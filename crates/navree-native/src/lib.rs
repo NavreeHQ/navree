@@ -31,6 +31,7 @@ pub mod envelope;
 pub mod input;
 pub mod node;
 pub mod op;
+pub mod schema;
 pub mod shell;
 pub mod vocab;
 

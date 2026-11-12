@@ -53,6 +53,15 @@ macro_rules! kinds {
                     _ => None,
                 }
             }
+
+            /// The name of the struct a node of this kind holds, as the schema
+            /// names its definition.
+            pub(crate) const fn type_name(self) -> &'static str {
+                match self {
+                    $(Self::$variant => stringify!($ty),)+
+                    Self::Unknown => "Unknown",
+                }
+            }
         }
 
         impl Node {

@@ -1,0 +1,8563 @@
+{
+  "$defs": {
+    "Accuracy": {
+      "enum": [
+        "approximate",
+        "precise"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Action": {
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/DeviceCall"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "device"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Action.Navigate"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "navigate"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Action.Submit"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "submit"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Action.Request"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "request"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Action.Commands"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "commands"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "properties": {
+            "t": {
+              "const": "back"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "properties": {
+            "t": {
+              "const": "refresh"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "properties": {
+            "t": {
+              "const": "dismiss"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        }
+      ],
+      "x-kind": "union",
+      "x-since": 0,
+      "x-tag": "t",
+      "x-unknown": {},
+      "x-variants": [
+        {
+          "tag": "device",
+          "type": "DeviceCall",
+          "x-since": 0
+        },
+        {
+          "tag": "navigate",
+          "type": "Action.Navigate",
+          "x-since": 0
+        },
+        {
+          "tag": "submit",
+          "type": "Action.Submit",
+          "x-since": 0
+        },
+        {
+          "tag": "request",
+          "type": "Action.Request",
+          "x-since": 0
+        },
+        {
+          "tag": "commands",
+          "type": "Action.Commands",
+          "x-since": 0
+        },
+        {
+          "tag": "back",
+          "x-since": 0
+        },
+        {
+          "tag": "refresh",
+          "x-since": 0
+        },
+        {
+          "tag": "dismiss",
+          "x-since": 0
+        }
+      ]
+    },
+    "Action.Commands": {
+      "properties": {
+        "list": {
+          "items": {
+            "$ref": "#/$defs/Command"
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "list"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Action.Navigate": {
+      "properties": {
+        "href": {
+          "type": "string",
+          "x-since": 0
+        },
+        "present": {
+          "$ref": "#/$defs/Present",
+          "default": "push",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "href"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Action.Request": {
+      "properties": {
+        "fields": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Pair"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "href": {
+          "type": "string",
+          "x-since": 0
+        },
+        "method": {
+          "$ref": "#/$defs/Method",
+          "default": "get",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "href"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Action.Submit": {
+      "properties": {
+        "form": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "href": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "with": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Align": {
+      "enum": [
+        "start",
+        "center",
+        "end",
+        "stretch",
+        "baseline"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Alt": {
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Alt.Navigate"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "navigate"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Alt.Text"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "text"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "properties": {
+            "t": {
+              "const": "hide"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        }
+      ],
+      "x-kind": "union",
+      "x-since": 0,
+      "x-tag": "t",
+      "x-unknown": {},
+      "x-variants": [
+        {
+          "tag": "navigate",
+          "type": "Alt.Navigate",
+          "x-since": 0
+        },
+        {
+          "tag": "text",
+          "type": "Alt.Text",
+          "x-since": 0
+        },
+        {
+          "tag": "hide",
+          "x-since": 0
+        }
+      ]
+    },
+    "Alt.Navigate": {
+      "properties": {
+        "href": {
+          "$ref": "#/$defs/OriginPath",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "href"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Alt.Text": {
+      "properties": {
+        "text": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "AppLock": {
+      "properties": {
+        "after_secs": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "after_secs"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "AuthSession": {
+      "properties": {
+        "ephemeral": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "start": {
+          "$ref": "#/$defs/OriginPath",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "start"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Avatar": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "initials": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        },
+        "src": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Axis": {
+      "enum": [
+        "vertical",
+        "horizontal"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Back": {
+      "properties": {
+        "href": {
+          "type": "string",
+          "x-since": 0
+        },
+        "title": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "title",
+        "href"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Badge": {
+      "properties": {
+        "dot": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "text": {
+          "type": "string",
+          "x-since": 0
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tone"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Banner": {
+      "properties": {
+        "actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tone"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Block": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/BlockKind",
+          "default": "paragraph",
+          "x-since": 0
+        },
+        "level": {
+          "default": 0,
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        },
+        "runs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Run"
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "BlockKind": {
+      "enum": [
+        "paragraph",
+        "heading",
+        "quote",
+        "bullet",
+        "numbered",
+        "code"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Button": {
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Action"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "disabled": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "icon_only": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "type": "string",
+          "x-since": 0
+        },
+        "pending": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "prominence": {
+          "$ref": "#/$defs/Prominence",
+          "default": "medium",
+          "x-since": 0
+        },
+        "role": {
+          "$ref": "#/$defs/Role",
+          "default": "none",
+          "x-since": 0
+        },
+        "standard": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Standard"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "undoable": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Call": {
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Haptic"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "haptic"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/CopyText"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "copy"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Share"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "share"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/OpenUrl"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "open_url"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthSession"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "auth_session"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/RegisterPush"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "register_push"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Notify"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "notify"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/CancelNotification"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "cancel_notification"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/SetBadge"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "set_badge"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/OpenSettings"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "open_settings"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Passkey"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "passkey"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Confirm"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "confirm"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/LocateOnce"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "locate_once"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ScanCode"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "scan_code"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PlatformSignIn"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "platform_sign_in"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        }
+      ],
+      "x-kind": "union",
+      "x-since": 0,
+      "x-tag": "f",
+      "x-unknown": {},
+      "x-variants": [
+        {
+          "tag": "haptic",
+          "type": "Haptic",
+          "x-since": 0
+        },
+        {
+          "tag": "copy",
+          "type": "CopyText",
+          "x-since": 0
+        },
+        {
+          "tag": "share",
+          "type": "Share",
+          "x-since": 0
+        },
+        {
+          "tag": "open_url",
+          "type": "OpenUrl",
+          "x-since": 0
+        },
+        {
+          "tag": "auth_session",
+          "type": "AuthSession",
+          "x-since": 0
+        },
+        {
+          "tag": "register_push",
+          "type": "RegisterPush",
+          "x-since": 0
+        },
+        {
+          "tag": "notify",
+          "type": "Notify",
+          "x-since": 0
+        },
+        {
+          "tag": "cancel_notification",
+          "type": "CancelNotification",
+          "x-since": 0
+        },
+        {
+          "tag": "set_badge",
+          "type": "SetBadge",
+          "x-since": 0
+        },
+        {
+          "tag": "open_settings",
+          "type": "OpenSettings",
+          "x-since": 0
+        },
+        {
+          "tag": "passkey",
+          "type": "Passkey",
+          "x-since": 0
+        },
+        {
+          "tag": "confirm",
+          "type": "Confirm",
+          "x-since": 0
+        },
+        {
+          "tag": "locate_once",
+          "type": "LocateOnce",
+          "x-since": 0
+        },
+        {
+          "tag": "scan_code",
+          "type": "ScanCode",
+          "x-since": 0
+        },
+        {
+          "tag": "platform_sign_in",
+          "type": "PlatformSignIn",
+          "x-since": 0
+        }
+      ]
+    },
+    "CancelNotification": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Chart": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/ChartKind",
+          "default": "line",
+          "x-since": 0
+        },
+        "labels": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "series": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Series"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ChartKind": {
+      "enum": [
+        "line",
+        "area",
+        "bar",
+        "donut",
+        "sparkline",
+        "funnel"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "ChoiceCreate": {
+      "properties": {
+        "href": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ChoiceInput": {
+      "properties": {
+        "create": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChoiceCreate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/ChoiceKind",
+          "default": "menu",
+          "x-since": 0
+        },
+        "options": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ChoiceOption"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "placeholder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "search": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChoiceSearch"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ChoiceKind": {
+      "enum": [
+        "menu",
+        "segmented",
+        "radio",
+        "list"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "ChoiceOption": {
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "disabled": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "label": {
+          "type": "string",
+          "x-since": 0
+        },
+        "value": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "value",
+        "label"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ChoiceSearch": {
+      "properties": {
+        "href": {
+          "type": "string",
+          "x-since": 0
+        },
+        "min": {
+          "default": 0,
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "href",
+        "name"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ChoicesInput": {
+      "properties": {
+        "create": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChoiceCreate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "options": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ChoiceOption"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "search": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChoiceSearch"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "values": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ClientDescriptor": {
+      "properties": {
+        "app": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        },
+        "caps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "contrast": {
+          "$ref": "#/$defs/Contrast",
+          "default": "normal",
+          "x-since": 0
+        },
+        "form": {
+          "$ref": "#/$defs/FormFactor",
+          "x-since": 0
+        },
+        "lib": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        },
+        "locale": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        },
+        "os": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        },
+        "platform": {
+          "$ref": "#/$defs/Platform",
+          "x-since": 0
+        },
+        "scheme": {
+          "$ref": "#/$defs/Scheme",
+          "default": "light",
+          "x-since": 0
+        },
+        "text_percent": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        },
+        "tz": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        },
+        "vocab": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "platform",
+        "form",
+        "vocab",
+        "text_percent"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Code": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "lang": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "text": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "CodeFormat": {
+      "enum": [
+        "qr",
+        "ean13",
+        "ean8",
+        "upc_a",
+        "upc_e",
+        "code128",
+        "code39",
+        "code93",
+        "itf",
+        "pdf417",
+        "aztec",
+        "data_matrix"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "ColourInput": {
+      "properties": {
+        "value": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Column": {
+      "properties": {
+        "align": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Align"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "type": "string",
+          "x-since": 0
+        },
+        "numeric": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ColumnRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "secondary": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "sort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Sort"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ColumnRole": {
+      "enum": [
+        "leading",
+        "title",
+        "subtitle",
+        "status",
+        "trailing",
+        "actions"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Command": {
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Toggle"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "toggle"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Show"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "show"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Hide"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "hide"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Open"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "open"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Close"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "close"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Copy"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "copy"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Set"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "set"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Flip"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "flip"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Focus"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "focus"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Submit"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "submit"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Text"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "text"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Count"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "count"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Value"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "value"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Command.Toast"
+            }
+          ],
+          "properties": {
+            "c": {
+              "const": "toast"
+            }
+          },
+          "required": [
+            "c"
+          ]
+        }
+      ],
+      "x-kind": "union",
+      "x-since": 0,
+      "x-tag": "c",
+      "x-unknown": {},
+      "x-variants": [
+        {
+          "tag": "toggle",
+          "type": "Command.Toggle",
+          "x-since": 0
+        },
+        {
+          "tag": "show",
+          "type": "Command.Show",
+          "x-since": 0
+        },
+        {
+          "tag": "hide",
+          "type": "Command.Hide",
+          "x-since": 0
+        },
+        {
+          "tag": "open",
+          "type": "Command.Open",
+          "x-since": 0
+        },
+        {
+          "tag": "close",
+          "type": "Command.Close",
+          "x-since": 0
+        },
+        {
+          "tag": "copy",
+          "type": "Command.Copy",
+          "x-since": 0
+        },
+        {
+          "tag": "set",
+          "type": "Command.Set",
+          "x-since": 0
+        },
+        {
+          "tag": "flip",
+          "type": "Command.Flip",
+          "x-since": 0
+        },
+        {
+          "tag": "focus",
+          "type": "Command.Focus",
+          "x-since": 0
+        },
+        {
+          "tag": "submit",
+          "type": "Command.Submit",
+          "x-since": 0
+        },
+        {
+          "tag": "text",
+          "type": "Command.Text",
+          "x-since": 0
+        },
+        {
+          "tag": "count",
+          "type": "Command.Count",
+          "x-since": 0
+        },
+        {
+          "tag": "value",
+          "type": "Command.Value",
+          "x-since": 0
+        },
+        {
+          "tag": "toast",
+          "type": "Command.Toast",
+          "x-since": 0
+        }
+      ]
+    },
+    "Command.Close": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Command.Copy": {
+      "properties": {
+        "text": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Command.Count": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-since": 0
+        },
+        "max": {
+          "anyOf": [
+            {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Command.Flip": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-since": 0
+        },
+        "state": {
+          "$ref": "#/$defs/State",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id",
+        "state"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Command.Focus": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Command.Hide": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Command.Open": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Command.Set": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-since": 0
+        },
+        "on": {
+          "type": "boolean",
+          "x-since": 0
+        },
+        "state": {
+          "$ref": "#/$defs/State",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id",
+        "state",
+        "on"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Command.Show": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Command.Submit": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Command.Text": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-since": 0
+        },
+        "text": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Command.Toast": {
+      "properties": {
+        "text": {
+          "type": "string",
+          "x-since": 0
+        },
+        "tone": {
+          "$ref": "#/$defs/Tone",
+          "default": "neutral",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Command.Toggle": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Command.Value": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-since": 0
+        },
+        "value": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id",
+        "value"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Confirm": {
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "method": {
+          "$ref": "#/$defs/ConfirmMethod",
+          "default": "either",
+          "x-since": 0
+        },
+        "reason": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ConfirmMethod": {
+      "enum": [
+        "passkey",
+        "device_key",
+        "either"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Confirmed": {
+      "properties": {
+        "challenge": {
+          "type": "string",
+          "x-since": 0
+        },
+        "credential": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "key_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "method": {
+          "$ref": "#/$defs/ConfirmedBy",
+          "x-since": 0
+        },
+        "signature": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "challenge",
+        "method"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ConfirmedBy": {
+      "enum": [
+        "passkey",
+        "device_key"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Contrast": {
+      "enum": [
+        "normal",
+        "more"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "CopyText": {
+      "properties": {
+        "sensitive": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "text": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "DateInput": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DateKind",
+          "default": "date",
+          "x-since": 0
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "off_days": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "off_weekdays": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Weekday"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "value": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "DateKind": {
+      "enum": [
+        "date",
+        "time",
+        "datetime"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Delivery": {
+      "enum": [
+        "sending",
+        "sent",
+        "delivered",
+        "read",
+        "failed"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Device": {
+      "properties": {
+        "caps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "lock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AppLock"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "push": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Push"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "DeviceCall": {
+      "properties": {
+        "alt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Alt"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "call": {
+          "$ref": "#/$defs/Call",
+          "x-since": 0
+        },
+        "then": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Then"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "call"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Dialog": {
+      "properties": {
+        "actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "alert": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "type": "string",
+          "x-since": 0
+        },
+        "open": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Direction": {
+      "enum": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Disclosure": {
+      "properties": {
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "type": "string",
+          "x-since": 0
+        },
+        "open": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Divider": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Empty": {
+      "properties": {
+        "actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Envelope": {
+      "properties": {
+        "app": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        },
+        "build": {
+          "type": "string",
+          "x-since": 0
+        },
+        "icons": {
+          "additionalProperties": {
+            "$ref": "#/$defs/IconShape"
+          },
+          "default": {},
+          "type": "object",
+          "x-since": 0
+        },
+        "navree": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        },
+        "ops": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Op"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "screen": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Screen"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "shell": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        },
+        "upgrade": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Upgrade"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "vocab": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        },
+        "web": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Web"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "navree",
+        "build",
+        "vocab"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Fact": {
+      "properties": {
+        "details": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "type": "string",
+          "x-since": 0
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tone"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Facts": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Fact"
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Feature": {
+      "enum": [
+        "haptic",
+        "clipboard",
+        "share",
+        "capture",
+        "auth_session",
+        "open_url",
+        "push",
+        "local_notification",
+        "passkey",
+        "confirm",
+        "location_once",
+        "scan_code",
+        "app_lock",
+        "platform_sign_in",
+        "request_review",
+        "open_settings"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "FeedRow": {
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Action"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Avatar"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "detail": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "runs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Run"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tone"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Field": {
+      "properties": {
+        "disabled": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "help": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "input": {
+          "$ref": "#/$defs/Input",
+          "x-since": 0
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        },
+        "required": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name",
+        "input"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Figure": {
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "type": "string",
+          "x-since": 0
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tone"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "trend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Trend"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "label",
+        "value"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "FileInput": {
+      "properties": {
+        "accept": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "capture": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "keep_location": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "multiple": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Fit": {
+      "enum": [
+        "contain",
+        "cover"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Form": {
+      "properties": {
+        "action": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        },
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "hidden": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Hidden"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "method": {
+          "$ref": "#/$defs/Method",
+          "default": "get",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "FormFactor": {
+      "enum": [
+        "phone",
+        "tablet",
+        "desktop",
+        "watch",
+        "tv",
+        "spatial",
+        "car"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Gauge": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "max": {
+          "type": "number",
+          "x-since": 0
+        },
+        "min": {
+          "type": "number",
+          "x-since": 0
+        },
+        "shown": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tone"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "type": "number",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "value",
+        "min",
+        "max"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Grid": {
+      "properties": {
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "cols": {
+          "anyOf": [
+            {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "gap": {
+          "default": 0,
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "min": {
+          "anyOf": [
+            {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Haptic": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/HapticKind",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "HapticKind": {
+      "enum": [
+        "success",
+        "warning",
+        "error",
+        "selection",
+        "light",
+        "medium",
+        "heavy"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Hidden": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        },
+        "value": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "HttpsUrl": {
+      "format": "https-url",
+      "type": "string",
+      "x-kind": "string",
+      "x-since": 0
+    },
+    "Icon": {
+      "properties": {
+        "fills": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "paths": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tone"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "view_box": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "IconShape": {
+      "properties": {
+        "fills": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "paths": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "view_box": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Image": {
+      "properties": {
+        "alt": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        },
+        "fit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Fit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "height": {
+          "anyOf": [
+            {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "src": {
+          "type": "string",
+          "x-since": 0
+        },
+        "width": {
+          "anyOf": [
+            {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "src"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Input": {
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/TextInput"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "text"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ToggleInput"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "toggle"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ChoiceInput"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "choice"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ChoicesInput"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "choices"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/DateInput"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "date"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/SliderInput"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "slider"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ColourInput"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "colour"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FileInput"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "file"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        }
+      ],
+      "x-kind": "union",
+      "x-since": 0,
+      "x-tag": "t",
+      "x-unknown": {},
+      "x-variants": [
+        {
+          "tag": "text",
+          "type": "TextInput",
+          "x-since": 0
+        },
+        {
+          "tag": "toggle",
+          "type": "ToggleInput",
+          "x-since": 0
+        },
+        {
+          "tag": "choice",
+          "type": "ChoiceInput",
+          "x-since": 0
+        },
+        {
+          "tag": "choices",
+          "type": "ChoicesInput",
+          "x-since": 0
+        },
+        {
+          "tag": "date",
+          "type": "DateInput",
+          "x-since": 0
+        },
+        {
+          "tag": "slider",
+          "type": "SliderInput",
+          "x-since": 0
+        },
+        {
+          "tag": "colour",
+          "type": "ColourInput",
+          "x-since": 0
+        },
+        {
+          "tag": "file",
+          "type": "FileInput",
+          "x-since": 0
+        }
+      ]
+    },
+    "Justify": {
+      "enum": [
+        "start",
+        "center",
+        "end",
+        "between"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Link": {
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action",
+          "x-since": 0
+        },
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "label",
+        "action"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "List": {
+      "properties": {
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "more": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "ordered": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Live": {
+      "properties": {
+        "event": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "src": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "src"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "LocateOnce": {
+      "properties": {
+        "accuracy": {
+          "$ref": "#/$defs/Accuracy",
+          "default": "approximate",
+          "x-since": 0
+        },
+        "max_age_secs": {
+          "default": 0,
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        },
+        "timeout_secs": {
+          "default": 0,
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Located": {
+      "properties": {
+        "accuracy_m": {
+          "format": "double",
+          "type": "number",
+          "x-since": 0
+        },
+        "at": {
+          "format": "int64",
+          "type": "integer",
+          "x-since": 0
+        },
+        "lat": {
+          "format": "double",
+          "type": "number",
+          "x-since": 0
+        },
+        "lon": {
+          "format": "double",
+          "type": "number",
+          "x-since": 0
+        },
+        "precise": {
+          "type": "boolean",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "lat",
+        "lon",
+        "accuracy_m",
+        "at",
+        "precise"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Menu": {
+      "properties": {
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "label": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Message": {
+      "properties": {
+        "author": {
+          "type": "string",
+          "x-since": 0
+        },
+        "avatar": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Avatar"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "body": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "delivery": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Delivery"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "mine": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "note": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "author"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Method": {
+      "enum": [
+        "get",
+        "post"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Moment": {
+      "properties": {
+        "detail": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RowState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "type": "string",
+          "x-since": 0
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tone"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "NativeView": {
+      "properties": {
+        "alt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Node"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        },
+        "props": {
+          "default": null,
+          "x-json": true,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Nav": {
+      "properties": {
+        "groups": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/NavGroup"
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "NavGroup": {
+      "properties": {
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/NavItem"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "NavItem": {
+      "properties": {
+        "badge": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "href": {
+          "type": "string",
+          "x-since": 0
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/NavItem"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "label": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "label",
+        "href"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Node": {
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Stack"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "stack"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Grid"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "grid"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Section"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "section"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/List"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "list"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Row"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "row"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Split"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "split"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Tabs"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "tabs"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Disclosure"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "disclosure"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Divider"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "divider"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Spacer"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "spacer"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Region"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "region"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Text"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "text"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Rich"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "rich"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Image"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "image"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "icon"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Avatar"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "avatar"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Badge"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "badge"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Progress"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "progress"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Banner"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "banner"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Empty"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "empty"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Facts"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "facts"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Table"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "table"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Chart"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "chart"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Code"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "code"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Button"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "button"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Link"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "link"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Menu"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "menu"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Form"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "form"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Field"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "field"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Sheet"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "sheet"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Dialog"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "dialog"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Popover"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "popover"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/NativeView"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "native"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WebRegion"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "web"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Toolbar"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "toolbar"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Gauge"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "gauge"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Figure"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "figure"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Timeline"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "timeline"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FeedRow"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "feed_row"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Message"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "message"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Pane"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "pane"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        }
+      ],
+      "x-kind": "union",
+      "x-since": 0,
+      "x-tag": "t",
+      "x-unknown": {
+        "alt": {
+          "$ref": "#/$defs/Node"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "x-variants": [
+        {
+          "tag": "stack",
+          "type": "Stack",
+          "x-since": 0
+        },
+        {
+          "tag": "grid",
+          "type": "Grid",
+          "x-since": 0
+        },
+        {
+          "tag": "section",
+          "type": "Section",
+          "x-since": 0
+        },
+        {
+          "tag": "list",
+          "type": "List",
+          "x-since": 0
+        },
+        {
+          "tag": "row",
+          "type": "Row",
+          "x-since": 0
+        },
+        {
+          "tag": "split",
+          "type": "Split",
+          "x-since": 0
+        },
+        {
+          "tag": "tabs",
+          "type": "Tabs",
+          "x-since": 0
+        },
+        {
+          "tag": "disclosure",
+          "type": "Disclosure",
+          "x-since": 0
+        },
+        {
+          "tag": "divider",
+          "type": "Divider",
+          "x-since": 0
+        },
+        {
+          "tag": "spacer",
+          "type": "Spacer",
+          "x-since": 0
+        },
+        {
+          "tag": "region",
+          "type": "Region",
+          "x-since": 0
+        },
+        {
+          "tag": "text",
+          "type": "Text",
+          "x-since": 0
+        },
+        {
+          "tag": "rich",
+          "type": "Rich",
+          "x-since": 0
+        },
+        {
+          "tag": "image",
+          "type": "Image",
+          "x-since": 0
+        },
+        {
+          "tag": "icon",
+          "type": "Icon",
+          "x-since": 0
+        },
+        {
+          "tag": "avatar",
+          "type": "Avatar",
+          "x-since": 0
+        },
+        {
+          "tag": "badge",
+          "type": "Badge",
+          "x-since": 0
+        },
+        {
+          "tag": "progress",
+          "type": "Progress",
+          "x-since": 0
+        },
+        {
+          "tag": "banner",
+          "type": "Banner",
+          "x-since": 0
+        },
+        {
+          "tag": "empty",
+          "type": "Empty",
+          "x-since": 0
+        },
+        {
+          "tag": "facts",
+          "type": "Facts",
+          "x-since": 0
+        },
+        {
+          "tag": "table",
+          "type": "Table",
+          "x-since": 0
+        },
+        {
+          "tag": "chart",
+          "type": "Chart",
+          "x-since": 0
+        },
+        {
+          "tag": "code",
+          "type": "Code",
+          "x-since": 0
+        },
+        {
+          "tag": "button",
+          "type": "Button",
+          "x-since": 0
+        },
+        {
+          "tag": "link",
+          "type": "Link",
+          "x-since": 0
+        },
+        {
+          "tag": "menu",
+          "type": "Menu",
+          "x-since": 0
+        },
+        {
+          "tag": "form",
+          "type": "Form",
+          "x-since": 0
+        },
+        {
+          "tag": "field",
+          "type": "Field",
+          "x-since": 0
+        },
+        {
+          "tag": "sheet",
+          "type": "Sheet",
+          "x-since": 0
+        },
+        {
+          "tag": "dialog",
+          "type": "Dialog",
+          "x-since": 0
+        },
+        {
+          "tag": "popover",
+          "type": "Popover",
+          "x-since": 0
+        },
+        {
+          "tag": "native",
+          "type": "NativeView",
+          "x-since": 0
+        },
+        {
+          "tag": "web",
+          "type": "WebRegion",
+          "x-since": 0
+        },
+        {
+          "tag": "toolbar",
+          "type": "Toolbar",
+          "x-since": 0
+        },
+        {
+          "tag": "gauge",
+          "type": "Gauge",
+          "x-since": 0
+        },
+        {
+          "tag": "figure",
+          "type": "Figure",
+          "x-since": 0
+        },
+        {
+          "tag": "timeline",
+          "type": "Timeline",
+          "x-since": 0
+        },
+        {
+          "tag": "feed_row",
+          "type": "FeedRow",
+          "x-since": 0
+        },
+        {
+          "tag": "message",
+          "type": "Message",
+          "x-since": 0
+        },
+        {
+          "tag": "pane",
+          "type": "Pane",
+          "x-since": 0
+        }
+      ]
+    },
+    "Notify": {
+      "properties": {
+        "at": {
+          "$ref": "#/$defs/When",
+          "x-since": 0
+        },
+        "body": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "href": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OriginPath"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "type": "string",
+          "x-since": 0
+        },
+        "thread": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "at"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op": {
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Toast"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "toast"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Morph"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "morph"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Replace"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "replace"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Append"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "append"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Prepend"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "prepend"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Remove"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "remove"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Errors"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "errors"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Open"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "open"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Close"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "close"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Focus"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "focus"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Url"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "url"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Navigate"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "navigate"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.NavigateExternal"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "navigate_external"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Invalidate"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "invalidate"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Op.Device"
+            }
+          ],
+          "properties": {
+            "op": {
+              "const": "device"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        },
+        {
+          "properties": {
+            "op": {
+              "const": "reload"
+            }
+          },
+          "required": [
+            "op"
+          ]
+        }
+      ],
+      "x-kind": "union",
+      "x-since": 0,
+      "x-tag": "op",
+      "x-unknown": {},
+      "x-variants": [
+        {
+          "tag": "toast",
+          "type": "Toast",
+          "x-since": 0
+        },
+        {
+          "tag": "morph",
+          "type": "Op.Morph",
+          "x-since": 0
+        },
+        {
+          "tag": "replace",
+          "type": "Op.Replace",
+          "x-since": 0
+        },
+        {
+          "tag": "append",
+          "type": "Op.Append",
+          "x-since": 0
+        },
+        {
+          "tag": "prepend",
+          "type": "Op.Prepend",
+          "x-since": 0
+        },
+        {
+          "tag": "remove",
+          "type": "Op.Remove",
+          "x-since": 0
+        },
+        {
+          "tag": "errors",
+          "type": "Op.Errors",
+          "x-since": 0
+        },
+        {
+          "tag": "open",
+          "type": "Op.Open",
+          "x-since": 0
+        },
+        {
+          "tag": "close",
+          "type": "Op.Close",
+          "x-since": 0
+        },
+        {
+          "tag": "focus",
+          "type": "Op.Focus",
+          "x-since": 0
+        },
+        {
+          "tag": "url",
+          "type": "Op.Url",
+          "x-since": 0
+        },
+        {
+          "tag": "navigate",
+          "type": "Op.Navigate",
+          "x-since": 0
+        },
+        {
+          "tag": "navigate_external",
+          "type": "Op.NavigateExternal",
+          "x-since": 0
+        },
+        {
+          "tag": "invalidate",
+          "type": "Op.Invalidate",
+          "x-since": 0
+        },
+        {
+          "tag": "device",
+          "type": "Op.Device",
+          "x-since": 0
+        },
+        {
+          "tag": "reload",
+          "x-since": 0
+        }
+      ]
+    },
+    "Op.Append": {
+      "properties": {
+        "more": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "target": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "target",
+        "nodes"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Close": {
+      "properties": {
+        "target": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Device": {
+      "properties": {
+        "call": {
+          "$ref": "#/$defs/ReplyCall",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "call"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Errors": {
+      "properties": {
+        "fields": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "object",
+          "x-since": 0
+        },
+        "form": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "form",
+        "fields"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Focus": {
+      "properties": {
+        "target": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Invalidate": {
+      "properties": {
+        "target": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Morph": {
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/Node",
+          "x-since": 0
+        },
+        "target": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "target",
+        "node"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Navigate": {
+      "properties": {
+        "href": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "href"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.NavigateExternal": {
+      "properties": {
+        "href": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "href"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Open": {
+      "properties": {
+        "target": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Prepend": {
+      "properties": {
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "target": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "target",
+        "nodes"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Remove": {
+      "properties": {
+        "target": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Replace": {
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/Node",
+          "x-since": 0
+        },
+        "target": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "target",
+        "node"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Op.Url": {
+      "properties": {
+        "href": {
+          "type": "string",
+          "x-since": 0
+        },
+        "mode": {
+          "$ref": "#/$defs/UrlMode",
+          "default": "push",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "href"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "OpenSettings": {
+      "properties": {
+        "page": {
+          "$ref": "#/$defs/SettingsPage",
+          "default": "app",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "OpenUrl": {
+      "properties": {
+        "inside": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "url": {
+          "$ref": "#/$defs/HttpsUrl",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "OriginPath": {
+      "format": "origin-path",
+      "type": "string",
+      "x-kind": "string",
+      "x-since": 0
+    },
+    "Pair": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "x-since": 0
+        },
+        "value": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Pane": {
+      "properties": {
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "current": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "role": {
+          "$ref": "#/$defs/PaneRole",
+          "x-since": 0
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "role"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "PaneRole": {
+      "enum": [
+        "list",
+        "content",
+        "detail",
+        "supporting",
+        "inspector"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Passkey": {
+      "properties": {
+        "conditional": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "mode": {
+          "$ref": "#/$defs/PasskeyMode",
+          "x-since": 0
+        },
+        "options": {
+          "$ref": "#/$defs/OriginPath",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "mode",
+        "options"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "PasskeyCredential": {
+      "properties": {
+        "credential": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "credential"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "PasskeyMode": {
+      "enum": [
+        "register",
+        "sign_in"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Platform": {
+      "enum": [
+        "ios",
+        "ipados",
+        "macos",
+        "watchos",
+        "tvos",
+        "visionos",
+        "android",
+        "wearos",
+        "windows",
+        "linux"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "PlatformSignIn": {
+      "properties": {
+        "client_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "nonce": {
+          "type": "string",
+          "x-since": 0
+        },
+        "provider": {
+          "$ref": "#/$defs/SignInProvider",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "provider",
+        "nonce"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Popover": {
+      "properties": {
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Present": {
+      "enum": [
+        "push",
+        "replace",
+        "root",
+        "sheet",
+        "full",
+        "external"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Progress": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "anyOf": [
+            {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Prominence": {
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Push": {
+      "properties": {
+        "register": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "register"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "PushEnvironment": {
+      "enum": [
+        "development",
+        "production"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "PushProvider": {
+      "enum": [
+        "apns",
+        "fcm",
+        "wns"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "PushRegistered": {
+      "properties": {
+        "app_id": {
+          "type": "string",
+          "x-since": 0
+        },
+        "environment": {
+          "$ref": "#/$defs/PushEnvironment",
+          "x-since": 0
+        },
+        "install_id": {
+          "type": "string",
+          "x-since": 0
+        },
+        "locale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "provider": {
+          "$ref": "#/$defs/PushProvider",
+          "x-since": 0
+        },
+        "token": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "provider",
+        "environment",
+        "token",
+        "app_id",
+        "install_id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Refusal": {
+      "enum": [
+        "unsupported",
+        "not_built",
+        "denied",
+        "restricted",
+        "unavailable",
+        "cancelled",
+        "busy",
+        "failed"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Region": {
+      "properties": {
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "type": "string",
+          "x-since": 0
+        },
+        "lazy": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "live": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Live"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "src": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id",
+        "src"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "RegisterPush": {
+      "properties": {
+        "categories": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ReplyCall": {
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Haptic"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "haptic"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/SetBadge"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "set_badge"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/CancelNotification"
+            }
+          ],
+          "properties": {
+            "f": {
+              "const": "cancel_notification"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        },
+        {
+          "properties": {
+            "f": {
+              "const": "request_review"
+            }
+          },
+          "required": [
+            "f"
+          ]
+        }
+      ],
+      "x-kind": "union",
+      "x-since": 0,
+      "x-tag": "f",
+      "x-unknown": {},
+      "x-variants": [
+        {
+          "tag": "haptic",
+          "type": "Haptic",
+          "x-since": 0
+        },
+        {
+          "tag": "set_badge",
+          "type": "SetBadge",
+          "x-since": 0
+        },
+        {
+          "tag": "cancel_notification",
+          "type": "CancelNotification",
+          "x-since": 0
+        },
+        {
+          "tag": "request_review",
+          "x-since": 0
+        }
+      ]
+    },
+    "Rich": {
+      "properties": {
+        "blocks": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Block"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "muted": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "runs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Run"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "style": {
+          "$ref": "#/$defs/TextStyle",
+          "default": "body",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Role": {
+      "enum": [
+        "none",
+        "primary",
+        "secondary",
+        "destructive",
+        "cancel",
+        "confirm",
+        "create",
+        "navigation"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Route": {
+      "properties": {
+        "chrome": {
+          "default": true,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "match": {
+          "type": "string",
+          "x-since": 0
+        },
+        "present": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Present"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "match"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Row": {
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Action"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "badge": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Badge"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "detail": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "leading": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Node"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "menu": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RowState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "swipe": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Button"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "title": {
+          "type": "string",
+          "x-since": 0
+        },
+        "trailing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Node"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "RowState": {
+      "enum": [
+        "done",
+        "current",
+        "upcoming"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Run": {
+      "properties": {
+        "bold": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "code": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "href": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "italic": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "text": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ScanCode": {
+      "properties": {
+        "formats": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CodeFormat"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Scanned": {
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/CodeFormat",
+          "x-since": 0
+        },
+        "value": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "format",
+        "value"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Scheme": {
+      "enum": [
+        "light",
+        "dark"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Screen": {
+      "properties": {
+        "actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "back": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Back"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "body": {
+          "$ref": "#/$defs/Node",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "nav": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "refresh": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "search": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Search"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "type": "string",
+          "x-since": 0
+        },
+        "trail": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Back"
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "title",
+        "body"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Search": {
+      "properties": {
+        "action": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        },
+        "hidden": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Pair"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        },
+        "placeholder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Section": {
+      "properties": {
+        "actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "footer": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "style": {
+          "$ref": "#/$defs/SectionStyle",
+          "default": "plain",
+          "x-since": 0
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "SectionStyle": {
+      "enum": [
+        "plain",
+        "card",
+        "inset"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Series": {
+      "properties": {
+        "label": {
+          "type": "string",
+          "x-since": 0
+        },
+        "shown": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "values": {
+          "default": [],
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "SetBadge": {
+      "properties": {
+        "count": {
+          "anyOf": [
+            {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "SettingsPage": {
+      "enum": [
+        "app",
+        "notifications"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Share": {
+      "properties": {
+        "file": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OriginPath"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "href": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OriginPath"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "url": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HttpsUrl"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Shared": {
+      "properties": {
+        "completed": {
+          "type": "boolean",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "completed"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Sheet": {
+      "properties": {
+        "actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "type": "string",
+          "x-since": 0
+        },
+        "open": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "size": {
+          "$ref": "#/$defs/SheetSize",
+          "default": "large",
+          "x-since": 0
+        },
+        "subtitle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "SheetSize": {
+      "enum": [
+        "medium",
+        "large",
+        "full"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Shell": {
+      "properties": {
+        "build": {
+          "type": "string",
+          "x-since": 0
+        },
+        "context": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "device": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Device"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "home": {
+          "type": "string",
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        },
+        "nav": {
+          "$ref": "#/$defs/Nav",
+          "default": {},
+          "x-since": 0
+        },
+        "navree": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        },
+        "routes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Route"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "stamp": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        },
+        "theme": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Theme"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "user": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/User"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "navree",
+        "build",
+        "name",
+        "home"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "SignInProvider": {
+      "enum": [
+        "apple",
+        "google"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "SignedIn": {
+      "properties": {
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "email": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "family_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "given_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id_token": {
+          "type": "string",
+          "x-since": 0
+        },
+        "provider": {
+          "$ref": "#/$defs/SignInProvider",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "provider",
+        "id_token"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "SliderInput": {
+      "properties": {
+        "max": {
+          "type": "string",
+          "x-since": 0
+        },
+        "min": {
+          "type": "string",
+          "x-since": 0
+        },
+        "step": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "min",
+        "max",
+        "value"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Sort": {
+      "properties": {
+        "dir": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SortDir"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "href": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "href"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "SortDir": {
+      "enum": [
+        "asc",
+        "desc"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Spacer": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Split": {
+      "properties": {
+        "detail": {
+          "$ref": "#/$defs/Node",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "primary": {
+          "$ref": "#/$defs/Node",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "primary",
+        "detail"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Stack": {
+      "properties": {
+        "align": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Align"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "axis": {
+          "$ref": "#/$defs/Axis",
+          "default": "vertical",
+          "x-since": 0
+        },
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "gap": {
+          "default": 0,
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        },
+        "hidden": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "justify": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Justify"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "wrap": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Standard": {
+      "enum": [
+        "share",
+        "delete",
+        "add",
+        "edit",
+        "search",
+        "done",
+        "cancel",
+        "more"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "State": {
+      "enum": [
+        "open",
+        "hidden",
+        "checked",
+        "selected",
+        "disabled",
+        "active",
+        "invalid",
+        "pending"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Tab": {
+      "properties": {
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "href": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "type": "string",
+          "x-since": 0
+        },
+        "selected": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Table": {
+      "properties": {
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "columns": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Column"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "empty": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Node"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "more": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "prev": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "query": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Form"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "rows": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TableRow"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "TableRow": {
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Action"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "actions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "cells": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Tabs": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Tab"
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Text": {
+      "properties": {
+        "heading": {
+          "anyOf": [
+            {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "lines": {
+          "anyOf": [
+            {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "muted": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "style": {
+          "$ref": "#/$defs/TextStyle",
+          "default": "body",
+          "x-since": 0
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tone"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "TextInput": {
+      "properties": {
+        "autofill": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/TextKind",
+          "default": "plain",
+          "x-since": 0
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "max_length": {
+          "anyOf": [
+            {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "placeholder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "readonly": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "step": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "default": "",
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "TextKind": {
+      "enum": [
+        "plain",
+        "email",
+        "password",
+        "number",
+        "decimal",
+        "phone",
+        "url",
+        "search",
+        "multiline",
+        "one_time_code"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "TextStyle": {
+      "enum": [
+        "large_title",
+        "title",
+        "headline",
+        "body",
+        "callout",
+        "caption",
+        "mono"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Theme": {
+      "properties": {
+        "accent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "accent_dark": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Then": {
+      "properties": {
+        "exp": {
+          "format": "int64",
+          "type": "integer",
+          "x-since": 0
+        },
+        "href": {
+          "$ref": "#/$defs/OriginPath",
+          "x-since": 0
+        },
+        "ticket": {
+          "$ref": "#/$defs/Ticket",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "href",
+        "ticket",
+        "exp"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Ticket": {
+      "format": "ticket",
+      "type": "string",
+      "x-kind": "string",
+      "x-since": 0
+    },
+    "Timeline": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Moment"
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Toast": {
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToastAction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "text": {
+          "type": "string",
+          "x-since": 0
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "tone": {
+          "$ref": "#/$defs/Tone",
+          "default": "neutral",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ToastAction": {
+      "properties": {
+        "href": {
+          "type": "string",
+          "x-since": 0
+        },
+        "label": {
+          "type": "string",
+          "x-since": 0
+        },
+        "post": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "label",
+        "href"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ToggleInput": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ToggleKind",
+          "default": "switch",
+          "x-since": 0
+        },
+        "on": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ToggleKind": {
+      "enum": [
+        "switch",
+        "checkbox"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Tone": {
+      "enum": [
+        "neutral",
+        "accent",
+        "success",
+        "warning",
+        "danger",
+        "info"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Toolbar": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ToolbarItem"
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ToolbarItem": {
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Action"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "disabled": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "icon": {
+          "$ref": "#/$defs/Icon",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "menu": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "prominence": {
+          "$ref": "#/$defs/Prominence",
+          "default": "medium",
+          "x-since": 0
+        },
+        "role": {
+          "$ref": "#/$defs/Role",
+          "default": "none",
+          "x-since": 0
+        },
+        "standard": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Standard"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "type": "string",
+          "x-since": 0
+        },
+        "undoable": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "title",
+        "icon"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Trend": {
+      "properties": {
+        "direction": {
+          "$ref": "#/$defs/Direction",
+          "x-since": 0
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tone"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "direction"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Upgrade": {
+      "properties": {
+        "min_app": {
+          "type": "string",
+          "x-since": 0
+        },
+        "url": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "min_app",
+        "url"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "UrlMode": {
+      "enum": [
+        "push",
+        "replace"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "User": {
+      "properties": {
+        "email": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "menu": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Web": {
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "url": {
+          "type": "string",
+          "x-since": 0
+        },
+        "why": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "WebRegion": {
+      "properties": {
+        "html": {
+          "type": "string",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "html"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Weekday": {
+      "enum": [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "When": {
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/When.At"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "at"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/When.After"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "after"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/When.Daily"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "daily"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        }
+      ],
+      "x-kind": "union",
+      "x-since": 0,
+      "x-tag": "t",
+      "x-unknown": {},
+      "x-variants": [
+        {
+          "tag": "at",
+          "type": "When.At",
+          "x-since": 0
+        },
+        {
+          "tag": "after",
+          "type": "When.After",
+          "x-since": 0
+        },
+        {
+          "tag": "daily",
+          "type": "When.Daily",
+          "x-since": 0
+        }
+      ]
+    },
+    "When.After": {
+      "properties": {
+        "secs": {
+          "format": "uint32",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "secs"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "When.At": {
+      "properties": {
+        "unix": {
+          "format": "int64",
+          "type": "integer",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "unix"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "When.Daily": {
+      "properties": {
+        "hour": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        },
+        "minute": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "hour",
+        "minute"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    }
+  },
+  "$ref": "#/$defs/Envelope",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The protocol between a Navree app and a native client: the envelope a server answers with, the shell, the descriptor a client sends, the device calls and their results. Written by the navree-native crate; edit the Rust types, never this file.",
+  "title": "Navree Native",
+  "x-major": 1,
+  "x-roots": [
+    "Envelope",
+    "Shell",
+    "ClientDescriptor",
+    "Feature",
+    "Refusal",
+    "Shared",
+    "PushRegistered",
+    "PasskeyCredential",
+    "Confirmed",
+    "Located",
+    "Scanned",
+    "SignedIn"
+  ],
+  "x-vocab": 0
+}
