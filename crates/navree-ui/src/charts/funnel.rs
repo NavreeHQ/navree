@@ -264,6 +264,7 @@ impl Funnel {
                 )
             }),
             interactive: true,
+            tip: None,
         })
     }
 }

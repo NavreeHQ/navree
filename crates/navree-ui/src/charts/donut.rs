@@ -308,6 +308,7 @@ impl Donut {
             height: self.size,
             note: None,
             interactive: true,
+            tip: None,
         })
     }
 }

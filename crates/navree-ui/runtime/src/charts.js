@@ -96,9 +96,17 @@ function show(body, i, keyed) {
   tip.setAttribute("data-open", "");
   const said = [head.textContent];
   lines.forEach((line, c) => {
-    const value = /** @type {HTMLElement} */ (line.children[1]);
-    value.textContent = shown(cells[c + 1]);
-    if (line.checkVisibility()) said.push(`${line.lastElementChild?.textContent} ${value.textContent}`);
+    const value = $(line, "strong"), cell = cells[c + 1];
+    if (!value || !cell) return;
+    value.textContent = shown(cell);
+    // A value coloured by its band gives the line its colour.
+    const ink = $(cell, "[data-color],[data-tone]");
+    if (ink) for (const name of ["data-color", "data-tone"]) {
+      const v = ink.getAttribute(name);
+      v ? line.setAttribute(name, v) : line.removeAttribute(name);
+    }
+    const unit = $(line, "em")?.textContent;
+    if (line.checkVisibility()) said.push(`${line.lastElementChild?.textContent} ${value.textContent}${unit ? " " + unit : ""}`);
   });
   // Beside the value, on whichever side has room; never past the chart's edges. A chart
   // shorter than its tooltip (a few bars with many series) grows to hold it.
