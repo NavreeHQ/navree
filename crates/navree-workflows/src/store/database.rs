@@ -310,6 +310,8 @@ async fn release_in(
     values: Vec<SqlValue>,
     run_id: &str,
 ) -> StoreResult<Option<String>> {
+    // `{sets}` is one of the fixed assignments `release` picks; every value is bound.
+    // nosemgrep: navree-sql-built-from-strings
     let updated = tx
         .execute(&statement(
             &format!(
@@ -410,6 +412,8 @@ impl WorkflowStore for DatabaseWorkflowStore {
             let (clause, mut values) = run_filter(query);
             values.push(to_i64(query.effective_limit()).into());
             values.push(to_i64(query.offset).into());
+            // `{clause}` is `run_filter`'s fixed conditions and `?` lists; every value is bound.
+            // nosemgrep: navree-sql-built-from-strings-in-async
             let rows = self
                 .executor()
                 .fetch_all(&statement(
@@ -427,6 +431,8 @@ impl WorkflowStore for DatabaseWorkflowStore {
     fn count_runs<'a>(&'a self, query: &'a RunQuery) -> BoxFuture<'a, StoreResult<u64>> {
         Box::pin(async move {
             let (clause, values) = run_filter(query);
+            // `{clause}` is `run_filter`'s fixed conditions and `?` lists; every value is bound.
+            // nosemgrep: navree-sql-built-from-strings-in-async
             let row = self
                 .executor()
                 .fetch_optional(&statement(
@@ -619,6 +625,8 @@ impl WorkflowStore for DatabaseWorkflowStore {
                 .map(|column| format!("s.{column}"))
                 .collect::<Vec<_>>()
                 .join(", ");
+            // `{columns}` is STEP_COLUMNS with a table prefix; the event is bound.
+            // nosemgrep: navree-sql-built-from-strings-in-async
             let rows = self
                 .executor()
                 .fetch_all(&statement(

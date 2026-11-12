@@ -206,6 +206,8 @@ impl DemoSeed {
     async fn delete_rows(&self, table: &str, column: &str) -> Result<u64, DbError> {
         let backend = Executor::backend(&self.uow);
         let statement = match (&self.isolation, &self.schema) {
+            // The schema and table go through the backend's `quote_identifier`.
+            // nosemgrep: navree-sql-built-from-strings
             (Isolation::Schema, Some(schema)) => Statement::portable(
                 format!(
                     "DELETE FROM {}.{}",
@@ -214,10 +216,14 @@ impl DemoSeed {
                 ),
                 [],
             ),
+            // The table goes through the backend's `quote_identifier`.
+            // nosemgrep: navree-sql-built-from-strings
             (Isolation::Database, _) => Statement::portable(
                 format!("DELETE FROM {}", backend.quote_identifier(table)),
                 [],
             ),
+            // The table and column go through the backend's `quote_identifier`; the value is bound.
+            // nosemgrep: navree-sql-built-from-strings
             _ => Statement::portable(
                 format!(
                     "DELETE FROM {} WHERE {} = ?",

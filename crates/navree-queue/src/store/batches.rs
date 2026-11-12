@@ -77,6 +77,8 @@ impl DatabaseStore {
             } else {
                 ""
             };
+            // `{lock}` is a fixed clause or empty; the id is bound.
+            // nosemgrep: navree-sql-built-from-strings-in-async
             let Some(found) = uow
                 .fetch_optional(&Statement::portable(
                     format!("SELECT {BATCH_COLUMNS} FROM {JOB_BATCHES_TABLE} WHERE id = ?{lock}"),

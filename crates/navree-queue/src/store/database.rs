@@ -468,6 +468,8 @@ fn reserve_statement(backend: Backend, queue: &str, worker: &str, now: i64) -> S
              ORDER BY available_at, id LIMIT 1{lock}) \
          RETURNING {RESERVED_COLUMNS}"
     );
+    // `{reservable}` and `{lock}` are fixed fragments; every value is bound.
+    // nosemgrep: navree-sql-built-from-strings
     Statement::portable(
         sql,
         [
@@ -484,6 +486,8 @@ fn reserve_statement(backend: Backend, queue: &str, worker: &str, now: i64) -> S
 /// `queue`, locked, skipping rows other workers hold.
 fn candidate_statement(queue: &str, now: i64) -> Statement {
     let reservable = reservable();
+    // `{reservable}` is a fixed fragment; every value is bound.
+    // nosemgrep: navree-sql-built-from-strings
     Statement::portable(
         format!(
             "SELECT id FROM {JOBS_TABLE} WHERE queue = ? AND ( {reservable}) \
@@ -573,6 +577,8 @@ pub(super) fn insert_job(backend: Backend, job: &NewJob) -> Result<Statement, Qu
     } else {
         " ON CONFLICT (unique_key) DO NOTHING"
     };
+    // `{on_conflict}` is a fixed clause or empty; every value is bound.
+    // nosemgrep: navree-sql-built-from-strings
     Ok(Statement::portable(
         format!(
             "INSERT INTO {JOBS_TABLE} \

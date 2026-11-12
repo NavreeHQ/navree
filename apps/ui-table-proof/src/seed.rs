@@ -129,6 +129,8 @@ pub async fn big(db: &Db, count: u64) -> Result<(), navree::BoxError> {
         let stage = "CASE n % 5 WHEN 0 THEN 'lead' WHEN 1 THEN 'qualified' WHEN 2 THEN 'proposal' WHEN 3 THEN 'won' ELSE 'lost' END";
         match backend {
             navree::db::Backend::Postgres => {
+                // Proof seed: `{stage}` is a fixed CASE and `{count}` a u64.
+                // nosemgrep: navree-sql-built-from-strings
                 pool.execute_script(&format!(
                     "INSERT INTO dt_big SELECT n, 'Deal ' || n || ' ' || md5(n::text), {stage}, CASE WHEN n % 20 = 0 THEN NULL ELSE (n * 7919) % 5000000 END, CASE WHEN n % 10 = 0 THEN NULL ELSE DATE '2020-01-01' + (n % 2000)::int END FROM generate_series(1::bigint, {count}::bigint) n"
                 ))
@@ -136,12 +138,16 @@ pub async fn big(db: &Db, count: u64) -> Result<(), navree::BoxError> {
             }
             navree::db::Backend::MySql => {
                 let digits = "(SELECT 0 d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9)";
+                // Proof seed: `{digits}` and `{stage}` are fixed fragments and `{count}` a u64.
+                // nosemgrep: navree-sql-built-from-strings
                 pool.execute_script(&format!(
                     "INSERT INTO dt_big WITH s AS (SELECT a.d + b.d * 10 + c.d * 100 + e.d * 1000 + f.d * 10000 + g.d * 100000 + 1 AS n FROM {digits} a, {digits} b, {digits} c, {digits} e, {digits} f, {digits} g) SELECT n, CONCAT('Deal ', n, ' ', MD5(n)), {stage}, IF(n % 20 = 0, NULL, (n * 7919) % 5000000), IF(n % 10 = 0, NULL, DATE_ADD('2020-01-01', INTERVAL (n % 2000) DAY)) FROM s WHERE n <= {count}"
                 ))
                 .await?;
             }
             _ => {
+                // Proof seed: `{stage}` is a fixed CASE and `{count}` a u64.
+                // nosemgrep: navree-sql-built-from-strings
                 pool.execute_script(&format!(
                     "INSERT INTO dt_big WITH RECURSIVE s (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM s WHERE n < {count}) SELECT n, 'Deal ' || n || ' ' || hex(n * 2654435761), {stage}, CASE WHEN n % 20 = 0 THEN NULL ELSE (n * 7919) % 5000000 END, CASE WHEN n % 10 = 0 THEN NULL ELSE date('2020-01-01', '+' || (n % 2000) || ' days') END FROM s"
                 ))

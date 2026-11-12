@@ -431,6 +431,8 @@ pub async fn seed(db: &Db, now: i64, today: &str, tickets: i64) -> Result<Made, 
         tx.execute_script(&statement).await?;
     }
     // The customers: a name, a business, a place, a plan and what they have paid.
+    // Demo seed: only counts, the plans' fixed keys and `literal(today)` are written in.
+    // nosemgrep: navree-sql-built-from-strings
     tx.execute_script(&format!(
         "WITH RECURSIVE g(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM g WHERE i < {last}),
          h AS (SELECT i, (i * 2654435761 + 97) % 4294967296 AS a FROM g),
@@ -452,6 +454,8 @@ pub async fn seed(db: &Db, now: i64, today: &str, tickets: i64) -> Result<Made, 
     ))
     .await?;
     // The conversations: most long closed; a few days' worth open, pending or snoozed.
+    // Demo seed: only counts and fixed CASE fragments are written in.
+    // nosemgrep: navree-sql-built-from-strings
     tx.execute_script(&format!(
         "WITH RECURSIVE g(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM g WHERE i < {last}),
          h AS (SELECT i, (i * 2654435761 + 97) % 4294967296 AS a, (i * 40503 + 7919) % 1000003 AS b,
@@ -513,6 +517,8 @@ pub async fn seed(db: &Db, now: i64, today: &str, tickets: i64) -> Result<Made, 
     .await?;
     // Each customer's account: signing up, a plan, the latest invoice; and each
     // conversation: when it was opened, and when it was resolved.
+    // Demo seed: only constants and the `now` timestamp (an i64) are written in.
+    // nosemgrep: navree-sql-built-from-strings
     tx.execute_script(&format!(
         "INSERT INTO customer_events (customer_id, kind, at, title, detail)
          SELECT id, 'signed_up', CAST(strftime('%s', since) AS INTEGER), 'Signed up', 'Started a 14-day trial'

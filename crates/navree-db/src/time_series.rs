@@ -108,6 +108,8 @@ where
 {
     let before = before.into();
     let backend = executor.backend();
+    // The table and column go through the backend's `quote_identifier`; the cutoff is bound.
+    // nosemgrep: navree-sql-built-from-strings
     let delete = Statement::portable(
         format!(
             "DELETE FROM {} WHERE {} < ?",
@@ -123,6 +125,8 @@ where
         // Built first: it checks the cutoff against the column's type
         // before any statement runs.
         let drop = drop_chunks(table, &dimension, before)?;
+        // The table and column go through the backend's `quote_identifier`; the cutoff is bound.
+        // nosemgrep: navree-sql-built-from-strings
         let count = Statement::portable(
             format!(
                 "SELECT COUNT(*) FROM {} WHERE {} < ?",

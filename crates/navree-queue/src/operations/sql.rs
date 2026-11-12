@@ -245,6 +245,8 @@ pub(super) fn finish(
         .map(serde_json::to_string)
         .transpose()
         .map_err(QueueError::Payload)?;
+    // `{fill}` is a fixed fragment or empty; every value is bound.
+    // nosemgrep: navree-sql-built-from-strings
     Ok(Statement::portable(
         format!(
             "UPDATE {OPERATIONS_TABLE} SET status = ?, {fill}result = COALESCE(?, result), \
