@@ -3,6 +3,23 @@ title: "Release notes"
 description: "What Navree 1.0.0, the first release, includes: the framework and ORM, Navree UI, the tools, packages, agent skills and CLI, and the limits that hold."
 ---
 
+## Navree 1.0.1
+
+Navree 1.0.1 is a patch release. To update, run `cargo update` in your app, which takes it within the range your `Cargo.toml` allows, and `cargo install navree-cli --force` for the command-line tool.
+
+### Fixed
+
+- `navree dev` on Linux restarted the server again and again with nothing edited: it took a file being opened or read (the server reading `.env` as it starts, `cargo build` reading `Cargo.toml`) for an edit. Only edits start a rebuild now, and a server busy writing `storage/` no longer delays one.
+
+### Security
+
+- The development install of `@navree/nuxt` takes node-forge 1.4.3, for the four advisories fixed in it. Only Nuxt's development HTTPS certificates use it; the published package does not depend on it.
+- The fuzzing workspace takes rustix 1.1.6, for RUSTSEC-2026-0486; the main workspace already had it.
+
+### Changed
+
+- Dependencies: the minor and patch updates of the Rust crates and of the front-end packages.
+
 ## Navree 1.0.0
 
 Navree is a framework for complete applications in Rust: the API, the background work, the screens and the tools that run them, in one binary. It is open source under MIT or Apache-2.0 and free to self-host. Every crate, the `navree` command-line tool, the starter kits and the `@navree/*` npm packages share one version number, and [the versioning page](/docs/prologue/versioning-and-support/) says what you can rely on across 1.x.
