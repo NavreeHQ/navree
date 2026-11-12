@@ -22,27 +22,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
-import com.navree.client.runtime.EMBED_HEADER
-import com.navree.client.runtime.Origin
-import com.navree.client.runtime.Target
+import com.navree.client.BuildConfig
+import com.navree.client.webViewToken
 
 /**
- * A page of the app in the system web view, inside native chrome, for a
- * screen the client cannot draw natively yet.
+ * A page of the app's origin that could not be drawn natively, in the
+ * system's web view inside the app's own chrome. It shares the native
+ * requests' cookies (the system store is the one store), carries the
+ * protocol's token at the end of its user agent so the server leaves out its
+ * web chrome, and has no bridge to the app: no script interface, no file or
+ * content access, no pop-ups, no mixed content.
  *
- * - It loads only the app's origin. A link is not followed here: it is handed
- *   to native navigation, which opens it as a screen of its own or, when it
- *   leaves the origin, outside the app.
- * - It shares the session's cookies with the native requests, so the page is
- *   signed in.
- * - It has no bridge to the app: no script interface, no file or content
- *   access.
+ * Every link the person taps is handed to the core, which decides where it
+ * leads (a native screen, the system browser, nothing); the web view's own
+ * navigation is cancelled. Form posts and the page's own requests go through.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 internal fun WebPage(
     url: String,
-    origin: Origin,
+    serial: Long,
     onLink: (String) -> Unit,
     onTitle: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -56,24 +55,26 @@ internal fun WebPage(
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { context ->
+                WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
                 WebView(context).apply {
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     settings.allowFileAccess = false
                     settings.allowContentAccess = false
+                    settings.setSupportMultipleWindows(false)
+                    settings.javaScriptCanOpenWindowsAutomatically = false
                     settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                     settings.setGeolocationEnabled(false)
+                    settings.safeBrowsingEnabled = true
+                    settings.userAgentString = settings.userAgentString + " " + webViewToken()
                     CookieManager.getInstance().setAcceptCookie(true)
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                             if (!request.isForMainFrame) return false
-                            val address = request.url.toString()
-                            val inside = origin.resolve(address) is Target.Inside
-                            // A redirect that stays on the origin is part of loading the page.
-                            if (request.isRedirect && inside) return false
-                            // A tap leads somewhere: native navigation decides where. A page that
-                            // tries to leave by itself, with no tap, goes nowhere.
-                            if (inside || request.hasGesture()) link(address)
+                            // A redirect is part of loading what was asked for.
+                            if (request.isRedirect) return false
+                            // Any other navigation of the page is the core's to decide.
+                            link(request.url.toString())
                             return true
                         }
 
@@ -94,11 +95,10 @@ internal fun WebPage(
                 }
             },
             update = { web ->
-                val address = origin.absolute(url)
-                if (web.tag != address) {
-                    web.tag = address
-                    // Asks for the page without its HTML chrome: the chrome is native.
-                    web.loadUrl(address, mapOf(EMBED_HEADER to "1"))
+                val wanted = "$serial $url"
+                if (web.tag != wanted) {
+                    web.tag = wanted
+                    web.loadUrl(url)
                 }
             },
         )

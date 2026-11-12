@@ -1,6 +1,5 @@
 package com.navree.client.design
 
-import com.navree.client.protocol.Nav
 
 /** The component that holds the top-level destinations. */
 enum class NavigationKind {
@@ -31,6 +30,11 @@ data class NavigationPlan(
     val menuButton: Boolean,
     /** Whether group headings are drawn in the component itself. */
     val groupHeadings: Boolean,
+    /**
+     * How many lines a destination's label may take. A label is never cut:
+     * at the largest text sizes it wraps onto a second line and the bar grows.
+     */
+    val labelLines: Int = 1,
 )
 
 /**
@@ -50,12 +54,11 @@ object NavigationRules {
     const val BAR_MOST = 5
     const val RAIL_MOST = 7
 
-    fun plan(window: WindowInfo, nav: Nav): NavigationPlan = plan(window, nav.groups.map { it.items.size })
-
     /** `groups` is how many destinations each group of the shell holds. */
     fun plan(window: WindowInfo, groups: List<Int>): NavigationPlan {
         val total = groups.sum()
         if (total <= 1) return NavigationPlan(NavigationKind.None, emptyList(), emptyList(), menuButton = false, groupHeadings = false)
+        val lines = if (window.largeText) 2 else 1
         val all = (0 until total).toList()
         val kind = when {
             window.width == WidthClass.Compact || window.height == HeightClass.Compact -> NavigationKind.Bar
@@ -75,6 +78,7 @@ object NavigationRules {
             more = more,
             menuButton = more.isNotEmpty(),
             groupHeadings = kind == NavigationKind.ExpandedRail && groups.count { it > 0 } > 1,
+            labelLines = lines,
         )
     }
 }

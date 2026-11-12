@@ -1,25 +1,11 @@
 package com.navree.client.ui
 
+import com.navree.client.core.ScreenView
 import com.navree.client.design.ContentRules
 import com.navree.client.design.ListRules
-import com.navree.client.protocol.Axis
-import com.navree.client.protocol.DialogNode
-import com.navree.client.protocol.EmptyNode
-import com.navree.client.protocol.FieldNode
-import com.navree.client.protocol.FormNode
-import com.navree.client.protocol.ListNode
-import com.navree.client.protocol.Node
-import com.navree.client.protocol.PopoverNode
-import com.navree.client.protocol.RegionNode
-import com.navree.client.protocol.RowNode
-import com.navree.client.protocol.SectionNode
-import com.navree.client.protocol.SectionStyle
-import com.navree.client.protocol.SheetNode
-import com.navree.client.protocol.StackNode
-import com.navree.client.protocol.TableNode
-import com.navree.client.protocol.TableRow
-import com.navree.client.protocol.ToggleInput
-import com.navree.client.runtime.Local
+import com.navree.client.design.childNodes
+import com.navree.client.design.nodeId
+import com.navree.protocol.Navree
 
 /** Where an item sits in a group that shares one container. */
 internal enum class Group { None, Only, First, Middle, Last }
@@ -32,54 +18,54 @@ internal sealed interface Block {
     val key: String
 
     /** Any node, drawn whole, with the screen's side margins. */
-    data class Single(override val key: String, val node: Node, val form: String?) : Block
+    data class Single(override val key: String, val node: Navree.Node, val form: String?) : Block
 
-    /** A row or a switch, edge to edge, or inside a group's container. */
-    data class Item(override val key: String, val node: Node, val group: Group, val form: String?) : Block
+    /** A row, a switch or a feed row, edge to edge, or inside a group's container. */
+    data class Item(override val key: String, val node: Navree.Node, val group: Group, val form: String?) : Block
 
     /** A table's row drawn as a list row. */
-    data class TableItem(override val key: String, val table: TableNode, val row: TableRow) : Block
+    data class TableItem(override val key: String, val table: Navree.Table, val row: Navree.TableRow, val form: String?) : Block
 
     /** A table's filters, as a row of chips. `search` says its search box is drawn here too, not in the app bar. */
-    data class Filters(override val key: String, val form: FormNode, val search: Boolean) : Block
+    data class Filters(override val key: String, val form: Navree.Form, val search: Boolean) : Block
 
     data class Header(override val key: String, val text: String, val subtitle: String? = null) : Block
 
-    data class Footer(override val key: String, val text: String) : Block
-
     data class Space(override val key: String, val dp: Int) : Block
 
-    /** The end of a list that has more: drawing it asks for the next page. */
-    data class More(override val key: String, val list: String, val more: String) : Block
+    /** The end of a list that has more: drawing it asks for the next page. `id` is the list's, or the table's region's. */
+    data class More(override val key: String, val id: String) : Block
 
     /** A region that is still on its way. */
-    data class Waiting(override val key: String) : Block
+    data class Waiting(override val key: String, val region: String) : Block
 
     /** A node that fills the window: an empty state that is the whole screen. */
-    data class Fill(override val key: String, val node: Node) : Block
+    data class Fill(override val key: String, val node: Navree.Node) : Block
 }
 
 /** Whether the node draws anything where it stands. Overlays are drawn over the screen, not in it. */
-internal fun inFlow(node: Node, local: Local): Boolean = when {
-    local.isHidden(node.id, (node as? StackNode)?.hidden ?: false) -> false
-    node is SheetNode || node is DialogNode || node is PopoverNode -> false
+internal fun inFlow(node: Navree.Node, screen: ScreenView): Boolean = when {
+    node is Navree.Stack && node.hidden -> false
+    screen.hidden(node.nodeId) -> false
+    node is Navree.Sheet || node is Navree.Dialog || node is Navree.Popover -> false
+    node is Navree.Toolbar -> false
     else -> true
 }
 
 /**
  * Flattens a body into blocks. Vertical stacks, lists, regions, plain and
- * inset sections, forms and (on a narrow width) tables are taken apart;
- * everything else is one block.
+ * inset sections, forms, panes and (on a narrow width) tables are taken
+ * apart; everything else is one block.
  *
  * `omit` is a node drawn elsewhere (a form's button that the app bar holds).
  * `hoisted` is the query whose search box the app bar holds.
  */
 internal fun blocks(
-    body: Node?,
-    local: Local,
+    body: Navree.Node?,
+    screen: ScreenView,
     widthDp: Int,
-    omit: Node? = null,
-    hoisted: FormNode? = null,
+    omit: Navree.Node? = null,
+    hoisted: Navree.Form? = null,
 ): List<Block> {
     val out = ArrayList<Block>()
     val used = HashSet<String>()
@@ -89,20 +75,21 @@ internal fun blocks(
         return if (used.add(wanted)) wanted else path.also { used.add(it) }
     }
 
-    fun groupable(node: Node): Boolean = node is RowNode || (node is FieldNode && node.input is ToggleInput)
+    fun groupable(node: Navree.Node): Boolean = node is Navree.Row || (node is Navree.Field && node.input is Navree.ToggleInput)
 
-    fun add(node: Node, path: String, form: String?, region: String?, top: Boolean) {
-        if (node === omit || !inFlow(node, local)) return
+    fun add(node: Navree.Node, path: String, form: String?, region: String?, top: Boolean) {
+        if (node === omit || !inFlow(node, screen)) return
         when (node) {
-            is StackNode -> if (node.axis == Axis.Vertical) {
+            is Navree.Stack -> if (node.axis == Navree.Axis.VERTICAL) {
                 val gap = ContentRules.gap(node.gap)
                 var any = false
+                val shown = node.children.count { it !== omit && inFlow(it, screen) }
                 node.children.forEachIndexed { index, child ->
-                    if (child !== omit && inFlow(child, local)) {
+                    if (child !== omit && inFlow(child, screen)) {
                         val before = out.size
                         if (any && gap > 0) out += Block.Space(key("$path/$index/gap", null), gap)
                         val spaced = out.size
-                        add(child, "$path/$index", form, region, top = top && node.children.count { inFlow(it, local) } == 1)
+                        add(child, "$path/$index", form, region, top = top && shown == 1)
                         // A part that drew nothing takes no room either.
                         if (out.size == spaced) {
                             if (spaced > before) out.removeAt(out.lastIndex)
@@ -113,42 +100,45 @@ internal fun blocks(
                 }
             } else {
                 // A row of parts whose only part is drawn elsewhere draws nothing.
-                if (node.children.any { it !== omit && inFlow(it, local) }) out += Block.Single(key(path, node.id), node, form)
+                if (node.children.any { it !== omit && inFlow(it, screen) }) out += Block.Single(key(path, node.id), node, form)
             }
-            is RegionNode -> {
-                val shown = node.children.filter { inFlow(it, local) }
-                if (shown.isEmpty() && node.lazy) {
-                    out += Block.Waiting(key("$path/waiting", null))
+            is Navree.Region -> {
+                val shown = node.children.filter { inFlow(it, screen) }
+                if (shown.isEmpty() && (node.lazy || screen.regions[node.id]?.loading == true)) {
+                    out += Block.Waiting(key("$path/waiting", null), node.id)
                 } else {
-                    node.children.forEachIndexed { index, child -> add(child, "$path/$index", form, node.id ?: region, top = top && shown.size == 1) }
+                    node.children.forEachIndexed { index, child -> add(child, "$path/$index", form, node.id, top = top && shown.size == 1) }
                 }
             }
-            is ListNode -> {
+            is Navree.Pane -> {
+                if (node.title != null) out += Block.Header(key("$path/header", null), node.title!!)
+                node.children.forEachIndexed { index, child -> add(child, "$path/$index", form, region, top = top) }
+            }
+            is Navree.List -> {
                 node.children.forEachIndexed { index, child ->
-                    if (inFlow(child, local)) {
-                        if (child is RowNode) {
-                            out += Block.Item(key("$path/$index", child.id), child, Group.None, form)
+                    if (inFlow(child, screen)) {
+                        if (child is Navree.Row || child is Navree.FeedRow) {
+                            out += Block.Item(key("$path/$index", child.nodeId), child, Group.None, form)
                         } else {
                             add(child, "$path/$index", form, region, top = false)
                         }
                     }
                 }
                 val id = node.id
-                val more = node.more
-                if (more != null && id != null) out += Block.More(key("$path/more", null), id, more)
+                if (node.more != null && id != null) out += Block.More(key("$path/more", null), id)
             }
-            is SectionNode -> if (node.style == SectionStyle.Card) {
+            is Navree.Section -> if (node.style == Navree.SectionStyle.CARD) {
                 out += Block.Single(key(path, node.id), node, form)
             } else {
                 val title = node.title
                 if (title != null) out += Block.Header(key("$path/header", null), title, node.subtitle)
                 if (node.actions.isNotEmpty()) {
-                    out += Block.Single(key("$path/actions", null), StackNode(axis = Axis.Horizontal, gap = 2, wrap = true, children = node.actions), form)
+                    out += Block.Single(key("$path/actions", null), Navree.Stack(axis = Navree.Axis.HORIZONTAL, gap = 2, wrap = true, children = node.actions), form)
                 }
                 // A list inside a section gives the section its rows.
-                val items = node.children.filter { inFlow(it, local) }
-                    .flatMap { child -> if (child is ListNode && child.more == null) child.children.filter { inFlow(it, local) } else listOf(child) }
-                if (node.style == SectionStyle.Inset && items.isNotEmpty() && items.all(::groupable)) {
+                val items = node.children.filter { inFlow(it, screen) }
+                    .flatMap { child -> if (child is Navree.List && child.more == null) child.children.filter { inFlow(it, screen) } else listOf(child) }
+                if (node.style == Navree.SectionStyle.INSET && items.isNotEmpty() && items.all(::groupable)) {
                     items.forEachIndexed { index, item ->
                         val group = when {
                             items.size == 1 -> Group.Only
@@ -156,13 +146,13 @@ internal fun blocks(
                             index == items.lastIndex -> Group.Last
                             else -> Group.Middle
                         }
-                        out += Block.Item(key("$path/$index", item.id), item, group, form)
+                        out += Block.Item(key("$path/$index", item.nodeId), item, group, form)
                     }
                 } else {
                     var any = title != null
                     node.children.forEachIndexed { index, child ->
-                        if (inFlow(child, local)) {
-                            if (any && child !is RowNode) out += Block.Space(key("$path/$index/gap", null), 8)
+                        if (inFlow(child, screen)) {
+                            if (any && child !is Navree.Row && child !is Navree.List) out += Block.Space(key("$path/$index/gap", null), 8)
                             add(child, "$path/$index", form, region, top = false)
                             any = true
                         }
@@ -170,31 +160,31 @@ internal fun blocks(
                 }
                 node.footer.forEachIndexed { index, child -> add(child, "$path/footer/$index", form, region, top = false) }
             }
-            is FormNode -> node.children.forEachIndexed { index, child -> add(child, "$path/$index", node.key, region, top = false) }
-            is TableNode -> {
+            is Navree.Form -> node.children.forEachIndexed { index, child -> add(child, "$path/$index", node.id, region, top = false) }
+            is Navree.Table -> {
                 val query = node.query
                 if (query != null) out += Block.Filters(key("$path/filters", null), query, search = query !== hoisted)
                 val empty = node.empty
                 if (node.rows.isEmpty() && empty != null) {
-                    out += Block.Single(key("$path/empty", empty.id), empty, form)
+                    out += Block.Single(key("$path/empty", empty.nodeId), empty, form)
                 } else if (ListRules.tableAsList(widthDp, node.columns.size)) {
-                    node.rows.forEachIndexed { index, row -> out += Block.TableItem(key("$path/$index", row.id), node, row) }
+                    node.rows.forEachIndexed { index, row -> out += Block.TableItem(key("$path/$index", row.id), node, row, form) }
                 } else {
                     out += Block.Single(key(path, node.id), node, form)
                 }
-                val id = node.id ?: region
-                val more = node.more
-                if (more != null && id != null) out += Block.More(key("$path/more", null), id, more)
+                // A table's next rows are asked for by the region it stands in.
+                val id = region ?: node.id
+                if (node.more != null && id != null) out += Block.More(key("$path/more", null), id)
             }
-            is EmptyNode -> out += if (top) Block.Fill(key(path, node.id), node) else Block.Single(key(path, node.id), node, form)
-            // A row and a switch are list items: they keep their own insets and run edge to edge.
-            is RowNode -> out += Block.Item(key(path, node.id), node, Group.None, form)
-            is FieldNode -> out += if (node.input is ToggleInput) {
+            is Navree.Empty -> out += if (top) Block.Fill(key(path, node.id), node) else Block.Single(key(path, node.id), node, form)
+            // A row, a feed row and a switch are list items: they keep their own insets and run edge to edge.
+            is Navree.Row, is Navree.FeedRow -> out += Block.Item(key(path, node.nodeId), node, Group.None, form)
+            is Navree.Field -> out += if (node.input is Navree.ToggleInput) {
                 Block.Item(key(path, node.id), node, Group.None, form)
             } else {
                 Block.Single(key(path, node.id), node, form)
             }
-            else -> out += Block.Single(key(path, node.id), node, form)
+            else -> out += Block.Single(key(path, node.nodeId), node, form)
         }
     }
 
@@ -202,7 +192,7 @@ internal fun blocks(
     return out
 }
 
-/** The index of the block that holds the node with this id, or the field asked for as `form/name`. */
+/** The index of the block that holds the node with this id. */
 internal fun blockOf(blocks: List<Block>, target: String): Int = blocks.indexOfFirst { block ->
     val node = when (block) {
         is Block.Single -> block.node
@@ -210,25 +200,28 @@ internal fun blockOf(blocks: List<Block>, target: String): Int = blocks.indexOfF
         is Block.Fill -> block.node
         else -> null
     }
-    val form = when (block) {
-        is Block.Single -> block.form
-        is Block.Item -> block.form
-        else -> null
-    }
-    node != null && holds(node, form, target)
+    node != null && holds(node, target)
 }
 
-private fun holds(node: Node, form: String?, target: String): Boolean {
-    if (node.id == target) return true
-    if (node is FieldNode && "$form/${node.name}" == target) return true
-    val inner = if (node is FormNode) node.key else form
-    val children = when (node) {
-        is StackNode -> node.children
-        is SectionNode -> node.children
-        is FormNode -> node.children
-        is ListNode -> node.children
-        is RegionNode -> node.children
-        else -> emptyList()
+private fun holds(node: Navree.Node, target: String): Boolean =
+    node.nodeId == target || node.childNodes().any { holds(it, target) }
+
+/** The toolbars of a body, drawn floating over the content rather than in it. */
+internal fun toolbars(body: Navree.Node?, screen: ScreenView): List<Navree.Toolbar> {
+    if (body == null) return emptyList()
+    val out = ArrayList<Navree.Toolbar>()
+    fun visit(node: Navree.Node) {
+        if (node is Navree.Stack && node.hidden || screen.hidden(node.nodeId)) return
+        when (node) {
+            is Navree.Toolbar -> out += node
+            is Navree.Sheet, is Navree.Dialog, is Navree.Popover -> Unit
+            else -> node.childNodes().forEach(::visit)
+        }
     }
-    return children.any { holds(it, inner, target) }
+    visit(body)
+    return out
 }
+
+/** A screen's toolbars: those among its actions and those in its body. */
+internal fun screenToolbars(screen: Navree.Screen, view: ScreenView): List<Navree.Toolbar> =
+    screen.actions.filterIsInstance<Navree.Toolbar>().filter { !view.hidden(it.id) } + toolbars(screen.body, view)

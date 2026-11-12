@@ -23,4 +23,5 @@ dependencyResolutionManagement {
 rootProject.name = "navree-android"
 
 include(":navree-native")
+include(":navree-push-fcm")
 include(":demo")

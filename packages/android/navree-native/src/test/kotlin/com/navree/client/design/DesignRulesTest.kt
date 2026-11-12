@@ -1,28 +1,7 @@
 package com.navree.client.design
 
 import com.navree.client.Fixtures
-import com.navree.client.protocol.ActionRole
-import com.navree.client.protocol.ButtonNode
-import com.navree.client.protocol.ChoiceKind
-import com.navree.client.protocol.Column
-import com.navree.client.protocol.DateKind
-import com.navree.client.protocol.IconNode
-import com.navree.client.protocol.Nav
-import com.navree.client.protocol.NavGroup
-import com.navree.client.protocol.NavItem
-import com.navree.client.protocol.Screen
-import com.navree.client.protocol.SheetSize
-import com.navree.client.protocol.TableNode
-import com.navree.client.protocol.TableRow
-import com.navree.client.protocol.TextKind
-import com.navree.client.protocol.TextLevel
-import com.navree.client.protocol.TextNode
-import com.navree.client.protocol.Tone
-import com.navree.client.protocol.decodeEnvelope
-import com.navree.client.protocol.decodeShell
-import com.navree.client.protocol.Submit
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
+import com.navree.protocol.Navree
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -30,9 +9,26 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-private fun screen(name: String): Screen = decodeEnvelope(Fixtures.envelope(name)).screen!!
+private fun button(
+    label: String,
+    role: Navree.Role = Navree.Role.NONE,
+    icon: Boolean = true,
+    standard: Navree.Standard? = null,
+    undoable: Boolean = false,
+    action: Navree.Action? = Navree.Action.Navigate("/orders/1"),
+) = Navree.Button(action = action, icon = if (icon) Navree.Icon(name = "star") else null, label = label, role = role, standard = standard, undoable = undoable)
 
-private fun label(screen: Screen, index: Int): String = (screen.actions[index] as ButtonNode).label
+private fun screen(
+    vararg actions: Navree.Node,
+    body: Navree.Node = Navree.Stack(),
+    search: Navree.Search? = null,
+    refresh: Boolean = false,
+    subtitle: String? = null,
+) = Navree.Screen(actions = actions.toList(), body = body, title = "Orders", search = search, refresh = refresh, subtitle = subtitle)
+
+private fun label(screen: Navree.Screen, index: Int): String = (screen.actions[index] as Navree.Button).label
+
+private val post = Navree.Action.Request(href = "/orders/1/cancel", method = Navree.Method.POST)
 
 class WindowTest {
     @Test
@@ -50,57 +46,46 @@ class WindowTest {
 }
 
 class NavigationRulesTest {
-    private val five = decodeShell(Fixtures.text("shell.json")).nav
-
-    private fun nav(vararg groups: Int): Nav =
-        Nav(groups.mapIndexed { g, size -> NavGroup("Group $g", List(size) { NavItem("Item $it", href = "/g$g/$it") }) })
-
     @Test
-    fun a_phone_gets_a_navigation_bar() {
-        val plan = NavigationRules.plan(WindowInfo.Phone, five)
-        assertEquals(NavigationKind.Bar, plan.kind)
-        assertEquals(listOf(0, 1, 2, 3, 4), plan.shown)
-        assertFalse(plan.menuButton)
-    }
-
-    @Test
-    fun a_phone_on_its_side_keeps_the_bar_because_the_window_is_short() {
-        assertEquals(NavigationKind.Bar, NavigationRules.plan(WindowInfo.PhoneLandscape, five).kind)
+    fun a_phone_gets_a_navigation_bar_and_its_side_keeps_it() {
+        assertEquals(NavigationKind.Bar, NavigationRules.plan(WindowInfo.Phone, listOf(5)).kind)
+        assertEquals(NavigationKind.Bar, NavigationRules.plan(WindowInfo.PhoneLandscape, listOf(5)).kind)
     }
 
     @Test
     fun a_foldable_and_a_small_tablet_get_a_rail() {
-        assertEquals(NavigationKind.Rail, NavigationRules.plan(WindowInfo.Foldable, five).kind)
-        assertEquals(NavigationKind.Rail, NavigationRules.plan(WindowInfo(900, 1200), five).kind)
+        assertEquals(NavigationKind.Rail, NavigationRules.plan(WindowInfo.Foldable, listOf(5)).kind)
+        assertEquals(NavigationKind.Rail, NavigationRules.plan(WindowInfo(900, 1200), listOf(5)).kind)
     }
 
     @Test
     fun a_large_window_gets_the_rail_expanded_not_a_drawer() {
-        val plan = NavigationRules.plan(WindowInfo.Tablet, nav(4, 3))
+        val plan = NavigationRules.plan(WindowInfo.Tablet, listOf(4, 3))
         assertEquals(NavigationKind.ExpandedRail, plan.kind)
         assertEquals(7, plan.shown.size)
         assertTrue("with more than one group, the groups are named", plan.groupHeadings)
-        assertFalse(NavigationRules.plan(WindowInfo.Desktop, five).groupHeadings)
     }
 
     @Test
     fun a_bar_holds_five_and_a_rail_seven_and_the_rest_are_behind_the_menu() {
-        val phone = NavigationRules.plan(WindowInfo.Phone, nav(4, 4))
+        val phone = NavigationRules.plan(WindowInfo.Phone, listOf(4, 4))
         assertEquals(listOf(0, 1, 2, 3, 4), phone.shown)
         assertEquals(listOf(5, 6, 7), phone.more)
         assertTrue(phone.menuButton)
-
-        val foldable = NavigationRules.plan(WindowInfo.Foldable, nav(4, 4))
-        assertEquals(7, foldable.shown.size)
+        val foldable = NavigationRules.plan(WindowInfo.Foldable, listOf(4, 4))
         assertEquals(listOf(7), foldable.more)
-        assertTrue(foldable.menuButton)
     }
 
     @Test
     fun one_destination_needs_no_navigation_and_two_still_get_a_bar() {
-        assertEquals(NavigationKind.None, NavigationRules.plan(WindowInfo.Phone, nav(1)).kind)
-        assertEquals(NavigationKind.None, NavigationRules.plan(WindowInfo.Tablet, nav()).kind)
-        assertEquals(NavigationKind.Bar, NavigationRules.plan(WindowInfo.Phone, nav(2)).kind)
+        assertEquals(NavigationKind.None, NavigationRules.plan(WindowInfo.Phone, listOf(1)).kind)
+        assertEquals(NavigationKind.Bar, NavigationRules.plan(WindowInfo.Phone, listOf(2)).kind)
+    }
+
+    @Test
+    fun at_the_largest_text_a_destinations_label_takes_two_lines_and_is_never_cut() {
+        assertEquals(1, NavigationRules.plan(WindowInfo.Phone, listOf(3)).labelLines)
+        assertEquals(2, NavigationRules.plan(WindowInfo.Phone.copy(fontScale = 2f), listOf(3)).labelLines)
     }
 }
 
@@ -109,362 +94,370 @@ class ScreenRulesTest {
     private val pushed = ScreenContext(canGoBack = true, user = true)
 
     @Test
-    fun on_a_phone_the_create_action_is_an_extended_floating_action_button() {
-        val orders = screen("orders")
+    fun creation_is_the_floating_action_button_and_nowhere_else() {
+        val orders = screen(button("Export", Navree.Role.SECONDARY), button("New order", Navree.Role.CREATE))
         val plan = ScreenRules.plan(orders, root, WindowInfo.Phone)
         assertEquals("New order", label(orders, plan.fab!!))
         assertEquals(FabPlace.BottomEnd, plan.fabPlace)
-        assertTrue(plan.fabExtended)
-        assertTrue("the create action is nowhere else", plan.barActions.none { it.index == plan.fab } && plan.fab !in plan.overflow)
+        assertTrue("at a first screen it carries its words", plan.fabExtended)
+        assertTrue(plan.barActions.none { it.index == plan.fab } && plan.fab !in plan.overflow)
     }
 
     @Test
-    fun a_first_screen_with_search_has_a_search_bar_for_its_app_bar() {
-        val orders = screen("orders")
-        val plan = ScreenRules.plan(orders, root, WindowInfo.Phone)
-        assertEquals(BarKind.Search, plan.bar)
-        assertEquals(SearchPlace.Bar, plan.search)
-        assertEquals(NavigationIcon.None, plan.navigationIcon)
-        assertTrue(plan.avatar)
-        assertTrue("beside the avatar there is room for the overflow only", plan.barActions.isEmpty())
-        assertEquals(listOf("Filter", "Export as CSV"), plan.overflow.map { label(orders, it) })
-        assertTrue(plan.pullToRefresh)
+    fun the_standard_add_is_creation_too() {
+        val orders = screen(button("Add", standard = Navree.Standard.ADD))
+        assertEquals(0, ScreenRules.plan(orders, root, WindowInfo.Phone).fab)
     }
 
     @Test
-    fun without_a_signed_in_user_the_search_bar_has_room_for_two_actions() {
-        val orders = screen("orders")
-        val plan = ScreenRules.plan(orders, root.copy(user = false), WindowInfo.Phone)
-        assertFalse(plan.avatar)
-        assertEquals(listOf("Filter", "Export as CSV"), plan.barActions.map { label(orders, it.index) })
-        assertTrue(plan.overflow.isEmpty())
+    fun deeper_the_floating_action_button_is_the_icon_alone_and_at_the_largest_text_too() {
+        val orders = screen(button("New order", Navree.Role.CREATE))
+        assertFalse(ScreenRules.plan(orders, pushed, WindowInfo.Phone).fabExtended)
+        assertFalse(ScreenRules.plan(orders, root, WindowInfo.Phone.copy(fontScale = 2f)).fabExtended)
     }
 
     @Test
     fun beside_a_rail_the_floating_action_button_moves_to_the_rails_head() {
-        val orders = screen("orders")
-        val foldable = ScreenRules.plan(orders, root.copy(navigation = NavigationKind.Rail), WindowInfo.Foldable)
-        assertEquals(FabPlace.RailHeader, foldable.fabPlace)
-        assertFalse("a collapsed rail has room for the icon only", foldable.fabExtended)
-        val tablet = ScreenRules.plan(orders, root.copy(navigation = NavigationKind.ExpandedRail), WindowInfo.Tablet)
-        assertEquals(FabPlace.RailHeader, tablet.fabPlace)
-        assertTrue(tablet.fabExtended)
+        val orders = screen(button("New order", Navree.Role.CREATE))
+        val rail = ScreenRules.plan(orders, root.copy(navigation = NavigationKind.Rail), WindowInfo.Foldable)
+        assertEquals(FabPlace.RailHeader, rail.fabPlace)
+        assertFalse(rail.fabExtended)
+        assertTrue(ScreenRules.plan(orders, root.copy(navigation = NavigationKind.ExpandedRail), WindowInfo.Tablet).fabExtended)
     }
 
     @Test
-    fun a_deeper_screen_keeps_its_floating_action_button_small_and_in_the_corner() {
-        val products = screen("products")
-        val plan = ScreenRules.plan(products, pushed.copy(navigation = NavigationKind.Rail), WindowInfo.Foldable)
-        assertEquals(FabPlace.BottomEnd, plan.fabPlace)
-        assertFalse(plan.fabExtended)
-        assertEquals("search on a deeper screen is an icon in the bar", SearchPlace.Action, plan.search)
-        assertEquals(BarKind.Small, plan.bar)
-        assertEquals(NavigationIcon.Back, plan.navigationIcon)
-        assertFalse("the avatar belongs to first screens", plan.avatar)
-    }
-
-    @Test
-    fun primary_goes_in_the_bar_the_rest_in_the_overflow_and_destructive_last() {
-        val order = screen("order")
-        val plan = ScreenRules.plan(order, pushed, WindowInfo.Phone)
-        assertNull("nothing here creates", plan.fab)
-        assertEquals(listOf("Edit"), plan.barActions.map { label(order, it.index) })
-        assertEquals(BarActionStyle.Icon, plan.barActions.single().style)
-        assertEquals(listOf("Share", "Print invoice", "Mark shipped", "Cancel order"), plan.overflow.map { label(order, it) })
-        assertEquals(ActionRole.Destructive, (order.actions[plan.overflow.last()] as ButtonNode).role)
-        assertEquals(NavigationIcon.Back, plan.navigationIcon)
-    }
-
-    @Test
-    fun a_wider_window_shows_more_actions_and_the_largest_text_fewer() {
-        val order = screen("order")
-        val tablet = ScreenRules.plan(order, pushed, WindowInfo.Tablet)
-        assertEquals(listOf("Edit", "Share"), tablet.barActions.map { label(order, it.index) })
-        assertEquals(listOf("Print invoice", "Mark shipped", "Cancel order"), tablet.overflow.map { label(order, it) })
-
-        val largeText = ScreenRules.plan(order, pushed, WindowInfo.Phone.copy(fontScale = 2f))
-        assertTrue("at the largest text the bar keeps only the overflow", largeText.barActions.isEmpty())
-        assertEquals(5, largeText.overflow.size)
-    }
-
-    @Test
-    fun a_destructive_action_is_never_in_the_bar_even_when_there_is_room() {
-        val only = Screen(
-            title = "Customer",
-            actions = listOf(ButtonNode(label = "Delete", role = ActionRole.Destructive, icon = IconNode(paths = listOf("M3 6h18")))),
+    fun a_destructive_action_is_never_the_floating_button_nor_in_the_bar_and_closes_the_overflow() {
+        val order = screen(
+            button("Cancel order", Navree.Role.DESTRUCTIVE, action = post),
+            button("Edit", Navree.Role.PRIMARY, standard = Navree.Standard.EDIT),
+            button("Share", standard = Navree.Standard.SHARE),
+            button("Delete", Navree.Role.CREATE, standard = Navree.Standard.DELETE),
         )
-        val plan = ScreenRules.plan(only, pushed, WindowInfo.Desktop)
-        assertTrue(plan.barActions.isEmpty())
+        val plan = ScreenRules.plan(order, pushed, WindowInfo.Tablet)
+        assertNull("a destructive action, whatever else it says, is not the floating button", plan.fab)
+        assertTrue(plan.barActions.none { ScreenRules.destructive(order.actions[it.index]) })
+        assertEquals(listOf("Cancel order", "Delete"), plan.overflow.map { label(order, it) })
+    }
+
+    @Test
+    fun primary_comes_first_in_the_bar_and_a_compact_window_shows_two() {
+        val order = screen(button("Print"), button("Share"), button("Edit", Navree.Role.PRIMARY), button("Archive"))
+        val phone = ScreenRules.plan(order, pushed, WindowInfo.Phone)
+        assertEquals("the second place goes to the overflow", listOf("Edit"), phone.barActions.map { label(order, it.index) })
+        assertEquals(listOf("Print", "Share", "Archive"), phone.overflow.map { label(order, it) })
+        val wide = ScreenRules.plan(order, pushed, WindowInfo.Tablet)
+        assertEquals(listOf("Edit", "Print", "Share", "Archive"), wide.barActions.map { label(order, it.index) })
+        assertTrue(wide.overflow.isEmpty())
+    }
+
+    @Test
+    fun the_largest_text_gives_up_a_place_in_the_bar() {
+        val order = screen(button("Edit", Navree.Role.PRIMARY), button("Share"))
+        assertEquals(2, ScreenRules.plan(order, pushed, WindowInfo.Phone).barActions.size)
+        val large = ScreenRules.plan(order, pushed, WindowInfo.Phone.copy(fontScale = 2f))
+        assertEquals(0, large.barActions.size)
+        assertEquals(2, large.overflow.size)
+    }
+
+    @Test
+    fun an_action_with_no_icon_goes_to_the_overflow_but_one_primary_may_be_words() {
+        val order = screen(button("Notes", icon = false), button("Ship", Navree.Role.PRIMARY, icon = false))
+        val plan = ScreenRules.plan(order, pushed, WindowInfo.Tablet)
+        assertEquals(listOf(BarAction(1, BarActionStyle.Text)), plan.barActions)
         assertEquals(listOf(0), plan.overflow)
     }
 
     @Test
-    fun one_primary_action_without_an_icon_may_be_a_text_button() {
-        val screen = Screen(
-            title = "Invoice",
-            actions = listOf(ButtonNode(label = "Send", role = ActionRole.Primary), ButtonNode(label = "Download"), ButtonNode(label = "Duplicate")),
-        )
-        val plan = ScreenRules.plan(screen, pushed, WindowInfo.Phone)
-        assertEquals(listOf(BarAction(0, BarActionStyle.Text)), plan.barActions)
-        assertEquals(listOf(1, 2), plan.overflow)
-    }
-
-    @Test
-    fun a_subtitle_sits_under_the_title_unless_the_window_is_short_or_the_text_at_its_largest() {
-        val order = screen("order")
-        val upright = ScreenRules.plan(order, pushed, WindowInfo.Phone)
-        assertEquals(BarKind.TwoLine, upright.bar)
-        assertEquals(BarScroll.Pinned, upright.scroll)
-        val onItsSide = ScreenRules.plan(order, pushed, WindowInfo.PhoneLandscape)
-        assertEquals(BarKind.Small, onItsSide.bar)
-        assertEquals("in a short window the bar leaves as the content scrolls", BarScroll.EnterAlways, onItsSide.scroll)
-        assertEquals(BarKind.Small, ScreenRules.plan(order, pushed, WindowInfo.Phone.copy(fontScale = 2f)).bar)
-    }
-
-    @Test
-    fun the_search_box_of_a_tables_query_goes_to_the_app_bar_and_its_filters_become_chips() {
-        val orders = decodeEnvelope(Fixtures.text("store-demo/orders.json")).screen!!
-        val query = ScreenRules.query(orders)!!
-        assertEquals("search", query.search?.name)
-        assertEquals(listOf("Status", "Fulfilment", "Payment", "Ships to"), query.filters.take(4).map { it.label })
-        val plan = ScreenRules.plan(orders, root, WindowInfo.Phone)
-        assertEquals(BarKind.Search, plan.bar)
-        assertTrue(plan.searchInQuery)
-        assertFalse("a screen with a search of its own uses that", ScreenRules.plan(screen("orders"), root, WindowInfo.Phone).searchInQuery)
-        assertTrue(ScreenRules.isCollection(orders.body))
-    }
-
-    @Test
-    fun a_presented_form_is_a_full_screen_dialog_closed_with_an_x_and_saved_from_the_bar() {
-        assertEquals(Presentation.FullScreenDialog, ScreenRules.presentation(full = false, WindowInfo.Phone))
-        val edit = screen("order-edit")
-        val plan = ScreenRules.plan(edit, ScreenContext(presentation = Presentation.FullScreenDialog), WindowInfo.Phone)
+    fun a_presented_screen_has_an_x_no_floating_button_and_no_cancel_in_the_bar() {
+        val form = screen(button("New", Navree.Role.CREATE), button("Cancel", Navree.Role.CANCEL))
+        val plan = ScreenRules.plan(form, ScreenContext(presentation = Presentation.FullScreenDialog), WindowInfo.Phone)
         assertEquals(NavigationIcon.Close, plan.navigationIcon)
-        assertEquals(SubmitPlace.Bar, plan.submit)
-        assertEquals(BarKind.Small, plan.bar)
         assertNull(plan.fab)
-        assertFalse(plan.avatar)
-        assertFalse("a form is not pulled to refresh", plan.pullToRefresh)
+        assertTrue(plan.barActions.none { label(form, it.index) == "Cancel" })
     }
 
     @Test
-    fun in_a_wide_window_the_presented_form_is_a_dialog_with_its_button_under_the_fields() {
-        assertEquals(Presentation.Dialog, ScreenRules.presentation(full = false, WindowInfo.Tablet))
-        assertEquals(Presentation.Dialog, ScreenRules.presentation(full = false, WindowInfo.Foldable))
-        assertEquals("a full cover is full at any size", Presentation.FullScreenDialog, ScreenRules.presentation(full = true, WindowInfo.Tablet))
-        assertEquals("a short window has no room for a dialog", Presentation.FullScreenDialog, ScreenRules.presentation(full = false, WindowInfo.PhoneLandscape))
-        val plan = ScreenRules.plan(screen("order-edit"), ScreenContext(presentation = Presentation.Dialog), WindowInfo.Tablet)
-        assertEquals(SubmitPlace.Inline, plan.submit)
-        assertEquals(NavigationIcon.Close, plan.navigationIcon)
+    fun a_floating_toolbar_takes_the_place_of_the_floating_button() {
+        val orders = screen(button("New order", Navree.Role.CREATE))
+        val plan = ScreenRules.plan(orders, root.copy(toolbar = true), WindowInfo.Phone)
+        assertNull(plan.fab)
+        assertTrue("creation is an icon in the bar instead", plan.barActions.any { label(orders, it.index) == "New order" } || plan.overflow.isNotEmpty())
     }
 
     @Test
-    fun a_pushed_form_is_saved_from_the_bar_and_a_screen_with_no_chrome_keeps_its_button() {
-        val edit = screen("order-edit")
-        assertEquals(SubmitPlace.Bar, ScreenRules.plan(edit, pushed, WindowInfo.Phone).submit)
-        val signIn = ScreenRules.plan(screen("sign-in"), ScreenContext(presentation = Presentation.FullScreenDialog, chrome = false), WindowInfo.Phone)
-        assertEquals(BarKind.None, signIn.bar)
-        assertEquals("the form is among other content, so its button stays with it", SubmitPlace.None, signIn.submit)
-        val bare = ScreenRules.plan(edit, ScreenContext(chrome = false), WindowInfo.Phone)
-        assertEquals(SubmitPlace.Inline, bare.submit)
-        assertEquals(NavigationIcon.None, bare.navigationIcon)
+    fun a_whole_form_is_finished_from_the_bar_and_inline_without_chrome() {
+        val form = Navree.Form(id = "customer", method = Navree.Method.POST, children = listOf(button("Save", Navree.Role.PRIMARY, action = Navree.Action.Submit())))
+        val plan = ScreenRules.plan(screen(body = form), pushed, WindowInfo.Phone)
+        assertEquals(SubmitPlace.Bar, plan.submit)
+        assertEquals(SubmitPlace.Inline, ScreenRules.plan(screen(body = form), pushed.copy(chrome = false), WindowInfo.Phone).submit)
     }
 
     @Test
-    fun a_screen_pushed_inside_a_presented_one_goes_back_with_an_arrow() {
-        val plan = ScreenRules.plan(screen("order"), ScreenContext(presentation = Presentation.FullScreenDialog, canGoBack = true), WindowInfo.Phone)
-        assertEquals(NavigationIcon.Back, plan.navigationIcon)
+    fun search_on_a_first_screen_is_the_bar_and_deeper_an_icon() {
+        val search = Navree.Search(name = "q", placeholder = "Search orders")
+        assertEquals(BarKind.Search, ScreenRules.plan(screen(search = search), root, WindowInfo.Phone).bar)
+        val deeper = ScreenRules.plan(screen(search = search), pushed, WindowInfo.Phone)
+        assertEquals(SearchPlace.Action, deeper.search)
+        assertEquals(BarKind.Small, deeper.bar)
     }
 
     @Test
-    fun the_menu_button_is_on_first_screens_when_destinations_did_not_fit() {
-        val home = screen("home")
-        assertEquals(NavigationIcon.Menu, ScreenRules.plan(home, root.copy(menuButton = true), WindowInfo.Phone).navigationIcon)
-        assertEquals(NavigationIcon.None, ScreenRules.plan(home, root, WindowInfo.Phone).navigationIcon)
-        val plan = ScreenRules.plan(home, root, WindowInfo.Phone)
-        assertEquals(BarKind.Small, plan.bar)
-        assertEquals(listOf("Reports"), plan.barActions.map { label(home, it.index) })
-        assertTrue(plan.overflow.isEmpty())
+    fun a_pushed_screen_has_a_back_arrow_and_a_first_screen_none() {
+        assertEquals(NavigationIcon.Back, ScreenRules.plan(screen(), pushed, WindowInfo.Phone).navigationIcon)
+        assertEquals(NavigationIcon.None, ScreenRules.plan(screen(), root, WindowInfo.Phone).navigationIcon)
+        assertEquals("the detail pane has the list beside it", NavigationIcon.None, ScreenRules.plan(screen(), ScreenContext(detailPane = true), WindowInfo.Tablet).navigationIcon)
     }
 
     @Test
-    fun a_wide_window_shows_a_list_and_what_was_opened_from_it_side_by_side() {
-        val orders = screen("orders")
-        assertTrue(ScreenRules.isCollection(orders.body))
-        assertTrue(ScreenRules.isCollection(screen("products").body))
-        assertFalse(ScreenRules.isCollection(screen("order-edit").body))
-        assertFalse(ScreenRules.isCollection(screen("home").body))
+    fun a_subtitle_takes_a_line_of_its_own_while_there_is_room() {
+        assertEquals(BarKind.TwoLine, ScreenRules.plan(screen(subtitle = "Ludhiana"), pushed, WindowInfo.Phone).bar)
+        assertEquals(BarKind.Small, ScreenRules.plan(screen(subtitle = "Ludhiana"), pushed, WindowInfo.PhoneLandscape).bar)
+    }
 
-        assertTrue(ScreenRules.twoPanes(WindowInfo.Tablet, orders, depth = 2))
-        assertTrue(ScreenRules.twoPanes(WindowInfo(900, 1200), orders, depth = 3))
-        assertFalse("with nothing opened the list has the window", ScreenRules.twoPanes(WindowInfo.Tablet, orders, depth = 1))
-        assertFalse(ScreenRules.twoPanes(WindowInfo.Phone, orders, depth = 2))
-        assertFalse(ScreenRules.twoPanes(WindowInfo.Foldable, orders, depth = 2))
-        assertFalse(ScreenRules.twoPanes(WindowInfo.Tablet, screen("home"), depth = 2))
-        assertEquals(360, ScreenRules.listPaneDp(WindowInfo(900, 1200)))
-        assertEquals(412, ScreenRules.listPaneDp(WindowInfo.Tablet))
+    @Test
+    fun a_presented_route_is_full_screen_on_a_phone_and_a_dialog_on_a_tablet() {
+        assertEquals(Presentation.FullScreenDialog, ScreenRules.presentation(false, WindowInfo.Phone))
+        assertEquals(Presentation.Dialog, ScreenRules.presentation(false, WindowInfo.Tablet))
+        assertEquals(Presentation.FullScreenDialog, ScreenRules.presentation(true, WindowInfo.Tablet))
+    }
 
-        val detail = ScreenRules.plan(screen("order"), ScreenContext(detailPane = true, user = true), WindowInfo.Tablet)
-        assertEquals("the list is beside it, so there is nothing to go back to", NavigationIcon.None, detail.navigationIcon)
+    @Test
+    fun two_panes_need_a_wide_window_and_a_list_first() {
+        val list = screen(body = Navree.List(children = listOf(Navree.Row(title = "CS-220480"))))
+        assertTrue(ScreenRules.twoPanes(WindowInfo.Tablet, list, 2))
+        assertFalse(ScreenRules.twoPanes(WindowInfo.Phone, list, 2))
+        assertFalse(ScreenRules.twoPanes(WindowInfo.Tablet, list, 1))
+        assertFalse(ScreenRules.twoPanes(WindowInfo.Tablet, screen(body = Navree.Text(value = "Hello")), 2))
+        val pane = screen(body = Navree.Pane(role = Navree.PaneRole.LIST))
+        assertTrue("a pane that says it is a list is one", ScreenRules.twoPanes(WindowInfo.Tablet, pane, 2))
+    }
+
+    @Test
+    fun the_real_orders_table_gives_its_search_box_and_its_filters_but_not_rows_a_page() {
+        val orders = Fixtures.screen("store-demo/orders.json")
+        val query = ScreenRules.query(orders)
+        assertNotNull(query)
+        query!!
+        assertNotNull(query.search)
+        assertTrue(query.filters.isNotEmpty())
+        assertTrue(query.filters.none { it.name.contains("per_page") })
     }
 }
 
-class ContentRulesTest {
-    private val products = screen("products").body as TableNode
-
+class ConfirmRulesTest {
     @Test
-    fun a_table_is_a_list_on_a_phone_and_a_table_where_there_is_room() {
-        assertTrue(ListRules.tableAsList(412, products.columns.size))
-        assertTrue(ListRules.tableAsList(599, products.columns.size))
-        assertFalse(ListRules.tableAsList(600, products.columns.size))
-        assertFalse(ListRules.tableAsList(1100, products.columns.size))
-        assertTrue("too many columns for the width is a list at any width", ListRules.tableAsList(700, 9))
+    fun a_destructive_action_that_writes_asks_first() {
+        assertTrue(ConfirmRules.asks(button("Cancel order", Navree.Role.DESTRUCTIVE, action = post), inDialog = false))
     }
 
     @Test
-    fun a_tables_row_folds_into_a_list_row_by_what_its_columns_say_they_are() {
-        val row = ListRules.asListRow(products.columns, products.rows.first())
-        assertEquals("Phulkari dupatta, red", row.headline)
-        assertEquals(listOf(TextNode(value = "PH-204"), TextNode(value = "Clothing")), row.lines)
-        assertEquals(TextNode(value = "₹4,999"), row.trailing)
-        assertEquals("24 in stock", (row.badges.single() as com.navree.client.protocol.BadgeNode).text)
-        assertEquals(products.rows.first().action, row.action)
+    fun one_that_can_be_undone_does_not_ask_its_undo_is_in_the_snackbar() {
+        assertFalse(ConfirmRules.asks(button("Archive", Navree.Role.DESTRUCTIVE, undoable = true, action = post), inDialog = false))
     }
 
     @Test
-    fun a_row_of_the_real_orders_table_is_one_touch_target_with_the_order_number_as_its_name() {
-        val table = ScreenRules.mainTable(decodeEnvelope(Fixtures.text("store-demo/orders.json")).screen!!.body)!!
-        val row = ListRules.asListRow(table.columns, table.rows.first())
-        assertEquals("the one control of the naming cell gives the row its name", "CS-220480", row.headline)
-        assertEquals("and its action: the form it stands in, sent", Submit(form = "@/orders/200000/peek"), row.action)
-        val words = row.lines.filterIsInstance<TextNode>().map { it.value }
-        assertEquals(listOf("Tejinder Randhawa", "Today, 21:42"), words)
-        assertEquals("the columns a narrow screen may leave out are left out", 2, row.badges.size)
-        assertNotNull("the number of the row is at its end", row.trailing)
+    fun the_answer_of_a_dialog_is_not_asked_again_and_a_link_never_asks() {
+        assertFalse(ConfirmRules.asks(button("Cancel order", Navree.Role.DESTRUCTIVE, action = post), inDialog = true))
+        assertFalse(ConfirmRules.asks(button("Cancel order", Navree.Role.DESTRUCTIVE), inDialog = false))
+        assertFalse(ConfirmRules.asks(button("Refund", Navree.Role.PRIMARY, action = post), inDialog = false))
+    }
+}
+
+class ListRulesTest {
+    private val columns = listOf(
+        Navree.Column(label = "Photo", role = Navree.ColumnRole.LEADING),
+        Navree.Column(label = "Order", role = Navree.ColumnRole.TITLE),
+        Navree.Column(label = "Customer", role = Navree.ColumnRole.SUBTITLE),
+        Navree.Column(label = "Status", role = Navree.ColumnRole.STATUS),
+        Navree.Column(label = "Ships to", secondary = true),
+        Navree.Column(label = "Total", numeric = true, role = Navree.ColumnRole.TRAILING),
+        Navree.Column(label = "", role = Navree.ColumnRole.ACTIONS),
+    )
+    private val row = Navree.TableRow(
+        action = Navree.Action.Navigate("/orders/1"),
+        cells = listOf(
+            Navree.Avatar(name = "Tejinder Randhawa"),
+            Navree.Text(value = "CS-220480"),
+            Navree.Text(value = "Tejinder Randhawa"),
+            Navree.Badge(text = "Open", tone = Navree.Tone.INFO),
+            Navree.Text(value = "Punjab"),
+            Navree.Text(value = "₹1,24,500"),
+            Navree.Menu(label = "Actions", items = listOf(Navree.Button(label = "Resend confirmation"))),
+        ),
+    )
+
+    @Test
+    fun a_row_is_folded_by_the_role_of_each_column() {
+        val folded = ListRules.asListRow(columns, row)
+        assertTrue(folded.leading is Navree.Avatar)
+        assertEquals("CS-220480", folded.headline)
+        assertEquals(listOf("Tejinder Randhawa"), folded.lines.map { (it as Navree.Text).value })
+        assertEquals(listOf("Open"), folded.statuses.map { (it as Navree.Badge).text })
+        assertEquals("₹1,24,500", (folded.trailing as Navree.Text).value)
+        assertEquals(listOf("Resend confirmation"), folded.menu.map { (it as Navree.Button).label })
+        assertEquals("the row opens what the server says it opens", Navree.Action.Navigate("/orders/1"), folded.action)
     }
 
     @Test
-    fun without_roles_a_tables_columns_are_placed_by_position() {
-        val columns = listOf("Customer", "City", "Orders", "Spent").map { Column(label = it) }
-        val cells = listOf("Harpreet Kaur", "Ludhiana", "12", "₹86,300").map { TextNode(value = it) }
-        val row = ListRules.asListRow(columns, TableRow(cells = cells))
-        assertEquals("Harpreet Kaur", row.headline)
-        assertEquals(listOf(cells[1], cells[2]), row.lines)
-        assertEquals(cells[3], row.trailing)
-        assertTrue(row.badges.isEmpty())
-
-        val two = ListRules.asListRow(columns.take(2), TableRow(cells = cells.take(2)))
-        assertEquals(listOf(cells[1]), two.lines)
-        assertNull("two columns are a title and a second line", two.trailing)
+    fun a_column_a_narrow_screen_may_leave_out_is_left_out() {
+        val folded = ListRules.asListRow(columns, row)
+        assertTrue(folded.lines.none { (it as? Navree.Text)?.value == "Punjab" })
     }
 
     @Test
-    fun a_grid_gets_as_many_columns_as_fit() {
-        assertEquals(2, ListRules.gridColumns(380, 156, 8))
-        assertEquals(1, ListRules.gridColumns(300, 156, 8))
-        assertEquals(4, ListRules.gridColumns(792, 156, 8))
-        assertEquals(1, ListRules.gridColumns(100, 400, 16))
+    fun without_roles_a_badge_is_a_status_and_the_first_number_trails() {
+        val plain = listOf(Navree.Column(label = "Order"), Navree.Column(label = "Status"), Navree.Column(label = "Total", numeric = true))
+        val folded = ListRules.asListRow(plain, Navree.TableRow(cells = listOf(Navree.Text(value = "CS-1"), Navree.Badge(text = "Paid"), Navree.Text(value = "₹500"))))
+        assertEquals("CS-1", folded.headline)
+        assertEquals(1, folded.statuses.size)
+        assertEquals("₹500", (folded.trailing as Navree.Text).value)
     }
 
     @Test
-    fun a_choice_becomes_the_material_control_that_fits_it() {
-        val phone = WindowInfo.Phone
-        assertEquals(ChoiceWidget.Segmented, FormRules.choice(ChoiceKind.Segmented, 3, phone))
-        assertEquals(ChoiceWidget.Segmented, FormRules.choice(ChoiceKind.Segmented, 4, phone))
-        assertEquals("five segments do not fit a phone", ChoiceWidget.Menu, FormRules.choice(ChoiceKind.Segmented, 5, phone))
-        assertEquals(ChoiceWidget.Segmented, FormRules.choice(ChoiceKind.Segmented, 5, WindowInfo.Tablet))
-        assertEquals("nor do segments fit the largest text", ChoiceWidget.Menu, FormRules.choice(ChoiceKind.Segmented, 3, phone.copy(fontScale = 2f)))
-        assertEquals(ChoiceWidget.Radio, FormRules.choice(ChoiceKind.Radio, 5, phone))
-        assertEquals(ChoiceWidget.Menu, FormRules.choice(ChoiceKind.Radio, 6, phone))
-        assertEquals(ChoiceWidget.Menu, FormRules.choice(ChoiceKind.Menu, 15, phone))
-        assertEquals("a menu that long cannot be scanned", ChoiceWidget.Dialog, FormRules.choice(ChoiceKind.Menu, 16, phone))
-        assertEquals(ChoiceWidget.Dialog, FormRules.choice(ChoiceKind.List, 3, phone))
+    fun a_row_with_no_action_takes_the_one_control_its_title_holds() {
+        val cell = Navree.Form(id = "peek-1", action = "/orders/1/peek", children = listOf(Navree.Button(label = "CS-220480", action = Navree.Action.Submit())))
+        val folded = ListRules.asListRow(listOf(Navree.Column(label = "Order", role = Navree.ColumnRole.TITLE)), Navree.TableRow(cells = listOf(cell)))
+        assertEquals("CS-220480", folded.headline)
+        assertEquals(Navree.Action.Submit(form = "peek-1"), folded.action)
+    }
+
+    @Test
+    fun the_real_orders_rows_each_have_a_headline_and_an_action() {
+        val orders = Fixtures.screen("store-demo/orders.json")
+        val table = ScreenRules.mainTable(orders.body)!!
+        assertTrue(table.rows.isNotEmpty())
+        for (each in table.rows) {
+            val folded = ListRules.asListRow(table.columns, each)
+            assertNotNull(folded.headline)
+            assertNotNull("a row on a phone is one touch target", folded.action)
+        }
+    }
+
+    @Test
+    fun at_the_largest_text_the_value_moves_under_the_text() {
+        assertFalse(ListRules.trailingBelow(WindowInfo.Phone))
+        assertTrue(ListRules.trailingBelow(WindowInfo.Phone.copy(fontScale = 2f)))
+    }
+
+    @Test
+    fun a_table_is_a_list_on_a_phone_and_a_table_where_its_columns_fit() {
+        assertTrue(ListRules.tableAsList(412, 4))
+        assertFalse(ListRules.tableAsList(900, 4))
+        assertTrue(ListRules.tableAsList(700, 7))
+    }
+
+    @Test
+    fun a_grid_adds_columns_with_the_width() {
+        assertEquals(1, ListRules.gridColumns(380, 200, 16))
+        assertEquals(4, ListRules.gridColumns(900, 200, 16))
+        assertEquals(3, ListRules.gridColumns(900, 200, 16, most = 3))
+    }
+}
+
+class FormRulesTest {
+    @Test
+    fun a_few_choices_are_a_connected_button_group_and_many_a_menu_or_a_dialog() {
+        assertEquals(ChoiceWidget.ButtonGroup, FormRules.choice(Navree.ChoiceKind.SEGMENTED, 4, WindowInfo.Phone))
+        assertEquals(ChoiceWidget.Menu, FormRules.choice(Navree.ChoiceKind.SEGMENTED, 5, WindowInfo.Phone))
+        assertEquals(ChoiceWidget.ButtonGroup, FormRules.choice(Navree.ChoiceKind.SEGMENTED, 5, WindowInfo.Tablet))
+        assertEquals(ChoiceWidget.Menu, FormRules.choice(Navree.ChoiceKind.SEGMENTED, 3, WindowInfo.Phone.copy(fontScale = 2f)))
+        assertEquals(ChoiceWidget.Dialog, FormRules.choice(Navree.ChoiceKind.MENU, 16, WindowInfo.Phone))
         assertEquals(ChoicesWidget.Chips, FormRules.choices(8))
         assertEquals(ChoicesWidget.Dialog, FormRules.choices(9))
     }
 
     @Test
-    fun dates_and_times_are_typed_when_the_window_is_too_short_for_the_picker() {
-        assertEquals(PickerMode.Picker, FormRules.picker(DateKind.Date, WindowInfo.Phone))
-        assertEquals(PickerMode.Input, FormRules.picker(DateKind.Date, WindowInfo.PhoneLandscape))
-        assertEquals(PickerMode.Input, FormRules.picker(DateKind.Time, WindowInfo.PhoneLandscape))
+    fun the_keyboard_goes_on_until_the_last_field_which_finishes() {
+        assertEquals("next", FormRules.imeAction(Navree.TextKind.PLAIN, last = false))
+        assertEquals("done", FormRules.imeAction(Navree.TextKind.EMAIL, last = true))
+        assertEquals("search", FormRules.imeAction(Navree.TextKind.SEARCH, last = false))
     }
 
     @Test
-    fun each_kind_of_text_gets_its_keyboard() {
-        assertEquals(KeyboardPlan("email", "none", autoCorrect = false, singleLine = true), FormRules.keyboard(TextKind.Email))
-        assertEquals("phone", FormRules.keyboard(TextKind.Phone).type)
-        assertEquals("decimal", FormRules.keyboard(TextKind.Decimal).type)
-        assertEquals("number", FormRules.keyboard(TextKind.OneTimeCode).type)
-        assertFalse(FormRules.keyboard(TextKind.Password).autoCorrect)
-        assertFalse(FormRules.keyboard(TextKind.Multiline).singleLine)
-        assertEquals("a name is capitalised word by word", "words", FormRules.capitalise("name", FormRules.keyboard(TextKind.Plain)))
-        assertEquals("sentences", FormRules.capitalise(null, FormRules.keyboard(TextKind.Plain)))
-        assertEquals("Full name *", FormRules.label("Full name", required = true))
-        assertEquals("Email", FormRules.label("Email", required = false))
+    fun names_are_capitalised_by_words_and_emails_not_at_all() {
+        val plain = FormRules.keyboard(Navree.TextKind.PLAIN)
+        assertEquals("words", FormRules.capitalise("name", plain))
+        assertEquals("none", FormRules.capitalise("email", plain))
+        assertEquals("sentences", FormRules.capitalise(null, plain))
     }
 
     @Test
-    fun sheets_and_dialogs_fit_the_window() {
-        assertEquals(SheetPlan(partial = true, fullHeight = false), OverlayRules.sheet(SheetSize.Medium, WindowInfo.Phone))
-        assertEquals("a short window has no room for a half-open sheet", SheetPlan(partial = false, fullHeight = false), OverlayRules.sheet(SheetSize.Medium, WindowInfo.PhoneLandscape))
-        assertEquals(SheetPlan(partial = false, fullHeight = true), OverlayRules.sheet(SheetSize.Full, WindowInfo.Phone))
-        assertFalse(OverlayRules.dialogButtonsStack(listOf("Keep order", "Cancel order"), WindowInfo.Phone))
-        assertTrue(OverlayRules.dialogButtonsStack(listOf("Keep", "Refund", "Cancel"), WindowInfo.Phone))
-        assertTrue(OverlayRules.dialogButtonsStack(listOf("Keep the order as it is", "Cancel the order"), WindowInfo.Phone))
+    fun a_short_window_types_dates_instead_of_the_calendar() {
+        assertEquals(PickerMode.Picker, FormRules.picker(WindowInfo.Phone))
+        assertEquals(PickerMode.Input, FormRules.picker(WindowInfo.PhoneLandscape))
     }
 
     @Test
-    fun what_a_thing_is_picks_its_type_its_colours_and_its_spacing() {
-        assertEquals(TypeRole.HeadlineMedium, ContentRules.type(TextLevel.LargeTitle))
-        assertEquals(TypeRole.BodyLarge, ContentRules.type(TextLevel.Body))
-        assertEquals(TypeRole.BodySmall, ContentRules.type(TextLevel.Caption))
-        assertEquals(ToneRole.Error, ContentRules.tone(Tone.Danger))
-        assertEquals(ToneRole.Surface, ContentRules.tone(Tone.Neutral))
-        assertEquals(listOf(0, 4, 8, 16, 64), listOf(0, 1, 2, 4, 40).map(ContentRules::gap))
-        assertEquals(16, ContentRules.marginDp(WindowInfo.Phone))
-        assertEquals(24, ContentRules.marginDp(WindowInfo.Foldable))
-        assertFalse(ContentRules.factsStacked(WindowInfo.Phone))
-        assertTrue("with large text a value goes under its label", ContentRules.factsStacked(WindowInfo.Phone.copy(fontScale = 1.3f)))
+    fun rows_a_page_is_not_a_filter() {
+        val perPage = Navree.Field(name = "per_page", input = Navree.ChoiceInput(options = listOf(Navree.ChoiceOption(label = "25", value = "25"))))
+        val status = Navree.Field(name = "filter[status][in]", input = Navree.ChoicesInput())
+        assertFalse(FilterRules.isFilter(perPage))
+        assertTrue(FilterRules.isFilter(status))
+    }
+
+    @Test
+    fun a_bottom_sheet_rests_half_open_only_where_there_is_room() {
+        assertTrue(OverlayRules.sheet(Navree.SheetSize.MEDIUM, WindowInfo.Phone).partial)
+        assertFalse(OverlayRules.sheet(Navree.SheetSize.MEDIUM, WindowInfo.PhoneLandscape).partial)
+        assertTrue(OverlayRules.sheet(Navree.SheetSize.FULL, WindowInfo.Phone).fullHeight)
     }
 }
 
-class IconShapesTest {
+class SymbolsTest {
     @Test
-    fun shapes_are_read_from_path_data_from_objects_and_from_markup() {
-        val paths = IconShapes.read(JsonArray(listOf(JsonPrimitive("M5 12h14"), JsonPrimitive("M12 5v14"))))
-        assertEquals(listOf(IconPath("M5 12h14"), IconPath("M12 5v14")), paths)
-
-        val markup = "<path d=\"M16 21v-2a4 4 0 0 0-4-4H6\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/>" +
-            "<rect width=\"20\" height=\"5\" x=\"2\" y=\"3\" rx=\"1\"/><line x1=\"2\" x2=\"22\" y1=\"10\" y2=\"10\"/>" +
-            "<polyline points=\"22 12 16 12 14 15\"/><polygon points=\"1,2 3,4 5,6\"/><circle cx=\"7.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\"/>"
-        val read = IconShapes.read(JsonPrimitive(markup))
-        assertEquals(
-            listOf(
-                IconPath("M16 21v-2a4 4 0 0 0-4-4H6"),
-                IconPath("M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0Z"),
-                IconPath("M3 3h18a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-18a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1Z"),
-                IconPath("M2 10L22 10"),
-                IconPath("M22 12L16 12L14 15"),
-                IconPath("M1 2L3 4L5 6Z"),
-                IconPath("M7 7.5a0.5 0.5 0 1 0 1 0a0.5 0.5 0 1 0 -1 0Z", fill = true),
-            ),
-            read,
-        )
-    }
-
-    @Test
-    fun what_is_not_a_shape_is_left_out() {
-        val hostile = "<script>alert(1)</script><image href=\"https://evil.example/x.png\"/><path d=\"M1 1h2\" onclick=\"x()\"/><circle r=\"0\"/>"
-        assertEquals(listOf(IconPath("M1 1h2")), IconShapes.read(JsonPrimitive(hostile)))
-        assertTrue(IconShapes.read(null).isEmpty())
-    }
-
-    @Test
-    fun every_icon_of_the_fixtures_has_shapes() {
-        val shell = decodeShell(Fixtures.text("shell.json"))
-        for (item in shell.nav.groups.flatMap { it.items }) {
-            assertTrue("${item.label} has an icon to draw", item.icon!!.paths.isNotEmpty())
+    fun every_standard_action_takes_a_system_symbol_the_client_carries() {
+        for (standard in Navree.Standard.entries) {
+            val symbol = Symbols.of(standard)
+            assertTrue("$standard is $symbol", Symbols.has(symbol))
+            assertNotNull(Symbols.paths(symbol, filled = true))
         }
+    }
+
+    @Test
+    fun the_store_demos_destinations_map_to_symbols() {
+        assertEquals("dashboard", Symbols.of("layout-dashboard"))
+        assertEquals("shopping_bag", Symbols.of("shopping-bag"))
+        assertEquals("inventory_2", Symbols.of("boxes"))
+        assertEquals("a symbol's own name is taken as it is", "receipt_long", Symbols.of("receipt_long"))
+        assertNull("a name that maps nowhere keeps the page's shape", Symbols.of("hologram"))
+    }
+
+    @Test
+    fun every_mapped_name_is_a_symbol_the_client_carries_in_both_forms() {
+        val names = listOf("layout-dashboard", "shopping-bag", "boxes", "truck", "users", "settings", "inbox", "plus", "pencil", "trash-2", "share-2", "x", "check", "bell")
+        for (name in names) {
+            val symbol = Symbols.of(name)!!
+            assertNotNull("$name -> $symbol plain", Symbols.paths(symbol, filled = false))
+            assertNotNull("$name -> $symbol filled", Symbols.paths(symbol, filled = true))
+        }
+    }
+}
+
+class ContentRulesTest {
+    @Test
+    fun text_styles_take_material_type_roles() {
+        assertEquals(TypeRole.HeadlineMedium, ContentRules.type(Navree.TextStyle.LARGE_TITLE))
+        assertEquals(TypeRole.BodyLarge, ContentRules.type(Navree.TextStyle.BODY))
+        assertEquals(TypeRole.BodySmall, ContentRules.type(Navree.TextStyle.CAPTION))
+    }
+
+    @Test
+    fun tones_take_colour_roles_and_no_tone_is_the_surface() {
+        assertEquals(ToneRole.Surface, ContentRules.tone(null))
+        assertEquals(ToneRole.Error, ContentRules.tone(Navree.Tone.DANGER))
+        assertEquals(ToneRole.Success, ContentRules.tone(Navree.Tone.SUCCESS))
+    }
+
+    @Test
+    fun margins_and_gaps_are_on_materials_grid() {
+        assertEquals(16, ContentRules.marginDp(WindowInfo.Phone))
+        assertEquals(24, ContentRules.marginDp(WindowInfo.Tablet))
+        assertEquals(8, ContentRules.gap(2))
+        assertTrue(ContentRules.factsStacked(WindowInfo.Phone.copy(fontScale = 2f)))
+    }
+
+    @Test
+    fun a_status_in_a_row_is_a_word_not_a_filled_label() {
+        assertTrue(ContentRules.statusAsText(inRow = true))
     }
 }

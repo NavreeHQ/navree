@@ -1,10 +1,8 @@
 package com.navree.client
 
-import android.content.ActivityNotFoundException
-import android.content.ClipData
-import android.content.ClipboardManager
+import android.app.Application
 import android.content.Intent
-import android.net.Uri
+import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,32 +12,86 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import com.navree.client.platform.HttpsTransport
-import com.navree.client.platform.NavreeConfig
-import com.navree.client.platform.NavreeStore
-import com.navree.client.platform.describe
-import com.navree.client.platform.origin
-import com.navree.client.runtime.Effect
-import com.navree.client.runtime.Event
-import com.navree.client.runtime.Load
+import com.navree.client.core.Driver
+import com.navree.client.core.Engine
+import com.navree.client.core.Events
+import com.navree.client.core.Width
+import com.navree.client.platform.AndroidEffects
 import com.navree.client.ui.NavreeApp
-import kotlinx.coroutines.launch
+import com.navree.client.ui.rememberWindow
+import com.navree.core.Core
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.Request
+
+/**
+ * The runtime core and everything that carries out its effects, kept for as
+ * long as the app's task lives: a rotation or a fold makes a new activity,
+ * not a new core.
+ */
+class NavreeSession(application: Application, val config: NavreeConfig, origin: HttpUrl) : AndroidViewModel(application) {
+    private val engine = CoreEngine()
+    val driver = Driver(engine)
+
+    /** The settings the core was last told of: dark, text size, locale. A change is told once. */
+    var environment: Triple<Boolean, Int, String>? = null
+    val effects = AndroidEffects(application, driver, origin, config.googleClientId, config.push)
+
+    init {
+        driver.effects = effects
+        val device = Device.of(application)
+        environment = Triple(device.dark, device.textPercent, device.locale)
+        engine.core = Core(coreConfig(config, device, effects.caps).toString().encodeToByteArray())
+        driver.send(Events.start)
+        effects.pushes?.register()
+    }
+
+    /** Fetches an image from the app's origin, with the session's cookies. */
+    suspend fun image(url: String): ByteArray? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val base = config.origin.toHttpUrlOrNull() ?: return@withContext null
+        val target = base.resolve(url)?.takeIf { it.host == base.host && it.scheme == base.scheme && it.port == base.port } ?: return@withContext null
+        runCatching {
+            effects.http.client.newCall(Request.Builder().url(target).build()).execute().use { response ->
+                if (response.isSuccessful) response.body.bytes() else null
+            }
+        }.getOrNull()
+    }
+
+    override fun onCleared() {
+        engine.core?.close()
+        engine.core = null
+    }
+
+    private class CoreEngine : Engine {
+        var core: Core? = null
+
+        override fun send(event: ByteArray): ByteArray = core?.send(event) ?: ByteArray(0)
+
+        override fun view(query: ByteArray): ByteArray = core?.view(query) ?: ByteArray(0)
+    }
+
+    class Factory(private val application: Application, private val config: NavreeConfig, private val origin: HttpUrl) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T = NavreeSession(application, config, origin) as T
+    }
+}
 
 /**
  * The one activity of a Navree app. An app declares it in its manifest and
  * sets its origin, name and seed colour in resources; there is no code to
- * write. An app that needs more than resources subclasses it and overrides
- * [config].
+ * write. An app that needs more than resources (a push provider, say)
+ * subclasses it and overrides [config].
  */
 open class NavreeActivity : ComponentActivity() {
-    private var store: NavreeStore? = null
+    private var session: NavreeSession? = null
 
     /** What this app is. Read once, when the activity is made. */
     protected open fun config(): NavreeConfig = NavreeConfig.fromResources(this)
@@ -49,52 +101,98 @@ open class NavreeActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val config = config()
-        val origin = config.origin()
+        val origin = config.origin.toHttpUrlOrNull()?.takeIf { it.scheme == "https" || config.loopbackHttp }
         if (origin == null) {
-            setContent {
-                MaterialTheme {
-                    Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                        Text("This app's origin is not set, or is not HTTPS: ${config.origin}")
-                    }
-                }
-            }
+            setContent { Unusable(config.origin) }
             return
         }
-        val app = applicationContext
-        val transport = HttpsTransport(origin, describe = { describe(app) })
-        val store = ViewModelProvider(this, NavreeStore.Factory(origin, transport))[NavreeStore::class.java]
-        this.store = store
-        if (store.state.value.shellLoad == Load.Idle) store.dispatch(Event.Started)
-        if (savedInstanceState == null) intent?.data?.let { store.dispatch(Event.Opened(it.toString())) }
-
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                store.effects.collect(::perform)
-            }
-        }
-        setContent {
-            NavreeApp(store, config, image = { url -> (store.transport as? HttpsTransport)?.bytes(url) })
-        }
+        val session = ViewModelProvider(this, NavreeSession.Factory(application, config, origin))[NavreeSession::class.java]
+        this.session = session
+        session.effects.activity = this
+        if (savedInstanceState == null) opened(intent)
+        setContent { Host(session) }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent.data?.let { store?.dispatch(Event.Opened(it.toString())) }
+        opened(intent)
     }
 
-    private fun perform(effect: Effect) {
-        when (effect) {
-            is Effect.OpenOutside -> try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(effect.url)))
-            } catch (_: ActivityNotFoundException) {
-                // Nothing on the device opens this kind of address.
-            }
-            is Effect.Copy -> {
-                val clipboard = getSystemService(ClipboardManager::class.java)
-                clipboard?.setPrimaryClip(ClipData.newPlainText("", effect.text))
-            }
-            Effect.Leave -> finish()
-            is Effect.Fetch -> Unit
+    override fun onResume() {
+        super.onResume()
+        session?.let {
+            it.effects.activity = this
+            it.effects.resumed()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        session?.driver?.send(Events.foreground)
+    }
+
+    override fun onStop() {
+        session?.let {
+            it.driver.send(Events.background)
+            it.effects.stopped()
+        }
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        session?.effects?.let { if (it.activity === this) it.activity = null }
+        super.onDestroy()
+    }
+
+    /** A link that opened the app, or a notification tapped: handed to the core, which checks it. */
+    private fun opened(intent: Intent?) {
+        val session = session ?: return
+        intent?.getStringExtra(EXTRA_HREF)?.let {
+            session.driver.send(Events.notification(it))
+            return
+        }
+        intent?.data?.toString()?.let(session.effects::opened)
+    }
+
+    companion object {
+        /** The path a notification opens, as the server's push channel puts it in a message's data. */
+        const val EXTRA_HREF = "href"
+    }
+}
+
+@Composable
+private fun Host(session: NavreeSession) {
+    val window = rememberWindow()
+    val configuration = LocalConfiguration.current
+    val driver = session.driver
+    // The window's width class and the person's settings, as they change.
+    LaunchedEffect(window.width) {
+        driver.send(
+            Events.window(
+                when (window.width) {
+                    com.navree.client.design.WidthClass.Compact -> Width.Compact
+                    com.navree.client.design.WidthClass.Medium -> Width.Medium
+                    else -> Width.Expanded
+                },
+            ),
+        )
+    }
+    val dark = configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+    val now = Triple(dark, (configuration.fontScale * 100).toInt(), configuration.locales[0].toLanguageTag())
+    LaunchedEffect(now) {
+        if (session.environment != now) {
+            session.environment = now
+            driver.send(Events.environment(dark = now.first, textPercent = now.second, locale = now.third))
+        }
+    }
+    NavreeApp(driver, session.config, image = session::image)
+}
+
+@Composable
+private fun Unusable(origin: String) {
+    MaterialTheme {
+        Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+            Text("This app's origin is not set, or is not HTTPS: $origin")
         }
     }
 }

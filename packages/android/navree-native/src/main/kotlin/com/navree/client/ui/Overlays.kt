@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -15,58 +16,61 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.navree.client.core.Events
 import com.navree.client.design.OverlayRules
-import com.navree.client.protocol.ActionRole
-import com.navree.client.protocol.ButtonNode
-import com.navree.client.protocol.DialogNode
-import com.navree.client.protocol.FormNode
-import com.navree.client.protocol.Node
-import com.navree.client.protocol.PopoverNode
-import com.navree.client.protocol.Screen
-import com.navree.client.protocol.SheetNode
-import com.navree.client.protocol.SheetSize
-import com.navree.client.runtime.Entry
-import com.navree.client.runtime.Event
-import com.navree.client.runtime.overlays
-import com.navree.client.runtime.submitButton
-import com.navree.client.runtime.walk
+import com.navree.client.design.ScreenRules
+import com.navree.client.design.overlays
+import com.navree.client.design.submitButton
+import com.navree.client.design.walk
+import com.navree.protocol.Navree
 
 /**
- * The sheets and dialogs of a screen that are open now, and the question a
- * destructive button asks. A sheet of the tree is a modal bottom sheet; a
- * dialog of the tree is a Material alert dialog.
+ * The sheets, dialogs and popovers of a screen's tree that are open now, and
+ * the question a destructive action asks. A sheet is a modal bottom sheet
+ * (with a most width on wide windows); a dialog is a Material alert dialog.
  */
 @Composable
-internal fun Overlays(entry: Entry, screen: Screen) {
+internal fun Overlays(place: Place) {
     val ui = LocalUi.current
-    val place = Place(entry)
-    for (overlay in screen.overlays()) {
-        val id = overlay.id ?: continue
-        if (!entry.local.isOpen(overlay)) continue
-        val close = { ui.dispatch(Event.OverlayToggled(entry.key, id, false)) }
+    val tree = place.screen.screen ?: return
+    for (overlay in tree.overlays()) {
+        val id = when (overlay) {
+            is Navree.Sheet -> overlay.id
+            is Navree.Dialog -> overlay.id
+            is Navree.Popover -> overlay.id
+            else -> continue
+        }
+        val open = when (overlay) {
+            is Navree.Sheet -> overlay.open
+            is Navree.Dialog -> overlay.open
+            else -> false
+        } || place.screen.open(id)
+        if (!open) continue
+        val close = { ui.send(Events.overlay(place.id, id, false)) }
+        val inner = place.copy(overlay = id)
         when (overlay) {
-            is SheetNode -> Sheet(overlay.title, overlay.subtitle, overlay.size, overlay.children, overlay.actions, place, close)
-            is PopoverNode -> Sheet(null, null, SheetSize.Medium, overlay.children, emptyList(), place, close)
-            is DialogNode -> TreeDialog(overlay, place.copy(inDialog = true), close)
+            is Navree.Sheet -> Sheet(overlay.title, overlay.subtitle, overlay.size, overlay.children, overlay.actions, inner, close)
+            is Navree.Popover -> Sheet(null, null, Navree.SheetSize.MEDIUM, overlay.children, emptyList(), inner, close)
+            is Navree.Dialog -> TreeDialog(overlay, inner.copy(inDialog = true), close)
             else -> Unit
         }
     }
-    entry.local.confirm?.let { waiting -> ConfirmDialog(waiting.button, entry) }
 }
 
 @Composable
 private fun Sheet(
     title: String?,
     subtitle: String?,
-    size: SheetSize,
-    children: List<Node>,
-    actions: List<Node>,
+    size: Navree.SheetSize,
+    children: List<Navree.Node>,
+    actions: List<Navree.Node>,
     place: Place,
     close: () -> Unit,
 ) {
@@ -75,6 +79,7 @@ private fun Sheet(
     ModalBottomSheet(
         onDismissRequest = close,
         sheetState = state,
+        sheetMaxWidth = OverlayRules.SHEET_MOST_DP.dp,
         modifier = if (title != null) Modifier.semantics { paneTitle = title } else Modifier,
     ) {
         Column(
@@ -89,16 +94,14 @@ private fun Sheet(
             if (title != null || subtitle != null) {
                 Column {
                     title?.let { Text(it, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }) }
-                    subtitle?.let {
-                        Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
             }
             for (child in children) NodeView(child, place)
             if (actions.isNotEmpty()) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                     for (action in actions) {
-                        if (action is ButtonNode) QuietButton(action, place)
+                        if (action is Navree.Button) QuietButton(action, place)
                     }
                 }
             }
@@ -107,7 +110,7 @@ private fun Sheet(
 }
 
 /** Which of a dialog's buttons affirm and which back out. Affirming ones sit at the end. */
-private fun affirms(button: ButtonNode): Boolean = button.role != ActionRole.Cancel
+private fun affirms(button: Navree.Button): Boolean = button.role != Navree.Role.CANCEL && button.standard != Navree.Standard.CANCEL
 
 /**
  * A dialog of the tree as a Material alert dialog. A dialog that holds a
@@ -116,12 +119,11 @@ private fun affirms(button: ButtonNode): Boolean = button.role != ActionRole.Can
  * time among the fields.
  */
 @Composable
-private fun TreeDialog(dialog: DialogNode, place: Place, close: () -> Unit) {
-    val ui = LocalUi.current
-    val buttons = dialog.actions.filterIsInstance<ButtonNode>()
+private fun TreeDialog(dialog: Navree.Dialog, place: Place, close: () -> Unit) {
+    val buttons = dialog.actions.filterIsInstance<Navree.Button>()
     val forward = buttons.filter(::affirms)
     val backward = buttons.filterNot(::affirms)
-    val form = dialog.children.asSequence().flatMap { it.walk() }.filterIsInstance<FormNode>().firstOrNull()
+    val form = dialog.children.asSequence().flatMap { it.walk() }.filterIsInstance<Navree.Form>().firstOrNull()
     val submit = form?.submitButton()
     val inner = place.copy(omit = submit)
     AlertDialog(
@@ -139,7 +141,7 @@ private fun TreeDialog(dialog: DialogNode, place: Place, close: () -> Unit) {
         },
         confirmButton = {
             for (button in forward) QuietButton(button, place)
-            if (form != null && submit != null) QuietButton(submit, place.copy(form = form.key))
+            if (form != null && submit != null) QuietButton(submit, place.copy(form = form.id))
         },
         dismissButton = when {
             backward.isNotEmpty() -> {
@@ -150,26 +152,32 @@ private fun TreeDialog(dialog: DialogNode, place: Place, close: () -> Unit) {
             }
             else -> null
         },
+        modifier = Modifier.widthIn(max = 560.dp),
     )
 }
 
 /**
  * The question asked before a destructive action runs, when the page did not
- * bring a dialog of its own. The button's own label is the question and the
- * answer that goes ahead; the client adds no words of its own but "Cancel".
+ * bring a dialog of its own. Its headline is the action's own words as a
+ * question ("Cancel order?"); the confirming button repeats the action's verb
+ * in the error colour, and "Cancel" backs out.
  */
 @Composable
-private fun ConfirmDialog(button: ButtonNode, entry: Entry) {
+internal fun ConfirmDialog() {
     val ui = LocalUi.current
-    val answer: (Boolean) -> Unit = { ui.dispatch(Event.ConfirmAnswered(entry.key, it)) }
+    val (place, button) = ui.asking.value ?: return
+    val done = { ui.asking.value = null }
     AlertDialog(
-        onDismissRequest = { answer(false) },
-        title = { Text("${button.label}?") },
+        onDismissRequest = done,
+        title = { Text(stringResource(com.navree.client.R.string.navree_confirm_question, button.label)) },
         confirmButton = {
-            TextButton(onClick = { answer(true) }) { Text(button.label, color = MaterialTheme.colorScheme.error) }
+            TextButton(
+                onClick = {
+                    done()
+                    ui.act(place, button.action)
+                },
+            ) { Text(button.label, color = if (ScreenRules.destructive(button)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }
         },
-        dismissButton = {
-            TextButton(onClick = { answer(false) }) { Text(stringResource(android.R.string.cancel)) }
-        },
+        dismissButton = { TextButton(onClick = done) { Text(stringResource(android.R.string.cancel)) } },
     )
 }

@@ -40,12 +40,16 @@ android {
     }
 
     sourceSets.named("test") {
-        // The client's fixtures beside the project.
+        // The protocol's own example answers, read where the protocol keeps
+        // them, and the answers recorded from the store demo.
+        resources.directories.add("../../../crates/navree-native/corpus")
         resources.directories.add("../fixtures")
     }
 
     sourceSets.named("androidTest") {
-        // Recorded answers the screen tests serve to the app.
+        // Answers the screen tests serve to the app: the protocol's examples
+        // and the store demo's recorded answers.
+        assets.directories.add("../../../crates/navree-native/corpus")
         assets.directories.add("../fixtures")
     }
 }

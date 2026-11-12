@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The name of the channel the app's notifications arrive on, in the system's settings. -->
+    <string name="navree_notifications">Notifications</string>
+
+    <!-- The app's Firebase project. An app sets these in its own res/values; empty means no push. -->
+    <string name="navree_fcm_project_id" translatable="false"></string>
+    <string name="navree_fcm_application_id" translatable="false"></string>
+    <string name="navree_fcm_api_key" translatable="false"></string>
+    <string name="navree_fcm_sender_id" translatable="false"></string>
+</resources>

@@ -12,7 +12,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +25,6 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -31,12 +32,12 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalWideNavigationRail
 import androidx.compose.material3.NavigationItemIconPosition
@@ -49,15 +50,14 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.WideNavigationRail
 import androidx.compose.material3.WideNavigationRailItem
+import androidx.compose.material3.WideNavigationRailState
 import androidx.compose.material3.WideNavigationRailValue
 import androidx.compose.material3.rememberWideNavigationRailState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -78,9 +78,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.navree.client.NavreeConfig
 import com.navree.client.R
+import com.navree.client.core.Destination
+import com.navree.client.core.Driver
+import com.navree.client.core.Events
+import com.navree.client.core.Modal
+import com.navree.client.core.NavPart
+import com.navree.client.core.ScreenView
+import com.navree.client.core.Stage
 import com.navree.client.design.FabPlace
-import com.navree.client.design.HeightClass
 import com.navree.client.design.NavigationKind
 import com.navree.client.design.NavigationPlan
 import com.navree.client.design.NavigationRules
@@ -88,96 +95,79 @@ import com.navree.client.design.Presentation
 import com.navree.client.design.ScreenContext
 import com.navree.client.design.ScreenRules
 import com.navree.client.design.WidthClass
-import com.navree.client.platform.NavreeConfig
-import com.navree.client.platform.NavreeStore
-import com.navree.client.protocol.NavItem
-import com.navree.client.protocol.Present
-import com.navree.client.protocol.Shell
-import com.navree.client.protocol.Upgrade
-import com.navree.client.runtime.ClientState
-import com.navree.client.runtime.Entry
-import com.navree.client.runtime.Event
-import com.navree.client.runtime.Load
-import com.navree.client.runtime.Modal
 import com.navree.client.theme.Hct
 import com.navree.client.theme.NavreeTheme
+import com.navree.protocol.Navree
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+
+/** The look a fresh app has before it knows its brand: Material's own baseline seed. */
+private const val BASELINE_SEED = 0xFF6750A4.toInt()
 
 /**
  * The whole app: the theme, the navigation the window calls for, the stack of
  * the destination in front, whatever is presented over it, and the passing
- * messages. Everything it shows comes from the store's state.
+ * messages. Everything it shows comes from the core's view state.
+ *
+ * The palette grows from the brand's accent (the shell's, or the app's own
+ * seed). The person's wallpaper colours are used when the app sets no accent
+ * at all, or when it opts in.
  */
 @Composable
-fun NavreeApp(store: NavreeStore, config: NavreeConfig, image: suspend (String) -> ByteArray? = { null }) {
-    val state by store.state.collectAsState()
-    val shell = state.shell
+fun NavreeApp(driver: Driver, config: NavreeConfig, image: suspend (String) -> ByteArray? = { null }) {
+    val app = driver.app
+    val nav = driver.nav
     val dark = isSystemInDarkTheme()
-    val accent = shell?.theme?.let { theme -> if (dark) theme.accentDark ?: theme.accent else theme.accent }
-    val seed = remember(accent, config.seed) { Hct.parse(accent) ?: config.seed }
-    val dynamic = config.dynamicColour && shell?.theme?.dynamic != false
-    NavreeTheme(seed = seed, dynamic = dynamic, corner = shell?.theme?.corner) {
+    val accent = app?.theme?.let { theme -> if (dark) theme.accentDark ?: theme.accent else theme.accent }
+    val brand = Hct.parse(accent) ?: config.seed
+    val dynamic = config.dynamicColour || brand == null
+    NavreeTheme(seed = brand ?: BASELINE_SEED, dynamic = dynamic) {
         val window = rememberWindow()
         val snackbars = remember { SnackbarHostState() }
-        val ui = remember(store, window) { Ui(store::dispatch, window, store.origin, image, snackbars) }
+        val ui = remember(driver, window) { Ui(driver, window, image, snackbars) }
         CompositionLocalProvider(LocalUi provides ui) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-                val upgrade = state.upgrade
-                when {
-                    upgrade != null -> UpgradeScreen(upgrade)
-                    shell == null -> StartScreen(state.shellLoad)
-                    else -> Frame(state, shell, config.name)
+                when (nav.stage) {
+                    Stage.Ready -> Frame(nav, app?.name?.ifEmpty { null } ?: config.name, app?.user)
+                    Stage.Upgrade -> UpgradeScreen()
+                    Stage.Failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        FailureState(nav.failure ?: com.navree.client.core.Failure.Server) { ui.send(Events.start) }
+                    }
+                    Stage.Starting -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { PatientProgress() }
                 }
             }
-            Messages(state, snackbars)
+            Messages(driver, snackbars)
+            ConfirmDialog()
         }
     }
 }
 
-/** Shows the waiting messages one at a time as snackbars, and reports what became of each. */
+/** Shows the waiting messages one at a time as snackbars, and tells the core what became of each. */
 @Composable
-private fun Messages(state: ClientState, host: SnackbarHostState) {
+private fun Messages(driver: Driver, host: SnackbarHostState) {
     val ui = LocalUi.current
-    val message = state.messages.firstOrNull() ?: return
-    val notice = message.notice?.let { failureShort(it) }
+    val message = driver.messages.firstOrNull() ?: return
+    val notice = message.notice?.let { noticeText(it) }
     val text = listOfNotNull(message.title, message.text ?: notice).joinToString("\n")
     LaunchedEffect(message.id) {
         val result = host.showSnackbar(
             message = text,
-            actionLabel = message.action?.label,
+            actionLabel = message.action,
             duration = if (message.action != null) SnackbarDuration.Long else SnackbarDuration.Short,
         )
-        ui.dispatch(if (result == SnackbarResult.ActionPerformed) Event.MessageActed(message.id) else Event.MessageShown(message.id))
+        ui.send(if (result == SnackbarResult.ActionPerformed) Events.messageAction(message.id) else Events.messageShown(message.id))
     }
 }
 
 @Composable
-private fun StartScreen(load: Load) {
-    val ui = LocalUi.current
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        if (load is Load.Failed) {
-            FailureState(load.failure) { ui.dispatch(Event.Started) }
-        } else {
-            PatientProgress()
-        }
-    }
-}
-
-@Composable
-private fun UpgradeScreen(upgrade: Upgrade) {
+private fun UpgradeScreen() {
     val ui = LocalUi.current
     Column(
         Modifier.fillMaxSize().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            stringResource(R.string.navree_upgrade_title),
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.semantics { heading() },
-        )
+        Text(stringResource(R.string.navree_upgrade_title), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
         Text(
             stringResource(R.string.navree_upgrade_text),
             style = MaterialTheme.typography.bodyMedium,
@@ -185,91 +175,91 @@ private fun UpgradeScreen(upgrade: Upgrade) {
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
-        val url = upgrade.url
-        if (url != null) {
-            Button(onClick = { ui.dispatch(Event.Opened(url)) }) { Text(stringResource(R.string.navree_upgrade_action)) }
-        }
+        Button(onClick = { ui.send(Events.openUpgrade) }) { Text(stringResource(R.string.navree_upgrade_action)) }
     }
+}
+
+/** The groups of destinations, in order, as the navigation rules count them. */
+private fun groups(destinations: List<Destination>): List<Int> {
+    val out = ArrayList<Int>()
+    var last: String? = null
+    for ((index, destination) in destinations.withIndex()) {
+        if (index == 0 || destination.group != last) out += 0
+        out[out.lastIndex] += 1
+        last = destination.group
+    }
+    return out
 }
 
 /** The navigation, the destination in front, and what is presented over them. */
 @Composable
-private fun Frame(state: ClientState, shell: Shell, name: String) {
+private fun Frame(nav: NavPart, name: String, user: Navree.User?) {
     val ui = LocalUi.current
     val window = ui.window
-    val plan = remember(window, shell.nav) { NavigationRules.plan(window, shell.nav) }
+    val screens = ui.driver.screens
+    val plan = remember(window, nav.destinations) { NavigationRules.plan(window, groups(nav.destinations)) }
     val holder = rememberSaveableStateHolder()
-    val tab = state.tabs.getOrNull(state.selected)
-    val tabFront = tab?.stack?.lastOrNull()
-    val kind = if (tabFront?.chrome == false) NavigationKind.None else plan.kind
-    val covers = state.modals.map { ScreenRules.presentation(it.present == Present.Full, window) }
+    val destination = nav.destinations.getOrNull(nav.selected)
+    val frontOfTab = destination?.stack?.lastOrNull()?.let(screens::get)
+    val kind = if (frontOfTab?.chrome == false) NavigationKind.None else plan.kind
+    val covers = nav.modals.map { ScreenRules.presentation(it.present == Navree.Present.FULL, window) }
     val covered = covers.any { it == Presentation.FullScreenDialog }
     val menu = rememberWideNavigationRailState()
     val scope = rememberCoroutineScope()
-    val items = state.tabs.map { it.item }
-    val appName = shell.name.ifEmpty { name }
 
     // Back belongs to the app while there is somewhere in it to go back to.
     // Otherwise the system takes it and plays its own way home.
-    BackHandler(enabled = state.canGoBack) { ui.dispatch(Event.BackPressed) }
+    BackHandler(enabled = nav.canGoBack) { ui.send(Events.back) }
 
     // The floating action button of the first screen moves to the rail's head.
-    val root = tab?.stack?.firstOrNull()
+    val root = destination?.stack?.firstOrNull()?.let(screens::get)
     val rootScreen = root?.screen
-    val twoPanes = ScreenRules.twoPanes(window, rootScreen, tab?.stack?.size ?: 0)
-    val rootContext = context(shell, plan, root, index = 0, presentation = Presentation.Stack, detailPane = false)
-    val rootPlan = if (rootScreen != null) ScreenRules.plan(rootScreen, rootContext, window) else null
-    val railFab = rootPlan != null && rootPlan.fab != null && rootPlan.fabPlace == FabPlace.RailHeader &&
-        (tab?.stack?.size == 1 || twoPanes)
+    val twoPanes = ScreenRules.twoPanes(window, rootScreen, destination?.stack?.size ?: 0)
+    val rootContext = context(plan, user, root, index = 0, presentation = Presentation.Stack, detailPane = false)
+    val rootPlan = if (root != null && rootScreen != null) ScreenRules.plan(rootScreen, rootContext.copy(toolbar = screenToolbars(rootScreen, root).isNotEmpty()), window) else null
+    val railFab = rootPlan != null && rootPlan.fab != null && rootPlan.fabPlace == FabPlace.RailHeader && (destination?.stack?.size == 1 || twoPanes)
 
     CompositionLocalProvider(LocalOpenMenu provides { scope.launch { menu.expand() } }) {
         Box(Modifier.fillMaxSize()) {
             // Under a full-screen cover the app is still drawn, but it is not there for TalkBack.
             Box(Modifier.fillMaxSize().then(if (covered) Modifier.clearAndSetSemantics {} else Modifier)) {
                 val stack: @Composable () -> Unit = {
-                    if (tab != null) {
-                        StackHost(state, shell, appName, plan, tab.stack, group = state.selected, Presentation.Stack, holder, active = state.modals.isEmpty())
+                    if (destination != null) {
+                        StackHost(nav, user, name, plan, destination.stack, group = nav.selected, Presentation.Stack, holder, active = nav.modals.isEmpty())
                     }
                 }
                 when (kind) {
                     NavigationKind.None -> stack()
                     NavigationKind.Bar -> Scaffold(
-                        bottomBar = { BottomBar(items, plan, state.selected) { ui.dispatch(Event.DestinationChosen(it)) } },
+                        bottomBar = { BottomBar(nav.destinations, plan, nav.selected) { ui.send(Events.select(it)) } },
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     ) { padding ->
                         Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) { stack() }
                     }
                     NavigationKind.Rail, NavigationKind.ExpandedRail -> Row(Modifier.fillMaxSize()) {
                         SideRail(
-                            shell = shell,
+                            destinations = nav.destinations,
                             plan = plan,
-                            selected = state.selected,
+                            selected = nav.selected,
                             expanded = kind == NavigationKind.ExpandedRail,
-                            fab = if (railFab && root != null && rootScreen != null && rootPlan != null) {
-                                { RailFab(root, rootScreen, rootPlan) }
-                            } else {
-                                null
-                            },
-                        ) { ui.dispatch(Event.DestinationChosen(it)) }
-                        Box(
-                            Modifier.weight(1f).fillMaxHeight()
-                                .consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start)),
-                        ) { stack() }
+                            fab = if (railFab && root != null && rootPlan != null) ({ RailFab(root, rootPlan) }) else null,
+                        ) { ui.send(Events.select(it)) }
+                        Box(Modifier.weight(1f).fillMaxHeight().consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))) { stack() }
                     }
                 }
             }
-            Covers(state, shell, appName, plan, covers, holder)
+            Covers(nav, user, name, plan, covers, holder)
             if (plan.menuButton) {
-                AllDestinations(shell, state.selected, menu) { index ->
+                AllDestinations(nav.destinations, nav.selected, menu) { index ->
                     scope.launch { menu.collapse() }
-                    ui.dispatch(Event.DestinationChosen(index))
+                    ui.send(Events.select(index))
                 }
             }
         }
     }
 
     // What a screen remembered (how far it was scrolled) is dropped once the screen is gone.
-    val live = state.entries().map { it.key }.toSet()
+    val live = nav.held()
     val seen = remember { HashSet<Long>() }
     LaunchedEffect(live) {
         for (key in seen - live) holder.removeState(key)
@@ -278,49 +268,48 @@ private fun Frame(state: ClientState, shell: Shell, name: String) {
     }
 }
 
-private fun context(
-    shell: Shell,
-    plan: NavigationPlan,
-    entry: Entry?,
-    index: Int,
-    presentation: Presentation,
-    detailPane: Boolean,
-): ScreenContext = ScreenContext(
-    root = index == 0 && presentation == Presentation.Stack,
-    presentation = presentation,
-    chrome = entry?.chrome ?: true,
-    navigation = plan.kind,
-    menuButton = plan.menuButton,
-    user = shell.user != null,
-    // The first screen of the detail pane has the list beside it, not under it.
-    canGoBack = if (detailPane) index > 1 else index > 0,
-    detailPane = detailPane,
-)
+private fun context(plan: NavigationPlan, user: Navree.User?, screen: ScreenView?, index: Int, presentation: Presentation, detailPane: Boolean): ScreenContext =
+    ScreenContext(
+        root = index == 0 && presentation == Presentation.Stack,
+        presentation = presentation,
+        chrome = screen?.chrome ?: true,
+        navigation = plan.kind,
+        menuButton = plan.menuButton,
+        user = user != null,
+        // The first screen of the detail pane has the list beside it, not under it.
+        canGoBack = if (detailPane) index > 1 else index > 0,
+        detailPane = detailPane,
+    )
 
+/** A destination's icon: the system's symbol when its name maps to one, filled when selected; a count beside it. */
 @Composable
-private fun NavIcon(item: NavItem) {
-    val vector = rememberVector(item.icon)
-    val badge = item.badge
+private fun NavIcon(destination: Destination, selected: Boolean) {
+    val vector = rememberIcon(destination.icon, selected = selected)
+    val badge = destination.badge
     BadgedBox(badge = { if (!badge.isNullOrEmpty()) Badge { Text(badge) } }) {
         if (vector != null) Icon(vector, contentDescription = null) else Spacer(Modifier.size(24.dp))
     }
 }
 
 @Composable
-private fun BottomBar(items: List<NavItem>, plan: NavigationPlan, selected: Int, choose: (Int) -> Unit) {
+private fun NavLabel(text: String, plan: NavigationPlan) {
+    // A label is never cut: at the largest text it takes a second line.
+    Text(text, maxLines = plan.labelLines, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+}
+
+@Composable
+private fun BottomBar(destinations: List<Destination>, plan: NavigationPlan, selected: Int, choose: (Int) -> Unit) {
     val window = LocalUi.current.window
     // In a wider window the bar's items sit side by side with their icons, in the middle.
     val beside = window.width >= WidthClass.Medium
-    ShortNavigationBar(
-        arrangement = if (beside) ShortNavigationBarArrangement.Centered else ShortNavigationBarArrangement.EqualWeight,
-    ) {
+    ShortNavigationBar(arrangement = if (beside) ShortNavigationBarArrangement.Centered else ShortNavigationBarArrangement.EqualWeight) {
         for (index in plan.shown) {
-            val item = items.getOrNull(index) ?: continue
+            val destination = destinations.getOrNull(index) ?: continue
             ShortNavigationBarItem(
                 selected = index == selected,
                 onClick = { choose(index) },
-                icon = { NavIcon(item) },
-                label = { Text(item.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                icon = { NavIcon(destination, index == selected) },
+                label = { NavLabel(destination.label, plan) },
                 iconPosition = if (beside) NavigationItemIconPosition.Start else NavigationItemIconPosition.Top,
             )
         }
@@ -329,7 +318,7 @@ private fun BottomBar(items: List<NavItem>, plan: NavigationPlan, selected: Int,
 
 @Composable
 private fun SideRail(
-    shell: Shell,
+    destinations: List<Destination>,
     plan: NavigationPlan,
     selected: Int,
     expanded: Boolean,
@@ -343,19 +332,15 @@ private fun SideRail(
         state = state,
         header = {
             Column(horizontalAlignment = Alignment.Start) {
-                IconButton(onClick = { scope.launch { state.toggle() } }, modifier = Modifier.padding(start = 24.dp)) {
-                    Icon(Glyphs.Menu, contentDescription = stringResource(R.string.navree_menu))
-                }
-                if (fab != null) {
-                    Box(Modifier.padding(start = 20.dp, top = 8.dp, bottom = 8.dp)) { fab() }
-                }
+                TipIconButton(stringResource(R.string.navree_menu), Glyphs.Menu, { scope.launch { state.toggle() } }, Modifier.padding(start = 24.dp))
+                if (fab != null) Box(Modifier.padding(start = 20.dp, top = 8.dp, bottom = 8.dp)) { fab() }
             }
         },
     ) {
-        var index = 0
-        for (group in shell.nav.groups) {
-            val heading = group.label
-            if (heading != null && open && plan.groupHeadings) {
+        var last: String? = null
+        destinations.forEachIndexed { index, destination ->
+            val heading = destination.group
+            if (heading != null && heading != last && open && plan.groupHeadings) {
                 Text(
                     heading,
                     style = MaterialTheme.typography.titleSmall,
@@ -363,14 +348,13 @@ private fun SideRail(
                     modifier = Modifier.padding(start = 36.dp, top = 16.dp, bottom = 8.dp).semantics { heading() },
                 )
             }
-            for (item in group.items) {
-                val at = index++
-                if (at !in plan.shown && !open) continue
+            last = heading
+            if (index in plan.shown || open) {
                 WideNavigationRailItem(
-                    selected = at == selected,
-                    onClick = { choose(at) },
-                    icon = { NavIcon(item) },
-                    label = { Text(item.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    selected = index == selected,
+                    onClick = { choose(index) },
+                    icon = { NavIcon(destination, index == selected) },
+                    label = { NavLabel(destination.label, plan) },
                     railExpanded = open,
                 )
             }
@@ -380,16 +364,12 @@ private fun SideRail(
 
 /** Every destination, in its group, in the expanded rail drawn over the content. Opened from the menu button. */
 @Composable
-private fun AllDestinations(
-    shell: Shell,
-    selected: Int,
-    state: androidx.compose.material3.WideNavigationRailState,
-    choose: (Int) -> Unit,
-) {
+private fun AllDestinations(destinations: List<Destination>, selected: Int, state: WideNavigationRailState, choose: (Int) -> Unit) {
     ModalWideNavigationRail(state = state, hideOnCollapse = true) {
-        var index = 0
-        for (group in shell.nav.groups) {
-            group.label?.let { heading ->
+        var last: String? = null
+        destinations.forEachIndexed { index, destination ->
+            val heading = destination.group
+            if (heading != null && heading != last) {
                 Text(
                     heading,
                     style = MaterialTheme.typography.titleSmall,
@@ -397,94 +377,100 @@ private fun AllDestinations(
                     modifier = Modifier.padding(start = 36.dp, top = 16.dp, bottom = 8.dp).semantics { heading() },
                 )
             }
-            for (item in group.items) {
-                val at = index++
-                WideNavigationRailItem(
-                    selected = at == selected,
-                    onClick = { choose(at) },
-                    icon = { NavIcon(item) },
-                    label = { Text(item.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    railExpanded = true,
-                )
-            }
+            last = heading
+            WideNavigationRailItem(
+                selected = index == selected,
+                onClick = { choose(index) },
+                icon = { NavIcon(destination, index == selected) },
+                label = { Text(destination.label, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                railExpanded = true,
+            )
         }
     }
 }
 
-/** What moves when the screen in front changes: which stack it is, and which entry. */
-private data class Front(val group: Int, val key: Long)
+/** What moves when the screen in front changes: which stack it is, and which screen. */
+private data class Front(val group: Int, val id: Long)
 
 /**
  * A stack of screens. In a wide window a list and what was opened from it are
- * two panes; otherwise the screen in front is the only one drawn. Going
- * deeper slides in from the end, going back slides out to it, and changing
- * destination fades through. A back gesture shows the screen under the one in
- * front while the finger is still down.
+ * two panes, each in a rounded container on the surface tone, as Android's
+ * own list-detail layouts are; otherwise the screen in front is the only one
+ * drawn. Going deeper slides in from the end, going back slides out to it,
+ * and changing destination fades through. A back gesture shows the screen
+ * under the one in front while the finger is still down.
  */
 @Composable
 private fun StackHost(
-    state: ClientState,
-    shell: Shell,
+    nav: NavPart,
+    user: Navree.User?,
     name: String,
     plan: NavigationPlan,
-    stack: List<Entry>,
+    stack: List<Long>,
     group: Int,
     presentation: Presentation,
     holder: SaveableStateHolder,
     active: Boolean,
 ) {
-    val window = LocalUi.current.window
-    if (stack.isEmpty()) {
+    val ui = LocalUi.current
+    val window = ui.window
+    val screens = stack.mapNotNull { ui.driver.screens[it] }
+    if (screens.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { PatientProgress() }
         return
     }
-    val two = presentation == Presentation.Stack && ScreenRules.twoPanes(window, stack.first().screen, stack.size)
-    val front = state.front?.key
+    val two = presentation == Presentation.Stack && ScreenRules.twoPanes(window, screens.first().screen, screens.size)
+    val front = nav.front
 
     @Composable
-    fun host(entry: Entry, index: Int, detailPane: Boolean, selectedUrl: String? = null) {
-        val context = context(shell, plan, entry, index, presentation, detailPane)
-        holder.SaveableStateProvider(entry.key) {
-            ScreenHost(entry, HostInfo(context, shell.user, name, front = entry.key == front, selectedUrl = selectedUrl))
+    fun host(screen: ScreenView, index: Int, detailPane: Boolean, selectedUrl: String? = null) {
+        val context = context(plan, user, screen, index, presentation, detailPane)
+        holder.SaveableStateProvider(screen.id) {
+            ScreenHost(screen, HostInfo(context, user, name, front = screen.id == front, selectedUrl = selectedUrl))
         }
     }
 
     if (two) {
-        Row(Modifier.fillMaxSize()) {
-            Box(Modifier.width(ScreenRules.listPaneDp(window).dp).fillMaxHeight()) {
-                host(stack.first(), 0, detailPane = false, selectedUrl = stack[1].url)
+        Row(
+            Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainer).padding(end = 12.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(shape = RoundedCornerShape(bottomEnd = 24.dp), modifier = Modifier.width(ScreenRules.listPaneDp(window).dp).fillMaxHeight()) {
+                host(screens.first(), 0, detailPane = false, selectedUrl = screens[1].url)
             }
-            VerticalDivider()
-            Box(Modifier.weight(1f).fillMaxHeight()) {
-                Moving(stack.drop(1), group, active, canPop = stack.size > 2) { entry, index -> host(entry, index + 1, detailPane = true) }
+            Surface(
+                shape = MaterialTheme.shapes.extraLarge,
+                modifier = Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(top = 12.dp),
+            ) {
+                Moving(screens.drop(1), group, active, canPop = screens.size > 2) { screen, index -> host(screen, index + 1, detailPane = true) }
             }
         }
     } else {
-        Moving(stack, group, active, canPop = stack.size > 1) { entry, index -> host(entry, index, detailPane = false) }
+        Moving(screens, group, active, canPop = screens.size > 1) { screen, index -> host(screen, index, detailPane = false) }
     }
 }
 
 @Composable
 private fun Moving(
-    entries: List<Entry>,
+    screens: List<ScreenView>,
     group: Int,
     active: Boolean,
     canPop: Boolean,
-    host: @Composable (Entry, Int) -> Unit,
+    host: @Composable (ScreenView, Int) -> Unit,
 ) {
     val ui = LocalUi.current
-    val top = entries.last()
-    // The entry that is leaving is no longer in the state, but it is still drawn while it leaves.
-    val known = remember { HashMap<Long, Pair<Entry, Int>>() }
-    entries.forEachIndexed { index, entry -> known[entry.key] = entry to index }
-    if (known.size > 16) known.keys.retainAll(entries.map { it.key }.toSet())
+    val top = screens.last()
+    // The screen that is leaving is no longer in a stack, but it is still drawn while it leaves.
+    val known = remember { HashMap<Long, Pair<ScreenView, Int>>() }
+    screens.forEachIndexed { index, screen -> known[screen.id] = screen to index }
+    if (known.size > 16) known.keys.retainAll(screens.map { it.id }.toSet())
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
 
     var pulled by remember { mutableFloatStateOf(0f) }
     PredictiveBackHandler(enabled = active && canPop) { events ->
         try {
             events.collect { pulled = it.progress }
-            ui.dispatch(Event.BackPressed)
+            ui.send(Events.back)
         } catch (_: CancellationException) {
             // The gesture was let go before the edge: nothing happens.
         } finally {
@@ -493,12 +479,9 @@ private fun Moving(
     }
 
     Box(Modifier.fillMaxSize()) {
-        if (pulled > 0f && entries.size > 1) {
-            val under = entries[entries.size - 2]
-            host(under, entries.size - 2)
-        }
+        if (pulled > 0f && screens.size > 1) host(screens[screens.size - 2], screens.size - 2)
         AnimatedContent(
-            targetState = Front(group, top.key),
+            targetState = Front(group, top.id),
             transitionSpec = { transition(initialState, targetState, rtl) },
             modifier = Modifier.fillMaxSize().graphicsLayer {
                 // The screen in front shrinks a little under the finger, as the system's own screens do.
@@ -510,8 +493,8 @@ private fun Moving(
             },
             label = "screens",
         ) { shown ->
-            val (entry, index) = known[shown.key] ?: (top to entries.lastIndex)
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) { host(entry, index) }
+            val (screen, index) = known[shown.id]?.let { (old, at) -> (ui.driver.screens[old.id] ?: old) to at } ?: (top to screens.lastIndex)
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) { host(screen, index) }
         }
     }
 }
@@ -524,7 +507,7 @@ private fun transition(from: Front, to: Front, rtl: Boolean): ContentTransform {
         // Another destination: one fades out, the next fades in.
         from.group != to.group -> fadeIn(tween(200, delayMillis = 90)) togetherWith fadeOut(tween(90))
         // Deeper: the new screen comes from the end.
-        to.key > from.key -> (slideInHorizontally(tween(300)) { end * it / 8 } + fadeIn(fade)) togetherWith fadeOut(tween(120))
+        to.id > from.id -> (slideInHorizontally(tween(300)) { end * it / 8 } + fadeIn(fade)) togetherWith fadeOut(tween(120))
         // Back: the old screen leaves to the end.
         else -> fadeIn(fade) togetherWith (slideOutHorizontally(tween(300)) { end * it / 8 } + fadeOut(tween(160)))
     }
@@ -533,8 +516,8 @@ private fun transition(from: Front, to: Front, rtl: Boolean): ContentTransform {
 /** Screens presented over the app: full screen where the window is small, a dialog where it is not. */
 @Composable
 private fun Covers(
-    state: ClientState,
-    shell: Shell,
+    nav: NavPart,
+    user: Navree.User?,
     name: String,
     plan: NavigationPlan,
     presentations: List<Presentation>,
@@ -542,12 +525,12 @@ private fun Covers(
 ) {
     val ui = LocalUi.current
     val window = ui.window
-    val full = state.modals.withIndex().lastOrNull { presentations.getOrNull(it.index) == Presentation.FullScreenDialog }
+    val full = nav.modals.withIndex().lastOrNull { presentations.getOrNull(it.index) == Presentation.FullScreenDialog }
     val known = remember { HashMap<Long, Modal>() }
-    full?.let { known[it.value.stack.first().key] = it.value }
+    full?.value?.stack?.firstOrNull()?.let { known[it] = full.value }
 
     AnimatedContent(
-        targetState = full?.value?.stack?.first()?.key,
+        targetState = full?.value?.stack?.firstOrNull(),
         transitionSpec = {
             if (targetState != null) {
                 (slideInVertically(tween(300)) { it / 6 } + fadeIn(tween(200))) togetherWith fadeOut(tween(100))
@@ -556,31 +539,27 @@ private fun Covers(
             }
         },
         label = "cover",
-    ) { key ->
-        val modal = key?.let { state.modals.firstOrNull { modal -> modal.stack.first().key == it } ?: known[it] }
+    ) { first ->
+        val modal = first?.let { nav.modals.firstOrNull { modal -> modal.stack.firstOrNull() == it } ?: known[it] }
         if (modal != null) {
+            // A cover the person cannot take away (the sign-in a session that ended is sent to) has no back of its own.
+            BackHandler(enabled = !modal.locked && nav.modals.lastOrNull() == modal && modal.stack.size <= 1) { ui.send(Events.back) }
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-                StackHost(
-                    state, shell, name, plan, modal.stack, group = -1 - state.modals.indexOf(modal),
-                    Presentation.FullScreenDialog, holder, active = state.modals.lastOrNull() == modal,
-                )
+                StackHost(nav, user, name, plan, modal.stack, group = -1 - nav.modals.indexOf(modal), Presentation.FullScreenDialog, holder, active = nav.modals.lastOrNull() == modal)
             }
         }
     }
 
-    state.modals.forEachIndexed { index, modal ->
+    nav.modals.forEachIndexed { index, modal ->
         if (presentations.getOrNull(index) == Presentation.Dialog) {
-            val first = modal.stack.first().key
-            Dialog(onDismissRequest = { ui.dispatch(Event.ModalDismissed(first)) }) {
+            val first = modal.stack.firstOrNull() ?: return@forEachIndexed
+            Dialog(onDismissRequest = { if (!modal.locked) ui.send(Events.dismissed(first)) }) {
                 Surface(
                     shape = MaterialTheme.shapes.extraLarge,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().heightIn(max = (window.heightDp * 0.9f).dp),
                 ) {
-                    StackHost(
-                        state, shell, name, plan, modal.stack, group = -1 - index,
-                        Presentation.Dialog, holder, active = index == state.modals.lastIndex,
-                    )
+                    StackHost(nav, user, name, plan, modal.stack, group = -1 - index, Presentation.Dialog, holder, active = index == nav.modals.lastIndex)
                 }
             }
         }

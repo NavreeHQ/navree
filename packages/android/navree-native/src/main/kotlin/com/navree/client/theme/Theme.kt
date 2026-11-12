@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.navree.client.design.ToneRole
+import com.navree.client.design.expressive.ExpressiveTheme
 
 /** A container colour and the colour of what sits on it. */
 @Immutable
@@ -127,8 +128,10 @@ internal fun shapesFor(corner: String?): Shapes = when (corner) {
 /**
  * The app's Material 3 theme. The brand gives one seed colour; the scheme is
  * made from it for light and for dark. With `dynamic` on Android 12 and
- * later, the user's wallpaper colours are used instead. Type, shape (but for
- * a sharp corner style), elevation and motion stay the system's.
+ * later, the user's wallpaper colours are used instead: when the app sets no
+ * accent, or opts in. Type, shape (but for a sharp corner style) and
+ * elevation stay the system's; motion is Material 3 Expressive's, or the
+ * standard scheme when the person has turned animations off.
  */
 @Composable
 fun NavreeTheme(
@@ -156,7 +159,10 @@ fun NavreeTheme(
         )
     }
     val shapes = remember(corner) { shapesFor(corner) }
+    val reduced = remember(context) {
+        android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    }
     CompositionLocalProvider(LocalToneColours provides tones) {
-        MaterialTheme(colorScheme = scheme, shapes = shapes, content = content)
+        ExpressiveTheme(colorScheme = scheme, shapes = shapes, typography = MaterialTheme.typography, reducedMotion = reduced, content = content)
     }
 }

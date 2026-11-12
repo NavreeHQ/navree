@@ -199,6 +199,7 @@ jobs:
           gradle --console=plain --stacktrace \
             :navree-native:testDebugUnitTest \
             :navree-native:assembleDebugAndroidTest \
+            :navree-push-fcm:assembleDebug \
             :demo:assembleDebug
 
       - name: Keep Gradle's caches

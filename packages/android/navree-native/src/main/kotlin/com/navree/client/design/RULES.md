@@ -19,7 +19,7 @@ Read against these sources on 12 November 2026:
   chips, bottom sheets, dialogs, snackbar (m3.material.io).
 - Android: window size classes, adaptive navigation, edge-to-edge, predictive
   back, principles of navigation (developer.android.com).
-- The library itself: Compose Material 3 1.4.0, whose components carry the
+- The library itself: Compose Material 3 1.5.0-alpha18, whose components carry the
   measurements, so no rule here repeats a size the component already has.
 
 ## The window (`Window.kt`)

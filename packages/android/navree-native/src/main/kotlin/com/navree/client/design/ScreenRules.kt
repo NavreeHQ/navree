@@ -1,23 +1,6 @@
 package com.navree.client.design
 
-import com.navree.client.protocol.ActionRole
-import com.navree.client.protocol.ButtonNode
-import com.navree.client.protocol.ChoiceInput
-import com.navree.client.protocol.ChoicesInput
-import com.navree.client.protocol.FieldNode
-import com.navree.client.protocol.FormNode
-import com.navree.client.protocol.ListNode
-import com.navree.client.protocol.MenuNode
-import com.navree.client.protocol.Node
-import com.navree.client.protocol.RegionNode
-import com.navree.client.protocol.Screen
-import com.navree.client.protocol.StackNode
-import com.navree.client.protocol.TableNode
-import com.navree.client.protocol.TextInput
-import com.navree.client.protocol.TextKind
-import com.navree.client.protocol.ToggleInput
-import com.navree.client.runtime.fields
-import com.navree.client.runtime.submitButton
+import com.navree.protocol.Navree
 
 /** How a screen is on show. */
 enum class Presentation {
@@ -85,18 +68,18 @@ enum class SearchPlace {
     /** The search bar is the app bar. */
     Bar,
 
-    /** An icon in the app bar that turns the bar into a search field. */
+    /** An icon in the app bar that opens the search view. */
     Action,
 }
 
 /**
  * The query of a screen's main table, taken apart: its search box goes to the
- * app bar and its filters become a row of chips over the rows.
+ * search bar and its filters become a row of chips over the rows.
  */
 data class QueryPlan(
-    val form: FormNode,
-    val search: FieldNode?,
-    val filters: List<FieldNode>,
+    val form: Navree.Form,
+    val search: Navree.Field?,
+    val filters: List<Navree.Field>,
 )
 
 /** How an action in the bar is drawn. */
@@ -126,6 +109,8 @@ data class ScreenContext(
     val canGoBack: Boolean = false,
     /** Drawn as the second pane, beside the list it was opened from. */
     val detailPane: Boolean = false,
+    /** The screen has a floating toolbar of its own: creation goes in the bar, not in a second floating button. */
+    val toolbar: Boolean = false,
 )
 
 /** Where everything on a screen's frame goes. Action numbers index `Screen.actions`. */
@@ -155,18 +140,21 @@ data class ScreenPlan(
  * Where the parts of a screen's frame go on Android. The tree says what each
  * action is; this says where it is drawn.
  *
- * - **Creation** is the floating action button: the first `create` action of a
- *   screen in a stack. At a first screen it carries its label (and gives it up
- *   when the list scrolls or the text is at its largest); deeper it is the icon
- *   alone. Beside a navigation rail it moves to the rail's head.
+ * - **Creation** is the floating action button: the first action whose role is
+ *   `create` (or whose standard is `add`) of a screen in a stack. At a first
+ *   screen it carries its label (and gives it up when the list scrolls or the
+ *   text is at its largest); deeper it is the icon alone. Beside a navigation
+ *   rail it moves to the rail's head. There is never more than one, and
+ *   none beside a floating toolbar: then creation is an icon in the bar.
  * - **Primary, then secondary** actions go in the top app bar, as icon buttons,
- *   in the order primary first. A compact window shows two, a medium one three,
- *   wider ones four; one fewer at the largest text sizes. When they do not all
- *   fit, the last place goes to the overflow menu and the rest go into it.
- *   An action with no icon goes into the overflow, except one primary action,
- *   which may be a text button.
- * - **Destructive** actions are never in the bar. They close the overflow
- *   menu, under a divider, and ask before they run.
+ *   primary first. A compact window shows two, a medium one three, wider ones
+ *   four; one fewer at the largest text sizes. When they do not all fit, the
+ *   last place goes to the overflow menu and the rest go into it. An action
+ *   with no icon (and no standard symbol) goes into the overflow, except one
+ *   primary action, which may be a text button.
+ * - **Destructive** actions are never in the bar and never the floating action
+ *   button. They close the overflow menu, under a divider, and ask before they
+ *   run unless they can be undone.
  * - **A form** that is the whole screen is finished from the bar: its submit
  *   is a text button at the bar's end, where the keyboard cannot cover it. A
  *   form on a screen with no chrome, or among other content, keeps its button
@@ -174,20 +162,20 @@ data class ScreenPlan(
  * - **Presented** screens are full-screen dialogs: an X, the title, the submit.
  *   They have no floating action button and no avatar.
  * - **Search** on a first screen is a search bar in the app bar's place. On a
- *   deeper screen it is an icon that turns the bar into a search field.
+ *   deeper screen it is an icon that opens the search view.
  * - **The title** sits in a small bar that stays put, with the subtitle on a
  *   line under it when the screen has one and there is room. In a short
  *   window the bar leaves as the content scrolls and comes back on the first
  *   scroll up.
  */
 object ScreenRules {
-    fun plan(screen: Screen, context: ScreenContext, window: WindowInfo): ScreenPlan {
+    fun plan(screen: Navree.Screen, context: ScreenContext, window: WindowInfo): ScreenPlan {
         val modal = context.presentation != Presentation.Stack
-        val wholeForm = screen.body is FormNode
+        val form = screen.body as? Navree.Form
         val query = if (screen.search == null) query(screen) else null
         val searchable = screen.search != null || query?.search != null
         val submit = when {
-            !wholeForm || (screen.body as FormNode).submitButton() == null -> SubmitPlace.None
+            form == null || form.submitButton() == null -> SubmitPlace.None
             !context.chrome -> SubmitPlace.Inline
             context.presentation == Presentation.BottomSheet || context.presentation == Presentation.Dialog -> SubmitPlace.Inline
             else -> SubmitPlace.Bar
@@ -212,12 +200,12 @@ object ScreenRules {
             modal -> if (context.canGoBack) NavigationIcon.Back else NavigationIcon.Close
             context.detailPane && !context.canGoBack -> NavigationIcon.None
             context.root -> if (context.menuButton) NavigationIcon.Menu else NavigationIcon.None
-            context.canGoBack || screen.back?.href != null -> NavigationIcon.Back
+            context.canGoBack || screen.back != null -> NavigationIcon.Back
             else -> NavigationIcon.None
         }
 
-        // The floating action button.
-        val fab = if (modal || !context.chrome) null else screen.actions.indexOfFirst { role(it) == ActionRole.Create }.takeIf { it >= 0 }
+        // The floating action button: creation, never a destructive action.
+        val fab = if (modal || !context.chrome || context.toolbar) null else screen.actions.indexOfFirst(::creates).takeIf { it >= 0 }
         val beside = context.navigation == NavigationKind.Rail || context.navigation == NavigationKind.ExpandedRail
         val fabPlace = if (fab != null && beside && context.root && !context.detailPane) FabPlace.RailHeader else FabPlace.BottomEnd
         val fabExtended = when {
@@ -228,12 +216,11 @@ object ScreenRules {
 
         // The rest, in the order they are offered a place: primary first, destructive last.
         val rest = screen.actions.indices.filter { it != fab && usable(screen.actions[it]) }
-        val cancelIsTheX = modal
         val candidates = rest.filter { index ->
-            val role = role(screen.actions[index])
-            role != ActionRole.Destructive && !(cancelIsTheX && role == ActionRole.Cancel)
-        }.sortedBy { index -> if (isPrimary(role(screen.actions[index]))) 0 else 1 }
-        val destructive = rest.filter { role(screen.actions[it]) == ActionRole.Destructive }
+            val node = screen.actions[index]
+            !destructive(node) && !(modal && node.role == Navree.Role.CANCEL)
+        }.sortedBy { index -> if (isPrimary(screen.actions[index].role)) 0 else 1 }
+        val destructive = rest.filter { destructive(screen.actions[it]) }
 
         var places = when (window.width) {
             WidthClass.Compact -> 2
@@ -249,7 +236,7 @@ object ScreenRules {
         places = places.coerceAtLeast(0)
 
         val withIcon = candidates.filter { hasIcon(screen.actions[it]) }
-        val textPrimary = candidates.firstOrNull { !hasIcon(screen.actions[it]) && isPrimary(role(screen.actions[it])) && screen.actions[it] is ButtonNode }
+        val textPrimary = candidates.firstOrNull { !hasIcon(screen.actions[it]) && isPrimary(screen.actions[it].role) && screen.actions[it] is Navree.Button }
             ?.takeIf { bar != BarKind.Search && submit != SubmitPlace.Bar }
         val eligible = candidates.filter { it in withIcon || it == textPrimary }
         val neverInBar = candidates.filter { it !in eligible }
@@ -286,51 +273,80 @@ object ScreenRules {
      * the window is at least expanded and the first screen of the stack is a
      * collection. A wide window is two panes, not one stretched phone screen.
      */
-    fun twoPanes(window: WindowInfo, first: Screen?, depth: Int): Boolean =
+    fun twoPanes(window: WindowInfo, first: Navree.Screen?, depth: Int): Boolean =
         depth >= 2 && window.width >= WidthClass.Expanded && window.height != HeightClass.Compact && isCollection(first?.body)
 
     /** The width of the list pane, in dp, when there are two. */
     fun listPaneDp(window: WindowInfo): Int = if (window.width >= WidthClass.Large) 412 else 360
 
-    /** Whether the body is, in the main, a list of things to open. */
-    fun isCollection(body: Node?): Boolean = when (body) {
-        is ListNode, is TableNode -> true
-        is RegionNode -> body.children.any(::isCollection)
-        is StackNode -> body.children.any { it is ListNode || it is TableNode || (it is RegionNode && isCollection(it)) } &&
-            body.children.none { it is FormNode }
+    /** Whether the body is, in the main, a list of things to open. A pane that says it is a list is one. */
+    fun isCollection(body: Navree.Node?): Boolean = when (body) {
+        is Navree.List, is Navree.Table -> true
+        is Navree.Pane -> body.role == Navree.PaneRole.LIST
+        is Navree.Region -> body.children.any(::isCollection)
+        is Navree.Stack -> body.children.any { it is Navree.List || it is Navree.Table || (it is Navree.Region && isCollection(it)) } &&
+            body.children.none { it is Navree.Form }
         else -> false
     }
 
     /** The screen's main table: the body itself, or the first table among the body's own parts, through regions. */
-    fun mainTable(body: Node?): TableNode? = when (body) {
-        is TableNode -> body
-        is RegionNode -> body.children.firstNotNullOfOrNull(::mainTable)
-        is StackNode -> body.children.firstNotNullOfOrNull { if (it is StackNode) null else mainTable(it) }
+    fun mainTable(body: Navree.Node?): Navree.Table? = when (body) {
+        is Navree.Table -> body
+        is Navree.Region -> body.children.firstNotNullOfOrNull(::mainTable)
+        is Navree.Stack -> body.children.firstNotNullOfOrNull { if (it is Navree.Stack) null else mainTable(it) }
         else -> null
     }
 
     /**
      * The query of the screen's main table, when it has one: the search box
-     * (a text field of the search kind) and the filters (choices, switches
-     * and dates). A text field that is not a search stays where it is.
+     * (a text field of the search kind) and the filters (choices and switches).
+     * A text field that is not a search stays where it is.
      */
-    fun query(screen: Screen): QueryPlan? {
+    fun query(screen: Navree.Screen): QueryPlan? {
         val form = mainTable(screen.body)?.query ?: return null
         val fields = form.fields()
-        val search = fields.firstOrNull { (it.input as? TextInput)?.kind == TextKind.Search }
-        val filters = fields.filter { it !== search && (it.input is ChoicesInput || it.input is ChoiceInput || it.input is ToggleInput) }
+        val search = fields.firstOrNull { (it.input as? Navree.TextInput)?.kind == Navree.TextKind.SEARCH }
+        val filters = fields.filter { it !== search && FilterRules.isFilter(it) }
         return QueryPlan(form, search, filters)
     }
 
-    private fun role(node: Node): ActionRole = (node as? ButtonNode)?.role ?: ActionRole.None
+    /** Whether an action creates something: its role, or its standard `add`. */
+    fun creates(node: Navree.Node): Boolean =
+        node is Navree.Button && (node.role == Navree.Role.CREATE || node.standard == Navree.Standard.ADD) && !destructive(node)
 
-    private fun isPrimary(role: ActionRole): Boolean = role == ActionRole.Primary || role == ActionRole.Confirm
+    /** Whether an action destroys something: its role, or its standard `delete`. */
+    fun destructive(node: Navree.Node): Boolean =
+        node is Navree.Button && (node.role == Navree.Role.DESTRUCTIVE || node.standard == Navree.Standard.DELETE)
 
-    private fun usable(node: Node): Boolean = node is ButtonNode || node is MenuNode
+    private fun isPrimary(role: Navree.Role): Boolean = role == Navree.Role.PRIMARY || role == Navree.Role.CONFIRM
 
-    private fun hasIcon(node: Node): Boolean = when (node) {
-        is ButtonNode -> node.icon != null
-        is MenuNode -> node.icon != null
+    private fun usable(node: Navree.Node): Boolean = node is Navree.Button || node is Navree.Menu || node is Navree.Link
+
+    private fun hasIcon(node: Navree.Node): Boolean = when (node) {
+        is Navree.Button -> node.icon != null || node.standard != null
+        is Navree.Menu -> node.icon != null
         else -> false
     }
+}
+
+/** Which fields of a table's query are filters drawn as chips. */
+object FilterRules {
+    /** Choices and switches are filters; "rows a page" is not one a person filters by. */
+    fun isFilter(field: Navree.Field): Boolean {
+        val input = field.input
+        if (input !is Navree.ChoicesInput && input !is Navree.ChoiceInput && input !is Navree.ToggleInput) return false
+        val name = field.name.lowercase()
+        return !(name.contains("per_page") || name.contains("perpage") || name.contains("page_size") || name == "limit" || name.endsWith("[size]"))
+    }
+}
+
+/**
+ * Whether tapping an action asks first, in a dialog of the client's whose
+ * words are the action's own. A destructive action that writes asks, unless
+ * it can be undone (Android's way then is to do it and offer Undo in the
+ * snackbar) or it is already the answer of a dialog.
+ */
+object ConfirmRules {
+    fun asks(button: Navree.Button, inDialog: Boolean): Boolean =
+        !inDialog && ScreenRules.destructive(button) && !button.undoable && button.action.writes()
 }
