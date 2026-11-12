@@ -1,7 +1,7 @@
 //! The blocks an app's dashboard is made of past the basic components: the info tip on a
-//! "?" chip, chart-shaped loading skeletons, a paced breathing guide, a floating dock and
-//! the day pager. Their styles are one sheet, [`Uses::APP_BLOCKS`], and none of them has a
-//! script of its own.
+//! "?" chip, chart-shaped loading skeletons, a paced breathing guide, a floating dock, the
+//! day pager, a field with a value to copy, and the page of a sign-in or sign-up form. Their
+//! styles are one sheet, [`Uses::APP_BLOCKS`], and none of them has a script of its own.
 
 use std::borrow::Cow;
 
@@ -728,15 +728,34 @@ impl DockItem {
 pub struct Dock {
     label: Cow<'static, str>,
     items: Vec<DockItem>,
+    below: Option<crate::charts::Screen>,
 }
 
 impl Dock {
-    /// A dock whose navigation is called `label` to a screen reader.
+    /// A dock whose navigation is called `label` to a screen reader. It shows at every
+    /// width until [`below`](Self::below) says otherwise.
     pub fn new(label: impl Into<Cow<'static, str>>) -> Self {
         Self {
             label: label.into(),
             items: Vec::new(),
+            below: None,
         }
+    }
+
+    /// Shows the dock only below `screen`: on phones, when the app's top bar holds the same
+    /// places from [`Screen::Md`](crate::charts::Screen::Md) up. From that width on it is
+    /// not drawn at all, so it is neither seen nor read twice.
+    ///
+    /// ```
+    /// use navree_ui::charts::Screen;
+    /// use navree_ui::{Dock, DockItem, render};
+    ///
+    /// let dock = Dock::new("Sections").below(Screen::Md).item(DockItem::new("Home", "/"));
+    /// assert!(render(&dock.into()).contains(r#"data-below="md""#));
+    /// ```
+    pub fn below(mut self, screen: crate::charts::Screen) -> Self {
+        self.below = Some(screen);
+        self
     }
 
     /// Adds a destination.
@@ -746,9 +765,15 @@ impl Dock {
     }
 
     fn into_node(self) -> Node {
+        let below = self.below.map(|screen| match screen {
+            crate::charts::Screen::Sm => "sm",
+            crate::charts::Screen::Md => "md",
+            crate::charts::Screen::Lg => "lg",
+        });
         el("nav")
             .slot("dock")
             .attr("aria-label", self.label)
+            .attr_opt("data-below", below)
             .uses(Uses::APP_BLOCKS)
             .children(
                 self.items
@@ -773,6 +798,211 @@ impl Dock {
 }
 
 crate::node::into_node!(Dock);
+
+// ---------------------------------------------------------------------------------------
+// CopyField
+// ---------------------------------------------------------------------------------------
+
+/// A value to take elsewhere (an invite link, a key, a code to type on another device), in
+/// a read-only field with a Copy button beside it.
+///
+/// The button copies the value and turns to "Copied" for a moment, and a screen reader hears
+/// "Copied". Focusing the field selects the whole value, so a keyboard copies it with one
+/// shortcut. With JavaScript off the button is not drawn (it could do nothing) and the field
+/// stays: read-only, selectable and copied by hand.
+///
+/// ```
+/// use navree_ui::{CopyField, render};
+///
+/// let html = render(
+///     &CopyField::new("invite", "Invite link", "https://kesar.example/join/8k2m")
+///         .help("Anyone with the link can ask to join.")
+///         .into(),
+/// );
+/// assert!(html.contains(r#"readonly"#));
+/// assert!(html.contains(r#"value="https://kesar.example/join/8k2m""#));
+/// assert!(html.contains("data-script-only"));
+/// ```
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct CopyField {
+    id: Cow<'static, str>,
+    label: Cow<'static, str>,
+    value: String,
+    help: Option<Cow<'static, str>>,
+    copy: Cow<'static, str>,
+    copied: Cow<'static, str>,
+}
+
+impl CopyField {
+    /// The field `id`, called `label`, holding `value`.
+    pub fn new(
+        id: impl Into<Cow<'static, str>>,
+        label: impl Into<Cow<'static, str>>,
+        value: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            value: value.into(),
+            help: None,
+            copy: Cow::Borrowed("Copy"),
+            copied: Cow::Borrowed("Copied"),
+        }
+    }
+
+    /// A line under the field: what the value is for.
+    pub fn help(mut self, text: impl Into<Cow<'static, str>>) -> Self {
+        self.help = Some(text.into());
+        self
+    }
+
+    /// The button's words, in the page's language: "Copy" and "Copied" by default.
+    pub fn labels(
+        mut self,
+        copy: impl Into<Cow<'static, str>>,
+        copied: impl Into<Cow<'static, str>>,
+    ) -> Self {
+        self.copy = copy.into();
+        self.copied = copied.into();
+        self
+    }
+
+    fn into_node(self) -> Node {
+        let help_id = format!("{}-help", self.id);
+        let button = el("button")
+            .slot("copy-field-button")
+            .attr("type", "button")
+            .flag("data-script-only", true)
+            .attr("aria-describedby", self.id.clone())
+            .on_click_one(crate::cmd::Cmd::copy(self.value.clone()))
+            .uses(Uses::CORE)
+            .children((
+                icon(icons::COPY),
+                el("span").slot("copy-field-copy").child(self.copy),
+                el("span").slot("copy-field-copied").child(self.copied),
+            ));
+        el("div")
+            .slot("copy-field")
+            .uses(Uses::APP_BLOCKS)
+            .children((
+                el("label")
+                    .slot("label")
+                    .attr("for", self.id.clone())
+                    .child(self.label),
+                el("div").slot("copy-field-row").children((
+                    el("input")
+                        .slot("input")
+                        .attr("id", self.id.clone())
+                        .attr("type", "text")
+                        .attr("value", self.value)
+                        .flag("readonly", true)
+                        .attr("spellcheck", "false")
+                        .attr("autocomplete", "off")
+                        .flag("data-ui-select", true)
+                        .attr_opt(
+                            "aria-describedby",
+                            self.help.is_some().then(|| help_id.clone()),
+                        ),
+                    button,
+                )),
+                self.help.map(|help| {
+                    el("p")
+                        .slot("field-description")
+                        .attr("id", help_id)
+                        .child(help)
+                }),
+            ))
+            .into()
+    }
+}
+
+crate::node::into_node!(CopyField);
+
+// ---------------------------------------------------------------------------------------
+// AuthLayout
+// ---------------------------------------------------------------------------------------
+
+/// The page of one form a guest fills in (signing in, signing up, a new password): the form
+/// centred in the window, a panel beside it on wide screens for the app's own picture and
+/// words, and a corner at the top for a theme menu. navree-auth's `AuthPages` draws its
+/// pages in it.
+///
+/// The panel shows from 960 px up; on a phone the form stands alone, first. The main part is
+/// the page's `<main>`, so a skip link and a screen reader's landmarks find the form.
+///
+/// ```
+/// use navree_ui::{AuthLayout, el, render};
+///
+/// let page = AuthLayout::new(el("form").child("…"))
+///     .aside(el("p").child("Sleep, heart and steps, scored every day."))
+///     .corner(el("span").child("menu"));
+/// let html = render(&page.into());
+/// assert!(html.contains(r#"<div data-slot="auth-layout" data-aside>"#));
+/// assert!(html.contains(r#"<main data-slot="auth-main" id="main">"#));
+/// ```
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct AuthLayout {
+    body: Node,
+    aside: Option<Node>,
+    aside_label: Cow<'static, str>,
+    corner: Option<Node>,
+}
+
+impl AuthLayout {
+    /// The page around `body`: the heading and the form's card.
+    pub fn new(body: impl Into<Node>) -> Self {
+        Self {
+            body: body.into(),
+            aside: None,
+            aside_label: Cow::Borrowed("About"),
+            corner: None,
+        }
+    }
+
+    /// The panel beside the form on wide screens: the app's mark, a line about it, a picture.
+    pub fn aside(mut self, aside: impl Into<Node>) -> Self {
+        self.aside = Some(aside.into());
+        self
+    }
+
+    /// What the panel is called to a screen reader ("About" by default): "About Kesar".
+    pub fn aside_label(mut self, label: impl Into<Cow<'static, str>>) -> Self {
+        self.aside_label = label.into();
+        self
+    }
+
+    /// What stands in the top corner, over the form: a theme menu.
+    pub fn corner(mut self, corner: impl Into<Node>) -> Self {
+        self.corner = Some(corner.into());
+        self
+    }
+
+    fn into_node(self) -> Node {
+        let has_aside = self.aside.is_some();
+        el("div")
+            .slot("auth-layout")
+            .flag("data-aside", has_aside)
+            .uses(Uses::APP_BLOCKS)
+            .children((
+                self.aside.map(|aside| {
+                    el("aside")
+                        .slot("auth-aside")
+                        .attr("aria-label", self.aside_label)
+                        .child(aside)
+                }),
+                el("main").slot("auth-main").attr("id", "main").children((
+                    self.corner
+                        .map(|corner| el("div").slot("auth-corner").child(corner)),
+                    el("div").slot("auth-body").child(self.body),
+                )),
+            ))
+            .into()
+    }
+}
+
+crate::node::into_node!(AuthLayout);
 
 // ---------------------------------------------------------------------------------------
 // DayPager
@@ -1180,6 +1410,100 @@ mod tests {
             "{out}"
         );
         assert!(out.contains("data-prominent"), "{out}");
+    }
+
+    #[test]
+    fn a_copy_field_copies_with_a_script_and_is_selectable_without_one() {
+        let out = html(
+            CopyField::new("invite", "Invite <link>", "https://x.example/?a=1&b=\"2\"")
+                .help("Share it once.")
+                .labels("Copy link", "Link copied"),
+        );
+        assert!(
+            out.contains(r#"<label data-slot="label" for="invite">Invite &lt;link&gt;</label>"#),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"value="https://x.example/?a=1&amp;b=&quot;2&quot;" readonly"#),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"data-ui-select aria-describedby="invite-help""#),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"<p data-slot="field-description" id="invite-help">Share it once.</p>"#),
+            "{out}"
+        );
+        // The button is drawn for a page with a script only, copies the value as data, and
+        // names the field it copies.
+        assert!(
+            out.contains(r#"type="button" data-script-only aria-describedby="invite""#),
+            "{out}"
+        );
+        assert!(
+            out.contains(
+                r#"[[&quot;copy&quot;,&quot;https://x.example/?a=1&amp;b=\&quot;2\&quot;&quot;]]"#
+            ),
+            "{out}"
+        );
+        assert!(
+            out.contains("Copy link</span>") && out.contains("Link copied</span>"),
+            "{out}"
+        );
+        let uses = crate::render::measure(&CopyField::new("k", "Key", "v").into()).uses;
+        assert!(uses.has(Uses::CORE) && uses.has(Uses::APP_BLOCKS));
+    }
+
+    #[test]
+    fn an_auth_layout_puts_the_form_in_main_and_the_panel_beside_it() {
+        let plain = html(AuthLayout::new("form"));
+        assert_eq!(
+            plain,
+            r#"<div data-slot="auth-layout"><main data-slot="auth-main" id="main"><div data-slot="auth-body">form</div></main></div>"#
+        );
+        let full = html(
+            AuthLayout::new("form")
+                .aside("<about>")
+                .aside_label("About Kesar")
+                .corner("menu"),
+        );
+        assert!(
+            full.starts_with(r#"<div data-slot="auth-layout" data-aside><aside data-slot="auth-aside" aria-label="About Kesar">&lt;about&gt;</aside>"#),
+            "{full}"
+        );
+        assert!(
+            full.contains(r#"<div data-slot="auth-corner">menu</div>"#),
+            "{full}"
+        );
+    }
+
+    #[test]
+    fn a_dock_can_keep_to_phones() {
+        let every = html(Dock::new("Sections").item(DockItem::new("Home", "/")));
+        assert!(!every.contains("data-below"), "{every}");
+        for (screen, id) in [
+            (crate::charts::Screen::Sm, "sm"),
+            (crate::charts::Screen::Md, "md"),
+            (crate::charts::Screen::Lg, "lg"),
+        ] {
+            let out = html(Dock::new("Sections").below(screen));
+            assert!(
+                out.starts_with(&format!(
+                    r#"<nav data-slot="dock" aria-label="Sections" data-below="{id}">"#
+                )),
+                "{out}"
+            );
+        }
+        // The stylesheet hides it from each width on.
+        let css = include_str!("../../styles/extra/app-blocks.css");
+        for rule in [
+            "@media (min-width:640px){[data-slot=dock][data-below=sm]{display:none}}",
+            "@media (min-width:768px){[data-slot=dock][data-below=md]{display:none}}",
+            "@media (min-width:1024px){[data-slot=dock][data-below=lg]{display:none}}",
+        ] {
+            assert!(css.contains(rule), "{rule}");
+        }
     }
 
     #[test]

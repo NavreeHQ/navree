@@ -31,6 +31,13 @@
 [data-slot=sidebar-overlay]{display:none}
 [data-slot=topbar]{position:sticky;top:0;z-index:10;display:flex;flex:none;align-items:center;gap:.5rem;height:var(--topbar-h);padding:0 .75rem;border-bottom:1px solid var(--line);background:var(--ink-0)}
 [data-slot=topbar-spacer]{flex:1}
+/* A page's own part in the middle of the bar: three columns, the outer two of equal width. */
+[data-slot=topbar][data-centred]{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
+[data-slot=topbar-start],[data-slot=topbar-end]{display:flex;align-items:center;gap:inherit;min-width:0}
+/* On a phone the middle needs the room: the app's mark stays, its name goes. */
+@media (max-width:767px){[data-centred] [data-slot=topbar-brand] [data-slot=sidebar-brand-text]{display:none}}
+[data-slot=topbar-end]{justify-content:flex-end}
+[data-slot=topbar-center]{display:flex;align-items:center;justify-content:center;min-width:0}
 [data-slot=page]{flex:1;min-width:0;padding:var(--page-pad);display:flex;flex-direction:column;gap:1rem}
 [data-slot=page-header]{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem}
 [data-slot=page-title]{color:var(--fg);font-size:1.25rem;font-weight:600;line-height:1.25;letter-spacing:-.01em}
@@ -54,6 +61,8 @@
 
 /* Layouts, on wide screens: inset, floating, the links in the top bar; and what folding does. */
 [data-slot=topnav],[data-slot=topbar-brand]{display:none}
+/* With the links in the top bar, the app's mark stays on phones too, beside the menu button. */
+[data-layout=header] [data-slot=topbar-brand]{display:flex;flex:0 1 auto;min-width:0;& [data-slot=sidebar-brand-context]{display:none}}
 [data-slot=topnav-menu]{display:flex;align-items:center;gap:.125rem}
 [data-slot=topnav-item]{display:inline-flex;align-items:center;gap:.375rem;height:2rem;padding:0 .625rem;border:0;border-radius:var(--radius);background:none;color:var(--fg-2);font:inherit;font-weight:500;text-decoration:none;white-space:nowrap;cursor:pointer;
   &:hover{background:var(--ink-2);color:var(--fg)}
@@ -67,7 +76,7 @@
   [data-layout=header]{
     & > [data-slot=sidebar],& [data-ui-sidebar-trigger]{display:none}
     & [data-slot=topnav]{display:flex;min-width:0;overflow-x:auto;scrollbar-width:none}
-    & [data-slot=topbar-brand]{display:flex;flex:none;& [data-slot=sidebar-brand-context]{display:none}}
+    & [data-slot=topbar-brand]{flex:none}
     & [data-slot=topbar]{gap:.75rem}
   }
   [data-layout=inset]{background:var(--ink-1);

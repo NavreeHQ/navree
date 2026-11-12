@@ -591,8 +591,10 @@ export async function refresh(id, polled = false) {
     let to = byId(id, doc);
     if (!to) {
       // A page with the runtime that lacks the region is somewhere else, not a fragment. So is a whole page that
-      // answers a table without it (a sign-in page a proxy serves at the table's own address).
-      if (build || (table && /^\s*<(!doctype|html)/i.test(text))) {
+      // answers a table without it (a sign-in page a proxy serves at the table's own address). An answer the server
+      // marks as the region's fragment is one, whatever it loads: a lazy tab inside it needs the runtime too.
+      const fragment = response.headers.has("x-navree-fragment");
+      if (!fragment && (build || (table && /^\s*<(!doctype|html)/i.test(text)))) {
         if (sameOrigin(response.url)) location.assign(response.url);
         return;
       }
