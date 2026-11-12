@@ -99,7 +99,7 @@ Eyebrows and the legal page's date are labels, set in the theme's text face. A s
 
 ## One address for guests and readers
 
-A site's home page is often the app's home too: the public page for a guest, the reader's own day once they sign in. `RouteDef::on_guest_or` answers one address with two handlers, each with its own extractors, so the signed-in one may take an extractor that refuses guests and the guest one never runs it. The answer varies by `Cookie` and `Authorization`, so no cache hands one reader's page to another.
+A site's home page is often the app's home too: the public page for a guest, the reader's own day once they sign in. `RouteDef::on_guest_or` answers one address with two handlers, each with its own extractors, so the signed-in one may take an extractor that refuses guests and the guest one never runs it. The answer varies by `Cookie` and `Authorization`, and a signed-in reader's answer goes out as `Cache-Control: private, no-store` unless its handler kept it private itself.
 
 ```rust
 use http::Method;
@@ -118,7 +118,7 @@ fn home() -> RouteDef {
 }
 ```
 
-A page that is the same for every guest can be cached as `public` for them, and `View::vary("Cookie")` keeps a cache from giving it to anyone else: `View::cache` sets `Cache-Control`, `View::vary` adds to `Vary`.
+A page that is the same for every guest can be cached as `public` for them: `View::cache` sets `Cache-Control`, and `View::vary("Cookie")` adds to `Vary`. `Vary` alone is not enough in front of a CDN: several, Cloudflare among them, ignore `Vary: Cookie`. Set the CDN or proxy to skip its cache (or bypass it) for any request that carries the session cookie or an `Authorization` header, or don't cache the guest's page at the edge at all.
 
 ## Accessible by default
 
