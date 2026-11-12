@@ -264,7 +264,10 @@ mod tests {
         );
         assert!(!data.cross_origin);
         let apple = br#"{"type":"webauthn.get","challenge":"T1xCsnxM2DNL2KdK5CLa6fMhD7OBqho6syzInk_n-Uo","origin":"https://example.com"}"#;
-        assert_eq!(ClientData::parse(apple).unwrap().origin, "https://example.com");
+        assert_eq!(
+            ClientData::parse(apple).unwrap().origin,
+            "https://example.com"
+        );
     }
 
     #[test]

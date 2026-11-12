@@ -372,9 +372,7 @@ async fn the_web_origin_still_works_beside_android() {
     let client = app.client();
     let browser = VirtualAuthenticator::new(RP_ID, ORIGIN);
     register(&client, &access, &browser).await;
-    let assertion = browser
-        .get(&login_options(&client, None).await)
-        .unwrap();
+    let assertion = browser.get(&login_options(&client, None).await).unwrap();
     post(&client, "/login", None, json!({ "credential": assertion }))
         .await
         .assert_status(200);
@@ -387,7 +385,11 @@ async fn an_unlisted_android_signature_is_refused() {
     let client = app.client();
     // A debug build, or a repackaged app signed with another key.
     let other = "android:apk-key-hash:47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU";
-    for origin in [other, &ANDROID_ORIGIN[..ANDROID_ORIGIN.len() - 1], "android:apk-key-hash:"] {
+    for origin in [
+        other,
+        &ANDROID_ORIGIN[..ANDROID_ORIGIN.len() - 1],
+        "android:apk-key-hash:",
+    ] {
         let options = post(&client, "/register/options", Some(&access), json!({}))
             .await
             .json_value();

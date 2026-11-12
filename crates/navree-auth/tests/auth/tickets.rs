@@ -184,7 +184,9 @@ async fn a_forged_ticket_is_refused() {
         refused(post_result(&phone, "A-1042", &forged).await);
     }
     // The real one still works: a refused forgery burns nothing.
-    post_result(&phone, "A-1042", &real).await.assert_status(200);
+    post_result(&phone, "A-1042", &real)
+        .await
+        .assert_status(200);
 }
 
 #[tokio::test]
@@ -241,7 +243,9 @@ async fn a_ticket_sent_to_another_route_is_refused() {
     let phone = browser(&app, "simran@example.com").await;
     let ticket = ticket(&phone, "scan_code", "/api/orders/A-1042/scanned").await;
     refused(post_result(&phone, "A-9999", &ticket).await);
-    post_result(&phone, "A-1042", &ticket).await.assert_status(200);
+    post_result(&phone, "A-1042", &ticket)
+        .await
+        .assert_status(200);
 }
 
 #[tokio::test]

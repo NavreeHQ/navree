@@ -20,8 +20,9 @@ use crate::passkeys::controller::PasskeyController;
 use crate::service::clock_of;
 use crate::session_controller::SessionController;
 use crate::{
-    AppsOptions, AuthError, AuthOptions, AuthService, SealedTickets, JwtService, JwtStrategy, SignInPolicy, Strategy,
-    StrategyAuthenticator, TwoFactorPolicy, UserResourceExtension, migration,
+    AppsOptions, AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, SealedTickets,
+    SignInPolicy, Strategy, StrategyAuthenticator, TwoFactorPolicy, UserResourceExtension,
+    migration,
 };
 
 /// The purpose the JWT signing key is derived for from the application key.

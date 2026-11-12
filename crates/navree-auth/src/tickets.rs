@@ -140,8 +140,7 @@ impl CallTickets for SealedTickets {
         let ttl = request
             .ttl
             .clamp(Duration::from_secs(1), TicketRequest::MAX_TTL);
-        let expires_at =
-            now + TimeDelta::from_std(ttl).unwrap_or_else(|_| TimeDelta::seconds(300));
+        let expires_at = now + TimeDelta::from_std(ttl).unwrap_or_else(|_| TimeDelta::seconds(300));
         let sealed = Sealed {
             v: VERSION.to_owned(),
             n: random_token(22),
@@ -154,12 +153,15 @@ impl CallTickets for SealedTickets {
             i: now.timestamp(),
             e: expires_at.timestamp(),
         };
-        let ticket = self.encrypter.encrypt_json(&sealed).map_err(|error| match error {
-            CryptoError::MissingKey => {
-                TicketError::Unavailable("no application key (`app.key`) is set".to_owned())
-            }
-            other => TicketError::Unavailable(other.to_string()),
-        })?;
+        let ticket = self
+            .encrypter
+            .encrypt_json(&sealed)
+            .map_err(|error| match error {
+                CryptoError::MissingKey => {
+                    TicketError::Unavailable("no application key (`app.key`) is set".to_owned())
+                }
+                other => TicketError::Unavailable(other.to_string()),
+            })?;
         Ok(IssuedTicket::new(ticket, at(sealed.e)))
     }
 
@@ -244,7 +246,9 @@ mod tests {
             Err(TicketError::Malformed)
         );
         // Another sealed value of the same key is not a ticket either.
-        let sealed = tickets.encrypter.encrypt_json(&serde_json::json!({ "v": "x" }));
+        let sealed = tickets
+            .encrypter
+            .encrypt_json(&serde_json::json!({ "v": "x" }));
         assert_eq!(
             tickets.redeem(&sealed.unwrap(), &check).await,
             Err(TicketError::Malformed)

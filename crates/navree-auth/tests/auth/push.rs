@@ -234,7 +234,11 @@ async fn a_session_ended_elsewhere_revoked_or_expired_gets_nothing() {
     assert_eq!(push.sent_to(PIXEL).len(), 1);
     clock.advance(Duration::from_secs(25 * 3600));
     ship(&app, user).await;
-    assert_eq!(push.sent_to(PIXEL).len(), 1, "nothing after the sign-in expired");
+    assert_eq!(
+        push.sent_to(PIXEL).len(),
+        1,
+        "nothing after the sign-in expired"
+    );
     assert!(saved(&app, user).await.is_empty());
 }
 

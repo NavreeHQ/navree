@@ -158,7 +158,11 @@ impl AuthService {
             .where_(RefreshToken::EXPIRES_AT.gt(now))
             .get(&self.db)
             .await?;
-        let mut live: Vec<Uuid> = rows.into_models().into_iter().map(|row| row.family_id).collect();
+        let mut live: Vec<Uuid> = rows
+            .into_models()
+            .into_iter()
+            .map(|row| row.family_id)
+            .collect();
         live.sort();
         live.dedup();
         Ok(live)

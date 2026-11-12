@@ -92,12 +92,7 @@ impl TicketRequest {
 
     /// A ticket for `holder`, for the call `feature`, whose result is posted
     /// with `method` to `path` (a query or fragment is dropped).
-    pub fn new(
-        holder: TicketHolder,
-        feature: impl Into<String>,
-        method: &str,
-        path: &str,
-    ) -> Self {
+    pub fn new(holder: TicketHolder, feature: impl Into<String>, method: &str, path: &str) -> Self {
         Self {
             holder,
             feature: feature.into(),

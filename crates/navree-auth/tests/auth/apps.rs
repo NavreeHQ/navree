@@ -17,7 +17,10 @@ async fn the_association_files_are_served_as_json_without_redirect() {
         .config("auth.apps.apple.orders.team_id", "ABCDE12345")
         .config("auth.apps.apple.orders.bundle_id", "com.example.orders")
         .config("auth.apps.android.orders.package", "com.example.orders")
-        .config("auth.apps.android.orders.fingerprints", json!([FINGERPRINT]))
+        .config(
+            "auth.apps.android.orders.fingerprints",
+            json!([FINGERPRINT]),
+        )
         .build()
         .await;
     let client = app.client();

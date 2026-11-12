@@ -244,10 +244,7 @@ impl AppsOptions {
             );
         }
         if !credentials.is_empty() {
-            document.insert(
-                "webcredentials".to_owned(),
-                json!({ "apps": credentials }),
-            );
+            document.insert("webcredentials".to_owned(), json!({ "apps": credentials }));
         }
         (!document.is_empty()).then_some(Value::Object(document))
     }
@@ -437,10 +434,14 @@ impl Controller for AppLinksController {
         let meta = |summary: &str| crate::controller::api(summary, &[]);
         if let Some(body) = self.apple.clone() {
             routes.push(
-                RouteDef::on(Method::GET, format!("!{APPLE_ASSOCIATION_PATH}"), move || {
-                    let body = body.clone();
-                    async move { json_file(&body) }
-                })
+                RouteDef::on(
+                    Method::GET,
+                    format!("!{APPLE_ASSOCIATION_PATH}"),
+                    move || {
+                        let body = body.clone();
+                        async move { json_file(&body) }
+                    },
+                )
                 .public()
                 .name("auth.apps.apple")
                 .api(meta("Apple's app site association")),
@@ -448,10 +449,14 @@ impl Controller for AppLinksController {
         }
         if let Some(body) = self.android.clone() {
             routes.push(
-                RouteDef::on(Method::GET, format!("!{ANDROID_ASSOCIATION_PATH}"), move || {
-                    let body = body.clone();
-                    async move { json_file(&body) }
-                })
+                RouteDef::on(
+                    Method::GET,
+                    format!("!{ANDROID_ASSOCIATION_PATH}"),
+                    move || {
+                        let body = body.clone();
+                        async move { json_file(&body) }
+                    },
+                )
                 .public()
                 .name("auth.apps.android")
                 .api(meta("Android's digital asset links")),

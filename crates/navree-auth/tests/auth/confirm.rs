@@ -10,9 +10,11 @@ use std::time::Duration;
 use http::Method;
 use navree_auth::testing::VirtualAuthenticator;
 use navree_auth::{
-    AccessClaims, AuthError, AuthService, ClientMeta, ConfirmAction, ConfirmProof, CONFIRM_TTL_SECS,
+    AccessClaims, AuthError, AuthService, CONFIRM_TTL_SECS, ClientMeta, ConfirmAction, ConfirmProof,
 };
-use navree_contracts::{AuditSink, AuthState, CallTickets, FixedClock, TicketHolder, TicketRequest};
+use navree_contracts::{
+    AuditSink, AuthState, CallTickets, FixedClock, TicketHolder, TicketRequest,
+};
 use navree_http::{AppError, Controller, Extension, Json, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_testing::{TestApp, TestClient, TestResponse};
@@ -102,9 +104,14 @@ impl Controller for PaymentsController {
                 // The details come from the server's own record, never from
                 // the confirmation.
                 let action = approval(&id, input.amount_paise);
-                auth.confirm_action(&claims, &action, ConfirmProof::Passkey(input.credential), &meta)
-                    .await
-                    .map_err(AuthError::into_app_error)?;
+                auth.confirm_action(
+                    &claims,
+                    &action,
+                    ConfirmProof::Passkey(input.credential),
+                    &meta,
+                )
+                .await
+                .map_err(AuthError::into_app_error)?;
                 Ok::<_, AppError>(Json(json!({ "approved": id })))
             }
         };
@@ -272,7 +279,11 @@ async fn a_replayed_assertion_is_refused() {
 
     let refusals = sink.with_action("auth.confirmation_refused");
     assert_eq!(refusals.len(), 3);
-    assert!(refusals.iter().all(|e| e.metadata["action"] == "payments.approve"));
+    assert!(
+        refusals
+            .iter()
+            .all(|e| e.metadata["action"] == "payments.approve")
+    );
 }
 
 #[tokio::test]
@@ -298,7 +309,10 @@ async fn an_assertion_for_a_different_amount_is_refused() {
         .collect();
     assert_eq!(
         reasons,
-        [json!("challenge of another action"), json!("challenge of another action")]
+        [
+            json!("challenge of another action"),
+            json!("challenge of another action")
+        ]
     );
 }
 
@@ -444,7 +458,10 @@ async fn password_and_code_still_confirm_an_action() {
         )
         .await
         .unwrap_err();
-    assert!(!matches!(error, AuthError::ConfirmationRefused(_)), "{error}");
+    assert!(
+        !matches!(error, AuthError::ConfirmationRefused(_)),
+        "{error}"
+    );
     let confirmed = sink.with_action("auth.confirmed");
     assert_eq!(confirmed[0].metadata["method"], "password");
     assert_eq!(confirmed[0].metadata["action"], "payments.approve");
@@ -477,11 +494,7 @@ async fn a_passkey_steps_up_through_post_auth_confirm_passkey() {
     refused(approve(&client, &access, "PAY-2024", LAKH, &assertion).await);
 
     let assertion = phone
-        .get(
-            &options(&client, &access, json!({}))
-                .await
-                .json_value()["publicKey"],
-        )
+        .get(&options(&client, &access, json!({})).await.json_value()["publicKey"])
         .unwrap();
     let confirmed = client
         .post("/api/auth/confirm/passkey")

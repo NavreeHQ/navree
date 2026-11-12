@@ -47,9 +47,7 @@ impl LiveSessions for AuthLiveSessions {
             let live = self.service.live_sessions(user_id, &ids).await?;
             Ok(sessions
                 .iter()
-                .filter(|session| {
-                    Uuid::parse_str(session).is_ok_and(|id| live.contains(&id))
-                })
+                .filter(|session| Uuid::parse_str(session).is_ok_and(|id| live.contains(&id)))
                 .cloned()
                 .collect())
         })

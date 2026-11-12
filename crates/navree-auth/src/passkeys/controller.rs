@@ -143,40 +143,41 @@ impl PasskeyController {
 
         let service = self.service.clone();
         let tickets = self.tickets.clone();
-        let options = move |claims: AccessClaims,
-                            state: Extension<AuthState>,
-                            OptionalBody(input): OptionalBody<ConfirmOptionsInput>| {
-            let service = service.clone();
-            let tickets = tickets.clone();
-            async move {
-                let digest = match input.ticket {
-                    // The action the page asked about, sealed in its ticket
-                    // for this session.
-                    Some(ticket) => {
-                        let check = TicketCheck::new(
-                            TicketHolder::of(state.0.0.as_ref()),
-                            CONFIRM_FEATURE,
-                        );
-                        let redeemed = tickets
-                            .redeem(&ticket, &check)
-                            .await
-                            .map_err(|error| AuthError::from(error).into_app_error())?;
-                        redeemed
-                            .binding
-                            .filter(|digest| is_digest(digest))
-                            .ok_or_else(|| {
-                                AuthError::from(TicketError::Malformed).into_app_error()
-                            })?
-                    }
-                    None => ConfirmAction::new(STEP_UP_ACTION).digest(),
-                };
-                let public_key = service
-                    .confirmation_options_for(claims.sub, claims.sid, digest)
-                    .await
-                    .map_err(AuthError::into_app_error)?;
-                Ok::<_, AppError>(Json(PasskeyOptionsResponse { public_key }))
-            }
-        };
+        let options =
+            move |claims: AccessClaims,
+                  state: Extension<AuthState>,
+                  OptionalBody(input): OptionalBody<ConfirmOptionsInput>| {
+                let service = service.clone();
+                let tickets = tickets.clone();
+                async move {
+                    let digest = match input.ticket {
+                        // The action the page asked about, sealed in its ticket
+                        // for this session.
+                        Some(ticket) => {
+                            let check = TicketCheck::new(
+                                TicketHolder::of(state.0.0.as_ref()),
+                                CONFIRM_FEATURE,
+                            );
+                            let redeemed = tickets
+                                .redeem(&ticket, &check)
+                                .await
+                                .map_err(|error| AuthError::from(error).into_app_error())?;
+                            redeemed
+                                .binding
+                                .filter(|digest| is_digest(digest))
+                                .ok_or_else(|| {
+                                    AuthError::from(TicketError::Malformed).into_app_error()
+                                })?
+                        }
+                        None => ConfirmAction::new(STEP_UP_ACTION).digest(),
+                    };
+                    let public_key = service
+                        .confirmation_options_for(claims.sub, claims.sid, digest)
+                        .await
+                        .map_err(AuthError::into_app_error)?;
+                    Ok::<_, AppError>(Json(PasskeyOptionsResponse { public_key }))
+                }
+            };
         routes.push(
             RouteDef::on(Method::POST, path("/confirm/options"), options)
                 .authenticated()
@@ -199,32 +200,33 @@ impl PasskeyController {
         );
 
         let service = self.service.clone();
-        let step_up = move |claims: AccessClaims,
-                            meta: ClientMeta,
-                            browser: BrowserSession,
-                            Valid(Json(input)): Valid<Json<ConfirmPasskeyInput>>| {
-            let service = service.clone();
-            async move {
-                let proof = ConfirmProof::Passkey(input.credential);
-                // A browser signed in on its session: the sign-in's time
-                // moves on; it gets no token.
-                #[cfg(feature = "session")]
-                if let Some(session) = browser.0 {
-                    service
-                        .confirm_session(&session, proof, &meta)
+        let step_up =
+            move |claims: AccessClaims,
+                  meta: ClientMeta,
+                  browser: BrowserSession,
+                  Valid(Json(input)): Valid<Json<ConfirmPasskeyInput>>| {
+                let service = service.clone();
+                async move {
+                    let proof = ConfirmProof::Passkey(input.credential);
+                    // A browser signed in on its session: the sign-in's time
+                    // moves on; it gets no token.
+                    #[cfg(feature = "session")]
+                    if let Some(session) = browser.0 {
+                        service
+                            .confirm_session(&session, proof, &meta)
+                            .await
+                            .map_err(AuthError::into_app_error)?;
+                        return Ok::<_, AppError>(NoContent.into_response());
+                    }
+                    #[cfg(not(feature = "session"))]
+                    let _ = browser;
+                    let confirmed = service
+                        .confirm(&claims, proof, &meta)
                         .await
                         .map_err(AuthError::into_app_error)?;
-                    return Ok::<_, AppError>(NoContent.into_response());
+                    Ok::<_, AppError>(Json(confirmed).into_response())
                 }
-                #[cfg(not(feature = "session"))]
-                let _ = browser;
-                let confirmed = service
-                    .confirm(&claims, proof, &meta)
-                    .await
-                    .map_err(AuthError::into_app_error)?;
-                Ok::<_, AppError>(Json(confirmed).into_response())
-            }
-        };
+            };
         routes.push(
             RouteDef::on(Method::POST, path("/confirm/passkey"), step_up)
                 .authenticated()

@@ -333,7 +333,8 @@ impl AuthOptions {
             }
         }
         if passkeys.origins.iter().any(|origin| {
-            !crate::apps::is_android_origin(origin) && (!is_http_url(origin) || origin.ends_with('/'))
+            !crate::apps::is_android_origin(origin)
+                && (!is_http_url(origin) || origin.ends_with('/'))
         }) {
             errors.push(
                 "auth.passkeys.origins must be http(s) origins without a trailing slash, or \
@@ -1042,12 +1043,14 @@ mod tests {
             "android:com.example.app".to_owned(),
             "ios:app".to_owned(),
         ] {
-            let error = load(
-                ConfigSources::new().set("auth.passkeys.origins", json!([refused.clone()])),
-            )
-            .expect_err(&refused)
-            .to_string();
-            assert!(error.contains("auth.passkeys.origins"), "{refused}: {error}");
+            let error =
+                load(ConfigSources::new().set("auth.passkeys.origins", json!([refused.clone()])))
+                    .expect_err(&refused)
+                    .to_string();
+            assert!(
+                error.contains("auth.passkeys.origins"),
+                "{refused}: {error}"
+            );
         }
     }
 
