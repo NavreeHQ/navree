@@ -1,0 +1,236 @@
+//! [`Effect`]: everything the core asks a client to do, and [`Update`]: what
+//! one event led to. The core does nothing itself.
+
+use navree_native::node::Method;
+use serde::{Deserialize, Serialize};
+
+use crate::state::{Message, Notice, ScreenId};
+
+/// One part of a multipart request.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "t", rename_all = "snake_case")]
+pub enum Part {
+    /// A value.
+    Text {
+        /// The field's name.
+        name: String,
+        /// Its value.
+        value: String,
+    },
+    /// A file. The client's transport puts in the bytes it keeps under `token`.
+    File {
+        /// The field's name.
+        name: String,
+        /// The client's name for the bytes.
+        token: String,
+        /// The file's name.
+        filename: String,
+        /// Its media type.
+        #[serde(rename = "type")]
+        media_type: String,
+    },
+}
+
+/// What a request carries.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "t", rename_all = "snake_case")]
+pub enum Body {
+    /// `application/x-www-form-urlencoded`, already encoded: send `text` as it is.
+    Form {
+        /// The encoded pairs.
+        text: String,
+    },
+    /// `multipart/form-data`: the client's transport writes the parts, with a
+    /// boundary of its own, and sets the content type.
+    Multipart {
+        /// The parts, in order.
+        parts: Vec<Part>,
+    },
+}
+
+/// A request to the app's origin. The client adds its cookies and nothing else.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Request {
+    /// The number the answer comes back with.
+    pub request: u64,
+    /// `get` or `post`.
+    pub method: Method,
+    /// The whole address.
+    pub url: String,
+    /// The headers to send, each a name and a value.
+    pub headers: Vec<(String, String)>,
+    /// The body of a post.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<Body>,
+    /// How long to wait for the answer before giving up, in milliseconds.
+    pub timeout_ms: u32,
+    /// Whether the session's `XSRF-TOKEN` cookie, decoded, also goes in the
+    /// `x-xsrf-token` header, as a browser's runtime sends it with every post.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub xsrf: bool,
+}
+
+/// Something the core asks the client to do.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "t", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Effect {
+    /// Send this and come back with a `response` event that carries its number.
+    Fetch(Request),
+    /// The answer to this request is no longer wanted. The client may drop it.
+    Cancel {
+        /// The request.
+        request: u64,
+    },
+    /// Open this address outside the app: the browser, the mail app, the dialler.
+    OpenUrl {
+        /// The address.
+        url: String,
+    },
+    /// Open the system's sign-in session at this address, and come back with
+    /// a `sign_in_done` event.
+    SignIn {
+        /// The whole address the session starts at.
+        url: String,
+        /// The scheme the session comes back on, when it is not a link to the
+        /// app's own origin.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        callback: Option<String>,
+    },
+    /// Show this message, as the system shows short messages, and come back
+    /// with `message_shown` when it has gone.
+    Message(Message),
+    /// Play a haptic.
+    Haptic {
+        /// Which: `success`, `warning`, `error`, `selection`, `light`,
+        /// `medium` or `heavy`.
+        kind: String,
+    },
+    /// Run a device call the server's reply started, and come back with a
+    /// `device_result` event when the call has a result to send.
+    Device {
+        /// The number the result comes back with.
+        call: u64,
+        /// The call's name.
+        name: String,
+        /// What the call is given.
+        #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+        args: serde_json::Value,
+    },
+    /// Read what the client keeps under a key, and come back with a `cache` event.
+    CacheRead {
+        /// The key.
+        key: String,
+    },
+    /// Keep this under a key, in place of what was there. Nothing takes the key away.
+    CacheWrite {
+        /// The key.
+        key: String,
+        /// What to keep, or nothing.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<String>,
+    },
+    /// Throw away everything kept for the cache.
+    CacheClear,
+    /// Say this to assistive technology.
+    Announce {
+        /// The server's own words.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        /// What happened, for the client to say in the person's language.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        notice: Option<Notice>,
+        /// How many, when the notice counts something.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        count: Option<u32>,
+    },
+    /// Put this text on the clipboard.
+    Copy {
+        /// The text.
+        text: String,
+    },
+    /// Come back with a `timer` event after this long.
+    Timer {
+        /// The timer.
+        timer: u64,
+        /// How long, in milliseconds.
+        ms: u32,
+    },
+    /// This timer is no longer wanted.
+    CancelTimer {
+        /// The timer.
+        timer: u64,
+    },
+    /// Open a stream of server-sent events, and come back with `stream` events.
+    StreamOpen {
+        /// The stream.
+        stream: u64,
+        /// The whole address.
+        url: String,
+        /// The headers to send.
+        headers: Vec<(String, String)>,
+    },
+    /// Close a stream.
+    StreamClose {
+        /// The stream.
+        stream: u64,
+    },
+    /// There is nothing to go back to: the system takes the back.
+    Exit,
+    /// Something the app's developers will want to know: an answer that did
+    /// not read, a kind this build has never heard of.
+    Report {
+        /// What it is about: `decode`, `kind`, `depth`.
+        what: String,
+        /// The detail.
+        detail: String,
+    },
+}
+
+/// A part of the view state that changed. The client reads the part again.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(tag = "t", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Change {
+    /// The app's name, theme or user.
+    App,
+    /// Anything about where the person is: the phase, the destinations and
+    /// their stacks, what is presented over them, the screen in front, the window.
+    Nav,
+    /// Everything about one screen. A screen no stack holds any more is gone.
+    Screen {
+        /// The screen.
+        id: ScreenId,
+    },
+    /// The state of one form of a screen, and nothing else of the screen.
+    Form {
+        /// The screen.
+        screen: ScreenId,
+        /// The form's id.
+        form: String,
+    },
+    /// Rows were added at the end of a list or table, and nothing else of the
+    /// screen changed but that list's `more`. A client that does not read rows
+    /// by themselves reads the screen.
+    Rows {
+        /// The screen.
+        screen: ScreenId,
+        /// The id of the list, or of the table or its region.
+        id: String,
+        /// How many rows it held before.
+        from: usize,
+        /// How many were added.
+        count: usize,
+    },
+    /// The messages waiting to be shown.
+    Messages,
+}
+
+/// What one event led to.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Update {
+    /// The parts of the view state that changed.
+    pub changed: Vec<Change>,
+    /// What the client is asked to do, in order.
+    pub effects: Vec<Effect>,
+}
