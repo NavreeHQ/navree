@@ -3,7 +3,10 @@
 //!
 //! The page `docs/configuration/reference.mdx` is
 //! generated. Rewrite it with
-//! `NAVREE_CONFIG_RECORD=1 cargo test -p navree --features social,oauth,flags,graphql,grpc,documents,media,billing,search,mcp,ai,redis,micro,i18n,mongo --test config_reference`.
+//! `NAVREE_CONFIG_RECORD=1 cargo test -p navree --all-features --test config_reference`,
+//! the features CI builds with. A shorter list writes another page: without
+//! `media-ffmpeg` the media section loses its `ffmpeg` rows, and without
+//! `sqlite` the logbook's `store` defaults to `memory` instead of `file`.
 //! The page is compared (and the sections are counted) only when every
 //! module feature is on; with fewer, the rules below still run on the
 //! sections that are there.
