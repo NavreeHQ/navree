@@ -55,7 +55,11 @@
 //! anything before the first delimiter, and a part's head that could be read
 //! two ways do not count. Paths matching
 //! [`SessionOptions::csrf_except`] are exempt from both
-//! checks. Tokens are compared in constant time and never logged.
+//! checks. A path a module names with
+//! [`SameOriginOnly`](navree_http::csrf::SameOriginOnly) (navree-ui's appearance route,
+//! which only sets the reader's theme cookie) is checked by its origin in place of the
+//! token: `Sec-Fetch-Site: same-origin`, else an `Origin` naming this host, else no word
+//! of either. Tokens are compared in constant time and never logged.
 //!
 //! ```no_run
 //! use std::sync::Arc;

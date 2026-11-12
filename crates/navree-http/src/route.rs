@@ -57,6 +57,47 @@ impl RouteDef {
         Self::with_endpoint(method, path, Endpoint::new(handler))
     }
 
+    /// A route at `method` and `path` that answers a guest with `guest` and a request
+    /// someone is signed in on with `signed_in`: a public site's home page and the app's
+    /// own home at the same address, say. Each handler takes its own extractors, so the
+    /// signed-in one may take an extractor that refuses guests (the user, their unit of
+    /// work) and the guest one is never asked for it. The route is public; the answer
+    /// varies by `Cookie` and `Authorization`, so no cache hands one reader's page to
+    /// another.
+    ///
+    /// ```
+    /// use http::Method;
+    /// use navree_http::{CurrentPrincipal, RouteDef};
+    ///
+    /// let home = RouteDef::on_guest_or(
+    ///     Method::GET,
+    ///     "!/",
+    ///     || async { "the public site" },
+    ///     |CurrentPrincipal(who): CurrentPrincipal| async move { format!("hello, {}", who.user_id) },
+    /// )
+    /// .name("home");
+    /// assert!(home.meta.access.public);
+    /// ```
+    pub fn on_guest_or<G, TG, S, TS>(
+        method: Method,
+        path: impl Into<String>,
+        guest: G,
+        signed_in: S,
+    ) -> Self
+    where
+        G: Handler<TG>,
+        TG: 'static,
+        S: Handler<TS>,
+        TS: 'static,
+    {
+        Self::with_endpoint(
+            method,
+            path,
+            Endpoint::guest_or(Endpoint::new(guest), Endpoint::new(signed_in)),
+        )
+        .public()
+    }
+
     /// A route answering `method` with `endpoint`.
     pub fn with_endpoint(method: Method, path: impl Into<String>, endpoint: Endpoint) -> Self {
         Self {
