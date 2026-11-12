@@ -364,8 +364,8 @@ mod tests {
         let out = html(resting(58.0));
         assert!(out.contains(r#"<div data-slot="scale-ends" aria-hidden="true"><span>40</span><span>120</span></div>"#), "{out}");
         let out = html(
-            RangeScale::new("Balance", 4_50_000)
-                .range(0, 10_00_000)
+            RangeScale::new("Balance", 450_000)
+                .range(0, 1_000_000)
                 .format(NumberFormat::currency("₹"))
                 .locale("en-IN"),
         );

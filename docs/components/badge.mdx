@@ -53,6 +53,22 @@ A tone colours a badge by what it means. `Tone` has five built-in values (`Neutr
 
 Badges keep a 4 px corner. There is no pill shape.
 
+## Status
+
+`.tone(Tone)` tints a badge with a color of the theme and `.icon(...)` adds a glyph before the text. The tones that read as a status are `Tone::Success` (green), `Tone::named("cyan")`, `Tone::Warning` (amber), `Tone::named("orange")`, `Tone::Danger` (red) and `Tone::named("slate")`, a quiet gray for no data. They follow light and dark and every theme.
+
+```rust
+use navree::ui::*;
+
+Badge::new("Excellent")
+    .tone(Tone::Success)
+    .icon(icons::SPARKLES)
+```
+
+<UiPreview example="badge/status" />
+
+The text says the status, so the color is never alone. To show which way a figure is moving, use a [Trend](/docs/components/trend/).
+
 ## Keyboard and accessibility
 
 <UiA11y>
