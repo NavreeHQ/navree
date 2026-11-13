@@ -1,10 +1,6 @@
 package com.navree.client
 
 import android.os.ParcelFileDescriptor
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.platform.app.InstrumentationRegistry
 
 /**
@@ -22,21 +18,6 @@ object Shots {
 
     /** The device the job runs on: `phone` or `tablet`. */
     val device: String get() = arguments.getString("device") ?: "device"
-
-    /**
-     * Draws the app in the look's direction. The device's own right-to-left
-     * switches did not reach the test's process on the emulator, so the
-     * "rtl" look lays the app out right to left itself; the system bars stay
-     * as they are.
-     */
-    @Composable
-    fun Directed(content: @Composable () -> Unit) {
-        if (look == "rtl") {
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl, content = content)
-        } else {
-            content()
-        }
-    }
 
     fun take(name: String) {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()

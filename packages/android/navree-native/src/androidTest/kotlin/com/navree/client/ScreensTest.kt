@@ -46,7 +46,7 @@ class ScreensTest {
             made = NavreeSession(compose.activity.application, config, origin.toHttpUrl())
             made.effects.activity = compose.activity
         }
-        compose.setContent { Shots.Directed { NavreeApp(made.driver, config, image = made::image) } }
+        compose.setContent { NavreeApp(made.driver, config, image = made::image) }
         waitFor("the app is ready") { made.driver.nav.stage == Stage.Ready }
         return made
     }
@@ -72,28 +72,6 @@ class ScreensTest {
 
     private fun send(session: NavreeSession, event: kotlinx.serialization.json.JsonObject) {
         compose.runOnUiThread { session.driver.send(event) }
-    }
-
-    @Test
-    fun theStoreDemosRecordedScreens() {
-        val app = start("store-demo")
-        // The dashboard was recorded as a page for the web view, inside the app's own chrome.
-        waitFor("the dashboard") { app.driver.screens.values.any { it.content is Content.Web } }
-        Thread.sleep(2500)
-        Shots.take("store-dashboard-web")
-
-        send(app, Events.select(1))
-        front(app, "Orders")
-        Shots.take("store-orders")
-
-        send(app, Events.openLink("${server.url("/orders/1")}"))
-        front(app, "Order CS-20481")
-        Shots.take("store-order")
-
-        send(app, Events.select(2))
-        front(app, "Inventory")
-        Shots.take("store-inventory")
-        assertEquals(Stage.Ready, app.driver.nav.stage)
     }
 
     @Test

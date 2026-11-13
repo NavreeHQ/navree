@@ -230,10 +230,10 @@ jobs:
             packages/android/demo/build/outputs/apk/debug/*.apk
           retention-days: 14
 
-  # The store demo, answering native clients, for the device tests to run
-  # against: the screens they photograph are the server's answers of now.
+  # The store, inbox and board demos, answering native clients, for the device
+  # tests to run against: the screens they photograph are the servers' answers of now.
   android-demo:
-    name: Store demo for the Android screens
+    name: Demos for the Android screens
     runs-on: ubuntu-latest
     timeout-minutes: 60
     concurrency:
@@ -251,15 +251,18 @@ jobs:
         with:
           key: android-store-demo
 
-      - name: Build the store demo
-        run: cargo build -p store-demo --features native-preview
+      - name: Build the demos
+        run: cargo build -p store-demo -p inbox-demo -p board-demo --features store-demo/native-preview,inbox-demo/native-preview,board-demo/native-preview
 
-      - name: Keep the store demo
+      - name: Keep the demos
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: android-store-demo
+          name: android-demos
           if-no-files-found: error
-          path: target/debug/store-demo
+          path: |
+            target/debug/store-demo
+            target/debug/inbox-demo
+            target/debug/board-demo
           retention-days: 7
 
   # The device tests on an emulator, on a phone and on a tablet: each screen in
@@ -268,7 +271,7 @@ jobs:
     name: Android screens (${{ matrix.device }})
     needs: [android, android-demo]
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 80
     strategy:
       fail-fast: false
       matrix:
@@ -286,26 +289,32 @@ jobs:
           name: android-apks
           path: ${{ runner.temp }}/apks
 
-      - name: The store demo
+      - name: The demos
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: android-store-demo
+          name: android-demos
           path: ${{ runner.temp }}/demo
 
-      # The emulator reaches this machine as 10.0.2.2.
-      - name: Serve the store demo
+      # The emulator reaches this machine as 10.0.2.2: the store at 8095, the inbox at 8096, the board at 8097.
+      - name: Serve the demos
         run: |
-          chmod +x "$RUNNER_TEMP/demo/store-demo"
           cd "$RUNNER_TEMP/demo"
+          chmod +x store-demo inbox-demo board-demo
           PORT=8095 STORE_SIMULATOR=off STORE_DATABASE_URL="sqlite://$RUNNER_TEMP/demo/store.db?mode=rwc" \
-            nohup ./store-demo > "$RUNNER_TEMP/demo/server.log" 2>&1 &
-          for _ in $(seq 1 120); do
-            if curl -s -o /dev/null http://127.0.0.1:8095/; then echo "the store demo answers"; break; fi
-            sleep 1
+            nohup ./store-demo > store.log 2>&1 &
+          PORT=8096 INBOX_SIMULATOR=off INBOX_SCALE=2000 INBOX_DATABASE_URL="sqlite://$RUNNER_TEMP/demo/inbox.db?mode=rwc" \
+            nohup ./inbox-demo > inbox.log 2>&1 &
+          PORT=8097 BOARD_SIMULATOR=off BOARD_DATABASE_URL="sqlite://$RUNNER_TEMP/demo/board.db?mode=rwc" \
+            nohup ./board-demo > board.log 2>&1 &
+          for port in 8095 8096 8097; do
+            for _ in $(seq 1 240); do
+              if curl -s -o /dev/null "http://127.0.0.1:$port/"; then echo "port $port answers"; break; fi
+              sleep 1
+            done
+            curl -s -o /dev/null -w "$port shell %{http_code}\n" -H 'X-Navree-Native: 1' \
+              -H 'X-Navree-Client: platform=android; form=phone; vocab=0; scheme=light; text=1.00' \
+              -H 'Accept: application/vnd.navree.native+json' "http://127.0.0.1:$port/_navree/native/shell"
           done
-          curl -s -o /dev/null -w '%{http_code}\n' -H 'X-Navree-Native: 1' \
-            -H 'X-Navree-Client: platform=android; form=phone; vocab=0; scheme=light; text=1.00' \
-            -H 'Accept: application/vnd.navree.native+json' http://127.0.0.1:8095/_navree/native/shell
 
       # The emulator runs on the processor's own virtualisation.
       - name: KVM
@@ -359,10 +368,19 @@ jobs:
             esac
             "$adb" shell cmd uimode night "$night"
             "$adb" shell settings put system font_scale "$scale"
-            # Right to left as a person gets it: the app's language set to one written that way.
-            if [ "$rtl" = 1 ]; then locales=he; else locales=""; fi
-            "$adb" shell cmd locale set-app-locales com.navree.client.test --locales "$locales" || true
-            "$adb" shell am instrument -w -e look "$look" -e device "${{ matrix.device }}" -e store http://10.0.2.2:8095 \
+            # Right to left as the developer option sets it: the system property, the setting, and a
+            # change of configuration so the system and every app lay themselves out again.
+            if [ "$rtl" = 1 ]; then
+              for _ in 1 2 3; do "$adb" root && break; sleep 5; done
+              "$adb" wait-for-device
+              "$adb" shell setprop debug.force_rtl true
+              "$adb" shell settings put global debug.force_rtl 1
+              "$adb" shell settings put system font_scale 1.05
+              sleep 3
+              "$adb" shell settings put system font_scale "$scale"
+              sleep 3
+            fi
+            "$adb" shell am instrument -w -e look "$look" -e device "${{ matrix.device }}" -e store http://10.0.2.2:8095 -e inbox http://10.0.2.2:8096 -e board http://10.0.2.2:8097 \
               com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/instrument-$look.txt"
             if ! grep -q '^OK (' "$RUNNER_TEMP/instrument-$look.txt"; then status=1; fi
           done
@@ -370,7 +388,7 @@ jobs:
           "$adb" pull /data/local/tmp/navree-screens "$RUNNER_TEMP/screens/" || true
           cp "$RUNNER_TEMP"/instrument-*.txt "$RUNNER_TEMP/screens/"
           "$adb" logcat -d > "$RUNNER_TEMP/screens/logcat.txt" || true
-          cp "$RUNNER_TEMP/demo/server.log" "$RUNNER_TEMP/screens/store-demo.log" || true
+          cp "$RUNNER_TEMP"/demo/*.log "$RUNNER_TEMP/screens/" || true
           ls -R "$RUNNER_TEMP/screens"
           exit $status
 
