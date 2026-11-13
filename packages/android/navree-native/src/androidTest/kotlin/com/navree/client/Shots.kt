@@ -38,7 +38,37 @@ object Shots {
         }
     }
 
+    private var demo = false
+
+    /**
+     * Puts the system bar in the system's own demo mode, as pictures that are
+     * shown to people want it: a fixed time, full battery, full signal and
+     * wifi, no notification icons. Once for the process; a device that does
+     * not allow it keeps the bar it has.
+     */
+    fun demoStatusBar() {
+        if (demo) return
+        demo = true
+        try {
+            shell("settings put global sysui_demo_allowed 1")
+            for (command in listOf(
+                "enter",
+                "clock -e hhmm 1000",
+                "battery -e level 100 -e plugged false",
+                "network -e wifi show -e level 4 -e fully true",
+                "network -e mobile show -e datatype none -e level 4 -e fully true",
+                "notifications -e visible false",
+            )) {
+                shell("am broadcast -a com.android.systemui.demo -e command $command")
+            }
+            Thread.sleep(500)
+        } catch (_: Exception) {
+            // The pictures are taken with the bar as it is.
+        }
+    }
+
     fun take(name: String) {
+        demoStatusBar()
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
         shell("mkdir -p $FOLDER")
         shell("screencap -p $FOLDER/$device-$look-$name.png")

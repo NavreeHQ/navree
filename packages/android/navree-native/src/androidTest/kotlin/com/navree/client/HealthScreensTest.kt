@@ -39,12 +39,13 @@ class HealthScreensTest {
         server.close()
     }
 
-    private fun start(): NavreeSession {
+    /** The app on its first screen: the plain today screen, or the designed one as the first screen of its destination. */
+    private fun start(designedAtRoot: Boolean = false): NavreeSession {
         server.dispatcher = Recorded(
             "",
             routes = mapOf(
                 "/_navree/native/shell" to "health/shell",
-                "/" to "screen-today",
+                "/" to if (designedAtRoot) "screen-designed-health" else "screen-today",
                 "/sleep" to "screen-sleep",
                 "/fitness" to "screen-fitness",
                 "/designed" to "screen-designed-health",
@@ -112,14 +113,30 @@ class HealthScreensTest {
         front(app, "Fitness")
         scrolled("health-fitness", 7)
 
-        // The same day written for native clients: cards, a pager of the screen's own, rooms.
-        send(app, Events.openLink("${server.url("/designed")}"))
-        front(app, "Today")
-        scrolled("designed-health", 4)
-
         send(app, Events.openLink("${server.url("/shelves")}"))
         front(app, "Shelves")
         scrolled("designed-shelves", 4)
+    }
+
+    /** The same day written for native clients: cards, a pager of the screen's own, rooms; the first screen of Today. */
+    @Test
+    fun theDesignedHealthScreen() {
+        val app = start(designedAtRoot = true)
+        front(app, "Today")
+        scrolled("designed-health", 4)
+    }
+
+    /** A card that zooms into the screen it opens, and the way back into it. */
+    @Test
+    fun aCardOpensItsScreen() {
+        val app = start(designedAtRoot = true)
+        front(app, "Today")
+        compose.onNodeWithContentDescription("Sleep, 25% of score").performClick()
+        front(app, "Sleep")
+        Shots.take("designed-health-opened")
+        send(app, Events.back)
+        front(app, "Today")
+        Shots.take("designed-health-back")
     }
 
     @Test
