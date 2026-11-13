@@ -32,19 +32,28 @@ struct RowView: View {
         case .option(let field, let option, let form):
             OptionRow(field: field, option: option, form: FormRef(form))
         case .pending(let region):
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .task { context.send(.appear(region: region)) }
+            if context.region(region).failed {
+                RetryRow(title: "Couldn't Load This") { context.send(.retry(region: region)) }
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .task { context.send(.appear(region: region)) }
+            }
         case .more(let target, let href):
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .task { context.send(.more(target: target, href: href)) }
+            if context.list(target).failed {
+                RetryRow(title: "Couldn't Load More") { context.send(.more(target: target, href: href)) }
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .task { context.send(.more(target: target, href: href)) }
+            }
         }
     }
 }
 
-/// Opens the screen at `address` the way the shell's rules present it: a push
-/// with the system's own disclosure, or a tap that asks the runtime.
+/// A row's way to what it opens: a link that leaves its presentation to the
+/// app, or asks for a push, has the system's own disclosure and asks the
+/// runtime as it is tapped; anything else is a tap that asks it.
 struct Opening<Label: View>: View {
     let action: Navree.Action?
     let place: Place
@@ -52,10 +61,8 @@ struct Opening<Label: View>: View {
     @Environment(\.navree) private var context
 
     var body: some View {
-        if case .navigate(let link)? = action, link.present == .auto || link.present == .push,
-            context.presentation(link.href) == .push
-        {
-            NavigationLink(value: Step(address: link.href, depth: context.depth + 1)) {
+        if let action, case .navigate(let link) = action, link.present == .auto || link.present == .push {
+            NavigationLink(value: PathEntry.tap(action, place)) {
                 label()
             }
         } else if let action {
@@ -138,7 +145,7 @@ struct RecordRowView: View {
         if action.fields > 0, action.form != nil {
             formSheet = action
         } else if let act = action.button.action {
-            context.send(.act(act, Place(form: action.form.map(FormRef.init))))
+            context.send(.act(act, Place(form: action.form.map(FormRef.init), ask: PresentationRules.question(action.button))))
         }
     }
 }
@@ -217,7 +224,9 @@ struct TreeRowView: View {
         .swipeActions(edge: .trailing) {
             ForEach(Array(row.swipe.enumerated()), id: \.offset) { _, button in
                 Button(role: buttonRole(button.role)) {
-                    if let action = button.action { context.send(.act(action, Place(overlay: overlay))) }
+                    if let action = button.action {
+                        context.send(.act(action, Place(overlay: overlay, ask: PresentationRules.question(button))))
+                    }
                 } label: {
                     ButtonLabel(button: button, mode: .both)
                 }
@@ -294,7 +303,9 @@ struct ButtonRow: View {
 
     var body: some View {
         Button(role: buttonRole(button.role)) {
-            if let action = button.action { context.send(.act(action, Place(form: form, overlay: overlay))) }
+            if let action = button.action {
+                context.send(.act(action, Place(form: form, overlay: overlay, ask: PresentationRules.question(button))))
+            }
         } label: {
             HStack {
                 ButtonLabel(button: button, mode: .title)
@@ -305,6 +316,25 @@ struct ButtonRow: View {
             }
         }
         .disabled(button.disabled || button.pending)
+    }
+}
+
+/// A row that says something did not come, and offers to try again.
+struct RetryRow: View {
+    let title: LocalizedStringKey
+    let retry: () -> Void
+
+    var body: some View {
+        Button(action: retry) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).foregroundStyle(.primary)
+                    Text("Tap to try again.").font(.subheadline).foregroundStyle(.secondary)
+                }
+            } icon: {
+                Image(systemName: "arrow.clockwise")
+            }
+        }
     }
 }
 

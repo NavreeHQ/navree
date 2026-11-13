@@ -23,10 +23,10 @@ let package = Package(
     targets: [
         .target(name: "NavreeProtocol"),
         .target(name: "NavreeDesign", dependencies: ["NavreeProtocol"]),
-        .target(name: "NavreeShell", dependencies: ["NavreeProtocol", "NavreeDesign"]),
+        .target(name: "NavreeShell", dependencies: ["NavreeProtocol", "NavreeDesign", "NavreeRuntime", "NavreeCoreBridge"]),
         .testTarget(name: "NavreeProtocolTests", dependencies: ["NavreeProtocol"]),
         .testTarget(name: "NavreeDesignTests", dependencies: ["NavreeDesign", "NavreeProtocol"]),
-        .testTarget(name: "NavreeShellTests", dependencies: ["NavreeShell", "NavreeProtocol"]),
+        .testTarget(name: "NavreeShellTests", dependencies: ["NavreeShell", "NavreeRuntime", "NavreeProtocol", "NavreeCoreBridge"]),
     ]
 )
 

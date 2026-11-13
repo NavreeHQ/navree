@@ -80,7 +80,7 @@ struct ButtonPart: View {
     var body: some View {
         let control = Button(role: buttonRole(button.role)) {
             if let action = button.action {
-                context.send(.act(action, Place(form: form, overlay: overlay)))
+                context.send(.act(action, Place(form: form, overlay: overlay, ask: PresentationRules.question(button))))
             }
         } label: {
             if button.pending {
@@ -190,7 +190,9 @@ struct MenuItems: View {
         switch item {
         case .button(let button):
             Button(role: buttonRole(button.role)) {
-                if let action = button.action { context.send(.act(action, Place(overlay: overlay))) }
+                if let action = button.action {
+                    context.send(.act(action, Place(overlay: overlay, ask: PresentationRules.question(button))))
+                }
             } label: {
                 ButtonLabel(button: button, mode: .both)
             }

@@ -52,7 +52,9 @@ struct ToolbarAction: View {
         switch node {
         case .button(let button):
             let action = {
-                if let act = button.action { context.send(.act(act, Place(form: form, overlay: overlay))) }
+                if let act = button.action {
+                    context.send(.act(act, Place(form: form, overlay: overlay, ask: PresentationRules.question(button))))
+                }
             }
             switch slot {
             case .cancel:

@@ -77,6 +77,13 @@ public enum PresentationRules {
         return !button.undoable
     }
 
+    /// The question a control asks before it acts: the server's own words,
+    /// unless what it does can be undone, where Apple's guidelines let the
+    /// person undo it rather than be asked.
+    public static func question(_ button: Navree.Button) -> Navree.Question? {
+        button.undoable ? nil : button.ask
+    }
+
     /// A failure interrupts with an alert; anything else is a line of status
     /// in the screen. Never a floating toast.
     public static func message(_ tone: Navree.Tone) -> MessagePresentation {
