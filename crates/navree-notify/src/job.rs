@@ -105,12 +105,6 @@ pub enum Delivery {
         /// The notification.
         message: WebPushMessage,
     },
-    /// A native app push notification, to every push device the
-    /// notifiable has when it is delivered.
-    Push {
-        /// The notification.
-        message: PushMessage,
-    },
     /// One digest mail batching several notifications' mails (over the
     /// mail channel).
     Digest {
@@ -120,6 +114,12 @@ pub enum Delivery {
         to: Vec<String>,
         /// The mails it batches, oldest first.
         items: Vec<DigestItem>,
+    },
+    /// A native app push notification, to every push device the
+    /// notifiable has when it is delivered.
+    Push {
+        /// The notification.
+        message: PushMessage,
     },
 }
 
