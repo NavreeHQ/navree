@@ -640,7 +640,9 @@ impl Ticket {
 pub struct Then {
     /// The route on the app's own origin the result is posted to, as a form.
     pub href: OriginPath,
-    /// The ticket the post carries back.
+    /// The ticket the post carries back. For a [`Confirm`] it is the one posted
+    /// to the call's `challenge` route, which spends it: the result is posted
+    /// without one.
     pub ticket: Ticket,
     /// When the ticket expires, in seconds since 1970 (UTC), so a client
     /// showing a kept screen fetches it again instead of posting a dead ticket.
@@ -1024,16 +1026,33 @@ pub enum ConfirmMethod {
 /// code, as a signature over a challenge the server derives from the action
 /// itself: approving ₹100 can't approve ₹1,00,000.
 ///
-/// On a tap, the client posts `{"ticket": <the call's ticket>}` as JSON to
-/// `challenge`, which spends the ticket and answers the passkey request's
-/// options (`{"publicKey": ...}`); it prompts with the system's sheet, then
-/// posts the signature to `then.href` as `credential`, with no ticket (the
-/// challenge, used once and for this session, stands for it).
+/// It takes two requests, both with the session's cookies and its token in
+/// `x-xsrf-token`, with the system's own sheet between them:
+///
+/// 1. On a tap, the client posts `{"ticket": <then.ticket>}` as JSON to
+///    `challenge`. The route spends the ticket and answers the passkey request's
+///    options: `{"publicKey": {"challenge", "rpId", "timeout",
+///    "userVerification": "required", "allowCredentials": [...]}}`. A ticket
+///    that is old, used or another session's is refused (`422`,
+///    `invalid_ticket`): the client fetches the screen again and the call has a
+///    new one.
+/// 2. The client prompts with the system's sheet (on Android a public key
+///    credential request made from `publicKey`; on Apple systems an assertion
+///    request with the challenge decoded from base64url, user verification
+///    required and the allowed credentials), then posts [`Confirmed`] to
+///    `then.href` as a form, with `outcome` as every call's result is. It
+///    carries no ticket: the challenge stands for it, which is good for 120
+///    seconds, for this session and this action only, and is used up by the
+///    first attempt. A signature the server refuses is `403`
+///    (`confirmation_refused`).
+///
+/// A person who closes the sheet is a refusal ([`Refusal::Cancelled`]): the
+/// client posts `outcome` alone.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Confirm {
     /// What is being approved, at most 120 characters: `Approve payment`.
     pub reason: String,
-    /// The route that turns the call's ticket into a challenge:
+    /// The route the call's ticket is posted to and turned into a challenge at:
     /// `/api/auth/confirm/options` by default.
     pub challenge: OriginPath,
     /// Its details, at most 120 characters: `₹1,00,000 to Gurpreet Kaur`.
@@ -1045,25 +1064,51 @@ pub struct Confirm {
 }
 
 /// Which method signed a confirmation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum ConfirmedBy {
-    /// A passkey.
+    /// A passkey: what a confirmation is signed with unless it says otherwise,
+    /// and what a method this build does not know is read as.
+    #[default]
     Passkey,
     /// The device's own key.
     DeviceKey,
 }
 
-/// What [`Confirm`] posts: the challenge it answered and the signature.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// What [`Confirm`] posts to its continuation, as a form, beside `outcome`: the
+/// signature, which the server checks against the challenge it issued for this
+/// session and this action.
+///
+/// A passkey's signature is its assertion, as WebAuthn's `toJSON()` writes it
+/// (`id`, `rawId`, `type`, `response` with `clientDataJSON`, `authenticatorData`,
+/// `signature` and `userHandle`), as JSON text in `credential`. That is all
+/// there is to post: the challenge is inside it, in the client data, so there
+/// is nothing to name beside it. A device key's signature carries no such
+/// assertion, so `challenge` names the one it signed, with `key_id` and
+/// `signature`.
+///
+/// ```
+/// use navree_native::device::{Confirmed, ConfirmedBy};
+///
+/// let assertion = r#"{"id":"AQID","rawId":"AQID","type":"public-key","response":{"clientDataJSON":"e30","authenticatorData":"AQ","signature":"MEUC","userHandle":null}}"#;
+/// let posted: Confirmed = serde_json::from_value(serde_json::json!({ "credential": assertion })).unwrap();
+/// assert_eq!(posted.method, ConfirmedBy::Passkey);
+/// assert_eq!(posted.credential.as_deref(), Some(assertion));
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Confirmed {
-    /// The id of the challenge the server issued.
-    pub challenge: String,
-    /// The method that signed.
-    pub method: ConfirmedBy,
-    /// A passkey's assertion, as WebAuthn's `toJSON()` writes it.
+    /// A passkey's assertion, as WebAuthn's `toJSON()` writes it, as JSON text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credential: Option<String>,
+    /// The method that signed. The passkey when left out, and when it is a
+    /// method this build does not know.
+    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    pub method: ConfirmedBy,
+    /// The id of the challenge a device key's signature answers. A passkey's
+    /// assertion holds its own challenge, so it posts none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub challenge: Option<String>,
     /// The device key's id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_id: Option<String>,
@@ -1862,6 +1907,49 @@ mod tests {
                 "{call}"
             );
         }
+    }
+
+    #[test]
+    fn a_confirmation_posts_the_assertion_and_needs_nothing_else_for_a_passkey() {
+        let assertion = r#"{"id":"AQID","rawId":"AQID","type":"public-key","response":{"clientDataJSON":"e30","authenticatorData":"AQ","signature":"MEUC","userHandle":null}}"#;
+        let confirmed: Confirmed = serde_json::from_value(serde_json::json!({ "credential": assertion })).unwrap();
+        assert_eq!(
+            confirmed,
+            Confirmed {
+                credential: Some(assertion.to_owned()),
+                ..Confirmed::default()
+            }
+        );
+        // The passkey is the usual method; a method this build does not know is read as it.
+        assert_eq!(confirmed.method, ConfirmedBy::Passkey);
+        let newer: Confirmed =
+            serde_json::from_str(r#"{"method":"retina","credential":"{}"}"#).unwrap();
+        assert_eq!(newer.method, ConfirmedBy::Passkey);
+        // What is written is the assertion alone: the challenge is inside it.
+        let written = serde_json::to_value(&confirmed).unwrap();
+        assert_eq!(written, serde_json::json!({ "credential": assertion }));
+    }
+
+    #[test]
+    fn a_confirmation_by_a_device_key_names_the_challenge_it_signed() {
+        let confirmed: Confirmed = serde_json::from_str(
+            r#"{"method":"device_key","challenge":"c-91","key_id":"k-1","signature":"MEUCIQ"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            confirmed,
+            Confirmed {
+                method: ConfirmedBy::DeviceKey,
+                challenge: Some("c-91".to_owned()),
+                key_id: Some("k-1".to_owned()),
+                signature: Some("MEUCIQ".to_owned()),
+                credential: None,
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&confirmed).unwrap(),
+            r#"{"method":"device_key","challenge":"c-91","key_id":"k-1","signature":"MEUCIQ"}"#
+        );
     }
 
     #[test]

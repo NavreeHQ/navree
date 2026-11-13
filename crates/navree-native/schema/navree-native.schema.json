@@ -2265,7 +2265,15 @@
     "Confirmed": {
       "properties": {
         "challenge": {
-          "type": "string",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "x-since": 0
         },
         "credential": {
@@ -2294,6 +2302,7 @@
         },
         "method": {
           "$ref": "#/$defs/ConfirmedBy",
+          "default": "passkey",
           "x-since": 0
         },
         "signature": {
@@ -2309,10 +2318,7 @@
           "x-since": 0
         }
       },
-      "required": [
-        "challenge",
-        "method"
-      ],
+      "required": [],
       "type": "object",
       "x-kind": "object",
       "x-since": 0

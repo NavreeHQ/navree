@@ -892,7 +892,7 @@ object!(PasskeyCredential { credential } {});
 names!(ConfirmMethod { Passkey, DeviceKey, Either });
 object!(Confirm { reason, challenge } { detail, method });
 names!(ConfirmedBy { Passkey, DeviceKey });
-object!(Confirmed { challenge, method } { credential, key_id, signature });
+object!(Confirmed {} { credential, method, challenge, key_id, signature });
 names!(Accuracy { Approximate, Precise });
 object!(LocateOnce {} { accuracy, max_age_secs, timeout_secs });
 object!(Located { lat, lon, accuracy_m, at, precise } {});
