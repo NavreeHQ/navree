@@ -92,9 +92,14 @@ public enum WireDecoder {
     public static let stackSize = 4 << 20
 
     /// Decodes an envelope, a shell document or any other protocol type.
-    public static func decode<T: Decodable & Sendable>(_ type: T.Type, from data: Data) throws -> T {
+    /// `limit` is how deep the JSON may nest: the protocol's limit for an
+    /// answer, a few levels more for a part of the runtime core's view state,
+    /// which holds a tree the core has read and checked a few levels down.
+    public static func decode<T: Decodable & Sendable>(
+        _ type: T.Type, from data: Data, limit: Int = Wire.maxNesting
+    ) throws -> T {
         let nesting = Wire.nesting(data)
-        guard nesting <= Wire.maxNesting else { throw WireError.tooDeep(nesting: nesting) }
+        guard nesting <= limit else { throw WireError.tooDeep(nesting: nesting) }
         return try onReadingThread { try JSONDecoder().decode(type, from: data) }
     }
 
