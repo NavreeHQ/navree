@@ -1028,6 +1028,7 @@ fn screen_kinds() -> Envelope {
                             reorder: None,
                             children: vec![Node::Row(Row {
                                 id: Some(s("event-981")),
+                                key: None,
                                 leading: Some(Box::new(Node::Avatar(Avatar {
                                     id: None,
                                     name: s("Ravneet Kaur"),
@@ -2305,8 +2306,10 @@ fn screen_inbox() -> Envelope {
 /// prefix and a suffix and fields that act as they change, quiet rows, and
 /// icons with their systems' symbols.
 fn screen_board() -> Envelope {
+    // A card's id names it on the screen; its key is the record the app moves.
     let card = |id: &str, title: &str, who: &str| Row {
         id: Some(s(id)),
+        key: id.strip_prefix("c-").map(s),
         title: s(title),
         subtitle: Some(s(who)),
         action: Some(Action::Navigate {
@@ -2323,6 +2326,8 @@ fn screen_board() -> Envelope {
                 children: cards,
                 reorder: Some(Reorder {
                     href: s("/cards/move"),
+                    // A column's key is the status a card in it has.
+                    key: id.strip_prefix("board-").map(s),
                     group: Some(s("board")),
                     limit,
                     fields: vec![pair("_csrf", "tok")],
@@ -2582,6 +2587,7 @@ fn ops_lists() -> Envelope {
                 target: s("board-doing"),
                 nodes: vec![Node::Row(Row {
                     id: Some(s("c-8")),
+                    key: Some(s("8")),
                     title: s("Photograph the Diwali range"),
                     subtitle: Some(s("Jaspreet Singh")),
                     ..Row::default()

@@ -6904,6 +6904,18 @@
           "type": "string",
           "x-since": 0
         },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "limit": {
           "anyOf": [
             {
@@ -7138,6 +7150,18 @@
           "x-since": 0
         },
         "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "key": {
           "anyOf": [
             {
               "type": "string"

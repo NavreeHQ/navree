@@ -129,6 +129,7 @@
                     {
                       "t": "row",
                       "id": "c-7",
+                      "key": "7",
                       "title": "Restock Brass Kadhai",
                       "subtitle": "Ravneet Kaur",
                       "action": {
@@ -140,6 +141,7 @@
                     {
                       "t": "row",
                       "id": "c-8",
+                      "key": "8",
                       "title": "Photograph the Diwali range",
                       "subtitle": "Jaspreet Singh",
                       "action": {
@@ -151,6 +153,7 @@
                   ],
                   "reorder": {
                     "href": "/cards/move",
+                    "key": "todo",
                     "group": "board",
                     "fields": [
                       {
@@ -173,6 +176,7 @@
                     {
                       "t": "row",
                       "id": "c-5",
+                      "key": "5",
                       "title": "Call the Jalandhar supplier",
                       "subtitle": "Amandeep Gill",
                       "action": {
@@ -184,6 +188,7 @@
                   ],
                   "reorder": {
                     "href": "/cards/move",
+                    "key": "doing",
                     "group": "board",
                     "limit": 3,
                     "fields": [
@@ -207,6 +212,7 @@
                     {
                       "t": "row",
                       "id": "c-2",
+                      "key": "2",
                       "title": "Archived 14 old cards",
                       "subtitle": "The nightly clean-up",
                       "action": {
@@ -219,6 +225,7 @@
                   ],
                   "reorder": {
                     "href": "/cards/move",
+                    "key": "done",
                     "group": "board",
                     "fields": [
                       {

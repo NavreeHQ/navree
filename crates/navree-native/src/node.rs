@@ -621,7 +621,9 @@ pub struct List {
     /// Whether the rows are numbered.
     #[serde(default, skip_serializing_if = "is_false")]
     pub ordered: bool,
-    /// The revision the rows are at: what the list asks `changes` since.
+    /// The revision the rows are at: what the list asks `changes` since. Every
+    /// row of a list with a revision has an `id`: an op merges a row into the
+    /// list by it, and a row with none can't be merged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub since: Option<String>,
     /// Where the list asks what changed: this address with `since` added as a
@@ -633,6 +635,7 @@ pub struct List {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub live: Option<Live>,
     /// Whether the rows can be moved by dragging, and where a move is posted.
+    /// Every row of such a list has an `id`: a row with none can't be moved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reorder: Option<Reorder>,
 }
@@ -640,15 +643,37 @@ pub struct List {
 /// How the rows of a list are moved by dragging: within the list, and into
 /// the lists of the same `group` (the columns of a board).
 ///
-/// A move is posted to `href` as a form: `item` (the row's id), `from` and
-/// `to` (the lists' ids), `before` (the id of the row it now stands before;
-/// empty at the end) and `position` (from 0), with `fields`. A row without an
-/// id can't be moved. The answer is ops, as a post's are; a move the server
-/// refuses (a 4xx with a toast or errors saying why) puts the row back.
+/// A client offers a move only for a row that has an `id`, and only into a list
+/// of the same group that is not already full (see `limit`). It moves the row
+/// on its own, for the feel of it, and then posts the move to `href` as a form,
+/// as an action's post is sent. A move from one list into another is posted to
+/// the list it joined, to that list's `href`. The fields, then `fields`, are:
+///
+/// - `item`: the row that moved, by its `key`, or by its `id` when it has no
+///   key. [`Reorder::ITEM`].
+/// - `from`: the list it left, by that list's `reorder.key`, or by its `id`
+///   when it has none. [`Reorder::FROM`].
+/// - `to`: the list it joined, named the same way; the same as `from` for a
+///   move within a list. [`Reorder::TO`].
+/// - `before`: the row it now stands before, named as `item` is; empty when it
+///   stands at the end. [`Reorder::BEFORE`].
+/// - `position`: where it now stands in the list it joined, counted from 0,
+///   among the rows the client holds: a list that loads by cursor holds only
+///   the first ones, so `before` is the place the server keeps. [`Reorder::POSITION`].
+///
+/// The answer is ops, as a post's are. The server is the judge of a move:
+/// `limit` is advice to the client, which offers no drop into a list that
+/// holds that many, and a move the server refuses (a `4xx`, with a toast or
+/// errors saying why) puts the row back where it was.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reorder {
     /// Where a move is posted.
     pub href: String,
+    /// The list's own key, as the app knows it (the status of the cards in a
+    /// column: `doing`), which a move posts in place of the list's `id`. Left
+    /// out, the `id` is posted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
     /// The lists a row may move between: those with the same group. A list
     /// with none keeps its rows to itself.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -661,12 +686,31 @@ pub struct Reorder {
     pub fields: Vec<crate::action::Pair>,
 }
 
+impl Reorder {
+    /// The field a move posts the row that moved under.
+    pub const ITEM: &'static str = "item";
+    /// The field a move posts the list the row left under.
+    pub const FROM: &'static str = "from";
+    /// The field a move posts the list the row joined under.
+    pub const TO: &'static str = "to";
+    /// The field a move posts the row it now stands before under.
+    pub const BEFORE: &'static str = "before";
+    /// The field a move posts its place in the list it joined under.
+    pub const POSITION: &'static str = "position";
+}
+
 /// One row of a list: who or what, a line about it, and what stands at each end.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Row {
-    /// The node's id.
+    /// The node's id. A row of a list that is merged into by revision or moved
+    /// by dragging has one, and a row with none can be neither.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    /// The record's own key, as the app knows it (`7`, the card's key in its
+    /// store), which a move posts in place of the row's `id`; the `id` names the
+    /// row on the screen. Left out, the `id` is posted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
     /// What stands before the words: an icon, an avatar, a picture.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub leading: Option<Box<Node>>,
@@ -2242,6 +2286,35 @@ mod tests {
         assert_eq!(bare.across.map(|across| across.total), Some(None));
         assert!(serde_json::from_str::<Selection>(r#"{"name":"ids[]","across":{"name":"all_matching"}}"#).is_err());
         assert_eq!(serde_json::from_str::<Selection>(r#"{"name":"ids[]"}"#).unwrap().across, None);
+    }
+
+    #[test]
+    fn a_move_names_a_row_and_its_lists_by_key_when_they_have_one() {
+        let node: Node = serde_json::from_str(
+            r#"{"t":"list","id":"board-doing","reorder":{"href":"/cards/move","key":"doing","group":"board"},
+                "children":[{"t":"row","id":"c-5","key":"5","title":"Call the Jalandhar supplier"},
+                            {"t":"row","id":"c-6","title":"Book the stall"}]}"#,
+        )
+        .unwrap();
+        let Node::List(list) = node else {
+            panic!("not a list");
+        };
+        assert_eq!(list.reorder.as_ref().and_then(|reorder| reorder.key.as_deref()), Some("doing"));
+        let keys: Vec<_> = list
+            .children
+            .iter()
+            .map(|row| match row {
+                Node::Row(row) => row.key.as_deref(),
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        // A row with none is named by its id, as before.
+        assert_eq!(keys, [Some("5"), None]);
+        // What a move posts is named once.
+        assert_eq!(
+            [Reorder::ITEM, Reorder::FROM, Reorder::TO, Reorder::BEFORE, Reorder::POSITION],
+            ["item", "from", "to", "before", "position"]
+        );
     }
 
     #[test]

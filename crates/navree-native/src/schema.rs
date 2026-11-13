@@ -623,9 +623,9 @@ object!(Grid {} { id, cols, min, gap, children });
 names!(SectionStyle { Plain, Card, Inset });
 object!(Section {} { id, title, subtitle, style, actions, children, footer });
 object!(List {} { id, children, more, before, ordered, since, changes, live, reorder });
-object!(Reorder { href } { group, limit, fields });
+object!(Reorder { href } { key, group, limit, fields });
 object!(Row { title } {
-    id, leading, subtitle, detail, trailing, badge, state, action, swipe, menu, muted
+    id, key, leading, subtitle, detail, trailing, badge, state, action, swipe, menu, muted
 });
 names!(RowState { Done, Current, Upcoming });
 object!(Split { primary, detail } { id });
