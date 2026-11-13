@@ -69,7 +69,11 @@
           "input": {
             "t": "text",
             "kind": "phone",
-            "value": "+919814012345"
+            "value": "98140 12345",
+            "country": {
+              "name": "phone_country",
+              "value": "IN"
+            }
           }
         },
         {
@@ -123,7 +127,9 @@
           "label": "Credit limit",
           "input": {
             "t": "text",
-            "kind": "decimal"
+            "kind": "decimal",
+            "value": "100000.50",
+            "prefix": "₹"
           }
         },
         {

@@ -18,7 +18,7 @@ use navree_native::device::{
 use navree_native::envelope::{Back, Envelope, Screen, Upgrade, Web};
 use navree_native::input::{
     ChoiceCreate, ChoiceInput, ChoiceKind, ChoiceOption, ChoiceSearch, ChoicesInput, ColourInput,
-    DateInput, DateKind, FileInput, Input, RangeEnd, RangeInput, SliderInput, TextInput, TextKind,
+    DateInput, DateKind, FileInput, Input, PhoneCountry, RangeEnd, RangeInput, SliderInput, TextInput, TextKind,
     ToggleInput, ToggleKind, Weekday,
 };
 use navree_native::node::{
@@ -699,7 +699,12 @@ fn screen_form() -> Envelope {
                 "Phone",
                 Input::Text(TextInput {
                     kind: TextKind::Phone,
-                    value: s("+919814012345"),
+                    value: s("98140 12345"),
+                    // The number is read in this country, which is posted beside it.
+                    country: Some(PhoneCountry {
+                        name: s("phone_country"),
+                        value: s("IN"),
+                    }),
                     ..TextInput::default()
                 }),
             ),
@@ -718,7 +723,18 @@ fn screen_form() -> Envelope {
                     ..TextInput::default()
                 }),
             ),
-            field("credit", "Credit limit", typed(TextKind::Decimal)),
+            // The value is plain digits, whatever the person's locale writes
+            // (₹1,00,000.50); the prefix carries the unit.
+            field(
+                "credit",
+                "Credit limit",
+                Input::Text(TextInput {
+                    kind: TextKind::Decimal,
+                    value: s("100000.50"),
+                    prefix: Some(s("₹")),
+                    ..TextInput::default()
+                }),
+            ),
             field(
                 "notes",
                 "Notes",

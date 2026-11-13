@@ -50,7 +50,7 @@ use crate::device::{
 use crate::envelope::{Back, Envelope, Screen, Search, Upgrade, Web};
 use crate::input::{
     ChoiceCreate, ChoiceInput, ChoiceKind, ChoiceOption, ChoiceSearch, ChoicesInput, ColourInput,
-    DateInput, DateKind, FileInput, Input, RangeEnd, RangeInput, SliderInput, TextInput, TextKind,
+    DateInput, DateKind, FileInput, Input, PhoneCountry, RangeEnd, RangeInput, SliderInput, TextInput, TextKind,
     ToggleInput, ToggleKind, Weekday,
 };
 use crate::node::{
@@ -711,8 +711,10 @@ names!(TextKind {
     Plain, Email, Password, Number, Decimal, Phone, Url, Search, Multiline, OneTimeCode
 });
 object!(TextInput {} {
-    kind, value, placeholder, max_length, min, max, step, autofill, readonly, prefix, suffix
+    kind, value, placeholder, max_length, min, max, step, autofill, readonly, prefix, suffix,
+    country
 });
+object!(PhoneCountry { name, value } {});
 names!(ToggleKind { Switch, Checkbox });
 object!(ToggleInput {} { kind, on, value });
 names!(ChoiceKind { Menu, Segmented, Radio, List });

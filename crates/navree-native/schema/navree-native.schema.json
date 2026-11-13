@@ -6389,6 +6389,25 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "PhoneCountry": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "x-since": 0
+        },
+        "value": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "Platform": {
       "enum": [
         "ios",
@@ -8700,6 +8719,18 @@
           "anyOf": [
             {
               "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "country": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PhoneCountry"
             },
             {
               "type": "null"

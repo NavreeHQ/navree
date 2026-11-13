@@ -48,11 +48,14 @@ pub enum TextKind {
     Email,
     /// A password: hidden as it is typed.
     Password,
-    /// A whole number.
+    /// A whole number. Its value is plain digits (`100000`): see
+    /// [`TextInput::value`].
     Number,
-    /// A number with a fraction.
+    /// A number with a fraction. Its value is plain digits with `.` for the
+    /// decimal point (`100000.50`): see [`TextInput::value`].
     Decimal,
-    /// A phone number.
+    /// A phone number, which may name the country it is read in
+    /// ([`TextInput::country`]).
     Phone,
     /// A web address.
     Url,
@@ -71,6 +74,14 @@ pub struct TextInput {
     #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
     pub kind: TextKind,
     /// What it holds now.
+    ///
+    /// The value of a control of the `number` or `decimal` kind is plain digits,
+    /// with `.` for the decimal point and no grouping (`100000.50`, never
+    /// `1,00,000.50` or `1.00.000,50`): what a number keypad can type, and what
+    /// the server reads. A server writes it so, and a client sends it so, however
+    /// the person's locale writes numbers and whatever it draws while they type
+    /// (a client may group the digits it shows). The unit is not in it: a
+    /// `prefix` or a `suffix` carries that.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub value: String,
     /// What it shows while empty.
@@ -79,13 +90,14 @@ pub struct TextInput {
     /// The most characters it takes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_length: Option<u32>,
-    /// The least a number may be, as the page wrote it.
+    /// The least a number may be, as the page wrote it: plain digits, as the
+    /// value is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min: Option<String>,
-    /// The most a number may be, as the page wrote it.
+    /// The most a number may be, as the page wrote it: plain digits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max: Option<String>,
-    /// The step between numbers, as the page wrote it.
+    /// The step between numbers, as the page wrote it: plain digits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step: Option<String>,
     /// What a system may fill it with, by the web's own names (`email`,
@@ -101,6 +113,26 @@ pub struct TextInput {
     /// What stands after the typed text, and is not sent with it: `kg`, `%`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub suffix: Option<String>,
+    /// For a phone number: the country it is read in, sent as a second field
+    /// beside the number. A client reads it for the `phone` kind only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub country: Option<PhoneCountry>,
+}
+
+/// The country a phone number is read in: a second field, posted beside the
+/// number, which holds the code of the country chosen.
+///
+/// A client that has a country picker draws it beside the number with `value`
+/// chosen, and posts the code of the country the person picks under `name`. A
+/// client without one posts `name` with `value` as it came, so the number is
+/// read in the country the server meant. The server reads the number in the
+/// country posted.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhoneCountry {
+    /// The name the country's code is sent under: `phone_country`.
+    pub name: String,
+    /// The country now, as its two-letter code of ISO 3166-1 in capitals: `IN`.
+    pub value: String,
 }
 
 /// How an on-or-off control is drawn.
@@ -470,6 +502,29 @@ mod tests {
             )
         );
         assert_eq!(serde_json::from_str::<Input>(&json).unwrap(), choice);
+    }
+
+    #[test]
+    fn a_phone_number_may_name_the_country_it_is_read_in() {
+        let input: Input = serde_json::from_str(
+            r#"{"t":"text","kind":"phone","value":"98140 12345","country":{"name":"phone_country","value":"IN"}}"#,
+        )
+        .unwrap();
+        let Input::Text(text) = &input else {
+            panic!("{input:?}");
+        };
+        assert_eq!(
+            text.country,
+            Some(PhoneCountry {
+                name: "phone_country".to_owned(),
+                value: "IN".to_owned(),
+            })
+        );
+        // Both parts are needed: a name with no country says nothing.
+        assert!(serde_json::from_str::<TextInput>(r#"{"country":{"name":"phone_country"}}"#).is_err());
+        // A number with no country is read where the server reads it by default.
+        assert_eq!(serde_json::from_str::<TextInput>(r#"{"kind":"phone"}"#).unwrap().country, None);
+        assert_eq!(serde_json::from_str::<Input>(&serde_json::to_string(&input).unwrap()).unwrap(), input);
     }
 
     #[test]
