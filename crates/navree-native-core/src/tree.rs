@@ -369,7 +369,8 @@ pub(crate) fn fits(input: &Input, value: &FieldValue) -> bool {
         (
             Input::Text(_) | Input::Date(_) | Input::Slider(_) | Input::Colour(_),
             FieldValue::Text { .. },
-        ) | (Input::Toggle(_), FieldValue::Flag { .. })
+        ) | (Input::Text(_), FieldValue::Phone { .. })
+            | (Input::Toggle(_), FieldValue::Flag { .. })
             | (Input::Choice(_), FieldValue::Text { .. } | FieldValue::None)
             | (Input::Choices(_), FieldValue::Many { .. })
             | (Input::File(_), FieldValue::Files { .. })
@@ -563,6 +564,9 @@ pub(crate) struct Survey<'a> {
     /// The lists that say where to ask what changed in them, each with the
     /// stream that says when.
     pub live: Vec<(&'a str, &'a str, Option<&'a navree_native::node::Live>)>,
+    /// How many tabs that do not show the walk is inside of: a lazy region
+    /// there waits for its tab.
+    unseen: usize,
 }
 
 impl<'a> Survey<'a> {
@@ -603,7 +607,7 @@ impl<'a> Survey<'a> {
                 self.regions.push(FoundRegion {
                     id: &inner.id,
                     src: &inner.src,
-                    wants: inner.lazy && inner.children.is_empty(),
+                    wants: inner.lazy && inner.children.is_empty() && self.unseen == 0,
                     live: inner.live.as_ref(),
                 });
                 for child in &inner.children {
@@ -637,6 +641,19 @@ impl<'a> Survey<'a> {
                 if let (Some(id), Some(changes)) = (list.id.as_deref(), list.changes.as_deref()) {
                     self.live.push((id, changes, list.live.as_ref()));
                 }
+            }
+            // Of a set of tabs the client can switch through the core (one
+            // with an id), only the selected one shows.
+            Node::Tabs(tabs) if tabs.id.is_some() => {
+                for tab in &tabs.items {
+                    let waits = usize::from(!tab.selected);
+                    self.unseen += waits;
+                    for child in &tab.children {
+                        self.node(child, form, region);
+                    }
+                    self.unseen -= waits;
+                }
+                return;
             }
             Node::Sheet(sheet) if sheet.open => self.open.push(&sheet.id),
             Node::Dialog(dialog) if dialog.open => self.open.push(&dialog.id),

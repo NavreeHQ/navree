@@ -1,0 +1,272 @@
+{
+  "about": "A table's newer words. A row that can't be chosen is passed over by \"all\" and never sent. Every record that matches the table's query can be chosen at once: what stands for that is sent in place of the ids, until a row is cleared. Rows that join the start move the cursor before the first. What is under a row opens and shuts, and stays as the reader left it when the row is drawn again. A control that can't be used says why.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The Resend button and the Export item are disabled, and say why.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/ledger.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"refresh","screen":1},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/0/children/1/reason","is":"It went out at 09:41. It can go again after 09:46."},
+        {"at":"/screens/1/content/screen/actions/0/items/0/reason","is":"Nothing is chosen."}
+      ]
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/ledger.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "All: the paid invoice can't be chosen and is passed over.",
+      "send": {"t":"choose","screen":1,"table":"ledger","on":true},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"ledger","from":3,"count":0}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/rows/0/selected","is":true},
+        {"at":"/screens/1/content/screen/body/children/1/rows/1/selected","is":null},
+        {"at":"/screens/1/content/screen/body/children/1/rows/2/selected","is":true}
+      ]
+    },
+    {
+      "note": "The ids of the rows chosen go with the action.",
+      "send": {"t":"act","screen":1,"action":{"t":"submit","with":{"name":"intent","value":"remind"}},"form":"bulk"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"bulk"}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"post","url":"https://shop.example/ledger/bulk","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=tk-91c2&ids%5B%5D=2001&ids%5B%5D=2003&intent=remind"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/gift-saved.json",
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"bulk"},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"neutral","text":"Saved"}
+        ]
+      }
+    },
+    {
+      "note": "The person takes \"Choose all 1,204\": every record that matches.",
+      "send": {"t":"choose","screen":1,"table":"ledger","on":true,"across":true},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"ledger","from":3,"count":0}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/lists/ledger/across","is":true}
+      ]
+    },
+    {
+      "note": "What stands for every matching record is sent in place of the ids.",
+      "send": {"t":"act","screen":1,"action":{"t":"submit","with":{"name":"intent","value":"remind"}},"form":"bulk"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"bulk"}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/ledger/bulk","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=tk-91c2&all_matching=q.9f2c&intent=remind"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/gift-saved.json",
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"bulk"},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":2,"tone":"neutral","text":"Saved"}
+        ]
+      }
+    },
+    {
+      "note": "A row is cleared: what is chosen is rows again.",
+      "send": {"t":"choose","screen":1,"table":"ledger","row":"2003","on":false},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"ledger","from":3,"count":0}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/lists/ledger/across","is":null}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"submit","with":{"name":"intent","value":"remind"}},"form":"bulk"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"bulk"}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/ledger/bulk","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=tk-91c2&ids%5B%5D=2001&intent=remind"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/gift-saved.json",
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"bulk"},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":3,"tone":"neutral","text":"Saved"}
+        ]
+      }
+    },
+    {
+      "note": "The reader shuts what is under the first row. Only that row is drawn again.",
+      "send": {"t":"overlay","screen":1,"id":"2001","open":false},
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"ledger","rows":["2001"],"gone":[]}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/rows/0/open","is":null}
+      ]
+    },
+    {
+      "note": "The start of the table is near: the records before the first are asked for.",
+      "send": {"t":"more","screen":1,"id":"ledger","before":true},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"ledger","from":3,"count":0}
+        ],
+        "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/ledger/rows?before=2001","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","ledger"]],"timeout_ms":10000}
+        ]
+      }
+    },
+    {
+      "note": "They join the start, and move the cursor before the first with them.",
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/ledger-newer.json",
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"ledger","rows":["2000"],"gone":[]}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/rows/0/id","is":"2000"},
+        {"at":"/screens/1/content/screen/body/children/1/prev","is":"/ledger/rows?before=2000"}
+      ]
+    },
+    {
+      "send": {"t":"more","screen":1,"id":"ledger","before":true},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"ledger","from":4,"count":0}
+        ],
+        "effects": [
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/ledger/rows?before=2000","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","ledger"]],"timeout_ms":10000}
+        ]
+      }
+    },
+    {
+      "note": "These say none are before them.",
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/ledger-first.json",
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"ledger","rows":["1999"],"gone":[]}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/rows/0/id","is":"1999"},
+        {"at":"/screens/1/content/screen/body/children/1/prev","is":null}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"request","method":"post","href":"/ledger/2001/paid"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":9,"method":"post","url":"https://shop.example/ledger/2001/paid","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The server draws a row again. It stays chosen, and what is under it stays shut, as the reader left it.",
+      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/ledger-row.json",
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"ledger","rows":["2001"],"gone":[]}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/rows/2/cells/2/value","is":"Paid"},
+        {"at":"/screens/1/content/screen/body/children/1/rows/2/selected","is":true},
+        {"at":"/screens/1/content/screen/body/children/1/rows/2/open","is":null}
+      ]
+    }
+  ]
+}

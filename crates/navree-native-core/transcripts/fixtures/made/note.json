@@ -1,0 +1,79 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Order CS-20481",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "form",
+     "id": "note",
+     "method": "post",
+     "action": "/orders/1/note",
+     "hidden": [
+      {
+       "name": "_csrf",
+       "value": "tk-91c2"
+      }
+     ],
+     "children": [
+      {
+       "t": "field",
+       "name": "note",
+       "label": "Note to the packer",
+       "input": {
+        "t": "text",
+        "multiline": true
+       },
+       "id": "note-text"
+      },
+      {
+       "t": "field",
+       "name": "pin",
+       "label": "Your PIN",
+       "input": {
+        "t": "text",
+        "kind": "password"
+       },
+       "id": "note-pin"
+      },
+      {
+       "t": "button",
+       "label": "Save",
+       "action": {
+        "t": "submit"
+       },
+       "role": "primary"
+      }
+     ]
+    },
+    {
+     "t": "button",
+     "label": "Gift options",
+     "action": {
+      "t": "commands",
+      "list": [
+       {
+        "c": "open",
+        "id": "gift"
+       }
+      ]
+     }
+    },
+    {
+     "t": "sheet",
+     "id": "gift",
+     "title": "Gift options",
+     "children": [
+      {
+       "t": "text",
+       "value": "Wrap it in phulkari paper."
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

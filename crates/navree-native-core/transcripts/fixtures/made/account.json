@@ -1,0 +1,37 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Account",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "button",
+     "label": "Sign out",
+     "action": {
+      "t": "request",
+      "method": "post",
+      "href": "/sign-out"
+     }
+    },
+    {
+     "t": "button",
+     "label": "Allow notifications",
+     "action": {
+      "t": "device",
+      "call": {
+       "f": "register_push"
+      },
+      "then": {
+       "href": "/account/notifications",
+       "ticket": "tk_p19",
+       "exp": 1794000000
+      }
+     }
+    }
+   ]
+  }
+ }
+}

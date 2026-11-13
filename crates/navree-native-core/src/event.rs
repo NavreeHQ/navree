@@ -51,6 +51,14 @@ pub enum FieldValue {
     },
     /// Nothing is chosen.
     None,
+    /// A phone number, with the country the person picked to read it in. A
+    /// client with no country picker sends the number as `text`.
+    Phone {
+        /// The number as typed.
+        text: String,
+        /// The country, as its two letters in capitals: `IN`.
+        country: String,
+    },
     /// The two ends of a range, each as a date control sends it; an end that
     /// is not picked is empty.
     Range {
@@ -201,6 +209,46 @@ pub enum Event {
         row: Option<String>,
         /// Whether it is chosen now.
         on: bool,
+        /// Whether the person chose every record that matches the table's
+        /// query, not only the rows loaded: what the table's selection offers
+        /// as `across`.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        across: bool,
+    },
+    /// The person chose another tab of a set of tabs.
+    Tab {
+        /// The screen.
+        screen: ScreenId,
+        /// The id of the set of tabs.
+        id: String,
+        /// The place of the tab chosen, from 0.
+        index: usize,
+    },
+    /// The bytes a `random` effect asked for.
+    Random {
+        /// The number the effect carried.
+        request: u64,
+        /// The bytes, as hex: two characters a byte. They are a secret: a
+        /// client never logs them and never uses them for anything else.
+        bytes: String,
+    },
+    /// The system gave the device a push token, or changed it. A client sends
+    /// it at every launch once it has one, and again whenever it changes. The
+    /// core posts it where the shell says, when somebody is signed in.
+    PushToken {
+        /// The token: Apple's as hex, Firebase's as it is.
+        token: String,
+        /// The push service's environment the token is for. A store build's
+        /// when left out.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        environment: Option<navree_native::device::PushEnvironment>,
+    },
+    /// The app starts again after the system ended it, from what
+    /// `{"part":"snapshot"}` gave before. Sent in place of `start`. A
+    /// snapshot the core can't use starts the app as `start` does.
+    Restore {
+        /// The snapshot, as it was read.
+        snapshot: serde_json::Value,
     },
     /// The person dragged a row of a list to another place, in it or in
     /// another list of its group.

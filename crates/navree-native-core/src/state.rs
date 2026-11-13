@@ -232,6 +232,10 @@ pub struct ListView {
     /// Whether the last try for those failed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub failed_before: bool,
+    /// Whether the person chose every record that matches the table's query,
+    /// not only the rows loaded.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub across: bool,
 }
 
 /// A question the core holds until the person answers it: what a control
@@ -269,6 +273,10 @@ pub struct ScreenView {
     /// Its address: a path and query on the app's origin, or a whole address
     /// on another origin the app allows.
     pub url: String,
+    /// Its title, as its page last said it, or as a snapshot kept it: there
+    /// while the screen has nothing to show yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     /// What it shows.
     pub content: Content,
     /// Whether a fetch of the page is on its way.
@@ -312,6 +320,7 @@ impl ScreenView {
         Self {
             id,
             url,
+            title: None,
             content: Content::Blank,
             loading: false,
             refreshing: false,
@@ -435,6 +444,23 @@ pub enum Query {
         /// How many.
         count: usize,
     },
+    /// The rows a `redraw` change names: each with its content and the id of
+    /// the row it now stands before (none at the end), in the list's order,
+    /// with what the list says of itself.
+    Redraw {
+        /// The screen.
+        screen: ScreenId,
+        /// The id of the list or of the table.
+        id: String,
+        /// The ids of the rows wanted.
+        rows: Vec<String>,
+        /// The ids of the rows that left: given back as they came.
+        #[serde(default)]
+        gone: Vec<String>,
+    },
+    /// What a client stores so the app can start again where the person was
+    /// after the system ended it. Read from the core, not from the view state.
+    Snapshot,
     /// The messages.
     Messages,
 }
@@ -489,6 +515,13 @@ impl ViewState {
                 .get(screen)
                 .and_then(|screen| crate::regions::rows(screen, id, *from, *count))
                 .unwrap_or(serde_json::Value::Null),
+            Query::Redraw { screen, id, rows, gone } => self
+                .screens
+                .get(screen)
+                .and_then(|screen| crate::regions::redrawn(screen, id, rows, gone))
+                .unwrap_or(serde_json::Value::Null),
+            // The core answers this one: see `Core::part`.
+            Query::Snapshot => serde_json::Value::Null,
             Query::Messages => json(&self.messages),
         }
     }
@@ -591,8 +624,15 @@ pub(crate) enum Pending {
     /// What a device call needs from the server before the client can run
     /// it: a confirmation's challenge, a sign-in's nonce.
     BeforeCall { call: u64 },
-    /// A platform sign-in's token, posted to the app's own sign-in route.
-    SignIn { screen: ScreenId },
+    /// A sign-in session's code, exchanged for a session of the app's own.
+    Exchange,
+    /// The device's push token, posted for the session that is signed in.
+    PushPut { token: String },
+    /// The device's push token, taken away because the person signed out.
+    PushGone,
+    /// A platform sign-in's token, posted to the app's own sign-in route, with
+    /// the page the call names for a second step.
+    SignIn { screen: ScreenId, second_step: Option<String> },
 }
 
 impl Pending {
@@ -607,7 +647,7 @@ impl Pending {
             | Self::Changes { screen, .. }
             | Self::Move { screen, .. }
             | Self::Options { screen, .. } => Some(*screen),
-            Self::Shell | Self::BeforeCall { .. } | Self::SignIn { .. } => None,
+            Self::Shell | Self::BeforeCall { .. } | Self::SignIn { .. } | Self::Exchange | Self::PushPut { .. } | Self::PushGone => None,
         }
     }
 
@@ -630,6 +670,8 @@ pub(crate) struct Asked {
     pub method: Method,
     pub body: Option<crate::effect::Body>,
     pub limit: u32,
+    /// Whether it is a removal, not a read or a write.
+    pub delete: bool,
     /// How many redirects were followed to get here.
     pub hops: u8,
     /// The part of the screen asked for, by id: a region, or a list's next rows.
@@ -787,6 +829,11 @@ pub(crate) struct ScreenInner {
     pub options: BTreeMap<String, OptionsAsk>,
     /// What waits for the answer to the screen's question.
     pub held: Option<Held>,
+    /// What a snapshot kept of the screen, until its page arrives.
+    pub restored: Option<Restored>,
+    /// This screen finishes a sign-in's second step: when a write from it
+    /// leads away, the person may be signed in, and the shell says.
+    pub second_step: bool,
 }
 
 /// What the core remembers about a message.
@@ -816,8 +863,14 @@ pub(crate) enum Goes {
     Then { then: navree_native::device::Then, spent: bool },
     /// As JSON to the app's own sign-in route, with the state the nonce route
     /// gave. `web` is where the web's sign-in starts, for a system with no
-    /// sheet for the provider.
-    SignIn { sign_in: String, state: String, web: Option<String> },
+    /// sheet for the provider; `second_step` the page that finishes a second
+    /// step, when the call names one of its own.
+    SignIn {
+        sign_in: String,
+        state: String,
+        web: Option<String>,
+        second_step: Option<String>,
+    },
 }
 
 /// The numbers the core hands out.
@@ -832,6 +885,62 @@ pub(crate) struct Counters {
     pub call: u64,
     pub web: u64,
     pub question: u64,
+    pub random: u64,
+}
+
+/// A sign-in in the system's own session, handed over to the app with a
+/// one-time code. One at a time.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) enum HandOver {
+    /// Random bytes were asked for: the session opens when they come.
+    Wanted { request: u64, ephemeral: bool },
+    /// The session is open. The return must carry this `state`; the verifier
+    /// goes with the code and is then forgotten.
+    Open { state: String, verifier: String },
+    /// The code is on its way to the exchange route.
+    Exchanging,
+}
+
+impl std::fmt::Debug for HandOver {
+    /// Never the state or the verifier.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Wanted { .. } => "HandOver::Wanted",
+            Self::Open { .. } => "HandOver::Open",
+            Self::Exchanging => "HandOver::Exchanging",
+        })
+    }
+}
+
+/// The device's push token and what the server knows of it.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub(crate) struct PushState {
+    /// The token the system gave, with its environment.
+    pub token: Option<String>,
+    pub environment: navree_native::device::PushEnvironment,
+    /// The token the server holds for the session that is signed in.
+    pub registered: Option<String>,
+    /// The token on its way there.
+    pub posting: Option<String>,
+    /// A token the server would not take: not posted again until it changes
+    /// or another person signs in.
+    pub refused: Option<String>,
+}
+
+impl std::fmt::Debug for PushState {
+    /// Never the token.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PushState {{ token: {}, registered: {} }}", self.token.is_some(), self.registered.is_some())
+    }
+}
+
+/// What a snapshot kept of one screen, to put back when its page arrives.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Restored {
+    /// What the person had typed, by the field's id.
+    pub fields: BTreeMap<String, FieldValue>,
+    /// The sheets and dialogs that were open.
+    pub open: Vec<String>,
 }
 
 /// Everything the core keeps for itself.
@@ -869,4 +978,18 @@ pub(crate) struct Inner {
     pub calls: BTreeMap<u64, DeviceCall>,
     /// The sign-in session is open; the screen to come back to.
     pub signing_in: bool,
+    /// The sign-in that is being handed over, when the shell names the routes for one.
+    pub hand_over: Option<HandOver>,
+    /// The routes the shell names for the core to call.
+    pub sign_in: Option<navree_native::shell::SignIn>,
+    pub push_route: Option<String>,
+    pub push: PushState,
+    /// The person signed out on purpose and the push token's removal is on
+    /// its way: the session is forgotten when it is answered.
+    pub signing_out: bool,
+    /// Where a reply said to land, which is opened whatever the rules for
+    /// links from outside say.
+    pub land: Option<String>,
+    /// A snapshot to start from, once the shell says who is signed in.
+    pub restore: Option<crate::snapshot::Snapshot>,
 }

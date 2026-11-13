@@ -89,6 +89,12 @@ pub struct Config {
     /// release build says no.
     #[serde(default)]
     pub loopback_http: bool,
+    /// The app's own name with its system: the bundle id on Apple's systems,
+    /// the package name on Android (`com.charkha.supply`). The sign-in
+    /// hand-over and the push registration name the app by it; without it
+    /// neither is started.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub app_id: String,
     /// What the client says about itself on every request. Its `caps` are
     /// the device features this build has, by the protocol's names: a control
     /// that calls one it lacks is drawn as the call's stand-in says.
@@ -125,6 +131,7 @@ impl Config {
             origin: origin.into(),
             also: Vec::new(),
             loopback_http: false,
+            app_id: String::new(),
             client,
             back_to_first: true,
             deep_links: DeepLinks::default(),

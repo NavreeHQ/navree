@@ -1,0 +1,18 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "signed_out"
+  },
+  {
+   "op": "toast",
+   "text": "You are signed out"
+  },
+  {
+   "op": "navigate",
+   "href": "/sign-in"
+  }
+ ]
+}

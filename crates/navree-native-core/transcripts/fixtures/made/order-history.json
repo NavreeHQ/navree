@@ -1,0 +1,17 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "text",
+     "value": "Paid on 12 November, 09:41 IST."
+    }
+   ]
+  }
+ }
+}

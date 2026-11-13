@@ -1,0 +1,102 @@
+{
+  "about": "A set of tabs. The tab that is selected shows; a lazy region in another tab waits until its tab is chosen. A tab that is a link takes the screen to its page.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The History tab holds a lazy region, and does not show: nothing is fetched for it.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/order-tabs.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person chooses History: its region is fetched now.",
+      "send": {"t":"tab","screen":1,"id":"parts","index":1},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders/1/history","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","history"]],"timeout_ms":15000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/items/1/selected","is":true},
+        {"at":"/screens/1/content/screen/body/items/0/selected","is":null},
+        {"at":"/screens/1/regions/history/loading","is":true}
+      ]
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/order-history.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Choosing the tab that shows changes nothing.",
+      "send": {"t":"tab","screen":1,"id":"parts","index":1},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Back to Summary. Nothing is fetched: the region has what it holds.",
+      "send": {"t":"tab","screen":1,"id":"parts","index":0},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Invoice is a link to its own page: the screen takes that page in its place.",
+      "send": {"t":"tab","screen":1,"id":"parts","index":2},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1/invoice","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/url","is":"/orders/1/invoice"},
+        {"at":"/screens/1/loading","is":true}
+      ]
+    }
+  ]
+}

@@ -93,6 +93,7 @@ pub(crate) fn rows(view: &ScreenView, id: &str, from: usize, count: usize) -> Op
                 "forms": forms(&mut nodes.iter().copied()),
                 "more": list.more,
                 "before": list.before,
+                "since": list.since,
                 "loading": state.loading,
                 "failed": state.failed,
                 "loading_before": state.loading_before,
@@ -108,8 +109,10 @@ pub(crate) fn rows(view: &ScreenView, id: &str, from: usize, count: usize) -> Op
                 "rows": rows,
                 "forms": forms(&mut rows.iter().flat_map(|row| row.nodes())),
                 "more": table.more,
+                "prev": table.prev,
                 "summary": table.summary,
                 "selected": selected,
+                "across": view.lists.get(table.id.as_deref().unwrap_or(id)).is_some_and(|state| state.across),
                 "loading": state.loading,
                 "failed": state.failed,
             }))
@@ -117,7 +120,72 @@ pub(crate) fn rows(view: &ScreenView, id: &str, from: usize, count: usize) -> Op
     }
 }
 
+/// The rows a `redraw` change names, each with the id of the row it stands
+/// before now (none at the end), in the list's order; the ids that left, as
+/// they were given; and what the list says of itself, as the rows part does.
+pub(crate) fn redrawn(view: &ScreenView, id: &str, rows: &[String], gone: &[String]) -> Option<Value> {
+    let mut part = self::rows(view, id, usize::MAX, 0)?;
+    let screen = view.screen()?;
+    let wanted = |id: Option<&str>| id.is_some_and(|id| rows.iter().any(|row| row == id));
+    let drawn: Vec<Value> = match find_in(screen, &|node| pages(node, id))? {
+        Node::List(list) => {
+            let found: Vec<(usize, &Node)> = list.children.iter().enumerate().filter(|(_, node)| wanted(node.id())).collect();
+            part["forms"] = {
+                let survey = Survey::of(found.iter().map(|(_, node)| *node));
+                Value::Object(survey.forms.iter().filter_map(|form| Some((form.handle.clone(), json!(view.forms.get(&form.handle)?)))).collect())
+            };
+            found.into_iter().map(|(at, node)| json!({"id": node.id(), "before": list.children.get(at + 1).and_then(Node::id), "node": node})).collect()
+        }
+        other => {
+            let table = table_of(other)?;
+            let found: Vec<(usize, &navree_native::node::TableRow)> = table.rows.iter().enumerate().filter(|(_, row)| wanted(row.id.as_deref())).collect();
+            part["forms"] = {
+                let survey = Survey::of(found.iter().flat_map(|(_, row)| row.nodes()));
+                Value::Object(survey.forms.iter().filter_map(|form| Some((form.handle.clone(), json!(view.forms.get(&form.handle)?)))).collect())
+            };
+            found.into_iter().map(|(at, row)| json!({"id": row.id, "before": table.rows.get(at + 1).and_then(|next| next.id.as_deref()), "row": row})).collect()
+        }
+    };
+    let part_of = part.as_object_mut()?;
+    part_of.remove("nodes");
+    part_of.insert("rows".to_owned(), Value::Array(drawn));
+    part_of.insert("gone".to_owned(), json!(gone));
+    Some(part)
+}
+
 impl Core {
+    /// The person chose another tab of the set of tabs `tabs`. A tab that
+    /// holds its view shows it, and a lazy region in it that waited for its
+    /// tab is fetched now; a tab that is a link takes the screen to its page.
+    pub(crate) fn tab(&mut self, id: ScreenId, tabs: &str, index: usize) {
+        let Some(screen) = self.view.screens.get_mut(&id).and_then(ScreenView::screen_mut) else {
+            return;
+        };
+        let Some(Node::Tabs(found)) = find_in_mut(screen, &|node| matches!(node, Node::Tabs(_)) && has_id(node, tabs)) else {
+            return;
+        };
+        let Some(chosen) = found.items.get(index) else {
+            return;
+        };
+        if chosen.children.is_empty()
+            && let Some(href) = chosen.href.clone()
+        {
+            if let Target::Inside(url) = self.resolve(&href, id) {
+                self.go_as(Some(id), &url, navree_native::Present::Replace);
+            }
+            return;
+        }
+        if chosen.selected {
+            return;
+        }
+        for (at, item) in found.items.iter_mut().enumerate() {
+            item.selected = at == index;
+        }
+        // The regions of the tab that shows now are asked for.
+        self.reconcile(id, Some(&std::collections::BTreeSet::new()));
+        self.touch_screen(id);
+    }
+
     /// Fetches a region: from its own address, or from `go`, another address
     /// of itself (a sort, a page, a query).
     pub(crate) fn fetch_region(&mut self, id: ScreenId, region: &str, go: Option<String>) {
@@ -241,6 +309,13 @@ impl Core {
         new.lazy = false;
         if let Some(went) = went {
             new.src = went.to_owned();
+        }
+        // The rows are other rows now: "every record that matches" was said of
+        // the ones before.
+        if let Some(view) = self.view.screens.get_mut(&id) {
+            for state in view.lists.values_mut() {
+                state.across = false;
+            }
         }
         self.apply_ops(
             id,

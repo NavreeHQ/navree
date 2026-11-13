@@ -1,0 +1,32 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "rows",
+   "target": "ledger",
+   "at": "start",
+   "prev": "",
+   "rows": [
+    {
+     "id": "1999",
+     "cells": [
+      {
+       "t": "text",
+       "value": "INV-1999"
+      },
+      {
+       "t": "text",
+       "value": "Rajveer Chahal, Bathinda"
+      },
+      {
+       "t": "text",
+       "value": "₹980"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

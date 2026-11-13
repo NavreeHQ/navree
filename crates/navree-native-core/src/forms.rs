@@ -101,6 +101,20 @@ fn field_parts(field: &Field, value: &FieldValue, out: &mut Vec<Part>) {
                 out.push(text(name, toggle.value.as_deref().unwrap_or("on")));
             }
         }
+        // A phone number names the country it is read in, as a second field
+        // beside it: the one the person picked, or the one the page came with.
+        (Input::Text(input), FieldValue::Phone { text: number, country }) => {
+            out.push(text(name, number));
+            if let Some(held) = &input.country {
+                out.push(text(&held.name, country));
+            }
+        }
+        (Input::Text(input), FieldValue::Text { text: number }) if input.kind == navree_native::input::TextKind::Phone && input.country.is_some() => {
+            out.push(text(name, number));
+            if let Some(held) = &input.country {
+                out.push(text(&held.name, &held.value));
+            }
+        }
         // Each end of a range goes under its own name.
         (Input::Range(range), FieldValue::Range { from, to }) => {
             out.push(text(&range.from.name, from));
@@ -157,10 +171,10 @@ fn body_of(parts: Vec<Part>) -> Body {
 
 /// Whether two values are of one kind, so one can take the other's place.
 fn same_kind(a: &FieldValue, b: &FieldValue) -> bool {
-    use FieldValue::{Files, Flag, Many, None, Range, Text};
+    use FieldValue::{Files, Flag, Many, None, Phone, Range, Text};
     matches!(
         (a, b),
-        (Text { .. } | None, Text { .. } | None) | (Flag { .. }, Flag { .. }) | (Many { .. }, Many { .. }) | (Files { .. }, Files { .. }) | (Range { .. }, Range { .. })
+        (Text { .. } | None | Phone { .. }, Text { .. } | None | Phone { .. }) | (Flag { .. }, Flag { .. }) | (Many { .. }, Many { .. }) | (Files { .. }, Files { .. }) | (Range { .. }, Range { .. })
     )
 }
 
@@ -888,8 +902,11 @@ impl Core {
                         }
                     } else {
                         for op in quiet {
-                            if let navree_native::Op::Toast(toast) = op {
-                                self.toast(None, toast);
+                            match op {
+                                navree_native::Op::Toast(toast) => self.toast(None, toast),
+                                // Signing out is no less so for having left the screen it was asked from.
+                                navree_native::Op::SignedOut => self.signed_out_on_purpose(),
+                                _ => {}
                             }
                         }
                     }
@@ -902,8 +919,7 @@ impl Core {
                             self.toast(None, toast);
                         }
                     }
-                    self.dismissed(id);
-                    self.fetch_shell();
+                    self.way_in_done(id);
                     // The page the sign-in led to is often the very one they
                     // were on: it is shown there. Otherwise that screen is
                     // fetched again as it comes to the front.

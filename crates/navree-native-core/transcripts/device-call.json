@@ -206,11 +206,11 @@
     },
     {
       "note": "The signature is posted where the call said, as a form. The ticket was spent on the challenge, so it is not sent a second time.",
-      "send": {"t":"device_result","call":3,"ok":true,"fields":[{"name":"challenge","value":"ch_5b20"},{"name":"method","value":"passkey"},{"name":"credential","value":"{\"id\":\"pk_1\"}"}]},
+      "send": {"t":"device_result","call":3,"ok":true,"fields":[{"name":"credential","value":"{\"id\":\"pk_1\",\"rawId\":\"pk_1\",\"type\":\"public-key\",\"response\":{\"clientDataJSON\":\"e30\",\"authenticatorData\":\"AQ\",\"signature\":\"MEUC\"}}"}]},
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":8,"method":"post","url":"https://shop.example/orders/1/refund/approved","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url+confirm"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"challenge=ch_5b20&method=passkey&credential=%7B%22id%22%3A%22pk_1%22%7D&outcome=ok"},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":8,"method":"post","url":"https://shop.example/orders/1/refund/approved","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=share+clipboard+open_url+confirm"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"credential=%7B%22id%22%3A%22pk_1%22%2C%22rawId%22%3A%22pk_1%22%2C%22type%22%3A%22public-key%22%2C%22response%22%3A%7B%22clientDataJSON%22%3A%22e30%22%2C%22authenticatorData%22%3A%22AQ%22%2C%22signature%22%3A%22MEUC%22%7D%7D&outcome=ok"},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },

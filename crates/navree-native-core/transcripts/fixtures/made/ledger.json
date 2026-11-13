@@ -1,0 +1,156 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Ledger",
+  "actions": [
+   {
+    "t": "toolbar",
+    "id": "tools",
+    "items": [
+     {
+      "title": "Export",
+      "icon": {
+       "name": "download"
+      },
+      "disabled": true,
+      "reason": "Nothing is chosen.",
+      "action": {
+       "t": "request",
+       "method": "post",
+       "href": "/ledger/export"
+      }
+     }
+    ]
+   }
+  ],
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "form",
+     "id": "bulk",
+     "method": "post",
+     "action": "/ledger/bulk",
+     "hidden": [
+      {
+       "name": "_csrf",
+       "value": "tk-91c2"
+      }
+     ],
+     "children": [
+      {
+       "t": "button",
+       "label": "Send reminders",
+       "action": {
+        "t": "submit",
+        "with": {
+         "name": "intent",
+         "value": "remind"
+        }
+       }
+      },
+      {
+       "t": "button",
+       "label": "Resend receipt",
+       "action": {
+        "t": "submit"
+       },
+       "id": "resend",
+       "disabled": true,
+       "reason": "It went out at 09:41. It can go again after 09:46."
+      }
+     ]
+    },
+    {
+     "t": "table",
+     "id": "ledger",
+     "select": {
+      "name": "ids[]",
+      "form": "bulk",
+      "across": {
+       "name": "all_matching",
+       "value": "q.9f2c",
+       "total": 1204
+      }
+     },
+     "prev": "/ledger/rows?before=2001",
+     "more": "/ledger/rows?after=2003",
+     "columns": [
+      {
+       "label": "Invoice"
+      },
+      {
+       "label": "Customer"
+      },
+      {
+       "label": "Due"
+      }
+     ],
+     "rows": [
+      {
+       "id": "2001",
+       "cells": [
+        {
+         "t": "text",
+         "value": "INV-2001"
+        },
+        {
+         "t": "text",
+         "value": "Gurpreet Kaur, Ludhiana"
+        },
+        {
+         "t": "text",
+         "value": "₹1,24,050"
+        }
+       ],
+       "detail": [
+        {
+         "t": "text",
+         "value": "Two reminders sent."
+        }
+       ],
+       "open": true
+      },
+      {
+       "id": "2002",
+       "cells": [
+        {
+         "t": "text",
+         "value": "INV-2002"
+        },
+        {
+         "t": "text",
+         "value": "Amandeep Singh, Jalandhar"
+        },
+        {
+         "t": "text",
+         "value": "Paid"
+        }
+       ],
+       "unchoosable": true
+      },
+      {
+       "id": "2003",
+       "cells": [
+        {
+         "t": "text",
+         "value": "INV-2003"
+        },
+        {
+         "t": "text",
+         "value": "Kiran Bedi, Patiala"
+        },
+        {
+         "t": "text",
+         "value": "₹7,848"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
