@@ -164,6 +164,7 @@ struct CardPart: View {
                     surface.contentShape(.interaction, shape)
                 }
                 .buttonStyle(.plain)
+                .modifier(PointerHover(corner: CompositionRules.cardCorner))
                 .environment(\.navreeInControl, true)
                 .modifier(OneControl(label: card.label))
             } else {

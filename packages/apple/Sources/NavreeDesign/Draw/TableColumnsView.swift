@@ -48,6 +48,8 @@ struct TableColumnsView: View {
             if index < record.cells.count {
                 if index == 0 {
                     Opening(action: record.action, place: Place()) { NodeView(record.cells[index]) }
+                } else if !RecordRules.controls(in: record.cells[index]).isEmpty {
+                    CellControls(cell: record.cells[index], title: RecordRules.words(in: record.cells[0]).first ?? "")
                 } else {
                     NodeView(record.cells[index])
                 }
