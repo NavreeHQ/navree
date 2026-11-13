@@ -180,6 +180,7 @@ fn reorder_of(list: &Element, items: &Element, root: Option<&str>) -> Read<Optio
         group: Some(root.to_owned()),
         limit: number(list, "data-limit"),
         fields,
+        ..n::Reorder::default()
     }))
 }
 
@@ -554,6 +555,7 @@ mod tests {
                 href: "/cards/move".into(),
                 group: Some("board".into()),
                 limit,
+                key: None,
                 fields: vec![
                     Pair {
                         name: "_csrf".into(),

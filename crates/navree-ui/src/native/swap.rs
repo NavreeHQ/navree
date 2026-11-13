@@ -789,6 +789,7 @@ fn rows_after(page: &Page, request: &scope::Request) -> Option<(Envelope, Answer
         rows: table.rows.clone(),
         at: navree_native::op::Edge::End,
         more: table.more.clone(),
+        prev: None,
     }];
     ops.extend(page.ops.iter().cloned());
     Some((

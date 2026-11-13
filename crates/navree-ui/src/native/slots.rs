@@ -1202,6 +1202,7 @@ fn events(cx: &mut Cx, list: &Element) -> Read<Vec<n::Moment>> {
             icon: glyph,
             tone: tone_of(event),
             detail,
+            ..n::Moment::default()
         });
     }
     Ok(moments)

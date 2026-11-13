@@ -238,6 +238,7 @@ pub(crate) fn data_table(cx: &mut Cx, element: &Element) -> Read {
                 table.select = Some(n::Selection {
                     name: choosing.unwrap_or_else(|| "ids".to_owned()),
                     form: Some(form_id),
+                    ..n::Selection::default()
                 });
             }
             vec![N::Form(form), N::Table(table)]

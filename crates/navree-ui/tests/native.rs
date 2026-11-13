@@ -701,6 +701,7 @@ async fn a_table_page_asked_for_by_a_native_client_is_native_with_its_rows() {
             rows,
             at,
             more,
+            ..
         },
     ] = next.ops.as_slice()
     else {
@@ -2017,7 +2018,8 @@ fn a_data_table_with_a_box_a_menu_and_a_detail_reads_as_the_parts_it_has() {
         table.select,
         Some(n::Selection {
             name: "ids".into(),
-            form: Some("orders-b".into())
+            form: Some("orders-b".into()),
+            ..n::Selection::default()
         })
     );
     // The columns: the four shown. The box, the control for the detail and the menu of a
