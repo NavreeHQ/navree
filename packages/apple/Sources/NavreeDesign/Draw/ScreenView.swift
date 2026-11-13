@@ -48,8 +48,15 @@ public struct ScreenView: View {
     /// The screen's own actions, a toolbar's items among them.
     private var actions: [Navree.Node] { ActionRules.expand(screen.actions) }
 
+    /// A presented screen is a task: its form's submit leaves the content for
+    /// the bar, as Done at the top trailing corner.
+    private var lifted: LiftedSubmits {
+        depth == .sheet || depth == .cover ? SheetRules.lift([screen.body]) : LiftedSubmits(form: nil, confirms: [])
+    }
+
     public var body: some View {
-        let sections = SectionRules.sections(screen.body)
+        let lifted = lifted
+        let sections = SectionRules.sections(screen.body).map { lifted.confirms.isEmpty ? $0 : OverlayContent.withoutSubmits($0) }
         let width = WidthClass(sizeClass)
         let table = sections.compactMap(\.table).first
         let query = QueryForm(screen: screen, table: table, region: sections.first { $0.table != nil }?.region)
@@ -60,6 +67,12 @@ public struct ScreenView: View {
             .modifier(PagerInBar(pager: screen.pager))
             .toolbar {
                 PlacedActions(actions: actions.filter { !Self.isDestructive($0) }, depth: depth, overlay: nil, form: nil)
+                if !lifted.confirms.isEmpty {
+                    PlacedActions(
+                        actions: lifted.confirms.map(Navree.Node.button), depth: depth, overlay: nil,
+                        form: lifted.form.map(FormRef.init)
+                    )
+                }
                 let foot = ActionRules.footToolbars(screen.body)
                 if !foot.isEmpty { FootToolbar(toolbars: foot) }
                 if let query, query.hasFilters || !query.sorts.isEmpty {

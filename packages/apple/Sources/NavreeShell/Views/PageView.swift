@@ -100,9 +100,12 @@ struct Modals: ViewModifier {
     @ViewBuilder private var presented: some View {
         if level < client.nav.modals.count {
             let modal = client.nav.modals[level]
+            let height = ModalRules.height(modal)
             StackView(stack: modal.stack, client: client, configuration: configuration, modal: modal)
                 .modifier(Modals(level: level + 1, client: client, configuration: configuration))
                 .interactiveDismissDisabled(!ModalRules.dismissible(modal, unsaved: unsaved(modal)))
+                .presentationDetents(height == .half ? [.medium, .large] : [.large])
+                .presentationDragIndicator(height == .half ? .visible : .automatic)
         }
     }
 
@@ -138,6 +141,12 @@ public enum ModalRules {
     /// not know are sheets.
     public static func presentation(_ present: Navree.Present) -> Style {
         present == .full ? .cover : .sheet
+    }
+
+    /// A glance rests at half height with a grabber and is swiped away; a
+    /// task, and anything locked, takes the full height.
+    public static func height(_ modal: Modal) -> SheetHeight {
+        modal.present == .sheet && !modal.locked ? .half : .full
     }
 
     /// Whether the person may swipe it away: never a locked one (a sign-in a
