@@ -14,7 +14,8 @@
 # - semver: no breaking change to the public API since the last release tag
 #   (cargo-semver-checks). Skipped until a release exists.
 # - stack: the reference app (NavreeHQ/crm), the skeleton (NavreeHQ/skeleton)
-#   and a fresh app of each starter kit, built against this commit. It runs
+#   and a fresh app of each starter kit, built against this commit, and the
+#   website's UI docs data (`docs/ui-data`) as this version writes it. It runs
 #   nightly and on release pull requests (branches prepare/v*), and is
 #   skipped while those repositories do not exist.
 name: Release checks
@@ -366,3 +367,9 @@ jobs:
         run: |
           cargo test --locked --package navree-cli --test generated_kits -- --ignored --test-threads 1
           cargo test --locked --package navree-cli --test generated_app -- --ignored --test-threads 1
+
+      - name: The website's UI docs data is current at this version
+        # The UI toolkit workflow checks this on pull requests that change a UI file. A
+        # release changes none and still moves the version, so it is checked here too.
+        working-directory: navree
+        run: cargo run --locked -p ui-docs -- --check
