@@ -340,6 +340,22 @@ public object Navree {
         val undoable: Boolean = false,
     ) : Navree.Node
 
+    /** `CalendarHeatmap`. */
+    @Serializable
+    public data class CalendarHeatmap(
+        val colour: Navree.Colour? = null,
+        val days: kotlin.collections.List<Navree.HeatDay> = emptyList(),
+        val first: String? = null,
+        val hint: Navree.Hint? = null,
+        val id: String? = null,
+        val label: String? = null,
+        val last: String? = null,
+        val steps: kotlin.collections.List<Double> = emptyList(),
+        val summary: String? = null,
+        val title: String? = null,
+        val unit: String? = null,
+    ) : Navree.Node
+
     /** `Call`: one of its variants, told apart by `f`. */
     @Serializable(with = Navree.CallSerializer::class)
     public sealed interface Call {
@@ -461,14 +477,39 @@ public object Navree {
         val id: String,
     ) : Navree.Call, Navree.ReplyCall
 
+    /** `Category`. */
+    @Serializable
+    public data class Category(
+        val colour: Navree.Colour? = null,
+        val name: String,
+    )
+
+    /** `Centre`. */
+    @Serializable
+    public enum class Centre {
+        @SerialName("value") VALUE,
+        @SerialName("icon") ICON,
+        @SerialName("nothing") NOTHING,
+    }
+
     /** `Chart`. */
     @Serializable
     public data class Chart(
+        val curve: Navree.Curve = Navree.Curve.LINEAR,
+        val hint: Navree.Hint? = null,
+        val horizontal: Boolean = false,
         val id: String? = null,
         val kind: Navree.ChartKind = Navree.ChartKind.LINE,
         val labels: kotlin.collections.List<String> = emptyList(),
+        val levels: kotlin.collections.List<String> = emptyList(),
+        val references: kotlin.collections.List<Navree.Reference> = emptyList(),
         val series: kotlin.collections.List<Navree.Series> = emptyList(),
+        val stacking: Navree.Stacking = Navree.Stacking.APART,
+        val summary: String? = null,
         val title: String? = null,
+        val x: Navree.Measure? = null,
+        val y: Navree.Measure? = null,
+        val zones: kotlin.collections.List<Navree.Zone> = emptyList(),
     ) : Navree.Node
 
     /** `ChartKind`. */
@@ -555,6 +596,15 @@ public object Navree {
         val vocab: Long,
     )
 
+    /** `ClockMoment`. */
+    @Serializable
+    public data class ClockMoment(
+        val at: Double,
+        val colour: Navree.Colour? = null,
+        val icon: Navree.Icon? = null,
+        val name: String,
+    )
+
     /** `Code`. */
     @Serializable
     public data class Code(
@@ -579,6 +629,29 @@ public object Navree {
         @SerialName("aztec") AZTEC,
         @SerialName("data_matrix") DATA_MATRIX,
     }
+
+    /** `ColorStrip`. */
+    @Serializable
+    public data class ColorStrip(
+        val cells: kotlin.collections.List<Navree.StripCell> = emptyList(),
+        val hint: Navree.Hint? = null,
+        val id: String? = null,
+        val key: kotlin.collections.List<Navree.Category> = emptyList(),
+        val label: String? = null,
+        val shares: Boolean = false,
+        val summary: String? = null,
+        val title: String? = null,
+        val unit: String? = null,
+    ) : Navree.Node
+
+    /** `Colour`. */
+    @Serializable
+    public data class Colour(
+        val dark: String? = null,
+        val hue: Navree.Hue,
+        val light: String? = null,
+        val to: Navree.Hue? = null,
+    )
 
     /** `ColourInput`. */
     @Serializable
@@ -845,6 +918,14 @@ public object Navree {
         val text: String,
     ) : Navree.Call
 
+    /** `Curve`. */
+    @Serializable
+    public enum class Curve {
+        @SerialName("linear") LINEAR,
+        @SerialName("smooth") SMOOTH,
+        @SerialName("step") STEP,
+    }
+
     /** `DateInput`. */
     @Serializable
     public data class DateInput(
@@ -865,6 +946,49 @@ public object Navree {
         @SerialName("time") TIME,
         @SerialName("datetime") DATETIME,
     }
+
+    /** `DayClock`. */
+    @Serializable
+    public data class DayClock(
+        val colour: Navree.Colour? = null,
+        val hint: Navree.Hint? = null,
+        val hours: kotlin.collections.List<Navree.Hour> = emptyList(),
+        val hub: Navree.Colour? = null,
+        val icon: Navree.Icon? = null,
+        val id: String? = null,
+        val key: kotlin.collections.List<Navree.Category> = emptyList(),
+        val label: String? = null,
+        val max: Double? = null,
+        val moments: kotlin.collections.List<Navree.ClockMoment> = emptyList(),
+        val now: Int? = null,
+        val shown: String? = null,
+        val summary: String? = null,
+        val title: String? = null,
+        val unit: String? = null,
+    ) : Navree.Node
+
+    /** `DayPager`. */
+    @Serializable
+    public data class DayPager(
+        val date: String,
+        val day: String,
+        val first: String? = null,
+        val id: String? = null,
+        val last: String? = null,
+        val next: String? = null,
+        val pick: Navree.DayPick? = null,
+        val previous: String? = null,
+        val scores: Navree.Node? = null,
+        val today: String? = null,
+        val words: Navree.PagerWords? = null,
+    ) : Navree.Node
+
+    /** `DayPick`. */
+    @Serializable
+    public data class DayPick(
+        val href: String,
+        val name: String,
+    )
 
     /** `Delivery`. */
     @Serializable
@@ -1029,11 +1153,19 @@ public object Navree {
     /** `Figure`. */
     @Serializable
     public data class Figure(
+        val action: Navree.Action? = null,
+        val aside: Navree.Node? = null,
+        val chart: Navree.Node? = null,
+        val colour: Navree.Colour? = null,
         val detail: String? = null,
+        val hint: Navree.Hint? = null,
+        val icon: Navree.Icon? = null,
         val id: String? = null,
         val label: String,
+        val status: Navree.Badge? = null,
         val tone: Navree.Tone? = null,
         val trend: Navree.Trend? = null,
+        val unit: String? = null,
         val value: String,
     ) : Navree.Node
 
@@ -1079,13 +1211,18 @@ public object Navree {
     /** `Gauge`. */
     @Serializable
     public data class Gauge(
+        val caption: String? = null,
+        val colour: Navree.Colour? = null,
+        val hint: Navree.Hint? = null,
         val id: String? = null,
         val label: String? = null,
         val max: Double,
         val min: Double,
         val shown: String? = null,
+        val summary: String? = null,
         val tone: Navree.Tone? = null,
         val value: Double,
+        val zones: kotlin.collections.List<Navree.Zone> = emptyList(),
     ) : Navree.Node
 
     /** `Grid`. */
@@ -1116,6 +1253,13 @@ public object Navree {
         @SerialName("heavy") HEAVY,
     }
 
+    /** `HeatDay`. */
+    @Serializable
+    public data class HeatDay(
+        val date: String,
+        val value: Double? = null,
+    )
+
     /** `Hidden`. */
     @Serializable
     public data class Hidden(
@@ -1123,6 +1267,50 @@ public object Navree {
         val name: String,
         val value: String = "",
     )
+
+    /** `Hint`. */
+    @Serializable
+    public data class Hint(
+        val about: String,
+        val mark: Navree.HintMark = Navree.HintMark.QUESTION,
+        val text: String,
+        val title: String? = null,
+    )
+
+    /** `HintMark`. */
+    @Serializable
+    public enum class HintMark {
+        @SerialName("question") QUESTION,
+        @SerialName("info") INFO,
+    }
+
+    /** `Hour`. */
+    @Serializable
+    public data class Hour(
+        val category: Long? = null,
+        val level: Double? = null,
+        val value: Double? = null,
+    )
+
+    /** `Hue`. */
+    @Serializable
+    public enum class Hue {
+        @SerialName("neutral") NEUTRAL,
+        @SerialName("accent") ACCENT,
+        @SerialName("success") SUCCESS,
+        @SerialName("warning") WARNING,
+        @SerialName("danger") DANGER,
+        @SerialName("info") INFO,
+        @SerialName("blue") BLUE,
+        @SerialName("green") GREEN,
+        @SerialName("amber") AMBER,
+        @SerialName("orange") ORANGE,
+        @SerialName("red") RED,
+        @SerialName("rose") ROSE,
+        @SerialName("violet") VIOLET,
+        @SerialName("cyan") CYAN,
+        @SerialName("slate") SLATE,
+    }
 
     /** `Icon`. */
     @Serializable
@@ -1303,6 +1491,31 @@ public object Navree {
         val precise: Boolean,
     )
 
+    /** `MatrixHeatmap`. */
+    @Serializable
+    public data class MatrixHeatmap(
+        val hint: Navree.Hint? = null,
+        val id: String? = null,
+        val label: String? = null,
+        val lower: Boolean = false,
+        val measures: kotlin.collections.List<String> = emptyList(),
+        val negative: Navree.Colour? = null,
+        val peak: Double? = null,
+        val positive: Navree.Colour? = null,
+        val relations: kotlin.collections.List<Navree.Relation> = emptyList(),
+        val summary: String? = null,
+        val title: String? = null,
+    ) : Navree.Node
+
+    /** `Measure`. */
+    @Serializable
+    public data class Measure(
+        val max: Double? = null,
+        val min: Double? = null,
+        val name: String? = null,
+        val unit: String? = null,
+    )
+
     /** `Menu`. */
     @Serializable
     public data class Menu(
@@ -1325,12 +1538,42 @@ public object Navree {
         val time: String? = null,
     ) : Navree.Node
 
+    /** `Meter`. */
+    @Serializable
+    public data class Meter(
+        val hint: Navree.Hint? = null,
+        val id: String? = null,
+        val segments: kotlin.collections.List<Navree.Segment> = emptyList(),
+        val summary: String? = null,
+        val title: String? = null,
+    ) : Navree.Node
+
     /** `Method`. */
     @Serializable
     public enum class Method {
         @SerialName("get") GET,
         @SerialName("post") POST,
     }
+
+    /** `MiniColumn`. */
+    @Serializable
+    public data class MiniColumn(
+        val label: String,
+        val shown: String? = null,
+        val values: kotlin.collections.List<Double?> = emptyList(),
+    )
+
+    /** `MiniColumns`. */
+    @Serializable
+    public data class MiniColumns(
+        val columns: kotlin.collections.List<Navree.MiniColumn> = emptyList(),
+        val highlight: Long? = null,
+        val hint: Navree.Hint? = null,
+        val id: String? = null,
+        val parts: kotlin.collections.List<Navree.Category> = emptyList(),
+        val summary: String? = null,
+        val title: String? = null,
+    ) : Navree.Node
 
     /** `Moment`. */
     @Serializable
@@ -1440,6 +1683,17 @@ public object Navree {
                 "feed_row" -> input.json.decodeFromJsonElement(Navree.FeedRow.serializer(), body)
                 "message" -> input.json.decodeFromJsonElement(Navree.Message.serializer(), body)
                 "pane" -> input.json.decodeFromJsonElement(Navree.Pane.serializer(), body)
+                "ring" -> input.json.decodeFromJsonElement(Navree.Ring.serializer(), body)
+                "rings" -> input.json.decodeFromJsonElement(Navree.Rings.serializer(), body)
+                "day_clock" -> input.json.decodeFromJsonElement(Navree.DayClock.serializer(), body)
+                "day_pager" -> input.json.decodeFromJsonElement(Navree.DayPager.serializer(), body)
+                "meter" -> input.json.decodeFromJsonElement(Navree.Meter.serializer(), body)
+                "columns" -> input.json.decodeFromJsonElement(Navree.MiniColumns.serializer(), body)
+                "strip" -> input.json.decodeFromJsonElement(Navree.ColorStrip.serializer(), body)
+                "range" -> input.json.decodeFromJsonElement(Navree.RangeScale.serializer(), body)
+                "calendar_heatmap" -> input.json.decodeFromJsonElement(Navree.CalendarHeatmap.serializer(), body)
+                "matrix_heatmap" -> input.json.decodeFromJsonElement(Navree.MatrixHeatmap.serializer(), body)
+                "scatter" -> input.json.decodeFromJsonElement(Navree.Scatter.serializer(), body)
                 else -> Navree.Node.Unknown(
                     tag = tag ?: "",
                     alt = body["alt"]?.let { input.json.decodeFromJsonElement(Navree.NodeSerializer, it) },
@@ -1616,6 +1870,50 @@ public object Navree {
                 is Navree.Pane -> {
                     tag = "pane"
                     body = output.json.encodeToJsonElement(Navree.Pane.serializer(), value) as JsonObject
+                }
+                is Navree.Ring -> {
+                    tag = "ring"
+                    body = output.json.encodeToJsonElement(Navree.Ring.serializer(), value) as JsonObject
+                }
+                is Navree.Rings -> {
+                    tag = "rings"
+                    body = output.json.encodeToJsonElement(Navree.Rings.serializer(), value) as JsonObject
+                }
+                is Navree.DayClock -> {
+                    tag = "day_clock"
+                    body = output.json.encodeToJsonElement(Navree.DayClock.serializer(), value) as JsonObject
+                }
+                is Navree.DayPager -> {
+                    tag = "day_pager"
+                    body = output.json.encodeToJsonElement(Navree.DayPager.serializer(), value) as JsonObject
+                }
+                is Navree.Meter -> {
+                    tag = "meter"
+                    body = output.json.encodeToJsonElement(Navree.Meter.serializer(), value) as JsonObject
+                }
+                is Navree.MiniColumns -> {
+                    tag = "columns"
+                    body = output.json.encodeToJsonElement(Navree.MiniColumns.serializer(), value) as JsonObject
+                }
+                is Navree.ColorStrip -> {
+                    tag = "strip"
+                    body = output.json.encodeToJsonElement(Navree.ColorStrip.serializer(), value) as JsonObject
+                }
+                is Navree.RangeScale -> {
+                    tag = "range"
+                    body = output.json.encodeToJsonElement(Navree.RangeScale.serializer(), value) as JsonObject
+                }
+                is Navree.CalendarHeatmap -> {
+                    tag = "calendar_heatmap"
+                    body = output.json.encodeToJsonElement(Navree.CalendarHeatmap.serializer(), value) as JsonObject
+                }
+                is Navree.MatrixHeatmap -> {
+                    tag = "matrix_heatmap"
+                    body = output.json.encodeToJsonElement(Navree.MatrixHeatmap.serializer(), value) as JsonObject
+                }
+                is Navree.Scatter -> {
+                    tag = "scatter"
+                    body = output.json.encodeToJsonElement(Navree.Scatter.serializer(), value) as JsonObject
                 }
                 is Navree.Node.Unknown -> {
                     tag = value.tag
@@ -1901,6 +2199,14 @@ public object Navree {
         val url: String,
     ) : Navree.Call
 
+    /** `PagerWords`. */
+    @Serializable
+    public data class PagerWords(
+        val choose: String,
+        val next: String,
+        val previous: String,
+    )
+
     /** `Pair`. */
     @Serializable
     public data class Pair(
@@ -1991,6 +2297,22 @@ public object Navree {
         val signIn: String,
         val web: String? = null,
     ) : Navree.Call
+
+    /** `Point`. */
+    @Serializable
+    public data class Point(
+        val label: String? = null,
+        val x: Double,
+        val y: Double,
+    )
+
+    /** `PointSeries`. */
+    @Serializable
+    public data class PointSeries(
+        val colour: Navree.Colour? = null,
+        val name: String,
+        val points: kotlin.collections.List<Navree.Point> = emptyList(),
+    )
 
     /** `Popover`. */
     @Serializable
@@ -2103,6 +2425,39 @@ public object Navree {
         val to: Navree.RangeEnd,
     ) : Navree.Input
 
+    /** `RangeScale`. */
+    @Serializable
+    public data class RangeScale(
+        val high: String? = null,
+        val hint: Navree.Hint? = null,
+        val id: String? = null,
+        val low: String? = null,
+        val max: Double,
+        val min: Double,
+        val shown: String? = null,
+        val summary: String? = null,
+        val title: String? = null,
+        val unit: String? = null,
+        val value: Double? = null,
+        val zones: kotlin.collections.List<Navree.Zone> = emptyList(),
+    ) : Navree.Node
+
+    /** `Reference`. */
+    @Serializable
+    public data class Reference(
+        val colour: Navree.Colour? = null,
+        val kind: Navree.ReferenceKind = Navree.ReferenceKind.LEVEL,
+        val label: String? = null,
+        val value: Double? = null,
+    )
+
+    /** `ReferenceKind`. */
+    @Serializable
+    public enum class ReferenceKind {
+        @SerialName("level") LEVEL,
+        @SerialName("diagonal") DIAGONAL,
+    }
+
     /** `Refusal`. */
     @Serializable
     public enum class Refusal {
@@ -2131,6 +2486,16 @@ public object Navree {
     public data class RegisterPush(
         val categories: kotlin.collections.List<String> = emptyList(),
     ) : Navree.Call
+
+    /** `Relation`. */
+    @Serializable
+    public data class Relation(
+        val a: Long,
+        val b: Long,
+        val note: String? = null,
+        val significant: Boolean = true,
+        val value: Double? = null,
+    )
 
     /** `Reorder`. */
     @Serializable
@@ -2214,6 +2579,57 @@ public object Navree {
         val style: Navree.TextStyle = Navree.TextStyle.BODY,
     ) : Navree.Node
 
+    /** `Ring`. */
+    @Serializable
+    public data class Ring(
+        val caption: String? = null,
+        val centre: Navree.Centre = Navree.Centre.VALUE,
+        val colour: Navree.Colour? = null,
+        val hint: Navree.Hint? = null,
+        val icon: Navree.Icon? = null,
+        val id: String? = null,
+        val label: String? = null,
+        val max: Double,
+        val prominence: Navree.Prominence = Navree.Prominence.MEDIUM,
+        val shown: String? = null,
+        val summary: String? = null,
+        val unit: String? = null,
+        val value: Double? = null,
+    ) : Navree.Node
+
+    /** `RingValue`. */
+    @Serializable
+    public data class RingValue(
+        val colour: Navree.Colour? = null,
+        val max: Double,
+        val name: String,
+        val shown: String? = null,
+        val unit: String? = null,
+        val value: Double? = null,
+    )
+
+    /** `Rings`. */
+    @Serializable
+    public data class Rings(
+        val centre: Navree.RingsCentre = Navree.RingsCentre.NOTHING,
+        val hint: Navree.Hint? = null,
+        val icon: Navree.Icon? = null,
+        val id: String? = null,
+        val legend: Boolean = false,
+        val prominence: Navree.Prominence = Navree.Prominence.MEDIUM,
+        val rings: kotlin.collections.List<Navree.RingValue> = emptyList(),
+        val summary: String? = null,
+        val title: String? = null,
+    ) : Navree.Node
+
+    /** `RingsCentre`. */
+    @Serializable
+    public enum class RingsCentre {
+        @SerialName("nothing") NOTHING,
+        @SerialName("values") VALUES,
+        @SerialName("icon") ICON,
+    }
+
     /** `Role`. */
     @Serializable
     public enum class Role {
@@ -2285,6 +2701,21 @@ public object Navree {
         val value: String,
     )
 
+    /** `Scatter`. */
+    @Serializable
+    public data class Scatter(
+        @SerialName("equal_axes")
+        val equalAxes: Boolean = false,
+        val hint: Navree.Hint? = null,
+        val id: String? = null,
+        val references: kotlin.collections.List<Navree.Reference> = emptyList(),
+        val series: kotlin.collections.List<Navree.PointSeries> = emptyList(),
+        val summary: String? = null,
+        val title: String? = null,
+        val x: Navree.Measure? = null,
+        val y: Navree.Measure? = null,
+    ) : Navree.Node
+
     /** `Scheme`. */
     @Serializable
     public enum class Scheme {
@@ -2323,6 +2754,7 @@ public object Navree {
         val actions: kotlin.collections.List<Navree.Node> = emptyList(),
         val children: kotlin.collections.List<Navree.Node> = emptyList(),
         val footer: kotlin.collections.List<Navree.Node> = emptyList(),
+        val hint: Navree.Hint? = null,
         val id: String? = null,
         val style: Navree.SectionStyle = Navree.SectionStyle.PLAIN,
         val subtitle: String? = null,
@@ -2337,6 +2769,16 @@ public object Navree {
         @SerialName("inset") INSET,
     }
 
+    /** `Segment`. */
+    @Serializable
+    public data class Segment(
+        val colour: Navree.Colour? = null,
+        val detail: String? = null,
+        val name: String,
+        val shown: String? = null,
+        val value: Double? = null,
+    )
+
     /** `Selection`. */
     @Serializable
     public data class Selection(
@@ -2348,8 +2790,10 @@ public object Navree {
     /** `Series`. */
     @Serializable
     public data class Series(
+        val colour: Navree.Colour? = null,
         val label: String,
         val shown: kotlin.collections.List<String> = emptyList(),
+        val unit: String? = null,
         val values: kotlin.collections.List<Double?> = emptyList(),
     )
 
@@ -2522,6 +2966,14 @@ public object Navree {
         val wrap: Boolean = false,
     ) : Navree.Node
 
+    /** `Stacking`. */
+    @Serializable
+    public enum class Stacking {
+        @SerialName("apart") APART,
+        @SerialName("values") VALUES,
+        @SerialName("shares") SHARES,
+    }
+
     /** `Standard`. */
     @Serializable
     public enum class Standard {
@@ -2547,6 +2999,14 @@ public object Navree {
         @SerialName("invalid") INVALID,
         @SerialName("pending") PENDING,
     }
+
+    /** `StripCell`. */
+    @Serializable
+    public data class StripCell(
+        val category: Long? = null,
+        val label: String,
+        val value: Double? = null,
+    )
 
     /** `SystemSymbol`. */
     @Serializable
@@ -2880,4 +3340,13 @@ public object Navree {
             output.encodeJsonElement(JsonObject(mapOf("t" to JsonPrimitive(tag)) + body))
         }
     }
+
+    /** `Zone`. */
+    @Serializable
+    public data class Zone(
+        val colour: Navree.Colour? = null,
+        val from: Double,
+        val label: String? = null,
+        val to: Double,
+    )
 }
