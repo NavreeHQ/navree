@@ -327,6 +327,9 @@ object ContentRules {
     /** The most a single column of content spans, in dp, so lines stay readable in a wide window. */
     const val CONTENT_MOST_DP = 840
 
+    /** The most a table drawn as a table spans: wider than a column of text, because its columns need the room. */
+    const val TABLE_MOST_DP = 1440
+
     /** Label and value sit side by side until the text is large; then the value goes under its label. */
     fun factsStacked(window: WindowInfo): Boolean = window.largeText
 

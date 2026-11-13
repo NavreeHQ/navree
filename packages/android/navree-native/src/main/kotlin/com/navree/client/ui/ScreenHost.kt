@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListState
@@ -248,52 +249,60 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     val hoisted = if (plan.searchInQuery) query?.form else null
     val atTop by remember { derivedStateOf { list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset < 24 } }
     val fab = plan.fab?.let { arranged.actions.getOrNull(it) as? Navree.Button }
+    // A glance the page opened stands beside the content on a wide window.
+    val side = if (ScreenRules.sheet(task = false, window = window) == Presentation.SideSheet) openGlance(place) else null
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(behaviour.nestedScrollConnection),
-        topBar = { ScreenBar(view, arranged, plan, place, info, behaviour, searching) { searching = it } },
-        floatingActionButton = {
-            if (fab != null && plan.fabPlace == FabPlace.BottomEnd) Fab(fab, place, plan.fabExtended, expanded = atTop)
-        },
-        snackbarHost = { Snackbars(info) },
-    ) { padding ->
-        BoxWithConstraints(
-            Modifier
-                .fillMaxSize()
-                .padding(top = padding.calculateTopPadding())
-                .consumeWindowInsets(padding)
-                .imePadding(),
-        ) {
-            val items = remember(screen.body, view, maxWidth, barSubmit, hoisted) {
-                blocks(screen.body, view, maxWidth.value.toInt(), omit = barSubmit, hoisted = hoisted)
-            }
-            val floating = (fab != null && plan.fabPlace == FabPlace.BottomEnd) || bars.isNotEmpty()
-            val bottom = padding.calculateBottomPadding() + if (floating) 88.dp else 16.dp
-            val body: @Composable () -> Unit = {
-                Body(items, place.copy(omit = barSubmit), list, PaddingValues(top = 8.dp, bottom = bottom))
-            }
-            if (plan.pullToRefresh) {
-                PullToRefreshBox(isRefreshing = view.refreshing, onRefresh = { ui.send(Events.refresh(view.id)) }, modifier = Modifier.fillMaxSize()) { body() }
-            } else {
-                body()
-            }
-            // A fresh tree is on its way while the last one is shown.
-            if (view.loading && !view.refreshing) LinearProgressIndicator(Modifier.fillMaxWidth())
+    Row(Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.weight(1f).nestedScroll(behaviour.nestedScrollConnection),
+            topBar = { ScreenBar(view, arranged, plan, place, info, behaviour, searching) { searching = it } },
+            floatingActionButton = {
+                if (fab != null && plan.fabPlace == FabPlace.BottomEnd) Fab(fab, place, plan.fabExtended, expanded = atTop)
+            },
+            snackbarHost = { Snackbars(info) },
+        ) { padding ->
+            BoxWithConstraints(
+                Modifier
+                    .fillMaxSize()
+                    .padding(top = padding.calculateTopPadding())
+                    .consumeWindowInsets(padding)
+                    .imePadding(),
+            ) {
+                val items = remember(screen.body, view, maxWidth, barSubmit, hoisted) {
+                    blocks(screen.body, view, maxWidth.value.toInt(), omit = barSubmit, hoisted = hoisted)
+                }
+                val floating = (fab != null && plan.fabPlace == FabPlace.BottomEnd) || bars.isNotEmpty()
+                val bottom = padding.calculateBottomPadding() + if (floating) 88.dp else 16.dp
+                val body: @Composable () -> Unit = {
+                    Body(items, place.copy(omit = barSubmit), list, PaddingValues(top = 8.dp, bottom = bottom))
+                }
+                if (plan.pullToRefresh) {
+                    PullToRefreshBox(isRefreshing = view.refreshing, onRefresh = { ui.send(Events.refresh(view.id)) }, modifier = Modifier.fillMaxSize()) { body() }
+                } else {
+                    body()
+                }
+                // A fresh tree is on its way while the last one is shown.
+                if (view.loading && !view.refreshing) LinearProgressIndicator(Modifier.fillMaxWidth())
 
-            for (bar in bars) {
-                Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)) { ToolbarView(bar, place) }
-            }
+                for (bar in bars) {
+                    Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)) { ToolbarView(bar, place) }
+                }
 
-            val focus = view.focus
-            LaunchedEffect(focus?.serial) {
-                if (focus != null) {
-                    val index = blockOf(items, focus.target)
-                    if (index >= 0) list.animateScrollToItem(index)
+                val focus = view.focus
+                LaunchedEffect(focus?.serial) {
+                    if (focus != null) {
+                        val index = blockOf(items, focus.target)
+                        if (index >= 0) list.animateScrollToItem(index)
+                    }
                 }
             }
         }
+        if (side != null) {
+            SideSheet(side, place, Modifier.width((window.widthDp * 0.4f).coerceIn(360f, 480f).dp))
+        }
     }
     Overlays(place)
+    QuestionDialog(place)
 }
 
 /** The screen's column of blocks, drawn as it scrolls. */
@@ -313,8 +322,13 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
     when (block) {
         is Block.Single -> {
             val inner = place.copy(form = block.form ?: place.form)
-            val most = if (block.form != null) FormRules.FORM_MOST_DP else ContentRules.CONTENT_MOST_DP
             val node = block.node
+            // A table where there is room for one takes the pane's width: its columns need it.
+            val most = when {
+                node is Navree.Table -> ContentRules.TABLE_MOST_DP
+                block.form != null -> FormRules.FORM_MOST_DP
+                else -> ContentRules.CONTENT_MOST_DP
+            }
             Box(Modifier.readable(most).padding(horizontal = margin, vertical = if (node is Navree.Field) 8.dp else 0.dp)) {
                 // A form's own button under its fields sits at the form's end, as wide as its words.
                 if (node is Navree.Button && block.form != null) {
@@ -401,7 +415,7 @@ internal fun arrange(screen: Navree.Screen, view: ScreenView, context: ScreenCon
 
 /** A toolbar item as the button it stands for, so it is pressed (and asks) like one. */
 private fun Navree.ToolbarItem.asButton(): Navree.Button =
-    Navree.Button(action = action, disabled = disabled, icon = icon, iconOnly = true, id = id, label = title, prominence = prominence, role = role, standard = standard, undoable = undoable)
+    Navree.Button(action = action, disabled = disabled, icon = icon, iconOnly = true, id = id, label = title, prominence = prominence, role = role, standard = standard, undoable = undoable, ask = ask)
 
 /**
  * A toolbar of the page as Material 3's floating toolbar: its items as icon

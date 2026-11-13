@@ -37,6 +37,30 @@ object Symbols {
         return snake.takeIf { it in SymbolPaths.all }
     }
 
+    /**
+     * The symbol for a destination the page gave no icon. Material's
+     * navigation always shows one: a word of the label that names a symbol,
+     * else a plain mark that says nothing it does not mean.
+     */
+    fun forLabel(label: String): String {
+        for (word in label.lowercase().split(' ', '-', '_')) {
+            labels[word]?.let { return it }
+            of(word)?.takeIf(::has)?.let { return it }
+        }
+        return "label"
+    }
+
+    private val labels: Map<String, String> = mapOf(
+        "dashboard" to "dashboard", "overview" to "dashboard", "home" to "home", "today" to "home",
+        "orders" to "receipt_long", "order" to "receipt_long", "sales" to "receipt_long",
+        "inventory" to "inventory_2", "stock" to "inventory_2", "products" to "sell", "catalogue" to "sell", "catalog" to "sell",
+        "customers" to "group", "people" to "group", "team" to "group", "contacts" to "group",
+        "inbox" to "inbox", "messages" to "chat", "conversations" to "chat", "support" to "chat",
+        "board" to "view_kanban", "boards" to "view_kanban", "tasks" to "checklist", "projects" to "view_kanban",
+        "reports" to "bar_chart", "analytics" to "bar_chart", "settings" to "settings", "notifications" to "notifications",
+        "calendar" to "calendar_today", "files" to "folder", "documents" to "description", "shipping" to "local_shipping",
+    )
+
     /** Whether the client carries the drawing of this symbol. */
     fun has(symbol: String): Boolean = symbol in SymbolPaths.all
 

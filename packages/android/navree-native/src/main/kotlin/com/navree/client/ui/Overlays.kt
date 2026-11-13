@@ -4,6 +4,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.navree.client.R
+import com.navree.client.design.Presentation
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -56,7 +67,13 @@ internal fun Overlays(place: Place) {
         val close = { ui.send(Events.overlay(place.id, id, false)) }
         val inner = place.copy(overlay = id)
         when (overlay) {
-            is Navree.Sheet -> Sheet(overlay.title, overlay.subtitle, overlay.size, overlay.children, overlay.actions, inner, close)
+            is Navree.Sheet -> when (ScreenRules.sheet(overlay.task, LocalUi.current.window)) {
+                // Drawn beside the content by the screen itself.
+                Presentation.SideSheet -> Unit
+                Presentation.FullScreenDialog -> TaskSheet(overlay, inner, full = true, close)
+                Presentation.Dialog -> TaskSheet(overlay, inner, full = false, close)
+                else -> Sheet(overlay.title, overlay.subtitle, overlay.size, overlay.children, overlay.actions, inner, close)
+            }
             is Navree.Popover -> Sheet(null, null, Navree.SheetSize.MEDIUM, overlay.children, emptyList(), inner, close)
             is Navree.Dialog -> TreeDialog(overlay, inner.copy(inDialog = true), close)
             else -> Unit
@@ -109,6 +126,87 @@ private fun Sheet(
     }
 }
 
+/**
+ * A sheet of the page that is a task: something to finish or cancel. On a
+ * short window it is a full-screen dialog (an X, the title, the affirming
+ * action at the bar's end); on a wider one a basic dialog.
+ */
+@Composable
+private fun TaskSheet(sheet: Navree.Sheet, place: Place, full: Boolean, close: () -> Unit) {
+    val buttons = sheet.actions.filterIsInstance<Navree.Button>()
+    val forward = buttons.filter(::affirms)
+    val form = sheet.children.asSequence().flatMap { it.walk() }.filterIsInstance<Navree.Form>().firstOrNull()
+    val submit = form?.submitButton()
+    val inner = place.copy(omit = submit)
+    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = !full)) {
+        Surface(
+            shape = if (full) RectangleShape else MaterialTheme.shapes.extraLarge,
+            color = if (full) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = if (full) Modifier.fillMaxSize() else Modifier.widthIn(max = 560.dp),
+        ) {
+            Column(Modifier.then(if (full) Modifier.fillMaxSize().systemBarsPadding().imePadding() else Modifier)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TipIconButton(stringResource(R.string.navree_close), Glyphs.Close, close)
+                    Text(sheet.title ?: "", style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 8.dp).semantics { heading() })
+                    for (button in forward) QuietButton(button, place)
+                    if (form != null && submit != null) QuietButton(submit, place.copy(form = form.id))
+                }
+                Column(
+                    Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    sheet.subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    for (child in sheet.children) NodeView(child, inner)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * A sheet of the page that is a glance, beside the content on a wide window:
+ * Material's standard side sheet, holding the detail of what was tapped
+ * while the list stays in view.
+ */
+@Composable
+internal fun SideSheet(sheet: Navree.Sheet, place: Place, modifier: Modifier = Modifier) {
+    val ui = LocalUi.current
+    val close = { ui.send(Events.overlay(place.id, sheet.id, false)) }
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp),
+        modifier = modifier.fillMaxHeight().semantics { sheet.title?.let { paneTitle = it } },
+    ) {
+        Column(Modifier.fillMaxSize().systemBarsPadding()) {
+            Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    sheet.title?.let { Text(it, style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }) }
+                    sheet.subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+                TipIconButton(stringResource(R.string.navree_close), Glyphs.Close, close)
+            }
+            Column(
+                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                val inner = place.copy(overlay = sheet.id)
+                for (child in sheet.children) NodeView(child, inner)
+                if (sheet.actions.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                        for (action in sheet.actions) if (action is Navree.Button) QuietButton(action, inner)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The glance sheet of a page that is open now, when there is one. */
+internal fun openGlance(place: Place): Navree.Sheet? {
+    val tree = place.screen.screen ?: return null
+    return tree.overlays().filterIsInstance<Navree.Sheet>().lastOrNull { !it.task && (it.open || place.screen.open(it.id)) }
+}
+
 /** Which of a dialog's buttons affirm and which back out. Affirming ones sit at the end. */
 private fun affirms(button: Navree.Button): Boolean = button.role != Navree.Role.CANCEL && button.standard != Navree.Standard.CANCEL
 
@@ -153,6 +251,26 @@ private fun TreeDialog(dialog: Navree.Dialog, place: Place, close: () -> Unit) {
             else -> null
         },
         modifier = Modifier.widthIn(max = 560.dp),
+    )
+}
+
+/**
+ * The core's question before an action runs, in the server's words: the
+ * headline, a line of text, the confirming button at the end and the way back
+ * before it (Android's own "Cancel" when the page names none). Every way out
+ * of the dialog is an answer.
+ */
+@Composable
+internal fun QuestionDialog(place: Place) {
+    val ui = LocalUi.current
+    val question = place.screen.question ?: return
+    val no = { ui.send(Events.answer(place.id, question.id, false)) }
+    AlertDialog(
+        onDismissRequest = no,
+        title = { Text(question.title) },
+        text = question.text?.let { text -> { Text(text) } },
+        confirmButton = { TextButton(onClick = { ui.send(Events.answer(place.id, question.id, true)) }) { Text(question.confirm) } },
+        dismissButton = { TextButton(onClick = no) { Text(question.cancel ?: stringResource(android.R.string.cancel)) } },
     )
 }
 

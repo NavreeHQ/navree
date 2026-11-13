@@ -39,7 +39,9 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalWideNavigationRail
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.NavigationItemIconPosition
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ShortNavigationBar
@@ -69,6 +71,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.SideEffect
+import androidx.core.view.WindowCompat
+import android.app.Activity
+import android.content.ContextWrapper
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
@@ -94,6 +101,7 @@ import com.navree.client.design.NavigationRules
 import com.navree.client.design.Presentation
 import com.navree.client.design.ScreenContext
 import com.navree.client.design.ScreenRules
+import com.navree.client.design.Symbols
 import com.navree.client.design.WidthClass
 import com.navree.client.theme.Hct
 import com.navree.client.theme.NavreeTheme
@@ -122,6 +130,7 @@ fun NavreeApp(driver: Driver, config: NavreeConfig, image: suspend (String) -> B
     val brand = Hct.parse(accent) ?: config.seed
     val dynamic = config.dynamicColour || brand == null
     NavreeTheme(seed = brand ?: BASELINE_SEED, dynamic = dynamic) {
+        SystemBars(dark)
         val window = rememberWindow()
         val snackbars = remember { SnackbarHostState() }
         val ui = remember(driver, window) { Ui(driver, window, image, snackbars) }
@@ -138,6 +147,23 @@ fun NavreeApp(driver: Driver, config: NavreeConfig, image: suspend (String) -> B
             }
             Messages(driver, snackbars)
             ConfirmDialog()
+        }
+    }
+}
+
+/**
+ * The system bars' icons follow the theme: dark icons over the light theme's
+ * surfaces, light ones over the dark theme's. The app draws behind both bars.
+ */
+@Composable
+private fun SystemBars(dark: Boolean) {
+    val view = LocalView.current
+    if (view.isInEditMode) return
+    SideEffect {
+        val activity = generateSequence(view.context) { (it as? ContextWrapper)?.baseContext }.filterIsInstance<Activity>().firstOrNull() ?: return@SideEffect
+        WindowCompat.getInsetsController(activity.window, view).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
         }
     }
 }
@@ -202,7 +228,7 @@ private fun Frame(nav: NavPart, name: String, user: Navree.User?) {
     val destination = nav.destinations.getOrNull(nav.selected)
     val frontOfTab = destination?.stack?.lastOrNull()?.let(screens::get)
     val kind = if (frontOfTab?.chrome == false) NavigationKind.None else plan.kind
-    val covers = nav.modals.map { ScreenRules.presentation(it.present == Navree.Present.FULL, window) }
+    val covers = nav.modals.map { ScreenRules.presentation(it.present, window) }
     val covered = covers.any { it == Presentation.FullScreenDialog }
     val menu = rememberWideNavigationRailState()
     val scope = rememberCoroutineScope()
@@ -289,7 +315,9 @@ private fun context(plan: NavigationPlan, user: Navree.User?, screen: ScreenView
 /** A destination's icon: the system's symbol when its name maps to one, filled when selected; a count beside it. */
 @Composable
 private fun NavIcon(destination: Destination, selected: Boolean) {
+    // A destination the page gave no icon still takes one: Material's navigation always shows an icon.
     val vector = rememberIcon(destination.icon, selected = selected)
+        ?: androidx.compose.runtime.remember(destination.label, selected) { symbolVector(Symbols.forLabel(destination.label), selected) }
     val badge = destination.badge
     BadgedBox(badge = { if (!badge.isNullOrEmpty()) Badge { Text(badge) } }) {
         if (vector != null) Icon(vector, contentDescription = null) else Spacer(Modifier.size(24.dp))
@@ -565,6 +593,19 @@ private fun Covers(
                     modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().heightIn(max = (window.heightDp * 0.9f).dp),
                 ) {
                     StackHost(nav, user, name, plan, modal.stack, group = -1 - index, Presentation.Dialog, holder, active = index == nav.modals.lastIndex)
+                }
+            }
+        } else if (presentations.getOrNull(index) == Presentation.BottomSheet) {
+            // A glance on a phone: a modal bottom sheet, opened fully, with its own stack.
+            val first = modal.stack.firstOrNull() ?: return@forEachIndexed
+            val state = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { !modal.locked })
+            ModalBottomSheet(
+                onDismissRequest = { if (!modal.locked) ui.send(Events.dismissed(first)) },
+                sheetState = state,
+                sheetGesturesEnabled = !modal.locked,
+            ) {
+                Box(Modifier.fillMaxWidth().heightIn(max = (window.heightDp * 0.92f).dp)) {
+                    StackHost(nav, user, name, plan, modal.stack, group = -1 - index, Presentation.BottomSheet, holder, active = index == nav.modals.lastIndex)
                 }
             }
         }

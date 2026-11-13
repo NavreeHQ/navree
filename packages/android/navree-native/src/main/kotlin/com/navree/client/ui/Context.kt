@@ -77,13 +77,20 @@ internal fun Ui.act(place: Place, action: Navree.Action?, text: String? = null) 
     send(Events.act(place.id, action, place.form, place.overlay, text))
 }
 
-/** A button was tapped. A destructive one that writes asks first, unless it can be undone or a dialog holds it. */
+/**
+ * A button was tapped. One whose page wrote a question (`ask`) has the core
+ * ask it, in the server's words, unless it can be undone: Android's way then
+ * is to do it and offer Undo. A destructive one that writes and brought no
+ * question asks in the client's dialog, in the action's own words.
+ */
 internal fun Ui.press(place: Place, button: Navree.Button) {
     if (button.disabled || button.pending) return
-    if (ConfirmRules.asks(button, place.inDialog)) {
-        asking.value = place to button
-    } else {
-        act(place, button.action)
+    val action = button.action ?: return
+    val ask = button.ask?.takeUnless { button.undoable || place.inDialog }
+    when {
+        ask != null -> send(Events.act(place.id, action, place.form, place.overlay, ask = ask))
+        ConfirmRules.asks(button, place.inDialog) -> asking.value = place to button
+        else -> act(place, action)
     }
 }
 

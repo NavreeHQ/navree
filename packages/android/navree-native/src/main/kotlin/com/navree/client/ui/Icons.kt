@@ -97,13 +97,15 @@ internal fun shapeVector(icon: Navree.Icon): ImageVector? {
 }
 
 /**
- * The vector to draw for an icon: the system's symbol for a standard action,
- * then the symbol the icon's name maps to (filled when selected), then the
- * page's own shape.
+ * The vector to draw for an icon: the system's symbol for a standard action;
+ * then the Material Symbol the server named for the icon (the protocol's own
+ * table); then the symbol the client's table maps the icon's name to; filled
+ * when selected; and only then the page's own shape.
  */
 internal fun iconVector(icon: Navree.Icon?, standard: Navree.Standard? = null, selected: Boolean = false): ImageVector? {
     standard?.let { return symbolVector(Symbols.of(it), selected) }
     if (icon == null) return null
+    icon.symbol?.material?.takeIf(Symbols::has)?.let { symbol -> symbolVector(symbol, selected)?.let { return it } }
     Symbols.of(icon.name)?.takeIf(Symbols::has)?.let { symbol -> symbolVector(symbol, selected)?.let { return it } }
     return shapeVector(icon)
 }

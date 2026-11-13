@@ -15,6 +15,9 @@ enum class Presentation {
 
     /** A modal bottom sheet. */
     BottomSheet,
+
+    /** A standard side sheet beside the content, on a wide window. */
+    SideSheet,
 }
 
 /** The app bar a screen gets. */
@@ -261,11 +264,32 @@ object ScreenRules {
         )
     }
 
-    /** How a route's `sheet` or `full` is shown: a task of its own, full screen where space is short, a dialog where it is not. */
-    fun presentation(full: Boolean, window: WindowInfo): Presentation = when {
-        full -> Presentation.FullScreenDialog
-        window.width == WidthClass.Compact || window.height == HeightClass.Compact -> Presentation.FullScreenDialog
-        else -> Presentation.Dialog
+    /**
+     * How something presented over the app is shown. `full` covers the window.
+     * A task (something finished or cancelled) is a full-screen dialog where
+     * space is short and a basic dialog where it is not. A glance (`sheet`, or
+     * a word this build does not know) is a modal bottom sheet on a compact
+     * window and a dialog on a wider one.
+     */
+    fun presentation(present: Navree.Present, window: WindowInfo): Presentation {
+        val short = window.width == WidthClass.Compact || window.height == HeightClass.Compact
+        return when (present) {
+            Navree.Present.FULL -> Presentation.FullScreenDialog
+            Navree.Present.TASK -> if (short) Presentation.FullScreenDialog else Presentation.Dialog
+            else -> if (window.width == WidthClass.Compact) Presentation.BottomSheet else Presentation.Dialog
+        }
+    }
+
+    /**
+     * How a sheet of a page is shown. A task is presented as a route's task
+     * is. A glance is a modal bottom sheet on a compact or medium window and a
+     * side sheet beside the content on an expanded one, where it is the detail
+     * of what the person tapped.
+     */
+    fun sheet(task: Boolean, window: WindowInfo): Presentation = when {
+        task -> presentation(Navree.Present.TASK, window)
+        window.width >= WidthClass.Expanded -> Presentation.SideSheet
+        else -> Presentation.BottomSheet
     }
 
     /**
@@ -352,9 +376,10 @@ object FilterRules {
  * Whether tapping an action asks first, in a dialog of the client's whose
  * words are the action's own. A destructive action that writes asks, unless
  * it can be undone (Android's way then is to do it and offer Undo in the
- * snackbar) or it is already the answer of a dialog.
+ * snackbar), it is already the answer of a dialog, or the page wrote its own
+ * question (`ask`), which the core asks in the server's words.
  */
 object ConfirmRules {
     fun asks(button: Navree.Button, inDialog: Boolean): Boolean =
-        !inDialog && ScreenRules.destructive(button) && !button.undoable && button.action.writes()
+        !inDialog && button.ask == null && ScreenRules.destructive(button) && !button.undoable && button.action.writes()
 }
