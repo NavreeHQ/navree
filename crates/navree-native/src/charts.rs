@@ -71,8 +71,8 @@ pub enum Hue {
 
 impl Hue {
     /// The tone this hue is the colour of: the status tones and the accent are
-    /// their own, and a plain colour has none. An older form of a part that
-    /// has a tone and no hue takes it from here.
+    /// their own, and a plain colour has none. An older form of a part, which
+    /// knows tones and not hues, takes its tone from here.
     pub const fn tone(self) -> Option<Tone> {
         match self {
             Self::Accent => Some(Tone::Accent),
