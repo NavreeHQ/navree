@@ -107,12 +107,13 @@ fn score() -> Card {
         .hero()
         .colour(Colour::blend(Hue::Cyan, Hue::Violet))
         .summary("Health score: 83 of 100, 83%.")
-        .hint(Hint {
-            about: "the health score".to_owned(),
-            title: Some("How the score is made".to_owned()),
-            text: "Your health score blends five pillars, each scored from 0 to 100 from your own readings. A pillar with no data that day is left out and the rest are weighed up. It describes a pattern in your readings; it is not advice.".to_owned(),
-            mark: HintMark::Question,
-        });
+        .hint(
+            Hint::about(
+                "the health score",
+                "Your health score blends five pillars, each scored from 0 to 100 from your own readings. A pillar with no data that day is left out and the rest are weighed up. It describes a pattern in your readings; it is not advice.",
+            )
+            .title("How the score is made"),
+        );
     Card::new().id("score").parts(
         Stack::down()
             .gap(4)

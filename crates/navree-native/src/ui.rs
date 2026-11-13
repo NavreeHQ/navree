@@ -26,6 +26,13 @@
 //! Reach for the third level only where the first two can't make the screen:
 //! a list of records is a [`List`], whatever a design would like it to be.
 //!
+//! Every part and every control of a form is built this way, so a screen is
+//! written without a struct literal: [`Table`] with its columns and rows,
+//! [`Tabs`], [`Split`] and its [`Pane`]s, [`Rich`] text, [`Message`],
+//! [`Toolbar`], [`Gauge`], [`Meter`], [`ColorStrip`], [`CalendarHeatmap`] and
+//! the other charts, and a [`Field`] with a [`TextInput`], a [`ToggleInput`],
+//! a [`ChoiceInput`], a [`DateInput`] or any other control.
+//!
 //! ```
 //! use navree_native::ui::*;
 //!
@@ -52,25 +59,32 @@
 //! assert_eq!(body.children.len(), 2);
 //! ```
 
-use crate::action::Command;
-use crate::node::{Hidden, Live, Method, Question, Run, SystemSymbol, Trend};
-
-pub use crate::action::{Action, Pair, Present};
+pub use crate::action::{Action, Command, Pair, Present, State};
 pub use crate::charts::{
-    Category, Centre, ClockMoment, Colour, DayClock, DayPager, DayPick, Hint, HintMark, Hour, Hue,
-    PagerWords, Ring, RingValue, Rings, RingsCentre,
+    CalendarHeatmap, Category, Centre, ClockMoment, ColorStrip, Colour, Curve, DayClock, DayPager,
+    DayPick, HeatDay, Hint, HintMark, Hour, Hue, MatrixHeatmap, Measure, Meter, MiniColumn,
+    MiniColumns, PagerWords, Point, PointSeries, RangeScale, Reference, ReferenceKind, Relation,
+    Ring, RingValue, Rings, RingsCentre, Scatter, Segment, Stacking, StripCell, Zone,
 };
 pub use crate::compose::{
     Adaptive, Appear, Card, Carousel, Change, Layers, Place, Shape, ShapeForm, Size, Transition,
     Weight,
 };
 pub use crate::envelope::{Back, Screen, Search};
-pub use crate::input::{ChoiceInput, ChoiceKind, ChoiceOption, Input, TextInput, TextKind};
+pub use crate::input::{
+    ChoiceCreate, ChoiceInput, ChoiceKind, ChoiceOption, ChoiceSearch, ChoicesInput, ColourInput,
+    DateInput, DateKind, FileInput, Input, PhoneCountry, RangeEnd, RangeInput, SliderInput,
+    TextInput, TextKind, ToggleInput, ToggleKind, Weekday,
+};
 pub use crate::node::{
-    Align, Avatar, Axis, Badge, Banner, Button, Chart, ChartKind, Dialog, Direction, Divider,
-    Empty, Fact, Facts, FeedRow, Field, Figure, Form, Grid, Icon, Justify, Link, List, Menu,
-    Moment, Node, Progress, Prominence, Region, Role, Row, RowState, Section, SectionStyle, Series,
-    Sheet, SheetSize, Spacer, Stack, Standard, Text, TextStyle, Timeline, Tone,
+    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Chart, ChartKind, Code,
+    Column, ColumnRole, Delivery, Dialog, Direction, Disclosure, Divider, Empty, Fact, Facts,
+    FeedRow, Field, Figure, Fit, Form, Gauge, Grid, Hidden, Icon, Image, Justify, Link, List, Live,
+    Menu, Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress, Prominence,
+    Purpose, Question, Region, Reorder, Rich, Role, Row, RowState, Run, Section, SectionStyle,
+    Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard,
+    SystemSymbol, Tab, Table, TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar,
+    ToolbarItem, Trend, WebRegion,
 };
 pub use crate::op::Op;
 
@@ -239,14 +253,11 @@ kinds! {
     Button(Button), Link(Link), Menu(Menu), Form(Form), Field(Field), Sheet(Sheet),
     Dialog(Dialog), Figure(Figure), Timeline(Timeline), FeedRow(FeedRow), Ring(Ring),
     Rings(Rings), DayClock(DayClock), DayPager(DayPager), Card(Card), Layers(Layers),
-    Shape(Shape), Carousel(Carousel), Adaptive(Adaptive),
-    Table(crate::node::Table), Tabs(crate::node::Tabs), Rich(crate::node::Rich),
-    Image(crate::node::Image), Gauge(crate::node::Gauge), Toolbar(crate::node::Toolbar),
-    Message(crate::node::Message), Pane(crate::node::Pane), Disclosure(crate::node::Disclosure),
-    Code(crate::node::Code), Popover(crate::node::Popover), Meter(crate::charts::Meter),
-    Columns(crate::charts::MiniColumns), Strip(crate::charts::ColorStrip),
-    Range(crate::charts::RangeScale), CalendarHeatmap(crate::charts::CalendarHeatmap),
-    MatrixHeatmap(crate::charts::MatrixHeatmap), Scatter(crate::charts::Scatter),
+    Shape(Shape), Carousel(Carousel), Adaptive(Adaptive), Table(Table), Tabs(Tabs), Rich(Rich),
+    Image(Image), Gauge(Gauge), Toolbar(Toolbar), Message(Message), Pane(Pane),
+    Disclosure(Disclosure), Code(Code), Popover(Popover), Split(Split), Native(NativeView),
+    Web(WebRegion), Meter(Meter), Columns(MiniColumns), Strip(ColorStrip), Range(RangeScale),
+    CalendarHeatmap(CalendarHeatmap), MatrixHeatmap(MatrixHeatmap), Scatter(Scatter),
 }
 
 /// A number as a part holds it, from the number types a screen's data comes
@@ -300,10 +311,67 @@ macro_rules! named {
 }
 
 named!(
-    Stack, Grid, Section, List, Row, Text, Icon, Badge, Button, Menu, Form, Field, Figure,
-    Timeline, FeedRow, Ring, Rings, DayClock, DayPager, Card, Layers, Shape, Carousel, Adaptive,
-    Chart, Facts, Progress
+    Stack,
+    Grid,
+    Section,
+    List,
+    Row,
+    Text,
+    Icon,
+    Badge,
+    Button,
+    Menu,
+    Form,
+    Field,
+    Figure,
+    Timeline,
+    FeedRow,
+    Ring,
+    Rings,
+    DayClock,
+    DayPager,
+    Card,
+    Layers,
+    Shape,
+    Carousel,
+    Adaptive,
+    Chart,
+    Facts,
+    Progress,
+    Split,
+    Tabs,
+    Disclosure,
+    Divider,
+    Spacer,
+    Rich,
+    Image,
+    Avatar,
+    Banner,
+    Empty,
+    Table,
+    TableRow,
+    Code,
+    NativeView,
+    WebRegion,
+    Toolbar,
+    ToolbarItem,
+    Gauge,
+    Message,
+    Pane,
+    Moment,
+    Link,
+    Meter,
+    MiniColumns,
+    ColorStrip,
+    RangeScale,
+    CalendarHeatmap,
+    MatrixHeatmap,
+    Scatter
 );
+
+mod charts;
+mod inputs;
+mod parts;
 
 impl Action {
     /// Asks for `href` and applies what it answers: the row that opens a
@@ -1182,59 +1250,54 @@ impl Form {
 }
 
 impl Field {
-    /// A field sent as `name`, with the control `input`.
-    pub fn new(name: impl Into<String>, input: Input) -> Self {
+    /// A field sent as `name`, with the control `input`: a [`TextInput`], a
+    /// [`ToggleInput`], a [`ChoiceInput`], a [`ChoicesInput`], a
+    /// [`DateInput`], a [`RangeInput`], a [`SliderInput`], a [`ColourInput`]
+    /// or a [`FileInput`].
+    ///
+    /// ```
+    /// use navree_native::ui::*;
+    ///
+    /// let cities = [("ldh", "Ludhiana"), ("asr", "Amritsar")];
+    /// let form = Form::post("/customers").id("customer").parts((
+    ///     Field::new("email", TextInput::email().placeholder("simran@example.in"))
+    ///         .label("Email")
+    ///         .required(),
+    ///     Field::new("phone", TextInput::phone().prefix("+91").country("phone_country", "IN"))
+    ///         .label("Phone"),
+    ///     Field::new("city", ChoiceInput::of(ChoiceKind::Menu, cities)).label("City"),
+    ///     Field::new("since", DateInput::date().max("2026-11-12")).label("Customer since"),
+    ///     Field::new("offers", ToggleInput::switch().on()).label("Send offers"),
+    /// ));
+    /// assert_eq!(form.children.len(), 5);
+    /// ```
+    pub fn new(name: impl Into<String>, input: impl Into<Input>) -> Self {
         Self {
             name: name.into(),
-            input,
+            input: input.into(),
             ..Self::default()
         }
     }
 
     /// A field of plain text.
     pub fn text(name: impl Into<String>) -> Self {
-        Self::new(name, Input::Text(TextInput::default()))
+        Self::new(name, TextInput::plain())
     }
 
     /// A field for an amount: a number that may have a fraction, typed as
     /// plain digits. `prefix` stands before it (`₹`).
     pub fn amount(name: impl Into<String>, prefix: impl Into<String>) -> Self {
-        Self::new(
-            name,
-            Input::Text(TextInput {
-                kind: TextKind::Decimal,
-                prefix: Some(prefix.into()),
-                ..TextInput::default()
-            }),
-        )
+        Self::new(name, TextInput::decimal().prefix(prefix))
     }
 
-    /// A field that takes one of `options`, each a value and its words, drawn
-    /// as the system draws a choice of `kind`.
-    pub fn choice<V, L>(
+    /// A field that takes one of `options`, each a [`ChoiceOption`] or a
+    /// value with its words, drawn as the system draws a choice of `kind`.
+    pub fn choice<O: Into<ChoiceOption>>(
         name: impl Into<String>,
         kind: ChoiceKind,
-        options: impl IntoIterator<Item = (V, L)>,
-    ) -> Self
-    where
-        V: Into<String>,
-        L: Into<String>,
-    {
-        Self::new(
-            name,
-            Input::Choice(ChoiceInput {
-                kind,
-                options: options
-                    .into_iter()
-                    .map(|(value, label)| ChoiceOption {
-                        value: value.into(),
-                        label: label.into(),
-                        ..ChoiceOption::default()
-                    })
-                    .collect(),
-                ..ChoiceInput::default()
-            }),
-        )
+        options: impl IntoIterator<Item = O>,
+    ) -> Self {
+        Self::new(name, ChoiceInput::of(kind, options))
     }
 
     /// Its label.
@@ -1259,12 +1322,15 @@ impl Field {
     }
 
     /// The value it starts with: the text of a text field, the chosen value
-    /// of a choice.
+    /// of a choice, the day of a date, the number of a slider, a colour.
     #[must_use]
     pub fn value(mut self, value: impl Into<String>) -> Self {
         match &mut self.input {
             Input::Text(text) => text.value = value.into(),
             Input::Choice(choice) => choice.value = Some(value.into()),
+            Input::Date(date) => date.value = value.into(),
+            Input::Slider(slider) => slider.value = value.into(),
+            Input::Colour(colour) => colour.value = value.into(),
             _ => {}
         }
         self
@@ -2334,12 +2400,10 @@ mod tests {
                 Button::new("Keep").role(Role::Cancel).dismisses(),
                 Button::new("Refund")
                     .role(Role::Confirm)
-                    .action(Action::Submit {
-                        form: Some("refund".to_owned()),
-                        href: None,
-                        with: None,
-                    }),
+                    .submits_form("refund"),
             ));
+        assert!(matches!(&dialog.actions[1], Node::Button(button)
+            if button.action == Some(Action::Submit { form: Some("refund".to_owned()), href: None, with: None })));
         let Node::Form(form) = &dialog.children[0] else {
             panic!("the dialog holds the form");
         };
@@ -2358,5 +2422,222 @@ mod tests {
         assert!(matches!(&reason.input, Input::Choice(choice)
             if choice.value.as_deref() == Some("late") && choice.options.len() == 2));
         assert_eq!(dialog.actions.len(), 2);
+    }
+
+    #[test]
+    fn every_kind_of_part_is_built_without_a_struct_literal() {
+        let icon = || Icon::named("package");
+        let parts: Vec<Node> = vec![
+            Stack::down().into(),
+            Grid::fit(150).into(),
+            Section::titled("Orders").into(),
+            List::new()
+                .ordered()
+                .before("/orders?before=9")
+                .reorder(Reorder::to("/orders/move").group("board").limit(5))
+                .into(),
+            Row::new("Brass lota").key("lota").into(),
+            Split::new(
+                Pane::new(PaneRole::List).parts(List::new()),
+                Pane::new(PaneRole::Detail).current(),
+            )
+            .into(),
+            Tabs::new()
+                .tab(Tab::new("Open").selected().parts(Text::new("3 open")))
+                .tab(Tab::new("Closed").href("/orders?closed=1"))
+                .into(),
+            Disclosure::new("More")
+                .open()
+                .parts(Text::new("Gift wrapped"))
+                .into(),
+            Divider::new().into(),
+            Spacer::new().into(),
+            Region::new("figures", "/fragments/figures").into(),
+            Text::new("Today").into(),
+            Rich::runs([Run::new("Paid by "), Run::new("UPI").bold()]).into(),
+            Image::new("/lota.jpg", "A brass lota")
+                .size(96, 96)
+                .cover()
+                .into(),
+            icon().into(),
+            Avatar::new("Harpreet Sandhu").into(),
+            Badge::new("Paid").into(),
+            Progress::busy().into(),
+            Banner::new("Two orders are late")
+                .tone(Tone::Warning)
+                .into(),
+            Empty::new("No orders yet").into(),
+            Facts::new()
+                .item(Fact::new("Paid", Text::new("₹1,24,050")).detail("by UPI"))
+                .into(),
+            Table::new()
+                .column(Column::new("Order").role(ColumnRole::Title))
+                .column(
+                    Column::new("Total")
+                        .numeric()
+                        .sort("/orders?sort=total", None),
+                )
+                .rows([TableRow::new((Text::new("#1042"), Text::new("₹2,450"))).to("/orders/1042")])
+                .select(Selection::named("ids[]").form("bulk"))
+                .into(),
+            Chart::new(ChartKind::Bar, "Sales").into(),
+            Code::new("cargo run").lang("sh").into(),
+            Button::new("Refund").into(),
+            Link::to("Orders", "/orders").into(),
+            Menu::new("More").into(),
+            Form::post("/orders").into(),
+            Field::new("notes", TextInput::multiline()).into(),
+            Sheet::new("peek").into(),
+            Dialog::new("refund").into(),
+            Popover::new("filters").into(),
+            NativeView::named("map").alt(Text::new("A map")).into(),
+            WebRegion::new("<p>An old page</p>").into(),
+            Toolbar::new()
+                .item(ToolbarItem::new("Share", icon()).standard(Standard::Share))
+                .into(),
+            Gauge::of(72, 0, 100)
+                .zone(Zone::new(60, 100).label("Good"))
+                .into(),
+            Figure::new("Sales", "₹1,24,050").into(),
+            Timeline::new().moment(Moment::new("Packed")).into(),
+            FeedRow::new("Simran", "packed", "#1042").into(),
+            Message::by("Gurleen Kaur")
+                .mine()
+                .body(Text::new("On its way"))
+                .into(),
+            Pane::new(PaneRole::Inspector).into(),
+            Ring::of(83, 100).into(),
+            Rings::new().into(),
+            DayClock::of([]).into(),
+            DayPager::on("Today", "2026-11-12").into(),
+            Meter::new()
+                .segment("Deep", 83, "1 h 23 min", Hue::Violet)
+                .into(),
+            MiniColumns::new()
+                .part("Deep", Hue::Violet)
+                .column("Mon", [83], "1 h 23 min")
+                .into(),
+            ColorStrip::new()
+                .key("Deep", Hue::Violet)
+                .cell("23:10", Some(0))
+                .into(),
+            RangeScale::of(58, 40, 100).unit("bpm").into(),
+            CalendarHeatmap::of([("2026-11-12", Some(82))]).into(),
+            MatrixHeatmap::of(["Sleep", "Steps"])
+                .relation(0, 1, 0.42)
+                .into(),
+            Scatter::new()
+                .series("Nights", [(7.2, 58)], Hue::Blue)
+                .into(),
+            Card::new().into(),
+            Layers::new().into(),
+            Shape::circle().into(),
+            Carousel::new().into(),
+            Adaptive::new().into(),
+        ];
+        let built: std::collections::BTreeSet<&str> =
+            parts.iter().map(|part| part.kind().as_str()).collect();
+        let known: std::collections::BTreeSet<&str> = crate::vocab::Kind::ALL
+            .iter()
+            .map(|kind| kind.as_str())
+            .collect();
+        assert_eq!(
+            known.difference(&built).collect::<Vec<_>>(),
+            Vec::<&&str>::new(),
+            "a kind has no part built here"
+        );
+        assert_eq!(
+            built.len(),
+            parts.len(),
+            "each part here is of its own kind"
+        );
+        // What was built reads back as it was written.
+        for part in &parts {
+            let written = serde_json::to_string(part).unwrap();
+            let read: Node = serde_json::from_str(&written).unwrap();
+            assert_eq!(&read, part, "{written}");
+        }
+    }
+
+    #[test]
+    fn every_control_of_a_form_is_built_without_a_struct_literal() {
+        let fields = [
+            Field::new(
+                "email",
+                TextInput::email()
+                    .placeholder("simran@example.in")
+                    .autofill("email"),
+            ),
+            Field::new(
+                "phone",
+                TextInput::phone()
+                    .prefix("+91")
+                    .country("phone_country", "IN"),
+            ),
+            Field::new(
+                "weight",
+                TextInput::decimal().suffix("kg").between(0, 2.5).step(0.1),
+            ),
+            Field::new("offers", ToggleInput::switch().on()),
+            Field::new("gift", ToggleInput::checkbox().sends("yes")),
+            Field::new(
+                "city",
+                ChoiceInput::of(
+                    ChoiceKind::Menu,
+                    [
+                        ChoiceOption::new("ldh", "Ludhiana").detail("Punjab"),
+                        ChoiceOption::new("asr", "Amritsar").disabled(),
+                    ],
+                )
+                .search("/cities/options", "q", 2),
+            ),
+            Field::new(
+                "tags",
+                ChoicesInput::of([("gift", "Gift"), ("bulk", "Bulk")])
+                    .values(["gift"])
+                    .create("Add a tag", None),
+            ),
+            Field::new(
+                "ship_on",
+                DateInput::date()
+                    .min("2026-11-12")
+                    .off_weekdays([Weekday::Sunday]),
+            ),
+            Field::new(
+                "placed",
+                RangeInput::dates("placed[gte]", "placed[lte]").values("2026-11-01", "2026-11-12"),
+            ),
+            Field::new("discount", SliderInput::between(0, 30).step(5).value(10)),
+            Field::new("tint", ColourInput::new("#22c55e")),
+            Field::new(
+                "photo",
+                FileInput::new().accept("image/*").capture("environment"),
+            ),
+        ];
+        let controls: Vec<String> = fields
+            .iter()
+            .map(|field| {
+                let written = serde_json::to_value(&field.input).unwrap();
+                written["t"].as_str().unwrap().to_owned()
+            })
+            .collect();
+        assert_eq!(
+            controls,
+            [
+                "text", "text", "text", "toggle", "toggle", "choice", "choices", "date", "range",
+                "slider", "colour", "file"
+            ]
+        );
+        assert_eq!(
+            serde_json::to_string(&fields[2].input).unwrap(),
+            r#"{"t":"text","kind":"decimal","min":"0","max":"2.5","step":"0.1","suffix":"kg"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&fields[9].input).unwrap(),
+            r#"{"t":"slider","min":"0","max":"30","step":"5","value":"10"}"#
+        );
+        // A field's value goes to its control, whatever the control is.
+        let day = Field::new("day", DateInput::date()).value("2026-11-12");
+        assert!(matches!(&day.input, Input::Date(date) if date.value == "2026-11-12"));
     }
 }
