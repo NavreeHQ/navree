@@ -303,6 +303,7 @@ impl Donut {
                 &self.common.id(),
                 parts.iter().map(|(name, ..)| name.as_str()),
                 std::iter::once((&*labels.value, values.as_slice())),
+                None,
             );
         }
         Some(Drawn {

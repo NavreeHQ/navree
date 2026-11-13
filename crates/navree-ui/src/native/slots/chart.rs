@@ -14,7 +14,7 @@
 use navree_native::node as n;
 
 use super::super::lower::{
-    Cx, N, Parts, Read, attr, elements, fail, flat, has, hooks, id, text_of,
+    Cx, N, Parts, Read, attr, elements, fail, fail_on, flat, has, hooks, id, text_of,
 };
 use crate::node::{Element, Node};
 
@@ -27,6 +27,7 @@ pub(crate) const HOOKS: &[&str] = &["data-ui-chart"];
 pub(crate) fn written<'a>(
     labels: impl Iterator<Item = &'a str>,
     series: impl Iterator<Item = (&'a str, &'a [Option<f64>])>,
+    extras: Option<serde_json::Value>,
 ) -> Option<String> {
     if !crate::native::Client::current().is_native() {
         return None;
@@ -54,6 +55,7 @@ pub(crate) fn written<'a>(
         serde_json::json!({
             "labels": labels.collect::<Vec<_>>(),
             "series": lines,
+            "extras": extras,
         })
         .to_string(),
     )
@@ -61,6 +63,16 @@ pub(crate) fn written<'a>(
 
 /// `Chart`, `Donut`, `Funnel`: a figure.
 pub(crate) fn figure(cx: &mut Cx, element: &Element) -> Read {
+    // The charts the toolkit has beyond the lines, bars, donut, funnel and sparkline: the
+    // protocol has a kind for each of them and none has a reader yet. Named, never guessed.
+    if let Some(kind) = attr(element, "data-kind")
+        && let Some(waits) = waiting(&kind)
+    {
+        return fail_on(
+            format!("chart:{kind}"),
+            format!("a chart with no reader here yet: the protocol has {waits} for it"),
+        );
+    }
     let mut parts = Parts::of(element);
     let header = parts.slot("chart-header");
     let state = parts.slot("chart-state");
@@ -102,7 +114,7 @@ pub(crate) fn figure(cx: &mut Cx, element: &Element) -> Read {
     let Some(values) = written_for(element) else {
         return fail("a chart built outside a native request, with no numbers to read");
     };
-    let (labels, series) = numbers(&values)?;
+    let (labels, series, extras) = numbers(&values)?;
     let kind = match attr(element, "data-kind").as_deref() {
         Some("line") => n::ChartKind::Line,
         Some("area") => n::ChartKind::Area,
@@ -119,7 +131,8 @@ pub(crate) fn figure(cx: &mut Cx, element: &Element) -> Read {
     };
     let series = series
         .into_iter()
-        .map(|(label, values)| {
+        .enumerate()
+        .map(|(at, (label, values))| {
             let words = shown
                 .iter()
                 .find(|(name, _)| *name == label)
@@ -130,6 +143,13 @@ pub(crate) fn figure(cx: &mut Cx, element: &Element) -> Read {
                 label,
                 values,
                 shown: words,
+                unit: extras.units.get(at).cloned().flatten(),
+                colour: extras
+                    .hues
+                    .get(at)
+                    .copied()
+                    .flatten()
+                    .map(n::Colour::new),
                 ..n::Series::default()
             }
         })
@@ -140,8 +160,35 @@ pub(crate) fn figure(cx: &mut Cx, element: &Element) -> Read {
         title,
         labels,
         series,
+        x: extras.x,
+        y: extras.y,
+        references: extras.references,
+        zones: extras.zones,
+        levels: extras.levels,
+        curve: extras.curve,
+        stacking: extras.stacking,
+        horizontal: extras.horizontal,
+        summary: extras.summary.filter(|summary| !summary.is_empty()),
         ..n::Chart::default()
     })])
+}
+
+/// What the protocol has for each chart the toolkit draws that no reader reads yet.
+fn waiting(kind: &str) -> Option<&'static str> {
+    Some(match kind {
+        "ring" => "a `ring`",
+        "rings" => "`rings`",
+        "gauge" => "a `gauge` with zones",
+        "day-clock" => "a `day_clock`",
+        "meter" => "a `meter`",
+        "mini-columns" => "`columns`",
+        "color-strip" => "a `strip`",
+        "range-scale" => "a `range`",
+        "calendar-heatmap" => "a `calendar_heatmap`",
+        "matrix-heatmap" | "relation-list" => "a `matrix_heatmap`",
+        "scatter" => "a `scatter`",
+        _ => return None,
+    })
 }
 
 /// What the chart with this figure wrote during the request that is current.
@@ -197,14 +244,38 @@ fn unready(state: &Element) -> Read<N> {
     }
 }
 
-/// The labels and series a chart wrote for a native client.
-type Numbers = (Vec<String>, Vec<(String, Vec<Option<serde_json::Number>>)>);
+/// What a chart says beside its numbers, in the protocol's own words: written by the
+/// chart (see `Chart::native_extras`), read here, every part optional.
+#[derive(Default, serde::Deserialize)]
+#[serde(default)]
+struct Extras {
+    x: Option<n::Measure>,
+    y: Option<n::Measure>,
+    references: Vec<n::Reference>,
+    zones: Vec<n::Zone>,
+    levels: Vec<String>,
+    curve: n::Curve,
+    stacking: n::Stacking,
+    horizontal: bool,
+    summary: Option<String>,
+    units: Vec<Option<String>>,
+    hues: Vec<Option<n::Hue>>,
+}
+
+/// The labels and series a chart wrote for a native client, with what it says beside them.
+type Numbers = (
+    Vec<String>,
+    Vec<(String, Vec<Option<serde_json::Number>>)>,
+    Extras,
+);
 
 fn numbers(json: &str) -> Read<Numbers> {
     #[derive(serde::Deserialize)]
     struct Written {
         labels: Vec<String>,
         series: Vec<Line>,
+        #[serde(default)]
+        extras: Option<Extras>,
     }
     #[derive(serde::Deserialize)]
     struct Line {
@@ -226,6 +297,7 @@ fn numbers(json: &str) -> Read<Numbers> {
             .into_iter()
             .map(|line| (line.label, line.values))
             .collect(),
+        written.extras.unwrap_or_default(),
     ))
 }
 
@@ -335,6 +407,94 @@ mod tests {
                 .iter()
                 .any(|name| name == "chart-title-hidden")
         );
+    }
+
+    #[test]
+    fn what_the_chart_says_beside_its_numbers_is_what_the_protocols_chart_carries() {
+        use crate::charts::{Annotation, Curve, Reference, Zone};
+        use navree_native::node as nn;
+        let chart = chart_of(|| {
+            Chart::line("Sleep")
+                .categories(["Mon", "Tue", "Wed"])
+                .series(Series::new("Heart rate", [52, 58, 61]).unit("bpm").color(3))
+                .series(Series::new("Resting", [48, 49, 47]).unit("bpm"))
+                .curve(Curve::Monotone)
+                .x_label("Night")
+                .y_min(40)
+                .y_max(80)
+                .reference(Reference::level(60).label("Limit"))
+                .reference(Reference::average())
+                .annotation(Annotation::target(55, "Target"))
+                .zone(Zone::new(50, 60).label("Optimal"))
+                .summary("Heart rate over three nights")
+                .into()
+        });
+        assert_eq!(chart.curve, nn::Curve::Smooth);
+        assert_eq!(chart.stacking, nn::Stacking::Apart);
+        assert!(!chart.horizontal);
+        assert_eq!(chart.x.as_ref().and_then(|x| x.name.as_deref()), Some("Night"));
+        let y = chart.y.as_ref().expect("a value axis");
+        // Both series count the same, so the axis does too; its bounds are the page's.
+        assert_eq!(y.unit.as_deref(), Some("bpm"));
+        assert_eq!(
+            (y.min.as_ref().map(ToString::to_string), y.max.as_ref().map(ToString::to_string)),
+            (Some("40".into()), Some("80".into()))
+        );
+        let levels: Vec<(Option<String>, Option<&str>)> = chart
+            .references
+            .iter()
+            .map(|r| (r.value.as_ref().map(ToString::to_string), r.label.as_deref()))
+            .collect();
+        // A level, the average worked out into a level, and a target.
+        assert_eq!(levels.len(), 3, "{levels:?}");
+        assert_eq!(levels[0], (Some("60".into()), Some("Limit")));
+        assert!(levels[1].0.is_some());
+        assert_eq!(levels[2], (Some("55".into()), Some("Target")));
+        assert!(chart.references.iter().all(|r| r.kind == nn::ReferenceKind::Level));
+        let [zone] = chart.zones.as_slice() else {
+            panic!("not one zone: {:?}", chart.zones);
+        };
+        assert_eq!((zone.from.to_string(), zone.to.to_string()), ("50".into(), "60".into()));
+        assert_eq!(zone.label.as_deref(), Some("Optimal"));
+        assert_eq!(chart.summary.as_deref(), Some("Heart rate over three nights"));
+        let [first, second] = chart.series.as_slice() else {
+            panic!("not two series");
+        };
+        assert_eq!(first.unit.as_deref(), Some("bpm"));
+        assert_eq!(first.colour.as_ref().map(|c| c.hue), Some(nn::Hue::Green));
+        assert!(second.colour.is_some());
+
+        // Bars that lie along rows, one on another as shares, and the names of a value axis.
+        let bars = chart_of(|| {
+            Chart::bar("Stages")
+                .categories(["Mon", "Tue"])
+                .series(Series::new("Deep", [1, 2]))
+                .series(Series::new("Light", [3, 2]))
+                .stacked_percent()
+                .horizontal()
+                .into()
+        });
+        assert_eq!(bars.stacking, nn::Stacking::Shares);
+        assert!(bars.horizontal);
+        let levels = chart_of(|| {
+            Chart::line("Stages")
+                .categories(["22:00", "23:00"])
+                .series(Series::new("Stage", [0, 2]))
+                .curve(Curve::Step)
+                .y_categories(["Awake", "Light", "Deep"])
+                .into()
+        });
+        assert_eq!(levels.levels, ["Awake", "Light", "Deep"]);
+        assert_eq!(levels.curve, nn::Curve::Step);
+        // A chart that says none of this carries none of it.
+        let plain = chart_of(|| {
+            Chart::line("Plain")
+                .categories(["Mon", "Tue"])
+                .series(Series::new("A", [1, 2]))
+                .into()
+        });
+        assert!(plain.x.is_none() && plain.references.is_empty() && plain.zones.is_empty());
+        assert_eq!((plain.curve, plain.stacking), (nn::Curve::Linear, nn::Stacking::Apart));
     }
 
     #[test]

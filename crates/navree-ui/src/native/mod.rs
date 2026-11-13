@@ -71,8 +71,9 @@ pub(crate) fn record_chart_numbers<'a>(
     id: &str,
     labels: impl Iterator<Item = &'a str>,
     series: impl Iterator<Item = (&'a str, &'a [Option<f64>])>,
+    extras: Option<serde_json::Value>,
 ) {
-    if let Some(values) = chart_numbers(labels, series) {
+    if let Some(values) = chart_numbers(labels, series, extras) {
         record_chart(id, values);
     }
 }

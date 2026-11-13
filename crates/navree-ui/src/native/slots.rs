@@ -160,9 +160,38 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
         "toggle-group" => (toggle::toggle_group, toggle::HOOKS),
         "sortable" => (sortable::sortable, sortable::HOOKS),
         "upload" => (upload::upload, upload::HOOKS),
+        // Parts of the toolkit's app blocks that have no reader yet: each is named, with what
+        // the protocol has for it, so a page that holds one is answered with the web view
+        // and says which part it is.
+        "dock" | "dock-item" => {
+            return Some(waiting(slot, "the protocol's shell names a dock's destinations"));
+        }
+        "day-pager" | "day-pager-day" | "day-pager-face" => {
+            return Some(waiting(slot, "the protocol has a `day_pager` for it"));
+        }
+        "info-tip" | "info-tip-content" | "info-tip-title" => {
+            return Some(waiting(slot, "the protocol has a `hint` for it"));
+        }
+        "meter" | "meter-track" | "meter-fill" | "meter-goal" => {
+            return Some(waiting(
+                slot,
+                "a progress bar with a goal, a glow or its own colours: the protocol's `progress` has none of them",
+            ));
+        }
+        "copy-field" | "auth-layout" | "breathing" | "chart-skeleton" => {
+            return Some(waiting(slot, "the protocol has no kind for it"));
+        }
         _ => return None,
     };
     Some(hooks(element, known).and_then(|()| reader(cx, element)))
+}
+
+/// A part with no reader yet, named: a miss, never a guess.
+fn waiting(slot: &str, what: &str) -> Read {
+    fail_on(
+        format!("slot:{slot}"),
+        format!("a part with no reader here yet: {what}"),
+    )
 }
 
 /// A menu's button read together with the popup it opens, when `element` is
@@ -479,6 +508,14 @@ fn alert(cx: &mut Cx, element: &Element) -> Read {
 /// `Stat`: a figure under its label, as a small section.
 fn stat(cx: &mut Cx, element: &Element) -> Read {
     let mut parts = Parts::of(element);
+    // A stat with an icon, a status or a graphic beside it: the protocol's `figure` has a field
+    // for each and this reader reads none of them yet. Named, never guessed.
+    if parts.slot("stat-head").is_some() || parts.slot("stat-body").is_some() {
+        return waiting(
+            "stat",
+            "a stat with an icon, a status or an aside has fields in the protocol's `figure`",
+        );
+    }
     let Some(label) = parts.slot("stat-label") else {
         return fail("a figure with no label");
     };
@@ -492,6 +529,16 @@ fn stat(cx: &mut Cx, element: &Element) -> Read {
         id: id(element),
         label: text_of(label),
         value: text_of(value),
+        // A stat that links is a tile that opens the page it is about.
+        action: flat(label.child_nodes())
+            .into_iter()
+            .find_map(|part| match part {
+                Node::Element(link) if slot(link).as_deref() == Some("stat-link") => {
+                    attr(link, "href")
+                }
+                _ => None,
+            })
+            .map(|href| Action::navigate(href.into_owned())),
         ..n::Figure::default()
     };
     if let Some(trend) = trend {
@@ -1966,6 +2013,92 @@ mod tests {
         assert_eq!(moments[2].state, Some(n::RowState::Current));
         assert_eq!(moments[2].time.as_deref(), Some("Next"));
         assert_eq!(moments[3].state, Some(n::RowState::Upcoming));
+    }
+
+    #[test]
+    fn what_the_toolkit_has_beyond_what_is_read_is_a_named_miss_and_never_a_guess() {
+        use crate::charts::{
+            CalendarHeatmap, ColorStrip, DayClock, Gauge, MatrixHeatmap, Meter, MiniColumn,
+            MiniColumns, RangeScale, Ring, RingValue, Rings, Scatter, Segment,
+        };
+        use crate::native::TestNative;
+        use crate::{CopyField, DayPager, Dock, DockItem, InfoTip, View};
+        use navree_native::{Client, FormFactor, Platform};
+        let phone = || Client::new(Platform::Android, FormFactor::Phone);
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 11, 12).expect("a day");
+        let parts: Vec<(Node, &str)> = vec![
+            (Ring::new("Score", 72).into(), "chart:ring"),
+            (
+                Rings::new("Activity").ring(RingValue::new("Move", 40)).into(),
+                "chart:rings",
+            ),
+            (Gauge::new("Heart rate", 64).into(), "chart:gauge"),
+            (DayClock::new("The day").into(), "chart:day-clock"),
+            (
+                Meter::new("Sleep").segment(Segment::new("Deep", 90)).into(),
+                "chart:meter",
+            ),
+            (
+                MiniColumns::new("The week")
+                    .part_auto("Asleep")
+                    .column(MiniColumn::new("Mon", [Some(1.0)]))
+                    .into(),
+                "chart:mini-columns",
+            ),
+            (
+                ColorStrip::new("Readings").cell("Mon", "Fine").into(),
+                "chart:color-strip",
+            ),
+            (RangeScale::new("Resting", 52).into(), "chart:range-scale"),
+            (
+                CalendarHeatmap::new("Steps").day(day, 3).into(),
+                "chart:calendar-heatmap",
+            ),
+            (MatrixHeatmap::new("Relations").into(), "chart:matrix-heatmap"),
+            (Scatter::new("Pairs").into(), "chart:scatter"),
+            (
+                Dock::new("Main").item(DockItem::new("Home", "/")).into(),
+                "slot:dock",
+            ),
+            (DayPager::new("pager", "Today").into(), "slot:day-pager"),
+            (CopyField::new("key", "Key", "abc").into(), "slot:copy-field"),
+            (crate::Progress::new(40, 100, "Done").goal(80).into(), "slot:meter"),
+        ];
+        for (node, named) in parts {
+            let page = TestNative::build(phone(), move || View::new("x").body(node));
+            assert!(!page.is_native(), "{named} was read");
+            assert_eq!(page.why(), [named], "{named}");
+            // It says why, in words, and the page is the web view's, not a crash.
+            assert!(
+                page.page().misses[0].why.contains("no reader here yet"),
+                "{named}"
+            );
+        }
+        // An info tip is two parts, a mark and what it opens.
+        let page = TestNative::build(phone(), || {
+            View::new("x").body(InfoTip::new("tip", "About this"))
+        });
+        assert_eq!(page.why(), ["slot:info-tip", "slot:info-tip-content"]);
+    }
+
+    #[test]
+    fn a_stat_that_links_opens_its_page_and_one_with_more_parts_than_are_read_is_a_named_miss() {
+        use crate::Stat;
+        let N::Figure(linked) = read(Stat::new("Steps", "8,200").href("/steps")) else {
+            panic!("not a figure");
+        };
+        assert_eq!(linked.label, "Steps");
+        assert_eq!(linked.action, Some(Action::navigate("/steps")));
+        for stat in [
+            Stat::new("Steps", "8,200").icon(icons::SHOPPING_BAG),
+            Stat::new("Steps", "8,200").status(Badge::new("ok")),
+            Stat::new("Steps", "8,200").aside(Text::new("graphic")),
+        ] {
+            let node: Node = stat.into();
+            let lowered = lower(&node);
+            assert_eq!(lowered.why(), ["slot:stat"]);
+            assert!(lowered.misses[0].why.contains("no reader here yet"));
+        }
     }
 
     #[test]

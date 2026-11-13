@@ -471,6 +471,7 @@ impl Sparkline {
                 &self.common.id(),
                 names.iter().map(String::as_str),
                 std::iter::once((self.common.title.as_str(), values.as_slice())),
+                None,
             );
         }
         Some(Drawn {

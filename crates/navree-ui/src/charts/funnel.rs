@@ -250,6 +250,7 @@ impl Funnel {
                 &self.common.id(),
                 self.stages.iter().map(|stage| stage.name.as_str()),
                 std::iter::once((&*labels.value, values.as_slice())),
+                None,
             );
         }
         Some(Drawn {
