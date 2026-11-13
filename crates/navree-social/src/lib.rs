@@ -24,7 +24,8 @@
 //! - **Native apps** sign in with the identity token the system's sheet
 //!   gives them (Sign in with Apple, Android's Credential Manager), bound
 //!   to a one-time nonce the server issued, for one of the site's app ids
-//!   (`auth.apps.apple` bundle ids; the Google client id). Apple's
+//!   (`auth.apps.apple` bundle ids; the Google client id, offered only
+//!   with an Android app in `auth.apps.android`). Apple's
 //!   authorization code is exchanged and its tokens kept, so that
 //!   disconnecting Apple, [`Social::revoke_tokens`] and navree-auth's
 //!   offboarding revoke them at Apple ([`Social::native_user`]).

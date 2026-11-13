@@ -15,7 +15,8 @@
 //!    the attempt is used up, the token's signature is checked against the
 //!    provider's key set, then its issuer, its audience (one of the site's
 //!    app ids: the bundle ids of `auth.apps.apple`, or the Google client
-//!    id an Android app passes as its server client id), its expiry, its
+//!    id an Android app passes as its server client id, when
+//!    `auth.apps.android` lists an app), its expiry, its
 //!    issue time (not before the attempt started) and its nonce. A token
 //!    taken from another attempt or made for another app is refused.
 //! 4. The person is signed in by [`Social::sign_in`], exactly as after the
@@ -70,8 +71,9 @@ impl Social {
     /// request and the sealed `state` to post back with the identity token,
     /// within `expires_in` seconds, once. Nothing is stored.
     ///
-    /// [`SocialError::NativeUnavailable`] (404) for other providers, and
-    /// for Apple when `auth.apps.apple` lists no app.
+    /// [`SocialError::NativeUnavailable`] (404) for other providers, for
+    /// Apple when `auth.apps.apple` lists no app, and for Google when
+    /// `auth.apps.android` lists none.
     pub async fn native_nonce(&self, provider: &str) -> Result<NativeNonce, SocialError> {
         let rt = self.rt()?;
         let entry = rt.provider(provider)?;
@@ -561,11 +563,13 @@ fn is_unavailable(status: u16) -> bool {
 }
 
 /// The audiences a native identity token of `entry` may carry: the bundle
-/// ids of `auth.apps.apple` for Apple, the Google client id for Google.
+/// ids of `auth.apps.apple` for Apple; for Google, its client id, when the
+/// site has an Android app in `auth.apps.android` (none: no native sign-in,
+/// as for Apple without an Apple app).
 fn native_audiences(rt: &Runtime, entry: &ProviderEntry) -> Result<Vec<String>, SocialError> {
     let audiences = match entry.kind {
         Kind::Apple => rt.apple_apps.clone(),
-        Kind::Google => vec![entry.config.client_id.clone()],
+        Kind::Google if !rt.android_apps.is_empty() => vec![entry.config.client_id.clone()],
         _ => Vec::new(),
     };
     if audiences.is_empty() {

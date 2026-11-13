@@ -222,7 +222,7 @@ bundle_id = "com.sutlej.orders"
 ```
 
 - **Apple:** an identity token from an app is for its bundle id, so the audiences accepted are the `bundle_id`s of `auth.apps.apple`. Without an Apple app there, native Sign in with Apple answers 404 `native_sign_in_unavailable`.
-- **Google:** the Android app passes the Google provider's `client_id` (the web client id) to Credential Manager as its server client id (`GetGoogleIdOption.Builder().setServerClientId(..)`), so that is the audience accepted. On iPhone, sign in with Google through the system browser and the web flow.
+- **Google:** the Android app passes the Google provider's `client_id` (the web client id) to Credential Manager as its server client id (`GetGoogleIdOption.Builder().setServerClientId(..)`), so that is the audience accepted. It is offered only when the site lists an Android app in `auth.apps.android` (`[auth.apps.android.main]` with its `package` and `fingerprints`): without one, native Sign in with Google answers 404 `native_sign_in_unavailable`, as Apple's does without an Apple app, and Google is the web flow only. On iPhone, sign in with Google through the system browser and the web flow.
 
 ### What the app sends
 
