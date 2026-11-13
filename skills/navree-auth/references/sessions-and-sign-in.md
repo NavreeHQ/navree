@@ -18,6 +18,64 @@
   token_type, expires_in, auth_time}`; the session remembers it, refreshed
   tokens keep the new `auth_time`. Wrong password/code: 400 field error,
   counted by the login / two-factor throttles.
+- With passkeys on: `POST /api/auth/confirm/options` `{}` -> `{publicKey}`
+  (`userVerification: "required"`, 120 s, one use, this user and session);
+  `POST /api/auth/confirm/passkey` `{credential}` answers like `/confirm`.
+  Refused: 403 `confirmation_refused` (audited `auth.confirmation_refused`).
+
+## Confirming one action
+
+- `ConfirmAction::new("payments.approve").field("payment", id)
+  .field("amount_paise", amount)`: its `digest()` covers the name and every
+  field. The challenge is derived from it.
+- The handler builds the action from its own record and calls
+  `auth.confirm_action(&claims, &action, ConfirmProof::Passkey(credential),
+  &meta)`; a confirmation of another amount, record, session or user, a
+  replay, no UV or past 120 s is 403 `confirmation_refused`. Password and
+  code proofs are accepted too (they prove the person, not the action).
+- Challenge: `auth.confirmation_options(user_id, sid, &action)`, or a page's
+  `confirm` ticket posted to `POST /api/auth/confirm/options {ticket}`.
+
+## Tickets for results posted back
+
+- `dyn navree::contracts::CallTickets` (registered by `AuthModule`):
+  `issue(&TicketRequest::new(TicketHolder::of(principal), feature, "POST",
+  path).binding(digest))` while the page is built (writes nothing);
+  `redeem(&ticket, &TicketCheck::new(holder, feature).at("POST", path))` in
+  the route the result goes to. Once only (cache `add`), 5 min by default,
+  at most 1 h. Forged, expired, used, another session, feature or route:
+  `TicketError`; `AuthError::from(e)` is 422 `invalid_ticket`.
+
+## Native apps
+
+- Passkey origins: web origins and `https://<rp_id>` (Apple apps) in
+  `auth.passkeys.origins`; Android apps' `android:apk-key-hash:<b64url
+  SHA-256>` there or derived from `auth.apps.android.<name>.fingerprints`.
+  Compared exactly.
+- `auth.apps` (`paths`, `exclude`, `apple.<name>{team_id, bundle_id}`,
+  `android.<name>{package, fingerprints}`, each with `links` and
+  `credentials`) serves `/.well-known/apple-app-site-association` and
+  `/.well-known/assetlinks.json` (application/json, no redirect, 404 when
+  not configured).
+- Sign-in hand-over (feature `session`; an app of `auth.apps` with
+  `callback`, an https universal link or App Link; `custom_scheme = true`
+  for a scheme, which never reuses a browser's sign-in): the app opens the
+  system's sign-in session at `GET /auth/app/sign-in?platform=apple|android
+  &app=<bundle id|package>&code_challenge=<b64url SHA-256(verifier)>
+  &code_challenge_method=S256&state=..`; after the sign-in pages (`next` =
+  `/auth/app/finish`) the browser is sent to `<callback>?code=..&state=..`
+  (60 s, one use); the app posts `{platform, app, code, code_verifier}` to
+  `POST /api/auth/app/exchange` with `X-XSRF-TOKEN` -> 200 user and its own
+  session cookie. Wrong verifier, another app, used, expired, no S256
+  challenge, unknown app or callback: 400 `invalid_hand_over`. The browser
+  is signed out after unless it was signed in before or
+  `auth.apps.keep_browser_signed_in`.
+- A platform sign-in in the app answering `two_factor_required` (navree-social's
+  native session route): finish on `GET /sign-in/two-factor?next=..` inside
+  the app, or `POST /api/auth/session/2fa/verify {code}`.
+- With the facade's `auth` and `notify`: push devices end with their
+  session (sign-out, `DELETE /sessions/{id}`, logout all at once; revoked or
+  expired sessions before the next push, `AuthLiveSessions`).
 
 ## Impersonation
 

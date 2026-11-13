@@ -13,7 +13,7 @@ readme = "README.md"
 include = ["src/**", "README.md", "LICENSE-*"]
 
 [package.metadata.docs.rs]
-features = ["session", "ui"]
+features = ["session", "ui", "notify"]
 targets = ["x86_64-unknown-linux-gnu"]
 
 [lints]
@@ -35,6 +35,12 @@ session = ["dep:navree-session"]
 ## sign-out pages, drawn with navree-ui on the session. The facade turns it
 ## on when both its `auth` and `ui` features are on.
 ui = ["session", "dep:navree-ui", "dep:tower"]
+## Native apps' push devices (navree-notify): `AuthLiveSessions` answers the
+## push channel which sign-ins are live, and signing out, ending a session
+## from another device and logging out everywhere delete the devices those
+## sign-ins registered. The facade turns it on when both its `auth` and
+## `notify` features are on.
+notify = ["dep:navree-notify"]
 
 [dependencies]
 # base64 and ring: token exchange (JWS verification of trusted issuers' tokens)
@@ -57,6 +63,8 @@ navree-http-client = { workspace = true }
 navree-kernel = { workspace = true }
 # navree-mail: the account flows (password reset mail).
 navree-mail = { workspace = true }
+# Native apps' push devices end with their sign-in (feature `notify`).
+navree-notify = { workspace = true, optional = true }
 navree-openapi = { workspace = true }
 # Browser sign-in (feature `session`) and its pages (feature `ui`).
 navree-session = { workspace = true, optional = true }
@@ -86,7 +94,7 @@ zeroize = { workspace = true }
 # The tests run on SQLite files (the driver is opt-in).
 navree-db = { workspace = true, features = ["sqlite"] }
 # The crate's own tests sign browsers in and draw the pages.
-navree-auth = { path = ".", features = ["session", "ui"] }
+navree-auth = { path = ".", features = ["session", "ui", "notify"] }
 futures = { workspace = true }
 navree-api = { workspace = true }
 # The PostgreSQL test checks the impersonator column of the audit log.

@@ -230,6 +230,82 @@ impl Module for AuthPages {
             async move { Ok(Arc::new(pages)) }
         }))
         .controller::<PagesController>();
+        // A native client reads where the hand-over starts, where its code is exchanged,
+        // where it comes back and where a second step is finished from the shell document.
+        let pages = self.clone();
+        m.multi(
+            Factory::<dyn navree_ui::NativeShellPart>::new(move |r: Resolver| {
+                let pages = pages.clone();
+                async move {
+                    let app = r.app();
+                    let apps = r.get::<crate::AppsOptions>().await?;
+                    let options = r.get::<crate::AuthOptions>().await?;
+                    let sessions = app
+                        .try_get::<navree_session::SessionOptions>()
+                        .await
+                        .is_some();
+                    let api_prefix = match app.try_get::<navree_http::HttpOptions>().await {
+                        Some(http) => http.api_prefix.clone(),
+                        None => String::new(),
+                    };
+                    let ui = app.try_get::<PagesOptions>().await;
+                    let paths = Paths::new(&pages, ui.as_deref());
+                    Ok(Arc::new(HandOverShellPart {
+                        // The routes are mounted only where sessions are and an app can take part.
+                        handed_over: sessions && apps.has_hand_over(),
+                        apps,
+                        exchange: format!(
+                            "/{}/{}/app/exchange",
+                            api_prefix.trim_matches('/'),
+                            options.routes_prefix.trim_matches('/')
+                        )
+                        .replace("//", "/"),
+                        second_step: paths.two_factor,
+                    })
+                        as Arc<dyn navree_ui::NativeShellPart>)
+                }
+            })
+            .deps(vec![
+                ProviderKey::of::<crate::AppsOptions>(),
+                ProviderKey::of::<crate::AuthOptions>(),
+            ]),
+        );
+    }
+}
+
+/// What the shell document says of signing in from a native app: the hand-over's routes,
+/// the callback of the app that asks and the page of a second step.
+struct HandOverShellPart {
+    handed_over: bool,
+    apps: Arc<crate::AppsOptions>,
+    exchange: String,
+    second_step: String,
+}
+
+impl navree_ui::NativeShellPart for HandOverShellPart {
+    fn contribute(
+        &self,
+        shell: &mut navree_ui::NativeShellParts,
+        client: &navree_ui::NativeClient,
+    ) {
+        use navree_ui::NativeFamily;
+        if !self.handed_over {
+            return;
+        }
+        let mut routes = navree_ui::NativeSignIn::new(
+            crate::hand_over::APP_SIGN_IN_PATH,
+            self.exchange.as_str(),
+        )
+        .second_step(self.second_step.as_str());
+        let family = match client.family {
+            NativeFamily::Apple => Some("apple"),
+            NativeFamily::Android => Some("android"),
+            _ => None,
+        };
+        if let Some(callback) = family.and_then(|family| self.apps.first_callback(family)) {
+            routes = routes.callback(callback);
+        }
+        shell.sign_in(routes);
     }
 }
 
@@ -1531,8 +1607,10 @@ impl Controller for PagesController {
                             .sign_out_session(&session, &meta)
                             .await
                             .map_err(AuthError::into_app_error)?;
+                        // A native client forgets what it holds of the person.
                         Ok::<_, AppError>(
                             Reply::redirect(LocalHref::from(paths.after_sign_out.as_str()))
+                                .signed_out()
                                 .into_response(),
                         )
                     }
@@ -1758,6 +1836,50 @@ impl PagesController {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn part(handed_over: bool) -> HandOverShellPart {
+        let mut apps = crate::AppsOptions::default();
+        let apple = crate::apps::AppleApp {
+            bundle_id: "com.example.orders".to_owned(),
+            callback: Some("https://orders.example.in/app/apple".to_owned()),
+            ..Default::default()
+        };
+        apps.apple.insert("main".to_owned(), apple);
+        HandOverShellPart {
+            handed_over,
+            apps: Arc::new(apps),
+            exchange: "/api/auth/app/exchange".to_owned(),
+            second_step: "/sign-in/two-factor".to_owned(),
+        }
+    }
+
+    #[test]
+    fn the_shell_document_names_the_hand_over_and_the_callback_of_the_family_that_asks() {
+        use navree_ui::{NativeClient, NativeFamily, NativeShellPart, NativeShellParts};
+        let said = |family| {
+            let mut parts = NativeShellParts::default();
+            part(true).contribute(&mut parts, &NativeClient::new(family));
+            parts
+        };
+        let mut apple = NativeShellParts::default();
+        apple.sign_in(
+            navree_ui::NativeSignIn::new("/auth/app/sign-in", "/api/auth/app/exchange")
+                .callback("https://orders.example.in/app/apple")
+                .second_step("/sign-in/two-factor"),
+        );
+        assert_eq!(said(NativeFamily::Apple), apple);
+        // An Android client has no app of its own here, so no callback: it knows its own.
+        let mut android = NativeShellParts::default();
+        android.sign_in(
+            navree_ui::NativeSignIn::new("/auth/app/sign-in", "/api/auth/app/exchange")
+                .second_step("/sign-in/two-factor"),
+        );
+        assert_eq!(said(NativeFamily::Android), android);
+        // Where the hand-over routes are not mounted, nothing is said.
+        let mut none = NativeShellParts::default();
+        part(false).contribute(&mut none, &NativeClient::new(NativeFamily::Apple));
+        assert_eq!(none, NativeShellParts::default());
+    }
 
     #[test]
     fn the_paths_follow_the_ui_settings_unless_told() {

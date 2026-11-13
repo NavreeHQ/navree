@@ -59,6 +59,8 @@ reference `users` use `.after(["auth"])`.
 | `POST /email/verification`, `GET /email/verify/{id}/{hash}` | signed in / signed link | email verification |
 | `POST /2fa/enable`, `/2fa/confirm`, `/2fa/verify`, `/2fa/disable`, `/2fa/recovery-codes` | mixed | TOTP two-factor |
 | `GET /sessions`, `DELETE /sessions/{id}`, `POST /confirm` `{password}` or `{code}` | signed in | sessions; step-up confirmation |
+| `POST /confirm/options` `{ticket?}`, `POST /confirm/passkey` `{credential}` | signed in | passkey step-up and confirming one action (`auth.passkeys.enabled`) |
+| `GET /auth/app/sign-in`, `GET /auth/app/finish` (outside `/api`), `POST /app/exchange` `{platform, app, code, code_verifier}` | public | a native app takes over a sign-in from the system's sign-in session (PKCE S256; apps of `auth.apps` with a `callback`) |
 | `POST /impersonate/{user}` `{reason}`, `DELETE /impersonate` | `users.impersonate` / signed in | impersonation (`auth.impersonation.enabled`) |
 | `POST /magic-link`, `/magic-link/verify`, `/otp`, `/otp/verify` | public | passwordless (`auth.magic_link.enabled`, `auth.otp.enabled`) |
 | `/passkeys/register/options`, `/passkeys/register`, `/passkeys/login/options`, `/passkeys/login`, `GET /passkeys`, `DELETE /passkeys/{id}` | mixed | passkeys (`auth.passkeys.enabled`) |
@@ -92,6 +94,16 @@ access token and retries. Hand-written routes: `.guard(recent_auth(dur))`,
 `.guard(not_while_impersonating())`, `.guard(platform_session())`.
 Extractors: `AccessClaims` (the token's `sid`, `auth_time`, impersonator),
 `Actor` (user and impersonator), `PlatformAdmin(user)`.
+
+Approving one thing (a payment, a refund, a role change) needs more than a
+recent sign-in: build a `ConfirmAction` from the server's own record and
+check the passkey assertion with
+`auth.confirm_action(&claims, &action, ConfirmProof::Passkey(credential), &meta)`.
+The challenge was derived from the same action, so a confirmation of ₹100
+never approves ₹1,00,000. Results a client posts back later carry a sealed
+one-time ticket (`dyn navree::contracts::CallTickets`). Native apps: passkey
+origins and the association files of `auth.apps`. All in
+`references/sessions-and-sign-in.md`.
 
 ## Read the signed-in user
 
@@ -361,6 +373,13 @@ needs a real `users` row). To test sign-in itself, post to
   plain `#[authenticated]`.
 - Turning on impersonation without `AccessModule`: its route requires the
   permission `users.impersonate`.
+- Building a `ConfirmAction` from what the client posted (the amount in the
+  form) instead of the server's record: the binding then proves nothing.
+- Listing an Android debug certificate in production `auth.apps`: any
+  debug-signed copy of the app can then use the site's passkeys.
+- A native app exchanging a hand-over code that arrived when it had no
+  sign-in session open, or with another `state`: that is how a planted code
+  would arrive. Only exchange the callback of the app's own session.
 
 ## Docs
 

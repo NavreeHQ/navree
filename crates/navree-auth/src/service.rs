@@ -212,6 +212,9 @@ pub struct AuthService {
     sign_in_policies: OnceCell<Vec<Arc<dyn SignInPolicy>>>,
     pub(crate) policies: Policies,
     pub(crate) exchange: crate::exchange::KeyCache,
+    /// The origins passkey ceremonies may come from: `auth.passkeys.origins`
+    /// and the Android apps' signatures of `auth.apps`.
+    pub(crate) passkey_origins: Vec<String>,
 }
 
 impl Injectable for AuthService {
@@ -222,6 +225,7 @@ impl Injectable for AuthService {
             ProviderKey::of::<Encrypter>(),
             ProviderKey::of::<JwtService>(),
             ProviderKey::of::<AuthOptions>(),
+            ProviderKey::of::<crate::AppsOptions>(),
         ]
     }
 
@@ -232,6 +236,11 @@ impl Injectable for AuthService {
             let encrypter = r.get::<Encrypter>().await?;
             let jwt = r.get::<JwtService>().await?;
             let options = r.get::<AuthOptions>().await?;
+            let apps = r.get::<crate::AppsOptions>().await?;
+            let mut passkey_origins = options.passkeys.origins.clone();
+            passkey_origins.extend(apps.passkey_origins());
+            passkey_origins.sort();
+            passkey_origins.dedup();
             let app = r.app();
             // The app's cache when CacheModule is in the app (shared by
             // every instance with a shared store), else an in-process one.
@@ -281,6 +290,7 @@ impl Injectable for AuthService {
                 sign_in_policies: OnceCell::new(),
                 policies: Policies::default(),
                 exchange: crate::exchange::KeyCache::default(),
+                passkey_origins,
             })
         })
     }
@@ -677,22 +687,28 @@ impl AuthService {
     ) -> Result<(), AuthError> {
         let presented = refresh_token.and_then(RefreshSecret::parse);
         let now = self.clock.now();
-        let revoked = self
+        let (revoked, family) = self
             .write(Some(user_id), |uow| async move {
                 if all {
-                    return revoke_user(&uow, user_id, now).await;
+                    return Ok((revoke_user(&uow, user_id, now).await?, None));
                 }
                 let Some(presented) = presented else {
-                    return Ok(0);
+                    return Ok((0, None));
                 };
                 match RefreshToken::find(&uow, presented.id()).await? {
-                    Some(row) if row.user_id == user_id && same_hash(&row, &presented) => {
-                        revoke_family(&uow, row.family_id, now).await
-                    }
-                    _ => Ok(0),
+                    Some(row) if row.user_id == user_id && same_hash(&row, &presented) => Ok((
+                        revoke_family(&uow, row.family_id, now).await?,
+                        Some(row.family_id),
+                    )),
+                    _ => Ok((0, None)),
                 }
             })
             .await?;
+        if all {
+            self.session_ended(user_id, None).await;
+        } else if let Some(family) = family {
+            self.session_ended(user_id, Some(family)).await;
+        }
         let mut logout = AuditEntry::new(AuditKind::Auth, "auth.logout")
             .actor(user_id)
             .metadata(json!({ "all": all, "revoked": revoked }));

@@ -5,8 +5,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use http::{Method, StatusCode};
+use navree_contracts::{AuthState, CallTickets, TicketCheck, TicketError, TicketHolder};
 use navree_http::{
-    ApiMeta, AppError, Controller, IntoResponse, Json, NoContent, Path, RouteDef, schema_fn,
+    ApiMeta, AppError, Controller, Extension, IntoResponse, Json, NoContent, Path, RouteDef,
+    schema_fn,
 };
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_openapi::ToSchema;
@@ -16,11 +18,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+use super::confirm::{ConfirmAction, STEP_UP_ACTION, is_digest};
 use super::{MAX_PASSKEY_NAME, PasskeyResource};
-use crate::controller::{OptionalBody, api, login_response};
+use crate::controller::{BrowserSession, OptionalBody, api, login_response};
 use crate::{
-    AuthError, AuthOptions, AuthService, ClientMeta, CurrentUser, LoginResponse,
-    not_while_impersonating,
+    AccessClaims, AuthError, AuthOptions, AuthService, ClientMeta, ConfirmProof, ConfirmedToken,
+    CurrentUser, LoginResponse, not_while_impersonating,
 };
 
 /// Ceremony option requests one client may make per minute.
@@ -61,6 +64,30 @@ pub struct PasskeyLoginInput {
     pub credential: Value,
 }
 
+/// `POST /auth/confirm/options`: the ticket of a confirmation a page asked
+/// for (the `confirm` call's), or nothing for a plain step-up.
+#[derive(Debug, Default, Deserialize, Validate, ToSchema)]
+#[non_exhaustive]
+pub struct ConfirmOptionsInput {
+    /// The sealed ticket the page issued with the call (its binding is the
+    /// digest of the action to confirm). Used up here.
+    #[validate(length(min = 1, max = 4096))]
+    #[serde(default)]
+    pub ticket: Option<String>,
+}
+
+/// `POST /auth/confirm/passkey`: a step-up with a passkey, the assertion
+/// from `navigator.credentials.get()` (its `toJSON()`) over the options of
+/// `POST /auth/confirm/options`.
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+#[non_exhaustive]
+pub struct ConfirmPasskeyInput {
+    /// The `PublicKeyCredential` JSON.
+    #[validate(skip)]
+    #[schema(value_type = Object)]
+    pub credential: Value,
+}
+
 /// Ceremony options: `{"publicKey": {...}}`, for
 /// `PublicKeyCredential.parseCreationOptionsFromJSON` /
 /// `parseRequestOptionsFromJSON`.
@@ -83,6 +110,7 @@ pub struct PasskeyList {
 pub(crate) struct PasskeyController {
     service: Arc<AuthService>,
     options: Arc<AuthOptions>,
+    tickets: Arc<dyn CallTickets>,
 }
 
 impl Injectable for PasskeyController {
@@ -90,6 +118,7 @@ impl Injectable for PasskeyController {
         vec![
             ProviderKey::of::<AuthService>(),
             ProviderKey::of::<AuthOptions>(),
+            ProviderKey::of::<dyn CallTickets>(),
         ]
     }
 
@@ -98,8 +127,124 @@ impl Injectable for PasskeyController {
             Ok(PasskeyController {
                 service: r.get::<AuthService>().await?,
                 options: r.get::<AuthOptions>().await?,
+                tickets: r.get::<dyn CallTickets>().await?,
             })
         })
+    }
+}
+
+/// The `confirm` call's name in tickets.
+pub(crate) const CONFIRM_FEATURE: &str = "confirm";
+
+impl PasskeyController {
+    /// `POST /confirm/options` and `POST /confirm/passkey`.
+    fn confirm_routes(&self, path: &dyn Fn(&str) -> String) -> Vec<RouteDef> {
+        let mut routes = Vec::new();
+
+        let service = self.service.clone();
+        let tickets = self.tickets.clone();
+        let options =
+            move |claims: AccessClaims,
+                  state: Extension<AuthState>,
+                  OptionalBody(input): OptionalBody<ConfirmOptionsInput>| {
+                let service = service.clone();
+                let tickets = tickets.clone();
+                async move {
+                    let digest = match input.ticket {
+                        // The action the page asked about, sealed in its ticket
+                        // for this session.
+                        Some(ticket) => {
+                            let check = TicketCheck::new(
+                                TicketHolder::of(state.0.0.as_ref()),
+                                CONFIRM_FEATURE,
+                            );
+                            let redeemed = tickets
+                                .redeem(&ticket, &check)
+                                .await
+                                .map_err(|error| AuthError::from(error).into_app_error())?;
+                            redeemed
+                                .binding
+                                .filter(|digest| is_digest(digest))
+                                .ok_or_else(|| {
+                                    AuthError::from(TicketError::Malformed).into_app_error()
+                                })?
+                        }
+                        None => ConfirmAction::new(STEP_UP_ACTION).digest(),
+                    };
+                    let public_key = service
+                        .confirmation_options_for(claims.sub, claims.sid, digest)
+                        .await
+                        .map_err(AuthError::into_app_error)?;
+                    Ok::<_, AppError>(Json(PasskeyOptionsResponse { public_key }))
+                }
+            };
+        routes.push(
+            RouteDef::on(Method::POST, path("/confirm/options"), options)
+                .authenticated()
+                .guard(not_while_impersonating())
+                .throttle(OPTIONS_PER_MINUTE, Duration::from_secs(60))
+                .name("auth.confirm.options")
+                .api(ApiMeta {
+                    description: Some(
+                        "A challenge for confirming with a passkey (user verification \
+                         required, two minutes, one use). With the `ticket` of a page's \
+                         `confirm` call, the challenge is derived from that action, and the \
+                         assertion goes to the page's own route; without one, it is for \
+                         `POST /auth/confirm/passkey`."
+                            .to_owned(),
+                    ),
+                    request: Some(schema_fn::<ConfirmOptionsInput>),
+                    response: Some(schema_fn::<PasskeyOptionsResponse>),
+                    ..api("Start confirming with a passkey", &[401, 403, 422, 429])
+                }),
+        );
+
+        let service = self.service.clone();
+        let step_up =
+            move |claims: AccessClaims,
+                  meta: ClientMeta,
+                  browser: BrowserSession,
+                  Valid(Json(input)): Valid<Json<ConfirmPasskeyInput>>| {
+                let service = service.clone();
+                async move {
+                    let proof = ConfirmProof::Passkey(input.credential);
+                    // A browser signed in on its session: the sign-in's time
+                    // moves on; it gets no token.
+                    #[cfg(feature = "session")]
+                    if let Some(session) = browser.0 {
+                        service
+                            .confirm_session(&session, proof, &meta)
+                            .await
+                            .map_err(AuthError::into_app_error)?;
+                        return Ok::<_, AppError>(NoContent.into_response());
+                    }
+                    #[cfg(not(feature = "session"))]
+                    let _ = browser;
+                    let confirmed = service
+                        .confirm(&claims, proof, &meta)
+                        .await
+                        .map_err(AuthError::into_app_error)?;
+                    Ok::<_, AppError>(Json(confirmed).into_response())
+                }
+            };
+        routes.push(
+            RouteDef::on(Method::POST, path("/confirm/passkey"), step_up)
+                .authenticated()
+                .guard(not_while_impersonating())
+                .name("auth.confirm.passkey")
+                .api(ApiMeta {
+                    description: Some(
+                        "Confirms with a passkey, as `POST /auth/confirm` does with the \
+                         password: a new access token whose `auth_time` is now, or 204 for a \
+                         browser signed in on the session cookie."
+                            .to_owned(),
+                    ),
+                    request: Some(schema_fn::<ConfirmPasskeyInput>),
+                    response: Some(schema_fn::<ConfirmedToken>),
+                    ..api("Confirm your identity with a passkey", &[400, 401, 403])
+                }),
+        );
+        routes
     }
 }
 
@@ -260,6 +405,9 @@ impl Controller for PasskeyController {
                     ..api("Sign in with a passkey", &[400, 401])
                 }),
         );
+        // Beside `POST /confirm`: `/confirm/options`, `/confirm/passkey`.
+        let beside_confirm = |p: &str| format!("{prefix}{p}");
+        routes.extend(self.confirm_routes(&beside_confirm));
         routes
     }
 }
