@@ -20,6 +20,11 @@ use crate::{Notifiable, NotifyError, USER_NOTIFIABLE_TYPE};
 /// characters; Apple's are 64 hex digits today).
 const MAX_TOKEN: usize = 4096;
 
+/// The most push devices one notifiable keeps. A device registered beyond
+/// it replaces the one that registered longest ago (a phone given away or
+/// an app removed without signing out).
+pub const MAX_DEVICES_PER_NOTIFIABLE: usize = 20;
+
 /// The system a native app runs on, which says which service reaches it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -339,8 +344,8 @@ pub trait LiveSessions: Send + Sync + 'static {
     ) -> BoxFuture<'a, Result<Vec<String>, BoxError>>;
 }
 
-/// The apps devices may register for, by platform; an empty list takes
-/// any app id.
+/// The apps devices may register for, by platform; a platform with none
+/// listed takes no device.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct RegisteredApps {
     pub(crate) ios: Vec<String>,
@@ -353,7 +358,7 @@ impl RegisteredApps {
             PushPlatform::Ios => &self.ios,
             PushPlatform::Android => &self.android,
         };
-        apps.is_empty() || apps.iter().any(|app| app == app_id)
+        apps.iter().any(|app| app == app_id)
     }
 }
 
@@ -362,26 +367,38 @@ impl RegisteredApps {
 /// Firebase report gone.
 ///
 /// The signed-in user registers and removes their own with `POST` and
-/// `DELETE /api/notifications/push-devices`. Provided by
+/// `DELETE /api/notifications/push-devices`, routes that exist only while
+/// the app can push (`notify.push.apns` or `notify.push.fcm` configured, or
+/// a `dyn PushDriver` registered). Provided by
 /// [`NotifyModule`](crate::NotifyModule): inject `Arc<PushDevices>`. Needs
 /// `DatabaseModule`; inside an unfinished unit of work its writes join the
 /// transaction.
 pub struct PushDevices {
     app: WeakAppContext,
     apps: RegisteredApps,
+    served: bool,
 }
 
 impl PushDevices {
-    pub(crate) fn new(app: WeakAppContext, apps: RegisteredApps) -> Self {
-        Self { app, apps }
+    pub(crate) fn new(app: WeakAppContext, apps: RegisteredApps, served: bool) -> Self {
+        Self { app, apps, served }
+    }
+
+    /// Whether the app can push to devices: a service of `notify.push` is
+    /// configured, or a `dyn PushDriver` is registered.
+    pub(crate) fn served(&self) -> bool {
+        self.served
     }
 
     /// Saves `device` for `notifiable`, owned by the signed-in session
     /// `session_id` ([`check`](NewPushDevice::check)ed first, and its app
-    /// id one of `notify.push`'s apps). A token already saved moves to
-    /// `notifiable` and this session: a device belongs to whoever signed in
-    /// on it last. A session keeps one device per app, so a token the
-    /// system replaced is deleted.
+    /// id one of `notify.push`'s apps: `apns.bundle_ids` for iOS,
+    /// `fcm.packages` for Android, and none for a platform that lists none).
+    /// A token already saved moves to `notifiable` and this session: a
+    /// device belongs to whoever signed in on it last. A session keeps one
+    /// device per app, so a token the system replaced is deleted. A
+    /// notifiable keeps at most [`MAX_DEVICES_PER_NOTIFIABLE`]: past it, the
+    /// device that registered longest ago is deleted.
     pub async fn register(
         &self,
         notifiable: &dyn Notifiable,
@@ -434,8 +451,28 @@ impl PushDevices {
         record.environment = device.environment.as_str().to_owned();
         record.last_seen_at = now;
         on!(&exec, e => record.save(e).await)?;
+        let saved = record.into_inner();
+        // At most so many devices a person: the ones seen longest ago go.
+        let mut kept = on!(&exec, e => PushDevice::query()
+            .where_(PushDevice::NOTIFIABLE_TYPE.eq(saved.notifiable_type.as_str()))
+            .where_(PushDevice::NOTIFIABLE_ID.eq(saved.notifiable_id.as_str()))
+            .get(e)
+            .await)?
+        .into_iter()
+        .map(Record::into_inner)
+        .filter(|device| device.id != saved.id)
+        .collect::<Vec<_>>();
+        if kept.len() >= MAX_DEVICES_PER_NOTIFIABLE {
+            kept.sort_by_key(|device| (device.last_seen_at, device.created_at, device.id));
+            let over = kept.len() + 1 - MAX_DEVICES_PER_NOTIFIABLE;
+            let gone: Vec<Uuid> = kept.iter().take(over).map(|device| device.id).collect();
+            on!(&exec, e => PushDevice::query()
+                .where_(PushDevice::ID.is_in(gone.iter().copied()))
+                .delete(e)
+                .await)?;
+        }
         exec.wrote();
-        Ok(record.into_inner())
+        Ok(saved)
     }
 
     /// Whether a device of `platform` may register for `app_id`.
@@ -682,13 +719,15 @@ mod tests {
     }
 
     #[test]
-    fn registered_apps_limit_app_ids_when_listed() {
+    fn registered_apps_take_only_the_app_ids_listed() {
         let apps = RegisteredApps {
             ios: vec!["com.acme.crm".to_owned()],
             android: Vec::new(),
         };
         assert!(apps.allows(PushPlatform::Ios, "com.acme.crm"));
         assert!(!apps.allows(PushPlatform::Ios, "com.evil.app"));
-        assert!(apps.allows(PushPlatform::Android, "com.anything"));
+        // A platform with no app listed takes no device at all.
+        assert!(!apps.allows(PushPlatform::Android, "com.acme.crm"));
+        assert!(!apps.allows(PushPlatform::Android, "com.anything"));
     }
 }

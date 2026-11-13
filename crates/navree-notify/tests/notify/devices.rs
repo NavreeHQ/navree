@@ -7,9 +7,9 @@ use std::sync::{Arc, Mutex};
 
 use navree_contracts::{BoxError, BoxFuture, CredentialRevoker, Principal};
 use navree_notify::{
-    Channel, ChannelError, Delivery, LiveSessions, NewPushDevice, Notifiable, Notification,
-    Notifier, NotifyError, NotifyOptions, PushDevices, PushDriver, PushEnvironment, PushFake,
-    PushMessage, PushPlatform,
+    Channel, ChannelError, Delivery, LiveSessions, MAX_DEVICES_PER_NOTIFIABLE, NewPushDevice,
+    Notifiable, Notification, Notifier, NotifyError, NotifyOptions, PushDevices, PushDriver,
+    PushEnvironment, PushFake, PushMessage, PushPlatform,
 };
 use navree_testing::{TestApp, TestAppBuilder, principal};
 use serde::{Deserialize, Serialize};
@@ -302,6 +302,122 @@ async fn invalid_devices_and_other_apps_are_refused() {
             .await,
         Err(NotifyError::InvalidRecipient(_))
     ));
+}
+
+#[tokio::test]
+async fn a_platform_with_no_app_listed_takes_no_device() {
+    let push = PushFake::new();
+    let sessions = Arc::new(Sessions::default());
+    // A push service, and only iPhone apps listed.
+    let app = support::builder(NotifyOptions::default())
+        .config("notify.push.apns.bundle_ids", json!(["com.acme.crm"]))
+        .override_value::<dyn PushDriver>(push.driver())
+        .override_value::<dyn LiveSessions>(sessions)
+        .build()
+        .await;
+    let devices = app.get::<PushDevices>().await;
+    let user = TestUser::new();
+    assert!(matches!(
+        devices
+            .register(&user, "session-1", device(PushPlatform::Android, PIXEL))
+            .await,
+        Err(NotifyError::InvalidRecipient(_))
+    ));
+    app.acting_as(signed_in(user.id, "session-1"))
+        .post("/api/notifications/push-devices")
+        .json(&json!({ "platform": "android", "token": PIXEL, "app_id": "com.acme.crm" }))
+        .send()
+        .await
+        .assert_validation_error("app_id");
+    devices
+        .register(&user, "session-1", device(PushPlatform::Ios, IPHONE))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_person_keeps_at_most_twenty_devices_the_oldest_going_first() {
+    let push = PushFake::new();
+    let sessions = Arc::new(Sessions::default());
+    let (builder, clock, _fakes) = timed(NotifyOptions::default(), "2026-11-13T09:00:00Z");
+    let app = with_push(builder, &push, &sessions).build().await;
+    let devices = app.get::<PushDevices>().await;
+    let user = TestUser::new();
+    let token = |n: usize| format!("{n:064x}");
+    for n in 0..MAX_DEVICES_PER_NOTIFIABLE {
+        clock.advance(std::time::Duration::from_secs(60));
+        devices
+            .register(&user, &format!("session-{n}"), device(PushPlatform::Ios, &token(n)))
+            .await
+            .unwrap();
+    }
+    assert_eq!(MAX_DEVICES_PER_NOTIFIABLE, 20);
+    let first = devices.of("user", &user.id.to_string()).await.unwrap();
+    assert_eq!(first.len(), 20);
+    // The first phone registers again (each launch does): it is the newest now.
+    clock.advance(std::time::Duration::from_secs(60));
+    devices
+        .register(&user, "session-0", device(PushPlatform::Ios, &token(0)))
+        .await
+        .unwrap();
+    // A twenty-first device replaces the one seen longest ago, not this one.
+    clock.advance(std::time::Duration::from_secs(60));
+    let latest = devices
+        .register(&user, "session-new", device(PushPlatform::Ios, &token(99)))
+        .await
+        .unwrap();
+    let kept = devices.of("user", &user.id.to_string()).await.unwrap();
+    assert_eq!(kept.len(), 20);
+    let sessions: Vec<&str> = kept.iter().map(|d| d.session_id.as_str()).collect();
+    assert!(sessions.contains(&"session-0"), "{sessions:?}");
+    assert!(sessions.contains(&"session-new"));
+    assert!(!sessions.contains(&"session-1"), "{sessions:?}");
+    assert!(kept.iter().any(|d| d.id == latest.id));
+    // Someone else's devices are not counted against this person.
+    let other = TestUser::new();
+    devices
+        .register(&other, "session-x", device(PushPlatform::Ios, &token(500)))
+        .await
+        .unwrap();
+    assert_eq!(devices.of("user", &user.id.to_string()).await.unwrap().len(), 20);
+}
+
+#[tokio::test]
+async fn an_app_that_cannot_push_has_no_device_routes() {
+    let app = support::app().await;
+    let user = TestUser::new();
+    let phone = app.acting_as(signed_in(user.id, "session-1"));
+    let answer = phone
+        .post("/api/notifications/push-devices")
+        .json(&json!({ "platform": "ios", "token": IPHONE, "app_id": "com.acme.crm" }))
+        .send()
+        .await;
+    assert_eq!(answer.status().as_u16(), 404, "{}", answer.text());
+    let answer = phone
+        .delete("/api/notifications/push-devices")
+        .json(&json!({ "token": IPHONE }))
+        .send()
+        .await;
+    assert_eq!(answer.status().as_u16(), 404, "{}", answer.text());
+    // The other notification routes are there as before.
+    phone
+        .get("/api/notifications/unread-count")
+        .send()
+        .await
+        .assert_status(200);
+
+    // App ids alone are not a push service.
+    let app = support::builder(NotifyOptions::default())
+        .config("notify.push.apns.bundle_ids", json!(["com.acme.crm"]))
+        .build()
+        .await;
+    let answer = app
+        .acting_as(signed_in(user.id, "session-1"))
+        .post("/api/notifications/push-devices")
+        .json(&json!({ "platform": "ios", "token": IPHONE, "app_id": "com.acme.crm" }))
+        .send()
+        .await;
+    assert_eq!(answer.status().as_u16(), 404, "{}", answer.text());
 }
 
 // ---------------------------------------------------------------------

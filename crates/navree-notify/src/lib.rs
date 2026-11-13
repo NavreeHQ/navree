@@ -212,8 +212,8 @@ pub use channel::Channel;
 pub use deferred::{DeferralReason, NotificationDeferral, Released};
 pub use deliveries::{DeliveryLog, DeliveryStatus, Ingested, NotificationDelivery};
 pub use devices::{
-    DeviceTarget, LiveSessions, NewPushDevice, PushDevice, PushDevices, PushEnvironment,
-    PushPlatform,
+    DeviceTarget, LiveSessions, MAX_DEVICES_PER_NOTIFIABLE, NewPushDevice, PushDevice,
+    PushDevices, PushEnvironment, PushPlatform,
 };
 pub use digest::{DIGEST_TYPE, DigestItem};
 pub use drivers::apns::ApnsPush;
