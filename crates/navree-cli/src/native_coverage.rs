@@ -31,7 +31,8 @@ const VERSION: u32 = 1;
 /// The grade at which `--fail-on` fails.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum FailOn {
-    /// Fail when any page is `layout` or `web`.
+    /// Fail when any page is `layout` or `web`, or is a screen written for
+    /// native clients (`designed`) that has something to fix.
     Layout,
     /// Fail when any page is `web`.
     Web,
@@ -66,14 +67,16 @@ pub struct Page {
     pub route: String,
     /// The address that was asked.
     pub path: String,
-    /// `idiom`, `layout` or `web`.
+    /// `idiom`, `designed`, `layout` or `web`.
     pub grade: String,
     /// Whether the client got native parts.
     pub native: bool,
     /// What kept the page in the web view (the readers' codes).
     #[serde(default)]
     pub why: Vec<String>,
-    /// What keeps a native screen from being idiom.
+    /// What keeps a native screen from belonging to its system: from being
+    /// idiom when it was read from a page, from being sound when it was
+    /// written for native clients.
     #[serde(default)]
     pub missing: Vec<String>,
     /// Decoration left out of the screen.
@@ -118,6 +121,8 @@ pub struct Totals {
     pub pages: usize,
     /// Pages that belong to their system.
     pub idiom: usize,
+    /// Screens written for native clients, not read from a page.
+    pub designed: usize,
     /// Pages of native parts in a web-shaped layout.
     pub layout: usize,
     /// Pages shown in the web view.
@@ -196,6 +201,7 @@ impl Report {
         self.totals = Totals {
             pages: self.pages.len(),
             idiom: count("idiom"),
+            designed: count("designed"),
             layout: count("layout"),
             web: count("web"),
             skipped: self.skipped.len(),
@@ -211,9 +217,20 @@ impl Report {
     /// Why the gate fails, if it does.
     pub fn refusal(&self, fail_on: Option<FailOn>) -> Option<String> {
         let totals = &self.totals;
+        // A screen written for native clients holds the gate unless it has
+        // something to fix.
+        let unsound = self
+            .pages
+            .iter()
+            .filter(|p| p.grade == "designed" && !p.missing.is_empty())
+            .count();
         let (bad, name) = match fail_on? {
             FailOn::Web => (totals.web, "web"),
-            FailOn::Layout => (totals.web + totals.layout, "layout or web"),
+            FailOn::Layout if unsound == 0 => (totals.web + totals.layout, "layout or web"),
+            FailOn::Layout => (
+                totals.web + totals.layout + unsound,
+                "layout, web or designed with something to fix",
+            ),
         };
         if totals.pages == 0 {
             return Some(
@@ -226,7 +243,9 @@ impl Report {
                 .pages
                 .iter()
                 .filter(|p| match fail_on {
-                    Some(FailOn::Layout) => p.grade != "idiom",
+                    Some(FailOn::Layout) => {
+                        !(p.grade == "idiom" || (p.grade == "designed" && p.missing.is_empty()))
+                    }
                     _ => p.grade == "web",
                 })
                 .map(|p| p.path.as_str())
@@ -281,16 +300,24 @@ pub fn render(report: &Report, app: &str) -> String {
             .max()
             .unwrap_or(5)
             .max("ROUTE".len());
+        // As wide as the longest grade: `designed` where an app has such screens.
+        let grade_width = report
+            .pages
+            .iter()
+            .map(|p| p.grade.chars().count())
+            .max()
+            .unwrap_or(6)
+            .max(6);
         out.push_str(&format!(
             "{}  {}  WHAT IS MISSING\n",
             pad("ROUTE", route_width),
-            pad("GRADE", 6)
+            pad("GRADE", grade_width)
         ));
         for page in &report.pages {
             let line = format!(
                 "{}  {}  {}",
                 pad(&page.path, route_width),
-                pad(&page.grade, 6),
+                pad(&page.grade, grade_width),
                 page.said.join("; ")
             );
             out.push_str(line.trim_end());
@@ -298,12 +325,17 @@ pub fn render(report: &Report, app: &str) -> String {
         }
     }
     let totals = &report.totals;
+    // Screens written for native clients are counted where an app has some.
+    let designed = match totals.designed {
+        0 => String::new(),
+        count => format!("{count} designed, "),
+    };
     out.push_str(&format!(
-        "\n{} idiom, {} layout, {} web: {} of {} pages are native screens\n",
+        "\n{} idiom, {designed}{} layout, {} web: {} of {} pages are native screens\n",
         totals.idiom,
         totals.layout,
         totals.web,
-        totals.idiom + totals.layout,
+        totals.idiom + totals.designed + totals.layout,
         totals.pages
     ));
     if !report.skipped.is_empty() {
@@ -512,12 +544,76 @@ Not pages, so not asked: not a GET (4); routes under the API prefix (2).
             Totals {
                 pages: 3,
                 idiom: 1,
+                designed: 0,
                 layout: 1,
                 web: 1,
                 skipped: 2
             }
         );
         assert!(report.passed);
+    }
+
+    /// An app with two screens written for native clients: one sound, one that says
+    /// something a designed screen should not.
+    fn designed_json() -> String {
+        serde_json::json!({
+            "format": "navree-native-coverage", "version": 1,
+            "platform": "ios", "form": "phone",
+            "pages": [
+                {"route": "/", "path": "/", "grade": "designed", "native": true,
+                 "why": [], "missing": [], "dropped": [], "html_bytes": 900, "envelope_bytes": 700},
+                {"route": "/orders", "path": "/orders", "grade": "idiom", "native": true,
+                 "why": [], "missing": [], "dropped": [], "html_bytes": 5000, "envelope_bytes": 2000},
+                {"route": "/shelves", "path": "/shelves", "grade": "designed", "native": true,
+                 "why": [], "missing": ["a card stands inside a card"],
+                 "dropped": [], "html_bytes": 0, "envelope_bytes": 1200}
+            ],
+            "skipped": [], "not_pages": []
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn a_screen_written_for_native_clients_is_listed_as_designed_with_what_it_should_fix() {
+        let report = Report::read(&designed_json())
+            .unwrap()
+            .finish(None, "native.toml");
+        assert_eq!(
+            (report.totals.designed, report.totals.idiom, report.totals.layout),
+            (2, 1, 0)
+        );
+        let expected = "\
+Native coverage of shop, asked as ios on phone
+
+ROUTE     GRADE     WHAT IS MISSING
+/         designed
+/orders   idiom
+/shelves  designed  a card stands inside a card
+
+1 idiom, 2 designed, 0 layout, 0 web: 3 of 3 pages are native screens
+";
+        assert_eq!(render(&report, "shop"), expected);
+    }
+
+    #[test]
+    fn a_designed_screen_holds_the_gate_unless_it_has_something_to_fix() {
+        let report = Report::read(&designed_json())
+            .unwrap()
+            .finish(Some(FailOn::Layout), "native.toml");
+        assert!(!report.passed);
+        assert_eq!(
+            report.refusal(Some(FailOn::Layout)).as_deref(),
+            Some("1 of 3 pages are layout, web or designed with something to fix: /shelves")
+        );
+        // The web gate is not about it.
+        assert!(report.refusal(Some(FailOn::Web)).is_none());
+        // With nothing to fix, every screen holds the gate.
+        let sound = designed_json().replace("a card stands inside a card", "");
+        let sound = sound.replace("\"missing\":[\"\"]", "\"missing\":[]");
+        let report = Report::read(&sound)
+            .unwrap()
+            .finish(Some(FailOn::Layout), "native.toml");
+        assert!(report.passed, "{:?}", report.refusal(Some(FailOn::Layout)));
     }
 
     #[test]
