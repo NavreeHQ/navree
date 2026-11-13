@@ -325,3 +325,36 @@ fn navigator_files_are_staged_from_the_docs_and_skills_and_cleaned() {
     }
     assert!(navigator.join("Cargo.toml").is_file());
 }
+
+/// A workspace beside the root one records the root's crates in a lock file of
+/// its own, which a release must refresh: each one named is there, and no lock
+/// file in the repository is left out.
+#[test]
+fn every_lock_file_beside_the_roots_is_refreshed_with_a_release() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask is in the repository's root");
+    for dir in xtask::prepare::OTHER_WORKSPACES {
+        let manifest = std::fs::read_to_string(root.join(dir).join("Cargo.toml"))
+            .unwrap_or_else(|e| panic!("{dir}/Cargo.toml: {e}"));
+        assert!(
+            manifest.lines().any(|line| line.trim() == "[workspace]"),
+            "{dir} is not a workspace of its own"
+        );
+        assert!(
+            root.join(dir).join("Cargo.lock").is_file(),
+            "{dir}/Cargo.lock"
+        );
+    }
+    // Outside a git checkout there is no list to read, and nothing to check.
+    let Ok(listed) = xtask::process::git(root, &["ls-files", "--", "*Cargo.lock"]) else {
+        return;
+    };
+    for lock in listed.lines().filter(|lock| *lock != "Cargo.lock") {
+        let dir = lock.strip_suffix("/Cargo.lock").unwrap_or(lock);
+        assert!(
+            xtask::prepare::OTHER_WORKSPACES.contains(&dir),
+            "{lock} is not refreshed by `release prepare`: add {dir} to OTHER_WORKSPACES"
+        );
+    }
+}

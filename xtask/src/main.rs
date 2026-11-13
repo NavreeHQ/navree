@@ -21,10 +21,11 @@ native-models [--check]
 Release commands:
   prepare <version> [--date YYYY-MM-DD]
       Sets <version> in the workspace, its exact internal requirements, the
-      npm packages and Cargo.lock, and adds its CHANGELOG.md section.
+      npm packages, Cargo.lock and fuzz/Cargo.lock, and adds its CHANGELOG.md
+      section.
   check
       Every version equal, every internal requirement exact, a publish order
-      exists, the changelog has the version, Cargo.lock is current.
+      exists, the changelog has the version, the lock files are current.
   order
       Prints the publish order, layer by layer.
   crates
