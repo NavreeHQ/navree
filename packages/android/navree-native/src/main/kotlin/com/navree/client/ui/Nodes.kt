@@ -654,6 +654,7 @@ private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.
 @Composable
 private fun SplitView(node: Navree.Split, place: Place, modifier: Modifier) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
+        val width = maxWidth.value
         if (maxWidth >= 840.dp) {
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 Box(Modifier.width(360.dp)) { Roomed(360f) { NodeView(node.primary, place) } }
@@ -662,7 +663,7 @@ private fun SplitView(node: Navree.Split, place: Place, modifier: Modifier) {
                     shape = MaterialTheme.shapes.extraLarge,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Box(Modifier.padding(24.dp)) { Roomed(maxWidth.value - 360f - 24f - 48f) { NodeView(node.detail, place) } }
+                    Box(Modifier.padding(24.dp)) { Roomed(width - 360f - 24f - 48f) { NodeView(node.detail, place) } }
                 }
             }
         } else {

@@ -439,7 +439,15 @@ internal fun HealthGaugeView(node: Navree.Gauge, modifier: Modifier = Modifier) 
                 drawCircle(ink.mark, px * 0.28f, c)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(node.shown ?: amount(node.value), style = MaterialTheme.typography.headlineMedium, maxLines = 1, textAlign = TextAlign.Center)
+                // The value and its unit, as large as the middle of the arc holds.
+                val value = node.shown ?: amount(node.value)
+                val headline = MaterialTheme.typography.headlineMedium
+                Text(
+                    value,
+                    style = headline.copy(fontSize = ClockRules.centreSp(diameter.value - 40f, value.length, headline.fontSize.value, scale).sp),
+                    maxLines = 1,
+                    textAlign = TextAlign.Center,
+                )
                 (zone?.label ?: node.caption)?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = ink.mark) }
             }
         }

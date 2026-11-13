@@ -80,7 +80,7 @@ class HealthScreensTest {
             (front?.content as? Content.Native)?.screen?.title == title && !front.loading
         }
         // The charts grow into place; the shot is of where they settle.
-        Thread.sleep(1200)
+        Thread.sleep(1800)
         compose.waitForIdle()
     }
 

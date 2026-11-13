@@ -35,6 +35,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
@@ -306,9 +307,10 @@ internal fun CarouselView(node: Navree.Carousel, place: Place, modifier: Modifie
 @Composable
 internal fun AdaptiveView(node: Navree.Adaptive, place: Place, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        val room = CompositionRules.room(node, maxWidth.value)
+        val width = maxWidth.value
+        val room = CompositionRules.room(node, width)
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Roomed(maxWidth.value) { for (child in room) NodeView(child, place) }
+            Roomed(width) { for (child in room) NodeView(child, place) }
         }
     }
 }
