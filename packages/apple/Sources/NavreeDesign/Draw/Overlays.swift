@@ -12,14 +12,17 @@ struct OpenOverlay: Identifiable, Equatable {
 /// its source, or a sheet; one at a time.
 struct OverlayPresenter: ViewModifier {
     let tree: Navree.Node
+    var actions: [Navree.Node] = []
     @Environment(\.navree) private var context
 
     func body(content: Content) -> some View {
-        let open = SectionRules.overlays(tree).filter(Self.isOpen)
+        let open = SectionRules.overlays(tree).filter { Self.isOpen($0) || Self.isOpenPopover($0, context.opened) }
         let sheet = open.first { node in
             switch node {
             case .sheet: true
             case .dialog(let dialog): PresentationRules.dialog(dialog) == .sheet
+            // A popover nothing on the screen opens has no control to stand by: a sheet.
+            case .popover(let popover): !PopoverRules.anchored(popover.id, in: tree, actions: actions)
             default: false
             }
         }
@@ -54,6 +57,11 @@ struct OverlayPresenter: ViewModifier {
             } message: { dialog in
                 if let text = dialog.text { Text(text) }
             }
+    }
+
+    static func isOpenPopover(_ node: Navree.Node, _ opened: Set<String>) -> Bool {
+        if case .popover(let popover) = node { return opened.contains(popover.id) }
+        return false
     }
 
     static func isOpen(_ node: Navree.Node) -> Bool {

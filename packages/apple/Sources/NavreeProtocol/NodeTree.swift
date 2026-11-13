@@ -220,7 +220,8 @@ extension Navree.Input {
         case .date(let input): [input.value]
         case .slider(let input): [input.value]
         case .colour(let input): [input.value]
-        case .file, .range, .unknown: []
+        case .range(let input): [input.from.value, input.to.value]
+        case .file, .unknown: []
         }
     }
 }

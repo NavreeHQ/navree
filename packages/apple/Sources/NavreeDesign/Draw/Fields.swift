@@ -86,8 +86,12 @@ struct FieldControl: View {
                 set: { set([HexColor.hex($0)]) }
             ))
         case .file(let input):
-            FileControl(label: label, input: input, chosen: values.first) { name in set([name]) }
-        case .range, .unknown:
+            FileControl(label: label, input: input, chosen: values) { urls in
+                context.send(.files(form: ref, name: field.name, urls: urls))
+            }
+        case .range(let input):
+            RangeControl(label: label, input: input, values: values) { set($0) }
+        case .unknown:
             EmptyView()
         }
     }
@@ -260,24 +264,54 @@ struct DateControl: View {
     }
 }
 
-/// Files: the system's file browser. The chosen file's name is shown; sending
-/// it is the runtime's.
+/// A span of days (or times): the system's two compact pickers under the
+/// field's name, the end never before the start, as Calendar sets an event's
+/// start and end.
+struct RangeControl: View {
+    let label: String
+    let input: Navree.RangeInput
+    let values: [String]
+    let set: ([String]) -> Void
+
+    var body: some View {
+        let from = values.first ?? ""
+        let to = values.count > 1 ? values[1] : ""
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+            DateControl(
+                label: RangeRules.startWords, input: Navree.DateInput(kind: input.kind, max: input.max, min: input.min, value: from),
+                value: Binding(get: { from }, set: { set(RangeRules.values(from: $0, to: to, kind: input.kind)) })
+            )
+            DateControl(
+                label: RangeRules.endWords,
+                input: Navree.DateInput(kind: input.kind, max: input.max, min: from.isEmpty ? input.min : from, value: to),
+                value: Binding(get: { to }, set: { set(RangeRules.values(from: from, to: $0, kind: input.kind)) })
+            )
+        }
+    }
+}
+
+/// Files: the system's file browser, limited to the types the field takes.
+/// The chosen files' names are shown; the app keeps their bytes until the
+/// form sends them.
 struct FileControl: View {
     let label: String
     let input: Navree.FileInput
-    let chosen: String?
-    let choose: (String) -> Void
+    let chosen: [String]
+    let choose: ([URL]) -> Void
     @State private var importing = false
 
     var body: some View {
         LabeledContent(label) {
-            Button(chosen ?? "Choose…") { importing = true }
+            Button(chosen.isEmpty ? String(localized: "Choose…") : chosen.joined(separator: ", ")) { importing = true }
                 .buttonStyle(.borderless)
+                .lineLimit(2)
         }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: input.multiple) { result in
-            if case .success(let urls) = result, let first = urls.first {
-                choose(first.lastPathComponent)
-            }
+        .fileImporter(
+            isPresented: $importing, allowedContentTypes: FileRules.types(input.accept),
+            allowsMultipleSelection: input.multiple
+        ) { result in
+            if case .success(let urls) = result, !urls.isEmpty { choose(urls) }
         }
     }
 }

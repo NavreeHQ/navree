@@ -154,6 +154,25 @@ struct HTTPTests {
         #expect(body.contains("filename=\"corner.jpg\"\r\nContent-Type: image/jpeg"))
         #expect(body.hasSuffix("--b--\r\n"))
     }
+
+    @Test func aPickedFileIsSentWithItsBytes() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("navree-files-test-\(UUID().uuidString)")
+        let store = FileStore(folder: folder.appendingPathComponent("kept"))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let picked = folder.appendingPathComponent("packing-list.csv")
+        try Data("sku,qty\nKIT-307-000,5\n".utf8).write(to: picked)
+        let file = try #require(store.keep(picked))
+        #expect(file.name == "packing-list.csv")
+        #expect(file.type == "text/csv")
+        #expect(file.size == 22)
+        let body = String(decoding: Multipart.body(
+            [.file(name: "list", token: file.token, filename: file.name, type: file.type)], boundary: "b", files: store.data
+        ), as: UTF8.self)
+        #expect(body.contains("Content-Type: text/csv\r\n\r\nsku,qty\nKIT-307-000,5\n\r\n--b--"))
+        store.clear()
+        #expect(store.data(file.token) == nil)
+    }
 }
 
 @Test func anEventStreamSaysEachEventsNameAndNeverItsData() {

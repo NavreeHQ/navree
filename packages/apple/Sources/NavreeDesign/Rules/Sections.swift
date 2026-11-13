@@ -168,9 +168,13 @@ public enum SectionRules {
                 }
             case .unknown(let part):
                 if let alt = part.alt { read(alt, region: region) }
-            case .toolbar, .feedRow, .message, .pane:
-                // Kinds this client does not draw yet: no row stands empty for them.
+            case .toolbar:
+                // A toolbar is placed in the screen's bars: no row stands empty for it.
                 return
+            case .pane(let pane):
+                // A pane read in place is its parts; where panes stand side by
+                // side is the screen's to say.
+                for child in pane.children { read(child, region: region) }
             default:
                 row(.part(node))
             }

@@ -105,7 +105,7 @@ import Testing
         "rich", "image", "icon", "avatar", "badge", "progress", "banner", "empty", "facts", "table", "chart", "code",
         "button", "link", "menu", "form", "field", "sheet", "dialog", "native", "gauge", "figure", "timeline", "ring",
         "rings", "day_clock", "day_pager", "meter", "columns", "strip", "range", "calendar_heatmap", "matrix_heatmap",
-        "scatter", "card", "layers", "shape", "carousel", "adaptive", "toolbar",
+        "scatter", "card", "layers", "shape", "carousel", "adaptive", "toolbar", "feed_row", "message", "pane", "popover",
     ]
     let kinds: Set<String> = [
         "stack", "grid", "section", "list", "row", "split", "tabs", "disclosure", "divider", "spacer", "region", "text",
@@ -117,8 +117,8 @@ import Testing
     ]
     let listed = Set(undrawable)
     #expect(kinds.subtracting(drawn).isSubset(of: listed))
-    #expect(listed.contains("input:range"))
-    #expect(listed.contains("input:file"))
+    // Every control is drawn: a range of days, and files sent with their bytes.
+    #expect(!listed.contains { $0.hasPrefix("input:") })
 }
 
 @Test func theWindowsWidthIsCompactMediumOrExpandedFromItsSizeClassAndWidth() {

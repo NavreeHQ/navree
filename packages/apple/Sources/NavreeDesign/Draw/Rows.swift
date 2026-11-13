@@ -321,6 +321,7 @@ struct ButtonRow: View {
             }
         }
         .disabled(button.disabled || button.pending)
+        .modifier(PopoverAnchor(action: button.action))
     }
 
     /// Set where the section's footer already says why.

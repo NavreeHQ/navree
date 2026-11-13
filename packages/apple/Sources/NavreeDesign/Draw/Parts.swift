@@ -92,8 +92,11 @@ public struct NodeView: View {
         case .shape(let shape): ShapePart(shape: shape)
         case .carousel(let carousel): CarouselPart(carousel: carousel)
         case .adaptive(let adaptive): AdaptivePart(adaptive: adaptive)
-        case .toolbar, .feedRow, .message, .pane:
-            // Kinds this client does not draw yet.
+        case .feedRow(let row): FeedRowPart(row: row)
+        case .message(let message): MessagePart(message: message)
+        case .pane(let pane): PanePart(pane: pane)
+        case .toolbar:
+            // A screen's toolbar is placed in its bars, never drawn in place.
             EmptyView()
         }
     }

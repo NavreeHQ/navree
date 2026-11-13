@@ -90,6 +90,8 @@ public enum Intent: Sendable, Equatable {
     case tab(id: String, index: Int)
     /// The focus moved to the field the screen asked for.
     case focused(serial: Int)
+    /// Files were picked for a field: the app keeps their bytes for the form.
+    case files(form: FormRef, name: String, urls: [URL])
 }
 
 /// Whether the rows after a list's last are on their way, or failed to come.
@@ -151,6 +153,9 @@ public struct DrawingContext: Sendable {
     public var base: URL?
     /// How deep the screen being drawn is in its stack: the root is 0.
     public var depth: Int
+    /// The popovers of the screen that are open, by id: the core keeps their
+    /// state apart from the tree.
+    public var opened: Set<String> = []
 
     public init(
         send: @escaping @MainActor @Sendable (Intent) -> Void,
