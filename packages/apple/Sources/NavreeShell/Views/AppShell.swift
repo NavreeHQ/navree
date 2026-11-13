@@ -132,7 +132,9 @@ final class Session {
             return
         }
         let effects = SystemEffects(
-            transport: configuration.transport(), signedWith: configuration.signedWith, origin: configuration.base
+            transport: configuration.transport(),
+            cache: KeptFiles(Self.cacheFolder(configuration.origin), in: .cachesDirectory),
+            signedWith: configuration.signedWith, origin: configuration.base
         )
         self.effects = effects
         let client = NativeClient(core: core, effects: effects)
@@ -187,6 +189,15 @@ final class Session {
     }
 
     static let snapshot = "snapshot"
+
+    /// The folder the core's cache is kept in, one for each origin: what one
+    /// origin's answers left is never another's head start.
+    nonisolated static func cacheFolder(_ origin: String) -> String {
+        let name = origin.lowercased().unicodeScalars
+            .map { CharacterSet.alphanumerics.contains($0) ? String($0) : "-" }
+            .joined()
+        return "navree-cache-" + name
+    }
 
     /// This device as the app starts.
     static func device() -> DeviceTraits {

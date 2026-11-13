@@ -7,7 +7,8 @@ import NavreeRuntime
 ///
 /// The folder holds `manifest.tsv` (tab-separated, a header row, the columns
 /// `file`, `status` and `url` at least; other columns are passed over) and
-/// the files it names. A request is answered by the rows of its address, by
+/// the files it names. A manifest of another name is named in place of the
+/// folder: `answers/recorded.tsv` is the folder `answers` with that manifest. A request is answered by the rows of its address, by
 /// path and query: several rows of one address are served in order, and then
 /// the last one again.
 @MainActor
@@ -25,9 +26,18 @@ public final class AnswerFolder: Transport {
     public var jar: CookieJar? { nil }
 
     /// The folder's answers, or `nil` when it has no manifest that reads.
+    /// `folder` may name the manifest itself, in a folder of answers.
     public convenience init?(folder: URL) {
-        guard let rows = Self.manifest(folder) else { return nil }
+        let (folder, manifest) = Self.place(folder)
+        guard let rows = Self.manifest(folder, named: manifest) else { return nil }
         self.init(folder: folder, rows: rows)
+    }
+
+    /// The folder and the manifest's name, from a folder or a manifest's path.
+    nonisolated static func place(_ url: URL) -> (folder: URL, manifest: String) {
+        url.pathExtension.lowercased() == "tsv"
+            ? (url.deletingLastPathComponent(), url.lastPathComponent)
+            : (url, "manifest.tsv")
     }
 
     init(folder: URL, rows: [Row]) {
@@ -43,15 +53,16 @@ public final class AnswerFolder: Transport {
     /// The origin the answers were recorded from, when the manifest names
     /// one: the first row whose address is absolute.
     public nonisolated static func origin(of folder: URL) -> String? {
-        for row in manifest(folder) ?? [] {
+        let (folder, name) = place(folder)
+        for row in manifest(folder, named: name) ?? [] {
             guard let url = URL(string: row.url), let scheme = url.scheme, let host = url.host else { continue }
             return "\(scheme)://\(host)" + (url.port.map { ":\($0)" } ?? "")
         }
         return nil
     }
 
-    nonisolated static func manifest(_ folder: URL) -> [Row]? {
-        guard let text = try? String(contentsOf: folder.appendingPathComponent("manifest.tsv"), encoding: .utf8) else {
+    nonisolated static func manifest(_ folder: URL, named name: String = "manifest.tsv") -> [Row]? {
+        guard let text = try? String(contentsOf: folder.appendingPathComponent(name), encoding: .utf8) else {
             return nil
         }
         return rows(text)
