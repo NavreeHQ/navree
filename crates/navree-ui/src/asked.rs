@@ -68,6 +68,8 @@ impl WhoAsked {
 /// header lookups and no allocation.
 ///
 /// ```
+/// # #[cfg(feature = "native-preview")]
+/// # {
 /// use http::{HeaderMap, HeaderValue};
 /// use navree_ui::native::{WhoAsked, who_asked};
 ///
@@ -77,6 +79,7 @@ impl WhoAsked {
 /// assert_eq!(who_asked(&headers), WhoAsked::Runtime);
 /// headers.insert("x-navree-native", HeaderValue::from_static("1"));
 /// assert_eq!(who_asked(&headers), WhoAsked::Native);
+/// # }
 /// ```
 #[inline]
 pub fn who_asked(headers: &HeaderMap) -> WhoAsked {
