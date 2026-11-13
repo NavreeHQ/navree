@@ -173,6 +173,26 @@ regexes = ['''^dGhlIHNhbXBsZSBub25jZQ==$''']
 
 [[allowlists]]
 description = """
+Sample values of the native clients' tests and documentation: invented push
+tokens (`fcm-` and sixteen characters, and a hex string that starts 9f2c), a
+sample device token of Apple's push service as guides print it, the app
+signature of Android's own documentation for linking an app to a site (a
+signature is public: it is the hash of an app's signing certificate) with the
+two malformed copies a test refuses, the hash of nothing as a second app's
+signature, the challenge of a sample passkey answer, and a three-part token
+with an empty body and the signature "sig". None is issued by any system."""
+regexes = [
+  '''fcm-[A-Za-z0-9]{16}''',
+  '''9f2c4a7e00b1d35c(8e6a1f4b7d0c2e5a)?''',
+  '''740f4707bebcf74f9b7c25d48e3358945f6aa01da5ddb387462c7eaf61bb78ad''',
+  '''FG3pg8VzBlDY7rmVLzT8ZBagg0LmHb6oigSWsj[_/]PROU?''',
+  '''47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU''',
+  '''T1xCsnxM2DNL2KdK5CLa6fMhD7OBqho6syzInk_n-Uo''',
+  '''eyJhbGciOiJFUzI1NiJ9\.e30\.c2ln''',
+]
+
+[[allowlists]]
+description = """
 The scanners' own output: the reports that scripts/sast.sh writes to
 sast-reports/ (git-ignored) hold commit hashes and redacted findings, and the
 working-tree scan would otherwise read the history report back in."""
