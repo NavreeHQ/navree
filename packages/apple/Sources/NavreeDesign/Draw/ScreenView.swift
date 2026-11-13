@@ -83,7 +83,8 @@ public struct ScreenView: View {
             }
             .modifier(SearchModifier(query: query, placement: PresentationRules.search(width: width)))
             .modifier(Refresh(enabled: screen.refresh))
-            .modifier(OverlayPresenter(tree: screen.body))
+            .modifier(OverlayPresenter(tree: screen.body, actions: actions))
+            .environment(\.navreePopovers, PopoverRules.popovers(in: screen.body))
             .alert(
                 failure?.title ?? "Something went wrong",
                 isPresented: Binding(get: { failure != nil }, set: { if !$0 { context.send(.noticeDismissed) } }),
@@ -96,8 +97,11 @@ public struct ScreenView: View {
     }
 
     @ViewBuilder private func content(sections: [ListSection], width: WidthClass, table: Navree.Table?) -> some View {
+        let panes = PaneRules.panes(in: screen.body)
         if let empty = Self.wholeEmpty(screen.body) {
             EmptyPart(empty: empty)
+        } else if !panes.isEmpty {
+            PaneScreenBody(panes: panes)
         } else if CompositionRules.isComposed(screen.body) {
             ComposedScreenBody(body: screen.body)
         } else if let table, sections.count == 1, ContentRules.table(table, width: width) == .columns {

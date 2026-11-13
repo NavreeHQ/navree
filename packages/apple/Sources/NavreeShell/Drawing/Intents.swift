@@ -14,7 +14,7 @@ extension NativeClient {
     /// What the drawing of screen `id`, `depth` deep in its stack, reaches the core through.
     public func context(for id: ScreenID, depth: Int, base: URL?) -> DrawingContext {
         let state = screen(id)
-        return DrawingContext(
+        var context = DrawingContext(
             send: { [weak self] intent in self?.perform(intent, on: id) },
             values: { [weak self] form, name in self?.field(form, name, on: id)?.value.values },
             errors: { [weak self] form, name in self?.field(form, name, on: id)?.errors },
@@ -32,6 +32,8 @@ extension NativeClient {
             base: base,
             depth: depth
         )
+        context.opened = Set((state?.states ?? [:]).filter { $0.value.contains(.open) }.keys)
+        return context
     }
 
     /// The core's state of a form's field, found by the field's name in the
@@ -83,6 +85,17 @@ extension NativeClient {
             send(.tab(screen: id, id: tabs, index: index))
         case .focused(let serial):
             send(.focused(screen: id, serial: serial))
+        case .files(let form, let name, let urls):
+            guard let found = screen(id)?.forms[form.key]?.field(named: name) else {
+                return problem("a file field the core does not hold changed: \(form.key) \(name)")
+            }
+            let files = urls.compactMap { url -> FileRef? in
+                // A file from another app's storage is lent for as long as it is copied.
+                let lent = url.startAccessingSecurityScopedResource()
+                defer { if lent { url.stopAccessingSecurityScopedResource() } }
+                return FileStore.shared.keep(url)
+            }
+            send(.field(screen: id, form: Self.formID(form), field: found.id, value: .files(files)))
         }
     }
 

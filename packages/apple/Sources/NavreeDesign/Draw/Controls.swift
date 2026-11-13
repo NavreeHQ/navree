@@ -93,6 +93,7 @@ struct ButtonPart: View {
             }
         }
         .disabled(button.disabled || button.pending)
+        .modifier(PopoverAnchor(action: button.action))
         VStack(alignment: .leading, spacing: 4) {
             Group {
                 if prominent || (button.prominence == .high && button.role != .destructive) {

@@ -75,6 +75,7 @@ public final class SystemEffects: EffectRunner {
             // The person signed out: what was kept of them goes with the session.
             snapshots.clear()
             cache.clear()
+            FileStore.shared.clear()
             let jar = transport.jar
             Task { await jar?.forget(WKWebsiteDataStore.default()) }
         case .cacheRead(let key):

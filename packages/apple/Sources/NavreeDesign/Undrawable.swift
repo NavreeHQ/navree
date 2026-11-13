@@ -4,11 +4,5 @@
 ///
 /// One word a line, in alphabetical order: when a kind is drawn, its line goes.
 public let undrawable: [String] = [
-    "feed_row",
-    "input:file",
-    "input:range",
-    "message",
-    "pane",
-    "popover",
     "web",
 ]

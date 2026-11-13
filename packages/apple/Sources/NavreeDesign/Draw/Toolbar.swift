@@ -49,6 +49,15 @@ struct ToolbarAction: View {
     @Environment(\.navree) private var context
 
     var body: some View {
+        content.modifier(PopoverAnchor(action: Self.action(of: node)))
+    }
+
+    static func action(of node: Navree.Node) -> Navree.Action? {
+        if case .button(let button) = node { return button.action }
+        return nil
+    }
+
+    @ViewBuilder private var content: some View {
         switch node {
         case .button(let button):
             let action = {

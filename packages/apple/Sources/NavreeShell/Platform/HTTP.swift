@@ -28,6 +28,8 @@ public protocol Transport: AnyObject {
 public final class HTTPTransport: Transport {
     public let jar: CookieJar?
     private let cookies: CookieJar
+    /// Where the files a form sends are kept.
+    private let files: FileStore
     private let session: URLSession
     private let streams: URLSession
     private var tasks: [Int: Task<Void, Never>] = [:]
@@ -35,9 +37,10 @@ public final class HTTPTransport: Transport {
 
     /// `configuration` lets a test answer requests itself (its `protocolClasses`);
     /// cookies, caching and redirects are always this class's own.
-    public init(jar: CookieJar, configuration: URLSessionConfiguration = .ephemeral) {
+    public init(jar: CookieJar, configuration: URLSessionConfiguration = .ephemeral, files: FileStore = .shared) {
         self.jar = jar
         cookies = jar
+        self.files = files
         session = URLSession(configuration: Self.prepared(configuration, timeout: 60), delegate: RedirectRefuser(), delegateQueue: nil)
         // A stream may be quiet for as long as it likes.
         streams = URLSession(configuration: Self.prepared(configuration, timeout: 24 * 60 * 60), delegate: RedirectRefuser(), delegateQueue: nil)
@@ -75,7 +78,7 @@ public final class HTTPTransport: Transport {
         case .multipart(let parts)?:
             let boundary = "navree-" + UUID().uuidString
             urlRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-            urlRequest.httpBody = Multipart.body(parts, boundary: boundary)
+            urlRequest.httpBody = Multipart.body(parts, boundary: boundary, files: files.data)
         case nil:
             if request.method.lowercased() != "get" { urlRequest.httpBody = Data() }
         }
@@ -210,9 +213,9 @@ struct EventStreamReader {
 }
 
 /// `multipart/form-data`, the parts in order. A file's bytes are the ones the
-/// client keeps under its token; this build keeps none, so a file part goes empty.
+/// client keeps under its token; a token it no longer holds sends none.
 enum Multipart {
-    static func body(_ parts: [FetchRequest.Part], boundary: String) -> Data {
+    static func body(_ parts: [FetchRequest.Part], boundary: String, files: (String) -> Data? = { _ in nil }) -> Data {
         var body = Data()
         func line(_ text: String) { body.append(Data((text + "\r\n").utf8)) }
         for part in parts {
@@ -222,10 +225,11 @@ enum Multipart {
                 line("Content-Disposition: form-data; name=\"\(escape(name))\"")
                 line("")
                 line(value)
-            case .file(let name, _, let filename, let type):
+            case .file(let name, let token, let filename, let type):
                 line("Content-Disposition: form-data; name=\"\(escape(name))\"; filename=\"\(escape(filename))\"")
-                line("Content-Type: \(type)")
+                line("Content-Type: \(type.isEmpty ? "application/octet-stream" : type)")
                 line("")
+                body.append(files(token) ?? Data())
                 line("")
             }
         }

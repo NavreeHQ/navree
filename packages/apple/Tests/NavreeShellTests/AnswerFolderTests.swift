@@ -55,12 +55,8 @@ struct AnswerFolderTests {
         client.send(.select(destination: 1))
         let orders = try #require(client.nav.front)
         try await Self.until { client.screen(orders).map { !$0.loading } ?? false }
-        // The orders hold a range field this client does not draw yet: the web view's too.
-        guard case .web(_, _, let because, _)? = client.screen(orders)?.content else {
-            Issue.record("the orders are not the web view's")
-            return
-        }
-        #expect(because.contains("client:input:range"))
+        // The orders hold a range of days, which this client draws: natively too.
+        #expect(client.screen(orders)?.screen?.title == "Orders")
         client.send(.act(.init(screen: orders, action: .navigate(.init(href: "/orders/1042")))))
         let order = try #require(client.nav.front)
         try await Self.until { client.screen(order).map { !$0.loading } ?? false }
