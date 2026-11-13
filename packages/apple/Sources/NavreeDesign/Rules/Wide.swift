@@ -383,3 +383,25 @@ extension ContentRules {
         .compact
     }
 }
+
+/// How a pull-down menu in the content shows what it is.
+public enum MenuLabel: Sendable, Equatable {
+    /// Its symbol and its words.
+    case titleAndIcon
+    /// Its words alone: it has no symbol.
+    case title
+    /// Its symbol alone: it has no words to show (VoiceOver still names it).
+    case icon
+}
+
+extension ContentRules {
+    /// A menu in the content shows its words beside its symbol: a menu in a
+    /// row of controls often names what it sets ("Open", "High"), as Reminders
+    /// writes a reminder's priority, and a symbol alone leaves the person to
+    /// guess. A toolbar's menus keep their symbols alone, as bars do.
+    public static func menuLabel(_ menu: Navree.Menu) -> MenuLabel {
+        let words = !menu.label.trimmingCharacters(in: .whitespaces).isEmpty
+        guard menu.icon != nil else { return .title }
+        return words ? .titleAndIcon : .icon
+    }
+}
