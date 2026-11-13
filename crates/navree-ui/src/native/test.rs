@@ -262,13 +262,18 @@ mod tests {
             }
             View::new("Deep").body(node)
         };
-        // Read whole: the server never runs out of stack reading it.
-        let page = TestNative::of(&deep(500));
+        // Read whole, as deep as a page may be: the server never runs out of stack reading it.
+        let page = TestNative::of(&deep(200));
         assert!(page.is_native());
         // But no client reads a tree that deep, so it goes to the web view.
         let envelope = page.envelope_at("/deep");
         assert_eq!(envelope.web.unwrap().why, ["depth"]);
         assert_eq!(envelope.vocab, navree_native::VOCAB);
+        // A tree deeper than a page is not read at all, and is the web view's the same.
+        let page = TestNative::of(&deep(500));
+        assert!(!page.is_native());
+        assert_eq!(page.why(), ["depth"]);
+        assert_eq!(page.envelope_at("/deep").web.unwrap().why, ["depth"]);
         let shallow = TestNative::of(&deep(20)).envelope_at("/deep");
         assert!(shallow.screen.is_some());
     }

@@ -140,8 +140,54 @@ pub(crate) fn fail_on<T>(what: impl Into<String>, why: impl Into<String>) -> Rea
 }
 
 /// The deepest a tree is read: a page nests a few dozen levels, and a tree
-/// built from data without end is not a page.
-const DEEPEST: usize = 4096;
+/// built from data without end is not a page. A tree is measured before it is
+/// read ([`web_depth`]) and one deeper than this is not read at all.
+pub(crate) const DEEPEST: usize = 256;
+
+/// The most stack, in bytes, one reading uses below where it began. The readers of
+/// a page hold about two bands of levels at once (see [`BAND`]); this is the
+/// bound under which that stays whatever a reader's frames come to, and under
+/// which a thread of the default 2 MiB has the rest of its stack for the handler
+/// around the reading, the envelope and the bytes written. A reading that would
+/// pass it stops at the element it was about to read, as a part it could not
+/// read (`depth`): a request can end a page in the web view, never a thread.
+pub(crate) const STACK_BUDGET: usize = 1 << 20;
+
+/// How deep `nodes` nest, in elements and fragments, counted with a list of its
+/// own: a tree of any depth is measured without using the stack. Stops once it is
+/// past `limit`, so a tree built without end costs `limit` levels, not its size.
+pub(crate) fn web_depth<'a>(nodes: impl IntoIterator<Item = &'a Node>, limit: usize) -> usize {
+    let mut deepest = 0;
+    let mut walk: Vec<(&Node, usize)> = nodes.into_iter().map(|node| (node, 1)).collect();
+    while let Some((node, level)) = walk.pop() {
+        match node {
+            Node::Element(element) => {
+                deepest = deepest.max(level);
+                if deepest > limit {
+                    return deepest;
+                }
+                walk.extend(element.child_nodes().iter().map(|child| (child, level + 1)));
+            }
+            Node::Fragment(nodes) => {
+                deepest = deepest.max(level);
+                if deepest > limit {
+                    return deepest;
+                }
+                walk.extend(nodes.iter().map(|child| (child, level + 1)));
+            }
+            _ => {}
+        }
+    }
+    deepest
+}
+
+/// Where the stack stands: the address of a local, which is lower the deeper the
+/// call.
+#[inline(always)]
+fn stack_at() -> usize {
+    let marker = 0_u8;
+    std::ptr::addr_of!(marker) as usize
+}
 
 /// How many levels one reading goes down before the levels below it are read
 /// first, from the bottom up. However deep a tree, the stack holds about two
@@ -175,6 +221,12 @@ pub(crate) struct Cx {
     /// The words of the page's dialog of a question, while its buttons that ask
     /// first are read.
     pub(crate) asking: Option<Asking>,
+    /// Where the stack stood when the first element was read: what
+    /// [`STACK_BUDGET`] is counted from. Zero until then.
+    started: usize,
+    /// The most stack the reading used, for the tests that measure it.
+    #[cfg(test)]
+    pub(crate) most: usize,
 }
 
 /// The dialog a page asks a question in: the words that stand over the
@@ -197,7 +249,29 @@ impl Cx {
             ahead: std::collections::HashMap::new(),
             csrf: None,
             asking: None,
+            started: 0,
+            #[cfg(test)]
+            most: 0,
         }
+    }
+
+    /// Whether `nodes`, read from the top, nest deeper than a page does. A reading
+    /// inside a reading never asks: what it reads was measured with the rest.
+    fn too_deep<'a>(&self, nodes: impl IntoIterator<Item = &'a Node>) -> bool {
+        self.depth == 0 && self.base == 0 && web_depth(nodes, DEEPEST) > DEEPEST
+    }
+
+    /// What stands in place of a tree that is not read because it is too deep.
+    #[inline(never)]
+    fn depth_miss(&mut self) -> Vec<N> {
+        self.misses.push(Miss {
+            what: "depth".to_owned(),
+            why: "the tree is deeper than a page is".to_owned(),
+        });
+        vec![N::Web(n::WebRegion {
+            id: None,
+            html: String::new(),
+        })]
     }
 
     /// This reading, for a page whose posts carry `token`.
@@ -315,6 +389,11 @@ impl Cx {
     /// Nodes in a row, read: text and inline elements join into one text
     /// node, and each other element is read by its slot or its tag.
     pub(crate) fn sequence(&mut self, nodes: &[Node]) -> Vec<N> {
+        // Measured before anything else reads it: `flat` and the readers' own walks
+        // go down a tree of fragments and inline elements on the stack.
+        if self.too_deep(nodes) {
+            return self.depth_miss();
+        }
         let nodes = flat(nodes);
         self.flat_sequence(&nodes)
     }
@@ -322,6 +401,9 @@ impl Cx {
     /// [`sequence`](Self::sequence) for nodes a reader picked out of an
     /// element's children.
     pub(crate) fn flat_sequence(&mut self, nodes: &[&Node]) -> Vec<N> {
+        if self.too_deep(nodes.iter().copied()) {
+            return self.depth_miss();
+        }
         let mut out = Vec::new();
         let mut runs: Vec<n::Run> = Vec::new();
         // Labels that name a control elsewhere: where each stands, the
@@ -417,7 +499,16 @@ impl Cx {
 
     /// [`element`](Self::element), read where it stands.
     fn read_one(&mut self, element: &Element, out: &mut Vec<N>) {
-        if self.base + usize::from(self.depth) >= DEEPEST {
+        let here = stack_at();
+        if self.started == 0 {
+            self.started = here;
+        }
+        let used = self.started.abs_diff(here);
+        #[cfg(test)]
+        {
+            self.most = self.most.max(used);
+        }
+        if self.base + usize::from(self.depth) >= DEEPEST || used >= STACK_BUDGET {
             let web = self.miss(
                 "depth".to_owned(),
                 "the tree is deeper than a page is".to_owned(),
@@ -2921,57 +3012,268 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_tree_deeper_than_a_page_stops_without_taking_the_stack() {
-        let mut node: Node = el("p").child("x").into();
-        for _ in 0..5000 {
-            node = el("div").child(node).into();
+    /// `inner` wrapped `levels` times by `wrap`.
+    fn nested(levels: usize, inner: Node, wrap: impl Fn(Node, usize) -> Node) -> Node {
+        let mut node = inner;
+        for level in 0..levels {
+            node = wrap(node, level);
         }
-        assert_eq!(lower(&node).why(), ["depth"]);
+        node
+    }
+
+    /// What reading `node` leaves: the stack the reading used below where it began, and
+    /// what it read.
+    fn measured(node: &Node) -> (usize, Lowered) {
+        let mut cx = Cx::new(false);
+        let nodes = cx.sequence(std::slice::from_ref(node));
+        let most = cx.most;
+        (most, cx.finish(nodes))
+    }
+
+    /// The stack a thread has by default: a test's, and a runtime's worker.
+    const DEFAULT_STACK: usize = 2 << 20;
+
+    /// Runs `work` on a thread with `stack` bytes, and says what it came back with.
+    fn on_stack<T: Send + 'static>(stack: usize, work: impl FnOnce() -> T + Send + 'static) -> T {
+        std::thread::Builder::new()
+            .stack_size(stack)
+            .spawn(work)
+            .expect("a thread")
+            .join()
+            .expect("no overflow")
     }
 
     #[test]
-    fn a_deep_tree_lowers() {
-        // Five hundred levels of parts with ids, read on a thread with a
-        // small stack: the reading never holds more than two bands of readers.
-        let deep = std::thread::Builder::new()
-            .stack_size(512 * 1024)
-            .spawn(|| {
-                let mut node: Node = crate::Text::new("the bottom").into();
-                for level in 0..500 {
-                    node = el("section")
-                        .children((crate::Text::new(format!("level {level}")), node))
-                        .into();
-                }
-                let mut form: Node = el("input").attr("name", "q").into();
-                for _ in 0..500 {
-                    form = el("div").child(form).into();
-                }
-                let form: Node = el("form").attr("action", "/find").child(form).into();
-                (lower(&node), lower(&form))
-            })
-            .expect("a thread")
-            .join()
-            .expect("no overflow");
-        let (lowered, form) = deep;
-        assert!(lowered.is_native(), "{:?}", lowered.misses);
-        let mut node = &lowered.node;
-        let mut levels = 0;
-        while let N::Stack(stack) = node {
-            let [N::Text(says), inner] = stack.children.as_slice() else {
-                panic!("not a level: {:?}", stack.children);
-            };
-            assert_eq!(says.value, format!("level {}", 499 - levels));
-            node = inner;
-            levels += 1;
-        }
-        assert_eq!(levels, 500);
-        assert!(matches!(node, N::Text(text) if text.value == "the bottom"));
-        // A control deep in a form is read as one of the form's.
-        assert!(form.is_native(), "{:?}", form.misses);
-        let N::Form(read) = &form.node else {
-            panic!("not a form: {:?}", form.node);
+    fn a_tree_deeper_than_a_page_is_not_read_at_all() {
+        let node = nested(5000, el("p").child("x").into(), |inner, _| {
+            el("div").child(inner).into()
+        });
+        let (most, lowered) = measured(&node);
+        assert_eq!(lowered.why(), ["depth"]);
+        // One miss, and no reader ran: nothing was read to be thrown away.
+        assert_eq!(lowered.misses.len(), 1);
+        assert_eq!(most, 0);
+        assert!(matches!(lowered.node, N::Web(_)));
+        // The same for a tree of fragments, which `flat` would open one inside another,
+        // and one of inline elements, which each walk of words goes down.
+        let fragments = nested(5000, Node::Empty, |inner, _| Node::Fragment(vec![inner]));
+        assert_eq!(lower(&fragments).why(), ["depth"]);
+        let words = nested(5000, "x".into(), |inner, _| el("b").child(inner).into());
+        assert_eq!(lower(&words).why(), ["depth"]);
+        // A page that is as deep as one may be is read, and one level more is not.
+        let wrap = |inner: Node, _| -> Node {
+            el("section").child((el("h2").child("level"), inner)).into()
         };
-        assert!(matches!(read.children.as_slice(), [N::Field(field)] if field.name == "q"));
+        let page = nested(DEEPEST - 2, el("p").child("x").into(), wrap);
+        assert!(lower(&page).is_native());
+        let too_deep = nested(DEEPEST + 1, el("p").child("x").into(), wrap);
+        assert_eq!(lower(&too_deep).why(), ["depth"]);
+    }
+
+    #[test]
+    fn rows_built_apart_from_the_page_are_measured_without_the_stack() {
+        let deep = nested(5000, "x".into(), |inner, _| el("span").child(inner).into());
+        assert!(web_depth([&deep], DEEPEST) > DEEPEST);
+        // A hundred thousand levels cost the limit, not the hundred thousand.
+        let more = nested(100_000, "x".into(), |inner, _| {
+            el("span").child(inner).into()
+        });
+        assert_eq!(web_depth([&more], DEEPEST), DEEPEST + 1);
+        let shallow: Node = el("tr").child(el("td").child("x")).into();
+        assert_eq!(web_depth([&shallow], DEEPEST), 2);
+    }
+
+    /// The shapes that spend the most stack a level: a reader of its own for each level,
+    /// with another part beside the one that goes deeper.
+    fn heavy_shapes(levels: usize) -> Vec<(&'static str, Node)> {
+        let bottom = || -> Node { crate::Text::new("the bottom").into() };
+        vec![
+            (
+                "sections with a heading",
+                nested(levels, bottom(), |inner, level| {
+                    el("section")
+                        .children((crate::Text::new(format!("level {level}")), inner))
+                        .into()
+                }),
+            ),
+            (
+                "cards",
+                nested(levels, bottom(), |inner, _| {
+                    crate::Card::titled("A card").body(inner).into()
+                }),
+            ),
+            (
+                "stacks and rows",
+                nested(levels, bottom(), |inner, level| {
+                    if level % 2 == 0 {
+                        crate::Stack::gap(2)
+                            .children((crate::Text::new("a"), inner))
+                            .into()
+                    } else {
+                        crate::Row::gap(2)
+                            .children((crate::Text::new("b"), inner))
+                            .into()
+                    }
+                }),
+            ),
+            (
+                "lists of lists",
+                nested(levels, bottom(), |inner, _| {
+                    el("ul").child(el("li").children(("item", inner))).into()
+                }),
+            ),
+            (
+                "disclosures",
+                nested(levels, bottom(), |inner, _| {
+                    el("details")
+                        .children((el("summary").child("more"), inner))
+                        .into()
+                }),
+            ),
+            (
+                "regions",
+                nested(levels, bottom(), |inner, level| {
+                    crate::Region::new(format!("r{level}"))
+                        .src("/x")
+                        .children(inner)
+                        .into()
+                }),
+            ),
+            (
+                "a control in a form",
+                el("form")
+                    .attr("action", "/find")
+                    .child(nested(
+                        levels,
+                        el("input").attr("name", "q").into(),
+                        |inner, _| el("div").child(inner).into(),
+                    ))
+                    .into(),
+            ),
+        ]
+    }
+
+    #[test]
+    fn a_page_as_deep_as_one_may_be_reads_within_the_budget_on_a_default_stack() {
+        // Each shape, `DEEPEST - 3` levels deep, read on a thread with the stack a test or a
+        // runtime's worker has. What is measured is the stack the reading used below where it
+        // began, in this build; it must stay under three quarters of the budget, which is
+        // itself half the default stack, so the handler's frames above the reading and the
+        // envelope's after it have the rest.
+        let report = on_stack(DEFAULT_STACK, || {
+            // A component is several elements a level: each shape is as many levels as make it
+            // as deep as a page may be.
+            let probe = heavy_shapes(10);
+            (0..probe.len())
+                .map(|at| {
+                    let per = web_depth([&probe[at].1], usize::MAX).div_ceil(10);
+                    let (name, node) = heavy_shapes((DEEPEST - 6) / per).swap_remove(at);
+                    assert!(web_depth([&node], DEEPEST) <= DEEPEST, "{name}");
+                    let (most, lowered) = measured(&node);
+                    assert!(lowered.is_native(), "{name}: {:?}", lowered.misses);
+                    (name, most)
+                })
+                .collect::<Vec<_>>()
+        });
+        for (name, most) in &report {
+            assert!(
+                *most < STACK_BUDGET / 4 * 3,
+                "{name}: {most} bytes, of a budget of {STACK_BUDGET}: {report:?}"
+            );
+        }
+        println!("stack used below the start, in a page as deep as one may be: {report:?}");
+    }
+
+    #[test]
+    fn what_the_budget_cannot_hold_is_a_part_in_the_web_view_not_an_overflow() {
+        // A reading that began a whole budget above where this one stands has none left:
+        // it ends in a miss at the first element, however the readers' frames come out.
+        let node = nested(100, crate::Text::new("x").into(), |inner, _| {
+            crate::Card::titled("A card").body(inner).into()
+        });
+        let mut cx = Cx::new(false);
+        cx.started = stack_at() + STACK_BUDGET;
+        let read = cx.sequence(std::slice::from_ref(&node));
+        let lowered = cx.finish(read);
+        assert!(!lowered.is_native());
+        assert_eq!(lowered.why(), ["depth"]);
+    }
+
+    #[test]
+    fn the_walks_that_go_down_a_tree_on_the_stack_fit_a_small_one_at_the_deepest() {
+        // Words in elements in elements, fragments in fragments, a control in a form: the
+        // helpers that recurse (`is_inline`, `inline`, `flat`, `text_of`, `hidden_in`) at
+        // the deepest a page may be, on a stack a quarter of the default.
+        on_stack(DEFAULT_STACK / 4, || {
+            let words = nested(DEEPEST - 1, "x".into(), |inner, _| {
+                el("b").child(inner).into()
+            });
+            let fragments = nested(DEEPEST - 1, "x".into(), |inner, _| {
+                Node::Fragment(vec![inner])
+            });
+            let emphasised = nested(DEEPEST - 1, "x".into(), |inner, level| {
+                el(if level % 2 == 0 { "em" } else { "strong" })
+                    .child(inner)
+                    .into()
+            });
+            let link = nested(DEEPEST - 2, "x".into(), |inner, _| {
+                el("span").child(inner).into()
+            });
+            let link: Node = el("a").attr("href", "/x").child(link).into();
+            for node in [&words, &fragments, &emphasised, &link] {
+                let lowered = lower(node);
+                assert!(lowered.is_native(), "{:?}", lowered.misses);
+            }
+        });
+    }
+
+    /// A chain of `levels` stacks of the protocol's, each holding the next.
+    fn chain(levels: usize) -> N {
+        let mut node = N::text("the bottom");
+        for _ in 0..levels {
+            node = N::Stack(n::Stack {
+                children: vec![node],
+                ..n::Stack::default()
+            });
+        }
+        node
+    }
+
+    #[test]
+    fn what_a_reading_leaves_is_dropped_on_a_small_stack_at_any_depth_a_page_has() {
+        // The tree of the protocol's parts a reading leaves is as deep as the page was; its
+        // derived `Drop` goes down it on the stack. Measured at about 70 KiB for the deepest
+        // a page may be, in a debug build: a quarter of the default stack has room.
+        let lowered = on_stack(DEFAULT_STACK, || {
+            lower(&nested(
+                DEEPEST - 2,
+                crate::Text::new("the bottom").into(),
+                |inner, level| {
+                    el("section")
+                        .children((crate::Text::new(format!("level {level}")), inner))
+                        .into()
+                },
+            ))
+        });
+        assert!(lowered.is_native(), "{:?}", lowered.misses);
+        let tree = lowered.node;
+        assert!(tree.depth() > navree_native::MAX_DEPTH);
+        on_stack(DEFAULT_STACK / 4, move || drop(tree));
+    }
+
+    #[test]
+    fn a_tree_a_client_can_read_is_cloned_compared_and_written_on_a_default_stack() {
+        // What is answered is at most `MAX_DEPTH` deep (anything deeper is the web view's
+        // before it is written or copied). Cloned and compared with the derived code, which
+        // holds a copy of a part in every frame, that is about a megabyte in a debug build:
+        // half the default stack. Written as JSON it is about 180 KiB, and its depth,
+        // `downgrade` and `share_icons` use none that grows with it.
+        on_stack(DEFAULT_STACK, || {
+            let tree = chain(navree_native::MAX_DEPTH - 1);
+            let copy = tree.clone();
+            assert!(copy == tree);
+            assert!(serde_json::to_string(&tree).expect("json").len() > 100);
+            assert_eq!(tree.depth(), navree_native::MAX_DEPTH);
+        });
     }
 }

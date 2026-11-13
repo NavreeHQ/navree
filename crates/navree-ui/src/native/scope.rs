@@ -57,7 +57,10 @@ pub(crate) struct Request {
     pub(crate) charts: std::sync::Mutex<std::collections::HashMap<String, String>>,
     /// The rows of the data tables built during the request, as trees, by a hash of
     /// the string the page keeps for them.
-    pub(crate) rows: std::sync::Mutex<std::collections::HashMap<u64, crate::node::Node>>,
+    /// Shared, not copied: copying a tree goes down it on the stack, and this one was
+    /// built by a page and is as deep as the page made it.
+    pub(crate) rows:
+        std::sync::Mutex<std::collections::HashMap<u64, std::sync::Arc<crate::node::Node>>>,
     /// What authors said to a native client of the elements built during the request,
     /// by the key the element holds: an element carries a number, not the words.
     pub(crate) hints: std::sync::Mutex<Vec<crate::hint::Hints>>,
@@ -112,12 +115,12 @@ impl Request {
     /// Keeps the tree of the rows written as `html`.
     pub(crate) fn keep_rows(&self, html: &str, rows: crate::node::Node) {
         if let Ok(mut kept) = self.rows.lock() {
-            kept.insert(hash(html), rows);
+            kept.insert(hash(html), std::sync::Arc::new(rows));
         }
     }
 
     /// The tree of the rows written as `html` during this request.
-    pub(crate) fn rows(&self, html: &str) -> Option<crate::node::Node> {
+    pub(crate) fn rows(&self, html: &str) -> Option<std::sync::Arc<crate::node::Node>> {
         self.rows.lock().ok()?.get(&hash(html)).cloned()
     }
 

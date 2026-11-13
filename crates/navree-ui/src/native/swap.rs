@@ -281,9 +281,16 @@ fn respond(
     shell: &str,
 ) -> Response {
     envelope = finished(envelope, request, shell);
-    let mut body = serde_json::to_string(&envelope)
-        .unwrap_or_else(|_| format!("{{\"navree\":{}}}", navree_native::MAJOR));
-    if navree_native::nesting(&body) > navree_native::MAX_NESTING {
+    // Measured before it is written: serialising goes down a tree on the stack, so a tree
+    // deeper than a client reads is never handed to it, whichever path made it.
+    let too_deep = deepest(&envelope) > navree_native::MAX_DEPTH;
+    let mut body = if too_deep {
+        String::new()
+    } else {
+        serde_json::to_string(&envelope)
+            .unwrap_or_else(|_| format!("{{\"navree\":{}}}", navree_native::MAJOR))
+    };
+    if too_deep || navree_native::nesting(&body) > navree_native::MAX_NESTING {
         let web = Envelope::web(
             assets::BUILD,
             Web {
@@ -306,6 +313,33 @@ fn respond(
         body,
     )
         .into_response()
+}
+
+/// How deep the nodes of `envelope` nest, its screen's and its ops': measured with
+/// a list of its own, so it costs no stack however deep they are.
+pub(crate) fn deepest(envelope: &Envelope) -> usize {
+    use navree_native::Op as O;
+    let mut deepest = 0;
+    if let Some(screen) = &envelope.screen {
+        for node in std::iter::once(&screen.body).chain(&screen.actions) {
+            deepest = deepest.max(node.depth());
+        }
+    }
+    for op in &envelope.ops {
+        let nodes: Vec<&N> = match op {
+            O::Morph { node, .. } | O::Replace { node, .. } => vec![node],
+            O::Append { nodes, .. } | O::Prepend { nodes, .. } | O::Merge { nodes, .. } => {
+                nodes.iter().collect()
+            }
+            O::Rows { rows, .. } => rows.iter().flat_map(|row| row.nodes()).collect(),
+            O::Row { row, .. } => row.nodes().collect(),
+            _ => Vec::new(),
+        };
+        for node in nodes {
+            deepest = deepest.max(node.depth());
+        }
+    }
+    deepest
 }
 
 /// The envelope a page answers a native client with: its screen in the
@@ -1185,6 +1219,70 @@ mod tests {
 
     use super::*;
     use crate::{Button, Card, Stack, Text};
+
+    #[tokio::test]
+    async fn an_answer_deeper_than_a_client_reads_is_the_web_views_before_it_is_written() {
+        use navree_native::node as n;
+        let chain = |levels: usize| {
+            let mut node = N::text("the bottom");
+            for _ in 0..levels {
+                node = N::Stack(n::Stack {
+                    children: vec![node],
+                    ..n::Stack::default()
+                });
+            }
+            node
+        };
+        let request = scope::Request::new(
+            navree_native::Client::new(
+                navree_native::Platform::Android,
+                navree_native::FormFactor::Phone,
+            ),
+            "/deep",
+        );
+        let said = |envelope: Envelope| {
+            let response = respond(StatusCode::OK, "no-store", envelope, &request, "");
+            async move {
+                let bytes = navree_http::body::to_bytes(response.into_body(), usize::MAX)
+                    .await
+                    .expect("a body");
+                String::from_utf8(bytes.to_vec()).expect("text")
+            }
+        };
+        // As deep as a client reads (the JSON nests two levels a part and two more around
+        // the screen): the screen.
+        let fine = Envelope::screen(
+            assets::BUILD,
+            navree_native::Screen::new("Deep", chain(navree_native::MAX_DEPTH / 2 + 20)),
+        );
+        assert!(deepest(&fine) <= navree_native::MAX_DEPTH);
+        assert!(said(fine).await.contains("the bottom"));
+        // One level more, and a tree a thousand deep: the word to show the page, with why.
+        for levels in [navree_native::MAX_DEPTH, 1000] {
+            let deep = Envelope::screen(
+                assets::BUILD,
+                navree_native::Screen::new("Deep", chain(levels)),
+            );
+            assert!(deepest(&deep) > navree_native::MAX_DEPTH);
+            let body = said(deep).await;
+            assert!(
+                body.contains(r#""web""#) && body.contains("depth"),
+                "{body}"
+            );
+            assert!(!body.contains("the bottom"), "{body}");
+        }
+        // The same for what an op carries.
+        let op = Envelope::ops(
+            assets::BUILD,
+            vec![navree_native::Op::Append {
+                target: "list".to_owned(),
+                nodes: vec![chain(200)],
+                more: None,
+            }],
+        );
+        assert!(deepest(&op) > navree_native::MAX_DEPTH);
+        assert!(said(op).await.contains("depth"));
+    }
 
     #[test]
     fn a_toasts_post_carries_the_token_it_was_given() {

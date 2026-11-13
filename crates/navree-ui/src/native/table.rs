@@ -139,13 +139,21 @@ pub(crate) fn data_table(cx: &mut Cx, element: &Element) -> Read {
             "tbody" => {
                 // Rows the page keeps as a string are kept as a tree with the request
                 // that built them; rows built any other way have none to read.
-                let mut kept: Vec<Node> = Vec::new();
+                let mut kept: Vec<std::sync::Arc<Node>> = Vec::new();
                 for child in flat(part.child_nodes()) {
                     match child {
                         Node::Raw(html) => {
                             let tree = super::scope::native()
                                 .and_then(|request| request.rows(html.as_str()));
                             match tree {
+                                // The rows were built apart from the page: measured here, as
+                                // the page is, before any reader walks them.
+                                Some(rows)
+                                    if super::lower::web_depth([&*rows], super::lower::DEEPEST)
+                                        > super::lower::DEEPEST =>
+                                {
+                                    return fail("rows nested deeper than a page is");
+                                }
                                 Some(rows) => kept.push(rows),
                                 None => {
                                     return fail("rows written as markup, with no tree to read");
@@ -160,7 +168,9 @@ pub(crate) fn data_table(cx: &mut Cx, element: &Element) -> Read {
                 }
                 let mut seen = flat(part.child_nodes());
                 seen.retain(|node| !matches!(node, Node::Raw(_)));
-                seen.extend(flat(&kept));
+                for rows in &kept {
+                    seen.extend(flat(std::slice::from_ref(&**rows)));
+                }
                 for row in seen {
                     let Node::Element(row) = row else { continue };
                     let detail = slot(row).as_deref() == Some("row-detail");

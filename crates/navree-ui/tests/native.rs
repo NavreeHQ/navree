@@ -2325,6 +2325,32 @@ fn a_data_table_with_a_box_a_menu_and_a_detail_reads_as_the_parts_it_has() {
 }
 
 #[test]
+fn a_cell_nested_deeper_than_a_page_is_the_tables_miss_and_not_a_stack_overflow() {
+    let deep = |levels: usize| {
+        TestNative::build(phone(), move || {
+            let query: TableQuery<OrderRow, NoFilter> = TableQuery::parse("/orders", "");
+            let page = TablePage::new(vec![order(1, "open")], 1);
+            View::new("Orders").body(orders_table(&query, &page).cell("total", move |_| {
+                let mut node: navree_ui::Node = Text::new("the bottom").into();
+                for _ in 0..levels {
+                    node = el("span").child(node).into();
+                }
+                node
+            }))
+        })
+    };
+    // Rows are built apart from the page, so they are measured on their own.
+    let page = deep(5000);
+    assert!(!page.is_native());
+    assert_eq!(page.why(), ["slot:data-table"]);
+    assert_eq!(
+        page.page().misses[0].why,
+        "rows nested deeper than a page is"
+    );
+    assert!(deep(20).is_native());
+}
+
+#[test]
 fn a_form_in_a_cell_stays_the_rows_inline_edit() {
     let page = TestNative::build(phone(), || {
         let query: TableQuery<OrderRow, NoFilter> = TableQuery::parse("/orders", "");
