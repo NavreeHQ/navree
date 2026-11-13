@@ -165,6 +165,10 @@ navree list                                 # every command of the app
 | Reverse engineering an old product (any stack, old data) into specs, a task list and tests, then rebuilding it in Navree; porting or migrating a legacy app and its data | `navree-reverse-engineering` |
 | Adding a page, a list page, a form, a table, a dashboard or a settings screen in Navree UI with no design to start from: the shell, page routes, forms and field errors, `DataTable` lists, regions, error pages, themes, dates and times, selects, drag and drop, `TestView` tests; finding which component fits | `navree-ui` |
 | Building navree-ui pages from a design: an HTML mock-up, a Figma or other design-tool export, a handoff bundle or screenshots; keeping an existing look; checking pages against a design; navree-ui forms with a select, a combobox searched on the server, a multi-select or a command palette | `navree-design-to-ui` |
+| Making Navree UI pages answer native apps (iPhone, iPad, Android phones and tablets): turning the preview on, saying what a page's parts are (roles, column roles, what a row opens), reading `navree native:coverage`, `native.toml`, `TestNative`; what falls back to the web view and what does not exist yet | `navree-native` |
+| Deciding where actions, records, forms, sheets and states go on a native screen so it belongs on every system; reviewing native screenshots in light and dark, at the largest text and right to left | `navree-native-design` |
+| Working on or reviewing a Navree app on iPhone or iPad: what the Apple client does with each part, Liquid Glass, the Apple checklist, app ids, passkeys, Sign in with Apple and push for an Apple app | `navree-native-apple` |
+| Working on or reviewing a Navree app on an Android phone or tablet: navigation by window width, the floating action button, Material 3, dynamic colour, the Android checklist, package ids, passkeys, Sign in with Google and push for an Android app | `navree-native-android` |
 
 ## Common mistakes
 

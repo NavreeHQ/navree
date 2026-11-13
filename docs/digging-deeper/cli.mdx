@@ -346,7 +346,6 @@ Native coverage of store-demo, asked as android on phone
 
 ROUTE                                       GRADE   WHAT IS MISSING
 /                                           idiom
-/fragments/activity                         web     the handler writes its HTML by hand, so it cannot be read; build it with the toolkit's components
 /fragments/figures                          idiom
 /fragments/sales                            idiom
 /fragments/shelves                          idiom
@@ -358,10 +357,11 @@ ROUTE                                       GRADE   WHAT IS MISSING
 /orders?filter[status][in]=open&sort=total  idiom
 /inventory?page=2                           idiom
 
-11 idiom, 0 layout, 1 web: 11 of 12 pages are native screens
+11 idiom, 0 layout, 0 web: 11 of 11 pages are native screens
 
-Skipped (3):
+Skipped (4):
   /app/{key}: needs a value for {key}; add `key = ...` under [coverage.params] in native.toml
+  /fragments/activity: answered operations, not a screen
   /orders/{id}/peek (/orders/1/peek): answered operations, not a screen
   /inventory/{id}/peek (/inventory/1/peek): answered operations, not a screen
 

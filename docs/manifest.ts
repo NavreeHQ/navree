@@ -250,6 +250,7 @@ export const sections: DocsSection[] = [
       "errors-and-states",
       "drag-and-drop",
       "islands",
+      "native",
       "coming-next",
     ],
   },

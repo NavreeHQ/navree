@@ -1,0 +1,119 @@
+---
+title: "Native apps (preview)"
+description: "The same Navree UI pages answer an iPhone, an iPad or an Android phone with native parts that each system draws its own way: turning it on, saying what a page's parts are, and reading the coverage report."
+---
+
+A native client asks for the same URL a browser does and gets the page as a tree of parts: a screen, a list, a form, a button with a role. The client for each system draws that tree with the system's own components (SwiftUI on Apple systems, Jetpack Compose with Material 3 on Android) and puts each part where that system's design guidelines put it. The server says what a thing is. The client decides where it goes and how it looks.
+
+<Callout type="warning" title="A preview">
+
+Native clients sit behind a feature whose name says it may change, and what they answer may change in a minor release. A browser's pages are the same bytes with it on and off. A watch or TV client, widgets, Windows and Linux clients, starting device features from a page, and a scaffold for the app project do not exist yet.
+
+</Callout>
+
+## Turn it on
+
+Add the facade feature to the `navree` dependency, or to a feature of your own app so a plain build stays as it was:
+
+```toml title="Cargo.toml"
+[features]
+native-preview = ["navree/ui-native-preview"]
+```
+
+With it on, `UiModule` answers a request that sends `X-Navree-Native: 1` and describes itself in `X-Navree-Client` with the page as a native tree, serves the app's shell (its destinations, user menu and the theme's accent) at `/_navree/native/shell`, and registers the `native:coverage` command. A request without the header gets HTML as before.
+
+## Say what the parts are
+
+A page runs as it is. It belongs to its system once its author has said, in words that mean the same on the web, what its parts are. Each word is a field of a component that writes no HTML.
+
+```rust
+use navree::ui::{AppPage, AppShell, Button, Card, Role, Text, icons};
+
+/// The orders page: one action the screen is for, one more beside it.
+pub fn orders_page(shell: AppShell) -> AppPage {
+    shell
+        .page("Orders")
+        .actions((
+            Button::primary("New order")
+                .icon(icons::PLUS)
+                .href("/orders/new")
+                .role(Role::Create),
+            Button::outline("Export").icon(icons::DOWNLOAD).href("/orders/export"),
+        ))
+        .body(Card::titled("Open orders").body(Text::new("14 orders wait to be packed.")))
+}
+```
+
+`Button::role` says what a button is for (`Primary`, `Secondary`, `Destructive`, `Cancel`, `Confirm`, `Create`, `Navigation`); an Android phone draws creation as the floating action button and an iPhone as a plus in the toolbar. `Button::presented` says how the screen a link leads to opens (`Push`, `Replace`, `Root`, `Sheet`, `Task`, `Full`).
+
+For records, the columns of a [DataTable](/docs/ui/data-table/) say which is the record's name, a line under it, its state and what stands at its end, and a row says what it opens:
+
+```rust
+use chrono::NaiveDate;
+use navree::ui::{DataTable, TablePage, TableQuery, TableRow};
+
+#[derive(Clone, TableRow)]
+#[table(cursor, sort = "-placed_on", per = 25)]
+pub struct OrderRow {
+    #[col(skip)]
+    pub id: i64,
+    #[col(sortable, search, label = "Order", role = title)]
+    pub number: String,
+    #[col(search, hidden, role = subtitle)]
+    pub customer: String,
+    #[col(sortable, numeric, role = trailing)]
+    pub total: i64,
+    #[col(sortable, filter = date, label = "Placed")]
+    pub placed_on: NaiveDate,
+}
+
+pub fn orders_table<'a>(
+    query: &'a TableQuery<OrderRow>,
+    page: &'a TablePage<OrderRow>,
+) -> DataTable<'a, OrderRow> {
+    DataTable::new("orders", query, page)
+        .row_opens(|row| format!("/orders/{}/peek", row.id))
+        .filter_bar()
+}
+```
+
+The roles are `title`, `subtitle`, `status` and `trailing`. The table's search, filters and sort become the screen's search bar, filter chips and sort menu. `native::only` and `native::web_only` keep a part for one side. The [agent skill `navree-native`](/docs/ai/agent-skills/) lists every word, and `navree-native-design` the rules that hold on every system.
+
+## Grades and coverage
+
+`navree native:coverage` asks every page route in process, as a native client, and grades it:
+
+| Grade | Means |
+|---|---|
+| `idiom` | The page's parts say what they are, so the client lays the screen out as its own system does. |
+| `layout` | Native parts, laid out as the web page is. It works and looks like a web page drawn with the system's controls. |
+| `web` | The client shows the page in its web view, because a part of it has no native meaning yet. |
+
+Only `idiom` belongs to its system. The command, its options, the `native.toml` file of example values and `navree native:doctor` are on the [CLI page](/docs/digging-deeper/cli/#native-apps).
+
+## Test a page as a native client
+
+`TestNative` drives a page in a plain test, with no browser and no device:
+
+```rust
+use http::HeaderMap;
+use navree::ui::native::protocol::{Client, FormFactor, Platform};
+use navree::ui::native::{Grade, TestNative, graded};
+use navree::ui::Shell;
+
+#[test]
+fn the_orders_page_belongs_to_its_system() {
+    let phone = Client::new(Platform::Android, FormFactor::Phone);
+    let page = TestNative::build(phone, || {
+        let shell = Shell::new("Sutlej Supply").for_request("/orders", &HeaderMap::new());
+        orders_page(shell).to_view()
+    });
+    assert!(page.is_native(), "{:?}", page.why());
+    assert!(page.sees("14 orders wait to be packed."));
+    assert_eq!(graded(page.screen()).0, Grade::Idiom);
+}
+```
+
+## When a part cannot be read
+
+A page with a part that has no native meaning yet (hand-written HTML, a canvas) is shown whole in the system's web view, inside the native bars. The app keeps working while coverage grows, and the report names the part. The web view has no bridge to the device: it gets what a browser tab on the same site gets.
