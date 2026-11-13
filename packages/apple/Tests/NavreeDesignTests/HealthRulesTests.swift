@@ -425,6 +425,15 @@ import Testing
     #expect(!CompositionRules.isGroup(Navree.Section(children: [.card(Navree.Card(children: [])), .divider(Navree.Divider())])))
     #expect(CompositionRules.padding(Navree.Card(children: [])) == 16)
     #expect(CompositionRules.padding(Navree.Card(children: [], pad: 3)) == 12)
+    #expect(CompositionRules.padding(Navree.Card(children: []), columns: 5) == 8)
+    #expect(CompositionRules.padding(Navree.Card(children: [], pad: 4), columns: 5) == 16)
+    #expect(CompositionRules.padding(Navree.Card(children: []), columns: 2) == 16)
+}
+
+@Test func aTilesOneWordNameShrinksRatherThanBreaking() {
+    #expect(CompositionRules.shrinksToFit(Navree.Text(align: .center, value: "Movement")))
+    #expect(!CompositionRules.shrinksToFit(Navree.Text(align: .center, value: "25% of score")))
+    #expect(!CompositionRules.shrinksToFit(Navree.Text(value: "Movement")))
 }
 
 @Test func anIconTakesTheSystemSymbolThePageNamesForIt() {

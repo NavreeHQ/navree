@@ -207,6 +207,7 @@ struct GridPart: View {
             ForEach(Array(grid.children.enumerated()), id: \.offset) { _, child in
                 NodeView(child).frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            .environment(\.navreeGridColumns, grid.cols)
         }
         .frame(maxWidth: .infinity)
     }
@@ -254,7 +255,8 @@ struct TextPart: View {
             .font(font)
             .fontWeight(text.weight.map(Typography.weight))
             .foregroundStyle(colour)
-            .lineLimit(text.lines)
+            .lineLimit(CompositionRules.shrinksToFit(text) ? 1 : text.lines)
+            .minimumScaleFactor(CompositionRules.shrinksToFit(text) ? 0.6 : 1)
             .multilineTextAlignment(Typography.alignment(text.align))
             .frame(maxWidth: text.align == .center || text.align == .end ? .infinity : nil, alignment: Typography.frame(text.align))
             .fixedSize(horizontal: false, vertical: text.lines == nil)
