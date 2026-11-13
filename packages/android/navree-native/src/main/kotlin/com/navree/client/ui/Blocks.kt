@@ -122,7 +122,7 @@ internal fun blocks(
                 node.children.forEachIndexed { index, child ->
                     // On a wide window, cards that follow each other stand side by side.
                     if (cardColumns > 1 && card(child) && child !== omit && inFlow(child, screen)) {
-                        run += index to child
+                        run.add(index to child)
                         return@forEachIndexed
                     }
                     if (run.isNotEmpty()) flush()
