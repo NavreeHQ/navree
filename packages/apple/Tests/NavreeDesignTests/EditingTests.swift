@@ -50,3 +50,14 @@ private func corpusScreen(_ name: String) throws -> Navree.Screen {
     let backlog = try #require(columns.first?.list)
     #expect(EditRules.movable(backlog)?.first == "columns-item-1")
 }
+
+@Test func aCardsMainColumnAndItsSideAreReadOneAfterTheOtherNotSideBySide() throws {
+    let card = try answerScreen("board-card1")
+    let sections = SectionRules.sections(card.body)
+    // The page's two columns become sections of the list, none of them a grid drawn in one row.
+    #expect(sections.count > 2)
+    #expect(!sections.flatMap(\.rows).contains { row in
+        if case .part(.grid) = row { return true }
+        return false
+    })
+}

@@ -99,15 +99,23 @@ public struct Launch: Sendable, Equatable {
     public var push: [String]
     /// An address presented as a sheet over everything.
     public var sheet: String?
+    /// Controls tapped in turn on the screen in front, by their words.
+    public var taps: [String]
+    /// Lists whose rows can be chosen or moved open in edit mode.
+    public var editing: Bool
 
-    public init(select: String? = nil, push: [String] = [], sheet: String? = nil) {
+    public init(
+        select: String? = nil, push: [String] = [], sheet: String? = nil, taps: [String] = [], editing: Bool = false
+    ) {
         self.select = select
         self.push = push
         self.sheet = sheet
+        self.taps = taps
+        self.editing = editing
     }
 
     public var isEmpty: Bool {
-        select == nil && push.isEmpty && sheet == nil
+        select == nil && push.isEmpty && sheet == nil && taps.isEmpty
     }
 }
 

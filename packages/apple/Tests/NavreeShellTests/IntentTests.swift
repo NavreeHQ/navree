@@ -113,10 +113,11 @@ struct IntentTests {
         #expect(shell.transport.fetched.count >= before)
     }
 
-    @Test func aFormOfNoIdIsSentAsNoForm() {
+    @Test func aFormTheServerGaveNoIdGoesByTheNameTheCoreGaveIt() {
         #expect(NativeClient.formID(nil) == nil)
         #expect(NativeClient.formID(.loose) == nil)
-        #expect(NativeClient.formID(FormRef(key: "@/orders")) == nil)
+        // The core names such a form `@` and its address, and writes that name in the tree.
+        #expect(NativeClient.formID(FormRef(key: "@/cards/1/peek")) == "@/cards/1/peek")
         #expect(NativeClient.formID(FormRef(key: "refund")) == "refund")
     }
 }

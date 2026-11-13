@@ -34,6 +34,7 @@ public struct AppShell: View {
         Group {
             if let client = session.client {
                 Chrome(client: client, configuration: session.configuration)
+                    .environment(\.navreeStartsEditing, session.configuration.launch.editing)
                     .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
                         session.window(WindowRules.width(sizeClass: WidthClass(sizeClass), points: width))
                     }
@@ -200,6 +201,25 @@ enum LaunchSteps {
         }
         if let sheet = launch.sheet, let front = client.nav.front {
             client.send(.act(.init(screen: front, action: .navigate(.init(href: sheet, present: .sheet)))))
+        }
+        if !launch.taps.isEmpty {
+            Task { await tap(launch.taps, on: client) }
+        }
+    }
+
+    /// Each control tapped once the screen in front has come, in turn.
+    static func tap(_ labels: [String], on client: NativeClient) async {
+        for label in labels {
+            for _ in 0..<120 {
+                if let front = client.front, !front.loading, let screen = front.screen,
+                    let tap = LaunchTaps.find(label, in: screen, open: Set(front.states.filter { $0.value.contains(.open) }.keys))
+                {
+                    client.perform(.act(tap.action, tap.place), on: front.id)
+                    break
+                }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            try? await Task.sleep(for: .milliseconds(800))
         }
     }
 }

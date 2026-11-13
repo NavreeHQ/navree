@@ -66,11 +66,7 @@ struct Inspector: ViewModifier {
         if let pane {
             content
                 .inspector(isPresented: $shown) {
-                    NavigationStack {
-                        PaneList(pane: pane)
-                            .navigationTitle(pane.title ?? "")
-                            .navigationBarTitleDisplayModeInline()
-                    }
+                    PaneList(pane: pane)
                 }
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {

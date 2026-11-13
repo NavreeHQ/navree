@@ -66,7 +66,13 @@ public struct ScreenView: View {
             .modifier(TitleDisplay(mode: PagerRules.titleMode(depth, pager: screen.pager)))
             .modifier(PagerInBar(pager: screen.pager))
             .toolbar {
-                PlacedActions(actions: actions.filter { !Self.isDestructive($0) }, depth: depth, overlay: nil, form: nil)
+                // A screen with no list of its own (a designed one) has no
+                // section at its end: its destructive actions end its menu.
+                let listed = !CompositionRules.isComposed(screen.body) && PaneRules.panes(in: screen.body).isEmpty
+                PlacedActions(
+                    actions: listed ? actions.filter { !Self.isDestructive($0) } : actions, depth: depth, overlay: nil, form: nil,
+                    destructiveInMenu: !listed
+                )
                 if !lifted.confirms.isEmpty {
                     PlacedActions(
                         actions: lifted.confirms.map(Navree.Node.button), depth: depth, overlay: nil,

@@ -20,6 +20,12 @@ struct Editing: ViewModifier {
     }
 }
 
+extension EnvironmentValues {
+    /// Whether a screen whose rows can be chosen or moved opens in edit mode:
+    /// for a demo's launch and its pictures.
+    @Entry public var navreeStartsEditing: Bool = false
+}
+
 #if os(iOS)
 private struct EditingBars<Wrapped: View>: View {
     let content: Wrapped
@@ -29,6 +35,7 @@ private struct EditingBars<Wrapped: View>: View {
     let reorders: Bool
     @State private var mode: EditMode = .inactive
     @Environment(\.navree) private var context
+    @Environment(\.navreeStartsEditing) private var startsEditing
 
     var body: some View {
         if table == nil && !reorders {
@@ -44,6 +51,7 @@ private struct EditingBars<Wrapped: View>: View {
                         ToolbarItemGroup(placement: .bottomBar) { chosenBar(table) }
                     }
                 }
+                .task { if startsEditing { mode = .active } }
         }
     }
 
