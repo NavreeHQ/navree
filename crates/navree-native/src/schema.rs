@@ -44,7 +44,7 @@ use crate::device::{
     ConfirmMethod, Confirmed, ConfirmedBy, CopyText, DeviceCall, Feature, Haptic, HapticKind,
     HttpsUrl, LocateOnce, Located, Notify, OpenSettings, OpenUrl, OriginPath, Passkey,
     PasskeyCredential, PasskeyMode, PlatformSignIn, PushDevice, PushEnvironment, PushPlatform,
-    PushProvider, PushRegistered, Refusal, RegisterPush, ReplyCall, ScanCode, Scanned, SetBadge, SettingsPage,
+    PushRegistered, Refusal, RegisterPush, ReplyCall, ScanCode, Scanned, SetBadge, SettingsPage,
     PersonName, Share, Shared, SignInProvider, SignedIn, SignedInUser, Then, Ticket, When,
 };
 use crate::envelope::{Back, Envelope, Screen, Search, Upgrade, Web};
@@ -866,11 +866,10 @@ object!(Shared { completed } {});
 object!(OpenUrl { url } { inside });
 object!(AuthSession { start } { ephemeral });
 object!(RegisterPush {} { categories });
-names!(PushProvider { Apns, Fcm, Wns });
 names!(PushEnvironment { Sandbox, Production });
 names!(PushPlatform { Ios, Android });
 object!(PushDevice { platform, token, app_id } { environment });
-object!(PushRegistered { provider, environment, token, app_id, install_id } { locale });
+object!(PushRegistered { granted } {});
 union!(When tag "t"
     newtype {}
     structs {

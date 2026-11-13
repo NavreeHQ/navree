@@ -776,9 +776,13 @@ pub struct AuthSession {
     pub ephemeral: bool,
 }
 
-/// Asks for permission to send push messages and registers the device. The
-/// device's token goes to the framework's own route; the call's continuation
-/// gets the outcome.
+/// Asks the person for permission to send push messages, in the system's own
+/// prompt, and asks for nothing else. It never gives the server a token: a
+/// device's token reaches the server by one route only, the shell's push route
+/// ([`Push::register`](crate::shell::Push::register)), which the client posts it
+/// to itself (a [`PushDevice`]), at every launch and whenever the system
+/// changes it, for as long as the permission is given. The call's continuation
+/// is told what the person said ([`PushRegistered`]).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RegisterPush {
     /// The kinds of message the app sends, so the system can offer each its
@@ -787,17 +791,20 @@ pub struct RegisterPush {
     pub categories: Vec<String>,
 }
 
-/// The service that carries a device's push messages.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum PushProvider {
-    /// Apple's.
-    Apns,
-    /// Google's Firebase Cloud Messaging.
-    Fcm,
-    /// Windows'.
-    Wns,
+/// What [`RegisterPush`] posts to its continuation: whether the person allowed
+/// push messages. It is never the device's token, which only the shell's push
+/// route takes.
+///
+/// A person's no is an answer, not a refusal: the client posts `outcome=ok`
+/// with `granted=false`, whether they said it now or before (a system asks
+/// once). A refusal is for when no answer could be had: the system has no push
+/// ([`Refusal::Unsupported`]), the app was not built with it
+/// ([`Refusal::NotBuilt`]), or something above the person forbids it
+/// ([`Refusal::Restricted`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PushRegistered {
+    /// Whether the person allowed push messages.
+    pub granted: bool,
 }
 
 /// Which of the service's environments a token belongs to.
@@ -870,24 +877,6 @@ impl fmt::Debug for PushDevice {
             .field("environment", &self.environment)
             .finish()
     }
-}
-
-/// What [`RegisterPush`] posts to the framework's push route.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PushRegistered {
-    /// The service.
-    pub provider: PushProvider,
-    /// Its environment.
-    pub environment: PushEnvironment,
-    /// The device's token. It is personal: never logged.
-    pub token: String,
-    /// The app's id with the service: its bundle id or package name.
-    pub app_id: String,
-    /// This installation of the app, so a reinstall replaces its old token.
-    pub install_id: String,
-    /// The person's locale, for the messages' words.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub locale: Option<String>,
 }
 
 /// When a notification is shown.
@@ -1363,7 +1352,8 @@ pub enum Call {
     OpenUrl(OpenUrl),
     /// Signs in through another site.
     AuthSession(AuthSession),
-    /// Registers for push messages.
+    /// Asks for permission to send push messages. The token is posted to the
+    /// shell's push route, not through this call.
     RegisterPush(RegisterPush),
     /// Schedules a notification.
     Notify(Notify),
@@ -1907,6 +1897,26 @@ mod tests {
                 "{call}"
             );
         }
+    }
+
+    #[test]
+    fn asking_for_push_permission_answers_with_whether_it_was_given_and_never_the_token() {
+        let call: Call = serde_json::from_str(r#"{"f":"register_push","categories":["orders","stock"]}"#).unwrap();
+        assert_eq!(
+            call,
+            Call::RegisterPush(RegisterPush {
+                categories: vec!["orders".to_owned(), "stock".to_owned()],
+            })
+        );
+        assert!(call.posts() && call.needs_gesture());
+        assert_eq!(serde_json::to_string(&PushRegistered { granted: true }).unwrap(), r#"{"granted":true}"#);
+        // A token, from a client that still sends one, is passed over and kept nowhere.
+        let answer: PushRegistered =
+            serde_json::from_str(r#"{"granted":false,"token":"9f2c4a7e00b1d35c","provider":"apns"}"#).unwrap();
+        assert_eq!(answer, PushRegistered { granted: false });
+        assert!(!serde_json::to_string(&answer).unwrap().contains("9f2c"));
+        // The answer is needed: without it the server does not know what the person said.
+        assert!(serde_json::from_str::<PushRegistered>("{}").is_err());
     }
 
     #[test]

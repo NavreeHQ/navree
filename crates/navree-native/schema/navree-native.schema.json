@@ -6632,57 +6632,15 @@
       "x-kind": "enum",
       "x-since": 0
     },
-    "PushProvider": {
-      "enum": [
-        "apns",
-        "fcm",
-        "wns"
-      ],
-      "type": "string",
-      "x-kind": "enum",
-      "x-since": 0
-    },
     "PushRegistered": {
       "properties": {
-        "app_id": {
-          "type": "string",
-          "x-since": 0
-        },
-        "environment": {
-          "$ref": "#/$defs/PushEnvironment",
-          "x-since": 0
-        },
-        "install_id": {
-          "type": "string",
-          "x-since": 0
-        },
-        "locale": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "x-since": 0
-        },
-        "provider": {
-          "$ref": "#/$defs/PushProvider",
-          "x-since": 0
-        },
-        "token": {
-          "type": "string",
+        "granted": {
+          "type": "boolean",
           "x-since": 0
         }
       },
       "required": [
-        "provider",
-        "environment",
-        "token",
-        "app_id",
-        "install_id"
+        "granted"
       ],
       "type": "object",
       "x-kind": "object",
