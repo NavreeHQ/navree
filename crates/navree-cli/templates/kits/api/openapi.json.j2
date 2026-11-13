@@ -982,6 +982,67 @@
         ],
         "type": "object"
       },
+      "NativeNonce": {
+        "description": "The one-time nonce of a sign-in from a native app (`POST\n/api/auth/social/{provider}/native/nonce`): the app passes `nonce` to\nthe system's sheet (Google: as is; Apple: its SHA-256 in lower-case\nhex) and posts `state` back with the identity token, within\n`expires_in` seconds, once.",
+        "properties": {
+          "expires_in": {
+            "description": "Seconds until the attempt expires.",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "nonce": {
+            "description": "The nonce for the provider's request.",
+            "type": "string"
+          },
+          "state": {
+            "description": "The sealed attempt, to post back with the identity token.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nonce",
+          "state",
+          "expires_in"
+        ],
+        "type": "object"
+      },
+      "NativeSignIn": {
+        "description": "What a native app posts after the system's sign-in sheet (`POST\n/api/auth/social/{provider}/native`): the identity token, the sealed\nattempt of [`NativeNonce`], and for Sign in with Apple the\nauthorization code and the name Apple hands the app on the first\nsign-in only.\n\n```\nuse navree_social::NativeSignIn;\n\nlet post = NativeSignIn::new(\"eyJraWQiOi...\", \"nvs1.AbC\")\n    .authorization_code(\"c3b1f2...\")\n    .user(serde_json::json!({ \"name\": { \"firstName\": \"Simran\", \"lastName\": \"Gill\" } }));\nassert!(post.authorization_code.is_some());\n```",
+        "properties": {
+          "authorization_code": {
+            "description": "Sign in with Apple's authorization code: exchanged for a refresh\ntoken the server keeps (encrypted) to revoke when the account is\ndeleted or Apple disconnected.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id_token": {
+            "description": "The identity token (a JWT) the provider gave the app.",
+            "type": "string"
+          },
+          "remember": {
+            "description": "On the session cookie (`POST .../native/session`): keep the app\nsigned in for `auth.session.remember_days`.",
+            "type": "boolean"
+          },
+          "state": {
+            "description": "The `state` of the attempt's [`NativeNonce`].",
+            "type": "string"
+          },
+          "user": {
+            "description": "Sign in with Apple's name, sent by the app on the first sign-in\n(`{\"name\": {\"firstName\", \"lastName\"}}`). Unverified: used only as a\ndisplay name, never to find or link an account.",
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id_token",
+          "state"
+        ],
+        "type": "object"
+      },
       "NewPushSubscription": {
         "description": "A browser push subscription, as `PushSubscription.toJSON()` gives it.",
         "properties": {
@@ -1163,7 +1224,7 @@
                       "additionalProperties": {
                         "type": "boolean"
                       },
-                      "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+                      "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push, push).",
                       "type": "object"
                     },
                     "digest": {
@@ -1184,7 +1245,7 @@
                 "additionalProperties": {
                   "type": "boolean"
                 },
-                "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+                "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push, push).",
                 "type": "object"
               },
               "digest": {
@@ -1238,7 +1299,7 @@
                           "additionalProperties": {
                             "type": "boolean"
                           },
-                          "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+                          "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push, push).",
                           "type": "object"
                         },
                         "digest": {
@@ -1259,7 +1320,7 @@
                     "additionalProperties": {
                       "type": "boolean"
                     },
-                    "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+                    "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push, push).",
                     "type": "object"
                   },
                   "digest": {
@@ -1320,7 +1381,7 @@
                   "additionalProperties": {
                     "type": "boolean"
                   },
-                  "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+                  "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push, push).",
                   "type": "object"
                 },
                 "digest": {
@@ -1341,7 +1402,7 @@
             "additionalProperties": {
               "type": "boolean"
             },
-            "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push).",
+            "description": "Channel switches (mail, database, slack, teams, sms, whatsapp, web_push, push).",
             "type": "object"
           },
           "digest": {
@@ -1762,6 +1823,19 @@
         },
         "required": [
           "data"
+        ],
+        "type": "object"
+      },
+      "ProviderNotification": {
+        "description": "`POST .../notifications`: a provider's server-to-server notification.",
+        "properties": {
+          "payload": {
+            "description": "The signed notification (a JWS).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payload"
         ],
         "type": "object"
       },
@@ -2796,9 +2870,47 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/_navree/ui/app/{file}": {
+      "get": {
+        "description": "A file one of the app's modules contributed, by its name and content hash; under an older hash it is still served, uncached. A picture is served under a content security policy that runs nothing.",
+        "operationId": "ui.app-files",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "A stylesheet, font or picture of the app",
+        "tags": [
+          "UI"
+        ]
+      }
+    },
     "/_navree/ui/appearance": {
       "post": {
-        "description": "The theme menu's form (`theme`, `mode`, `back`): sets the appearance cookie and goes back to `back`, so it works with JavaScript off. A post from another site is refused.",
+        "description": "The theme menu's form (`theme`, `mode`, `back`): sets the appearance cookie and goes back to `back` (a path of this site, else `/`), so it works with JavaScript off. A post from another site is refused; the session layer checks its origin in place of the CSRF token.",
         "operationId": "ui.appearance",
         "responses": {
           "303": {
@@ -6005,6 +6117,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           }
         },
         "summary": "Create an account and sign in",
@@ -6588,6 +6710,300 @@
           }
         ],
         "summary": "Connect a provider to the signed-in user",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/auth/social/{provider}/native": {
+      "post": {
+        "description": "Answers like `POST /auth/login` (the user and tokens, or a two-factor challenge). Sign in with Apple also takes `authorization_code` (kept to revoke the person's tokens later) and, on the first sign-in, `user` with the name (display only).",
+        "operationId": "social.native",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeSignIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Sign in with an identity token from an app",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/auth/social/{provider}/native/nonce": {
+      "post": {
+        "description": "For the system's sign-in sheet of an app (`apple`, `google`): pass `nonce` to the request (Google as is, Apple as its lower-case hex SHA-256), then post the identity token with `state` to `POST .../native` within `expires_in` seconds.",
+        "operationId": "social.native.nonce",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeNonce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "A one-time nonce for a sign-in from an app",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/auth/social/{provider}/native/session": {
+      "post": {
+        "description": "Like `POST .../native`, but the app is signed in on its session cookie (no token is issued): the answer is the user, or `{\"two_factor_required\": true}`; finish with `POST /auth/session/2fa/verify`. The request carries the CSRF token of the session as `X-XSRF-TOKEN`.",
+        "operationId": "social.native.session",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeSignIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Sign an app in on its session with an identity token",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/auth/social/{provider}/notifications": {
+      "post": {
+        "description": "Sign in with Apple's server-to-server notifications (`{payload}`, a JWS signed by Apple): consent revoked, account deleted, email forwarding changed. Register this URL with Apple.",
+        "operationId": "social.notifications",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderNotification"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpError"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Receive the provider's notifications",
         "tags": [
           "Auth"
         ]
@@ -11031,7 +11447,7 @@
     },
     "/sign-out": {
       "post": {
-        "description": "Ends the browser's sign-in, then goes to the sign-in page.",
+        "description": "Ends the browser's sign-in, then goes to the sign-in page (or the page the app chose).",
         "operationId": "auth.pages.sign_out",
         "responses": {
           "200": {
