@@ -575,7 +575,7 @@ More: [/docs/digging-deeper/http-client/](/docs/digging-deeper/http-client/).
 | `ssrf` | table |  | `APP_HTTP_CLIENT__SSRF` | Which destinations are refused (server-side request forgery guard). |
 | `ssrf.block_private` | boolean | `true` | `APP_HTTP_CLIENT__SSRF__BLOCK_PRIVATE` | Refuse private, loopback, link-local and other internal addresses (default `true`). |
 | `ssrf.allow_hosts` | list of string | `[]` | `APP_HTTP_CLIENT__SSRF__ALLOW_HOSTS` | Destinations that bypass the policy: host names (`api.internal`), host globs (`*.svc.cluster.local`), IP addresses (`127.0.0.1`) or CIDR networks (`10.20.0.0/16`). Host names match case-insensitively. |
-| `user_agent` | string | `"navree-http-client/1.1.0"` | `APP_HTTP_CLIENT__USER_AGENT` | The `User-Agent` header sent with every request (default `navree-http-client/<version>`). |
+| `user_agent` | string | `"navree-http-client/1.2.0"` | `APP_HTTP_CLIENT__USER_AGENT` | The `User-Agent` header sent with every request (default `navree-http-client/<version>`). |
 
 ## `i18n`
 

@@ -3,6 +3,40 @@ title: "Release notes"
 description: "What Navree 1.0.0, the first release, includes: the framework and ORM, Navree UI, the tools, packages, agent skills and CLI, and the limits that hold."
 ---
 
+## Navree 1.2.0
+
+Navree 1.2.0 is a minor release. To update, run `cargo update` in your app, which takes it within the range your `Cargo.toml` allows, and `cargo install navree-cli --force` for the command-line tool.
+
+### Added
+
+- Navree Native, a preview behind the `ui-native-preview` feature: a `ui` app's pages answer a native client as well as a browser. A request that sends `X-Navree-Native: 1` and describes itself in `X-Navree-Client` gets the page as a tree of parts (a screen with a title and actions by role, lists, tables, forms, sheets, charts) for the system's own toolkit to draw, and the app's shell at `/_navree/native/shell`. A browser's pages are the same bytes with the feature on and off. A page with a part that has no native form yet is shown in the client's web view, and the answer says which part.
+- Words a page says what its parts are with, each a field that writes no HTML: `Button::role` (`Role`), `Button::presented` and `Item::presented` (`Presented`), `Button::undoable`, `Button::standard` (`Standard`), `Button::reason`, `AppPage::actions`, `Sheet::footer` and `Dialog::footer`, `DataTable::row_opens`, a column's `role` (`title`, `subtitle`, `status`, `trailing`) on `#[col]`, and `native::only` and `native::web_only` for a part of one side.
+- Navree Native UI (`navree::native::ui`): a screen written once in Rust for native clients, with builders for every part and every control of a form. Structure the system places (`Screen`, `Section`, `List`, `Row`, `Form`, `Field`, `Sheet`, `Dialog`, `Region`), content it styles (`Figure`, `Ring`, `Rings`, `Chart`, `DayClock`, `Timeline`, `Progress`, `Facts`) and composition (`Stack`, `Grid`, `Card`, `Layers`, `Shape`, `Carousel`, `Adaptive`, `Text`, `Icon`) in the system's text styles, colours by name (`Hue`) and steps of its spacing. `navree::ui::native::Answer` answers one route with a page for a browser and a screen for a native client; `native::form` says a page's own form natively; `Reply::each` goes on with a reply for the client that asked; `Reply::signed_out` tells a native client to forget its session. A route with only a native side answers a browser with a small page and the status 406.
+- `navree native:coverage` grades every page route for a native client (`idiom`, `designed`, `layout`, `web`) and says what keeps a page from its system, with `--platform`, `--json` and `--fail-on` for a check in CI and a `native.toml` of example values; `navree native:doctor` checks an app's setup for native clients. `TestNative` drives a page as a native client in a plain test.
+- The crate `navree-native`: the protocol's vocabulary, the client's descriptor, a JSON Schema, the example answers every client decodes, and the builders above. It is a preview and is used through `navree`.
+- Signing in from native apps (`auth`): the association files Apple's and Android's systems ask for, from the apps listed under `auth.apps`; passkeys made in an Android app; a hand-over that signs an app in through the system's sign-in session (`GET /auth/app/sign-in`, then `POST /api/auth/app/exchange` with a PKCE proof); and `ConfirmAction`, which holds an action until the person confirms it with a passkey (`POST /api/auth/confirm/options`, `POST /api/auth/confirm/passkey`).
+- Sign in with Apple and with Google from native apps (`social`): the app posts the identity token the system's own sheet gave it (`POST /api/auth/social/{provider}/native/nonce`, then `POST /api/auth/social/{provider}/native`), and the server signs the person in by the rules of the web callback. Native Sign in with Apple needs an Apple app under `auth.apps`, and native Sign in with Google an Android app there. Apple's server-to-server notifications are taken at `POST /api/auth/social/apple/notifications`. `Social::revoke_tokens` revokes a user's stored tokens at the provider, and offboarding a user does it too.
+- Push to native apps (`notify`): a `push` channel through Apple's push service and Firebase Cloud Messaging, configured under `notify.push`. An app registers its device with `POST /api/notifications/push-devices` and removes it with `DELETE`; a device belongs to the session that registered it and gets nothing more once that session ends. The routes exist only where the app can push (`notify.push.apns` or `notify.push.fcm` configured, or a push driver registered), and a person keeps at most 20 devices.
+- Agent skills for native apps: `navree-native`, `navree-native-design`, `navree-native-apple` and `navree-native-android`.
+- `SortableGrid`, `GridTile` and `GridOrder` in `navree::ui`: a grid of tiles that people put in their own order by mouse, touch or keys, and take away. The page changes at once, and a moment after the last change the whole order is posted to your server, which checks and saves it.
+- Charts drawn as PNG pictures on the server, for places that show only an image such as a home-screen widget, an email or a link preview: `ChartImage`, `Tile` and `Block` in `navree::ui::image`, with colours from the theme, light or dark, and the toolkit's typeface built in. It is behind the `image` feature of `navree-ui` and the `ui-image` feature of `navree`, off by default.
+
+### Changed
+
+- Disconnecting a provider (`Social::unlink`, `DELETE /api/auth/social/accounts/{provider}`) now revokes the stored tokens at the provider first. A provider that cannot be reached answers 502 and leaves the account linked, to try again. A token the provider refuses for good is audited (`social.token_revocation_refused`) and forgotten, and the account is disconnected. An account with no stored tokens is disconnected as before.
+- An app with an Apple app under `auth.apps` keeps Sign in with Apple's tokens (encrypted) whatever `social.store_tokens` says, because deleting an account must revoke them at Apple. An app with no Apple app there stores what it stored before.
+- The `social` and `notify` modules each add a migration (the client a provider's token was issued to, and push devices). Run `navree migrate` after upgrading.
+- The Rust library of `navree-cli` (the crate `navree_cli`) is not public API: the commands and options of `navree` stay compatible across 1.x, and the library's items, which the tool and its tests share, may change in any release. The versioning page says so.
+
+### Fixed
+
+- A small `Donut` drew the figure in its middle at one size whatever the ring's, so at `size(96)` a total of five characters reached the ring. The middle is now a box as wide as the hole and its words are sized against it: a donut of the default size and larger looks as before, and a smaller one, or one with a longer figure, draws it smaller. A figure too long for the hole at any size ends in an ellipsis.
+- The `openapi.json` of the API and SaaS kits and the web kit's `web/lib/api/schema.d.ts` were behind the routes a new app serves since 1.1.0, so a new app's own CI check of its contract failed at once. They match now. In an app generated by 1.1.0, run `cargo run -- openapi:export openapi.json` and commit the file, and in a SaaS app run `pnpm --dir web gen:api` instead, which also writes the web app's types.
+
+### Known limits
+
+- Navree Native (preview): reading the deepest tree in a debug build on Windows. An answer may be up to 64 parts deep. Reading one at that limit with `serde_json` in a debug build on Windows takes between 1.75 and 2 MiB of stack, which is what a default thread has, so it can overflow there (it does with Rust 1.100). The pages of the example apps are 10 to 20 parts deep, a release build needs under 512 KiB, and a debug build on Linux is not affected. If a test of yours reads a tree that deep on Windows, give its thread 8 MiB. Making each level cheaper is planned.
+
 ## Navree 1.1.0
 
 Navree 1.1.0 is a minor release. To update, run `cargo update` in your app, which takes it within the range your `Cargo.toml` allows, and `cargo install navree-cli --force` for the command-line tool.
