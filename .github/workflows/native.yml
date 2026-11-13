@@ -495,7 +495,7 @@ jobs:
         if: steps.core.outputs.mac != 'true'
         run: |
           echo "::notice::The core's artifact has no Mac library: the package's tests run in an iPhone simulator."
-          swift build --target NavreeShell 2>&1 | tee swift-build.log
+          swift build --target NavreeDesign 2>&1 | tee swift-build.log
           bash scripts/test-in-simulator.sh
       - name: Demo app screens in an iPhone simulator
         if: ${{ !cancelled() }}
