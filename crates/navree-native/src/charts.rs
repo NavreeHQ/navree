@@ -532,6 +532,58 @@ pub struct DayClock {
     pub hint: Option<Hint>,
 }
 
+/// One segment of a [`Meter`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Segment {
+    /// What it is: `Deep`.
+    pub name: String,
+    /// The amount it holds. None, zero or below zero gives it no width: it
+    /// stays in the key, so every part is listed, the empty ones too.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<serde_json::Number>,
+    /// The amount in the page's words, with its unit: `1 h 23 min`,
+    /// `₹1,20,000`. A duration is written by the page, so a client shows these
+    /// words and does not write its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shown: Option<String>,
+    /// A second line under its name in the key: the range a heart rate zone
+    /// covers (`109–127 bpm`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// Its colour. A client takes its colours in turn when there is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+}
+
+/// One bar split into segments that add up to the whole, drawn as 100%: how a
+/// night divides into sleep stages, how a workout divides into heart rate
+/// zones, where an order stands.
+///
+/// A segment's share is its value over the total of the values above zero. A
+/// client draws the bar as its system draws a bar of this kind, writes a share
+/// inside a segment that is wide enough for it, and lists every segment beside
+/// or under the bar with its colour, its words and its share.
+///
+/// The bar is named by its `summary`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Meter {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What the bar shows: `Sleep stages, last night`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// The segments, in order from the start.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<Segment>,
+    /// One sentence that says the whole bar to a reader who can't see it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// A note about what the bar means, shown when asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
+}
+
 /// Where a day the person chooses is asked for.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DayPick {

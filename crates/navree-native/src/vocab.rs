@@ -268,6 +268,7 @@ kinds! {
     Rings(Rings) => "rings" since 0,
     DayClock(DayClock) => "day_clock" since 0,
     DayPager(DayPager) => "day_pager" since 0,
+    Meter(Meter) => "meter" since 0,
 }
 
 /// A field that arrived after its type did: the type's name in the schema
@@ -639,6 +640,40 @@ impl Node {
                     ..n::Stack::default()
                 })
             }
+            Self::Meter(node) => {
+                // Each segment with its words, its share of the whole and its detail.
+                let amount = |segment: &n::Segment| {
+                    segment
+                        .value
+                        .as_ref()
+                        .and_then(serde_json::Number::as_f64)
+                        .filter(|value| *value > 0.0)
+                };
+                let total: f64 = node.segments.iter().filter_map(amount).sum();
+                Node::Facts(n::Facts {
+                    id: node.id.clone(),
+                    items: node
+                        .segments
+                        .iter()
+                        .map(|segment| n::Fact {
+                            label: segment.name.clone(),
+                            value: vec![Node::text(words(
+                                segment.shown.as_deref(),
+                                segment.value.as_ref(),
+                                None,
+                            ))],
+                            icon: None,
+                            tone: segment.colour.as_ref().and_then(|colour| colour.hue.tone()),
+                            details: amount(segment)
+                                .filter(|_| total > 0.0)
+                                .map(|value| format!("{}%", (value / total * 100.0).round()))
+                                .into_iter()
+                                .chain(segment.detail.clone())
+                                .collect(),
+                        })
+                        .collect(),
+                })
+            }
             Self::Unknown(node) => return node.alt.as_deref().cloned(),
             _ => return None,
         })
@@ -696,9 +731,9 @@ mod tests {
     use super::*;
     use crate::node::{
         Avatar, Badge, Chart, ClockMoment, Colour, DayClock, DayPager, Direction, FeedRow, Figure,
-        Gauge, Hour, Hue, Icon, Message, Moment, PagerWords, Pane, PaneRole, Ring, RingValue,
-        Rings, RingsCentre, RowState, Run, Section, Stack, Standard, Timeline, Tone, Toolbar,
-        ToolbarItem, Trend, Unknown, Zone,
+        Gauge, Hour, Hue, Icon, Message, Meter, Moment, PagerWords, Pane, PaneRole, Ring,
+        RingValue, Rings, RingsCentre, RowState, Run, Section, Segment, Stack, Standard, Timeline,
+        Tone, Toolbar, ToolbarItem, Trend, Unknown, Zone,
     };
 
     #[test]
@@ -839,6 +874,30 @@ mod tests {
                 colour: Some(Colour::new(Hue::Success)),
                 ..Ring::default()
             }),
+            Node::Meter(Meter {
+                id: Some("stages".to_owned()),
+                segments: vec![
+                    Segment {
+                        name: "Deep".to_owned(),
+                        value: Some(83.into()),
+                        shown: Some("1 h 23 min".to_owned()),
+                        colour: Some(Colour::new(Hue::Violet)),
+                        ..Segment::default()
+                    },
+                    Segment {
+                        name: "Core".to_owned(),
+                        value: Some(253.into()),
+                        detail: Some("Most of the night".to_owned()),
+                        ..Segment::default()
+                    },
+                    // A part with no amount stays in the list, and has no share.
+                    Segment {
+                        name: "Awake".to_owned(),
+                        ..Segment::default()
+                    },
+                ],
+                ..Meter::default()
+            }),
             Node::DayPager(DayPager {
                 id: Some("pager".to_owned()),
                 day: "Wed, 11 Nov".to_owned(),
@@ -921,7 +980,8 @@ mod tests {
             | Kind::Ring
             | Kind::Rings
             | Kind::DayClock
-            | Kind::DayPager => 1,
+            | Kind::DayPager
+            | Kind::Meter => 1,
             kind => kind.since(),
         }
     }
@@ -1036,6 +1096,26 @@ mod tests {
         };
         assert_eq!(progress.label.as_deref(), Some("Load ratio: 1.12 (Overuse)"));
         assert_eq!(progress.value, Some(560));
+    }
+
+    #[test]
+    fn a_meter_becomes_a_list_of_facts_with_the_share_of_each_part() {
+        let meter = part(Kind::Meter);
+        let Downgraded::Node(Node::Facts(facts)) = downgrade_by(meter, 0, only(Kind::Meter)) else {
+            panic!("a meter becomes facts");
+        };
+        assert_eq!(facts.id.as_deref(), Some("stages"));
+        let labels: Vec<&str> = facts.items.iter().map(|fact| fact.label.as_str()).collect();
+        assert_eq!(labels, ["Deep", "Core", "Awake"]);
+        // The page's words when it gave them, else the number; 83 of 336 is a quarter.
+        let value = |at: usize| match &facts.items[at].value[..] {
+            [Node::Text(text)] => text.value.clone(),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!((value(0), value(1), value(2)), ("1 h 23 min".into(), "253".into(), "–".into()));
+        assert_eq!(facts.items[0].details, ["25%"]);
+        assert_eq!(facts.items[1].details, ["75%", "Most of the night"]);
+        assert!(facts.items[2].details.is_empty());
     }
 
     #[test]

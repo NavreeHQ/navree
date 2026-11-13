@@ -4987,6 +4987,70 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "Meter": {
+      "properties": {
+        "hint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "segments": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Segment"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "Method": {
       "enum": [
         "get",
@@ -5909,6 +5973,21 @@
           "required": [
             "t"
           ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Meter"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "meter"
+            }
+          },
+          "required": [
+            "t"
+          ]
         }
       ],
       "x-kind": "union",
@@ -6146,6 +6225,11 @@
         {
           "tag": "day_pager",
           "type": "DayPager",
+          "x-since": 0
+        },
+        {
+          "tag": "meter",
+          "type": "Meter",
           "x-since": 0
         }
       ]
@@ -8722,6 +8806,68 @@
       ],
       "type": "string",
       "x-kind": "enum",
+      "x-since": 0
+    },
+    "Segment": {
+      "properties": {
+        "colour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        },
+        "shown": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "x-kind": "object",
       "x-since": 0
     },
     "Selection": {

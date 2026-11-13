@@ -1,0 +1,130 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "screen": {
+    "title": "Sleep",
+    "nav": "/sleep",
+    "refresh": true,
+    "body": {
+      "t": "stack",
+      "gap": 4,
+      "children": [
+        {
+          "t": "day_pager",
+          "id": "night",
+          "day": "Thursday night",
+          "date": "2026-11-12",
+          "previous": "/sleep?date=2026-11-11",
+          "next": "/sleep?date=2026-11-13",
+          "today": "/sleep",
+          "first": "2026-01-02",
+          "last": "2026-11-13",
+          "pick": {
+            "href": "/sleep",
+            "name": "date"
+          },
+          "scores": {
+            "t": "ring",
+            "value": 78,
+            "max": 100,
+            "shown": "78",
+            "colour": {
+              "hue": "violet"
+            },
+            "centre": "nothing",
+            "prominence": "low",
+            "summary": "Sleep score: 78 of 100, 78%."
+          },
+          "words": {
+            "previous": "Previous night",
+            "next": "Next night",
+            "choose": "Choose a night"
+          }
+        },
+        {
+          "t": "figure",
+          "id": "asleep",
+          "label": "Time asleep",
+          "value": "7 h 12 min",
+          "icon": {
+            "name": "moon",
+            "paths": [
+              "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"
+            ]
+          },
+          "trend": {
+            "direction": "up",
+            "text": "18 min",
+            "tone": "success"
+          },
+          "detail": "against the week before",
+          "colour": {
+            "hue": "violet"
+          },
+          "action": {
+            "t": "navigate",
+            "href": "/sleep/week"
+          }
+        },
+        {
+          "t": "section",
+          "title": "Stages",
+          "style": "card",
+          "children": [
+            {
+              "t": "meter",
+              "id": "sleep-stages",
+              "title": "Sleep stages, last night",
+              "segments": [
+                {
+                  "name": "Deep",
+                  "value": 83,
+                  "shown": "1 h 23 min",
+                  "detail": "19% of the night",
+                  "colour": {
+                    "hue": "violet"
+                  }
+                },
+                {
+                  "name": "REM",
+                  "value": 96,
+                  "shown": "1 h 36 min",
+                  "detail": "22% of the night",
+                  "colour": {
+                    "hue": "cyan"
+                  }
+                },
+                {
+                  "name": "Core",
+                  "value": 253,
+                  "shown": "4 h 13 min",
+                  "detail": "56% of the night",
+                  "colour": {
+                    "hue": "blue"
+                  }
+                },
+                {
+                  "name": "Awake",
+                  "value": 21,
+                  "shown": "21 min",
+                  "detail": "5% of the night",
+                  "colour": {
+                    "hue": "amber"
+                  }
+                }
+              ],
+              "summary": "Sleep stages, last night: Deep 1 h 23 min, REM 1 h 36 min, Core 4 h 13 min, Awake 21 min."
+            }
+          ],
+          "hint": {
+            "about": "the estimated stages",
+            "title": "An estimate",
+            "text": "Stages are estimated from movement and heart rate while you sleep. They show a pattern in your nights, not a measurement of your brain.",
+            "mark": "info"
+          }
+        }
+      ]
+    }
+  }
+}

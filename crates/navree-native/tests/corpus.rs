@@ -28,9 +28,10 @@ use navree_native::node::{
     Delivery, Dialog,
     Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Hour, Icon, Image, Justify, Link, List, Live,
-    Menu, Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress, Prominence,
+    Menu, Message, Meter, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress,
+    Prominence,
     PagerWords, Purpose, Question, Region, Reorder, Rich, Ring, RingValue, Rings, RingsCentre,
-    Role, Row, RowState, Run, Section, SectionStyle,
+    Role, Row, RowState, Run, Section, SectionStyle, Segment,
     Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table,
     TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown,
     WebRegion, Zone,
@@ -2405,6 +2406,103 @@ fn screen_today() -> Envelope {
     Envelope::screen(BUILD, screen)
 }
 
+/// A night's sleep: how long, what the night was made of, and, as the kinds are
+/// added, its stages through the hours, its cycles and the week it sits in.
+fn screen_sleep() -> Envelope {
+    // The control that steps from night to night, with the night's score as a
+    // small ring before the date. A night that is not the last has a day after
+    // it, and a way back to today.
+    let pager = Node::DayPager(DayPager {
+        id: Some(s("night")),
+        day: s("Thursday night"),
+        date: s("2026-11-12"),
+        previous: Some(s("/sleep?date=2026-11-11")),
+        next: Some(s("/sleep?date=2026-11-13")),
+        today: Some(s("/sleep")),
+        first: Some(s("2026-01-02")),
+        last: Some(s("2026-11-13")),
+        pick: Some(DayPick {
+            href: s("/sleep"),
+            name: s("date"),
+        }),
+        scores: Some(Box::new(Node::Ring(Ring {
+            value: Some(number(78)),
+            max: number(100),
+            shown: Some(s("78")),
+            colour: Some(Colour::new(Hue::Violet)),
+            centre: Centre::Nothing,
+            prominence: Prominence::Low,
+            summary: Some(s("Sleep score: 78 of 100, 78%.")),
+            ..Ring::default()
+        }))),
+        words: Some(PagerWords {
+            previous: s("Previous night"),
+            next: s("Next night"),
+            choose: s("Choose a night"),
+        }),
+    });
+    let asleep = Node::Figure(Figure {
+        id: Some(s("asleep")),
+        label: s("Time asleep"),
+        value: s("7 h 12 min"),
+        icon: Some(icon("moon", "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z")),
+        trend: Some(Trend {
+            direction: Direction::Up,
+            text: Some(s("18 min")),
+            tone: Some(Tone::Success),
+        }),
+        detail: Some(s("against the week before")),
+        colour: Some(Colour::new(Hue::Violet)),
+        action: Some(Action::navigate("/sleep/week")),
+        ..Figure::default()
+    });
+    // One bar split into the stages of the night: minutes, written as the page
+    // writes durations.
+    let stage = |name: &str, minutes: i64, shown: &str, hue: Hue, detail: &str| Segment {
+        name: s(name),
+        value: Some(number(minutes)),
+        shown: Some(s(shown)),
+        detail: Some(s(detail)),
+        colour: Some(Colour::new(hue)),
+    };
+    let stages = Node::Meter(Meter {
+        id: Some(s("sleep-stages")),
+        title: Some(s("Sleep stages, last night")),
+        segments: vec![
+            stage("Deep", 83, "1 h 23 min", Hue::Violet, "19% of the night"),
+            stage("REM", 96, "1 h 36 min", Hue::Cyan, "22% of the night"),
+            stage("Core", 253, "4 h 13 min", Hue::Blue, "56% of the night"),
+            stage("Awake", 21, "21 min", Hue::Amber, "5% of the night"),
+        ],
+        summary: Some(s("Sleep stages, last night: Deep 1 h 23 min, REM 1 h 36 min, Core 4 h 13 min, Awake 21 min.")),
+        ..Meter::default()
+    });
+    let body = Node::Stack(Stack {
+        gap: 4,
+        children: vec![
+            pager,
+            asleep,
+            Node::Section(Section {
+                title: Some(s("Stages")),
+                style: SectionStyle::Card,
+                children: vec![stages],
+                hint: Some(Hint {
+                    about: s("the estimated stages"),
+                    title: Some(s("An estimate")),
+                    text: s("Stages are estimated from movement and heart rate while you sleep. They show a pattern in your nights, not a measurement of your brain."),
+                    mark: HintMark::Info,
+                }),
+                ..Section::default()
+            }),
+        ],
+        ..Stack::default()
+    });
+    let mut screen = Screen::new("Sleep", body);
+    screen.nav = Some(s("/sleep"));
+    screen.refresh = true;
+    Envelope::screen(BUILD, screen)
+}
+
 /// A week of training: how hard it was against the weeks before, and, as the
 /// kinds are added, the calendar, the links between measures and the beats.
 fn screen_fitness() -> Envelope {
@@ -3131,6 +3229,7 @@ fn envelopes() -> Vec<(&'static str, Envelope)> {
         ("screen-dashboard", screen_dashboard()),
         ("screen-inbox", screen_inbox()),
         ("screen-today", screen_today()),
+        ("screen-sleep", screen_sleep()),
         ("screen-fitness", screen_fitness()),
         ("screen-device", screen_device()),
         ("ops-device", ops_device()),
