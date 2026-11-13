@@ -73,6 +73,7 @@ is dropped.
 | A correlation matrix, ranked pairs | `MatrixHeatmap::new(title).metrics(..).relation(a, b, Relation::new(r))`, `RelationList::new(title).relation(..)` |
 | A scatter plot | `Scatter::new(title).series(PointSeries::new(name, pairs))` |
 | Gradient strokes, glow, colour by band, marks growing in | `Gradient`, `Ink`, `ColorScale`, `.glow()`, `Motion`; see `navree-ui`'s `references/charts.md` |
+| A chart as a picture, where only an image shows: a home-screen widget, an email, a link preview (chart pictures) | `ChartImage::for_tile(&tile).mode(Mode::Dark).png(&tile.into())` with `Tile::new(TileSize::Medium).block(Block::ring(label, value, max))`, `Block::sparkline(..)`, `Block::stat(..)`; `ChartImage::respond` serves it with an `ETag`; the `ui-image` feature, in `navree::ui::image` |
 | A chart-shaped placeholder while loading | `ChartSkeleton::ring(size)`, `gauge`, `line`, `bars`, `heat_map`, `matrix`, `meter` |
 | A "?" or (i) beside a heading that explains it | `InfoTip::new(id, about).title(..).body(..)` |
 | A floating bar of icon links at the bottom (phones) | `Dock::new(label).below(Screen::Md).item(DockItem::new(label, href).icon(..).current())` |
@@ -254,6 +255,7 @@ Other lists and moves:
 |---|---|
 | An inbox, a conversation, a feed: a stream read in one order | `LazyList::new(id, label, src).items(..).more_after(url)`; the source reads `LazyQuery` and answers `LazyPage` |
 | Drag to reorder, a board of columns | `Sortable::new(id, label).board().post(url).list(SortList::new(key, title).item(SortItem::new(key, title)))`; the server holds each `Move` to the lists with `Move::check` |
+| Tiles people put in their own order and take away: a personal dashboard, the blocks of a widget | `SortableGrid::new(id, label).post(url).columns(n).tile(GridTile::new(key, title))`, `.fit(GridFit::Medium)`, a tile that stays with `GridTile::fixed()`; the server reads the whole order with `GridOrder` and `arrange` |
 
 ## Steps and trees
 

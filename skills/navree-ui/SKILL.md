@@ -764,13 +764,13 @@ come from the component catalog of the docs
 | Layout | Stack, Row, Grid and Container, `SplitPane`, `Accordion`, `Collapsible`, `ScrollArea`, `Separator`, `AspectRatio`, `Direction`, `Carousel` |
 | Navigation | the App shell (`Shell`, `AppShell`, `AppPage`), `Tabs`, `Breadcrumb`, `Pagination`, `Command`, `NavigationMenu` |
 | Steps, ranges and trees | `Stepper`, `Wizard`, `Slider`, `TreeView`, `Toolbar` |
-| Data | `Table`, `DataTable`, `LazyList`, Stat and Bars, `Sortable` |
+| Data | `Table`, `DataTable`, `LazyList`, Stat and Bars, `Sortable`, `SortableGrid` |
 | App blocks | App styles (`AppSheet`, `AppFont`, `AppImage`), the figure tile (`Stat` with a `Trend`), the info tip (`InfoTip`), the chart skeleton (`ChartSkeleton`), the breathing guide (`BreathingGuide`), `Dock`, the day pager (`DayPager`), the copy field (`CopyField`), the auth layout (`AuthLayout`), `Picture` |
 | Marketing site | `SitePage`, `SiteHeader`, `Hero`, `Section`, `LogoCloud`, `FeatureGrid`, `FeatureRows`, `StatBand`, device frames (`BrowserFrame`, `PhoneFrame`), `Testimonials`, `Pricing`, `Faq`, `CtaBand`, `Newsletter`, `LegalPage`, `SiteFooter`; in `navree::ui::marketing` |
 | Page SEO | `View::seo` with `Seo`, JSON-LD (`JsonLd`, `Organization`, `WebSite`, `FaqPage`), `Sitemap`, `RobotsTxt`; in `navree::ui::seo` |
 | Sign-in pages | `AuthPages` (navree-auth): sign-in, sign-up, two-factor and password pages in the app's look, in an `AuthLayout` |
 | Assistant | `Conversation`, `ChatMessage`, `PromptInput`, `ToolCallCard` and `Reasoning`, `ApprovalCard`, `SurfaceFrame`, `Suggestions`, `Sources` and `Citation`, `ThreadList` (the parts of a page where people talk with an assistant; see https://navree.com/docs/ai/generative-ui/) |
-| Charts | the line chart, area chart and bar chart (`Chart::line`, `area`, `bar`), the donut chart (`Donut`, and a pie), `Funnel`, `Sparkline`, and Reports (`Report`, for a date window); radial: `Ring`, `Rings`, `Gauge`, the day clock (`DayClock`); linear: `Meter`, mini columns (`MiniColumns`), a colour strip (`ColorStrip`), a range scale (`RangeScale`); grids: the calendar heat map (`CalendarHeatmap`), the matrix heat map (`MatrixHeatmap`), the relation list (`RelationList`), the scatter chart (`Scatter`); in `navree::ui::charts` |
+| Charts | the line chart, area chart and bar chart (`Chart::line`, `area`, `bar`), the donut chart (`Donut`, and a pie), `Funnel`, `Sparkline`, and Reports (`Report`, for a date window); radial: `Ring`, `Rings`, `Gauge`, the day clock (`DayClock`); linear: `Meter`, mini columns (`MiniColumns`), a colour strip (`ColorStrip`), a range scale (`RangeScale`); grids: the calendar heat map (`CalendarHeatmap`), the matrix heat map (`MatrixHeatmap`), the relation list (`RelationList`), the scatter chart (`Scatter`); in `navree::ui::charts`. Chart pictures (`ChartImage`, `Tile`, `Block`): a chart drawn as a PNG on the server; the `ui-image` feature, in `navree::ui::image` |
 | Foundations | Foundations (tokens, sizes), Themes, the Theme builder, Icons, Flags, Commands (`Cmd`, `Reply`, `Op`), Regions, Errors and states |
 
 Notes on a few: `Tabs` panels can load on first show with `Tab::lazy(src)`;
@@ -794,7 +794,17 @@ into parts, mini columns split several items the same way, a colour strip
 colours each slot of time and a range scale places one reading between two
 ends; the calendar heat map shows a habit over months, the matrix heat map
 and the relation list how measures move together, and the scatter chart a
-cloud of pairs ([`references/charts.md`](references/charts.md)). The
+cloud of pairs ([`references/charts.md`](references/charts.md)). A
+`SortableGrid` is one grid of tiles that people put in their own order and
+take away (a dashboard's tiles, the blocks of a home-screen widget): it posts
+the whole order a moment after the last change, and the server reads it with
+`GridOrder` and `arrange`, which trusts nothing in the post
+(https://navree.com/docs/components/sortable-grid/); for moves between lists,
+or a long list, use `Sortable`. Chart pictures are for a place that shows only
+an image (a home-screen widget, an email, a link preview): `ChartImage` draws
+a ring, rings, a gauge, a sparkline or a `Tile` of blocks as a PNG in the
+theme's colours and answers with an `ETag`; it is the `ui-image` feature of
+`navree`, off by default (https://navree.com/docs/components/chart-image/). The
 marketing blocks draw a public site from the same app with no script, and
 `View::seo` writes its head
 ([`references/app-and-site-blocks.md`](references/app-and-site-blocks.md)).
