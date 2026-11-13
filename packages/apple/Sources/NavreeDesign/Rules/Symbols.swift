@@ -1,22 +1,14 @@
 import NavreeProtocol
 import SwiftUI
 
-/// SF Symbols for what the server names. A standard action always takes the
-/// system's own symbol; an icon of the toolkit's set takes the symbol that
-/// means the same where there is one, and its own shape where there is not.
+/// SF Symbols for what the server names, from the protocol's own table: an
+/// icon's `symbol` when the server filled it, else the table's symbol for the
+/// icon's name, else none (the icon's own shape is drawn). A standard action
+/// always takes the system's own symbol.
 public enum Symbols {
-    /// The symbol Apple's guidelines give each standard action.
+    /// The symbol Apple's guidelines give each standard action, as the protocol's table names it.
     public static func standard(_ action: Navree.Standard) -> String? {
-        switch action {
-        case .share: "square.and.arrow.up"
-        case .delete: "trash"
-        case .add: "plus"
-        case .edit: "pencil"
-        case .search: "magnifyingglass"
-        case .done: "checkmark"
-        case .cancel: "xmark"
-        case .more: "ellipsis"
-        }
+        ProtocolSymbols.standard[action]?.apple
     }
 
     /// The symbol a role implies when the action has no icon of its own.
@@ -31,7 +23,7 @@ public enum Symbols {
 
     /// The SF Symbol for an icon of the toolkit's set, by its name.
     public static func system(for name: String) -> String? {
-        table[name]
+        ProtocolSymbols.names[name]?.apple
     }
 
     /// The symbol to draw for `icon`: its system symbol, or `nil` when its
@@ -41,75 +33,12 @@ public enum Symbols {
         return icon.name.flatMap(system(for:))
     }
 
-    static let table: [String: String] = [
-        "activity": "waveform.path.ecg",
-        "alert-circle": "exclamationmark.circle", "circle-alert": "exclamationmark.circle",
-        "alert-triangle": "exclamationmark.triangle", "triangle-alert": "exclamationmark.triangle",
-        "archive": "archivebox",
-        "arrow-left": "arrow.left", "arrow-right": "arrow.right", "arrow-up": "arrow.up", "arrow-down": "arrow.down",
-        "banknote": "banknote",
-        "bar-chart": "chart.bar", "chart-bar": "chart.bar", "chart-column": "chart.bar",
-        "line-chart": "chart.xyaxis.line", "chart-line": "chart.xyaxis.line",
-        "pie-chart": "chart.pie", "chart-pie": "chart.pie",
-        "bell": "bell",
-        "bookmark": "bookmark",
-        "box": "shippingbox", "boxes": "shippingbox", "package": "shippingbox",
-        "package-check": "shippingbox.fill",
-        "building": "building.2", "warehouse": "building.2",
-        "calendar": "calendar",
-        "camera": "camera",
-        "check": "checkmark", "check-circle": "checkmark.circle", "circle-check": "checkmark.circle",
-        "chevron-right": "chevron.right", "chevron-left": "chevron.left",
-        "clock": "clock",
-        "copy": "doc.on.doc",
-        "credit-card": "creditcard",
-        "download": "arrow.down.circle", "upload": "arrow.up.circle",
-        "eye": "eye", "eye-off": "eye.slash",
-        "file": "doc", "file-text": "doc.text",
-        "filter": "line.3.horizontal.decrease", "list-filter": "line.3.horizontal.decrease",
-        "flag": "flag",
-        "folder": "folder",
-        "gift": "gift",
-        "globe": "globe",
-        "grid": "square.grid.2x2", "layout-grid": "square.grid.2x2", "layout-dashboard": "square.grid.2x2",
-        "heart": "heart",
-        "help-circle": "questionmark.circle", "circle-help": "questionmark.circle",
-        "home": "house", "house": "house",
-        "image": "photo",
-        "inbox": "tray",
-        "indian-rupee": "indianrupeesign",
-        "info": "info.circle",
-        "kanban": "rectangle.split.3x1", "columns": "rectangle.split.3x1",
-        "link": "link",
-        "list": "list.bullet",
-        "lock": "lock", "unlock": "lock.open",
-        "log-out": "rectangle.portrait.and.arrow.right",
-        "mail": "envelope",
-        "map-pin": "mappin", "map": "map",
-        "message-circle": "bubble.left", "message-square": "bubble.left",
-        "more-horizontal": "ellipsis", "ellipsis": "ellipsis",
-        "pencil": "pencil", "pen": "pencil", "square-pen": "square.and.pencil", "edit": "square.and.pencil",
-        "phone": "phone",
-        "plus": "plus",
-        "printer": "printer",
-        "receipt": "doc.plaintext",
-        "refresh-cw": "arrow.clockwise", "rotate-cw": "arrow.clockwise",
-        "repeat": "repeat",
-        "search": "magnifyingglass", "search-x": "magnifyingglass",
-        "send": "paperplane",
-        "settings": "gear", "cog": "gear",
-        "share": "square.and.arrow.up", "share-2": "square.and.arrow.up",
-        "shopping-bag": "bag", "shopping-cart": "cart",
-        "sparkles": "sparkles",
-        "star": "star",
-        "store": "storefront",
-        "tag": "tag",
-        "trash": "trash", "trash-2": "trash",
-        "truck": "truck.box",
-        "undo": "arrow.uturn.backward",
-        "user": "person", "users": "person.2", "user-circle": "person.crop.circle", "circle-user": "person.crop.circle",
-        "x": "xmark", "x-circle": "xmark.circle", "circle-x": "xmark.circle",
-    ]
+    /// The filled form of `icon`'s symbol, where the table has one: for a
+    /// selected destination.
+    public static func filled(for icon: Navree.Icon) -> String? {
+        if let named = icon.symbol?.appleFilled, !named.isEmpty { return named }
+        return icon.name.flatMap { ProtocolSymbols.names[$0]?.filled } ?? symbol(for: icon)
+    }
 }
 
 /// The system colours and symbols a tone stands for. System colours adapt to
