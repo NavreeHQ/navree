@@ -4304,6 +4304,11 @@
           "default": null,
           "x-since": 0
         },
+        "muted": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
         "state": {
           "anyOf": [
             {

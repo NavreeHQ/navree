@@ -693,7 +693,7 @@ names!(Direction { Up, Down, Flat });
 object!(Trend { direction } { text, tone });
 object!(Figure { label, value } { id, trend, detail, tone });
 object!(Timeline {} { id, items });
-object!(Moment { title } { id, subtitle, time, state, icon, tone, detail });
+object!(Moment { title } { id, subtitle, time, state, icon, tone, detail, muted });
 object!(FeedRow {} { id, actor, icon, runs, time, tone, detail, action, muted });
 names!(Delivery { Sending, Sent, Delivered, Read, Failed });
 object!(Message { author } { id, avatar, mine, note, body, time, delivery });

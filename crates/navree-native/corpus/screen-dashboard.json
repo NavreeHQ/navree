@@ -178,6 +178,15 @@
                   }
                 },
                 {
+                  "title": "Reminder sent to the carrier",
+                  "time": "11:30",
+                  "state": "done",
+                  "icon": {
+                    "name": "bell"
+                  },
+                  "muted": true
+                },
+                {
                   "title": "Shipping",
                   "time": "Next",
                   "state": "current",
@@ -416,6 +425,11 @@
     }
   },
   "icons": {
+    "bell": {
+      "paths": [
+        "M3 7l9-4 9 4v10l-9 4-9-4z"
+      ]
+    },
     "ellipsis": {
       "paths": [
         "M5 12h.01M12 12h.01M19 12h.01"

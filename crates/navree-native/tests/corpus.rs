@@ -1715,14 +1715,11 @@ fn screen_dashboard() -> Envelope {
         })
     };
     let moment = |title: &str, time: &str, state: RowState, icon_name: &str| Moment {
-        id: None,
         title: s(title),
-        subtitle: None,
         time: Some(s(time)),
         state: Some(state),
         icon: Some(icon(icon_name, "M3 7l9-4 9 4v10l-9 4-9-4z")),
-        tone: None,
-        detail: Vec::new(),
+        ..Moment::default()
     };
     let toolbar = Node::Toolbar(Toolbar {
         id: Some(s("dashboard-bar")),
@@ -1823,6 +1820,11 @@ fn screen_dashboard() -> Envelope {
                             ..moment("Placed", "09:41", RowState::Done, "receipt")
                         },
                         moment("Packed", "11:05", RowState::Done, "package"),
+                        // What a machine did, among what people did.
+                        Moment {
+                            muted: true,
+                            ..moment("Reminder sent to the carrier", "11:30", RowState::Done, "bell")
+                        },
                         Moment {
                             tone: Some(Tone::Info),
                             ..moment("Shipping", "Next", RowState::Current, "truck")

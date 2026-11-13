@@ -2067,6 +2067,10 @@ pub struct Moment {
     /// More under it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub detail: Vec<Node>,
+    /// Whether it is drawn quieter than its neighbours: what a machine did, in
+    /// a timeline of what people did.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub muted: bool,
 }
 
 /// One entry of an activity feed: who did what, and when.
@@ -2315,6 +2319,14 @@ mod tests {
             [Reorder::ITEM, Reorder::FROM, Reorder::TO, Reorder::BEFORE, Reorder::POSITION],
             ["item", "from", "to", "before", "position"]
         );
+    }
+
+    #[test]
+    fn a_moment_may_be_quiet_like_a_row_and_a_feed_entry() {
+        let moment: Moment =
+            serde_json::from_str(r#"{"title":"Reminder sent to the carrier","muted":true}"#).unwrap();
+        assert!(moment.muted);
+        assert_eq!(serde_json::to_string(&Moment::default()).unwrap(), r#"{"title":""}"#);
     }
 
     #[test]
