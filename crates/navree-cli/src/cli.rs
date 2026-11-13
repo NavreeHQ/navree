@@ -132,6 +132,12 @@ pub enum Command {
     /// Export the OpenAPI document and generate the front end's typed client schema (schema.d.ts).
     #[command(name = "openapi:client")]
     OpenapiClient(OpenapiClientArgs),
+    /// Ask each page route as a native client and print its grade (idiom, layout or web) and what is missing; --fail-on makes it a gate.
+    #[command(name = "native:coverage")]
+    NativeCoverage(NativeCoverageArgs),
+    /// Check what a native build needs, without changing anything: the native preview feature, the settings for links, passkeys, push and sign-in, the Android and Apple toolchains.
+    #[command(name = "native:doctor")]
+    NativeDoctor(NativeDoctorArgs),
     /// A command of the app binary.
     #[command(external_subcommand)]
     Forward(Vec<String>),
@@ -495,6 +501,44 @@ pub struct DockRemoveArgs {
     /// Also delete its data (the volume).
     #[arg(long)]
     pub volumes: bool,
+}
+
+/// `navree native:coverage [--platform <p>] [--form <f>] [--json] [--fail-on <grade>] [--features <f>] [--file <path>]`.
+#[derive(Debug, Args)]
+pub struct NativeCoverageArgs {
+    /// The system to ask as; default android.
+    #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(crate::native::PLATFORMS))]
+    pub platform: Option<String>,
+    /// The kind of device to ask as; default phone.
+    #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(crate::native::FORMS))]
+    pub form: Option<String>,
+    /// Print the report as JSON.
+    #[arg(long)]
+    pub json: bool,
+    /// Exit with an error when a page has this grade or a worse one: `web`,
+    /// or `layout` (layout and web).
+    #[arg(long, value_enum, value_name = "GRADE")]
+    pub fail_on: Option<crate::native_coverage::FailOn>,
+    /// Cargo features to build the app with (default: the one in Cargo.toml that turns the native preview on).
+    #[arg(long, value_delimiter = ',', value_name = "FEATURE")]
+    pub features: Vec<String>,
+    /// The file of example values for route parameters (default: native.toml in the app).
+    #[arg(long, value_name = "FILE")]
+    pub file: Option<PathBuf>,
+}
+
+/// `navree native:doctor [--platform <system>] [--url <site>] [--json]`.
+#[derive(Debug, Args)]
+pub struct NativeDoctorArgs {
+    /// Check for these systems: `ios` (the Apple systems), `android` or `all`.
+    #[arg(long, value_enum, default_value_t)]
+    pub platform: crate::native_doctor::Scope,
+    /// Also ask this running site (`https://orders.example.com`) for the association files Apple and Android read.
+    #[arg(long, value_name = "SITE")]
+    pub url: Option<String>,
+    /// Print the findings as JSON.
+    #[arg(long)]
+    pub json: bool,
 }
 
 /// `navree browser:install [--version <version>] [--force]`.
@@ -1000,6 +1044,95 @@ mod tests {
             panic!("expected skills:install");
         };
         assert_eq!(args.path.as_deref(), Some(std::path::Path::new("../crm")));
+    }
+
+    #[test]
+    fn native_coverage_flags() {
+        use crate::native_coverage::FailOn;
+
+        let Command::NativeCoverage(args) = parse(&["native:coverage"]) else {
+            panic!("expected native:coverage");
+        };
+        assert_eq!(args.platform, None);
+        assert_eq!(args.form, None);
+        assert!(!args.json && args.fail_on.is_none() && args.features.is_empty());
+        let Command::NativeCoverage(args) = parse(&[
+            "native:coverage",
+            "--platform",
+            "ios",
+            "--form=tablet",
+            "--json",
+            "--fail-on",
+            "web",
+            "--features",
+            "native-preview,orm",
+            "--file",
+            "ci/native.toml",
+        ]) else {
+            panic!("expected native:coverage");
+        };
+        assert_eq!(args.platform.as_deref(), Some("ios"));
+        assert_eq!(args.form.as_deref(), Some("tablet"));
+        assert!(args.json);
+        assert_eq!(args.fail_on, Some(FailOn::Web));
+        assert_eq!(args.features, ["native-preview", "orm"]);
+        assert_eq!(
+            args.file.as_deref(),
+            Some(std::path::Path::new("ci/native.toml"))
+        );
+        let Command::NativeCoverage(args) = parse(&["native:coverage", "--fail-on=layout"]) else {
+            panic!("expected native:coverage");
+        };
+        assert_eq!(args.fail_on, Some(FailOn::Layout));
+        // The names are the protocol's.
+        for bad in [
+            &["native:coverage", "--platform", "symbian"][..],
+            &["native:coverage", "--form", "fridge"],
+            &["native:coverage", "--fail-on", "idiom"],
+        ] {
+            let mut all = vec!["navree"];
+            all.extend_from_slice(bad);
+            assert!(Cli::try_parse_from(all).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn native_doctor_flags() {
+        use crate::native_doctor::Scope;
+
+        let Command::NativeDoctor(args) = parse(&["native:doctor"]) else {
+            panic!("expected native:doctor");
+        };
+        assert_eq!(args.platform, Scope::All);
+        assert_eq!(args.url, None);
+        assert!(!args.json);
+        let Command::NativeDoctor(args) = parse(&[
+            "native:doctor",
+            "--platform",
+            "ios",
+            "--url",
+            "https://orders.example.com",
+            "--json",
+        ]) else {
+            panic!("expected native:doctor");
+        };
+        assert_eq!(args.platform, Scope::Ios);
+        assert_eq!(args.url.as_deref(), Some("https://orders.example.com"));
+        assert!(args.json);
+        let Command::NativeDoctor(args) = parse(&["native:doctor", "--platform=android"]) else {
+            panic!("expected native:doctor");
+        };
+        assert_eq!(args.platform, Scope::Android);
+        assert!(Cli::try_parse_from(["navree", "native:doctor", "--platform", "tvos"]).is_err());
+    }
+
+    #[test]
+    fn the_help_lists_the_native_commands() {
+        let help = Cli::try_parse_from(["navree", "--help"])
+            .unwrap_err()
+            .to_string();
+        assert!(help.contains("native:coverage"), "{help}");
+        assert!(help.contains("native:doctor"), "{help}");
     }
 
     #[test]

@@ -27,6 +27,8 @@
 //! | `navree skills:install [--path <dir>]` | The Navree agent skills into `.claude/skills/` and `.agents/skills/` |
 //! | `navree browser:install [--version <version>] [--force]` | Download Chrome for Testing into Navree's cache for navree-browser ([`browser`]) |
 //! | `navree openapi:client [--out web/src/lib/api] [--input <file>]` | The OpenAPI document and the front end's `schema.d.ts` for `@navree/client` ([`openapi_client`]) |
+//! | `navree native:coverage [--platform <p>] [--form <f>] [--json] [--fail-on web\|layout] [--features <f>] [--file <path>]` | Each page route of the app asked as a native client: its grade and what is missing, with totals; a gate for a store build (the app needs the native preview; [`native_coverage`]) |
+//! | `navree native:doctor [--platform ios\|android\|all] [--url <site>] [--json]` | What a native build needs, each item ready, missing or not applicable, with the next step for what is missing: the preview feature, the `auth.apps`, passkey, push and sign-in settings, the Android and Apple toolchains ([`native_doctor`]) |
 //! | `navree <anything else> [args...]` | `cargo run --quiet -- <command> [args...]` in the app ([`forward`]) |
 //!
 //! When the app has a `dock.toml`, `navree dev` and forwarded commands pass
@@ -55,6 +57,9 @@ pub mod kits;
 pub mod make;
 pub mod make_ui;
 pub mod names;
+pub mod native;
+pub mod native_coverage;
+pub mod native_doctor;
 pub mod new_app;
 pub mod openapi_client;
 pub mod project;

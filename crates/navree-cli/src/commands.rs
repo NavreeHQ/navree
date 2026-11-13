@@ -18,6 +18,8 @@ use crate::gate::{GateOptions, default_lock_path, run_gate};
 use crate::make::{MakeKind, MakeOptions, MakeReport, make_item, make_model, make_module};
 use crate::make_ui::{UiOptions, UiReport, default_module, make_ui_item};
 use crate::names::{AppName, Name};
+use crate::native_coverage::{CoverageOptions, run_coverage};
+use crate::native_doctor::{DoctorOptions, SystemMachine, run_doctor};
 use crate::new_app::{
     NavreeSource, NewApp, Repository, Ui, create_app, created_message, init_repository,
     write_harbor_key,
@@ -210,6 +212,30 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
                 "  next     createNavreeClient<paths>() from @navree/client, with `import type {{ paths }} from \"./schema\"`"
             );
             Ok(ExitCode::SUCCESS)
+        }
+        Command::NativeCoverage(args) => {
+            let root = run_root_of(cwd)?;
+            let options = CoverageOptions {
+                platform: args.platform.clone(),
+                form: args.form.clone(),
+                json: args.json,
+                fail_on: args.fail_on,
+                features: args.features.clone(),
+                file: args.file.clone(),
+                env: dock::app_env(&root)?,
+            };
+            let held = run_coverage(&root, &options, &mut ProcessRunner, &mut std::io::stdout())?;
+            Ok(exit_code(held))
+        }
+        Command::NativeDoctor(args) => {
+            let root = run_root_of(cwd)?;
+            let options = DoctorOptions {
+                scope: args.platform,
+                url: args.url.clone(),
+                json: args.json,
+            };
+            let ready = run_doctor(&root, &options, &SystemMachine, &mut std::io::stdout())?;
+            Ok(exit_code(ready))
         }
         Command::Forward(words) => {
             let Some((command, args)) = words.split_first() else {
