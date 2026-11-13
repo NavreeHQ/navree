@@ -62,11 +62,11 @@ own or what a server reply may start.
 | Haptics | `UINotificationFeedbackGenerator`, `.sensoryFeedback` | iOS 10 (17); iPad is mostly silent; macOS 10.11 trackpad; watchOS 2 | free | in Navree: a haptic with each message's tone |
 | Copy text | `UIPasteboard` (write only; a paste goes through the system paste control) | iOS 3 | free | in Navree (`Cmd::Copy`) |
 | Share | `ShareLink`, `UIActivityViewController` | iOS 16 (6) | free | in Navree for a page shown in the web view; not as a page call |
-| Open a URL; the sign-in session | `openURL`, `ASWebAuthenticationSession` with an https callback | iOS 12; macOS 10.15 | free | in Navree: other sites open in Safari; sign-in uses the session |
-| Passkeys | `ASAuthorizationPlatformPublicKeyCredentialProvider` | iOS 15; macOS 12; not watchOS | ADP (associated domains) | not yet in the client; the server side is done (`navree-auth`) |
-| Confirm one action (a passkey assertion over the action's details) | the same API | iOS 15 | ADP | not yet in the client; the server side is done |
+| Open a URL; the sign-in session | `openURL`, `ASWebAuthenticationSession` with the app's scheme or an https callback | iOS 12 (https callback 17.4); macOS 10.15 | free with the app's scheme; ADP (associated domains) for an https callback | in Navree: other sites open in Safari; the sign-in is handed over to the app; an https return only in a build signed with the origin as its associated domain |
+| Passkeys | `ASAuthorizationPlatformPublicKeyCredentialProvider` | iOS 15; macOS 12; not watchOS | ADP (associated domains) | in the client (made and used), not offered yet: the core does not fetch a passkey's options; the server side is done (`navree-auth`) |
+| Confirm one action (a passkey assertion over the action's details) | the same API | iOS 15 | ADP | in the client, offered by a build signed with the origin as its associated domain; the server side is done |
 | App lock | `LAContext` | iOS 8 | free (`NSFaceIDUsageDescription`) | not yet |
-| Push | APNs: `UNUserNotificationCenter`, `registerForRemoteNotifications` | iOS 10; macOS 10.14; watchOS 3 | ADP | not yet in the client; the server side is done (`notify.push.apns`) |
+| Push | APNs: `UNUserNotificationCenter`, `registerForRemoteNotifications` | iOS 10; macOS 10.14; watchOS 3 | ADP | in the client, offered by a build signed for push (`NavreeAppDelegate` passes the token on, the core posts it); the server side is done (`notify.push.apns`) |
 | Local notifications and the badge | `UNNotificationRequest`, `setBadgeCount` | iOS 10 (badge 16) | free | not yet |
 | Photos | `PhotosPicker` (no library permission) | iOS 16 (picker 14) | free | not yet |
 | Files | `fileImporter` | iOS 14 | free | in Navree (the file field) |
@@ -76,7 +76,7 @@ own or what a server reply may start.
 | Ask for a review | `RequestReviewAction` | iOS 16 | free | not yet |
 | Keep the screen on | `isIdleTimerDisabled` | iOS 2 | free | not yet |
 | Open this app's settings | `openSettingsURLString` | iOS 8 | free | not yet |
-| Sign in with Apple | `ASAuthorizationAppleIDProvider` | iOS 13; watchOS 6 | ADP (capability) | not yet in the client; the server side is done (`navree-social`) |
+| Sign in with Apple | `ASAuthorizationAppleIDProvider` | iOS 13; watchOS 6 | ADP (capability) | in the client, offered by a build signed for it; the server side is done (`navree-social`) |
 | Sign in with Google on iPhone | the web flow in `ASWebAuthenticationSession` | iOS 12 | free (a Google Cloud project) | the server side is done; the client uses the sign-in session |
 
 ## Surfaces outside the app

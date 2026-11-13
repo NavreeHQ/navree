@@ -130,6 +130,58 @@ A paid Apple Developer Program membership is needed for Associated Domains,
 passkeys, push and Sign in with Apple. What the client does about each is in
 `references/availability.md`.
 
+### Signing in, and what needs a team
+
+The core runs every sign-in; the client only opens the system's sheet and
+says how it ended. A feature that needs an entitlement is offered (listed in
+the client's capabilities) only when the build says it is signed for it, so
+an unsigned build never shows a control it cannot carry out. The build says
+so in its Info.plist, from build settings: `NavreeSignedWith` =
+`$(NAVREE_SIGNED_WITH)` (words apart: `associated-domains`,
+`sign-in-with-apple`, `push`) and `NavreeAssociatedDomain` =
+`$(NAVREE_ASSOCIATED_DOMAIN)`, which counts only when it is the origin's own
+host over https.
+
+| Feature | Unsigned, in the simulator | What it needs |
+|---|---|---|
+| The sign-in handed over on the app's own scheme | works | the scheme in `CFBundleURLTypes`; on the server `callback = "<scheme>:/signed-in"` with `custom_scheme = true` |
+| The sign-in handed over on an https link | not offered: the session is never opened | a team; Associated Domains on the App ID; `webcredentials:<host>`; the association file on a real https host |
+| Sign in with Apple | not offered | a team; Sign in with Apple on the App ID; the entitlement; a person signed in to an Apple Account on the device; `social.providers.apple` and `auth.apps.apple` on the server |
+| Passkeys, made or used | not offered | as the https sign-in, with `webcredentials:<rp_id>`; and, for now, a core that fetches the passkey's options (it does not yet) |
+| Confirming an action with a passkey | not offered | as passkeys, and a passkey made for the site |
+| Push | not offered | a team; Push Notifications on the App ID; `aps-environment`; `notify.push.apns` with a `.p8` key on the server; delivery is proven only on a device |
+
+For the hand-over the app lists its sign-in page among the addresses that
+open the system's session (`ShellConfiguration.signInPaths`, such as
+`["/sign-in", "/auth/*/redirect"]`), and the server names the app:
+
+```toml
+[auth.apps.apple.main]
+team_id = "ABCDE12345"
+bundle_id = "in.example.charkha"
+callback = "https://charkha.example/app/signed-in"   # or "charkha:/signed-in" with custom_scheme = true
+```
+
+With `credentials` or `links` (both on by default) the server serves
+`/.well-known/apple-app-site-association` itself; for the app above and
+`auth.apps.paths = ["/orders/*"]` it is:
+
+```json
+{
+  "applinks": { "details": [{ "appIDs": ["ABCDE12345.in.example.charkha"], "components": [{ "/": "/orders/*" }] }] },
+  "webcredentials": { "apps": ["ABCDE12345.in.example.charkha"] }
+}
+```
+
+A team then turns everything on with one file. The demo has it written and
+off: copy `packages/apple/Demo/Signing/Signing.local.xcconfig.example` to
+`Signing.local.xcconfig`, put in `DEVELOPMENT_TEAM`, the bundle id and the
+domain, and run `xcodegen generate`; it adds `Signing/NavreeDemo.entitlements`
+(Sign in with Apple, `webcredentials:` and `applinks:` for the domain,
+`aps-environment`) and says so in the Info.plist. An app of its own does the
+same, and adopts `NavreeAppDelegate` (`@UIApplicationDelegateAdaptor`) so the
+push token and a tapped notification reach the core.
+
 ## Review checklist
 
 Run on a screenshot of the iPhone and iPad passes (`navree-native-design`,
@@ -216,6 +268,8 @@ and with Increase Contrast. Answer yes or no; a "no" is a defect.
 | An in-app light and dark switch | The system's appearance. |
 | A blank screen while loading | Cached content, then placeholders. |
 | A web view as a browser | Native bars always; other sites open in Safari. |
+| Signing in inside the app's web view | The system's sign-in session, handed over to the app. |
+| Listing `passkey`, `confirm`, `platform_sign_in` or `push` in an unsigned build | Each is offered only when the Info.plist says the build is signed for it. |
 
 ## Docs
 
