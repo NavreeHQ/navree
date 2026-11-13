@@ -1,0 +1,19 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "stamp": "4d2c8e10b7a91f36",
+  "name": "Health",
+  "home": "/",
+  "theme": {"name": "health", "accent": "#00796b", "accent_dark": "#4db6ac"},
+  "nav": {
+    "groups": [
+      {
+        "items": [
+          {"label": "Today", "href": "/", "icon": {"name": "home", "symbol": {"apple": "house", "material": "home"}}},
+          {"label": "Sleep", "href": "/sleep", "icon": {"name": "moon", "symbol": {"apple": "bed.double", "material": "bedtime"}}},
+          {"label": "Fitness", "href": "/fitness", "icon": {"name": "activity", "symbol": {"apple": "figure.run", "material": "directions_run"}}}
+        ]
+      }
+    ]
+  }
+}

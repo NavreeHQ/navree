@@ -1,0 +1,8 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+*.apk
+*.aab
+# The runtime core's libraries come from the cloud build of the core, never from git.
+navree-native/src/main/jniLibs/

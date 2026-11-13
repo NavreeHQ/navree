@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- A debug build talks to a server on the machine the emulator runs on. -->
+    <string name="navree_origin" translatable="false">http://10.0.2.2:8787</string>
+    <bool name="navree_loopback_http">true</bool>
+</resources>

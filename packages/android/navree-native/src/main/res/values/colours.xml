@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The seed of the app's tonal palette until the shell brings the brand's own.
+         Transparent is no seed: an app that sets none takes the person's wallpaper colours. -->
+    <color name="navree_seed">#00000000</color>
+    <color name="navree_window">#FEF7FF</color>
+</resources>

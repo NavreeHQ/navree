@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The window before the first frame is drawn: no action bar, the surface colour, bars drawn by the app. -->
+    <style name="Theme.Navree" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/navree_window</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>
