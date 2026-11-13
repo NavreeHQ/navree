@@ -13,7 +13,18 @@ struct StackView: View {
     /// The presentation the stack stands in, when it is presented over everything.
     var modal: Modal?
 
+    @Environment(\.navreeWindow) private var window
+
     var body: some View {
+        let layout = modal == nil ? SplitRules.layout(stack.first.flatMap { client.screen($0)?.screen?.body }, width: window) : .stack
+        if case .stack = layout {
+            stacked
+        } else {
+            ColumnsStack(layout: layout, stack: stack, client: client, configuration: configuration)
+        }
+    }
+
+    @ViewBuilder private var stacked: some View {
         if let root = stack.first {
             NavigationStack(path: path) {
                 PageView(id: root, depth: 0, modal: modal, client: client, configuration: configuration)
@@ -202,10 +213,12 @@ struct PageView: View {
     let modal: Modal?
     let client: NativeClient
     let configuration: ShellConfiguration
+    /// The part of a screen of panes drawn, when only one is.
+    var part: SplitPart?
 
     var body: some View {
         if let model = client.screens[id] {
-            ScreenPage(model: model, depth: depth, modal: modal, client: client, configuration: configuration)
+            ScreenPage(model: model, depth: depth, modal: modal, client: client, configuration: configuration, part: part)
         } else {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -221,6 +234,8 @@ struct ScreenPage: View {
     let modal: Modal?
     let client: NativeClient
     let configuration: ShellConfiguration
+    /// The part of a screen of panes drawn, when only one is: its detail.
+    var part: SplitPart?
     @State private var webTitle: String?
 
     private var state: ScreenState { model.state }
@@ -249,7 +264,7 @@ struct ScreenPage: View {
         case .native(let screen):
             let shown = Drawable.notice(message)
             ScreenView(
-                screen: Drawable.screen(screen, states: state.states), depth: screenDepth,
+                screen: SplitRules.part(part, of: Drawable.screen(screen, states: state.states)), depth: screenDepth,
                 appName: client.app?.name ?? "", notice: shown.notice, failure: shown.failure
             )
         case .web(let address, let title, _, let serial):
@@ -292,7 +307,7 @@ struct ScreenPage: View {
             }
             .sharedBackgroundVisibility(.hidden)
         }
-        if depth == 0, modal == nil, state.chrome, let user = client.app?.user {
+        if depth == 0, modal == nil, state.chrome, AccountPlacement.inToolbar, let user = client.app?.user {
             ToolbarItem(placement: .primaryAction) {
                 AccountMenu(user: user, client: client)
             }
