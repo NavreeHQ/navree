@@ -280,6 +280,14 @@ class SpreadRulesTest {
     }
 }
 
+class LaneRulesTest {
+    @Test
+    fun the_names_of_levels_stand_inside_the_plot_so_it_has_the_full_width() {
+        assertTrue(AxisRules.namesInside(Navree.Chart(levels = listOf("Deep", "Core", "REM", "Awake"))))
+        assertFalse("a chart with a value axis keeps its gutter", AxisRules.namesInside(Navree.Chart()))
+    }
+}
+
 class GaugeRulesTest {
     @Test
     fun an_arc_open_at_the_foot_needs_less_than_its_square() {
