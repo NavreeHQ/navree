@@ -326,6 +326,8 @@ data class ScreenView(
     val question: Question? = null,
     /** The title of the page the screen last showed: for the bar while it has nothing to show. */
     val title: String? = null,
+    /** The id of the part on the screen under it this screen was opened from. */
+    val from: String? = null,
 ) {
     val screen: Navree.Screen? get() = (content as? Content.Native)?.screen
 

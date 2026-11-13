@@ -12,7 +12,12 @@ import java.net.URLDecoder
  * `orders_sort_total.json`, `/` is `index.json`. A native request gets the
  * JSON; the web view's gets the page's HTML when it was recorded.
  */
-class Recorded(private val folder: String, private val routes: Map<String, String> = emptyMap()) : Dispatcher() {
+class Recorded(
+    private val folder: String,
+    private val routes: Map<String, String> = emptyMap(),
+    /** Reads an answer by its file name from somewhere else than the test's assets, when given. */
+    private val read: ((String) -> String?)? = null,
+) : Dispatcher() {
     private val assets = InstrumentationRegistry.getInstrumentation().context.assets
 
     /** Every address asked, in order, for the test to look at. */
@@ -26,7 +31,7 @@ class Recorded(private val folder: String, private val routes: Map<String, Strin
         val name = routes[path] ?: nameOf(path, url.encodedQuery)
         val prefix = if (folder.isEmpty()) "" else "$folder/"
         val file = if (native) "$prefix$name.json" else "$prefix$name.embed.html"
-        val body = runCatching { assets.open(file).use { it.readBytes().decodeToString() } }.getOrNull()
+        val body = read?.invoke(file) ?: runCatching { assets.open(file).use { it.readBytes().decodeToString() } }.getOrNull()
             ?: return MockResponse.Builder().code(404).addHeader("Content-Type", "text/plain").body("Not recorded: $file").build()
         return MockResponse.Builder()
             .code(200)

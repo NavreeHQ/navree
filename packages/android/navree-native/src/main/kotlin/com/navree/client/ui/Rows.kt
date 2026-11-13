@@ -244,9 +244,9 @@ internal fun RowView(
                         action != null && menu.isNotEmpty() -> Modifier.combinedClickable(
                             role = Role.Button,
                             onLongClick = { menuOpen = true },
-                            onClick = { ui.act(place, action) },
+                            onClick = { ui.act(place, action, from = row.id) },
                         )
-                        action != null -> Modifier.clickable(role = Role.Button) { ui.act(place, action) }
+                        action != null -> Modifier.clickable(role = Role.Button) { ui.act(place, action, from = row.id) }
                         else -> Modifier
                     },
                 )
@@ -488,10 +488,10 @@ internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Pla
                     choosable -> Modifier.combinedClickable(
                         role = Role.Button,
                         onLongClick = { tick(true) },
-                        onClick = { if (action != null) ui.act(place, action) else tick(true) },
+                        onClick = { if (action != null) ui.act(place, action, from = row.id) else tick(true) },
                     )
-                    action != null && folded.menu.isNotEmpty() -> Modifier.combinedClickable(role = Role.Button, onLongClick = { menuOpen = true }) { ui.act(place, action) }
-                    action != null -> Modifier.clickable(role = Role.Button) { ui.act(place, action) }
+                    action != null && folded.menu.isNotEmpty() -> Modifier.combinedClickable(role = Role.Button, onLongClick = { menuOpen = true }) { ui.act(place, action, from = row.id) }
+                    action != null -> Modifier.clickable(role = Role.Button) { ui.act(place, action, from = row.id) }
                     else -> Modifier
                 },
             )
@@ -585,7 +585,7 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
                     .then(
                         when {
                             SelectionRules.tapTicks(node, row, choosing.any) -> Modifier.clickable(role = Role.Checkbox) { choosing.tick(ui, place, row, !ticked) }
-                            action != null -> Modifier.clickable(role = Role.Button) { ui.act(place, action) }
+                            action != null -> Modifier.clickable(role = Role.Button) { ui.act(place, action, from = row.id) }
                             else -> Modifier
                         },
                     )

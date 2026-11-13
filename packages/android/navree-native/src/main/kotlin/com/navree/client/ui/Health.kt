@@ -681,7 +681,7 @@ internal fun HealthFigureView(node: Navree.Figure, place: Place, modifier: Modif
         modifier = modifier
             .fillMaxWidth()
             .clip(CardDefaults.shape)
-            .then(if (action != null) Modifier.clickable(role = Role.Button) { ui.act(place, action) } else Modifier)
+            .then(if (action != null) Modifier.clickable(role = Role.Button) { ui.act(place, action, from = node.id) } else Modifier)
             .semantics(mergeDescendants = true) {},
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {

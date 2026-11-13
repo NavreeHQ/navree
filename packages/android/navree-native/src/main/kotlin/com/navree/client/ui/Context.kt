@@ -72,9 +72,9 @@ internal data class Place(
 }
 
 /** Something with an action was tapped. */
-internal fun Ui.act(place: Place, action: Navree.Action?, text: String? = null) {
+internal fun Ui.act(place: Place, action: Navree.Action?, text: String? = null, from: String? = null) {
     if (action == null) return
-    send(Events.act(place.id, action, place.form, place.overlay, text))
+    send(Events.act(place.id, action, place.form, place.overlay, text, from = from))
 }
 
 /**
@@ -88,9 +88,9 @@ internal fun Ui.press(place: Place, button: Navree.Button) {
     val action = button.action ?: return
     val ask = button.ask?.takeUnless { button.undoable || place.inDialog }
     when {
-        ask != null -> send(Events.act(place.id, action, place.form, place.overlay, ask = ask))
+        ask != null -> send(Events.act(place.id, action, place.form, place.overlay, ask = ask, from = button.id))
         ConfirmRules.asks(button, place.inDialog) -> asking.value = place to button
-        else -> act(place, action)
+        else -> act(place, action, from = button.id)
     }
 }
 

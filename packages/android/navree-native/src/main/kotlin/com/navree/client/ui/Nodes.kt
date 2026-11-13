@@ -812,7 +812,7 @@ internal fun FeedRowView(node: Navree.FeedRow, place: Place, modifier: Modifier 
             else -> null
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = modifier.then(if (action != null) Modifier.clickable(role = Role.Button) { ui.act(place, action) } else Modifier),
+        modifier = modifier.then(if (action != null) Modifier.clickable(role = Role.Button) { ui.act(place, action, from = node.id) } else Modifier),
     )
 }
 

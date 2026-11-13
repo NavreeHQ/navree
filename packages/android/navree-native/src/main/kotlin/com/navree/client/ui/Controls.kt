@@ -156,14 +156,14 @@ internal fun QuietButton(node: Navree.Button, place: Place, colour: Color = Colo
 internal fun LinkView(node: Navree.Link, place: Place, modifier: Modifier = Modifier) {
     val ui = LocalUi.current
     if (node.children.isEmpty()) {
-        TextButton(onClick = { ui.act(place, node.action) }, modifier = modifier) { Text(node.label) }
+        TextButton(onClick = { ui.act(place, node.action, from = node.id) }, modifier = modifier) { Text(node.label) }
         return
     }
     // A link that holds parts (a ring and its words) is one touch target with the shape of a card's item.
     Box(
         modifier
             .clip(MaterialTheme.shapes.medium)
-            .clickable(role = androidx.compose.ui.semantics.Role.Button) { ui.act(place, node.action) }
+            .clickable(role = androidx.compose.ui.semantics.Role.Button) { ui.act(place, node.action, from = node.id) }
             .semantics(mergeDescendants = true) {}
             .padding(vertical = 8.dp, horizontal = 4.dp),
         contentAlignment = Alignment.Center,

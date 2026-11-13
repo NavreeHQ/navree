@@ -144,6 +144,8 @@ class EventsTest {
         assertEquals("""{"t":"tab","screen":1,"id":"parts","index":1}""", Events.tab(1, "parts", 1).toString())
         assertEquals("""{"t":"restore","snapshot":{"v":1}}""", Events.restore(Json.parseToJsonElement("""{"v":1}""")).toString())
         assertEquals("""{"t":"choose","screen":1,"table":"ledger","on":true,"across":true}""", Events.choose(1, "ledger", null, true, across = true).toString())
+        val tapped = Events.act(1, Navree.Action.Navigate("/sleep"), now = 0, from = "pillar-sleep")
+        assertEquals("the part tapped, for the screen it opens to grow from", "pillar-sleep", tapped["from"]!!.jsonPrimitive.content)
     }
 
     @Test

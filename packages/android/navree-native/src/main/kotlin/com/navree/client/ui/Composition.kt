@@ -144,12 +144,12 @@ internal fun CardView(node: Navree.Card, place: Place, modifier: Modifier = Modi
                     .combinedClickable(
                         role = Role.Button,
                         onLongClick = { menuOpen = true },
-                        onClick = { if (action != null) ui.act(place, action) else menuOpen = true },
+                        onClick = { if (action != null) ui.act(place, action, from = node.id) else menuOpen = true },
                     )
                     .then(described),
                 colors = colours,
             ) { content() }
-            action != null -> Card(onClick = { ui.act(place, action) }, modifier = Modifier.fillMaxWidth().fillMaxHeight().then(described), colors = colours) { content() }
+            action != null -> Card(onClick = { ui.act(place, action, from = node.id) }, modifier = Modifier.fillMaxWidth().fillMaxHeight().then(described), colors = colours) { content() }
             // In a grid's row, cards are as high as the tallest.
             else -> Card(modifier = Modifier.fillMaxWidth().fillMaxHeight().then(described), colors = colours) { content() }
         }

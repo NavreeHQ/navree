@@ -34,6 +34,8 @@ object Events {
         text: String? = null,
         now: Long = System.currentTimeMillis() / 1000,
         ask: Navree.Question? = null,
+        /** The id of the part tapped, when it has one: a screen it opens is drawn growing from it. */
+        from: String? = null,
     ) = event("act") {
         screen?.let { put("screen", it) }
         put("action", CoreJson.encodeToJsonElement(Navree.ActionSerializer, action))
@@ -42,6 +44,7 @@ object Events {
         text?.let { put("text", it) }
         put("now", now)
         ask?.let { put("ask", CoreJson.encodeToJsonElement(Navree.Question.serializer(), it)) }
+        from?.let { put("from", it) }
     }
 
     /** The person answered the core's question: `yes` for its confirming button, `false` for every other way out. */
