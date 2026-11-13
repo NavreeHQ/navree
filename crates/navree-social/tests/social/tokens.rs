@@ -9,11 +9,12 @@ use navree_contracts::Clock;
 use navree_crypto::Encrypter;
 use navree_db::Db;
 use navree_orm::Model as _;
-use navree_social::{ProviderToken, Social, SocialError, SocialUser, social_account};
-use navree_testing::{FixedClock, TestApp};
+use navree_social::{ProviderToken, Social, SocialError, SocialFake, SocialUser, social_account};
+use navree_testing::{FixedClock, TestApp, TestAppBuilder};
+use serde_json::json;
 use uuid::Uuid;
 
-use crate::support::{fake_app, sign_in};
+use crate::support::{APPLE_P8, fake_app, sign_in};
 
 async fn account(app: &TestApp) -> social_account::Model {
     let db = app.get::<Db>().await;
@@ -167,4 +168,80 @@ async fn without_store_tokens_nothing_is_kept() {
         social.token(Uuid::now_v7(), "github").await,
         Err(SocialError::NotLinked { .. })
     ));
+}
+
+/// The site's Apple settings, with the Services ID of the web flow.
+fn apple(b: TestAppBuilder) -> TestAppBuilder {
+    b.config(
+        "social.providers.apple",
+        json!({
+            "client_id": "in.navree.dhaba.web",
+            "team_id": "TEAM123456",
+            "key_id": "KEY1234567",
+            "private_key": APPLE_P8,
+        }),
+    )
+}
+
+/// The site's iPhone app, a native Apple app of `auth.apps.apple`.
+fn with_apple_app(b: TestAppBuilder) -> TestAppBuilder {
+    b.config(
+        "auth.apps.apple.main",
+        json!({ "team_id": "ABCDE12345", "bundle_id": "in.navree.dhaba" }),
+    )
+}
+
+async fn sign_in_with_tokens(
+    app: &TestApp,
+    fake: &SocialFake,
+    provider: &str,
+) -> social_account::Model {
+    fake.on_code(
+        provider,
+        "code",
+        SocialUser::new(provider, "1")
+            .email(Some("anu@example.com"), true)
+            .token(ProviderToken::new("access").refresh_token("refresh")),
+    );
+    sign_in(app, provider, "code").await.assert_status(200);
+    account(app).await
+}
+
+#[tokio::test]
+async fn apples_tokens_are_kept_without_store_tokens_when_the_site_has_an_apple_app() {
+    let (app, fake) = fake_app(|b| with_apple_app(apple(b))).await;
+    let row = sign_in_with_tokens(&app, &fake, "apple").await;
+    let encrypter = app.get::<Encrypter>().await;
+    assert_eq!(
+        encrypter
+            .decrypt_string(row.refresh_token.as_deref().expect("kept"))
+            .unwrap(),
+        "refresh"
+    );
+    assert!(row.access_token.is_some());
+}
+
+#[tokio::test]
+async fn another_providers_tokens_are_not_kept_because_the_site_has_an_apple_app() {
+    let (app, fake) = fake_app(with_apple_app).await;
+    let row = sign_in_with_tokens(&app, &fake, "github").await;
+    assert_eq!(row.access_token, None);
+    assert_eq!(row.refresh_token, None);
+}
+
+#[tokio::test]
+async fn apples_tokens_are_not_kept_without_store_tokens_when_the_site_has_no_apple_app() {
+    let (app, fake) = fake_app(apple).await;
+    let row = sign_in_with_tokens(&app, &fake, "apple").await;
+    assert_eq!(row.access_token, None);
+    assert_eq!(row.refresh_token, None);
+    assert_eq!(row.token_expires_at, None);
+}
+
+#[tokio::test]
+async fn apples_tokens_are_kept_with_store_tokens_when_the_site_has_no_apple_app() {
+    let (app, fake) = fake_app(|b| apple(b).config("social.store_tokens", true)).await;
+    let row = sign_in_with_tokens(&app, &fake, "apple").await;
+    assert!(row.access_token.is_some());
+    assert!(row.refresh_token.is_some());
 }

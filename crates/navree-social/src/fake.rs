@@ -17,6 +17,8 @@ pub(crate) struct FakeState {
     codes: Mutex<HashMap<(String, String), Answer>>,
     refreshes: Mutex<HashMap<String, ProviderToken>>,
     exchanged: Mutex<Vec<(String, String)>>,
+    id_tokens: Mutex<HashMap<(String, String), SocialUser>>,
+    revocations: Mutex<Vec<(String, String)>>,
 }
 
 impl FakeState {
@@ -43,6 +45,33 @@ impl FakeState {
             Some(Answer::Error(error)) => Err(SocialError::provider(provider_name, error.clone())),
             None => Err(SocialError::provider(provider_name, "invalid_grant")),
         }
+    }
+
+    /// A native sign-in's identity token of `provider`: the user set for
+    /// it with [`SocialFake::on_id_token`], or a refusal.
+    pub(crate) fn native(
+        &self,
+        provider: &str,
+        id_token: &str,
+        provider_name: &str,
+    ) -> Result<SocialUser, SocialError> {
+        self.id_tokens
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&(provider.to_owned(), id_token.to_owned()))
+            .cloned()
+            .ok_or_else(|| SocialError::InvalidIdToken {
+                provider: provider_name.to_owned(),
+                reason: "unknown identity token".to_owned(),
+            })
+    }
+
+    /// Records a revocation of `provider_user_id`'s tokens at `provider`.
+    pub(crate) fn revoked(&self, provider: &str, provider_user_id: &str) {
+        self.revocations
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push((provider.to_owned(), provider_user_id.to_owned()));
     }
 
     /// A token refresh of `provider`: the token set with
@@ -128,6 +157,27 @@ impl SocialFake {
             .unwrap_or_else(PoisonError::into_inner)
             .insert(provider.to_owned(), token);
         self
+    }
+
+    /// Answers a native sign-in with `provider` posting `id_token` with
+    /// `user` (the attempt's state is still checked; the token is not).
+    pub fn on_id_token(&self, provider: &str, id_token: &str, user: SocialUser) -> &Self {
+        self.state
+            .id_tokens
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert((provider.to_owned(), id_token.to_owned()), user);
+        self
+    }
+
+    /// The `(provider, provider user id)` pairs whose stored tokens were
+    /// revoked so far (disconnecting, offboarding, deleting), in order.
+    pub fn revocations(&self) -> Vec<(String, String)> {
+        self.state
+            .revocations
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     /// The `(provider, code)` pairs exchanged so far, in order (only codes

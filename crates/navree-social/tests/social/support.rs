@@ -258,7 +258,13 @@ impl Idp {
 
     /// An ES256 ID token with `claims`.
     pub fn es256(&self, claims: &Value) -> String {
-        let input = Self::encode(&json!({ "alg": "ES256", "kid": "ec-1" }), claims);
+        self.es256_kid(claims, "ec-1")
+    }
+
+    /// An ES256 ID token with `claims`, naming the key `kid` (signed with
+    /// the `ec-1` key whatever it names).
+    pub fn es256_kid(&self, claims: &Value, kid: &str) -> String {
+        let input = Self::encode(&json!({ "alg": "ES256", "kid": kid }), claims);
         let sig = self
             .ec
             .sign(&SystemRandom::new(), input.as_bytes())

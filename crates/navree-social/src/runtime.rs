@@ -3,10 +3,10 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use navree_auth::{AuthOptions, AuthService};
+use navree_auth::{AppsOptions, AuthOptions, AuthService};
 use navree_cache::Cache;
 use navree_contracts::{AuditEntry, AuditSink, Clock, SystemClock};
 use navree_crypto::jose::JwkSet;
@@ -20,8 +20,14 @@ use tokio::sync::Mutex;
 use crate::provider::ProviderEntry;
 use crate::{SocialError, SocialOptions, SocialProvider};
 
-/// How long a fetched JSON Web Key Set is used.
+/// How long a fetched JSON Web Key Set is used when the provider does not
+/// say.
 const JWKS_TTL: Duration = Duration::from_secs(3600);
+
+/// The shortest and longest time a key set is used, whatever the provider
+/// says.
+const JWKS_MIN_TTL: Duration = Duration::from_secs(300);
+const JWKS_MAX_TTL: Duration = Duration::from_secs(86_400);
 
 /// The shortest time between two fetches of one key set (an unknown `kid`
 /// refetches, but not more often than this).
@@ -42,6 +48,9 @@ pub(crate) struct Runtime {
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) http: HttpClient,
     pub(crate) jwks: JwksCache,
+    /// The bundle ids of the site's Apple apps (`auth.apps.apple`): the
+    /// audiences of Sign in with Apple's identity tokens from the apps.
+    pub(crate) apple_apps: Vec<String>,
     pub(crate) app: WeakAppContext,
 }
 
@@ -88,6 +97,15 @@ impl Runtime {
             clock,
             http,
             jwks: JwksCache::default(),
+            apple_apps: match app.try_get::<AppsOptions>().await {
+                Some(apps) => apps
+                    .apple
+                    .values()
+                    .map(|app| app.bundle_id.trim().to_owned())
+                    .filter(|bundle| !bundle.is_empty())
+                    .collect(),
+                None => Vec::new(),
+            },
             app: app.downgrade(),
             options,
         })
@@ -144,6 +162,19 @@ impl Runtime {
         }
     }
 
+    /// Emits `event` now, when the app has an `EventBus`.
+    pub(crate) async fn emit<E: Event>(&self, event: E) {
+        let Some(app) = self.app.upgrade() else {
+            return;
+        };
+        let Some(bus) = app.try_get::<EventBus>().await else {
+            return;
+        };
+        if let Err(error) = bus.emit(event).await {
+            tracing::warn!(target: "navree::social", event = E::NAME, %error, "a social event listener failed");
+        }
+    }
+
     /// Emits `event` once `uow` commits, when the app has an `EventBus`.
     pub(crate) async fn emit_after_commit<E: Event>(&self, uow: &Uow, event: E) {
         let Some(app) = self.app.upgrade() else {
@@ -169,36 +200,79 @@ async fn record(sink: Arc<dyn AuditSink>, entry: AuditEntry) {
     }
 }
 
+/// A fetched key set: when it was fetched and until when it is used.
+struct CachedSet {
+    set: JwkSet,
+    fetched: DateTime<Utc>,
+    expires: DateTime<Utc>,
+}
+
 /// Fetched JSON Web Key Sets, by URL.
 #[derive(Default)]
 pub(crate) struct JwksCache {
-    sets: Mutex<HashMap<String, (JwkSet, Instant)>>,
+    sets: Mutex<HashMap<String, CachedSet>>,
 }
 
 impl JwksCache {
-    /// The key set at `url`, fetched when it is not cached, older than an
-    /// hour, or lacks `kid` (key rotation).
+    /// The key set at `url` at time `now`. It is fetched when it is not
+    /// cached, when its lifetime is over (the `max-age` the provider sent
+    /// with it, see [`jwks_lifetime`]), or when it lacks `kid` (a key
+    /// rotation): then once, and not again within 30 seconds, so a token
+    /// with a made-up key id cannot make every request fetch the set.
     pub(crate) async fn get<F, Fut>(
         &self,
         url: &str,
         kid: Option<&str>,
+        now: DateTime<Utc>,
         fetch: F,
     ) -> Result<JwkSet, SocialError>
     where
         F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<JwkSet, SocialError>>,
+        Fut: Future<Output = Result<(JwkSet, Duration), SocialError>>,
     {
         let mut sets = self.sets.lock().await;
-        if let Some((set, fetched)) = sets.get(url) {
-            let fresh = fetched.elapsed() < JWKS_TTL;
-            let knows_kid = kid.is_none_or(|kid| set.has_kid(kid));
-            if fresh && (knows_kid || fetched.elapsed() < JWKS_MIN_REFETCH) {
-                return Ok(set.clone());
+        if let Some(cached) = sets.get(url) {
+            let fresh = now < cached.expires;
+            let knows_kid = kid.is_none_or(|kid| cached.set.has_kid(kid));
+            let refetched_lately =
+                now.signed_duration_since(cached.fetched) < delta(JWKS_MIN_REFETCH);
+            if fresh && (knows_kid || refetched_lately) {
+                return Ok(cached.set.clone());
             }
         }
-        let set = fetch().await?;
-        sets.insert(url.to_owned(), (set.clone(), Instant::now()));
+        let (set, lifetime) = fetch().await?;
+        sets.insert(
+            url.to_owned(),
+            CachedSet {
+                set: set.clone(),
+                fetched: now,
+                expires: now + delta(lifetime),
+            },
+        );
         Ok(set)
+    }
+}
+
+fn delta(duration: Duration) -> chrono::TimeDelta {
+    chrono::TimeDelta::from_std(duration).unwrap_or(chrono::TimeDelta::MAX)
+}
+
+/// How long a key set is used: the `max-age` of its `Cache-Control` header
+/// (Google sends several hours), kept between five minutes and a day; an
+/// hour without one.
+pub(crate) fn jwks_lifetime(cache_control: Option<&str>) -> Duration {
+    let max_age = cache_control.and_then(|value| {
+        value.split(',').find_map(|directive| {
+            let (name, seconds) = directive.trim().split_once('=')?;
+            name.trim()
+                .eq_ignore_ascii_case("max-age")
+                .then(|| seconds.trim().trim_matches('"').parse::<u64>().ok())
+                .flatten()
+        })
+    });
+    match max_age {
+        Some(seconds) => Duration::from_secs(seconds).clamp(JWKS_MIN_TTL, JWKS_MAX_TTL),
+        None => JWKS_TTL,
     }
 }
 
@@ -220,6 +294,10 @@ mod tests {
         }
     }
 
+    fn at(seconds: i64) -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_800_000_000 + seconds, 0).unwrap()
+    }
+
     #[tokio::test]
     async fn key_sets_are_cached_until_an_unknown_kid_after_the_refetch_delay() {
         let cache = JwksCache::default();
@@ -228,30 +306,63 @@ mod tests {
             let fetches = &fetches;
             move || async move {
                 fetches.fetch_add(1, Ordering::SeqCst);
-                Ok(set(kid))
+                Ok((set(kid), JWKS_TTL))
             }
         };
-        cache
-            .get("https://idp/keys", Some("a"), fetch("a"))
-            .await
-            .unwrap();
-        cache
-            .get("https://idp/keys", Some("a"), fetch("a"))
-            .await
-            .unwrap();
+        let url = "https://idp/keys";
+        cache.get(url, Some("a"), at(0), fetch("a")).await.unwrap();
+        cache.get(url, Some("a"), at(1), fetch("a")).await.unwrap();
         assert_eq!(fetches.load(Ordering::SeqCst), 1);
         // An unknown kid right after a fetch does not refetch (no hammering).
-        let keys = cache
-            .get("https://idp/keys", Some("b"), fetch("b"))
-            .await
-            .unwrap();
+        let keys = cache.get(url, Some("b"), at(2), fetch("b")).await.unwrap();
         assert!(!keys.has_kid("b"));
         assert_eq!(fetches.load(Ordering::SeqCst), 1);
+        // Later, an unknown kid refetches once (a rotation)...
+        let keys = cache.get(url, Some("b"), at(40), fetch("b")).await.unwrap();
+        assert!(keys.has_kid("b"));
+        assert_eq!(fetches.load(Ordering::SeqCst), 2);
+        // ...and a kid that stays unknown does not refetch again at once.
+        let keys = cache.get(url, Some("z"), at(41), fetch("b")).await.unwrap();
+        assert!(!keys.has_kid("z"));
+        assert_eq!(fetches.load(Ordering::SeqCst), 2);
         // Another URL is its own entry.
         cache
-            .get("https://other/keys", None, fetch("c"))
+            .get("https://other/keys", None, at(42), fetch("c"))
             .await
             .unwrap();
-        assert_eq!(fetches.load(Ordering::SeqCst), 2);
+        assert_eq!(fetches.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn key_sets_live_for_their_max_age() {
+        let cache = JwksCache::default();
+        let fetches = AtomicUsize::new(0);
+        let counter = &fetches;
+        let fetch = move || async move {
+            counter.fetch_add(1, Ordering::SeqCst);
+            Ok((
+                set("a"),
+                jwks_lifetime(Some("public, max-age=21600, must-revalidate")),
+            ))
+        };
+        let url = "https://idp/keys";
+        cache.get(url, Some("a"), at(0), fetch).await.unwrap();
+        cache.get(url, Some("a"), at(21_599), fetch).await.unwrap();
+        assert_eq!(fetches.load(Ordering::SeqCst), 1, "fresh for six hours");
+        cache.get(url, Some("a"), at(21_600), fetch).await.unwrap();
+        assert_eq!(fetches.load(Ordering::SeqCst), 2, "stale after six hours");
+    }
+
+    #[test]
+    fn the_lifetime_is_read_from_cache_control() {
+        assert_eq!(
+            jwks_lifetime(Some("public, max-age=19800, must-revalidate, no-transform")),
+            Duration::from_secs(19_800)
+        );
+        assert_eq!(jwks_lifetime(Some("max-age=5")), JWKS_MIN_TTL);
+        assert_eq!(jwks_lifetime(Some("max-age=9999999")), JWKS_MAX_TTL);
+        assert_eq!(jwks_lifetime(Some("no-store")), JWKS_TTL);
+        assert_eq!(jwks_lifetime(None), JWKS_TTL);
+        assert_eq!(jwks_lifetime(Some("max-age=soon")), JWKS_TTL);
     }
 }

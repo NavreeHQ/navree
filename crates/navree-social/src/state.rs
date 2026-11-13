@@ -40,6 +40,10 @@ pub(crate) struct StatePayload {
     pub(crate) return_to: Option<String>,
     /// Expiry, in seconds since the Unix epoch.
     pub(crate) exp: i64,
+    /// When a native sign-in attempt started (its nonce was issued), in
+    /// seconds since the Unix epoch: the identity token must be newer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) iat: Option<i64>,
 }
 
 impl StatePayload {
@@ -61,6 +65,7 @@ impl StatePayload {
             user,
             return_to,
             exp,
+            iat: None,
         }
     }
 

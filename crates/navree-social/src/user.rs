@@ -254,6 +254,110 @@ impl fmt::Debug for SocialCallback {
     }
 }
 
+/// The one-time nonce of a sign-in from a native app (`POST
+/// /api/auth/social/{provider}/native/nonce`): the app passes `nonce` to
+/// the system's sheet (Google: as is; Apple: its SHA-256 in lower-case
+/// hex) and posts `state` back with the identity token, within
+/// `expires_in` seconds, once.
+#[derive(Clone, Serialize, ToSchema)]
+#[non_exhaustive]
+pub struct NativeNonce {
+    /// The nonce for the provider's request.
+    pub nonce: String,
+    /// The sealed attempt, to post back with the identity token.
+    pub state: String,
+    /// Seconds until the attempt expires.
+    pub expires_in: u64,
+}
+
+impl fmt::Debug for NativeNonce {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NativeNonce")
+            .field("nonce", &"[redacted]")
+            .field("state", &"[redacted]")
+            .field("expires_in", &self.expires_in)
+            .finish()
+    }
+}
+
+/// What a native app posts after the system's sign-in sheet (`POST
+/// /api/auth/social/{provider}/native`): the identity token, the sealed
+/// attempt of [`NativeNonce`], and for Sign in with Apple the
+/// authorization code and the name Apple hands the app on the first
+/// sign-in only.
+///
+/// ```
+/// use navree_social::NativeSignIn;
+///
+/// let post = NativeSignIn::new("eyJraWQiOi...", "nvs1.AbC")
+///     .authorization_code("c3b1f2...")
+///     .user(serde_json::json!({ "name": { "firstName": "Simran", "lastName": "Gill" } }));
+/// assert!(post.authorization_code.is_some());
+/// ```
+#[derive(Clone, Default, Deserialize, ToSchema)]
+#[non_exhaustive]
+pub struct NativeSignIn {
+    /// The identity token (a JWT) the provider gave the app.
+    pub id_token: String,
+    /// The `state` of the attempt's [`NativeNonce`].
+    pub state: String,
+    /// Sign in with Apple's authorization code: exchanged for a refresh
+    /// token the server keeps (encrypted) to revoke when the account is
+    /// deleted or Apple disconnected.
+    #[serde(default)]
+    pub authorization_code: Option<String>,
+    /// Sign in with Apple's name, sent by the app on the first sign-in
+    /// (`{"name": {"firstName", "lastName"}}`). Unverified: used only as a
+    /// display name, never to find or link an account.
+    #[serde(default)]
+    #[schema(value_type = Option<Object>)]
+    pub user: Option<Value>,
+    /// On the session cookie (`POST .../native/session`): keep the app
+    /// signed in for `auth.session.remember_days`.
+    #[serde(default)]
+    pub remember: bool,
+}
+
+impl NativeSignIn {
+    /// A post with the identity token and the attempt's state.
+    pub fn new(id_token: impl Into<String>, state: impl Into<String>) -> Self {
+        Self {
+            id_token: id_token.into(),
+            state: state.into(),
+            authorization_code: None,
+            user: None,
+            remember: false,
+        }
+    }
+
+    /// Sets Sign in with Apple's authorization code.
+    pub fn authorization_code(mut self, code: impl Into<String>) -> Self {
+        self.authorization_code = Some(code.into());
+        self
+    }
+
+    /// Sets the name Apple handed the app on the first sign-in.
+    pub fn user(mut self, user: Value) -> Self {
+        self.user = Some(user);
+        self
+    }
+}
+
+impl fmt::Debug for NativeSignIn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NativeSignIn")
+            .field("id_token", &"[redacted]")
+            .field("state", &"[redacted]")
+            .field(
+                "authorization_code",
+                &self.authorization_code.as_ref().map(|_| "[redacted]"),
+            )
+            .field("user", &self.user.as_ref().map(|_| "[present]"))
+            .field("remember", &self.remember)
+            .finish()
+    }
+}
+
 /// What a flow is for: signing in (the default) or connecting a provider
 /// to the signed-in user (`?intent=link`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
