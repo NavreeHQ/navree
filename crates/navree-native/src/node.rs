@@ -1286,6 +1286,12 @@ pub struct TableRow {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     /// One cell a column, in the columns' order.
+    ///
+    /// A form in a cell is the row's inline edit. A client draws it as an
+    /// action in the cell, named by the form's submit (its label and its icon),
+    /// which opens the form as a task ([`Present::Task`](crate::Present::Task))
+    /// with its fields, and not as the fields themselves in the cell. The
+    /// cell's other nodes are drawn as they are.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cells: Vec<Node>,
     /// What a tap on the row does.
@@ -1300,6 +1306,18 @@ pub struct TableRow {
     /// ([`Table::select`]).
     #[serde(default, skip_serializing_if = "is_false")]
     pub selected: bool,
+    /// Whether the row can't be chosen, in a table whose rows can be: a record
+    /// the actions on the rows chosen do not apply to. A client draws its box as
+    /// it draws a control that can't be used now, or leaves it out; choosing
+    /// the rows of the page skips it, and its id is never sent with the ones
+    /// chosen. A row that can't be chosen still opens and acts as any other.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub unchoosable: bool,
+    /// Whether the detail shows now, open under the row. A client keeps what the
+    /// reader did to it (open or shut) when the server draws the row again, as
+    /// it keeps whether the row is chosen.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub open: bool,
     /// What opens under the row: more about the record than its cells hold.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub detail: Vec<Node>,
@@ -1602,6 +1620,9 @@ pub struct Hidden {
 /// A form. The client holds its fields and sends them, with the hidden values,
 /// as `application/x-www-form-urlencoded`, or as `multipart/form-data` when a
 /// field holds a file.
+///
+/// A form in a cell of a table is that row's inline edit, and is drawn as an
+/// action that opens it as a task: see [`TableRow::cells`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Form {
     /// The form's id.
@@ -2147,6 +2168,23 @@ mod tests {
         assert_eq!(toolbar.items[0].reason.as_deref(), Some("3 orders are still to be packed."));
         // A control that can be used says nothing of why it can't.
         assert!(!serde_json::to_string(&Button::default()).unwrap().contains("reason"));
+    }
+
+    #[test]
+    fn a_table_row_says_whether_its_detail_shows_and_whether_it_can_be_chosen() {
+        let row: TableRow = serde_json::from_str(
+            r#"{"id":"1041","selected":true,"open":true,"unchoosable":false,"detail":[{"t":"text","value":"2 units"}]}"#,
+        )
+        .unwrap();
+        assert!(row.open && row.selected && !row.unchoosable);
+        // Both are false unless said, and false is left out.
+        let plain = serde_json::to_string(&TableRow::default()).unwrap();
+        assert_eq!(plain, "{}");
+        let held = TableRow {
+            unchoosable: true,
+            ..TableRow::default()
+        };
+        assert_eq!(serde_json::to_string(&held).unwrap(), r#"{"unchoosable":true}"#);
     }
 
     #[test]

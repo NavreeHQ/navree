@@ -658,7 +658,7 @@ names!(ColumnRole { Leading, Title, Subtitle, Status, Trailing, Actions });
 names!(SortDir { Asc, Desc });
 object!(Sort { href } { dir });
 object!(Column { label } { key, numeric, align, sort, role, secondary });
-object!(TableRow {} { id, cells, action, actions, selected, detail });
+object!(TableRow {} { id, cells, action, actions, selected, unchoosable, open, detail });
 object!(Selection { name } { form });
 object!(Table {} { id, caption, columns, rows, query, select, more, prev, summary, empty });
 names!(ChartKind { Line, Area, Bar, Donut, Sparkline, Funnel });

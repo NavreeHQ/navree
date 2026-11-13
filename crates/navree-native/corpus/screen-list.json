@@ -74,6 +74,11 @@
                 "dir": "desc"
               },
               "secondary": true
+            },
+            {
+              "key": "note",
+              "label": "Delivery note",
+              "secondary": true
             }
           ],
           "rows": [
@@ -111,12 +116,45 @@
                 {
                   "t": "text",
                   "value": "Today, 09:41"
+                },
+                {
+                  "t": "form",
+                  "id": "note-1042",
+                  "method": "post",
+                  "action": "/orders/1042/note",
+                  "hidden": [
+                    {
+                      "name": "_csrf",
+                      "value": "tok"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "t": "field",
+                      "name": "note",
+                      "label": "Delivery note",
+                      "input": {
+                        "t": "text",
+                        "max_length": 120
+                      }
+                    },
+                    {
+                      "t": "button",
+                      "label": "Update note",
+                      "role": "secondary",
+                      "prominence": "low",
+                      "action": {
+                        "t": "submit"
+                      }
+                    }
+                  ]
                 }
               ],
               "action": {
                 "t": "navigate",
                 "href": "/orders/1042"
-              }
+              },
+              "unchoosable": true
             },
             {
               "id": "1041",
@@ -152,6 +190,39 @@
                 {
                   "t": "text",
                   "value": "Yesterday, 18:02"
+                },
+                {
+                  "t": "form",
+                  "id": "note-1041",
+                  "method": "post",
+                  "action": "/orders/1041/note",
+                  "hidden": [
+                    {
+                      "name": "_csrf",
+                      "value": "tok"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "t": "field",
+                      "name": "note",
+                      "label": "Delivery note",
+                      "input": {
+                        "t": "text",
+                        "value": "Left with the neighbour",
+                        "max_length": 120
+                      }
+                    },
+                    {
+                      "t": "button",
+                      "label": "Update note",
+                      "role": "secondary",
+                      "prominence": "low",
+                      "action": {
+                        "t": "submit"
+                      }
+                    }
+                  ]
                 }
               ],
               "action": {
@@ -159,6 +230,7 @@
                 "href": "/orders/1041"
               },
               "selected": true,
+              "open": true,
               "detail": [
                 {
                   "t": "text",

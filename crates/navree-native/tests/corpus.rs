@@ -124,10 +124,41 @@ fn screen_list() -> Envelope {
                 text(when),
             ],
             action: Some(Action::navigate(format!("/orders/{id}"))),
-            actions: Vec::new(),
-            selected: false,
-            detail: Vec::new(),
+            ..TableRow::default()
         };
+    // A form in a cell is the row's inline edit: a client draws an action
+    // named by the form's submit, which opens the form as a task.
+    let note = |id: &str, said: &str| {
+        Node::Form(Form {
+            id: Some(format!("note-{id}")),
+            method: Method::Post,
+            action: format!("/orders/{id}/note"),
+            hidden: vec![Hidden {
+                name: s("_csrf"),
+                value: s("tok"),
+                id: None,
+            }],
+            children: vec![
+                Node::Field(Field {
+                    name: s("note"),
+                    label: Some(s("Delivery note")),
+                    input: Input::Text(TextInput {
+                        value: s(said),
+                        max_length: Some(120),
+                        ..TextInput::default()
+                    }),
+                    ..Field::default()
+                }),
+                Node::Button(Button {
+                    label: s("Update note"),
+                    role: Role::Secondary,
+                    prominence: Prominence::Low,
+                    action: Some(Action::submit()),
+                    ..Button::default()
+                }),
+            ],
+        })
+    };
     let field = |name: &str, label: &str, purpose: Purpose, input: Input| Field {
         name: s(name),
         label: Some(s(label)),
@@ -153,7 +184,13 @@ fn screen_list() -> Envelope {
             "Yesterday, 18:02",
         ),
     ];
+    rows[0].cells.push(note("1042", ""));
+    // Only a delivered order can be archived with the others, so an order still
+    // on its way can't be chosen.
+    rows[0].unchoosable = true;
+    rows[1].cells.push(note("1041", "Left with the neighbour"));
     rows[1].selected = true;
+    rows[1].open = true;
     rows[1].detail = vec![muted("2 units of Phulkari dupatta, to Patiala")];
     let table = Table {
         id: Some(s("orders")),
@@ -195,6 +232,12 @@ fn screen_list() -> Envelope {
                     href: s("/orders?sort=placed_on"),
                     dir: Some(SortDir::Desc),
                 }),
+                ..Column::default()
+            },
+            Column {
+                key: Some(s("note")),
+                label: s("Delivery note"),
+                secondary: true,
                 ..Column::default()
             },
         ],
@@ -2155,8 +2198,7 @@ fn screen_inbox() -> Envelope {
                     }),
                 ],
             })],
-            selected: false,
-            detail: Vec::new(),
+            ..TableRow::default()
         }],
         ..Table::default()
     });
@@ -2555,6 +2597,7 @@ fn ops_lists() -> Envelope {
             Op::Row {
                 target: s("1042"),
                 row: TableRow {
+                    open: true,
                     detail: vec![muted("Refunded ₹1,240.50 to UPI")],
                     ..record("1042", "CH-1042", "₹1,22,809.50")
                 },

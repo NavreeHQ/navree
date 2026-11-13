@@ -8516,7 +8516,17 @@
           "default": null,
           "x-since": 0
         },
+        "open": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
         "selected": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "unchoosable": {
           "default": false,
           "type": "boolean",
           "x-since": 0

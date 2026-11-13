@@ -80,6 +80,7 @@
           "t": "navigate",
           "href": "/orders/1042"
         },
+        "open": true,
         "detail": [
           {
             "t": "text",
