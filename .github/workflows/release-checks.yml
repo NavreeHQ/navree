@@ -1,8 +1,9 @@
 # What must hold for every commit that may be released:
 #
-# - release: `cargo xtask release check` (one version everywhere, exact
-#   requirements between Navree's crates, a publish order, the changelog) and
-#   the tests of the release tool.
+# - release: every crate is as rustfmt writes it (`cargo fmt --all` is the
+#   whole fix), `cargo xtask release check` (one version everywhere, exact
+#   requirements between Navree's crates, a publish order, the changelog, the
+#   lock files) and the tests of the release tool.
 # - msrv: the workspace builds with the oldest Rust it declares
 #   (`rust-version`, 1.95).
 # - docs: every published crate's documentation builds the way docs.rs builds
@@ -50,6 +51,12 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: rustfmt
+      # First, because it takes seconds: no other check reads the formatting,
+      # and a whole crate once landed without it.
+      - name: Formatting
+        run: cargo fmt --all -- --check
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: The release tool's tests
         run: cargo test --locked --package xtask
