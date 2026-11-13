@@ -7,6 +7,9 @@ struct PlacedActions: ToolbarContent {
     let depth: ScreenDepth
     let overlay: String?
     let form: FormRef?
+    /// Destructive actions end the overflow menu, in red, where the screen
+    /// has no section at its end for them.
+    var destructiveInMenu = false
 
     var body: some ToolbarContent {
         let slots = PlacementRules.place(actions.map { ActionTraits($0) ?? ActionTraits(role: Navree.Role.none) }, depth: depth)
@@ -24,6 +27,11 @@ struct PlacedActions: ToolbarContent {
         ToolbarItemGroup(placement: .secondaryAction) {
             ForEach(Array(placed.filter { $0.1 == .overflow }.enumerated()), id: \.offset) { _, entry in
                 ToolbarAction(node: entry.0, slot: .overflow, overlay: overlay, form: form)
+            }
+            if destructiveInMenu {
+                ForEach(Array(placed.filter { $0.1 == .destructiveSection }.enumerated()), id: \.offset) { _, entry in
+                    ToolbarAction(node: entry.0, slot: .overflow, overlay: overlay, form: form)
+                }
             }
         }
         ToolbarItemGroup(placement: .primaryAction) {

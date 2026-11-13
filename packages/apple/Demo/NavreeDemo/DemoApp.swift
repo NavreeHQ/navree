@@ -45,7 +45,11 @@ enum DemoConfiguration {
                 launch: launch
             )
         }
-        let origin = defaults.string(forKey: "NavreeOrigin")
+        // A launch argument is read as a property list, where `//` starts a
+        // comment: give it quoted (`-NavreeOrigin '"http://127.0.0.1:8096"'`)
+        // or as `NAVREE_ORIGIN` in the environment.
+        let origin = ProcessInfo.processInfo.environment["NAVREE_ORIGIN"].flatMap { $0.isEmpty ? nil : $0 }
+            ?? defaults.string(forKey: "NavreeOrigin")
             ?? Bundle.main.object(forInfoDictionaryKey: "NavreeOrigin") as? String
             ?? "http://127.0.0.1:8095"
         return ShellConfiguration(
@@ -54,8 +58,9 @@ enum DemoConfiguration {
         )
     }
 
-    /// `-NavreeSelect /orders -NavreeStack "/orders=/orders/1" -NavreeSheet /orders/new`:
-    /// the screens a launch opens, as the person would by tapping.
+    /// `-NavreeSelect /orders -NavreeStack "/orders=/orders/1" -NavreeSheet /orders/new
+    /// -NavreeTap "CS-220480;Refund"`: the screens a launch opens and the
+    /// controls it taps by their words, as the person would.
     static func launch(_ defaults: UserDefaults) -> Launch {
         var select = defaults.string(forKey: "NavreeSelect")
         var push: [String] = []
@@ -68,6 +73,10 @@ enum DemoConfiguration {
                 break
             }
         }
-        return Launch(select: select, push: push, sheet: defaults.string(forKey: "NavreeSheet"))
+        let taps = defaults.string(forKey: "NavreeTap")?.split(separator: ";").map(String.init) ?? []
+        return Launch(
+            select: select, push: push, sheet: defaults.string(forKey: "NavreeSheet"), taps: taps,
+            editing: defaults.bool(forKey: "NavreeEditing")
+        )
     }
 }

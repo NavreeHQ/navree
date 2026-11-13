@@ -108,9 +108,11 @@ extension NativeClient {
         }
     }
 
-    /// A form's id as the core knows it: none for the fields that stand in no form.
+    /// A form's id as the core knows it: none for the fields that stand in no
+    /// form. The core names a form the server gave no id `@` and its address,
+    /// and the drawing reads that name from the tree: it goes back as it is.
     static func formID(_ form: FormRef?) -> String? {
-        guard let key = form?.key, !key.isEmpty, !key.hasPrefix("@") else { return nil }
+        guard let key = form?.key, !key.isEmpty else { return nil }
         return key
     }
 }

@@ -170,6 +170,9 @@ struct RecordContent: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
         layout {
+            if let leading = row.leading {
+                NodeView(leading)
+            }
             VStack(alignment: .leading, spacing: 3) {
                 Text(row.title)
                     .font(.headline)
@@ -264,9 +267,17 @@ struct RowContent: View {
                     Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                ForEach(Array(row.detail.enumerated()), id: \.offset) { _, part in
-                    NodeView(part).font(.footnote).foregroundStyle(.secondary)
-                        .environment(\.navreeInRowDetail, true)
+                ForEach(Array(RowRules.detailLines(row.detail).enumerated()), id: \.offset) { _, line in
+                    if line.count > 1 {
+                        // States one after another share a line, as Mail's flags do.
+                        Flow(spacing: 12, lineSpacing: 4) {
+                            ForEach(Array(line.enumerated()), id: \.offset) { _, part in NodeView(part) }
+                        }
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    } else if let part = line.first {
+                        NodeView(part).font(.footnote).foregroundStyle(.secondary)
+                            .environment(\.navreeInRowDetail, true)
+                    }
                 }
             }
             if let trailing = row.trailing, !typeSize.isAccessibilitySize {

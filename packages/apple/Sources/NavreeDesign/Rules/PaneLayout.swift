@@ -28,6 +28,14 @@ public enum PaneRules {
         return found
     }
 
+    /// Whether a pane shows only that it is empty.
+    static func holdsNothing(_ pane: Navree.Pane) -> Bool {
+        pane.children.allSatisfy { node in
+            if case .empty = node { return true }
+            return false
+        }
+    }
+
     /// The order panes stand in across a wide window.
     static func rank(_ role: Navree.PaneRole) -> Int {
         switch role {
@@ -44,7 +52,8 @@ public enum PaneRules {
     /// its content and detail, as Mail does. The inspector stands apart in
     /// both, shown when the person asks.
     public static func layout(_ panes: [Navree.Pane], width: WidthClass) -> PaneLayout {
-        let inspector = panes.first { $0.role == .inspector }
+        // An inspector with nothing to show yet (its empty state alone) offers nothing.
+        let inspector = panes.first { $0.role == .inspector && !holdsNothing($0) }
         let main = panes.filter { $0.role != .inspector }
         switch width {
         case .compact:

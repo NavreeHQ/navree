@@ -417,7 +417,7 @@ public struct StatusLabel: View {
         HStack(spacing: 5) {
             if badge.dot {
                 Circle().fill(Tones.color(badge.tone)).frame(width: dot, height: dot)
-            } else {
+            } else if RowRules.hasSymbol(badge) {
                 Image(systemName: Tones.symbol(badge.tone)).foregroundStyle(Tones.color(badge.tone))
             }
             Text(badge.text)

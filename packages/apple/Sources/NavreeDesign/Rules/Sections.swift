@@ -155,9 +155,11 @@ public enum SectionRules {
                     row(.more(target: list.id ?? region ?? "", href: more))
                 }
                 close()
-            case .grid(let grid) where !grid.children.isEmpty && grid.children.allSatisfy(Self.isSection):
-                // Columns of sections on a wide page (a board) are its sections, one after another.
-                for child in grid.children { read(child, region: region) }
+            case .grid(let grid) where !grid.children.isEmpty && grid.children.allSatisfy(Self.isColumn):
+                // Columns of a wide page (a board's lists, a record's main
+                // column and its side) are read one after another, as a
+                // narrow page stacks them; a grid of tiles stays a grid.
+                readVertical(grid.children, region: region)
             case .row(let part):
                 row(.row(part))
             case .facts(let facts):
@@ -187,9 +189,12 @@ public enum SectionRules {
             }
         }
 
-        static func isSection(_ node: Navree.Node) -> Bool {
-            if case .section = node { return true }
-            return false
+        static func isColumn(_ node: Navree.Node) -> Bool {
+            switch node {
+            case .section: return true
+            case .stack(let stack): return stack.axis == .vertical
+            default: return false
+            }
         }
 
         mutating func readListChild(_ node: Navree.Node, region: String?) {
@@ -311,6 +316,8 @@ extension Navree.Form {
             for node in nodes {
                 switch node {
                 case .stack(let stack) where !stack.hidden: each(stack.children)
+                // Fields set side by side on a wide page stand one a row here.
+                case .grid(let grid): each(grid.children)
                 case .field, .button: visit(node)
                 case .stack: break
                 default: visit(node)
