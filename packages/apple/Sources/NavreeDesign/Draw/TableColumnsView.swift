@@ -20,7 +20,7 @@ struct TableColumnsView: View {
 
     var body: some View {
         let records = table.rows.enumerated().map { Record(id: $0.offset, cells: $0.element.cells, action: $0.element.action) }
-        let columns = table.columns.enumerated().map { Column(id: $0.offset, label: $0.element.label) }
+        let columns = ContentRules.shownColumns(table).map { Column(id: $0, label: table.columns[$0].label) }
         VStack(spacing: 0) {
             Table(records) {
                 TableColumnForEach(columns) { (column: Column) in

@@ -99,3 +99,11 @@ struct Missing: Error {}
         """)
     #expect(QueryRules.fields(numbers).filters.map(\.name) == ["floor"])
 }
+
+@Test func aWideTableLeavesOutTheSubtitleColumnItsTitleCellAlreadyShows() throws {
+    let orders = try firstTable(try answerScreen("store-orders"))
+    let shown = ContentRules.shownColumns(orders).map { orders.columns[$0].label }
+    #expect(!shown.contains("Customer"))
+    #expect(shown.first == "Order")
+    #expect(shown.contains("Total"))
+}

@@ -88,6 +88,13 @@ public enum ContentRules {
         return table.columns.count > 2 ? .columns : .rows
     }
 
+    /// The columns a wide table shows, by their places: all but the subtitle
+    /// column, whose words a narrow row puts under the name and which the
+    /// title cell already shows beside it.
+    public static func shownColumns(_ table: Navree.Table) -> [Int] {
+        table.columns.indices.filter { table.columns[$0].role != .subtitle }
+    }
+
     /// The control a field's input becomes on iPhone and iPad.
     public static func control(_ input: Navree.Input) -> ControlKind {
         switch input {
