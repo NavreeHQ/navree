@@ -104,7 +104,8 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
             if (count == 0) return@Canvas
             // Room for the value axis' numbers or the levels' names at the start, and the labels under.
             val axisWords = if (spark) emptyList() else if (node.levels.isNotEmpty()) node.levels else listOf(amount(bounds.high), amount(bounds.low))
-            val gutter = if (spark || node.horizontal) 0f else (axisWords.maxOfOrNull { measurer.measure(it, small).size.width } ?: 0) + 8.dp.toPx()
+            // Levels' names stand on their lines inside the plot, so a night drawn in lanes is as wide as the strip under it.
+            val gutter = if (spark || node.horizontal || AxisRules.namesInside(node)) 0f else (axisWords.maxOfOrNull { measurer.measure(it, small).size.width } ?: 0) + 8.dp.toPx()
             val labelsRoom = if (spark || node.horizontal) 0f else measurer.measure("0", small).size.height + 6.dp.toPx()
             val plot = Rect(if (rtl) 0f else gutter, 4.dp.toPx(), if (rtl) size.width - gutter else size.width, size.height - labelsRoom)
             fun x(at: Float): Float = if (rtl) plot.right - at * plot.width else plot.left + at * plot.width
@@ -126,8 +127,12 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
                 if (node.levels.isNotEmpty()) {
                     node.levels.forEachIndexed { index, word ->
                         val text = measurer.measure(word, small)
-                        val left = if (rtl) plot.right + 8.dp.toPx() else plot.left - 8.dp.toPx() - text.size.width
-                        drawText(text, topLeft = Offset(left, y(index.toDouble()) - text.size.height / 2f))
+                        val line = y(index.toDouble())
+                        // Above its line, the top one under it; on the card's own colour so the line behind does not run through the letters.
+                        val top = if (index == node.levels.lastIndex) line + 2.dp.toPx() else line - text.size.height - 1.dp.toPx()
+                        val left = if (rtl) plot.right - text.size.width - 4.dp.toPx() else plot.left + 4.dp.toPx()
+                        drawRoundRect(scheme.surfaceContainerLow.copy(alpha = 0.8f), Offset(left - 2.dp.toPx(), top), Size(text.size.width + 4.dp.toPx(), text.size.height.toFloat()), CornerRadius(3.dp.toPx()))
+                        drawText(text, topLeft = Offset(left, top))
                     }
                 } else {
                     for (value in listOf(bounds.low, bounds.high)) {

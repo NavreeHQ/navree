@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -164,7 +165,8 @@ internal fun LinkView(node: Navree.Link, place: Place, modifier: Modifier = Modi
         modifier
             .clip(MaterialTheme.shapes.medium)
             .clickable(role = androidx.compose.ui.semantics.Role.Button) { ui.act(place, node.action, from = node.id) }
-            .semantics(mergeDescendants = true) {}
+            // The link's label is its name for a screen reader; the parts it holds are one target.
+            .semantics(mergeDescendants = true) { contentDescription = node.label }
             .padding(vertical = 8.dp, horizontal = 4.dp),
         contentAlignment = Alignment.Center,
     ) {

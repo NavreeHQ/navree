@@ -374,6 +374,14 @@ object AxisRules {
         return Bounds(chart.y?.min ?: round.low, chart.y?.max ?: round.high)
     }
 
+    /**
+     * Whether the names of a chart's levels stand on their lines inside its
+     * plot, which then has the whole width: a night drawn in lanes is as wide
+     * as the strip of the same night under it, so a change of stage stands
+     * over the same place in both.
+     */
+    fun namesInside(chart: Navree.Chart): Boolean = chart.levels.isNotEmpty()
+
     /** Two ends rounded out to a step of 1, 2, 2.5 or 5 times a power of ten, about four steps apart. */
     fun nice(low: Double, high: Double): Bounds {
         val span = high - low

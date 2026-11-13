@@ -772,15 +772,15 @@ internal fun HealthFigureView(node: Navree.Figure, place: Place, modifier: Modif
     val ui = LocalUi.current
     val ink = inkOf(node.colour, Navree.Hue.ACCENT)
     val action = node.action
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(CardDefaults.shape)
-            .then(if (action != null) Modifier.clickable(role = Role.Button) { ui.act(place, action, from = node.id) } else Modifier)
-            .semantics(mergeDescendants = true) {},
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    // In a card a figure is not a second card on it: it stands on the card's own surface.
+    val flat = LocalInCard.current
+    val body = modifier
+        .fillMaxWidth()
+        .clip(CardDefaults.shape)
+        .then(if (action != null) Modifier.clickable(role = Role.Button) { ui.act(place, action, from = node.id) } else Modifier)
+        .semantics(mergeDescendants = true) {}
+    val content: @Composable () -> Unit = {
+        Column(Modifier.padding(if (flat) 4.dp else 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -801,6 +801,11 @@ internal fun HealthFigureView(node: Navree.Figure, place: Place, modifier: Modif
             node.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             node.chart?.let { chart -> NodeView(chart, place) }
         }
+    }
+    if (flat) {
+        Box(body) { content() }
+    } else {
+        Card(modifier = body, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) { content() }
     }
 }
 
