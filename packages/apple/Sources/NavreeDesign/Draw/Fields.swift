@@ -246,6 +246,7 @@ struct DateControl: View {
                 in: range,
                 displayedComponents: components
             )
+            .modifier(DateLook(style: ContentRules.dateStyle(input)))
         }
     }
 
@@ -355,5 +356,16 @@ enum HexColor {
         let resolved = color.resolve(in: EnvironmentValues())
         func byte(_ value: Float) -> Int { Int((max(0, min(1, value)) * 255).rounded()) }
         return String(format: "#%02x%02x%02x", byte(resolved.red), byte(resolved.green), byte(resolved.blue))
+    }
+}
+
+/// A date picker in the style its rule gives it.
+struct DateLook: ViewModifier {
+    let style: DateStyle
+
+    func body(content: Content) -> some View {
+        switch style {
+        case .compact: content.datePickerStyle(.compact)
+        }
     }
 }

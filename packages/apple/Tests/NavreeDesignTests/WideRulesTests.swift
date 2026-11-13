@@ -212,3 +212,9 @@ private func go(_ href: String, _ present: Navree.Present = .auto) -> Navree.Act
     #expect(!narrow.sideBySide)
     #expect(narrow.panes == [supporting, content])
 }
+
+@Test func aDateInAFormIsTheCompactPickerOnEverySystem() {
+    #expect(ContentRules.dateStyle(Navree.DateInput(kind: .date)) == .compact)
+    #expect(ContentRules.dateStyle(Navree.DateInput(kind: .time)) == .compact)
+    #expect(ContentRules.dateStyle(Navree.DateInput(kind: .datetime)) == .compact)
+}
