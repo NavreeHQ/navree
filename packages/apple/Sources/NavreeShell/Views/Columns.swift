@@ -47,7 +47,9 @@ struct ColumnsStack: View {
                         if let first = detail.first {
                             PageView(id: first, depth: 1, modal: nil, client: client, configuration: configuration)
                         } else {
+                            // The window keeps the list's name while nothing is open beside it.
                             NothingChosen()
+                                .navigationTitle(client.screen(root)?.screen?.title ?? client.screen(root)?.title ?? "")
                         }
                     },
                     pushed: pushed

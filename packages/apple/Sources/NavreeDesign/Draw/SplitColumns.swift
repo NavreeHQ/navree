@@ -69,6 +69,9 @@ public struct SplitColumns<ListColumn: View, DetailRoot: View, Inspector: View, 
             // a choice, asked of the runtime for the detail column.
             NavigationStack(path: choices) {
                 list
+                    // Registered so the list's links read as links; the
+                    // path never grows, so nothing is pushed here.
+                    .navigationDestination(for: PathEntry.self) { _ in EmptyView() }
             }
             // A list narrower than the window draws as a phone's would: rows,
             // never columns, its search under its title.
