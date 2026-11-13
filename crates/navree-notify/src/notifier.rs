@@ -21,10 +21,11 @@ use crate::digest::DigestMail;
 use crate::overrides::StyledMail;
 use crate::recipient::within;
 use crate::{
-    Channel, ChannelError, Delivery, DeliveryLog, Notifiable, Notification, NotificationDeferral,
-    NotificationOverrides, NotificationPreferences, NotifyError, NotifyOptions, OptOutSource,
-    OptOuts, PushSubscriptions, SendNotificationJob, SentMessage, SlackRoute, TeamsRoute,
-    TemplateOverrides, WebPushMessage, notifications,
+    Channel, ChannelError, Delivery, DeliveryLog, LiveSessions, Notifiable, Notification,
+    NotificationDeferral, NotificationOverrides, NotificationPreferences, NotifyError,
+    NotifyOptions, OptOutSource, OptOuts, PushDevice, PushDevices, PushMessage, PushSubscriptions,
+    SendNotificationJob, SentMessage, SlackRoute, TeamsRoute, TemplateOverrides, WebPushMessage,
+    notifications,
 };
 
 /// The event the broadcast channel sends.
@@ -48,6 +49,9 @@ pub struct Notifier {
     warned_inline: AtomicBool,
     /// Whether the "no database, not holding" warning was logged.
     pub(crate) warned_no_hold: AtomicBool,
+    /// Whether the "push devices are not checked against sessions" warning
+    /// was logged.
+    warned_no_sessions: AtomicBool,
     /// Where delivered channels are reported (`NotificationSent`).
     telemetry: Telemetry,
     /// The drivers configured in `notify`.
@@ -58,6 +62,8 @@ pub struct Notifier {
     opt_outs: Arc<OptOuts>,
     /// The web push subscriptions.
     push: Arc<PushSubscriptions>,
+    /// The native app push devices.
+    devices: Arc<PushDevices>,
     /// The stored preferences.
     pub(crate) preferences: Arc<NotificationPreferences>,
 }
@@ -70,6 +76,7 @@ pub(crate) struct Parts {
     pub(crate) log: Arc<DeliveryLog>,
     pub(crate) opt_outs: Arc<OptOuts>,
     pub(crate) push: Arc<PushSubscriptions>,
+    pub(crate) devices: Arc<PushDevices>,
     pub(crate) preferences: Arc<NotificationPreferences>,
 }
 
@@ -82,11 +89,13 @@ impl Notifier {
             app: parts.app,
             warned_inline: AtomicBool::new(false),
             warned_no_hold: AtomicBool::new(false),
+            warned_no_sessions: AtomicBool::new(false),
             telemetry: parts.telemetry,
             drivers: parts.drivers,
             log: parts.log,
             opt_outs: parts.opt_outs,
             push: parts.push,
+            devices: parts.devices,
             preferences: parts.preferences,
         }
     }
@@ -429,6 +438,7 @@ impl Notifier {
                     .await
             }
             Delivery::WebPush { message } => self.push_all(ctx, job, message).await,
+            Delivery::Push { message } => self.push_devices(ctx, job, message).await,
         }
     }
 
@@ -589,6 +599,157 @@ impl Notifier {
         }
     }
 
+    /// Pushes `message` to every device of the job's notifiable whose
+    /// session is still live; devices of ended sessions, and the ones the
+    /// service reports gone, are deleted. A message whose link is not a
+    /// path inside the app is refused before anything is sent.
+    async fn push_devices(
+        &self,
+        ctx: &AppContext,
+        job: &SendNotificationJob,
+        message: &PushMessage,
+    ) -> Result<bool, NotifyError> {
+        let driver = self.drivers.push(ctx).await.ok_or_else(|| {
+            unavailable(
+                Channel::Push,
+                "configure notify.push.apns or notify.push.fcm, or register a `dyn PushDriver`",
+            )
+        })?;
+        if !has_database(ctx).await {
+            return Err(unavailable(
+                Channel::Push,
+                "push devices are stored in the database: add DatabaseModule",
+            ));
+        }
+        if let Err((field, reason)) = message.check() {
+            let error = ChannelError::InvalidMessage(format!("{field}: {reason}"));
+            let outcome = Outcome::Failed {
+                provider: None,
+                error: error.to_string(),
+            };
+            self.record(ctx, job, Channel::Push, None, outcome).await;
+            return Err(NotifyError::Channel {
+                channel: Channel::Push,
+                source: error,
+            });
+        }
+        let devices = self
+            .devices
+            .of(&job.notifiable_type, &job.notifiable_id)
+            .await?;
+        let devices = self.signed_in(ctx, job, devices).await?;
+        // A retried job skips the devices an earlier attempt reached.
+        let reached = if self.options.deliveries {
+            self.log.sent_recipients(job.id, Channel::Push).await?
+        } else {
+            Vec::new()
+        };
+        let mut sent_any = false;
+        let mut errors = Vec::new();
+        for device in devices {
+            let recipient = device.id.to_string();
+            if reached.contains(&recipient) {
+                continue;
+            }
+            let Some(target) = device.target() else {
+                continue;
+            };
+            if !driver.serves(target.platform) {
+                continue;
+            }
+            let outcome = match driver.send(&target, message).await {
+                Ok(sent) => {
+                    sent_any = true;
+                    if let Err(error) = self.devices.touch(device.id, now(ctx).await).await {
+                        tracing::debug!(target: "navree::notify", %error, "updating a push device failed");
+                    }
+                    let outcome = Outcome::Sent(&sent);
+                    self.record(ctx, job, Channel::Push, Some(&recipient), outcome)
+                        .await;
+                    continue;
+                }
+                Err(ChannelError::Gone) => {
+                    if let Err(error) = self.devices.forget(device.id).await {
+                        tracing::warn!(target: "navree::notify", %error, "deleting a gone push device failed");
+                    }
+                    Outcome::Failed {
+                        provider: None,
+                        error: ChannelError::Gone.to_string(),
+                    }
+                }
+                Err(error) => {
+                    let outcome = Outcome::Failed {
+                        provider: provider_of(&error),
+                        error: error.to_string(),
+                    };
+                    errors.push(NotifyError::Channel {
+                        channel: Channel::Push,
+                        source: error,
+                    });
+                    outcome
+                }
+            };
+            self.record(ctx, job, Channel::Push, Some(&recipient), outcome)
+                .await;
+        }
+        match NotifyError::collect(errors) {
+            Some(error) => Err(error),
+            None => Ok(sent_any),
+        }
+    }
+
+    /// The `devices` whose session is still live, when the app can tell
+    /// (a `dyn LiveSessions`); the others are deleted. Devices of a notifiable that is
+    /// not a user are all kept.
+    async fn signed_in(
+        &self,
+        ctx: &AppContext,
+        job: &SendNotificationJob,
+        devices: Vec<PushDevice>,
+    ) -> Result<Vec<PushDevice>, NotifyError> {
+        if devices.is_empty() || job.notifiable_type != crate::USER_NOTIFIABLE_TYPE {
+            return Ok(devices);
+        }
+        let Ok(user) = Uuid::parse_str(&job.notifiable_id) else {
+            return Ok(devices);
+        };
+        let Some(sessions) = ctx.try_get::<dyn LiveSessions>().await else {
+            if !self.warned_no_sessions.swap(true, Ordering::Relaxed) {
+                tracing::warn!(
+                    target: "navree::notify",
+                    "no `dyn LiveSessions` is registered: push devices are sent to without checking that their session is still signed in"
+                );
+            }
+            return Ok(devices);
+        };
+        let mut asked: Vec<String> = devices.iter().map(|d| d.session_id.clone()).collect();
+        asked.sort();
+        asked.dedup();
+        let live = sessions
+            .live(user, &asked)
+            .await
+            .map_err(|error| NotifyError::Unavailable {
+                channel: Some(Channel::Push),
+                reason: format!("checking which sessions are signed in failed: {error}"),
+            })?;
+        let mut kept = Vec::with_capacity(devices.len());
+        for device in devices {
+            if live.contains(&device.session_id) {
+                kept.push(device);
+            } else {
+                tracing::debug!(
+                    target: "navree::notify",
+                    device = %device.id,
+                    "deleting the push device of a session that ended"
+                );
+                if let Err(error) = self.devices.forget(device.id).await {
+                    tracing::warn!(target: "navree::notify", %error, "deleting a signed-out push device failed");
+                }
+            }
+        }
+        Ok(kept)
+    }
+
     /// Records an attempt in the delivery log, with `notify.deliveries`
     /// and `DatabaseModule`.
     async fn record(
@@ -723,6 +884,9 @@ fn render_channel<N: Notification>(
         }
         Channel::WebPush => Some(Delivery::WebPush {
             message: notification.to_web_push(notifiable)?,
+        }),
+        Channel::Push => Some(Delivery::Push {
+            message: notification.to_push(notifiable)?,
         }),
     }
 }

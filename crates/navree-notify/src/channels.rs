@@ -4,8 +4,11 @@
 
 use std::sync::{Arc, OnceLock};
 
+use navree_contracts::BoxFuture;
 use navree_kernel::{AppContext, WeakAppContext};
 
+use crate::drivers::apns::ApnsPush;
+use crate::drivers::fcm::FcmPush;
 use crate::drivers::log::{LogSms, LogWhatsApp};
 use crate::drivers::meta::MetaWhatsApp;
 use crate::drivers::slack::SlackApi;
@@ -15,7 +18,8 @@ use crate::drivers::twilio::{TwilioSms, TwilioWhatsApp};
 use crate::drivers::vonage::VonageSms;
 use crate::drivers::web_push::VapidWebPush;
 use crate::{
-    Channel, NotifyError, NotifyOptions, SlackDriver, SlackOptions, SmsDriver, SmsDriverKind,
+    Channel, ChannelError, DeviceTarget, NotifyError, NotifyOptions, PushDriver, PushMessage,
+    PushOptions, PushPlatform, SentMessage, SlackDriver, SlackOptions, SmsDriver, SmsDriverKind,
     TeamsDriver, TeamsOptions, WebPushDriver, WhatsAppDriver, WhatsAppDriverKind,
 };
 
@@ -32,12 +36,14 @@ pub(crate) struct ChannelDrivers {
     sms: Option<Arc<dyn SmsDriver>>,
     whatsapp: Option<Arc<dyn WhatsAppDriver>>,
     web_push: Option<Arc<VapidWebPush>>,
+    push: Option<Arc<PlatformPush>>,
 }
 
 impl ChannelDrivers {
     /// The drivers `options` configure; connection tokens come from `app`.
     pub(crate) fn from_options(
         options: &NotifyOptions,
+        push: &PushOptions,
         app: &WeakAppContext,
     ) -> Result<Self, String> {
         let sms: Option<Arc<dyn SmsDriver>> = match options.sms.driver {
@@ -65,6 +71,17 @@ impl ChannelDrivers {
         } else {
             None
         };
+        let apns = if push.apns.is_configured() {
+            Some(ApnsPush::new(push)?)
+        } else {
+            None
+        };
+        let fcm = if push.fcm.is_configured() {
+            Some(FcmPush::new(push)?)
+        } else {
+            None
+        };
+        let push = (apns.is_some() || fcm.is_some()).then(|| Arc::new(PlatformPush { apns, fcm }));
         Ok(Self {
             app: app.clone(),
             slack_options: options.slack.clone(),
@@ -74,6 +91,7 @@ impl ChannelDrivers {
             sms,
             whatsapp,
             web_push,
+            push,
         })
     }
 
@@ -133,11 +151,53 @@ impl ChannelDrivers {
         }
     }
 
+    pub(crate) async fn push(&self, ctx: &AppContext) -> Option<Arc<dyn PushDriver>> {
+        match ctx.try_get::<dyn PushDriver>().await {
+            Some(driver) => Some(driver),
+            None => self
+                .push
+                .clone()
+                .map(|driver| driver as Arc<dyn PushDriver>),
+        }
+    }
+
     /// The application server key of the configured VAPID key pair.
     pub(crate) fn application_server_key(&self) -> Option<String> {
         self.web_push
             .as_ref()
             .map(|driver| driver.application_server_key())
+    }
+}
+
+/// The configured push services: Apple's for iOS devices, Firebase's for
+/// Android ones.
+struct PlatformPush {
+    apns: Option<ApnsPush>,
+    fcm: Option<FcmPush>,
+}
+
+impl PushDriver for PlatformPush {
+    fn send<'a>(
+        &'a self,
+        device: &'a DeviceTarget,
+        message: &'a PushMessage,
+    ) -> BoxFuture<'a, Result<SentMessage, ChannelError>> {
+        match (device.platform, &self.apns, &self.fcm) {
+            (PushPlatform::Ios, Some(apns), _) => apns.send(device, message),
+            (PushPlatform::Android, _, Some(fcm)) => fcm.send(device, message),
+            (platform, _, _) => Box::pin(async move {
+                Err(ChannelError::Config(format!(
+                    "no push service is configured for {platform} devices"
+                )))
+            }),
+        }
+    }
+
+    fn serves(&self, platform: PushPlatform) -> bool {
+        match platform {
+            PushPlatform::Ios => self.apns.is_some(),
+            PushPlatform::Android => self.fcm.is_some(),
+        }
     }
 }
 

@@ -8,8 +8,8 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
-    Channel, Digest, DigestItem, Notifier, SlackMessage, SlackRoute, SmsMessage, TeamsMessage,
-    TeamsRoute, WebPushMessage, WhatsAppMessage,
+    Channel, Digest, DigestItem, Notifier, PushMessage, SlackMessage, SlackRoute, SmsMessage,
+    TeamsMessage, TeamsRoute, WebPushMessage, WhatsAppMessage,
 };
 
 /// Job `notify.send`: delivers one notification over one channel.
@@ -105,6 +105,12 @@ pub enum Delivery {
         /// The notification.
         message: WebPushMessage,
     },
+    /// A native app push notification, to every push device the
+    /// notifiable has when it is delivered.
+    Push {
+        /// The notification.
+        message: PushMessage,
+    },
     /// One digest mail batching several notifications' mails (over the
     /// mail channel).
     Digest {
@@ -129,6 +135,7 @@ impl Delivery {
             Delivery::Sms { .. } => Channel::Sms,
             Delivery::WhatsApp { .. } => Channel::WhatsApp,
             Delivery::WebPush { .. } => Channel::WebPush,
+            Delivery::Push { .. } => Channel::Push,
         }
     }
 }

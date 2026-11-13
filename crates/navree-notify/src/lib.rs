@@ -1,8 +1,8 @@
 //! # navree-notify
 //!
 //! `NotifyModule`: notifications delivered over mail, database, broadcast,
-//! Slack, Microsoft Teams, SMS, WhatsApp and web push channels, with read
-//! state, a delivery log and opt-outs.
+//! Slack, Microsoft Teams, SMS, WhatsApp, web push and native app push
+//! channels, with read state, a delivery log and opt-outs.
 //!
 //! - A [`Notification`] lists its [`Channel`]s per recipient
 //!   ([`via`](Notification::via)) and renders itself for each one:
@@ -11,25 +11,28 @@
 //!   [`to_database`](Notification::to_database) (the stored `data`),
 //!   [`to_broadcast`](Notification::to_broadcast),
 //!   [`to_slack`](Notification::to_slack), [`to_teams`](Notification::to_teams),
-//!   [`to_sms`](Notification::to_sms), [`to_whatsapp`](Notification::to_whatsapp)
-//!   and [`to_web_push`](Notification::to_web_push). A [`Notifiable`]
+//!   [`to_sms`](Notification::to_sms), [`to_whatsapp`](Notification::to_whatsapp),
+//!   [`to_web_push`](Notification::to_web_push) and
+//!   [`to_push`](Notification::to_push). A [`Notifiable`]
 //!   (usually a user) names the owner of stored notifications and routes
 //!   each channel (`route_mail`, `route_slack`, `route_sms`...).
 //! - [`NotifyModule`] is global: it provides and exports [`Notifier`]
-//!   ([`NotifyOptions`], section `notify`), [`DeliveryLog`], [`OptOuts`] and
-//!   [`PushSubscriptions`], registers job `notify.send`
+//!   ([`NotifyOptions`], section `notify`), [`DeliveryLog`], [`OptOuts`],
+//!   [`PushSubscriptions`] and [`PushDevices`], registers job `notify.send`
 //!   ([`SendNotificationJob`]) and the commands `notify:vapid` and
 //!   `notify:release`, and migrates `notifications`,
 //!   `notification_deliveries`, `notification_opt_outs`,
-//!   `push_subscriptions`, `notification_preferences` and
+//!   `push_subscriptions`, `push_devices`, `notification_preferences` and
 //!   `notification_deferrals` (migration set `notify`; PostgreSQL, MySQL
 //!   and SQLite).
-//! - The Slack, Teams, SMS, WhatsApp and web push channels send through a
-//!   driver per channel ([`SlackDriver`], [`TeamsDriver`], [`SmsDriver`],
-//!   [`WhatsAppDriver`], [`WebPushDriver`]): the app's own (a fake such as
-//!   [`SmsFake`]), else the one `notify.<channel>` configures
-//!   ([`SlackApi`], [`TeamsApi`], [`TwilioSms`], [`VonageSms`], [`SnsSms`],
-//!   [`TwilioWhatsApp`], [`MetaWhatsApp`], [`VapidWebPush`]). Numbers are
+//! - The Slack, Teams, SMS, WhatsApp, web push and push channels send
+//!   through a driver per channel ([`SlackDriver`], [`TeamsDriver`],
+//!   [`SmsDriver`], [`WhatsAppDriver`], [`WebPushDriver`], [`PushDriver`]):
+//!   the app's own (a fake such as [`SmsFake`]), else the one
+//!   `notify.<channel>` configures ([`SlackApi`], [`TeamsApi`],
+//!   [`TwilioSms`], [`VonageSms`], [`SnsSms`], [`TwilioWhatsApp`],
+//!   [`MetaWhatsApp`], [`VapidWebPush`], and for native apps [`ApnsPush`]
+//!   and [`FcmPush`] from section `notify.push`). Numbers are
 //!   read as E.164; opted-out numbers are skipped; each attempt is a
 //!   [`NotificationDelivery`] row, moved forward by provider callbacks
 //!   ([`ChannelCallback`], [`DeliveryLog::ingest`]).
@@ -67,7 +70,9 @@
 //!   `POST /api/notifications/{id}/read` and
 //!   `POST /api/notifications/read-all` (204), the push subscriptions:
 //!   `GET /api/notifications/push-key`, `POST` and `DELETE
-//!   /api/notifications/push-subscriptions`, and the preferences: `GET` and
+//!   /api/notifications/push-subscriptions`, the native app devices: `POST`
+//!   and `DELETE /api/notifications/push-devices` (a signed-in session
+//!   owns each device; ending the session ends it), and the preferences: `GET` and
 //!   `PATCH /api/notifications/preferences` and
 //!   `/api/notifications/preferences/workspace`. The same read state is
 //!   available in code: [`Notifier::notifications`],
@@ -169,6 +174,7 @@ mod commands;
 mod controller;
 mod deferred;
 mod deliveries;
+mod devices;
 mod digest;
 mod drivers;
 mod error;
@@ -205,7 +211,13 @@ pub use catalog::{
 pub use channel::Channel;
 pub use deferred::{DeferralReason, NotificationDeferral, Released};
 pub use deliveries::{DeliveryLog, DeliveryStatus, Ingested, NotificationDelivery};
+pub use devices::{
+    DeviceTarget, LiveSessions, NewPushDevice, PushDevice, PushDevices, PushEnvironment,
+    PushPlatform,
+};
 pub use digest::{DIGEST_TYPE, DigestItem};
+pub use drivers::apns::ApnsPush;
+pub use drivers::fcm::FcmPush;
 pub use drivers::log::{LogSms, LogWhatsApp};
 pub use drivers::meta::MetaWhatsApp;
 pub use drivers::slack::SlackApi;
@@ -215,19 +227,21 @@ pub use drivers::twilio::{TwilioSms, TwilioWhatsApp};
 pub use drivers::vonage::VonageSms;
 pub use drivers::web_push::VapidWebPush;
 pub use drivers::{
-    ChannelError, PushTarget, SentMessage, SlackDriver, SmsDriver, TeamsDriver, WebPushDriver,
-    WhatsAppDriver,
+    ChannelError, PushDriver, PushTarget, SentMessage, SlackDriver, SmsDriver, TeamsDriver,
+    WebPushDriver, WhatsAppDriver,
 };
 pub use error::NotifyError;
-pub use fake::{FAKE_PROVIDER, Sent, SlackFake, SmsFake, TeamsFake, WebPushFake, WhatsAppFake};
+pub use fake::{
+    FAKE_PROVIDER, PushFake, Sent, SlackFake, SmsFake, TeamsFake, WebPushFake, WhatsAppFake,
+};
 pub use job::{Delivery, SendNotificationJob};
 pub use messages::{
-    SlackMessage, SlackRoute, SmsMessage, TeamsMessage, TeamsRoute, Urgency, WebPushMessage,
-    WhatsAppMessage, WhatsAppTemplate,
+    PushMessage, SlackMessage, SlackRoute, SmsMessage, TeamsMessage, TeamsRoute, Urgency,
+    WebPushMessage, WhatsAppMessage, WhatsAppTemplate,
 };
 pub use migration::{
     DEFERRALS_TABLE, DELIVERIES_TABLE, NOTIFICATIONS_TABLE, OPT_OUTS_TABLE, PREFERENCES_TABLE,
-    PUSH_SUBSCRIPTIONS_TABLE,
+    PUSH_DEVICES_TABLE, PUSH_SUBSCRIPTIONS_TABLE,
 };
 pub use module::NotifyModule;
 /// `#[notification(category = "..", digest = "daily", urgent)]` on an
@@ -240,9 +254,10 @@ pub use notification::Notification;
 pub use notifier::{INBOX_TOPIC, NOTIFICATION_CREATED, Notifier};
 pub use opt_outs::{NotificationOptOut, OptOutSource, OptOuts};
 pub use options::{
-    DeferredOptions, DigestOptions, MetaOptions, NotifyOptions, PreferenceOptions, SlackOptions,
-    SmsDriverKind, SmsOptions, SnsOptions, TeamsOptions, TwilioOptions, VonageOptions,
-    WebPushOptions, WhatsAppDriverKind, WhatsAppOptions,
+    ApnsOptions, DeferredOptions, DigestOptions, FcmOptions, MetaOptions, NotifyOptions,
+    PreferenceOptions, PushOptions, SlackOptions, SmsDriverKind, SmsOptions, SnsOptions,
+    TeamsOptions, TwilioOptions, VonageOptions, WebPushOptions, WhatsAppDriverKind,
+    WhatsAppOptions,
 };
 pub use overrides::{MailOverride, NotificationOverrides, TemplateOverrides};
 pub use preferences::{

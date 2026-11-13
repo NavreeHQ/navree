@@ -7,8 +7,8 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::{
-    Channel, Digest, Notifiable, SlackMessage, SmsMessage, TeamsMessage, WebPushMessage,
-    WhatsAppMessage,
+    Channel, Digest, Notifiable, PushMessage, SlackMessage, SmsMessage, TeamsMessage,
+    WebPushMessage, WhatsAppMessage,
 };
 
 /// A notification: it picks its channels per
@@ -174,6 +174,41 @@ pub trait Notification: Serialize + DeserializeOwned + Send + Sync + 'static {
     /// The notification of the [`Channel::WebPush`] channel, pushed to each
     /// of the notifiable's push subscriptions. Default: `None`.
     fn to_web_push(&self, notifiable: &dyn Notifiable) -> Option<WebPushMessage> {
+        let _ = notifiable;
+        None
+    }
+
+    /// The notification of the [`Channel::Push`] channel, pushed to each
+    /// of the notifiable's native app devices whose session is still
+    /// signed in. Default: `None`.
+    ///
+    /// ```
+    /// use navree_notify::{Channel, Notifiable, Notification, PushMessage};
+    /// use serde::{Deserialize, Serialize};
+    ///
+    /// #[derive(Serialize, Deserialize)]
+    /// struct OrderShipped {
+    ///     order: String,
+    /// }
+    ///
+    /// impl Notification for OrderShipped {
+    ///     const TYPE: &'static str = "order_shipped";
+    ///
+    ///     fn via(&self, _n: &dyn Notifiable) -> Vec<Channel> {
+    ///         vec![Channel::Database, Channel::Push]
+    ///     }
+    ///
+    ///     fn to_push(&self, _n: &dyn Notifiable) -> Option<PushMessage> {
+    ///         Some(
+    ///             PushMessage::new("Your order has shipped")
+    ///                 .body(format!("Order {} is on its way to Ludhiana", self.order))
+    ///                 .href(format!("/orders/{}", self.order))
+    ///                 .collapse(format!("order-{}", self.order)),
+    ///         )
+    ///     }
+    /// }
+    /// ```
+    fn to_push(&self, notifiable: &dyn Notifiable) -> Option<PushMessage> {
         let _ = notifiable;
         None
     }

@@ -1,6 +1,6 @@
 [package]
 name = "navree-notify"
-description = "Navree NotifyModule: notifications over mail, database, broadcast, chat, SMS, WhatsApp and web push, with preferences and a delivery log."
+description = "Navree NotifyModule: notifications over mail, database, broadcast, chat, SMS, WhatsApp, web push and native app push, with preferences and a delivery log."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

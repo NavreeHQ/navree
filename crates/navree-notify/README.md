@@ -1,6 +1,6 @@
 # navree-notify
 
-Navree NotifyModule: notifications over mail, database, broadcast, chat, SMS, WhatsApp and web push, with preferences and a delivery log.
+Navree NotifyModule: notifications over mail, database, broadcast, chat, SMS, WhatsApp, web push and native app push, with preferences and a delivery log.
 
 Part of [Navree](https://navree.com), the complete application framework for Rust.
 

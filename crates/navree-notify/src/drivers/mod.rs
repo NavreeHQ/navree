@@ -1,6 +1,8 @@
-//! The drivers behind the Slack, Teams, SMS, WhatsApp and web push
+//! The drivers behind the Slack, Teams, SMS, WhatsApp, web push and push
 //! channels: one trait per channel, the HTTP drivers, and their helpers.
 
+pub(crate) mod apns;
+pub(crate) mod fcm;
 pub(crate) mod log;
 pub(crate) mod meta;
 pub(crate) mod slack;
@@ -17,18 +19,20 @@ use serde_json::Value;
 use url::Url;
 
 use crate::{
-    SlackMessage, SlackRoute, SmsMessage, TeamsMessage, TeamsRoute, WebPushMessage, WhatsAppMessage,
+    DeviceTarget, PushMessage, PushPlatform, SlackMessage, SlackRoute, SmsMessage, TeamsMessage,
+    TeamsRoute, WebPushMessage, WhatsAppMessage,
 };
 
 /// What a provider answered when it accepted a message.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SentMessage {
     /// The driver that sent it: `slack`, `teams`, `twilio`, `vonage`,
-    /// `sns`, `meta`, `web_push`, `log` or `fake`.
+    /// `sns`, `meta`, `web_push`, `apns`, `fcm`, `log` or `fake`.
     pub provider: String,
     /// The provider's id of the message (Twilio's `SM...`, Vonage's
     /// `message_uuid`, a WhatsApp `wamid`, Slack's `ts`, a Teams activity
-    /// id), which status callbacks name.
+    /// id, Apple's `apns-id`, Firebase's message name), which status
+    /// callbacks name.
     pub message_id: Option<String>,
 }
 
@@ -88,10 +92,16 @@ pub enum ChannelError {
     /// that is not E.164, a malformed push subscription).
     #[error("invalid recipient: {0}")]
     InvalidRecipient(String),
-    /// The push subscription has expired or was revoked (`404` or `410`
-    /// from the push service): it is deleted.
+    /// The push subscription or device has expired or was revoked (`404`
+    /// or `410` from the push service; Apple's `Unregistered` and
+    /// `BadDeviceToken`, Firebase's `UNREGISTERED`): it is deleted.
     #[error("the push subscription is gone")]
     Gone,
+    /// The message cannot be sent as it is: a push notification whose
+    /// link is not a path inside the app, or whose payload is over the
+    /// service's 4096 bytes. Nothing was sent.
+    #[error("the message cannot be sent: {0}")]
+    InvalidMessage(String),
     /// The driver is not configured for this message (a bot route without a
     /// token, a missing sender).
     #[error("{0}")]
@@ -172,6 +182,28 @@ pub trait WebPushDriver: Send + Sync + 'static {
         target: &'a PushTarget,
         message: &'a WebPushMessage,
     ) -> BoxFuture<'a, Result<SentMessage, ChannelError>>;
+}
+
+/// Sends push notifications to native apps: Apple's push service for
+/// iOS devices ([`ApnsPush`](crate::ApnsPush)) and Firebase Cloud
+/// Messaging for Android ones ([`FcmPush`](crate::FcmPush)), configured
+/// in section `notify.push`; [`PushFake`](crate::PushFake) records them.
+/// Install your own with `override_value::<dyn PushDriver>(..)`.
+pub trait PushDriver: Send + Sync + 'static {
+    /// Sends `message` to one device. A device the service no longer
+    /// knows is [`ChannelError::Gone`].
+    fn send<'a>(
+        &'a self,
+        device: &'a DeviceTarget,
+        message: &'a PushMessage,
+    ) -> BoxFuture<'a, Result<SentMessage, ChannelError>>;
+
+    /// Whether it sends to devices of `platform`; the channel skips the
+    /// others. Default: every platform.
+    fn serves(&self, platform: PushPlatform) -> bool {
+        let _ = platform;
+        true
+    }
 }
 
 /// An HTTP client for a provider: the default SSRF policy, with the host

@@ -1,9 +1,9 @@
 //! The `notify` migration set: the `notifications` table, the
-//! `notification_deliveries`, `notification_opt_outs` and
-//! `push_subscriptions` tables of the Slack, Teams, SMS, WhatsApp and web
-//! push channels, and the `notification_preferences` and
-//! `notification_deferrals` tables of preferences and held deliveries
-//! (schema-builder migrations).
+//! `notification_deliveries`, `notification_opt_outs`,
+//! `push_subscriptions` and `push_devices` tables of the Slack, Teams,
+//! SMS, WhatsApp, web push and push channels, and the
+//! `notification_preferences` and `notification_deferrals` tables of
+//! preferences and held deliveries (schema-builder migrations).
 
 use navree_db::MigrationSet;
 use navree_db::navree_schema::{
@@ -21,6 +21,9 @@ pub const OPT_OUTS_TABLE: &str = "notification_opt_outs";
 
 /// The browser push subscriptions.
 pub const PUSH_SUBSCRIPTIONS_TABLE: &str = "push_subscriptions";
+
+/// The native app push devices.
+pub const PUSH_DEVICES_TABLE: &str = "push_devices";
 
 /// The preferences of people and workspaces.
 pub const PREFERENCES_TABLE: &str = "notification_preferences";
@@ -55,6 +58,46 @@ pub(crate) fn migrations() -> MigrationSet {
             "m20261028_000005_create_notification_deferrals_table",
             CreateDeferrals,
         ))
+        .migration(SchemaMigration::new(
+            "m20261112_000001_create_push_devices_table",
+            CreatePushDevices,
+        ))
+}
+
+/// Creates `push_devices`: unique per token (by its hash, since Firebase
+/// tokens are long), found by notifiable and by the session that
+/// registered them.
+struct CreatePushDevices;
+
+impl Migration for CreatePushDevices {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let mysql = schema.target().await?.dialect() == Dialect::MySql;
+        schema
+            .create(PUSH_DEVICES_TABLE, |t| {
+                uuid(t, "id", mysql).primary();
+                t.string("notifiable_type").length(64);
+                t.string("notifiable_id");
+                t.string("session_id").length(191);
+                t.string("platform").length(16);
+                t.text("token");
+                t.char("token_hash", 64);
+                t.string("app_id");
+                t.string("environment").length(16);
+                t.timestamp_tz("created_at");
+                t.timestamp_tz("last_seen_at");
+                t.timestamp_tz("last_used_at").nullable();
+                t.unique(["token_hash"])
+                    .name("push_devices_token_hash_unique");
+                t.index(["notifiable_type", "notifiable_id"])
+                    .name("push_devices_notifiable_index");
+                t.index(["session_id"]).name("push_devices_session_index");
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists(PUSH_DEVICES_TABLE).await
+    }
 }
 
 /// Creates `notification_preferences`: one row per owner (a notifiable or

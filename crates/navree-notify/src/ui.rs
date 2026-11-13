@@ -33,6 +33,31 @@ use crate::{
     DatabaseNotification, INBOX_TOPIC, Notifiable, Notifier, NotifyOptions, USER_NOTIFIABLE_TYPE,
 };
 
+/// What the shell document says of push for a native client: the route a device's token is
+/// posted to and deleted from, under the API prefix.
+pub(crate) struct PushShellPart {
+    path: String,
+}
+
+impl PushShellPart {
+    /// The part for the routes under `api_prefix`.
+    pub(crate) fn new(api_prefix: &str) -> Self {
+        Self {
+            path: format!(
+                "/{}/notifications/push-devices",
+                api_prefix.trim_matches('/')
+            )
+            .replace("//", "/"),
+        }
+    }
+}
+
+impl navree_ui::NativeShellPart for PushShellPart {
+    fn contribute(&self, shell: &mut navree_ui::NativeShellParts, _: &navree_ui::NativeClient) {
+        shell.push_register(self.path.as_str());
+    }
+}
+
 /// Where the list is fetched from.
 pub const BELL_PATH: &str = "/notifications/bell";
 
@@ -416,6 +441,26 @@ impl Controller for NotificationBellController {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_push_route_is_the_notification_routes_under_the_api_prefix() {
+        use navree_ui::{NativeClient, NativeFamily, NativeShellPart, NativeShellParts};
+        for (prefix, route) in [
+            ("/api", "/api/notifications/push-devices"),
+            ("api/", "/api/notifications/push-devices"),
+            ("", "/notifications/push-devices"),
+            ("/v1/api", "/v1/api/notifications/push-devices"),
+        ] {
+            let mut parts = NativeShellParts::default();
+            super::PushShellPart::new(prefix)
+                .contribute(&mut parts, &NativeClient::new(NativeFamily::Android));
+            assert_eq!(parts, {
+                let mut said = NativeShellParts::default();
+                said.push_register(route);
+                said
+            });
+        }
+    }
+
     use chrono::Utc;
     use serde_json::json;
 
