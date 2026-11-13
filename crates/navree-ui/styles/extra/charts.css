@@ -94,7 +94,14 @@
 /* The donut: the ring, its total in the middle, a legend with values. */
 [data-slot=chart-donut-frame]{display:flex;flex-wrap:wrap;align-items:center;gap:1rem 1.5rem}
 [data-slot=chart-donut-plot]{display:grid;place-items:center;flex:none;& > *{grid-area:1/1}}
-[data-slot=chart-donut-center]{display:flex;flex-direction:column;align-items:center;max-width:60%;text-align:center;pointer-events:none;& strong{font-size:20px;font-weight:600;line-height:1.2;color:var(--fg);overflow-wrap:anywhere}& span{font-size:12px;color:var(--fg-2)}}
+/* The middle is a box as wide as the hole, and its words are sized against it (`cqi`), so a
+   small donut's total stays inside its ring: at most the sizes a large donut shows, and
+   smaller for a longer figure (`data-fit`, 1 to 5 by its length). */
+[data-slot=chart-donut-center]{width:60%;aspect-ratio:1;container-type:size;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;line-height:1.2;pointer-events:none;& > *{max-width:86cqi}& strong{font-size:min(20px,var(--fit,34cqi));font-weight:600;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}& span{font-size:min(12px,max(9px,13cqi));color:var(--fg-2);overflow-wrap:anywhere}}
+[data-slot=chart-donut-center][data-fit="2"]{--fit:28cqi}
+[data-slot=chart-donut-center][data-fit="3"]{--fit:22cqi}
+[data-slot=chart-donut-center][data-fit="4"]{--fit:15cqi}
+[data-slot=chart-donut-center][data-fit="5"]{--fit:11cqi}
 [data-slot=chart-slice]{fill:var(--c);stroke:var(--surface);stroke-width:2px;stroke-linejoin:round;vector-effect:non-scaling-stroke;transition:opacity .1s}
 [data-slot=chart-donut-frame]:has([data-active]) [data-slot=chart-slice]:not([data-active]){opacity:.45}
 [data-slot=chart-legend][data-layout=list]{flex:1 1 12rem;max-width:24rem;flex-direction:column;flex-wrap:nowrap;gap:.375rem;min-width:0;& > li{width:100%}}

@@ -7,6 +7,14 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Fixed
+
+- A small `Donut` drew the figure in its middle at one size whatever the ring's, so at
+  `size(96)` a total of five characters reached the ring. The middle is now a box as wide as
+  the hole and its words are sized against it: a donut of the default size and larger looks
+  as before, and a smaller one, or one with a longer figure, draws it smaller. A figure too
+  long for the hole at any size ends in an ellipsis.
+
 ## [1.1.0] - 2026-11-13
 
 ### Added

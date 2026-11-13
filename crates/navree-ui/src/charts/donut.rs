@@ -222,6 +222,7 @@ impl Donut {
         let middle = (self.hole > 0.0).then(|| {
             el("div")
                 .slot("chart-donut-center")
+                .attr("data-fit", fit(&center_value))
                 .attr("aria-hidden", "true")
                 .children((
                     el("strong").child(center_value),
@@ -316,6 +317,18 @@ impl Donut {
 
 crate::node::into_node!(Donut);
 
+/// How much the figure in the middle must shrink to stay inside the hole, 1 to 5, by
+/// its length: the stylesheet has a size for each, measured against the hole's width.
+fn fit(text: &str) -> i64 {
+    match text.chars().count() {
+        0..=3 => 1,
+        4 => 2,
+        5..=6 => 3,
+        7..=9 => 4,
+        _ => 5,
+    }
+}
+
 /// A ring slice from angle `a` to `b` (radians clockwise from twelve), between radii
 /// `inner` and `outer`. A whole ring is drawn as two halves, which an arc can.
 fn arc(a: f64, b: f64, outer: f64, inner: f64) -> String {
@@ -370,5 +383,32 @@ mod tests {
     fn a_whole_ring_is_two_halves() {
         let d = arc(0.0, std::f64::consts::TAU, 100.0, 60.0);
         assert_eq!(d.matches('M').count(), 2);
+    }
+
+    #[test]
+    fn a_longer_figure_in_the_middle_is_drawn_smaller() {
+        assert_eq!(
+            ["312", "9412", "9,600", "12,345", "1,25,000", "₹12,50,000"].map(fit),
+            [1, 2, 3, 3, 4, 5]
+        );
+        let middle = |donut: Donut| {
+            let html = crate::render(&donut.into());
+            let at = html
+                .find(r#"data-slot="chart-donut-center""#)
+                .expect("a donut has a middle");
+            html[at..].chars().take(60).collect::<String>()
+        };
+        let total = middle(
+            Donut::new("Payments")
+                .part("Paid", 9_412)
+                .part("Failed", 188),
+        );
+        assert!(total.contains(r#"data-fit="3""#), "{total}");
+        let words = middle(
+            Donut::new("Payments")
+                .part("Paid", 3)
+                .center("₹12,50,000", "this month"),
+        );
+        assert!(words.contains(r#"data-fit="5""#), "{words}");
     }
 }
