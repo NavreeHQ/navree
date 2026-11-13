@@ -772,7 +772,10 @@ pub struct Split {
     pub detail: Box<Node>,
 }
 
-/// Views a reader switches between.
+/// Views a reader switches between. The tab that is `selected` is the one that
+/// shows. A lazy [`Region`] inside a tab that is not selected is not fetched
+/// with the screen: the client fetches it when its tab is shown, as it fetches
+/// the regions of a screen when the screen is.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tabs {
     /// The node's id.
@@ -791,7 +794,8 @@ pub struct Tab {
     /// Its icon.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<Icon>,
-    /// Whether it is the one shown.
+    /// Whether it is the one shown. A lazy region in the view of a tab that is
+    /// not selected waits until its tab is.
     #[serde(default, skip_serializing_if = "is_false")]
     pub selected: bool,
     /// The page it leads to, when its view is not held here.

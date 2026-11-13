@@ -261,6 +261,17 @@
               ]
             },
             {
+              "label": "Stock",
+              "children": [
+                {
+                  "t": "region",
+                  "id": "stock-figures",
+                  "src": "/inventory/figures",
+                  "lazy": true
+                }
+              ]
+            },
+            {
               "label": "Reports",
               "href": "/reports"
             }

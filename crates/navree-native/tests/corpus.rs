@@ -1110,6 +1110,21 @@ fn screen_kinds() -> Envelope {
                             })],
                         })],
                     },
+                    // A view held here, still to be fetched: its region is asked for
+                    // when the tab is shown, not before.
+                    Tab {
+                        label: s("Stock"),
+                        icon: None,
+                        selected: false,
+                        href: None,
+                        children: vec![Node::Region(Region {
+                            id: s("stock-figures"),
+                            src: s("/inventory/figures"),
+                            lazy: true,
+                            live: None,
+                            children: Vec::new(),
+                        })],
+                    },
                     Tab {
                         label: s("Reports"),
                         icon: None,
