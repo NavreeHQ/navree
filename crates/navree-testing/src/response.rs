@@ -32,8 +32,17 @@ pub struct TestResponse {
     status: StatusCode,
     headers: HeaderMap,
     body: Bytes,
-    extensions: http::Extensions,
+    extensions: Left,
 }
+
+/// What the app left on a response. A test reads it and never changes it, so
+/// a response is as safe to hold across a caught panic as its status, headers
+/// and body are.
+#[derive(Clone, Debug, Default)]
+struct Left(http::Extensions);
+
+impl std::panic::UnwindSafe for Left {}
+impl std::panic::RefUnwindSafe for Left {}
 
 impl TestResponse {
     /// A response from its parts (to use the assertions on a response
@@ -43,7 +52,7 @@ impl TestResponse {
             status,
             headers,
             body,
-            extensions: http::Extensions::new(),
+            extensions: Left::default(),
         }
     }
 
@@ -51,7 +60,7 @@ impl TestResponse {
     /// headers and its body (`http::Response::extensions`).
     #[must_use]
     pub fn with_extensions(mut self, extensions: http::Extensions) -> Self {
-        self.extensions = extensions;
+        self.extensions = Left(extensions);
         self
     }
 
@@ -75,7 +84,7 @@ impl TestResponse {
     /// assert_eq!(response.extension::<String>(), None);
     /// ```
     pub fn extension<T: Send + Sync + 'static>(&self) -> Option<&T> {
-        self.extensions.get::<T>()
+        self.extensions.0.get::<T>()
     }
 
     /// The status code (compares with a `u16`: `response.status() == 200`).
