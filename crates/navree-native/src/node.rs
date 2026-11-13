@@ -1406,9 +1406,9 @@ pub struct Selection {
     pub across: Option<Across>,
 }
 
-/// Every record that matches a table's query, as an action on the rows chosen
-/// can take them. A client offers it (`Choose all 1,204`) when the person has
-/// chosen the rows it holds, as its system's own lists do.
+/// Every record that matches a table's query, offered to an action on the rows
+/// chosen in place of the rows chosen. A client offers it (`Choose all 1,204`)
+/// when the person has chosen the rows it holds, as its system's own lists do.
 ///
 /// When the person takes it, the client sends `name` with `value`, as a box
 /// ticked in the form would be, in place of the ids of the rows, which are only
