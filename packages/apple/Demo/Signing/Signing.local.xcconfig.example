@@ -1,0 +1,18 @@
+// A team's signing of the demo. Copy to Signing.local.xcconfig, put in the
+// team's own values, then `xcodegen generate` in Demo/.
+//
+// On Apple's side first (developer.apple.com, Certificates, Identifiers &
+// Profiles): an App ID for NAVREE_BUNDLE_ID with the capabilities Sign in
+// with Apple, Associated Domains and Push Notifications. On the site: the
+// app under `auth.apps.apple`, so it serves apple-app-site-association over
+// https at NAVREE_ASSOCIATED_DOMAIN (what it serves: apple-app-site-association.json).
+
+// The ten-character Team ID.
+DEVELOPMENT_TEAM = ABCDE12345
+CODE_SIGN_STYLE = Automatic
+// A bundle id of the team's own.
+NAVREE_BUNDLE_ID = in.example.charkha
+// The origin's host: the app talks to https://charkha.example.
+NAVREE_ASSOCIATED_DOMAIN = charkha.example
+CODE_SIGN_ENTITLEMENTS = Signing/NavreeDemo.entitlements
+NAVREE_SIGNED_WITH = associated-domains sign-in-with-apple push

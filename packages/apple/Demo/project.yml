@@ -33,6 +33,11 @@ targets:
     dependencies:
       - package: NavreeNative
         product: NavreeNative
+    # Who signs the demo and with what: nobody, unless a team fills in
+    # Signing/Signing.local.xcconfig (see Signing/Signing.xcconfig).
+    configFiles:
+      Debug: Signing/Signing.xcconfig
+      Release: Signing/Signing.xcconfig
     info:
       path: Generated/NavreeDemo-Info.plist
       properties:
@@ -42,6 +47,10 @@ targets:
         # app's real origin is https with no exception.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # What the build is signed with, as the shell reads it: empty unless
+        # the team's signing says so.
+        NavreeSignedWith: $(NAVREE_SIGNED_WITH)
+        NavreeAssociatedDomain: $(NAVREE_ASSOCIATED_DOMAIN)
         CFBundleURLTypes:
           - CFBundleURLName: com.navree.demo
             CFBundleURLSchemes: [charkha]
@@ -59,7 +68,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.navree.demo
+        PRODUCT_BUNDLE_IDENTIFIER: $(NAVREE_BUNDLE_ID)
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: YES

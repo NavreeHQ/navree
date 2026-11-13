@@ -10,3 +10,5 @@
 # The picture tool's own build
 /Shots/.build/
 /Shots/.swiftpm/
+# A team's own signing of the demo
+/Demo/Signing/Signing.local.xcconfig

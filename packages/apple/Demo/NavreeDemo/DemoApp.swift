@@ -4,12 +4,15 @@ import SwiftUI
 
 /// The store demo as a native app, on the runtime core. Its origin is
 /// configuration: the Info.plist key `NavreeOrigin` (a store demo running on
-/// this Mac by default); or the store's answers kept in the app, when launched
-/// with `-NavreeRecorded YES`; or the answers in a folder outside the app,
-/// when launched with `-NavreeAnswers <folder>` (or `NAVREE_ANSWERS` in the
+/// this Mac by default), or the site a team's signing associates it with; or
+/// the store's answers kept in the app, when launched with
+/// `-NavreeRecorded YES`; or the answers in a folder outside the app, when
+/// launched with `-NavreeAnswers <folder>` (or `NAVREE_ANSWERS` in the
 /// environment), so it runs with no server at all.
 @main
 struct DemoApp: App {
+    /// The push token and a tapped notification, passed on to the shell.
+    @UIApplicationDelegateAdaptor(NavreeAppDelegate.self) private var delegate
     private let configuration = DemoConfiguration.make()
 
     var body: some Scene {
@@ -66,12 +69,28 @@ enum DemoConfiguration {
         // or as `NAVREE_ORIGIN` in the environment.
         let origin = ProcessInfo.processInfo.environment["NAVREE_ORIGIN"].flatMap { $0.isEmpty ? nil : $0 }
             ?? defaults.string(forKey: "NavreeOrigin")
+            ?? associated.map { "https://\($0)" }
             ?? Bundle.main.object(forInfoDictionaryKey: "NavreeOrigin") as? String
             ?? "http://127.0.0.1:8095"
         return ShellConfiguration(
             origin: origin, loopbackHTTP: origin.hasPrefix("http://"), appVersion: version, signInScheme: "charkha",
-            launch: launch
+            signInPaths: signInPaths(defaults), launch: launch
         )
+    }
+
+    /// The site a team's signing associates the build with, if any.
+    static var associated: String? {
+        let domain = (Bundle.main.object(forInfoDictionaryKey: Entitlement.domainKey) as? String)?
+            .split(separator: "?").first.map(String.init)
+        return domain?.isEmpty == false ? domain : nil
+    }
+
+    /// The addresses that open the system's sign-in session instead of a
+    /// page: `-NavreeSignInPaths "/sign-in;/auth/*/redirect"` for a server
+    /// whose sign-in is handed over to the app; else only another site's.
+    static func signInPaths(_ defaults: UserDefaults) -> [String] {
+        let paths = defaults.string(forKey: "NavreeSignInPaths")?.split(separator: ";").map(String.init) ?? []
+        return paths.isEmpty ? ["/auth/*/redirect"] : paths
     }
 
     /// `-NavreeSelect /orders -NavreeStack "/orders=/orders/1" -NavreeSheet /orders/new
