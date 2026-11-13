@@ -47,6 +47,8 @@ help: the trait `Prunable` is not implemented for `Log`
 note: required by a bound in `Pruning::each`
  --> src/prune.rs
   |
+  | impl Pruning {
+  |     /// Record by record ([`Prunable`]).
   |     pub const fn each<M: Prunable>() -> Self {
   |                          ^^^^^^^^ required by this bound in `Pruning::each`
 
