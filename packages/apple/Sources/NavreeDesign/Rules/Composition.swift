@@ -83,7 +83,9 @@ public enum CompositionRules {
     /// in a centring stack keeps its own height and two columns side by side
     /// keep theirs.
     public static func fillsWidth(_ stack: Navree.Stack, axis: Navree.Axis, inLine: Bool) -> Bool {
-        if stack.grow, inLine { return true }
+        // A part that grows takes the room left along a line, and in a
+        // column the only room there is, its width.
+        if stack.grow { return true }
         return axis == .vertical && !inLine && (stack.align == .center || stack.align == .end)
     }
 
@@ -352,6 +354,16 @@ public enum ZoomRules {
     public static func source(from: String?, under: Navree.Node?, reduceMotion: Bool = false) -> String? {
         guard let from, let under, case .card(let card)? = under.find(from, kinds: ["card"]) else { return nil }
         return source(card, reduceMotion: reduceMotion) == from ? from : nil
+    }
+
+    /// The same, when the screen under it is one of `screens` (the bodies of
+    /// the other screens the runtime holds): the first that holds the card.
+    public static func source(from: String?, among screens: [Navree.Node], reduceMotion: Bool = false) -> String? {
+        guard from != nil else { return nil }
+        for under in screens {
+            if let source = source(from: from, under: under, reduceMotion: reduceMotion) { return source }
+        }
+        return nil
     }
 }
 

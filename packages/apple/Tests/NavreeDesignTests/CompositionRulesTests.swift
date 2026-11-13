@@ -81,6 +81,8 @@ private let navigate = Navree.Action.navigate(Navree.Action.Navigate(href: "/sle
     // A column from the start keeps its own width; a column that grows in a line takes the room left.
     #expect(!CompositionRules.fillsWidth(Navree.Stack(children: []), axis: .vertical, inLine: false))
     #expect(CompositionRules.fillsWidth(Navree.Stack(children: [], grow: true), axis: .vertical, inLine: true))
+    // In a column, a part that grows takes the width, so its words start at the edge.
+    #expect(CompositionRules.fillsWidth(Navree.Stack(children: [], grow: true), axis: .vertical, inLine: false))
     // A line that centres is not a column.
     #expect(!CompositionRules.fillsWidth(Navree.Stack(align: .center, axis: .horizontal, children: []), axis: .horizontal, inLine: false))
 }
@@ -200,6 +202,11 @@ private let navigate = Navree.Action.navigate(Navree.Action.Navigate(href: "/sle
     #expect(ZoomRules.source(from: "gone", under: home) == nil)
     #expect(ZoomRules.source(from: "last-night-card", under: nil) == nil)
     #expect(ZoomRules.source(from: "last-night-card", under: home, reduceMotion: true) == nil)
+    // Among the screens the runtime holds, the one that has the card.
+    let sleep = Navree.Node.stack(Navree.Stack(children: [text("Sleep")]))
+    #expect(ZoomRules.source(from: "last-night-card", among: [sleep, home]) == "last-night-card")
+    #expect(ZoomRules.source(from: "pillar-sleep", among: [sleep, home]) == nil)
+    #expect(ZoomRules.source(from: nil, among: [home]) == nil)
 }
 
 // MARK: Carousels
