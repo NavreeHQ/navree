@@ -902,7 +902,7 @@ object!(ScanCode {} { formats, prompt });
 object!(Scanned { format, value } {});
 object!(AppLock { after_secs } {});
 names!(SignInProvider { Apple, Google });
-object!(PlatformSignIn { provider, nonce, sign_in } { web, client_id });
+object!(PlatformSignIn { provider, nonce, sign_in } { web, client_id, second_step });
 object!(SignedIn { id_token, state } { authorization_code, user });
 object!(SignedInUser {} { name });
 object!(PersonName {} { first_name = "firstName", last_name = "lastName" });

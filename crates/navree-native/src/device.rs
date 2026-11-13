@@ -1199,6 +1199,14 @@ pub enum SignInProvider {
 /// No ticket and no `then`: the sealed `state`, used once, stands for a
 /// ticket, and the answer is the person signed in, after which the client
 /// fetches the shell and the screen again.
+///
+/// When the person's sign-in needs a second step (a code from an
+/// authenticator app), the route answers `{"two_factor_required": true}` and
+/// nobody is signed in yet: the person's session waits for the step. The client
+/// opens `second_step` inside the app, with the app's own cookies, and never in
+/// the system's sign-in session, which does not have them; the page leads on
+/// when the step is done, and the client then fetches the shell and the screen
+/// as it does after any sign-in.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlatformSignIn {
     /// Who with.
@@ -1216,6 +1224,12 @@ pub struct PlatformSignIn {
     /// (Google's server client id on Android).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_id: Option<String>,
+    /// The page of the app that finishes a second step: `/sign-in/two-factor`.
+    /// Left out, the shell's [`SignIn::second_step`](crate::shell::SignIn::second_step)
+    /// is the page; with neither, the client has no page for it and tells the
+    /// person to sign in another way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub second_step: Option<OriginPath>,
 }
 
 /// What [`PlatformSignIn`] posts, as JSON: the body the app's sign-in route
@@ -1792,6 +1806,7 @@ mod tests {
                 sign_in: OriginPath::parse("/api/auth/social/apple/native/session").unwrap(),
                 web: None,
                 client_id: None,
+                second_step: None,
             }
             .into(),
         ];
@@ -1847,6 +1862,32 @@ mod tests {
                 "{call}"
             );
         }
+    }
+
+    #[test]
+    fn a_platform_sign_in_may_name_the_page_of_its_second_step() {
+        let call: Call = serde_json::from_str(
+            r#"{"f":"platform_sign_in","provider":"apple",
+                "nonce":"/api/auth/social/apple/native/nonce",
+                "sign_in":"/api/auth/social/apple/native/session",
+                "second_step":"/sign-in/two-factor"}"#,
+        )
+        .unwrap();
+        let Call::PlatformSignIn(sign_in) = call else {
+            panic!("{call:?}");
+        };
+        assert_eq!(sign_in.second_step.as_ref().map(OriginPath::as_str), Some("/sign-in/two-factor"));
+        // Left out, it is not written; the shell's page is the one used.
+        let plain = PlatformSignIn {
+            second_step: None,
+            ..sign_in
+        };
+        assert!(!serde_json::to_string(&plain).unwrap().contains("second_step"));
+        // The page is the app's own: a page of another site is refused.
+        assert!(serde_json::from_str::<PlatformSignIn>(
+            r#"{"provider":"google","nonce":"/n","sign_in":"/s","second_step":"https://evil.example/2fa"}"#
+        )
+        .is_err());
     }
 
     #[test]

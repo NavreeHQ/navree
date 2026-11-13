@@ -1548,6 +1548,7 @@ fn screen_device() -> Envelope {
                 sign_in: path("/api/auth/social/apple/native/session"),
                 web: Some(path("/api/auth/social/apple/redirect")),
                 client_id: None,
+                second_step: Some(path("/sign-in/two-factor")),
             }),
         ),
         Node::Field(Field {

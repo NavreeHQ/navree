@@ -206,9 +206,10 @@ pub struct SignIn {
     /// itself, such as a [`PlatformSignIn`](crate::device::PlatformSignIn):
     /// `/sign-in/two-factor`. The client opens it inside the app, with the app's
     /// own cookies, never in the system's sign-in session, which does not have
-    /// them. It leads on to its `next` address once the second step is done, and
-    /// the client then treats the sign-in as complete. A call that names a page
-    /// of its own uses that one instead.
+    /// them, and with `?next=` the address to go to afterwards. The page answers
+    /// with a redirect to `next` once the second step is done, and the client
+    /// then treats the sign-in as complete. A call that names a page of its own
+    /// uses that one instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub second_step: Option<OriginPath>,
 }

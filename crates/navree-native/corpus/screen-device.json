@@ -243,7 +243,8 @@
               "provider": "apple",
               "nonce": "/api/auth/social/apple/native/nonce",
               "sign_in": "/api/auth/social/apple/native/session",
-              "web": "/api/auth/social/apple/redirect"
+              "web": "/api/auth/social/apple/redirect",
+              "second_step": "/sign-in/two-factor"
             }
           }
         },

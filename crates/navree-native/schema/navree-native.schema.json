@@ -6345,6 +6345,18 @@
           "$ref": "#/$defs/SignInProvider",
           "x-since": 0
         },
+        "second_step": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OriginPath"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "sign_in": {
           "$ref": "#/$defs/OriginPath",
           "x-since": 0
