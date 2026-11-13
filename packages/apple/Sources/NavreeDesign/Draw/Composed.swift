@@ -624,22 +624,31 @@ struct TileGrid: Layout {
 
 /// Parts that scroll across, stopping at a part. With a least width, as many
 /// as fit show at once, each the same width, and when more are waiting the
-/// next one peeks in; on a screen's ground the run goes to the window's edges
+/// next one shows the edge of its card, never its words; on a screen's ground
+/// the run goes to the window's edges
 /// while its first part starts at the content's leading edge, as the App
 /// Store's shelves do. Cards in a run share one height. Paged, one part at a
 /// time with the system's page marks. VoiceOver steps through every part.
 struct CarouselPart: View {
     let carousel: Navree.Carousel
     @Environment(\.navreeScreenMargin) private var margin
-    @State private var room: Double?
+    @State private var run: Double?
+
+    /// The room inside the margins, from the run's own width.
+    private var room: Double? {
+        run.map { Swift.max($0 - 2 * Double(margin ?? 0), 0) }
+    }
 
     var body: some View {
         if carousel.paged {
             PagedCarousel(carousel: carousel)
         } else {
             let gap = CompositionRules.points(steps: carousel.gap)
-            let layout = CompositionRules.carousel(room: room ?? 0, min: carousel.min, gap: gap, parts: carousel.children.count)
             let bleed = margin ?? 0
+            let layout = CompositionRules.carousel(
+                room: room ?? 0, min: carousel.min, gap: gap, parts: carousel.children.count, margin: Double(bleed),
+                edge: CompositionRules.surfaceEdge(carousel.children)
+            )
             ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: CGFloat(gap)) {
                     ForEach(Array(PartItem.of(carousel.children).enumerated()), id: \.element.id) { _, item in
@@ -657,8 +666,10 @@ struct CarouselPart: View {
             .scrollTargetBehavior(.viewAligned)
             .scrollIndicators(.hidden)
             .scrollDisabled(layout.width != nil && !CompositionRules.scrolls(shown: layout.shown, parts: carousel.children.count))
+            // The run as it stands, from one edge of the window to the other:
+            // the room is what it has inside the margins.
+            .onGeometryChange(for: Double.self) { Double($0.size.width) } action: { run = $0 }
             .padding(.horizontal, -bleed)
-            .onGeometryChange(for: Double.self) { Double($0.size.width) } action: { room = $0 }
             .opacity(room == nil && carousel.min != nil ? 0 : 1)
             .accessibilityElement(children: .contain)
             .accessibilityLabel(carousel.label ?? "")
