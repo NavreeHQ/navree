@@ -330,7 +330,9 @@ internal fun RingsView(node: Navree.Rings, modifier: Modifier = Modifier) {
     val grownAll = progress.map { grown(it) }
     val said = node.summary ?: rings.joinToString(". ") { "${it.name} ${it.shown ?: it.value?.let(::amount) ?: "–"}" }
     val low = node.prominence == Navree.Prominence.LOW
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // Under other parts the rings and their heading start at the same edge; beside them they keep to their own width.
+    val beside = LocalInLine.current
+    Column(if (beside) modifier else modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // The rings keep to the width of their words, so what stands beside them keeps the rest of the line.
         if (!low) ChartHeading(node.title, node.hint, fill = false)
         val dial: @Composable () -> Unit = {

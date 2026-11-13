@@ -53,6 +53,8 @@ class HealthScreensTest {
                 "/sleep" to "screen-sleep",
                 "/fitness" to "screen-fitness",
                 "/designed" to "screen-designed-health",
+                // A screen with no destination of its own: opened from a card, it is pushed on the screen it came from.
+                "/heart" to "screen-form",
                 "/shelves" to "screen-designed-store",
             ),
         )
@@ -136,9 +138,9 @@ class HealthScreensTest {
         val app = start(designedAtRoot = true)
         front(app, "Today")
         // At the largest text the card is below the first screen: scroll to it first.
-        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasContentDescription("Sleep, 25% of score"))
-        compose.onNodeWithContentDescription("Sleep, 25% of score").performClick()
-        front(app, "Sleep")
+        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasContentDescription("Heart, 20% of score"))
+        compose.onNodeWithContentDescription("Heart, 20% of score").performClick()
+        front(app, "New customer")
         Shots.take("designed-health-opened")
         send(app, Events.back)
         front(app, "Today")
