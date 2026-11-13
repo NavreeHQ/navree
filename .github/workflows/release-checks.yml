@@ -224,14 +224,32 @@ jobs:
           cache-targets: false
       - name: This part's crates
         if: ${{ steps.baseline.outputs.tag != '' }}
+        env:
+          TAG: ${{ steps.baseline.outputs.tag }}
         run: |
-          # The published crates, in name order; this part takes every PARTS-th.
+          # The published crates, in name order, each with its manifest.
           cargo metadata --no-deps --format-version 1 \
-            | jq -r '[.packages[] | select(.publish != []) | .name] | sort | .[]' > "$RUNNER_TEMP/published.txt"
-          awk -v parts="$PARTS" -v part="$PART" '(NR - 1) % parts == part' "$RUNNER_TEMP/published.txt" > "$RUNNER_TEMP/mine.txt"
-          awk -v parts="$PARTS" -v part="$PART" '(NR - 1) % parts != part' "$RUNNER_TEMP/published.txt" > "$RUNNER_TEMP/others.txt"
-          echo "part $PART of $PARTS: $(wc -l < "$RUNNER_TEMP/mine.txt") of $(wc -l < "$RUNNER_TEMP/published.txt") published crates"
+            | jq -r '[.packages[] | select(.publish != [])] | sort_by(.name) | .[] | [.name, .manifest_path] | @tsv' > "$RUNNER_TEMP/published.tsv"
+          # A crate that the last release did not have has nothing to be
+          # compared with: it is left out of every part, and named here.
+          : > "$RUNNER_TEMP/known.txt"
+          : > "$RUNNER_TEMP/new.txt"
+          while IFS=$'\t' read -r name manifest; do
+            if git cat-file -e "$TAG:${manifest#"$PWD"/}" 2> /dev/null; then
+              echo "$name" >> "$RUNNER_TEMP/known.txt"
+            else
+              echo "$name" >> "$RUNNER_TEMP/new.txt"
+            fi
+          done < "$RUNNER_TEMP/published.tsv"
+          # This part takes every PARTS-th of the crates the last release had.
+          awk -v parts="$PARTS" -v part="$PART" '(NR - 1) % parts == part' "$RUNNER_TEMP/known.txt" > "$RUNNER_TEMP/mine.txt"
+          awk -v parts="$PARTS" -v part="$PART" '(NR - 1) % parts != part' "$RUNNER_TEMP/known.txt" > "$RUNNER_TEMP/others.txt"
+          cat "$RUNNER_TEMP/new.txt" >> "$RUNNER_TEMP/others.txt"
+          echo "part $PART of $PARTS: $(wc -l < "$RUNNER_TEMP/mine.txt") of $(wc -l < "$RUNNER_TEMP/known.txt") published crates"
           sed 's/^/  /' "$RUNNER_TEMP/mine.txt"
+          if [ -s "$RUNNER_TEMP/new.txt" ]; then
+            echo "new since $TAG, not compared: $(tr '\n' ' ' < "$RUNNER_TEMP/new.txt")"
+          fi
           if [ ! -s "$RUNNER_TEMP/mine.txt" ]; then
             echo "::error::this part has no crates"
             exit 1
