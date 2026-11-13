@@ -260,23 +260,32 @@ fn a_move_reads_from_a_form_body() {
 }
 
 #[test]
-fn a_move_a_native_client_posts_is_read_back_as_the_keys_of_the_page() {
-    // The ids of the page's nodes, a position from 0, and the sortable they belong to.
-    let body = b"_csrf=t&_sortable=board&item=board-item-12&from=board-list-ready-items&to=board-list-review-items&before=board-item-9&position=2";
+fn a_move_a_native_client_posts_is_read_in_the_protocols_words() {
+    // Keys for the rows and the lists, and a position counted from 0.
+    let body = b"_csrf=t&item=12&from=ready&to=review&before=9&position=2";
     let mv = Move::from_form(body).unwrap();
-    assert_eq!(mv.item, "12");
-    assert_eq!(
-        (mv.from_list.as_str(), mv.to_list.as_str()),
-        ("ready", "review")
-    );
-    assert_eq!(mv.before.as_deref(), Some("9"));
-    // At the end there is no item to go before: the place is the number, which a form counts from 1.
-    let body = b"_sortable=board&item=board-item-12&from=board-list-ready-items&to=board-list-ready-items&before=&position=4";
+    assert_eq!(mv, Move::new("12", "ready", "review").before("9"));
+    // At the end there is no row to go before: the place is the number, which a form counts from 1.
+    let body = b"item=12&from=ready&to=ready&before=&position=4";
     let mv = Move::from_form(body).unwrap();
     assert_eq!((mv.before, mv.position), (None, Some(5)));
-    // An id that is not of this sortable is no move.
-    let body = b"_sortable=board&item=other-item-12&from=board-list-a-items&to=board-list-b-items";
-    assert_eq!(Move::from_form(body), Err(MoveError::Field("item")));
+    // The names are the protocol's.
+    #[cfg(feature = "native-preview")]
+    {
+        use navree_native::node::Reorder;
+        let body = format!(
+            "{}=12&{}=a&{}=b&{}=&{}=0",
+            Reorder::ITEM,
+            Reorder::FROM,
+            Reorder::TO,
+            Reorder::BEFORE,
+            Reorder::POSITION
+        );
+        assert_eq!(Move::from_form(body.as_bytes()).unwrap().position, Some(1));
+    }
+    // A form's own position counts from 1.
+    let mv = Move::from_form(b"item=12&from_list=a&to_list=a&position=3").unwrap();
+    assert_eq!(mv.position, Some(3));
 }
 
 #[test]

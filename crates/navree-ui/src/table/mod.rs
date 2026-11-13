@@ -66,6 +66,8 @@ pub use query::{
 };
 pub use region::Region;
 pub use saved::{SavedView, ViewOp, ViewPost};
+#[cfg(feature = "native-preview")]
+pub(crate) use selection::ALL_FIELD;
 pub use selection::{BulkMode, BulkRefusal, BulkRequest, MAX_SELECTED_IDS};
 pub use view::{
     BulkAction, DataTable, FilterMode, FilterOption, RowAction, TableData, TableDensity,

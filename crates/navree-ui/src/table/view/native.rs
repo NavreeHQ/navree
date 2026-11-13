@@ -58,6 +58,9 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
         let mut text = String::new();
         for row in self.data.rows {
             let key = row.key();
+            let is_open = key
+                .as_ref()
+                .is_some_and(|key| state.open.iter().any(|open| open == key));
             let mut cells: Vec<Node> = Vec::with_capacity(state.cols.len() + hidden.len() + 3);
             if self.selectable() {
                 text.clear();
@@ -125,6 +128,8 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
             rows.push(
                 el("tr")
                     .attr_opt("data-key", key.clone())
+                    // Whether the page opened its detail: where it starts for a client.
+                    .flag("data-open", is_open)
                     .attr_opt(
                         "data-ui-row-href",
                         self.row_href.as_ref().map(|href| href(row)),

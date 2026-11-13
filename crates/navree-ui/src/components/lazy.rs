@@ -517,6 +517,7 @@ impl FromRequestParts for LazyQuery {
 pub struct LazyPage {
     items: Vec<Node>,
     more: bool,
+    joins: LazyEnd,
     since: Option<String>,
     gone: Vec<String>,
 }
@@ -527,6 +528,7 @@ impl LazyPage {
         Self {
             items: items.into_iter().map(Node::from).collect(),
             more,
+            joins: LazyEnd::End,
             since: None,
             gone: Vec::new(),
         }
@@ -544,6 +546,7 @@ impl LazyPage {
         Self {
             items: items.into_iter().map(Node::from).collect(),
             more: false,
+            joins: LazyEnd::End,
             since: Some(clip(since.as_ref())),
             gone: gone.into_iter().map(|key| clip(&key)).collect(),
         }
@@ -553,6 +556,23 @@ impl LazyPage {
     /// for [changes](Self::changes), more changes after the revision this answer gives.
     pub fn more(mut self, more: bool) -> Self {
         self.more = more;
+        self
+    }
+
+    /// Which end of the list a new item among [changes](Self::changes) joins, when the
+    /// list has none of its key: the end it follows its stream at. A browser's list
+    /// places a live item by its cursor; a native client's is told here. The end is the
+    /// bottom unless said.
+    ///
+    /// ```
+    /// use navree_ui::{LazyEnd, LazyItem, LazyPage, Text};
+    ///
+    /// let page = LazyPage::changes([LazyItem::new("9", "0009", Text::new("Nine"))], "r9", [])
+    ///     .joins(LazyEnd::Start);
+    /// # let _ = page;
+    /// ```
+    pub fn joins(mut self, end: LazyEnd) -> Self {
+        self.joins = end;
         self
     }
 
@@ -575,6 +595,7 @@ impl IntoResponse for LazyPage {
             self.more,
             self.since.as_deref(),
             &self.gone,
+            self.joins == LazyEnd::Start,
         ) {
             return response;
         }

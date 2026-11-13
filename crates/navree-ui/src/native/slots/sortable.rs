@@ -34,12 +34,13 @@ pub(crate) fn sortable(cx: &mut Cx, element: &Element) -> Read {
         return fail("a sortable with no lists");
     };
     hooks(lists, &[])?;
+    let mover = mover_of(&elements(lists)?)?;
     let mut sections = Vec::new();
     for list in elements(lists)? {
         if slot(list).as_deref() != Some("sortable-list") {
             return fail("something that is not a list in a sortable");
         }
-        sections.push(list_of(cx, list, id(element).as_deref())?);
+        sections.push(list_of(cx, list, id(element).as_deref(), mover.as_ref())?);
     }
     let board = attr(element, "data-layout").as_deref() == Some("board");
     Ok(vec![if board {
@@ -58,7 +59,12 @@ pub(crate) fn sortable(cx: &mut Cx, element: &Element) -> Read {
 }
 
 /// One list: its title and count, its items, what stands under them.
-fn list_of(cx: &mut Cx, list: &Element, root: Option<&str>) -> Read<N> {
+fn list_of(
+    cx: &mut Cx,
+    list: &Element,
+    root: Option<&str>,
+    mover: Option<&(String, Vec<navree_native::action::Pair>)>,
+) -> Read<N> {
     hooks(list, &[])?;
     let mut parts = Parts::of(list);
     let header = parts.slot("sortable-list-header");
@@ -87,7 +93,7 @@ fn list_of(cx: &mut Cx, list: &Element, root: Option<&str>) -> Read<N> {
     let mut list_node = n::List {
         id: id(items),
         children: rows,
-        reorder: reorder_of(list, items, root)?,
+        reorder: reorder_of(list, items, root, mover)?,
         ..n::List::default()
     };
     let mut after = Vec::new();
@@ -117,70 +123,82 @@ fn list_of(cx: &mut Cx, list: &Element, root: Option<&str>) -> Read<N> {
     Ok(N::Section(section))
 }
 
-/// The word a move posted by a client carries to say which sortable the ids it
-/// names belong to.
-pub(crate) const SORTABLE_WORD: &str = "_sortable";
-
-/// How the rows of a list are dragged: where a move is posted, which lists take
-/// the rows, how many a list takes and what goes with a move. `None` when no row
-/// of the list moves, or when a key is not what its id says: a move names the
-/// ids of the page, and the server gives each its key back only if the id is
-/// built from it.
-fn reorder_of(list: &Element, items: &Element, root: Option<&str>) -> Read<Option<n::Reorder>> {
-    let (Some(root), Some(key)) = (root, attr(list, "data-list")) else {
-        return Ok(None);
-    };
-    if id(list).as_deref() != Some(format!("{root}-list-{key}").as_str()) {
-        return Ok(None);
-    }
-    let mut found: Option<&Element> = None;
-    for item in elements(items)? {
-        let Some(item_key) = attr(item, "data-key") else {
-            return Ok(None);
+/// Where a move is posted and what goes with it, as the page's move form says: the same
+/// for every list of the sortable, so a list with no rows (an empty column) takes a drop
+/// too. `None` when no row can move (the page gave no address, or every row is locked).
+fn mover_of(lists: &[&Element]) -> Read<Option<(String, Vec<navree_native::action::Pair>)>> {
+    for list in lists {
+        let Some(items) = elements(list)?
+            .into_iter()
+            .find(|part| slot(part).as_deref() == Some("sortable-items"))
+        else {
+            continue;
         };
-        if id(item).as_deref() != Some(format!("{root}-item-{item_key}").as_str()) {
-            return Ok(None);
-        }
-        if found.is_none() {
+        for item in elements(items)? {
             for part in elements(item)? {
-                if slot(part).as_deref() == Some("sortable-move") {
-                    found = elements(part)?
-                        .into_iter()
-                        .find(|form| slot(form).as_deref() == Some("sortable-form"));
+                if slot(part).as_deref() != Some("sortable-move") {
+                    continue;
                 }
+                let Some(form) = elements(part)?
+                    .into_iter()
+                    .find(|form| slot(form).as_deref() == Some("sortable-form"))
+                else {
+                    continue;
+                };
+                let mut hidden = Vec::new();
+                hidden_in(form.child_nodes(), &mut hidden);
+                // What goes with each move is what the form holds besides the move itself.
+                let fields = hidden
+                    .into_iter()
+                    .filter(|field| {
+                        !matches!(
+                            field.name.as_str(),
+                            "item" | "from_list" | "before" | "after"
+                        )
+                    })
+                    .map(|field| navree_native::action::Pair {
+                        name: field.name,
+                        value: field.value,
+                    })
+                    .collect();
+                return Ok(Some((
+                    attr(form, "action")
+                        .map(Cow::into_owned)
+                        .unwrap_or_default(),
+                    fields,
+                )));
             }
         }
     }
-    let Some(form) = found else {
+    Ok(None)
+}
+
+/// How the rows of a list are dragged: where a move is posted, the list's own key, which
+/// lists take the rows and how many a list takes. A move names the rows and the lists by
+/// their keys, which the page's move form names them by too. `None` when no row of the
+/// list has an id to be moved by.
+fn reorder_of(
+    list: &Element,
+    items: &Element,
+    root: Option<&str>,
+    mover: Option<&(String, Vec<navree_native::action::Pair>)>,
+) -> Read<Option<n::Reorder>> {
+    let (Some(root), Some(key), Some((href, fields))) = (root, attr(list, "data-list"), mover)
+    else {
         return Ok(None);
     };
-    let mut hidden = Vec::new();
-    hidden_in(form.child_nodes(), &mut hidden);
-    let mut fields: Vec<navree_native::action::Pair> = hidden
-        .into_iter()
-        .filter(|field| {
-            !matches!(
-                field.name.as_str(),
-                "item" | "from_list" | "before" | "after"
-            )
-        })
-        .map(|field| navree_native::action::Pair {
-            name: field.name,
-            value: field.value,
-        })
-        .collect();
-    fields.push(navree_native::action::Pair {
-        name: SORTABLE_WORD.to_owned(),
-        value: root.to_owned(),
-    });
+    // A row with no id can't be moved.
+    for item in elements(items)? {
+        if id(item).is_none() {
+            return Ok(None);
+        }
+    }
     Ok(Some(n::Reorder {
-        href: attr(form, "action")
-            .map(Cow::into_owned)
-            .unwrap_or_default(),
+        href: href.clone(),
+        key: Some(key.into_owned()),
         group: Some(root.to_owned()),
         limit: number(list, "data-limit"),
-        fields,
-        ..n::Reorder::default()
+        fields: fields.clone(),
     }))
 }
 
@@ -268,6 +286,7 @@ fn row_of(cx: &mut Cx, item: &Element) -> Read<N> {
     hooks(body, &[])?;
     let mut row = n::Row {
         id: id(item),
+        key: attr(item, "data-key").map(Cow::into_owned),
         title: name.clone(),
         ..n::Row::default()
     };
@@ -550,32 +569,28 @@ mod tests {
         let [todo, done] = sections(&node) else {
             panic!("not two lists");
         };
-        let expected = |limit| {
+        let expected = |limit, key: &str| {
             Some(n::Reorder {
                 href: "/cards/move".into(),
                 group: Some("board".into()),
                 limit,
-                key: None,
-                fields: vec![
-                    Pair {
-                        name: "_csrf".into(),
-                        value: "tok".into(),
-                    },
-                    Pair {
-                        name: "_sortable".into(),
-                        value: "board".into(),
-                    },
-                ],
+                key: Some(key.into()),
+                fields: vec![Pair {
+                    name: "_csrf".into(),
+                    value: "tok".into(),
+                }],
             })
         };
-        assert_eq!(list_of_section(todo).reorder, expected(Some(2)));
-        // The lists are those of one sortable, the first with an item that can move says how.
-        assert_eq!(
-            list_of_section(todo).id.as_deref(),
-            Some("board-list-todo-items")
-        );
-        // A list with no rows has no form to read it from; a sortable that can't post moves nothing.
-        assert_eq!(list_of_section(done).reorder, None);
+        // The lists are named by the keys the page knows them by, and so are the rows.
+        assert_eq!(list_of_section(todo).reorder, expected(Some(2), "todo"));
+        assert_eq!(list_of_section(todo).children[0].id(), Some("board-item-c1"));
+        let N::Row(card) = &list_of_section(todo).children[0] else {
+            panic!("not a row");
+        };
+        assert_eq!(card.key.as_deref(), Some("c1"));
+        // A column with no cards takes a drop too: the page's one move form says how.
+        assert_eq!(list_of_section(done).reorder, expected(None, "done"));
+        // A sortable that can't post moves nothing.
         let node = read(
             Sortable::new("board", "Cards")
                 .list(SortList::new("todo", "To do").item(SortItem::new("c1", "Fix login"))),
@@ -584,17 +599,24 @@ mod tests {
     }
 
     #[test]
-    fn a_key_the_page_cannot_give_back_from_an_id_leaves_the_row_to_its_form() {
+    fn a_key_that_is_not_plain_is_still_the_rows_and_the_lists_key() {
         let node = read(
-            Sortable::new("board", "Cards")
-                .post("/cards/move")
-                .list(SortList::new("todo", "To do").item(SortItem::new("a card", "Fix login"))),
+            Sortable::new("board", "Cards").post("/cards/move").list(
+                SortList::new("to do", "To do").item(SortItem::new("a card", "Fix login")),
+            ),
         );
         let list = list_of_section(&sections(&node)[0]);
-        assert_eq!(list.reorder, None);
+        assert_eq!(
+            list.reorder.as_ref().and_then(|reorder| reorder.key.as_deref()),
+            Some("to do")
+        );
         let [N::Row(row)] = list.children.as_slice() else {
             panic!("not one row");
         };
+        // The id names the row on the screen; the key is the record's own.
+        assert_eq!(row.key.as_deref(), Some("a card"));
+        assert!(row.id.as_deref().is_some_and(|id| id != "a card"));
+        // The page's own form stays under the row, for a person with no drag.
         assert!(
             row.detail
                 .iter()

@@ -83,17 +83,18 @@ pub(crate) fn lazy_list(cx: &mut Cx, element: &Element) -> Read {
         .filter(|link| !has(link, "hidden"))
         .and_then(|link| attr(link, "href").map(Cow::into_owned));
     let live = attr(element, "data-ui-live-src");
-    // A list at a revision asks what changed since it, whenever its stream says: new rows
-    // join the end it follows the stream at.
+    // A list at a revision asks what changed since it, whenever its stream says. The answer
+    // says where new rows join.
     let revision = attr(items, "data-ui-since").map(Cow::into_owned);
-    if let (Some(live), Some(since), Some(list_id), Some(src)) =
-        (&live, &revision, id(element), attr(element, "data-ui-src"))
-    {
-        let at = if attr(element, "data-ui-live-at").as_deref() == Some("start") {
-            "start"
-        } else {
-            "end"
-        };
+    // A row with no id could not be merged into: such a list is fetched again whole.
+    let merges = rows.iter().all(|row| row.id().is_some());
+    if let (true, Some(live), Some(since), Some(list_id), Some(src)) = (
+        merges,
+        &live,
+        &revision,
+        id(element),
+        attr(element, "data-ui-src"),
+    ) {
         let joiner = if src.contains('?') { '&' } else { '?' };
         let mut children = vec![N::List(n::List {
             id: Some(list_id),
@@ -101,7 +102,7 @@ pub(crate) fn lazy_list(cx: &mut Cx, element: &Element) -> Read {
             more,
             before: rows_before,
             since: Some(since.clone()),
-            changes: Some(format!("{src}{joiner}dir=live&at={at}")),
+            changes: Some(format!("{src}{joiner}dir=live")),
             live: Some(n::Live {
                 src: live.to_string(),
                 event: attr(element, "data-ui-live-event").map(Cow::into_owned),
@@ -243,7 +244,7 @@ mod tests {
         assert_eq!(list.since.as_deref(), Some("r7"));
         assert_eq!(
             list.changes.as_deref(),
-            Some("/inbox/rows?dir=live&at=start")
+            Some("/inbox/rows?dir=live")
         );
         assert_eq!(
             list.live,

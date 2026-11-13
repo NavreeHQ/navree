@@ -13,6 +13,7 @@ pub(crate) mod feed;
 mod fold;
 mod lazy;
 mod menu;
+mod phone;
 mod select;
 mod sortable;
 mod split;
@@ -78,6 +79,7 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
         "radio-group" => (radio_group, &[]),
         "input" | "checkbox" | "switch" | "native-select" | "textarea" => (control, CONTROL_HOOKS),
         "input-group" => (input_group, &[]),
+        "phone-input" => (phone::phone, phone::HOOKS),
         "fact-grid" => (fact_grid, &[]),
         "fact-card" => (
             |cx, element| {
@@ -1202,7 +1204,8 @@ fn events(cx: &mut Cx, list: &Element) -> Read<Vec<n::Moment>> {
             icon: glyph,
             tone: tone_of(event),
             detail,
-            ..n::Moment::default()
+            // What was set aside (work a machine did) is drawn quieter.
+            muted: attr(event, "data-state").as_deref() == Some("muted"),
         });
     }
     Ok(moments)
@@ -1694,6 +1697,49 @@ mod tests {
     }
 
     #[test]
+    fn what_a_sheet_and_a_dialog_foot_with_are_their_own_actions_with_their_roles() {
+        let N::Sheet(sheet) = read(
+            Sheet::new("order", "Order CS-20481")
+                .body(Text::new("Inside"))
+                .footer((
+                    Button::primary("Mark as packed").href("/orders/1/pack"),
+                    Button::outline("Close").on_click(crate::Cmd::close("order")),
+                )),
+        ) else {
+            panic!("not a sheet");
+        };
+        // The body holds what the sheet says; the buttons are its actions.
+        assert_eq!(sheet.children, [text_node("Inside")]);
+        let roles: Vec<(&str, n::Role)> = sheet
+            .actions
+            .iter()
+            .map(|node| match node {
+                N::Button(button) => (button.label.as_str(), button.role),
+                other => panic!("not a button: {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            roles,
+            [
+                ("Mark as packed", n::Role::Primary),
+                ("Close", n::Role::Cancel)
+            ]
+        );
+        let N::Dialog(dialog) = read(
+            Dialog::new("refund", "Refund")
+                .body(Text::new("How much?"))
+                .footer(Button::destructive("Refund")),
+        ) else {
+            panic!("not a dialog");
+        };
+        assert_eq!(dialog.children, [text_node("How much?")]);
+        assert!(matches!(
+            dialog.actions.as_slice(),
+            [N::Button(button)] if button.role == n::Role::Destructive
+        ));
+    }
+
+    #[test]
     fn a_sheet_that_holds_a_form_is_a_task_and_any_other_is_a_glance() {
         let form = el("form")
             .slot("form")
@@ -1920,6 +1966,30 @@ mod tests {
         assert_eq!(moments[2].state, Some(n::RowState::Current));
         assert_eq!(moments[2].time.as_deref(), Some("Next"));
         assert_eq!(moments[3].state, Some(n::RowState::Upcoming));
+    }
+
+    #[test]
+    fn work_a_machine_did_is_a_muted_moment() {
+        let node = read(
+            Timeline::new("steps", "Steps").events([
+                TimelineEvent::new("Packed by hand").at(1_793_773_800),
+                TimelineEvent::new("Label printed").at(1_793_773_900).muted(),
+            ]),
+        );
+        let mut muted: Vec<(&str, bool)> = Vec::new();
+        let mut stack = vec![&node];
+        while let Some(part) = stack.pop() {
+            if let N::Timeline(timeline) = part {
+                muted.extend(
+                    timeline
+                        .items
+                        .iter()
+                        .map(|moment| (moment.title.as_str(), moment.muted)),
+                );
+            }
+            stack.extend(part.children().into_iter().rev());
+        }
+        assert_eq!(muted, [("Packed by hand", false), ("Label printed", true)]);
     }
 
     #[test]

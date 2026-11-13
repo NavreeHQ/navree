@@ -550,6 +550,7 @@ pub(crate) fn lazy_page(
     more: bool,
     since: Option<&str>,
     gone: &[String],
+    joins_start: bool,
 ) -> Option<Response> {
     let request = scope::native()?;
     let target = request.region.clone().unwrap_or_default();
@@ -598,18 +599,12 @@ pub(crate) fn lazy_page(
         ));
     }
     let ops = if let Some(since) = since {
-        // Where a new row joins is the end the list follows its stream at, which its
-        // address for changes says.
-        let at = query
-            .split('&')
-            .find_map(|pair| pair.strip_prefix("at="))
-            .map_or(navree_native::op::Edge::End, |at| {
-                if at == "start" {
-                    navree_native::op::Edge::Start
-                } else {
-                    navree_native::op::Edge::End
-                }
-            });
+        // The answer says where a row that is new joins.
+        let at = if joins_start {
+            navree_native::op::Edge::Start
+        } else {
+            navree_native::op::Edge::End
+        };
         vec![navree_native::Op::Merge {
             target,
             nodes,
@@ -755,18 +750,24 @@ fn unpercent(value: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-/// The rows after the ones a client has, when that is what it asked: the page
-/// is the table's page it was sent the address of (the address says which
-/// table), and the answer is its rows as an op that adds them, with the address
-/// of the rows after them. `None` for any other request, and when the page did
-/// not read whole or holds no such table: the client is then given the page.
+/// The rows after, or before, the ones a client has, when that is what it asked: the
+/// page is the table's page it was sent the address of (the address says which table
+/// and which end), and the answer is its rows as an op that adds them, with the address
+/// of the rows beyond them: after the last for rows that join the end, before the first
+/// (or none) for rows that join the start. `None` for any other request, and when the
+/// page did not read whole or holds no such table: the client is then given the page.
 fn rows_after(page: &Page, request: &scope::Request) -> Option<(Envelope, Answered)> {
     use navree_native::Op as O;
     let query = request.url.split_once('?')?.1;
-    let region = query.split('&').find_map(|pair| {
+    let (start, region) = query.split('&').find_map(|pair| {
         let (name, value) = pair.split_once('=')?;
-        (name == super::table::ROWS_WORD).then(|| unpercent(value))
-    })??;
+        match name {
+            super::table::ROWS_WORD => Some((false, unpercent(value))),
+            super::table::ROWS_BEFORE_WORD => Some((true, unpercent(value))),
+            _ => None,
+        }
+    })?;
+    let region = region?;
     if !page.misses.is_empty() {
         return None;
     }
@@ -784,12 +785,24 @@ fn rows_after(page: &Page, request: &scope::Request) -> Option<(Envelope, Answer
     if !readable {
         return None;
     }
-    let mut ops = vec![O::Rows {
-        target,
-        rows: table.rows.clone(),
-        at: navree_native::op::Edge::End,
-        more: table.more.clone(),
-        prev: None,
+    let mut ops = vec![if start {
+        // Rows that join the start move the cursor before the table back with them; an
+        // empty address says there is none before. The cursor after stays as it was.
+        O::Rows {
+            target,
+            rows: table.rows.clone(),
+            at: navree_native::op::Edge::Start,
+            more: None,
+            prev: Some(table.prev.clone().unwrap_or_default()),
+        }
+    } else {
+        O::Rows {
+            target,
+            rows: table.rows.clone(),
+            at: navree_native::op::Edge::End,
+            more: table.more.clone(),
+            prev: None,
+        }
     }];
     ops.extend(page.ops.iter().cloned());
     Some((

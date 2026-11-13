@@ -970,7 +970,7 @@ impl Cx {
             .map(Cow::into_owned)
             .unwrap_or_default();
         let text = |kind: i::TextKind| {
-            i::Input::Text(i::TextInput {
+            let mut input = i::TextInput {
                 kind,
                 value: value.clone(),
                 placeholder: attr(element, "placeholder").map(Cow::into_owned),
@@ -983,7 +983,11 @@ impl Cx {
                     .map(Cow::into_owned),
                 readonly: has(element, "readonly"),
                 ..i::TextInput::default()
-            })
+            };
+            if matches!(kind, i::TextKind::Number | i::TextKind::Decimal) {
+                plain_number(&mut input);
+            }
+            i::Input::Text(input)
         };
         let date = |kind: i::DateKind| {
             i::Input::Date(i::DateInput {
@@ -1503,6 +1507,68 @@ pub(crate) fn commands(json: &str) -> Read<Vec<Command>> {
         });
     }
     Ok(out)
+}
+
+/// A number as a number keypad types it: digits, a `-` before them and a `.` for the
+/// decimal point, with no grouping, and the unit the page wrote around it (`₹`, `kg`)
+/// apart: `(before, digits, after)`. `None` when the text is not a number written with
+/// the web's `.` and grouping marks (`12,500.50`, `₹ 1,24,050`).
+pub(crate) fn plain_digits(text: &str) -> Option<(String, String, String)> {
+    let text = text.trim();
+    let wanted = |c: char| c.is_ascii_digit() || c == '.';
+    let first = text.find(wanted)?;
+    let last = text.rfind(wanted)? + 1;
+    // A sign stands right before the digits.
+    let start = if first > 0 && text[..first].ends_with(['-', '+']) {
+        first - 1
+    } else {
+        first
+    };
+    let (before, middle, after) = (&text[..start], &text[start..last], &text[last..]);
+    // A second sign is no number.
+    if before.trim_end().ends_with(['-', '+']) {
+        return None;
+    }
+    let mut digits = String::with_capacity(middle.len());
+    for c in middle.chars() {
+        match c {
+            ',' | '\'' | '_' | ' ' | '\u{a0}' | '\u{202f}' | '\u{2009}' => {}
+            c if c.is_ascii_digit() || matches!(c, '.' | '-' | '+') => digits.push(c),
+            _ => return None,
+        }
+    }
+    let body = digits.trim_start_matches(['-', '+']);
+    if digits.len() - body.len() > 1
+        || body.is_empty()
+        || body == "."
+        || body.matches('.').count() > 1
+        || body.contains(['-', '+'])
+    {
+        return None;
+    }
+    let digits = digits.trim_start_matches('+').to_owned();
+    Some((before.trim().to_owned(), digits, after.trim().to_owned()))
+}
+
+/// Writes the value, limits and step of a number or decimal control as plain digits;
+/// a unit the value was written with goes to the prefix or suffix.
+fn plain_number(input: &mut i::TextInput) {
+    if let Some((before, digits, after)) = plain_digits(&input.value) {
+        input.value = digits;
+        if input.prefix.is_none() && !before.is_empty() {
+            input.prefix = Some(before);
+        }
+        if input.suffix.is_none() && !after.is_empty() {
+            input.suffix = Some(after);
+        }
+    }
+    for limit in [&mut input.min, &mut input.max, &mut input.step] {
+        if let Some(text) = limit.as_deref()
+            && let Some((_, digits, _)) = plain_digits(text)
+        {
+            *limit = Some(digits);
+        }
+    }
 }
 
 /// The state an attribute a command sets stands for.
@@ -2117,6 +2183,62 @@ mod tests {
 
     fn missed(node: impl Into<Node>) -> Vec<String> {
         lower(&node.into()).why()
+    }
+
+    #[test]
+    fn a_number_is_written_as_a_number_keypad_types_it() {
+        let plain = |text: &str| plain_digits(text);
+        let says = |before: &str, digits: &str, after: &str| {
+            Some((before.to_owned(), digits.to_owned(), after.to_owned()))
+        };
+        assert_eq!(plain("7,848.00"), says("", "7848.00", ""));
+        assert_eq!(plain("1,24,050"), says("", "124050", ""));
+        assert_eq!(plain("₹ 1,24,050.5"), says("₹", "124050.5", ""));
+        assert_eq!(plain("12 kg"), says("", "12", "kg"));
+        assert_eq!(plain("-3.5"), says("", "-3.5", ""));
+        assert_eq!(plain("+3"), says("", "3", ""));
+        assert_eq!(plain(".5"), says("", ".5", ""));
+        assert_eq!(plain(" 42 "), says("", "42", ""));
+        for not in ["", "kg", "1.2.3", "1 2a3", "--1", "1-2", "."] {
+            assert_eq!(plain(not), None, "{not}");
+        }
+    }
+
+    #[test]
+    fn a_number_control_carries_plain_digits_and_its_unit_as_a_prefix_or_suffix() {
+        let field = |node: Node| match read(node) {
+            N::Field(field) => field,
+            other => panic!("not a field: {other:?}"),
+        };
+        let amount = field(
+            el("input")
+                .attr("type", "text")
+                .attr("inputmode", "decimal")
+                .attr("name", "amount")
+                .attr("value", "₹ 1,24,050.50")
+                .attr("min", "1,000")
+                .into(),
+        );
+        let i::Input::Text(typed) = &amount.input else {
+            panic!("not text");
+        };
+        assert_eq!(typed.kind, i::TextKind::Decimal);
+        assert_eq!(typed.value, "124050.50");
+        assert_eq!(typed.prefix.as_deref(), Some("₹"));
+        assert_eq!(typed.min.as_deref(), Some("1000"));
+        // A plain text field keeps what it holds, grouping marks and all.
+        let note = field(
+            el("input")
+                .attr("type", "text")
+                .attr("name", "note")
+                .attr("value", "1,000 units")
+                .into(),
+        );
+        let i::Input::Text(typed) = &note.input else {
+            panic!("not text");
+        };
+        assert_eq!(typed.value, "1,000 units");
+        assert_eq!(typed.prefix, None);
     }
 
     #[test]

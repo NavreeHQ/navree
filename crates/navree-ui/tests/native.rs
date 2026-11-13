@@ -28,7 +28,7 @@ use navree_ui::{
     Options, Reply, Sheet, Shell, TablePage, TableQuery, TableRow, Text, ToastTone, UiModule,
     UserMenu, Validate, View, assets, el, icons, render,
 };
-use navree_ui::{LazyAsk, LazyItem, LazyPage, LazyQuery};
+use navree_ui::{LazyAsk, LazyEnd, LazyItem, LazyPage, LazyQuery};
 use serde::Deserialize;
 
 const NATIVE: &str = "x-navree-native";
@@ -115,7 +115,8 @@ fn a_form_view_reads_as_a_form_of_fields_with_their_labels_and_help() {
         panic!("not typed");
     };
     assert_eq!(typed.kind, TextKind::Decimal);
-    assert_eq!(typed.value, "7,848.00");
+    // A decimal keypad can't type a grouping mark: the value is plain digits.
+    assert_eq!(typed.value, "7848.00");
     assert_eq!(reason.label.as_deref(), Some("Reason"));
     let Input::Choice(choice) = &reason.input else {
         panic!("not a choice");
@@ -497,7 +498,15 @@ impl Controller for Pages {
                         })
                     };
                     match query.ask() {
-                        LazyAsk::Since(_) => LazyPage::changes(items(1), "r9", ["7".to_owned()]),
+                        LazyAsk::Since(since) => {
+                            let page = LazyPage::changes(items(1), "r9", ["7".to_owned()]);
+                            // The list says where a new row joins.
+                            if since == "r2" {
+                                page.joins(LazyEnd::Start)
+                            } else {
+                                page
+                            }
+                        }
                         LazyAsk::Before(_) => LazyPage::new(items(1), false),
                         _ => LazyPage::new(items(3), true),
                     }
@@ -713,6 +722,31 @@ async fn a_table_page_asked_for_by_a_native_client_is_native_with_its_rows() {
         more.as_deref()
             .is_some_and(|more| more.ends_with("&_rows=orders")),
         "{more:?}"
+    );
+    // The rows before join the start: the cursor before them moves back with them, and
+    // the cursor after stays as it was.
+    let response = app
+        .client()
+        .get("/orders?page=2&_rows_before=orders")
+        .header(NATIVE, "1")
+        .header(CLIENT, PHONE)
+        .send()
+        .await;
+    let before: Envelope = serde_json::from_str(&response.text()).expect("an envelope");
+    let [
+        NativeOp::Rows {
+            at, more, prev, ..
+        },
+    ] = before.ops.as_slice()
+    else {
+        panic!("not one op of rows: {:?}", before.ops);
+    };
+    assert_eq!(*at, navree_native::op::Edge::Start);
+    assert_eq!(*more, None);
+    assert!(
+        prev.as_deref()
+            .is_some_and(|prev| prev.ends_with("&_rows_before=orders") || prev.is_empty()),
+        "{prev:?}"
     );
     // Asked as a browser asks, the address is the page it always was.
     let html = app.client().get("/orders?page=2").send().await;
@@ -1347,7 +1381,7 @@ async fn a_lazy_list_page_is_rows_for_a_native_client() {
     let (_, live) = ask_native(
         &app,
         Method::GET,
-        "/things/rows?dir=live&at=start&since=r1",
+        "/things/rows?dir=live&since=r2",
         &region,
         "",
     )
@@ -2019,7 +2053,11 @@ fn a_data_table_with_a_box_a_menu_and_a_detail_reads_as_the_parts_it_has() {
         Some(n::Selection {
             name: "ids".into(),
             form: Some("orders-b".into()),
-            ..n::Selection::default()
+            across: Some(n::Across {
+                name: "_all".into(),
+                value: "5".into(),
+                total: Some(5)
+            }),
         })
     );
     // The columns: the four shown. The box, the control for the detail and the menu of a
@@ -2059,6 +2097,111 @@ fn a_data_table_with_a_box_a_menu_and_a_detail_reads_as_the_parts_it_has() {
             }],
         })
     );
+}
+
+#[test]
+fn a_form_in_a_cell_stays_the_rows_inline_edit() {
+    let page = TestNative::build(phone(), || {
+        let query: TableQuery<OrderRow, NoFilter> = TableQuery::parse("/orders", "");
+        let page = TablePage::new(vec![order(1, "open")], 1);
+        View::new("Orders").body(orders_table(&query, &page).cell("total", |row| {
+            el("form")
+                .attr("method", "post")
+                .attr("action", format!("/orders/{}/status", row.id))
+                .attr("id", format!("status-{}", row.id))
+                .children((
+                    el("input")
+                        .attr("type", "hidden")
+                        .attr("name", "_csrf")
+                        .attr("value", "tok"),
+                    el("input")
+                        .attr("type", "text")
+                        .attr("name", "status")
+                        .attr("value", row.status.clone()),
+                    Button::new("Save").submit(),
+                ))
+        }))
+    });
+    assert!(page.is_native(), "{:?}", page.page().misses);
+    let Some(N::Region(region)) = page.find("orders") else {
+        panic!("no table");
+    };
+    let [N::Table(table)] = region.children.as_slice() else {
+        panic!("not one table");
+    };
+    // The cell holds the form, with its fields and its submit, where the page put it.
+    let N::Form(edit) = &table.rows[0].cells[2] else {
+        panic!("not a form: {:?}", table.rows[0].cells[2]);
+    };
+    assert_eq!(edit.action, "/orders/1/status");
+    assert_eq!(edit.method, n::Method::Post);
+    assert!(edit.children.iter().any(|node| matches!(node, N::Field(field) if field.name == "status")));
+    assert!(edit.children.iter().any(|node| matches!(node, N::Button(button) if button.action == Some(Action::submit()))));
+}
+
+/// The orders with a box that is switched off for the ones that are done.
+fn picky_view() -> View {
+    let query: TableQuery<OrderRow, NoFilter> = TableQuery::parse("/orders", "open=2");
+    let page = TablePage::new(vec![order(1, "open"), order(2, "completed")], 5);
+    View::new("Orders").body(
+        full_table(&query, &page).selectable_if(|row| row.status == "open"),
+    )
+}
+
+#[test]
+fn what_the_page_opened_and_what_cannot_be_chosen_are_said_of_the_rows() {
+    let page = TestNative::build(phone(), || full_view("open=2"));
+    assert!(page.is_native(), "{:?}", page.page().misses);
+    let Some(N::Region(region)) = page.find("orders") else {
+        panic!("no table");
+    };
+    let [N::Form(_), N::Table(table)] = region.children.as_slice() else {
+        panic!("not a form and a table");
+    };
+    // The page opened the second order's detail; the first is shut.
+    assert_eq!(
+        table.rows.iter().map(|row| row.open).collect::<Vec<_>>(),
+        [false, true]
+    );
+    // Every record that matches can be chosen, and the table says how many that is.
+    let select = table.select.as_ref().expect("a selection");
+    assert_eq!(
+        select.across,
+        Some(n::Across {
+            name: "_all".into(),
+            value: "5".into(),
+            total: Some(5)
+        })
+    );
+    // A box switched off is a row that cannot be chosen; the table then holds only the
+    // rows it has, and offers no choice of all.
+    let page = TestNative::build(phone(), picky_view);
+    assert!(page.is_native(), "{:?}", page.page().misses);
+    let Some(N::Region(region)) = page.find("orders") else {
+        panic!("no table");
+    };
+    let [N::Form(_), N::Table(table)] = region.children.as_slice() else {
+        panic!("not a form and a table");
+    };
+    assert_eq!(
+        table.rows.iter().map(|row| row.unchoosable).collect::<Vec<_>>(),
+        [false, true]
+    );
+    assert_eq!(table.select.as_ref().and_then(|select| select.across.as_ref()), None);
+}
+
+#[test]
+fn a_native_clients_all_is_read_as_all_that_match_and_how_many_it_was_told() {
+    use navree_ui::table::BulkMode;
+    let request = BulkRequest::<OrderRow>::parse(b"action=archive&_all=5&_path=/orders&_q=")
+        .expect("a request");
+    assert_eq!(request.mode(), &BulkMode::All);
+    assert_eq!(request.expected(), Some(5));
+    // A count that is no number is no choice of all.
+    assert!(BulkRequest::<OrderRow>::parse(b"action=archive&_all=many&_path=/orders&_q=").is_err());
+    let ids = BulkRequest::<OrderRow>::parse(b"action=archive&ids=1&ids=2&_path=/orders&_q=")
+        .expect("a request");
+    assert_eq!(ids.mode(), &BulkMode::Ids);
 }
 
 #[test]

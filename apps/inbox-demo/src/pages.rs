@@ -1356,7 +1356,7 @@ impl Controller for Pages {
                     let (rows, gone, newest, more) = queries::changes(uow, &filters, me.id, since, ask.window(), now).await?;
                     let items: Vec<LazyItem> = rows.iter().map(|row| conversation_item(row, &filters, open, now, None)).collect();
                     let next = Since { rev: newest, at: now }.text();
-                    return Ok::<_, AppError>(LazyPage::changes(items, next, gone).more(more).into_response());
+                    return Ok::<_, AppError>(LazyPage::changes(items, next, gone).joins(navree::ui::LazyEnd::Start).more(more).into_response());
                 }
                 let (rows, more_after, more_before) = queries::list_page(uow, &filters, me.id, ask.ask()).await?;
                 let more = match ask.ask() {

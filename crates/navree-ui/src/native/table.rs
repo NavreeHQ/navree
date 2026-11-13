@@ -54,12 +54,16 @@ pub(crate) fn table_id(region: &str) -> String {
 /// ones a client has: its value is the id of the table's region.
 pub(crate) const ROWS_WORD: &str = "_rows";
 
-/// `href` as the address of the rows after these, which a client asks with the
-/// word that tells the server to answer with rows and not a screen.
-fn rows_href(href: String, region: &str) -> String {
+/// The same for the rows before the ones a client has.
+pub(crate) const ROWS_BEFORE_WORD: &str = "_rows_before";
+
+/// `href` as the address of rows a client adds to its table, which it asks with the
+/// word that tells the server to answer with rows and not a screen: `word` is
+/// [`ROWS_WORD`] for the rows after and [`ROWS_BEFORE_WORD`] for the rows before.
+fn rows_href(href: String, region: &str, word: &str) -> String {
     let mut out = href;
     out.push(if out.contains('?') { '&' } else { '?' });
-    out.push_str(ROWS_WORD);
+    out.push_str(word);
     out.push('=');
     out.push_str(&super::swap::percent(region));
     out
@@ -216,8 +220,8 @@ pub(crate) fn data_table(cx: &mut Cx, element: &Element) -> Read {
             let _size = end.slot("page-size");
             if let Some(pages) = end.slot("pagination") {
                 let (prev, more) = pagination(pages)?;
-                table.prev = prev;
-                table.more = more.map(|more| rows_href(more, &id));
+                table.prev = prev.map(|prev| rows_href(prev, &id, ROWS_BEFORE_WORD));
+                table.more = more.map(|more| rows_href(more, &id, ROWS_WORD));
             }
             end.done()?;
         }
@@ -235,10 +239,23 @@ pub(crate) fn data_table(cx: &mut Cx, element: &Element) -> Read {
                 let Some(form_id) = form.id.clone() else {
                     return fail("rows to choose with no form to act on them");
                 };
+                // A table that counts what matches offers every row that does, not only the
+                // ones it holds: the field says so, with how many it is.
+                let across = match (
+                    has(element, "data-can-select-all"),
+                    attr(element, "data-total").and_then(|total| total.parse::<u32>().ok()),
+                ) {
+                    (true, Some(total)) => Some(n::Across {
+                        name: crate::table::ALL_FIELD.to_owned(),
+                        value: total.to_string(),
+                        total: Some(total),
+                    }),
+                    _ => None,
+                };
                 table.select = Some(n::Selection {
                     name: choosing.unwrap_or_else(|| "ids".to_owned()),
                     form: Some(form_id),
-                    ..n::Selection::default()
+                    across,
                 });
             }
             vec![N::Form(form), N::Table(table)]
@@ -360,6 +377,7 @@ fn data_row(cx: &mut Cx, row: &Element, choosing: &mut Option<String>) -> Read<n
     let mut out = Vec::with_capacity(cells.len());
     let mut actions = Vec::new();
     let mut selected = false;
+    let mut unchoosable = false;
     for cell in cells {
         if !matches!(cell.tag(), "td" | "th") {
             return fail(format!("a <{}> among the cells of a row", cell.tag()));
@@ -375,9 +393,10 @@ fn data_row(cx: &mut Cx, row: &Element, choosing: &mut Option<String>) -> Read<n
             }
             // The box that chooses the row is the table's: the row says whether it is.
             Some("cell-select") => {
-                let (name, checked) = select_cell(cell)?;
+                let (name, checked, disabled) = select_cell(cell)?;
                 choosing.get_or_insert(name);
-                selected = checked;
+                selected = checked && !disabled;
+                unchoosable = disabled;
                 continue;
             }
             _ => {
@@ -395,14 +414,15 @@ fn data_row(cx: &mut Cx, row: &Element, choosing: &mut Option<String>) -> Read<n
         cells: out,
         actions,
         selected,
+        unchoosable,
+        open: has(row, "data-open"),
         ..n::TableRow::default()
     })
 }
 
 /// The box that chooses a row: the name its id is sent under, and whether it
-/// is ticked. A box that can't be ticked leaves the row as it is: a client
-/// has no word for a row that can't be chosen.
-fn select_cell(cell: &Element) -> Read<(String, bool)> {
+/// is ticked, and whether it can't be (the row can't be chosen).
+fn select_cell(cell: &Element) -> Read<(String, bool, bool)> {
     let inside = elements(cell)?;
     let [input] = inside.as_slice() else {
         return fail("a cell to select a row that is not one box");
@@ -414,6 +434,7 @@ fn select_cell(cell: &Element) -> Read<(String, bool)> {
     Ok((
         attr(input, "name").map_or_else(|| "ids".to_owned(), Cow::into_owned),
         has(input, "checked"),
+        has(input, "disabled"),
     ))
 }
 
@@ -821,9 +842,31 @@ mod tests {
             };
             assert_eq!(
                 select_cell(cell).expect("a box"),
-                ("ids".to_owned(), expected)
+                ("ids".to_owned(), expected, false)
             );
         }
+    }
+
+    #[test]
+    fn a_box_that_cannot_be_ticked_is_a_row_that_cannot_be_chosen() {
+        let node: Node = el("td")
+            .slot("cell-select")
+            .child(
+                el("input")
+                    .attr("type", "checkbox")
+                    .flag("data-ui-select-row", true)
+                    .attr("name", "ids")
+                    .attr("value", "7")
+                    .flag("disabled", true),
+            )
+            .into();
+        let Node::Element(cell) = &node else {
+            panic!("not an element");
+        };
+        assert_eq!(
+            select_cell(cell).expect("a box"),
+            ("ids".to_owned(), false, true)
+        );
     }
 
     #[test]
@@ -846,12 +889,16 @@ mod tests {
     #[test]
     fn the_address_of_the_next_rows_names_the_table() {
         assert_eq!(
-            rows_href("/orders?page=2".to_owned(), "orders"),
+            rows_href("/orders?page=2".to_owned(), "orders", ROWS_WORD),
             "/orders?page=2&_rows=orders"
         );
         assert_eq!(
-            rows_href("/orders".to_owned(), "a b"),
+            rows_href("/orders".to_owned(), "a b", ROWS_WORD),
             "/orders?_rows=a%20b"
+        );
+        assert_eq!(
+            rows_href("/orders?page=1".to_owned(), "orders", ROWS_BEFORE_WORD),
+            "/orders?page=1&_rows_before=orders"
         );
         assert_eq!(table_id("orders"), "orders-table");
     }
