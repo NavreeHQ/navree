@@ -17,6 +17,8 @@
 //!   the stamps of the app and of the shell.
 //! - [`Node`]: the vocabulary. [`Action`] and [`Command`]: what a control does.
 //!   [`Op`]: what the server changes.
+//! - [`charts`]: the parts a chart is made of (a colour by name, a hint) and
+//!   the kinds a health or fitness screen draws, as typed data.
 //! - [`device`]: the device features a tap may start ([`DeviceCall`]), the few
 //!   a reply may start ([`ReplyCall`]), and the sealed one-time [`Ticket`] a
 //!   result is posted back with.
@@ -32,6 +34,7 @@
 #![forbid(unsafe_code)]
 
 pub mod action;
+pub mod charts;
 pub mod client;
 pub mod device;
 pub mod envelope;
