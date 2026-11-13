@@ -14,7 +14,7 @@ let package = Package(
     products: [
         .library(
             name: "NavreeNative",
-            targets: ["NavreeProtocol", "NavreeDesign", "NavreeShell"]
+            targets: ["NavreeProtocol", "NavreeDesign", "NavreeShell", "NavreeCoreBridge"]
         )
     ],
     targets: [
@@ -26,3 +26,18 @@ let package = Package(
         .testTarget(name: "NavreeShellTests", dependencies: ["NavreeShell", "NavreeProtocol"]),
     ]
 )
+
+// The runtime core, written in Rust, through its C interface: the libraries
+// that scripts/build-core.sh makes into NavreeCore.xcframework (never
+// committed; run it before the first build), and the Swift class over them.
+package.targets += [
+    .binaryTarget(name: "NavreeCore", path: "NavreeCore.xcframework"),
+    .target(
+        name: "NavreeCoreBridge",
+        dependencies: ["NavreeCore"],
+        // What the libraries link beside them, as the compiler says it:
+        // -lc -lm -liconv -lSystem, of which only iconv is not in libSystem.
+        linkerSettings: [.linkedLibrary("iconv")]
+    ),
+    .testTarget(name: "NavreeCoreBridgeTests", dependencies: ["NavreeCoreBridge"]),
+]
