@@ -49,13 +49,20 @@ struct SettingsContent: View {
             if let href = SettingsRules.destination(in: client.app?.user?.menu ?? [])?.href {
                 let nav = client.nav
                 let stack = nav.destinations.indices.contains(nav.selected) ? nav.destinations[nav.selected].stack : []
-                StackView(stack: opened == href ? stack : [], client: client, configuration: configuration)
-                    .modifier(WindowWidth(width: .medium))
-                    .task(id: href) {
-                        guard opened != href else { return }
-                        opened = href
-                        client.send(.act(.init(screen: nil, action: .navigate(.init(href: href, present: .root)))))
+                ZStack {
+                    if opened == href, !stack.isEmpty {
+                        StackView(stack: stack, client: client, configuration: configuration)
+                            .modifier(WindowWidth(width: .medium))
+                    } else {
+                        ProgressView()
                     }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .task(id: href) {
+                    guard opened != href else { return }
+                    opened = href
+                    client.send(.act(.init(screen: nil, action: .navigate(.init(href: href, present: .root)))))
+                }
             } else {
                 ContentUnavailableView(
                     "No Settings", systemImage: "gearshape",
