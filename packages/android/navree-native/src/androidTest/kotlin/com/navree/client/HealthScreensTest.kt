@@ -3,7 +3,11 @@ package com.navree.client
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -131,6 +135,8 @@ class HealthScreensTest {
     fun aCardOpensItsScreen() {
         val app = start(designedAtRoot = true)
         front(app, "Today")
+        // At the largest text the card is below the first screen: scroll to it first.
+        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasContentDescription("Sleep, 25% of score"))
         compose.onNodeWithContentDescription("Sleep, 25% of score").performClick()
         front(app, "Sleep")
         Shots.take("designed-health-opened")

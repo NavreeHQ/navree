@@ -56,7 +56,7 @@ object Shots {
                 "clock -e hhmm 1000",
                 "battery -e level 100 -e plugged false",
                 "network -e wifi show -e level 4 -e fully true",
-                "network -e mobile show -e datatype none -e level 4 -e fully true",
+                "network -e mobile show -e datatype hide -e level 4 -e fully true",
                 "notifications -e visible false",
             )) {
                 shell("am broadcast -a com.android.systemui.demo -e command $command")

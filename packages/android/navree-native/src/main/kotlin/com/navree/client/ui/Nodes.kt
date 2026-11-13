@@ -538,6 +538,7 @@ private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthD
     val columns = ListRules.gridColumns(widthDp.toInt(), node.min, gap, node.cols, LocalUi.current.window.fontScale)
     val shown = node.children.filter { inFlow(it, place.screen) }
     val cell = ContentRules.cardWidthDp(widthDp, columns, gap)
+    val stretch = ListRules.stretchesLastLine(shown)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(gap.dp)) {
         for (line in shown.chunked(columns)) {
             // The parts of a line are as tall as the tallest of them, where they can say how tall that is.
@@ -548,8 +549,8 @@ private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthD
                         CompositionLocalProvider(LocalInLine provides false) { Roomed(cell) { NodeView(child, place, Modifier.fillMaxHeight()) } }
                     }
                 }
-                // An unfinished last line keeps its columns the width of the others.
-                repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
+                // An unfinished last line keeps its columns the width of the others, unless its parts are whole things that stretch.
+                if (!stretch) repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }

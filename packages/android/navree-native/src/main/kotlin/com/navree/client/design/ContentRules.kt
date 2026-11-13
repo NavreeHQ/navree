@@ -39,6 +39,16 @@ object ListRules {
         contentWidthDp < TABLE_FROM_DP || columns * COLUMN_LEAST_DP > contentWidthDp
 
     /**
+     * Whether the last line of a grid, when it has fewer parts than the
+     * others, stretches its parts across the whole line. Parts that are whole
+     * things in themselves (cards and figures) do, so no cell stands empty
+     * beside them; parts that are not (words, rings, fields) keep the width
+     * of the other lines' columns, as Material's own grids do.
+     */
+    fun stretchesLastLine(children: List<Navree.Node>): Boolean =
+        children.isNotEmpty() && children.all { it is Navree.Card || it is Navree.Figure }
+
+    /**
      * Folds a row's cells into a list row, by the role of each column.
      *
      * - `title` (or else the first column) gives the first line. When that

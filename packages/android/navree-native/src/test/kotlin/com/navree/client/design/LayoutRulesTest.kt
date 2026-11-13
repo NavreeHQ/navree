@@ -47,6 +47,15 @@ class LineRulesTest {
     }
 
     @Test
+    fun a_short_last_line_of_cards_or_figures_stretches_and_one_of_other_parts_does_not() {
+        val pillars = Fixtures.screen("screen-designed-health.json").body!!.walk().filterIsInstance<Navree.Grid>().first { it.id == "pillars" }
+        assertTrue(ListRules.stretchesLastLine(pillars.children))
+        assertTrue(ListRules.stretchesLastLine(listOf(Navree.Figure(label = "Steps", value = "9,412"))))
+        assertFalse("words and rings keep the columns of the other lines", ListRules.stretchesLastLine(listOf(Navree.Card(), Navree.Text(value = "a"))))
+        assertFalse(ListRules.stretchesLastLine(emptyList()))
+    }
+
+    @Test
     fun a_line_the_page_lets_wrap_is_left_to_wrap() {
         val wrapping = activity.copy(wrap = true)
         assertEquals(Navree.Axis.HORIZONTAL, CompositionRules.laidAxis(wrapping, wrapping.children, 200f, 16f, 1f))

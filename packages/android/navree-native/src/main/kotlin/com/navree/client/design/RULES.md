@@ -245,10 +245,12 @@ With nothing opened, the list has the window.
   would be squeezed below the least width each keeps: a ring its diameter,
   rings with a legend their dial and legend, a grid one column, a chart 160 dp.
   Parts that grow share what the others leave.
-- A grid of equal cards (five pillars in three columns) leaves its last line
-  start-aligned, as Material's own grids do; a screen that wants all five at
-  once says so with a carousel, with fewer columns, or by naming the number
-  of columns (`cols`).
+- The last line of a grid with fewer parts than the others stretches its
+  parts across the line when they are whole things in themselves (cards and
+  figures: five pillars in three columns are three, then two wider ones);
+  words, rings and fields keep the width of the other lines' columns, as
+  Material's own grids do. A screen that wants all five in one line says so
+  with a carousel or by naming the number of columns (`cols`).
 - Amounts joined to their unit in one string of the client's own are one run
   read left to right, so "540/600 kcal" does not turn into "kcal 540/600" in a
   right to left line.
