@@ -738,9 +738,18 @@ mod tests {
         // The redirect is listed, with the way to a page behind it.
         assert_eq!(report.skipped.len(), 1, "{:?}", report.skipped);
         assert_eq!(report.skipped[0].route, "/old");
-        assert!(report.skipped[0].reason.contains("/deals"), "{:?}", report.skipped);
+        assert!(
+            report.skipped[0].reason.contains("/deals"),
+            "{:?}",
+            report.skipped
+        );
         // The toolkit's own files are counted, not asked.
-        assert!(report.not_pages.iter().any(|n| n.reason.contains("own files")));
+        assert!(
+            report
+                .not_pages
+                .iter()
+                .any(|n| n.reason.contains("own files"))
+        );
         // Without a value for `id`, the route is listed as skipped.
         let report = survey(&router, &routes, "/api", &Plan::default(), &client)
             .await

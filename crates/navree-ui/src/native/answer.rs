@@ -730,8 +730,14 @@ mod tests {
             .iter()
             .filter_map(|value| value.to_str().ok().map(str::to_ascii_lowercase))
             .collect();
-        assert!(vary.iter().any(|value| value.contains("cookie")), "{vary:?}");
-        assert!(vary.iter().any(|value| value.contains("user-agent")), "{vary:?}");
+        assert!(
+            vary.iter().any(|value| value.contains("cookie")),
+            "{vary:?}"
+        );
+        assert!(
+            vary.iter().any(|value| value.contains("user-agent")),
+            "{vary:?}"
+        );
     }
 
     #[tokio::test]
