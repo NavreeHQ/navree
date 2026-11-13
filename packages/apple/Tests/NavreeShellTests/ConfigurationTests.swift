@@ -105,7 +105,7 @@ import Testing
         "rich", "image", "icon", "avatar", "badge", "progress", "banner", "empty", "facts", "table", "chart", "code",
         "button", "link", "menu", "form", "field", "sheet", "dialog", "native", "gauge", "figure", "timeline", "ring",
         "rings", "day_clock", "day_pager", "meter", "columns", "strip", "range", "calendar_heatmap", "matrix_heatmap",
-        "scatter", "card", "layers", "shape", "carousel", "adaptive",
+        "scatter", "card", "layers", "shape", "carousel", "adaptive", "toolbar",
     ]
     let kinds: Set<String> = [
         "stack", "grid", "section", "list", "row", "split", "tabs", "disclosure", "divider", "spacer", "region", "text",
