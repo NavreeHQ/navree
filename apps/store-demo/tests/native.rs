@@ -69,6 +69,37 @@ fn all(node: &N) -> Vec<&N> {
     out
 }
 
+/// Keeps the screens the store writes for native clients, and the parts their
+/// regions fetch, as files: what a client is sent, for a client's own tests.
+///
+/// ```text
+/// NAVREE_NATIVE_DIR=/tmp/store-native cargo test -p store-demo --features native-preview --test native -- --ignored
+/// ```
+#[tokio::test]
+#[ignore = "writes files: see the lines above"]
+async fn the_screens_written_for_native_clients_are_kept_as_files() {
+    let dir = std::env::var("NAVREE_NATIVE_DIR").expect("NAVREE_NATIVE_DIR names the directory");
+    std::fs::create_dir_all(&dir).expect("the directory");
+    // The data is written and the screens are drawn at one moment, so the files
+    // are the same from one run to the next.
+    store_demo::live::hold_clock(1_794_457_800);
+    let (app, _dir) = boot().await;
+    for (name, path) in [
+        ("store-today", "/"),
+        ("store-order", "/orders/1"),
+        ("store-shelves", "/shelves"),
+        ("store-part-figures", "/fragments/figures"),
+        ("store-part-sales", "/fragments/sales"),
+    ] {
+        let asked = ask(&app, path).await;
+        let sent: serde_json::Value = serde_json::from_str(&asked.native).expect("an envelope");
+        assert!(sent.get("screen").is_some(), "{path}: {:.200}", asked.native);
+        let pretty = serde_json::to_string_pretty(&sent).expect("JSON") + "\n";
+        std::fs::write(std::path::Path::new(&dir).join(format!("{name}.json")), pretty)
+            .expect("the file written");
+    }
+}
+
 #[tokio::test]
 async fn the_store_answers_a_native_client() {
     let (app, _dir) = boot().await;

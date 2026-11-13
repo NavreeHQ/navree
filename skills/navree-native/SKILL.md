@@ -28,7 +28,11 @@ The same handler, the same typed components, one codebase:
    platform to move a button.
 2. **Write the page once.** If a screen has to be written twice, stop: say
    what its parts are instead. `native::only` and `native::web_only` keep a
-   part for one side; they are for parts that only make sense there.
+   part for one side; they are for parts that only make sense there. Only a
+   screen that deserves a design of its own (a day at a glance, a wall of
+   tiles) is written for native clients, with Navree Native UI (below): reach
+   for it when saying what the parts are cannot make the screen belong, never
+   for a list, a record or a form.
 3. **Use the toolkit's components** (the index of `navree-ui`). Hand-written
    HTML, a canvas or a stylesheet trick cannot be read: the page falls back
    to the web view.
@@ -303,6 +307,7 @@ Every page route is graded for the client that asks:
 | `idiom` | The parts say what they are, so the client lays the screen out as its own system does: records as rows with a title, rows that open something, actions with a role. |
 | `layout` | Native parts laid out as the web page is. It works and looks like a web page drawn with the system's controls. |
 | `web` | The client shows the page in its web view, because a part has no native meaning yet. |
+| `designed` | A screen written for native clients with Navree Native UI, not read from a page. The report lists beside it what such a screen should fix. |
 
 `navree native:coverage` asks every page route in process, as an Android phone
 by default (`--platform ios --form tablet` for another), and prints the grade
@@ -312,20 +317,21 @@ run on the current code:
 ```text
 Native coverage of store-demo, asked as android on phone
 
-ROUTE                                       GRADE   WHAT IS MISSING
-/                                           idiom
+ROUTE                                       GRADE     WHAT IS MISSING
+/                                           designed
 /fragments/figures                          idiom
 /fragments/sales                            idiom
 /fragments/shelves                          idiom
 /orders                                     idiom
-/orders/1                                   idiom
+/orders/1                                   designed
 /orders/1/steps                             idiom
 /orders/1/others                            idiom
+/shelves                                    designed
 /inventory                                  idiom
 /orders?filter[status][in]=open&sort=total  idiom
 /inventory?page=2                           idiom
 
-11 idiom, 0 layout, 0 web: 11 of 11 pages are native screens
+9 idiom, 3 designed, 0 layout, 0 web: 12 of 12 pages are native screens
 
 Skipped (4):
   /app/{key}: needs a value for {key}; add `key = ...` under [coverage.params] in native.toml
@@ -336,9 +342,11 @@ Skipped (4):
 Not pages, so not asked: the toolkit's and the framework's own files (4); not a GET (7); answers that are not pages (1).
 ```
 
-That table is the end state: every page says what its parts are. In the demo
-each page got there by saying roles, `row_opens` and column roles; a page
-that has not yet gets a `layout` row whose last column says what it lacks.
+That table is the end state: every page says what its parts are, and three
+screens (the day, an order, the shelves) are written for native clients. In
+the demo each read page got there by saying roles, `row_opens` and column
+roles; a page that has not yet gets a `layout` row whose last column says what
+it lacks, and a `designed` row lists there what the screen should fix.
 
 How to read it: a `layout` row names what keeps it from `idiom` (the grader's
 words are like "the action “Export” has no role", "the orders table has no
@@ -348,7 +356,8 @@ writes its own markup: "the handler writes its HTML by hand, so it cannot be
 read; build it with the toolkit's components"). Fix what it names, run it
 again.
 `--fail-on web` (or `layout`) exits 1 when a page has that grade or worse, for
-CI; a run that asked no page fails too. Full options are in
+CI; a run that asked no page fails too. A `designed` screen holds the `layout`
+gate unless it has something to fix. Full options are in
 `navree-cli-generators`.
 
 ## 4. native.toml
@@ -433,6 +442,99 @@ parts. That is fine because the app always works and coverage grows part by
 part; it is a gap to close before a store build, because a store reviews
 screens. The web view has no script bridge to the device: a fallback page gets
 what a browser tab on the same site gets.
+
+## Writing a screen for native clients
+
+Three ways to get a native screen, each more work and more control; an app
+mixes them screen by screen:
+
+1. Let the page be read (nothing to do).
+2. Say what the page's parts are (section 2).
+3. Write the screen for native clients, with **Navree Native UI**
+   (`navree::native::ui`): the protocol's own parts with builders. One piece
+   of Rust; SwiftUI and Jetpack Compose both draw it.
+
+A screen is a plain function of its data. It takes no request, no database
+handle and no HTML, and a component of your own is a function that returns a
+part. Parts come in three levels, and a screen mixes them:
+
+- **Structure the system places:** `Screen` (title, way back, actions by
+  `Role`, `pager`), `Section`, `List`, `Row`, `Form`, `Field`, `Sheet`,
+  `Dialog`, `Region`.
+- **Content the system styles:** `Figure`, `Ring`, `Rings`, `Chart`,
+  `DayClock`, `Timeline`, `FeedRow`, `Badge`, `Progress`, `Facts`.
+- **Free composition:** `Stack` (`down`, `across`, `gap`, `pad`, `grow`,
+  `wide`), `Grid::fit(min)`, `Card` (`tint`, `opens`, `zoom`, `menu`),
+  `Layers`, `Shape`, `Carousel`, `Adaptive`, `Text` (`style`, `weight`,
+  `colour`, `tabular`, `change`), `Icon::named`.
+
+```rust
+use navree::http::response::Response;
+use navree::native::ui::{Card, Change, Grid, Hue, Screen, Stack, Text, TextStyle};
+use navree::ui::native::Answer;
+use navree::ui::{AppShell, Text as Words};
+
+/// A tile: a component of your own is a function that returns a part.
+fn tile(name: &str, count: u32, hue: Hue) -> Card {
+    Card::new().tint(hue).parts((
+        Text::new(name).style(TextStyle::Caption).muted(),
+        Text::new(count.to_string()).style(TextStyle::Title2).change(Change::Count),
+    ))
+}
+
+/// The screen: a function of what the handler loaded.
+fn today(revenue: &str, to_pack: u32, to_ship: u32) -> Screen {
+    Screen::titled("Today").refresh().body(Stack::down().gap(4).parts((
+        Text::new(revenue).style(TextStyle::Display).change(Change::Count),
+        Grid::fit(150).gap(3).parts((
+            tile("To pack", to_pack, Hue::Amber),
+            tile("To ship", to_ship, Hue::Blue),
+        )),
+    )))
+}
+
+/// One route: the page for a browser, the screen for a native client.
+async fn dashboard(shell: AppShell) -> Response {
+    let revenue = "₹1,24,050".to_owned();
+    Answer::in_shell(&shell).each(
+        || shell.page("Dashboard").body(Words::new(revenue.clone())),
+        || today(&revenue, 12, 7),
+    )
+}
+```
+
+What to hold to:
+
+- **Only the side that is asked for runs**, in the handler, so both closures
+  borrow what the handler loaded. The layer adds the destination, a toast
+  left for the screen, the shell's stamp, the session's token in posts and
+  the shapes of icons named with `Icon::named(..)`.
+- **Actions go to the page's own handlers.** A `Form::post(href).id("refund")`
+  gets its errors back at its fields when the handler's form has that id. A
+  reply carries native parts with `native::morph`, `replace`, `append` and
+  `prepend`; build them only when `native::asked()`.
+- **A region or a list of the screen** fetches from a route that answers the
+  same way: the native closure may return a `Screen`, a part
+  (`Node::from(..)`) or `Vec<Op>` (a list's next rows or its changes).
+- **A route with only a native side** is `Answer::in_shell(&shell).native(..)`;
+  a browser gets `406`.
+- **Room is in steps, type is a text style, colour is a `Hue`.** A `Size` in
+  points is only for what has no size of its own (the box a symbol stands
+  in). There are no offsets, no colours or corner radii as numbers, no
+  fonts, no shadows, no blur, and nothing is composed into a bar.
+- **What depends on the room is said in the tree**, not asked of the server:
+  `Grid::fit` and `Carousel::min` show as many parts as fit, `Stack::wide`
+  turns a stack in a wide room, `Adaptive` holds two sets of parts. Give a
+  part with an id to one room only.
+- **Lists stay lists.** Records are `List` and `Row`, loaded by cursor, even
+  on a designed screen.
+- **Test the function**: call it and assert the tree; `native::designed(&screen)`
+  lists what it should fix (a tapped card with no name, a card in a card, a
+  carousel in a carousel, more than one display figure, an id in both rooms
+  of an adaptive part) and must be empty.
+
+The store demo has three such screens beside their pages
+(`apps/store-demo/src/screens.rs`): the day, an order and the shelves.
 
 ## 7. What does not exist yet
 
