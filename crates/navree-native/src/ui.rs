@@ -31,7 +31,9 @@
 //! [`Tabs`], [`Split`] and its [`Pane`]s, [`Rich`] text, [`Message`],
 //! [`Toolbar`], [`Gauge`], [`Meter`], [`ColorStrip`], [`CalendarHeatmap`] and
 //! the other charts, and a [`Field`] with a [`TextInput`], a [`ToggleInput`],
-//! a [`ChoiceInput`], a [`DateInput`] or any other control.
+//! a [`ChoiceInput`], a [`DateInput`] or any other control. So are the changes
+//! a route answers with in place of a screen ([`Op::next_rows`], [`Op::merge`],
+//! [`Op::replace`]).
 //!
 //! ```
 //! use navree_native::ui::*;
@@ -86,7 +88,7 @@ pub use crate::node::{
     SystemSymbol, Tab, Table, TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar,
     ToolbarItem, Trend, WebRegion,
 };
-pub use crate::op::Op;
+pub use crate::op::{Edge, Op};
 
 /// What can stand where parts are asked for: one part, a tuple of parts, a
 /// list or an array of them, an `Option`, and what an iterator's `map`,
@@ -371,6 +373,7 @@ named!(
 
 mod charts;
 mod inputs;
+mod ops;
 mod parts;
 
 impl Action {
@@ -2556,6 +2559,69 @@ mod tests {
             let written = serde_json::to_string(part).unwrap();
             let read: Node = serde_json::from_str(&written).unwrap();
             assert_eq!(&read, part, "{written}");
+        }
+    }
+
+    #[test]
+    fn the_changes_a_route_answers_with_are_built_without_a_struct_literal() {
+        let row = |id: &str| Row::new("Order CS-20481 was packed").id(id);
+        let ops = [
+            Op::next_rows(
+                "activity",
+                [row("event-7"), row("event-6")],
+                Some("/activity?after=6".to_owned()),
+            ),
+            Op::earlier_rows("activity", row("event-9"), None),
+            Op::merge(
+                "activity",
+                "9",
+                Edge::Start,
+                row("event-9"),
+                ["event-2".to_owned()],
+            ),
+            Op::morph("order-total", Text::new("₹1,240").id("order-total")),
+            Op::replace("shelf-7", Card::new().id("shelf-7")),
+            Op::append("wall", (Card::new(), Card::new())),
+            Op::prepend("wall", Card::new()),
+            Op::remove("shelf-7"),
+            Op::next_records(
+                "orders",
+                [TableRow::new(Text::new("#1042")).id("1042")],
+                None,
+            ),
+            Op::record(
+                "1042",
+                TableRow::new(Text::new("#1042")).id("1042").selected(),
+            ),
+        ];
+        let written: Vec<String> = ops
+            .iter()
+            .map(|op| {
+                serde_json::to_value(op).unwrap()["op"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect();
+        assert_eq!(
+            written,
+            [
+                "append", "prepend", "merge", "morph", "replace", "append", "prepend", "remove",
+                "rows", "row"
+            ]
+        );
+        assert_eq!(
+            serde_json::to_string(&ops[2]).unwrap(),
+            concat!(
+                r#"{"op":"merge","target":"activity","nodes":[{"t":"row","id":"event-9","title":"Order CS-20481 was packed"}],"#,
+                r#""gone":["event-2"],"since":"9","at":"start"}"#
+            )
+        );
+        assert!(matches!(&ops[0], Op::Append { nodes, more, .. }
+            if nodes.len() == 2 && more.as_deref() == Some("/activity?after=6")));
+        for op in &ops {
+            let read: Op = serde_json::from_str(&serde_json::to_string(op).unwrap()).unwrap();
+            assert_eq!(&read, op);
         }
     }
 
