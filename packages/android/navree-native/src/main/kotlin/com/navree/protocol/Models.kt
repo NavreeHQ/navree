@@ -165,6 +165,14 @@ public object Navree {
         }
     }
 
+    /** `Adaptive`. */
+    @Serializable
+    public data class Adaptive(
+        val compact: kotlin.collections.List<Navree.Node> = emptyList(),
+        val id: String? = null,
+        val wide: kotlin.collections.List<Navree.Node> = emptyList(),
+    ) : Navree.Node
+
     /** `Align`. */
     @Serializable
     public enum class Align {
@@ -248,6 +256,14 @@ public object Navree {
         @SerialName("after_secs")
         val afterSecs: Long,
     )
+
+    /** `Appear`. */
+    @Serializable
+    public enum class Appear {
+        @SerialName("fade") FADE,
+        @SerialName("rise") RISE,
+        @SerialName("scale") SCALE,
+    }
 
     /** `AuthSession`. */
     @Serializable
@@ -477,6 +493,31 @@ public object Navree {
         val id: String,
     ) : Navree.Call, Navree.ReplyCall
 
+    /** `Card`. */
+    @Serializable
+    public data class Card(
+        val action: Navree.Action? = null,
+        val appear: Navree.Appear? = null,
+        val children: kotlin.collections.List<Navree.Node> = emptyList(),
+        val colour: Navree.Colour? = null,
+        val id: String? = null,
+        val label: String? = null,
+        val menu: kotlin.collections.List<Navree.Node> = emptyList(),
+        val pad: Int? = null,
+        val transition: Navree.Transition? = null,
+    ) : Navree.Node
+
+    /** `Carousel`. */
+    @Serializable
+    public data class Carousel(
+        val children: kotlin.collections.List<Navree.Node> = emptyList(),
+        val gap: Int = 0,
+        val id: String? = null,
+        val label: String? = null,
+        val min: Int? = null,
+        val paged: Boolean = false,
+    ) : Navree.Node
+
     /** `Category`. */
     @Serializable
     public data class Category(
@@ -490,6 +531,13 @@ public object Navree {
         @SerialName("value") VALUE,
         @SerialName("icon") ICON,
         @SerialName("nothing") NOTHING,
+    }
+
+    /** `Change`. */
+    @Serializable
+    public enum class Change {
+        @SerialName("count") COUNT,
+        @SerialName("fade") FADE,
     }
 
     /** `Chart`. */
@@ -1315,11 +1363,13 @@ public object Navree {
     /** `Icon`. */
     @Serializable
     public data class Icon(
+        val colour: Navree.Colour? = null,
         val fills: kotlin.collections.List<String> = emptyList(),
         val id: String? = null,
         val label: String? = null,
         val name: String? = null,
         val paths: kotlin.collections.List<String> = emptyList(),
+        val scale: Navree.TextStyle? = null,
         val symbol: Navree.SystemSymbol? = null,
         val tone: Navree.Tone? = null,
         @SerialName("view_box")
@@ -1439,6 +1489,17 @@ public object Navree {
         @SerialName("end") END,
         @SerialName("between") BETWEEN,
     }
+
+    /** `Layers`. */
+    @Serializable
+    public data class Layers(
+        val children: kotlin.collections.List<Navree.Node> = emptyList(),
+        val grow: Boolean = false,
+        val id: String? = null,
+        val pad: Int = 0,
+        val place: Navree.Place = Navree.Place.CENTER,
+        val size: Navree.Size? = null,
+    ) : Navree.Node
 
     /** `Link`. */
     @Serializable
@@ -1694,6 +1755,11 @@ public object Navree {
                 "calendar_heatmap" -> input.json.decodeFromJsonElement(Navree.CalendarHeatmap.serializer(), body)
                 "matrix_heatmap" -> input.json.decodeFromJsonElement(Navree.MatrixHeatmap.serializer(), body)
                 "scatter" -> input.json.decodeFromJsonElement(Navree.Scatter.serializer(), body)
+                "card" -> input.json.decodeFromJsonElement(Navree.Card.serializer(), body)
+                "layers" -> input.json.decodeFromJsonElement(Navree.Layers.serializer(), body)
+                "shape" -> input.json.decodeFromJsonElement(Navree.Shape.serializer(), body)
+                "carousel" -> input.json.decodeFromJsonElement(Navree.Carousel.serializer(), body)
+                "adaptive" -> input.json.decodeFromJsonElement(Navree.Adaptive.serializer(), body)
                 else -> Navree.Node.Unknown(
                     tag = tag ?: "",
                     alt = body["alt"]?.let { input.json.decodeFromJsonElement(Navree.NodeSerializer, it) },
@@ -1914,6 +1980,26 @@ public object Navree {
                 is Navree.Scatter -> {
                     tag = "scatter"
                     body = output.json.encodeToJsonElement(Navree.Scatter.serializer(), value) as JsonObject
+                }
+                is Navree.Card -> {
+                    tag = "card"
+                    body = output.json.encodeToJsonElement(Navree.Card.serializer(), value) as JsonObject
+                }
+                is Navree.Layers -> {
+                    tag = "layers"
+                    body = output.json.encodeToJsonElement(Navree.Layers.serializer(), value) as JsonObject
+                }
+                is Navree.Shape -> {
+                    tag = "shape"
+                    body = output.json.encodeToJsonElement(Navree.Shape.serializer(), value) as JsonObject
+                }
+                is Navree.Carousel -> {
+                    tag = "carousel"
+                    body = output.json.encodeToJsonElement(Navree.Carousel.serializer(), value) as JsonObject
+                }
+                is Navree.Adaptive -> {
+                    tag = "adaptive"
+                    body = output.json.encodeToJsonElement(Navree.Adaptive.serializer(), value) as JsonObject
                 }
                 is Navree.Node.Unknown -> {
                     tag = value.tag
@@ -2268,6 +2354,20 @@ public object Navree {
         val name: String,
         val value: String,
     )
+
+    /** `Place`. */
+    @Serializable
+    public enum class Place {
+        @SerialName("top_start") TOP_START,
+        @SerialName("top") TOP,
+        @SerialName("top_end") TOP_END,
+        @SerialName("start") START,
+        @SerialName("center") CENTER,
+        @SerialName("end") END,
+        @SerialName("bottom_start") BOTTOM_START,
+        @SerialName("bottom") BOTTOM,
+        @SerialName("bottom_end") BOTTOM_END,
+    }
 
     /** `Platform`. */
     @Serializable
@@ -2731,6 +2831,7 @@ public object Navree {
         val body: Navree.Node,
         val id: String? = null,
         val nav: String? = null,
+        val pager: Navree.DayPager? = null,
         val refresh: Boolean = false,
         val search: Navree.Search? = null,
         val subtitle: String? = null,
@@ -2808,6 +2909,27 @@ public object Navree {
     public enum class SettingsPage {
         @SerialName("app") APP,
         @SerialName("notifications") NOTIFICATIONS,
+    }
+
+    /** `Shape`. */
+    @Serializable
+    public data class Shape(
+        val fill: Navree.Colour? = null,
+        val form: Navree.ShapeForm = Navree.ShapeForm.ROUNDED,
+        val id: String? = null,
+        val label: String? = null,
+        val size: Navree.Size? = null,
+        val soft: Boolean = false,
+        val stroke: Navree.Colour? = null,
+    ) : Navree.Node
+
+    /** `ShapeForm`. */
+    @Serializable
+    public enum class ShapeForm {
+        @SerialName("rounded") ROUNDED,
+        @SerialName("circle") CIRCLE,
+        @SerialName("capsule") CAPSULE,
+        @SerialName("rect") RECT,
     }
 
     /** `Share`. */
@@ -2916,6 +3038,14 @@ public object Navree {
         val name: Navree.PersonName? = null,
     )
 
+    /** `Size`. */
+    @Serializable
+    public data class Size(
+        val height: Int? = null,
+        val scaled: Boolean = false,
+        val width: Int? = null,
+    )
+
     /** `SliderInput`. */
     @Serializable
     public data class SliderInput(
@@ -2957,12 +3087,16 @@ public object Navree {
     @Serializable
     public data class Stack(
         val align: Navree.Align? = null,
+        val appear: Navree.Appear? = null,
         val axis: Navree.Axis = Navree.Axis.VERTICAL,
         val children: kotlin.collections.List<Navree.Node> = emptyList(),
         val gap: Int = 0,
+        val grow: Boolean = false,
         val hidden: Boolean = false,
         val id: String? = null,
         val justify: Navree.Justify? = null,
+        val pad: Int = 0,
+        val wide: Navree.Axis? = null,
         val wrap: Boolean = false,
     ) : Navree.Node
 
@@ -3065,13 +3199,18 @@ public object Navree {
     /** `Text`. */
     @Serializable
     public data class Text(
+        val align: Navree.Align? = null,
+        val change: Navree.Change? = null,
+        val colour: Navree.Colour? = null,
         val heading: Int? = null,
         val id: String? = null,
         val lines: Int? = null,
         val muted: Boolean = false,
         val style: Navree.TextStyle = Navree.TextStyle.BODY,
+        val tabular: Boolean = false,
         val tone: Navree.Tone? = null,
         val value: String,
+        val weight: Navree.Weight? = null,
     ) : Navree.Node
 
     /** `TextInput`. */
@@ -3110,8 +3249,10 @@ public object Navree {
     /** `TextStyle`. */
     @Serializable
     public enum class TextStyle {
+        @SerialName("display") DISPLAY,
         @SerialName("large_title") LARGE_TITLE,
         @SerialName("title") TITLE,
+        @SerialName("title2") TITLE2,
         @SerialName("headline") HEADLINE,
         @SerialName("body") BODY,
         @SerialName("callout") CALLOUT,
@@ -3212,6 +3353,12 @@ public object Navree {
         val undoable: Boolean = false,
     )
 
+    /** `Transition`. */
+    @Serializable
+    public enum class Transition {
+        @SerialName("zoom") ZOOM,
+    }
+
     /** `Trend`. */
     @Serializable
     public data class Trend(
@@ -3268,6 +3415,15 @@ public object Navree {
         @SerialName("friday") FRIDAY,
         @SerialName("saturday") SATURDAY,
         @SerialName("sunday") SUNDAY,
+    }
+
+    /** `Weight`. */
+    @Serializable
+    public enum class Weight {
+        @SerialName("regular") REGULAR,
+        @SerialName("medium") MEDIUM,
+        @SerialName("semibold") SEMIBOLD,
+        @SerialName("bold") BOLD,
     }
 
     /** `When`: one of its variants, told apart by `t`. */

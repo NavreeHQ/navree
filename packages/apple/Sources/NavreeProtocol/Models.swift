@@ -324,6 +324,45 @@ extension Navree.Action {
 }
 
 extension Navree {
+    /// `Adaptive`.
+    public struct Adaptive: Codable, Hashable, Sendable {
+        public var compact: [Navree.Node]
+        public var id: String?
+        public var wide: [Navree.Node]
+
+        public init(
+            compact: [Navree.Node] = [],
+            id: String? = nil,
+            wide: [Navree.Node] = []
+        ) {
+            self.compact = compact
+            self.id = id
+            self.wide = wide
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case compact = "compact"
+            case id = "id"
+            case wide = "wide"
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.compact = try container.decodeIfPresent([Navree.Node].self, forKey: .compact) ?? []
+            self.id = try container.decodeIfPresent(String.self, forKey: .id)
+            self.wide = try container.decodeIfPresent([Navree.Node].self, forKey: .wide) ?? []
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            if self.compact != [] { try container.encode(self.compact, forKey: .compact) }
+            try container.encodeIfPresent(self.id, forKey: .id)
+            if self.wide != [] { try container.encode(self.wide, forKey: .wide) }
+        }
+    }
+}
+
+extension Navree {
     /// `Align`.
     public enum Align: String, Codable, Hashable, Sendable, CaseIterable {
         case start = "start"
@@ -472,6 +511,15 @@ extension Navree {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encode(self.afterSecs, forKey: .afterSecs)
         }
+    }
+}
+
+extension Navree {
+    /// `Appear`.
+    public enum Appear: String, Codable, Hashable, Sendable, CaseIterable {
+        case fade = "fade"
+        case rise = "rise"
+        case scale = "scale"
     }
 }
 
@@ -1094,6 +1142,138 @@ extension Navree {
 }
 
 extension Navree {
+    /// `Card`.
+    public struct Card: Codable, Hashable, Sendable {
+        public var action: Navree.Action?
+        public var appear: Navree.Appear?
+        public var children: [Navree.Node]
+        public var colour: Navree.Colour?
+        public var id: String?
+        public var label: String?
+        public var menu: [Navree.Node]
+        public var pad: Int?
+        public var transition: Navree.Transition?
+
+        public init(
+            action: Navree.Action? = nil,
+            appear: Navree.Appear? = nil,
+            children: [Navree.Node] = [],
+            colour: Navree.Colour? = nil,
+            id: String? = nil,
+            label: String? = nil,
+            menu: [Navree.Node] = [],
+            pad: Int? = nil,
+            transition: Navree.Transition? = nil
+        ) {
+            self.action = action
+            self.appear = appear
+            self.children = children
+            self.colour = colour
+            self.id = id
+            self.label = label
+            self.menu = menu
+            self.pad = pad
+            self.transition = transition
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case action = "action"
+            case appear = "appear"
+            case children = "children"
+            case colour = "colour"
+            case id = "id"
+            case label = "label"
+            case menu = "menu"
+            case pad = "pad"
+            case transition = "transition"
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.action = try container.decodeIfPresent(Navree.Action.self, forKey: .action)
+            self.appear = try? container.decodeIfPresent(Navree.Appear.self, forKey: .appear)
+            self.children = try container.decodeIfPresent([Navree.Node].self, forKey: .children) ?? []
+            self.colour = try container.decodeIfPresent(Navree.Colour.self, forKey: .colour)
+            self.id = try container.decodeIfPresent(String.self, forKey: .id)
+            self.label = try container.decodeIfPresent(String.self, forKey: .label)
+            self.menu = try container.decodeIfPresent([Navree.Node].self, forKey: .menu) ?? []
+            self.pad = try container.decodeIfPresent(Int.self, forKey: .pad)
+            self.transition = try? container.decodeIfPresent(Navree.Transition.self, forKey: .transition)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(self.action, forKey: .action)
+            try container.encodeIfPresent(self.appear, forKey: .appear)
+            if self.children != [] { try container.encode(self.children, forKey: .children) }
+            try container.encodeIfPresent(self.colour, forKey: .colour)
+            try container.encodeIfPresent(self.id, forKey: .id)
+            try container.encodeIfPresent(self.label, forKey: .label)
+            if self.menu != [] { try container.encode(self.menu, forKey: .menu) }
+            try container.encodeIfPresent(self.pad, forKey: .pad)
+            try container.encodeIfPresent(self.transition, forKey: .transition)
+        }
+    }
+}
+
+extension Navree {
+    /// `Carousel`.
+    public struct Carousel: Codable, Hashable, Sendable {
+        public var children: [Navree.Node]
+        public var gap: Int
+        public var id: String?
+        public var label: String?
+        public var min: Int?
+        public var paged: Bool
+
+        public init(
+            children: [Navree.Node] = [],
+            gap: Int = 0,
+            id: String? = nil,
+            label: String? = nil,
+            min: Int? = nil,
+            paged: Bool = false
+        ) {
+            self.children = children
+            self.gap = gap
+            self.id = id
+            self.label = label
+            self.min = min
+            self.paged = paged
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case children = "children"
+            case gap = "gap"
+            case id = "id"
+            case label = "label"
+            case min = "min"
+            case paged = "paged"
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.children = try container.decodeIfPresent([Navree.Node].self, forKey: .children) ?? []
+            self.gap = try container.decodeIfPresent(Int.self, forKey: .gap) ?? 0
+            self.id = try container.decodeIfPresent(String.self, forKey: .id)
+            self.label = try container.decodeIfPresent(String.self, forKey: .label)
+            self.min = try container.decodeIfPresent(Int.self, forKey: .min)
+            self.paged = try container.decodeIfPresent(Bool.self, forKey: .paged) ?? false
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            if self.children != [] { try container.encode(self.children, forKey: .children) }
+            if self.gap != 0 { try container.encode(self.gap, forKey: .gap) }
+            try container.encodeIfPresent(self.id, forKey: .id)
+            try container.encodeIfPresent(self.label, forKey: .label)
+            try container.encodeIfPresent(self.min, forKey: .min)
+            if self.paged != false { try container.encode(self.paged, forKey: .paged) }
+        }
+    }
+}
+
+extension Navree {
     /// `Category`.
     public struct Category: Codable, Hashable, Sendable {
         public var colour: Navree.Colour?
@@ -1132,6 +1312,14 @@ extension Navree {
         case value = "value"
         case icon = "icon"
         case nothing = "nothing"
+    }
+}
+
+extension Navree {
+    /// `Change`.
+    public enum Change: String, Codable, Hashable, Sendable, CaseIterable {
+        case count = "count"
+        case fade = "fade"
     }
 }
 
@@ -4141,41 +4329,49 @@ extension Navree {
 extension Navree {
     /// `Icon`.
     public struct Icon: Codable, Hashable, Sendable {
+        public var colour: Navree.Colour?
         public var fills: [String]
         public var id: String?
         public var label: String?
         public var name: String?
         public var paths: [String]
+        public var scale: Navree.TextStyle?
         public var symbol: Navree.SystemSymbol?
         public var tone: Navree.Tone?
         public var viewBox: String?
 
         public init(
+            colour: Navree.Colour? = nil,
             fills: [String] = [],
             id: String? = nil,
             label: String? = nil,
             name: String? = nil,
             paths: [String] = [],
+            scale: Navree.TextStyle? = nil,
             symbol: Navree.SystemSymbol? = nil,
             tone: Navree.Tone? = nil,
             viewBox: String? = nil
         ) {
+            self.colour = colour
             self.fills = fills
             self.id = id
             self.label = label
             self.name = name
             self.paths = paths
+            self.scale = scale
             self.symbol = symbol
             self.tone = tone
             self.viewBox = viewBox
         }
 
         private enum CodingKeys: String, CodingKey {
+            case colour = "colour"
             case fills = "fills"
             case id = "id"
             case label = "label"
             case name = "name"
             case paths = "paths"
+            case scale = "scale"
             case symbol = "symbol"
             case tone = "tone"
             case viewBox = "view_box"
@@ -4183,11 +4379,13 @@ extension Navree {
 
         public init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.colour = try container.decodeIfPresent(Navree.Colour.self, forKey: .colour)
             self.fills = try container.decodeIfPresent([String].self, forKey: .fills) ?? []
             self.id = try container.decodeIfPresent(String.self, forKey: .id)
             self.label = try container.decodeIfPresent(String.self, forKey: .label)
             self.name = try container.decodeIfPresent(String.self, forKey: .name)
             self.paths = try container.decodeIfPresent([String].self, forKey: .paths) ?? []
+            self.scale = try? container.decodeIfPresent(Navree.TextStyle.self, forKey: .scale)
             self.symbol = try container.decodeIfPresent(Navree.SystemSymbol.self, forKey: .symbol)
             self.tone = try? container.decodeIfPresent(Navree.Tone.self, forKey: .tone)
             self.viewBox = try container.decodeIfPresent(String.self, forKey: .viewBox)
@@ -4195,11 +4393,13 @@ extension Navree {
 
         public func encode(to encoder: any Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(self.colour, forKey: .colour)
             if self.fills != [] { try container.encode(self.fills, forKey: .fills) }
             try container.encodeIfPresent(self.id, forKey: .id)
             try container.encodeIfPresent(self.label, forKey: .label)
             try container.encodeIfPresent(self.name, forKey: .name)
             if self.paths != [] { try container.encode(self.paths, forKey: .paths) }
+            try container.encodeIfPresent(self.scale, forKey: .scale)
             try container.encodeIfPresent(self.symbol, forKey: .symbol)
             try container.encodeIfPresent(self.tone, forKey: .tone)
             try container.encodeIfPresent(self.viewBox, forKey: .viewBox)
@@ -4401,6 +4601,63 @@ extension Navree {
         case center = "center"
         case end = "end"
         case between = "between"
+    }
+}
+
+extension Navree {
+    /// `Layers`.
+    public struct Layers: Codable, Hashable, Sendable {
+        public var children: [Navree.Node]
+        public var grow: Bool
+        public var id: String?
+        public var pad: Int
+        public var place: Navree.Place
+        public var size: Navree.Size?
+
+        public init(
+            children: [Navree.Node] = [],
+            grow: Bool = false,
+            id: String? = nil,
+            pad: Int = 0,
+            place: Navree.Place = Navree.Place.center,
+            size: Navree.Size? = nil
+        ) {
+            self.children = children
+            self.grow = grow
+            self.id = id
+            self.pad = pad
+            self.place = place
+            self.size = size
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case children = "children"
+            case grow = "grow"
+            case id = "id"
+            case pad = "pad"
+            case place = "place"
+            case size = "size"
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.children = try container.decodeIfPresent([Navree.Node].self, forKey: .children) ?? []
+            self.grow = try container.decodeIfPresent(Bool.self, forKey: .grow) ?? false
+            self.id = try container.decodeIfPresent(String.self, forKey: .id)
+            self.pad = try container.decodeIfPresent(Int.self, forKey: .pad) ?? 0
+            self.place = (try? container.decodeIfPresent(Navree.Place.self, forKey: .place)) ?? Navree.Place.center
+            self.size = try container.decodeIfPresent(Navree.Size.self, forKey: .size)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            if self.children != [] { try container.encode(self.children, forKey: .children) }
+            if self.grow != false { try container.encode(self.grow, forKey: .grow) }
+            try container.encodeIfPresent(self.id, forKey: .id)
+            if self.pad != 0 { try container.encode(self.pad, forKey: .pad) }
+            if self.place != Navree.Place.center { try container.encode(self.place, forKey: .place) }
+            try container.encodeIfPresent(self.size, forKey: .size)
+        }
     }
 }
 
@@ -5340,6 +5597,11 @@ extension Navree {
         case calendarHeatmap(Navree.CalendarHeatmap)
         case matrixHeatmap(Navree.MatrixHeatmap)
         case scatter(Navree.Scatter)
+        case card(Navree.Card)
+        case layers(Navree.Layers)
+        case shape(Navree.Shape)
+        case carousel(Navree.Carousel)
+        case adaptive(Navree.Adaptive)
         /// A variant this build does not know, from a newer server, with what it keeps.
         case unknown(Navree.Node.Unknown)
 
@@ -5403,6 +5665,11 @@ extension Navree {
             case "calendar_heatmap": self = .calendarHeatmap(try Navree.CalendarHeatmap(from: decoder))
             case "matrix_heatmap": self = .matrixHeatmap(try Navree.MatrixHeatmap(from: decoder))
             case "scatter": self = .scatter(try Navree.Scatter(from: decoder))
+            case "card": self = .card(try Navree.Card(from: decoder))
+            case "layers": self = .layers(try Navree.Layers(from: decoder))
+            case "shape": self = .shape(try Navree.Shape(from: decoder))
+            case "carousel": self = .carousel(try Navree.Carousel(from: decoder))
+            case "adaptive": self = .adaptive(try Navree.Adaptive(from: decoder))
             default: self = .unknown(try Navree.Node.Unknown(from: decoder, tag: tag))
             }
         }
@@ -5565,6 +5832,21 @@ extension Navree {
                 try value.encode(to: encoder)
             case .scatter(let value):
                 try container.encode("scatter", forKey: .tag)
+                try value.encode(to: encoder)
+            case .card(let value):
+                try container.encode("card", forKey: .tag)
+                try value.encode(to: encoder)
+            case .layers(let value):
+                try container.encode("layers", forKey: .tag)
+                try value.encode(to: encoder)
+            case .shape(let value):
+                try container.encode("shape", forKey: .tag)
+                try value.encode(to: encoder)
+            case .carousel(let value):
+                try container.encode("carousel", forKey: .tag)
+                try value.encode(to: encoder)
+            case .adaptive(let value):
+                try container.encode("adaptive", forKey: .tag)
                 try value.encode(to: encoder)
             case .unknown(let value):
                 try container.encode(value.tag, forKey: .tag)
@@ -6712,6 +6994,21 @@ extension Navree {
             try container.encode(self.name, forKey: .name)
             try container.encode(self.value, forKey: .value)
         }
+    }
+}
+
+extension Navree {
+    /// `Place`.
+    public enum Place: String, Codable, Hashable, Sendable, CaseIterable {
+        case topStart = "top_start"
+        case top = "top"
+        case topEnd = "top_end"
+        case start = "start"
+        case center = "center"
+        case end = "end"
+        case bottomStart = "bottom_start"
+        case bottom = "bottom"
+        case bottomEnd = "bottom_end"
     }
 }
 
@@ -8292,6 +8589,7 @@ extension Navree {
         public var body: Navree.Node
         public var id: String?
         public var nav: String?
+        public var pager: Navree.DayPager?
         public var refresh: Bool
         public var search: Navree.Search?
         public var subtitle: String?
@@ -8304,6 +8602,7 @@ extension Navree {
             body: Navree.Node,
             id: String? = nil,
             nav: String? = nil,
+            pager: Navree.DayPager? = nil,
             refresh: Bool = false,
             search: Navree.Search? = nil,
             subtitle: String? = nil,
@@ -8315,6 +8614,7 @@ extension Navree {
             self.body = body
             self.id = id
             self.nav = nav
+            self.pager = pager
             self.refresh = refresh
             self.search = search
             self.subtitle = subtitle
@@ -8328,6 +8628,7 @@ extension Navree {
             case body = "body"
             case id = "id"
             case nav = "nav"
+            case pager = "pager"
             case refresh = "refresh"
             case search = "search"
             case subtitle = "subtitle"
@@ -8342,6 +8643,7 @@ extension Navree {
             self.body = try container.decode(Navree.Node.self, forKey: .body)
             self.id = try container.decodeIfPresent(String.self, forKey: .id)
             self.nav = try container.decodeIfPresent(String.self, forKey: .nav)
+            self.pager = try container.decodeIfPresent(Navree.DayPager.self, forKey: .pager)
             self.refresh = try container.decodeIfPresent(Bool.self, forKey: .refresh) ?? false
             self.search = try container.decodeIfPresent(Navree.Search.self, forKey: .search)
             self.subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
@@ -8356,6 +8658,7 @@ extension Navree {
             try container.encode(self.body, forKey: .body)
             try container.encodeIfPresent(self.id, forKey: .id)
             try container.encodeIfPresent(self.nav, forKey: .nav)
+            try container.encodeIfPresent(self.pager, forKey: .pager)
             if self.refresh != false { try container.encode(self.refresh, forKey: .refresh) }
             try container.encodeIfPresent(self.search, forKey: .search)
             try container.encodeIfPresent(self.subtitle, forKey: .subtitle)
@@ -8667,6 +8970,79 @@ extension Navree {
     public enum SettingsPage: String, Codable, Hashable, Sendable, CaseIterable {
         case app = "app"
         case notifications = "notifications"
+    }
+}
+
+extension Navree {
+    /// `Shape`.
+    public struct Shape: Codable, Hashable, Sendable {
+        public var fill: Navree.Colour?
+        public var form: Navree.ShapeForm
+        public var id: String?
+        public var label: String?
+        public var size: Navree.Size?
+        public var soft: Bool
+        public var stroke: Navree.Colour?
+
+        public init(
+            fill: Navree.Colour? = nil,
+            form: Navree.ShapeForm = Navree.ShapeForm.rounded,
+            id: String? = nil,
+            label: String? = nil,
+            size: Navree.Size? = nil,
+            soft: Bool = false,
+            stroke: Navree.Colour? = nil
+        ) {
+            self.fill = fill
+            self.form = form
+            self.id = id
+            self.label = label
+            self.size = size
+            self.soft = soft
+            self.stroke = stroke
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case fill = "fill"
+            case form = "form"
+            case id = "id"
+            case label = "label"
+            case size = "size"
+            case soft = "soft"
+            case stroke = "stroke"
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.fill = try container.decodeIfPresent(Navree.Colour.self, forKey: .fill)
+            self.form = (try? container.decodeIfPresent(Navree.ShapeForm.self, forKey: .form)) ?? Navree.ShapeForm.rounded
+            self.id = try container.decodeIfPresent(String.self, forKey: .id)
+            self.label = try container.decodeIfPresent(String.self, forKey: .label)
+            self.size = try container.decodeIfPresent(Navree.Size.self, forKey: .size)
+            self.soft = try container.decodeIfPresent(Bool.self, forKey: .soft) ?? false
+            self.stroke = try container.decodeIfPresent(Navree.Colour.self, forKey: .stroke)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(self.fill, forKey: .fill)
+            if self.form != Navree.ShapeForm.rounded { try container.encode(self.form, forKey: .form) }
+            try container.encodeIfPresent(self.id, forKey: .id)
+            try container.encodeIfPresent(self.label, forKey: .label)
+            try container.encodeIfPresent(self.size, forKey: .size)
+            if self.soft != false { try container.encode(self.soft, forKey: .soft) }
+            try container.encodeIfPresent(self.stroke, forKey: .stroke)
+        }
+    }
+}
+
+extension Navree {
+    /// `ShapeForm`.
+    public enum ShapeForm: String, Codable, Hashable, Sendable, CaseIterable {
+        case rounded = "rounded"
+        case circle = "circle"
+        case capsule = "capsule"
+        case rect = "rect"
     }
 }
 
@@ -9098,6 +9474,45 @@ extension Navree {
 }
 
 extension Navree {
+    /// `Size`.
+    public struct Size: Codable, Hashable, Sendable {
+        public var height: Int?
+        public var scaled: Bool
+        public var width: Int?
+
+        public init(
+            height: Int? = nil,
+            scaled: Bool = false,
+            width: Int? = nil
+        ) {
+            self.height = height
+            self.scaled = scaled
+            self.width = width
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case height = "height"
+            case scaled = "scaled"
+            case width = "width"
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.height = try container.decodeIfPresent(Int.self, forKey: .height)
+            self.scaled = try container.decodeIfPresent(Bool.self, forKey: .scaled) ?? false
+            self.width = try container.decodeIfPresent(Int.self, forKey: .width)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(self.height, forKey: .height)
+            if self.scaled != false { try container.encode(self.scaled, forKey: .scaled) }
+            try container.encodeIfPresent(self.width, forKey: .width)
+        }
+    }
+}
+
+extension Navree {
     /// `SliderInput`.
     public struct SliderInput: Codable, Hashable, Sendable {
         public var max: String
@@ -9253,66 +9668,90 @@ extension Navree {
     /// `Stack`.
     public struct Stack: Codable, Hashable, Sendable {
         public var align: Navree.Align?
+        public var appear: Navree.Appear?
         public var axis: Navree.Axis
         public var children: [Navree.Node]
         public var gap: Int
+        public var grow: Bool
         public var hidden: Bool
         public var id: String?
         public var justify: Navree.Justify?
+        public var pad: Int
+        public var wide: Navree.Axis?
         public var wrap: Bool
 
         public init(
             align: Navree.Align? = nil,
+            appear: Navree.Appear? = nil,
             axis: Navree.Axis = Navree.Axis.vertical,
             children: [Navree.Node] = [],
             gap: Int = 0,
+            grow: Bool = false,
             hidden: Bool = false,
             id: String? = nil,
             justify: Navree.Justify? = nil,
+            pad: Int = 0,
+            wide: Navree.Axis? = nil,
             wrap: Bool = false
         ) {
             self.align = align
+            self.appear = appear
             self.axis = axis
             self.children = children
             self.gap = gap
+            self.grow = grow
             self.hidden = hidden
             self.id = id
             self.justify = justify
+            self.pad = pad
+            self.wide = wide
             self.wrap = wrap
         }
 
         private enum CodingKeys: String, CodingKey {
             case align = "align"
+            case appear = "appear"
             case axis = "axis"
             case children = "children"
             case gap = "gap"
+            case grow = "grow"
             case hidden = "hidden"
             case id = "id"
             case justify = "justify"
+            case pad = "pad"
+            case wide = "wide"
             case wrap = "wrap"
         }
 
         public init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             self.align = try? container.decodeIfPresent(Navree.Align.self, forKey: .align)
+            self.appear = try? container.decodeIfPresent(Navree.Appear.self, forKey: .appear)
             self.axis = (try? container.decodeIfPresent(Navree.Axis.self, forKey: .axis)) ?? Navree.Axis.vertical
             self.children = try container.decodeIfPresent([Navree.Node].self, forKey: .children) ?? []
             self.gap = try container.decodeIfPresent(Int.self, forKey: .gap) ?? 0
+            self.grow = try container.decodeIfPresent(Bool.self, forKey: .grow) ?? false
             self.hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
             self.id = try container.decodeIfPresent(String.self, forKey: .id)
             self.justify = try? container.decodeIfPresent(Navree.Justify.self, forKey: .justify)
+            self.pad = try container.decodeIfPresent(Int.self, forKey: .pad) ?? 0
+            self.wide = try? container.decodeIfPresent(Navree.Axis.self, forKey: .wide)
             self.wrap = try container.decodeIfPresent(Bool.self, forKey: .wrap) ?? false
         }
 
         public func encode(to encoder: any Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encodeIfPresent(self.align, forKey: .align)
+            try container.encodeIfPresent(self.appear, forKey: .appear)
             if self.axis != Navree.Axis.vertical { try container.encode(self.axis, forKey: .axis) }
             if self.children != [] { try container.encode(self.children, forKey: .children) }
             if self.gap != 0 { try container.encode(self.gap, forKey: .gap) }
+            if self.grow != false { try container.encode(self.grow, forKey: .grow) }
             if self.hidden != false { try container.encode(self.hidden, forKey: .hidden) }
             try container.encodeIfPresent(self.id, forKey: .id)
             try container.encodeIfPresent(self.justify, forKey: .justify)
+            if self.pad != 0 { try container.encode(self.pad, forKey: .pad) }
+            try container.encodeIfPresent(self.wide, forKey: .wide)
             if self.wrap != false { try container.encode(self.wrap, forKey: .wrap) }
         }
     }
@@ -9670,62 +10109,92 @@ extension Navree {
 extension Navree {
     /// `Text`.
     public struct Text: Codable, Hashable, Sendable {
+        public var align: Navree.Align?
+        public var change: Navree.Change?
+        public var colour: Navree.Colour?
         public var heading: Int?
         public var id: String?
         public var lines: Int?
         public var muted: Bool
         public var style: Navree.TextStyle
+        public var tabular: Bool
         public var tone: Navree.Tone?
         public var value: String
+        public var weight: Navree.Weight?
 
         public init(
+            align: Navree.Align? = nil,
+            change: Navree.Change? = nil,
+            colour: Navree.Colour? = nil,
             heading: Int? = nil,
             id: String? = nil,
             lines: Int? = nil,
             muted: Bool = false,
             style: Navree.TextStyle = Navree.TextStyle.body,
+            tabular: Bool = false,
             tone: Navree.Tone? = nil,
-            value: String
+            value: String,
+            weight: Navree.Weight? = nil
         ) {
+            self.align = align
+            self.change = change
+            self.colour = colour
             self.heading = heading
             self.id = id
             self.lines = lines
             self.muted = muted
             self.style = style
+            self.tabular = tabular
             self.tone = tone
             self.value = value
+            self.weight = weight
         }
 
         private enum CodingKeys: String, CodingKey {
+            case align = "align"
+            case change = "change"
+            case colour = "colour"
             case heading = "heading"
             case id = "id"
             case lines = "lines"
             case muted = "muted"
             case style = "style"
+            case tabular = "tabular"
             case tone = "tone"
             case value = "value"
+            case weight = "weight"
         }
 
         public init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.align = try? container.decodeIfPresent(Navree.Align.self, forKey: .align)
+            self.change = try? container.decodeIfPresent(Navree.Change.self, forKey: .change)
+            self.colour = try container.decodeIfPresent(Navree.Colour.self, forKey: .colour)
             self.heading = try container.decodeIfPresent(Int.self, forKey: .heading)
             self.id = try container.decodeIfPresent(String.self, forKey: .id)
             self.lines = try container.decodeIfPresent(Int.self, forKey: .lines)
             self.muted = try container.decodeIfPresent(Bool.self, forKey: .muted) ?? false
             self.style = (try? container.decodeIfPresent(Navree.TextStyle.self, forKey: .style)) ?? Navree.TextStyle.body
+            self.tabular = try container.decodeIfPresent(Bool.self, forKey: .tabular) ?? false
             self.tone = try? container.decodeIfPresent(Navree.Tone.self, forKey: .tone)
             self.value = try container.decode(String.self, forKey: .value)
+            self.weight = try? container.decodeIfPresent(Navree.Weight.self, forKey: .weight)
         }
 
         public func encode(to encoder: any Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(self.align, forKey: .align)
+            try container.encodeIfPresent(self.change, forKey: .change)
+            try container.encodeIfPresent(self.colour, forKey: .colour)
             try container.encodeIfPresent(self.heading, forKey: .heading)
             try container.encodeIfPresent(self.id, forKey: .id)
             try container.encodeIfPresent(self.lines, forKey: .lines)
             if self.muted != false { try container.encode(self.muted, forKey: .muted) }
             if self.style != Navree.TextStyle.body { try container.encode(self.style, forKey: .style) }
+            if self.tabular != false { try container.encode(self.tabular, forKey: .tabular) }
             try container.encodeIfPresent(self.tone, forKey: .tone)
             try container.encode(self.value, forKey: .value)
+            try container.encodeIfPresent(self.weight, forKey: .weight)
         }
     }
 }
@@ -9842,8 +10311,10 @@ extension Navree {
 extension Navree {
     /// `TextStyle`.
     public enum TextStyle: String, Codable, Hashable, Sendable, CaseIterable {
+        case display = "display"
         case largeTitle = "large_title"
         case title = "title"
+        case title2 = "title2"
         case headline = "headline"
         case body = "body"
         case callout = "callout"
@@ -10245,6 +10716,13 @@ extension Navree {
 }
 
 extension Navree {
+    /// `Transition`.
+    public enum Transition: String, Codable, Hashable, Sendable, CaseIterable {
+        case zoom = "zoom"
+    }
+}
+
+extension Navree {
     /// `Trend`.
     public struct Trend: Codable, Hashable, Sendable {
         public var direction: Navree.Direction
@@ -10445,6 +10923,16 @@ extension Navree {
         case friday = "friday"
         case saturday = "saturday"
         case sunday = "sunday"
+    }
+}
+
+extension Navree {
+    /// `Weight`.
+    public enum Weight: String, Codable, Hashable, Sendable, CaseIterable {
+        case regular = "regular"
+        case medium = "medium"
+        case semibold = "semibold"
+        case bold = "bold"
     }
 }
 
