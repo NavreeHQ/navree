@@ -4,10 +4,12 @@
 # Mac as an iPad app (Mac Catalyst), wrapped as an app and run once.
 #
 #   scripts/shots.sh <out folder> <answer.json>...
+#   SHOT_WIDTHS=507,834,1024,1366 scripts/shots.sh <out folder> <list.json>+<detail.json>
 #
 # Writes, for each answer, light and dark pictures of the screen as it first
 # shows and of the whole screen (Shots/Sources/NavreeShots/main.swift says
-# which widths). A window opens for the few seconds the drawing takes.
+# which widths). `<list>+<detail>` draws a list beside the screen one of its
+# rows opened. A window opens for the few seconds the drawing takes.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,7 +20,14 @@ fi
 out="$1"
 shift
 files=()
-for file in "$@"; do files+=("$(cd "$(dirname "$file")" && pwd)/$(basename "$file")"); done
+absolute() { echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; }
+for file in "$@"; do
+    if [[ "$file" == *+* ]]; then
+        files+=("$(absolute "${file%%+*}")+$(absolute "${file#*+}")")
+    else
+        files+=("$(absolute "$file")")
+    fi
+done
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
 

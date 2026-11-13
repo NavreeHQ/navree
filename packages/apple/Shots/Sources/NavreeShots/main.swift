@@ -7,9 +7,17 @@
 // first shows (its bar, its title, what fits under them), and `-whole.png`,
 // the whole screen from its bar to the end of its content. An answer whose
 // file name ends in `-phone` is drawn 402 points wide, one ending in
-// `-tablet` 834 points wide, any other at both. Nothing is sent anywhere:
-// the drawing's intents go nowhere. A Mac has no Dynamic Type, so the
-// pictures are at the default text size: larger sizes need a simulator.
+// `-tablet` 834 points wide, any other at both; `SHOT_WIDTHS=507,834,1024,1366`
+// draws every answer at each of those widths instead, each at the height of
+// that window (a narrow Stage Manager window, an 11-inch iPad upright, a
+// 13-inch one upright and across). The window's class follows the width as
+// the app tells the core: compact under 600 points, medium under 1000.
+//
+// A screen of panes led by a list is drawn as the app draws it, in the
+// system's split view; `<list.json>+<detail.json>` draws a list whose rows
+// open screens beside one of them. Nothing is sent anywhere: the drawing's
+// intents go nowhere. A Mac has no Dynamic Type, so the pictures are at the
+// default text size: larger sizes need a simulator.
 import NavreeDesign
 import NavreeProtocol
 import SwiftUI
@@ -17,46 +25,110 @@ import UIKit
 
 struct Shot {
     let file: URL
+    /// The screen a list's row opened, drawn beside the list.
+    let detail: URL?
     let width: CGFloat
     let dark: Bool
 
-    var name: String { file.deletingPathExtension().lastPathComponent }
-    var height: CGFloat { width < 600 ? 874 : 1194 }
-    var scale: CGFloat { width < 600 ? 3 : 2 }
+    var name: String {
+        let list = file.deletingPathExtension().lastPathComponent
+        return detail.map { list + "+" + $0.deletingPathExtension().lastPathComponent } ?? list
+    }
+    var height: CGFloat {
+        switch width {
+        case ..<450: 874
+        case ..<600: 1000
+        case 1366: 1024
+        case 1024: 1366
+        default: 1194
+        }
+    }
+    var scale: CGFloat { width < 450 ? 3 : 2 }
     var look: String { dark ? "dark" : "light" }
+    var window: WindowClass { WindowClass(sizeClass: width < 600 ? .compact : .regular, points: Double(width)) }
 }
 
 enum Plan {
     static func widths(for file: URL) -> [CGFloat] {
+        if let given = ProcessInfo.processInfo.environment["SHOT_WIDTHS"] {
+            let widths = given.split(separator: ",").compactMap { Double($0) }.map { CGFloat($0) }
+            if !widths.isEmpty { return widths }
+        }
         let name = file.deletingPathExtension().lastPathComponent
         if name.hasSuffix("-phone") { return [402] }
         if name.hasSuffix("-tablet") { return [834] }
         return [402, 834]
     }
 
-    static func shots(_ files: [URL]) -> [Shot] {
-        files.flatMap { file in
-            widths(for: file).flatMap { width in [false, true].map { Shot(file: file, width: width, dark: $0) } }
+    static func shots(_ arguments: [String]) -> [Shot] {
+        arguments.flatMap { argument -> [Shot] in
+            let parts = argument.split(separator: "+").map { URL(fileURLWithPath: String($0)) }
+            guard let file = parts.first else { return [] }
+            let detail = parts.count > 1 ? parts[1] : nil
+            return widths(for: file).flatMap { width in
+                [false, true].map { Shot(file: file, detail: detail, width: width, dark: $0) }
+            }
         }
     }
 }
 
-/// The screen as an app draws it at the root of a destination.
+/// The screen as an app draws it at the root of a destination: in a
+/// navigation stack, or as a list beside its detail where the app's stack
+/// would be columns at this width.
 struct Screen: View {
     let envelope: Navree.Envelope
+    let detail: Navree.Envelope?
+    let window: WindowClass
     /// As an app's stack has one, so a card that zooms is drawn as a source.
     @Namespace private var zoom
 
     var body: some View {
-        NavigationStack {
+        Group {
             if let screen = envelope.screen {
-                ScreenView(screen: screen, depth: .root)
+                switch SplitRules.layout(screen.body, width: window) {
+                case .panes(let panes):
+                    SplitColumns(
+                        path: .constant([]), compactColumn: SplitRules.compactColumn(panes),
+                        inspectorTitle: panes.inspector?.title, choose: { _, _ in },
+                        list: { ScreenView(screen: SplitRules.screen(.list, of: screen, panes: panes), depth: .root) },
+                        detail: { ScreenView(screen: SplitRules.screen(.detail, of: screen, panes: panes), depth: .pushed) },
+                        inspector: panes.inspector == nil ? nil : {
+                            ScreenView(screen: SplitRules.screen(.inspector, of: screen, panes: panes), depth: .pushed)
+                        },
+                        pushed: { _ in EmptyView() }
+                    )
+                case .listBesideDetail where detail != nil:
+                    SplitColumns(
+                        path: .constant([]), compactColumn: .detail, choose: { _, _ in },
+                        list: { ScreenView(screen: screen, depth: .root) },
+                        detail: {
+                            if let opened = detail?.screen { ScreenView(screen: opened, depth: .pushed) } else { NothingChosen() }
+                        },
+                        pushed: { _ in EmptyView() }
+                    )
+                default:
+                    NavigationStack {
+                        ScreenView(screen: screen, depth: .root)
+                    }
+                }
             } else {
                 Text("This answer holds no screen.")
             }
         }
         .environment(\.navree, DrawingContext(send: { _ in }, icons: envelope.icons))
         .environment(\.navreeZoomSpace, zoom)
+        .environment(\.navreeWindow, window)
+    }
+
+    /// Whether the screen is drawn as columns, which have no one scroll to
+    /// draw whole.
+    static func columns(_ envelope: Navree.Envelope, detail: Navree.Envelope?, window: WindowClass) -> Bool {
+        guard let screen = envelope.screen else { return false }
+        switch SplitRules.layout(screen.body, width: window) {
+        case .panes: return true
+        case .listBesideDetail: return detail != nil
+        case .stack: return false
+        }
     }
 }
 
@@ -75,17 +147,18 @@ final class Shooter {
             do {
                 let data = try Data(contentsOf: shot.file)
                 let envelope = try WireDecoder.decode(Navree.Envelope.self, from: data)
-                try await take(shot, envelope: envelope)
+                let detail = try shot.detail.map { try WireDecoder.decode(Navree.Envelope.self, from: Data(contentsOf: $0)) }
+                try await take(shot, envelope: envelope, detail: detail)
             } catch {
                 FileHandle.standardError.write(Data("\(shot.file.lastPathComponent): \(error)\n".utf8))
             }
         }
     }
 
-    private func take(_ shot: Shot, envelope: Navree.Envelope) async throws {
-        let host = UIHostingController(rootView: Screen(envelope: envelope))
+    private func take(_ shot: Shot, envelope: Navree.Envelope, detail: Navree.Envelope?) async throws {
+        let host = UIHostingController(rootView: Screen(envelope: envelope, detail: detail, window: shot.window))
         host.overrideUserInterfaceStyle = shot.dark ? .dark : .light
-        host.traitOverrides.horizontalSizeClass = shot.width < 600 ? .compact : .regular
+        host.traitOverrides.horizontalSizeClass = shot.window == .compact ? .compact : .regular
         host.traitOverrides.verticalSizeClass = .regular
         guard let root = window.rootViewController else { return }
         root.addChild(host)
@@ -100,6 +173,7 @@ final class Shooter {
         host.view.frame = CGRect(x: 0, y: 0, width: shot.width, height: shot.height)
         try await settle(host.view)
         try write(host.view, to: "\(shot.name)-\(Int(shot.width))-\(shot.look)-top.png", scale: shot.scale)
+        if Screen.columns(envelope, detail: detail, window: shot.window) { return }
 
         // The whole screen: as tall as its scrolling content, so nothing scrolls.
         for _ in 0..<3 {
@@ -162,7 +236,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
         let out = URL(fileURLWithPath: arguments[0], isDirectory: true)
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
-        let files = arguments.dropFirst().map { URL(fileURLWithPath: $0) }
+        let files = Array(arguments.dropFirst())
 
         scene.sizeRestrictions?.minimumSize = CGSize(width: 420, height: 600)
         let window = UIWindow(windowScene: scene)
