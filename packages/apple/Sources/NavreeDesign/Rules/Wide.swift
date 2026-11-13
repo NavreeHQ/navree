@@ -1,3 +1,4 @@
+import Foundation
 import NavreeProtocol
 
 /// How wide the window is, in the classes the runtime core is told: what the
@@ -247,6 +248,27 @@ public enum SplitRules {
             break
         }
         return nil
+    }
+
+    /// The id of the row of a list beside its detail that opened the detail
+    /// shown: the list's selection, as Mail highlights the message open and no
+    /// other. A row ticked for an action on many is no part of it.
+    public static func openRow(in body: Navree.Node, opened address: String) -> String? {
+        let opened = path(of: address)
+        func leads(_ action: Navree.Action?) -> Bool {
+            guard case .navigate(let link)? = action else { return false }
+            return path(of: link.href) == opened
+        }
+        var found: String?
+        body.walk { node in
+            guard found == nil else { return }
+            switch node {
+            case .row(let row) where leads(row.action): found = row.id
+            case .table(let table): found = table.rows.first { leads($0.action) }?.id
+            default: break
+            }
+        }
+        return found
     }
 
     /// An address's path: what is left of it without its origin, query and fragment.

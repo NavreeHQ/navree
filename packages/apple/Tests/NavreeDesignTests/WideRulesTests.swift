@@ -218,3 +218,37 @@ private func go(_ href: String, _ present: Navree.Present = .auto) -> Navree.Act
     #expect(ContentRules.dateStyle(Navree.DateInput(kind: .time)) == .compact)
     #expect(ContentRules.dateStyle(Navree.DateInput(kind: .datetime)) == .compact)
 }
+
+@Test func aMacsListBesideItsDetailIsOneSplitViewOfThreeColumnsWithTheDestinationsAsItsSidebar() throws {
+    let orders = SplitRules.layout(try corpusScreen("screen-list.json").body, width: .expanded)
+    let inbox = SplitRules.layout(try corpusScreen("screen-inbox.json").body, width: .expanded)
+    let dashboard = SplitRules.layout(try corpusScreen("screen-dashboard.json").body, width: .expanded)
+    // A Mac's window (a sidebar that never turns into a tab bar): Orders and
+    // the inbox are sidebar, list and detail in one split view, as Mail.
+    #expect(NavigationRules.window(destinations: 3, sidebarOnly: true, stack: orders) == .sidebarListDetail)
+    #expect(NavigationRules.window(destinations: 3, sidebarOnly: true, stack: inbox) == .sidebarListDetail)
+    // A destination that is one stack keeps the system's tab view and its sidebar.
+    #expect(NavigationRules.window(destinations: 3, sidebarOnly: true, stack: dashboard) == .tabs)
+    // An iPad's destinations are a tab bar that may turn into a sidebar: the
+    // tab view stays at every width, with the split view inside its tab.
+    #expect(NavigationRules.window(destinations: 3, sidebarOnly: false, stack: orders) == .tabs)
+    #expect(NavigationRules.window(destinations: 3, sidebarOnly: false, stack: inbox) == .tabs)
+    // One destination has no sidebar to share a split view with.
+    #expect(NavigationRules.window(destinations: 1, sidebarOnly: true, stack: orders) == .tabs)
+}
+
+@Test func theListsChosenRowIsTheOneOpenBesideItNeverOneTickedForMany() throws {
+    // The corpus orders: CH-1041 is ticked for an action on many, CH-1042 is
+    // open beside the list. The list shows CH-1042 chosen, as Mail shows the
+    // message open, and no other.
+    let orders = try corpusScreen("screen-list.json")
+    #expect(SplitRules.openRow(in: orders.body, opened: "https://charkha.example/orders/1042") == "1042")
+    #expect(SplitRules.openRow(in: orders.body, opened: "/orders/1041?from=list") == "1041")
+    #expect(SplitRules.openRow(in: orders.body, opened: "/orders/9") == nil)
+    // A list's rows are chosen by their ids the same way.
+    let mail = Navree.Node.list(Navree.List(children: [
+        .row(Navree.Row(action: go("/inbox/87"), id: "87", title: "Simran Bhatia")),
+        .row(Navree.Row(action: go("/inbox/88"), id: "88", title: "Harpreet Sandhu")),
+    ]))
+    #expect(SplitRules.openRow(in: mail, opened: "/inbox/88") == "88")
+}

@@ -11,6 +11,9 @@ extension EnvironmentValues {
     /// Set in the list of a list beside its detail: what a row that would push
     /// does instead, choosing the screen the detail shows.
     @Entry public var navreeChoose: (@MainActor @Sendable (Navree.Action, Place) -> Void)? = nil
+    /// Set in the list of a list beside its detail: the address of the screen
+    /// the detail shows, whose row the list shows chosen.
+    @Entry public var navreeOpen: String? = nil
 }
 
 /// The search field takes the focus when Find is chosen from the menu bar.
@@ -32,14 +35,19 @@ struct FindFocus: ViewModifier {
 /// width the system folds the columns into one stack, showing first the
 /// column `compactColumn` names.
 ///
+/// With a `sidebar` (the app's destinations, on a Mac), the split view has
+/// three columns, as Mail's mailboxes, messages and message: the sidebar,
+/// the list as the content column, and the detail.
+///
 /// A choice in the list is not a push: every link the list's rows follow is
 /// handed to `choose`, which asks the runtime for the detail; the detail
 /// column then shows what it answers.
-public struct SplitColumns<ListColumn: View, DetailRoot: View, Inspector: View, Pushed: View>: View {
+public struct SplitColumns<Sidebar: View, ListColumn: View, DetailRoot: View, Inspector: View, Pushed: View>: View {
     let path: Binding<[PathEntry]>
     let compactColumn: CompactColumn
     let inspectorTitle: String?
     let choose: @MainActor @Sendable (Navree.Action, Place) -> Void
+    let sidebar: Sidebar?
     let list: ListColumn
     let detail: DetailRoot
     let inspector: Inspector?
@@ -51,7 +59,7 @@ public struct SplitColumns<ListColumn: View, DetailRoot: View, Inspector: View, 
 
     public init(
         path: Binding<[PathEntry]>, compactColumn: CompactColumn, inspectorTitle: String? = nil,
-        choose: @escaping @MainActor @Sendable (Navree.Action, Place) -> Void,
+        choose: @escaping @MainActor @Sendable (Navree.Action, Place) -> Void, sidebar: Sidebar?,
         @ViewBuilder list: () -> ListColumn, @ViewBuilder detail: () -> DetailRoot,
         inspector: (() -> Inspector)? = nil, @ViewBuilder pushed: @escaping (PathEntry) -> Pushed
     ) {
@@ -59,48 +67,78 @@ public struct SplitColumns<ListColumn: View, DetailRoot: View, Inspector: View, 
         self.compactColumn = compactColumn
         self.inspectorTitle = inspectorTitle
         self.choose = choose
+        self.sidebar = sidebar
         self.list = list()
         self.detail = detail()
         self.inspector = inspector?()
         self.pushed = pushed
-        _shown = State(initialValue: compactColumn == .detail ? .detail : .sidebar)
+        _shown = State(initialValue: Self.column(compactColumn, sidebar: sidebar != nil))
     }
 
     public var body: some View {
-        NavigationSplitView(preferredCompactColumn: $shown) {
-            list
-                // A row the list would push is a choice, asked of the runtime
-                // for the detail column.
-                .environment(\.navreeChoose, { action, place in
-                    shown = .detail
-                    choose(action, place)
-                })
-                // A list narrower than the window draws as a phone's would:
-                // rows, never columns, its search under its title.
-                .environment(\.horizontalSizeClass, .compact)
-                .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 440)
-        } detail: {
-            NavigationStack(path: path) {
-                detail
-                    .navigationDestination(for: PathEntry.self, destination: pushed)
-                    .toolbar {
-                        if inspector != nil {
-                            ToolbarItem(placement: .automatic) {
-                                Button {
-                                    inspecting = !inspectorShown
-                                } label: {
-                                    Label(inspectorTitle ?? String(localized: "Inspector"), systemImage: "sidebar.trailing")
-                                }
-                                .help(inspectorShown ? "Hide \(inspectorTitle ?? "Inspector")" : "Show \(inspectorTitle ?? "Inspector")")
-                            }
-                        }
-                    }
+        Group {
+            if let sidebar {
+                NavigationSplitView(preferredCompactColumn: $shown) {
+                    sidebar
+                        .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
+                } content: {
+                    listColumn
+                } detail: {
+                    detailColumn
+                }
+            } else {
+                NavigationSplitView(preferredCompactColumn: $shown) {
+                    listColumn
+                } detail: {
+                    detailColumn
+                }
             }
-            .modifier(InspectorColumn(content: inspector, shown: inspectorBinding))
-            .modifier(DetailMinimum())
         }
         .navigationSplitViewStyle(.balanced)
-        .onChange(of: compactColumn) { _, column in shown = column == .detail ? .detail : .sidebar }
+        .onChange(of: compactColumn) { _, column in shown = Self.column(column, sidebar: sidebar != nil) }
+    }
+
+    /// The split view's column that holds the list or the detail.
+    static func column(_ column: CompactColumn, sidebar: Bool) -> NavigationSplitViewColumn {
+        switch column {
+        case .detail: .detail
+        case .list: sidebar ? .content : .sidebar
+        }
+    }
+
+    private var listColumn: some View {
+        list
+            // A row the list would push is a choice, asked of the runtime
+            // for the detail column.
+            .environment(\.navreeChoose, { action, place in
+                shown = .detail
+                choose(action, place)
+            })
+            // A list narrower than the window draws as a phone's would:
+            // rows, never columns, its search under its title.
+            .environment(\.horizontalSizeClass, .compact)
+            .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 440)
+    }
+
+    private var detailColumn: some View {
+        NavigationStack(path: path) {
+            detail
+                .navigationDestination(for: PathEntry.self, destination: pushed)
+                .toolbar {
+                    if inspector != nil {
+                        ToolbarItem(placement: .automatic) {
+                            Button {
+                                inspecting = !inspectorShown
+                            } label: {
+                                Label(inspectorTitle ?? String(localized: "Inspector"), systemImage: "sidebar.trailing")
+                            }
+                            .help(inspectorShown ? "Hide \(inspectorTitle ?? "Inspector")" : "Show \(inspectorTitle ?? "Inspector")")
+                        }
+                    }
+                }
+        }
+        .modifier(InspectorColumn(content: inspector, shown: inspectorBinding))
+        .modifier(DetailMinimum())
     }
 
     /// Shown beside the detail as the window's width says, until the person
@@ -114,8 +152,23 @@ public struct SplitColumns<ListColumn: View, DetailRoot: View, Inspector: View, 
     }
 }
 
-extension SplitColumns where Inspector == EmptyView {
-    /// A list beside its detail, with no inspector.
+extension SplitColumns where Sidebar == EmptyView {
+    /// A list beside its detail, in two columns.
+    public init(
+        path: Binding<[PathEntry]>, compactColumn: CompactColumn, inspectorTitle: String? = nil,
+        choose: @escaping @MainActor @Sendable (Navree.Action, Place) -> Void,
+        @ViewBuilder list: () -> ListColumn, @ViewBuilder detail: () -> DetailRoot,
+        inspector: (() -> Inspector)? = nil, @ViewBuilder pushed: @escaping (PathEntry) -> Pushed
+    ) {
+        self.init(
+            path: path, compactColumn: compactColumn, inspectorTitle: inspectorTitle, choose: choose, sidebar: nil,
+            list: list, detail: detail, inspector: inspector, pushed: pushed
+        )
+    }
+}
+
+extension SplitColumns where Sidebar == EmptyView, Inspector == EmptyView {
+    /// A list beside its detail, in two columns, with no inspector.
     public init(
         path: Binding<[PathEntry]>, compactColumn: CompactColumn,
         choose: @escaping @MainActor @Sendable (Navree.Action, Place) -> Void,
@@ -123,8 +176,8 @@ extension SplitColumns where Inspector == EmptyView {
         @ViewBuilder pushed: @escaping (PathEntry) -> Pushed
     ) {
         self.init(
-            path: path, compactColumn: compactColumn, inspectorTitle: nil, choose: choose, list: list, detail: detail,
-            inspector: nil, pushed: pushed
+            path: path, compactColumn: compactColumn, inspectorTitle: nil, choose: choose, sidebar: nil, list: list,
+            detail: detail, inspector: nil, pushed: pushed
         )
     }
 }
