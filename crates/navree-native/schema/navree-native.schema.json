@@ -1145,6 +1145,32 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "Category": {
+      "properties": {
+        "colour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "Centre": {
       "enum": [
         "value",
@@ -1535,6 +1561,49 @@
         "form",
         "vocab",
         "text_percent"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ClockMoment": {
+      "properties": {
+        "at": {
+          "type": "number",
+          "x-since": 0
+        },
+        "colour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "at",
+        "name"
       ],
       "type": "object",
       "x-kind": "object",
@@ -2486,6 +2555,185 @@
       ],
       "type": "string",
       "x-kind": "enum",
+      "x-since": 0
+    },
+    "DayClock": {
+      "properties": {
+        "colour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "hours": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Hour"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "hub": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "key": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Category"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "moments": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClockMoment"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "now": {
+          "anyOf": [
+            {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "shown": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
       "x-since": 0
     },
     "Delivery": {
@@ -3747,6 +3995,53 @@
       ],
       "type": "string",
       "x-kind": "enum",
+      "x-since": 0
+    },
+    "Hour": {
+      "properties": {
+        "category": {
+          "anyOf": [
+            {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "level": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
       "x-since": 0
     },
     "HttpsUrl": {
@@ -5438,6 +5733,21 @@
           "required": [
             "t"
           ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/DayClock"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "day_clock"
+            }
+          },
+          "required": [
+            "t"
+          ]
         }
       ],
       "x-kind": "union",
@@ -5665,6 +5975,11 @@
         {
           "tag": "rings",
           "type": "Rings",
+          "x-since": 0
+        },
+        {
+          "tag": "day_clock",
+          "type": "DayClock",
           "x-since": 0
         }
       ]

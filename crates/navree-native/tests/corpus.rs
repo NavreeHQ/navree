@@ -23,11 +23,11 @@ use navree_native::input::{
     ToggleInput, ToggleKind, Weekday,
 };
 use navree_native::node::{
-    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Centre, Chart, ChartKind,
-    Code, Colour, Column,
-    ColumnRole, Delivery, Dialog, Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
-    Field, Figure, Fit, Form, Gauge, Grid, Hidden, Icon, Image, Justify, Link, List, Live, Menu,
-    Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress, Prominence,
+    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Category, Centre, Chart,
+    ChartKind, ClockMoment, Code, Colour, Column, ColumnRole, DayClock, Delivery, Dialog,
+    Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
+    Field, Figure, Fit, Form, Gauge, Grid, Hidden, Hour, Icon, Image, Justify, Link, List, Live,
+    Menu, Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress, Prominence,
     Purpose, Question, Region, Reorder, Rich, Ring, RingValue, Rings, RingsCentre, Role, Row,
     RowState, Run, Section, SectionStyle,
     Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table,
@@ -2197,6 +2197,83 @@ fn screen_today() -> Envelope {
         ],
         ..Grid::default()
     });
+    // The day as 24 wedges round a clock: steps an hour, what each hour was,
+    // and the moments that stand out. It is 8 in the evening; the hours to come
+    // have no value yet.
+    let steps = [
+        0, 0, 0, 0, 0, 0, 120, 1850, 940, 520, 380, 610, 760, 300, 280, 350, 600, 1200, 940, 420,
+        142,
+    ];
+    let levels = [
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.9, 0.5, 0.3, 0.25, 0.4, 0.5, 0.2, 0.2, 0.25, 0.4,
+        0.8, 0.55, 0.3, 0.1,
+    ];
+    // 0 active, 1 calm, 2 rest: the hours of the night are rest.
+    let kinds = [2, 2, 2, 2, 2, 2, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1];
+    let hours: Vec<Hour> = (0..24)
+        .map(|hour| match steps.get(hour) {
+            Some(count) => Hour {
+                value: Some(number(*count)),
+                level: Some(decimal(levels[hour])),
+                category: Some(kinds[hour]),
+            },
+            None => Hour::default(),
+        })
+        .collect();
+    let moment = |at: f64, name: &str, glyph: Icon, hue: Hue| ClockMoment {
+        at: decimal(at),
+        name: s(name),
+        icon: Some(glyph),
+        colour: Some(Colour::new(hue)),
+    };
+    let day = Node::DayClock(DayClock {
+        id: Some(s("day-clock")),
+        title: Some(s("Steps by hour")),
+        hours,
+        key: vec![
+            Category {
+                name: s("Active"),
+                colour: Some(Colour::new(Hue::Green)),
+            },
+            Category {
+                name: s("Calm"),
+                colour: Some(Colour::new(Hue::Cyan)),
+            },
+            Category {
+                name: s("Rest"),
+                colour: Some(Colour::new(Hue::Violet)),
+            },
+        ],
+        moments: vec![
+            moment(
+                6.5,
+                "Woke up, 6:30 am",
+                icon("sunrise", "M12 2v6M4.9 10.9l1.4 1.4M2 18h2M20 18h2M17.7 12.3l1.4-1.4M22 22H2M16 18a4 4 0 0 0-8 0"),
+                Hue::Amber,
+            ),
+            moment(
+                7.25,
+                "Morning run, 3.2 km",
+                icon("footprints", "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z"),
+                Hue::Green,
+            ),
+            moment(
+                18.4,
+                "Highest heart rate, 158 bpm",
+                icon("heart-pulse", "M19.5 12.6 12 20l-7.5-7.4a5 5 0 0 1 7.5-6.6 5 5 0 0 1 7.5 6.6zM3 12h4l2-3 3 6 2-3h5"),
+                Hue::Rose,
+            ),
+        ],
+        now: Some(20),
+        unit: Some(s("steps")),
+        shown: Some(s("9,412")),
+        label: Some(s("Steps")),
+        icon: Some(icon("footprints", "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z")),
+        colour: Some(Colour::new(Hue::Blue)),
+        hub: Some(Colour::new(Hue::Violet)),
+        summary: Some(s("9,412 steps in the day so far. Busiest at 7 am: 1,850. 3 moments: Woke up, 6:30 am, Morning run, 3.2 km, Highest heart rate, 158 bpm.")),
+        ..DayClock::default()
+    });
     let body = Node::Stack(Stack {
         gap: 4,
         children: vec![
@@ -2206,7 +2283,7 @@ fn screen_today() -> Envelope {
                 heading: Some(1),
                 ..Text::default()
             }),
-            muted("Your Thursday, 12 November, from your own readings."),
+            muted("Your Friday, 13 November, from your own readings."),
             Node::Section(Section {
                 style: SectionStyle::Card,
                 children: vec![
@@ -2247,6 +2324,12 @@ fn screen_today() -> Envelope {
                         ..Grid::default()
                     }),
                 ],
+                ..Section::default()
+            }),
+            Node::Section(Section {
+                title: Some(s("Your day")),
+                style: SectionStyle::Card,
+                children: vec![day],
                 ..Section::default()
             }),
             Node::Section(Section {

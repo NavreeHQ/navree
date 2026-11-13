@@ -266,6 +266,7 @@ kinds! {
     Pane(Pane) => "pane" since 0,
     Ring(Ring) => "ring" since 0,
     Rings(Rings) => "rings" since 0,
+    DayClock(DayClock) => "day_clock" since 0,
 }
 
 /// A field that arrived after its type did: the type's name in the schema
@@ -562,9 +563,59 @@ impl Node {
                     })
                     .collect(),
             }),
+            Self::DayClock(node) => {
+                // The day's total first, then each moment at its time.
+                let total: f64 = node
+                    .hours
+                    .iter()
+                    .filter_map(|hour| hour.value.as_ref().and_then(serde_json::Number::as_f64))
+                    .sum();
+                let mut items = vec![n::Fact {
+                    label: node
+                        .title
+                        .clone()
+                        .or_else(|| node.label.clone())
+                        .unwrap_or_default(),
+                    value: vec![Node::text(words(
+                        node.shown.as_deref(),
+                        Some(&quantity(total)),
+                        node.unit.as_deref(),
+                    ))],
+                    icon: node.icon.clone(),
+                    tone: None,
+                    details: Vec::new(),
+                }];
+                items.extend(node.moments.iter().map(|moment| {
+                    let minutes = (moment.at.as_f64().unwrap_or_default() * 60.0).round() as u32;
+                    n::Fact {
+                        label: moment.name.clone(),
+                        value: vec![Node::text(format!(
+                            "{:02}:{:02}",
+                            minutes / 60 % 24,
+                            minutes % 60
+                        ))],
+                        icon: moment.icon.clone(),
+                        tone: moment.colour.as_ref().and_then(|colour| colour.hue.tone()),
+                        details: Vec::new(),
+                    }
+                }));
+                Node::Facts(n::Facts {
+                    id: node.id.clone(),
+                    items,
+                })
+            }
             Self::Unknown(node) => return node.alt.as_deref().cloned(),
             _ => return None,
         })
+    }
+}
+
+/// A number written without a fraction when it has none.
+fn quantity(value: f64) -> serde_json::Number {
+    if value.fract() == 0.0 && value.abs() < 9.0e15 {
+        (value as i64).into()
+    } else {
+        serde_json::Number::from_f64(value).unwrap_or_else(|| 0.into())
     }
 }
 
@@ -609,9 +660,10 @@ pub fn newer_than(node: &Node, vocab: u32) -> Option<Kind> {
 mod tests {
     use super::*;
     use crate::node::{
-        Avatar, Badge, Chart, Colour, Direction, FeedRow, Figure, Gauge, Hue, Icon, Message,
-        Moment, Pane, PaneRole, Ring, RingValue, Rings, RingsCentre, RowState, Run, Section,
-        Stack, Standard, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown, Zone,
+        Avatar, Badge, Chart, ClockMoment, Colour, DayClock, Direction, FeedRow, Figure, Gauge,
+        Hour, Hue, Icon, Message, Moment, Pane, PaneRole, Ring, RingValue, Rings, RingsCentre,
+        RowState, Run, Section, Stack, Standard, Timeline, Tone, Toolbar, ToolbarItem, Trend,
+        Unknown, Zone,
     };
 
     #[test]
@@ -752,6 +804,37 @@ mod tests {
                 colour: Some(Colour::new(Hue::Success)),
                 ..Ring::default()
             }),
+            Node::DayClock(DayClock {
+                id: Some("day".to_owned()),
+                title: Some("Steps by hour".to_owned()),
+                hours: vec![
+                    Hour {
+                        value: Some(120.into()),
+                        ..Hour::default()
+                    },
+                    Hour {
+                        value: Some(1850.into()),
+                        ..Hour::default()
+                    },
+                    Hour::default(),
+                ],
+                moments: vec![
+                    ClockMoment {
+                        at: quantity(6.5),
+                        name: "Woke up".to_owned(),
+                        colour: Some(Colour::new(Hue::Amber)),
+                        ..ClockMoment::default()
+                    },
+                    ClockMoment {
+                        at: 18.into(),
+                        name: "Evening walk".to_owned(),
+                        colour: Some(Colour::new(Hue::Success)),
+                        ..ClockMoment::default()
+                    },
+                ],
+                unit: Some("steps".to_owned()),
+                ..DayClock::default()
+            }),
             Node::Rings(Rings {
                 id: Some("activity".to_owned()),
                 rings: vec![
@@ -787,7 +870,8 @@ mod tests {
             | Kind::Message
             | Kind::Pane
             | Kind::Ring
-            | Kind::Rings => 1,
+            | Kind::Rings
+            | Kind::DayClock => 1,
             kind => kind.since(),
         }
     }
@@ -873,15 +957,6 @@ mod tests {
         assert_eq!(figure.tone, None);
     }
 
-    /// A number, written without a fraction when it has none.
-    fn quantity(value: f64) -> serde_json::Number {
-        if value.fract() == 0.0 {
-            (value as i64).into()
-        } else {
-            serde_json::Number::from_f64(value).unwrap()
-        }
-    }
-
     fn zone(from: f64, to: f64, label: &str, hue: Hue) -> Zone {
         Zone {
             from: quantity(from),
@@ -911,6 +986,25 @@ mod tests {
         };
         assert_eq!(progress.label.as_deref(), Some("Load ratio: 1.12 (Overuse)"));
         assert_eq!(progress.value, Some(560));
+    }
+
+    #[test]
+    fn a_day_clock_becomes_its_total_and_its_moments_at_their_times() {
+        let clock = part(Kind::DayClock);
+        let Downgraded::Node(Node::Facts(facts)) = downgrade_by(clock, 0, only(Kind::DayClock))
+        else {
+            panic!("a clock becomes facts");
+        };
+        assert_eq!(facts.id.as_deref(), Some("day"));
+        let at = |index: usize| match &facts.items[index].value[..] {
+            [Node::Text(text)] => text.value.clone(),
+            other => panic!("{other:?}"),
+        };
+        // 120 + 1850 steps, and no hour of zero among the hours with no reading.
+        assert_eq!((facts.items[0].label.as_str(), at(0)), ("Steps by hour", "1970 steps".to_owned()));
+        assert_eq!((facts.items[1].label.as_str(), at(1)), ("Woke up", "06:30".to_owned()));
+        assert_eq!((facts.items[2].label.as_str(), at(2)), ("Evening walk", "18:00".to_owned()));
+        assert_eq!(facts.items[2].tone, Some(Tone::Success));
     }
 
     #[test]

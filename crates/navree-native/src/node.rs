@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::action::Action;
 pub use crate::charts::{
-    Centre, Colour, Hint, HintMark, Hue, Ring, RingValue, Rings, RingsCentre, Zone,
+    Category, Centre, ClockMoment, Colour, DayClock, Hint, HintMark, Hour, Hue, Ring, RingValue,
+    Rings, RingsCentre, Zone,
 };
 use crate::input::Input;
 
@@ -120,6 +121,8 @@ pub enum Node {
     Ring(Ring),
     /// Several values on rings inside each other.
     Rings(Rings),
+    /// A day as 24 hours round a dial, with its moments.
+    DayClock(DayClock),
     /// A kind this build has never heard of, from a newer server. A client
     /// draws its `alt`, or shows the page in its web view when it has none.
     Unknown(Unknown),
@@ -217,6 +220,7 @@ impl Node {
             Self::Pane(node) => node.id.as_deref(),
             Self::Ring(node) => node.id.as_deref(),
             Self::Rings(node) => node.id.as_deref(),
+            Self::DayClock(node) => node.id.as_deref(),
             Self::Unknown(node) => node.id.as_deref(),
         }
     }
@@ -289,7 +293,8 @@ impl Node {
             | Self::Web(_)
             | Self::Gauge(_)
             | Self::Ring(_)
-            | Self::Rings(_) => Vec::new(),
+            | Self::Rings(_)
+            | Self::DayClock(_) => Vec::new(),
         }
     }
 
@@ -386,7 +391,8 @@ impl Node {
             | Self::Web(_)
             | Self::Gauge(_)
             | Self::Ring(_)
-            | Self::Rings(_) => Vec::new(),
+            | Self::Rings(_)
+            | Self::DayClock(_) => Vec::new(),
         }
     }
 
@@ -1159,6 +1165,11 @@ impl Node {
             Self::Figure(node) => node.icon.iter_mut().collect(),
             Self::Ring(node) => node.icon.iter_mut().collect(),
             Self::Rings(node) => node.icon.iter_mut().collect(),
+            Self::DayClock(node) => node
+                .icon
+                .iter_mut()
+                .chain(node.moments.iter_mut().filter_map(|moment| moment.icon.as_mut()))
+                .collect(),
             _ => Vec::new(),
         }
     }
@@ -2482,6 +2493,27 @@ mod tests {
         assert_eq!(gauge.zones[0].colour, Some(Colour::new(Hue::Neutral)));
         // A zone needs both its ends.
         assert!(serde_json::from_str::<Zone>(r#"{"from":1}"#).is_err());
+    }
+
+    #[test]
+    fn a_day_clock_holds_hours_with_no_reading_and_the_hour_that_is_now() {
+        let node: Node = serde_json::from_str(
+            r#"{"t":"day_clock","hours":[{"value":120,"category":1},{}],
+                "key":[{"name":"Rest"},{"name":"Calm","colour":{"hue":"cyan"}}],
+                "moments":[{"at":6.5,"name":"Woke up"}],"now":20}"#,
+        )
+        .unwrap();
+        let Node::DayClock(clock) = node else {
+            panic!("not a clock");
+        };
+        assert_eq!(clock.now, Some(20));
+        assert_eq!(clock.hours[0].category, Some(1));
+        // An hour with no reading is not an hour of zero: it holds nothing.
+        assert_eq!(clock.hours[1], crate::charts::Hour::default());
+        assert_eq!(serde_json::to_string(&clock.hours[1]).unwrap(), "{}");
+        assert_eq!(clock.moments[0].at.as_f64(), Some(6.5));
+        // A moment says when and what.
+        assert!(serde_json::from_str::<Node>(r#"{"t":"day_clock","moments":[{"at":6.5}]}"#).is_err());
     }
 
     #[test]

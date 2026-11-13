@@ -408,6 +408,130 @@ pub struct Rings {
     pub hint: Option<Hint>,
 }
 
+/// A name in a key, with the colour it wears: a kind of hour on a clock, a stage
+/// of sleep in a strip, a part of a column. A client lists the categories of a
+/// chart beside it, each with its colour, so a colour is never alone.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Category {
+    /// What it is: `Deep`, `Active`.
+    pub name: String,
+    /// Its colour. A client takes its colours in turn when there is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+}
+
+/// One hour of a [`DayClock`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Hour {
+    /// The hour's value: steps, active minutes. None for an hour with no
+    /// reading, which is not an hour of zero.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<serde_json::Number>,
+    /// How strong the hour is, 0 to 1: how much of it was active, say. A client
+    /// draws a stronger hour stronger. Left out, the hour's value against the
+    /// busiest hour's says it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<serde_json::Number>,
+    /// What the hour was: the place of one of the clock's `key`, from 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<u32>,
+}
+
+/// Something that happened at a time of day, marked on a [`DayClock`]: a run, a
+/// meal, a meeting, waking up.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClockMoment {
+    /// The time of day in hours, 0 to 24: `6.75` is a quarter to seven in the
+    /// morning.
+    pub at: serde_json::Number,
+    /// What happened, with the time or the figure that matters: `Morning run,
+    /// 3.2 km`.
+    pub name: String,
+    /// Its mark.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<Icon>,
+    /// The colour of its mark. It takes the colour of its hour when there is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+}
+
+impl Default for ClockMoment {
+    fn default() -> Self {
+        Self {
+            at: 0.into(),
+            name: String::new(),
+            icon: None,
+            colour: None,
+        }
+    }
+}
+
+/// The most moments a client marks on a clock; the others are listed.
+pub const MAX_MOMENTS: usize = 8;
+
+/// A day as 24 hours round a dial, midnight at the top and running clockwise:
+/// how much happened in each hour (steps, active minutes), what each hour was
+/// (a kind from the `key`), and the moments that stand out. A client draws the
+/// dial as its system draws a 24 hour dial, with the hours' values as marks
+/// round it, each in the colour of its category and as strong as its level; the
+/// hour that is now is outlined; the middle holds the day's total.
+///
+/// `hours` holds the 24 hours from midnight; fewer leave the rest empty. The
+/// total is `shown`, in the page's words and without its unit, and `label` says
+/// what it counts under it (`Steps`). More than [`MAX_MOMENTS`] are listed
+/// beside the dial and not marked on it.
+///
+/// The clock is named by its `summary`, one sentence with the total, the
+/// busiest hour and the moments.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DayClock {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What the clock shows: `Steps by hour`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// The hours, from midnight.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hours: Vec<Hour>,
+    /// What an hour can be, each with its colour: the key of the dial.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub key: Vec<Category>,
+    /// The moments that stand out.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub moments: Vec<ClockMoment>,
+    /// The hour that is now, 0 to 23, when the day is today.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub now: Option<u8>,
+    /// The value a full hour stands for. The busiest hour's when left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<serde_json::Number>,
+    /// What the values count: `steps`, `min`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    /// The day's total in the page's words, without its unit: `9,412`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shown: Option<String>,
+    /// What the total counts, small under it: `Steps`. The unit when left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// An icon over the total.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<Icon>,
+    /// The colour of an hour that has no category.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+    /// The colour the middle is washed with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hub: Option<Colour>,
+    /// One sentence that says the whole clock to a reader who can't see it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// A note about what the clock means, shown when asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -39,7 +39,8 @@ use serde_json::{Map, Value, json};
 
 use crate::action::{Action, Command, Pair, Present, State};
 use crate::charts::{
-    Centre, Colour, Hint, HintMark, Hue, Ring, RingValue, Rings, RingsCentre, Zone,
+    Category, Centre, ClockMoment, Colour, DayClock, Hint, HintMark, Hour, Hue, Ring, RingValue,
+    Rings, RingsCentre, Zone,
 };
 use crate::client::{ClientDescriptor, Contrast, FormFactor, Platform, Scheme};
 use crate::device::{
@@ -605,7 +606,7 @@ union!(Node tag "t"
         Stack, Grid, Section, List, Row, Split, Tabs, Disclosure, Divider, Spacer, Region,
         Text, Rich, Image, Icon, Avatar, Badge, Progress, Banner, Empty, Facts, Table, Chart,
         Code, Button, Link, Menu, Form, Field, Sheet, Dialog, Popover, Native, Web, Toolbar,
-        Gauge, Figure, Timeline, FeedRow, Message, Pane, Ring, Rings,
+        Gauge, Figure, Timeline, FeedRow, Message, Pane, Ring, Rings, DayClock,
     }
     structs {}
     units {}
@@ -721,6 +722,12 @@ object!(Ring { max } {
 });
 names!(RingsCentre { Nothing, Values, Icon });
 object!(Zone { from, to } { label, colour });
+object!(Category { name } { colour });
+object!(Hour {} { value, level, category });
+object!(ClockMoment { at, name } { icon, colour });
+object!(DayClock {} {
+    id, title, hours, key, moments, now, max, unit, shown, label, icon, colour, hub, summary, hint
+});
 object!(RingValue { name, max } { value, unit, shown, colour });
 object!(Rings {} {
     id, title, rings, centre, icon, legend, prominence, summary, hint
