@@ -137,7 +137,7 @@ A person's preferences are one JSON document. Every field is optional, and what 
 
 | Field | Meaning |
 |---|---|
-| `channels` | Channel switches for every category: `mail`, `database`, `slack`, `teams`, `sms`, `whatsapp`, `web_push` (`notify.preferences.channels`). |
+| `channels` | Channel switches for every category: `mail`, `database`, `slack`, `teams`, `sms`, `whatsapp`, `web_push`, `push` (`notify.preferences.channels`). |
 | `categories.<name>.channels` | Switches for one category (up to 200 categories have choices of their own). |
 | `categories.<name>.digest` | The digest of one category's mail. |
 | `digest` | The digest of every category's mail. |
@@ -254,17 +254,17 @@ Authorization: Bearer eyJhbGciOiJFZERTQSJ9...
       "types": ["deal.won"],
       "required": false,
       "digest": "daily",
-      "channels": { "mail": true, "database": true, "slack": true, "teams": true, "sms": false, "whatsapp": false, "web_push": true }
+      "channels": { "mail": true, "database": true, "slack": true, "teams": true, "sms": false, "whatsapp": false, "web_push": true, "push": true }
     },
     {
       "category": "security",
       "types": ["auth.sign_in_code"],
       "required": true,
       "digest": "off",
-      "channels": { "mail": true, "database": true, "slack": true, "teams": true, "sms": true, "whatsapp": true, "web_push": true }
+      "channels": { "mail": true, "database": true, "slack": true, "teams": true, "sms": true, "whatsapp": true, "web_push": true, "push": true }
     }
   ],
-  "channels": ["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"],
+  "channels": ["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push", "push"],
   "time_zone": "Asia/Kolkata"
 }
 ```
@@ -307,7 +307,7 @@ A mail in a digest waits for the recipient's next digest:
 | `daily` | At `notify.digest.at` (`09:00`), the next time that comes on the recipient's clock. |
 | `weekly` | On `notify.digest.weekly_on` (`monday`) at `notify.digest.at`. |
 
-Only mail is batched: the database, broadcast, Slack, Teams, SMS, WhatsApp and web push channels deliver as usual. Each recipient gets one digest mail per frequency, listing every mail that waited for it, oldest first. A digest that falls in the recipient's quiet hours waits for their end.
+Only mail is batched: the database, broadcast, Slack, Teams, SMS, WhatsApp, web push and push channels deliver as usual. Each recipient gets one digest mail per frequency, listing every mail that waited for it, oldest first. A digest that falls in the recipient's quiet hours waits for their end.
 
 The digest renders `notify.digest.template` (`notify/digest`, built in). Put `notify/digest.html` and `notify/digest.txt` in your views to replace it; they get these variables:
 
@@ -330,7 +330,7 @@ The subject is `notify.digest.subject`, itself a template with `count` and `dige
 
 ## Quiet hours and send windows
 
-Mail, Slack, Teams, SMS, WhatsApp and web push interrupt people (`notify.deferred.channels`). Inside the recipient's quiet hours, deliveries over those channels wait until the quiet hours end; the in-app notification shows at once.
+Mail, Slack, Teams, SMS, WhatsApp, web push and native app push interrupt people (`notify.deferred.channels`). Inside the recipient's quiet hours, deliveries over those channels wait until the quiet hours end; the in-app notification shows at once.
 
 A notification can also say when it may reach people at all. Return a [send window](/docs/digging-deeper/time-zones/#send-windows) from `send_window`:
 
@@ -435,7 +435,7 @@ The mail of a notification sent in a workspace goes through the workspace's [mai
 ```toml title="config/app.toml"
 [notify.preferences]
 enabled = true                        # apply stored preferences when sending
-channels = ["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"]
+channels = ["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push", "push"]
 required = ["security"]               # categories that can't be turned off
 workspace_permission = "workspace.update"
 
@@ -446,7 +446,7 @@ subject = "Your notifications"
 template = "notify/digest"
 
 [notify.deferred]
-channels = ["mail", "slack", "teams", "sms", "whatsapp", "web_push"]
+channels = ["mail", "slack", "teams", "sms", "whatsapp", "web_push", "push"]
 batch = 500
 max_attempts = 5
 retry_secs = 300
@@ -527,7 +527,7 @@ The held rows are an ORM model, so a test can also read them: `NotificationDefer
     Notifiables, the database, mail and broadcast channels, queueing.
   </LinkCard>
   <LinkCard href="/docs/digging-deeper/notification-channels/" title="Notification channels">
-    Slack, Teams, SMS, WhatsApp and web push, with the delivery log and opt-outs.
+    Slack, Teams, SMS, WhatsApp, web push and native app push, with the delivery log and opt-outs.
   </LinkCard>
   <LinkCard href="/docs/digging-deeper/time-zones/" title="Time zones">
     Zones of users and workspaces, local days and send windows.

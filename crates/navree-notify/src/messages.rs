@@ -1,5 +1,7 @@
-//! What a notification renders for the Slack, Teams, SMS, WhatsApp and web
-//! push channels, and where those messages go.
+//! What a notification renders for the Slack, Teams, SMS, WhatsApp, web
+//! push and push channels, and where those messages go.
+
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -622,9 +624,368 @@ impl WebPushMessage {
     }
 }
 
+/// The longest link a push notification carries, in bytes.
+const MAX_HREF: usize = 2048;
+
+/// The longest collapse key (Apple's `apns-collapse-id` limit), in bytes.
+const MAX_COLLAPSE: usize = 64;
+
+/// The data keys a [`PushMessage`] cannot use: what the message itself
+/// writes there, and what Apple and Google keep for themselves.
+const RESERVED_DATA_KEYS: [&str; 7] = [
+    "aps",
+    "href",
+    "thread",
+    "from",
+    "notification",
+    "message_type",
+    "collapse_key",
+];
+
+/// A notification on a native app, sent over [`Channel::Push`](crate::Channel::Push)
+/// to each of the recipient's [push devices](crate::PushDevices): Apple's
+/// service for iOS, Firebase Cloud Messaging for Android.
+///
+/// It is an alert (a title, a body, a badge or a sound, shown by the
+/// system), or [silent](PushMessage::silent) (nothing shown: the app is
+/// woken to fetch what changed). `href` is the path inside the app the
+/// client opens when the notification is tapped: it must be a path on the
+/// app's own origin (`/deals/42?tab=notes`), never a URL, and a message
+/// whose `href` is not one is refused before it is sent.
+///
+/// The text goes through Apple's or Google's servers and shows on a locked
+/// screen: keep secrets (codes, balances, private messages) out of it, or
+/// send a generic title with [`mutable_content`](PushMessage::mutable_content)
+/// and let the app fetch the real text.
+///
+/// ```
+/// use navree_notify::{PushMessage, Urgency};
+///
+/// let push = PushMessage::new("Deal won")
+///     .body("Agra renewal was won by Gurpreet Kaur")
+///     .href("/deals/42")
+///     .badge(3)
+///     .sound("default")
+///     .thread("deals")
+///     .collapse("deal-42")
+///     .urgency(Urgency::High);
+/// assert!(push.check().is_ok());
+///
+/// let refresh = PushMessage::silent().data("refresh", "inbox");
+/// assert!(refresh.is_silent());
+///
+/// assert!(PushMessage::new("x").href("https://evil.example/").check().is_err());
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PushMessage {
+    /// The title (none for a silent push).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// The body text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+    /// The path inside the app opened when it is tapped (`/deals/42`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub href: Option<String>,
+    /// The number on the app's icon (Apple; Android shows a dot and counts
+    /// it where the launcher does).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub badge: Option<u32>,
+    /// A sound: `default`, or the name of a sound file in the app.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sound: Option<String>,
+    /// The thread it is grouped in (Apple's `thread-id`; the `thread` data
+    /// key on Android, where the app groups its notifications).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thread: Option<String>,
+    /// A collapse key: a newer notification with the same key replaces
+    /// this one, shown or still waiting (at most 64 bytes).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collapse: Option<String>,
+    /// How long the service keeps it for an offline device, in seconds,
+    /// instead of `notify.push.ttl_secs` (0: deliver now or never).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl_secs: Option<u32>,
+    /// How soon it is delivered to a sleeping device. `high` is for
+    /// what the person must see now; unset, an alert goes at once and a
+    /// silent push when the device has power to spare.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub urgency: Option<Urgency>,
+    /// Lets the app's notification service extension change the content
+    /// before it shows (Apple's `mutable-content`): send a generic text
+    /// and have the app fetch the private one.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub mutable_content: bool,
+    /// Data for the app, as text (Firebase carries only text). The keys
+    /// `aps`, `href`, `thread`, `from`, `notification`, `message_type`,
+    /// `collapse_key` and those starting with `google` or `gcm` are
+    /// reserved.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub data: BTreeMap<String, String>,
+}
+
+impl PushMessage {
+    /// An alert titled `title`.
+    pub fn new(title: impl Into<String>) -> Self {
+        Self {
+            title: Some(title.into()),
+            ..Self::default()
+        }
+    }
+
+    /// A silent push: nothing is shown, the app is woken in the background
+    /// with the [`data`](PushMessage::data) (Apple's `content-available`,
+    /// a data message on Android). The system may delay or drop it.
+    pub fn silent() -> Self {
+        Self::default()
+    }
+
+    /// With body text.
+    #[must_use]
+    pub fn body(mut self, body: impl Into<String>) -> Self {
+        self.body = Some(body.into());
+        self
+    }
+
+    /// Opening `path` (a path inside the app, `/deals/42`) when tapped.
+    #[must_use]
+    pub fn href(mut self, path: impl Into<String>) -> Self {
+        self.href = Some(path.into());
+        self
+    }
+
+    /// With the icon's badge set to `count`.
+    #[must_use]
+    pub fn badge(mut self, count: u32) -> Self {
+        self.badge = Some(count);
+        self
+    }
+
+    /// With a sound (`default`, or a sound file of the app).
+    #[must_use]
+    pub fn sound(mut self, sound: impl Into<String>) -> Self {
+        self.sound = Some(sound.into());
+        self
+    }
+
+    /// Grouped in thread `thread`.
+    #[must_use]
+    pub fn thread(mut self, thread: impl Into<String>) -> Self {
+        self.thread = Some(thread.into());
+        self
+    }
+
+    /// Replacing an earlier notification with the same `key`.
+    #[must_use]
+    pub fn collapse(mut self, key: impl Into<String>) -> Self {
+        self.collapse = Some(key.into());
+        self
+    }
+
+    /// Kept `secs` seconds for an offline device.
+    #[must_use]
+    pub fn ttl_secs(mut self, secs: u32) -> Self {
+        self.ttl_secs = Some(secs);
+        self
+    }
+
+    /// With an urgency.
+    #[must_use]
+    pub fn urgency(mut self, urgency: Urgency) -> Self {
+        self.urgency = Some(urgency);
+        self
+    }
+
+    /// With `mutable-content`, for the app's notification service
+    /// extension.
+    #[must_use]
+    pub fn mutable_content(mut self) -> Self {
+        self.mutable_content = true;
+        self
+    }
+
+    /// With the data `key` = `value` for the app.
+    #[must_use]
+    pub fn data(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.data.insert(key.into(), value.into());
+        self
+    }
+
+    /// Whether nothing is shown: no title, body, badge or sound.
+    pub fn is_silent(&self) -> bool {
+        self.title.is_none() && self.body.is_none() && self.badge.is_none() && self.sound.is_none()
+    }
+
+    /// Checks the message before it is sent: `href` is a path inside the
+    /// app, `collapse` fits Apple's 64 bytes, `sound` names a file, and no
+    /// data key is reserved. The error names the field.
+    pub fn check(&self) -> Result<(), (&'static str, String)> {
+        if let Some(href) = &self.href {
+            check_href(href).map_err(|message| ("href", message))?;
+        }
+        if let Some(collapse) = &self.collapse
+            && (collapse.is_empty() || collapse.len() > MAX_COLLAPSE)
+        {
+            return Err((
+                "collapse",
+                format!("collapse must be 1 to {MAX_COLLAPSE} bytes"),
+            ));
+        }
+        if let Some(sound) = &self.sound
+            && (sound.is_empty()
+                || sound.len() > 255
+                || sound.contains(['/', '\\'])
+                || sound.chars().any(char::is_control))
+        {
+            return Err((
+                "sound",
+                "sound must be `default` or a sound file's name".to_owned(),
+            ));
+        }
+        for key in self.data.keys() {
+            let lower = key.to_ascii_lowercase();
+            if key.is_empty()
+                || RESERVED_DATA_KEYS.contains(&lower.as_str())
+                || lower.starts_with("google")
+                || lower.starts_with("gcm")
+            {
+                return Err(("data", format!("the data key `{key}` is reserved")));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Checks that `href` is a path on the app's own origin: it starts with
+/// one `/`, names no scheme or host (`//host`, `/\host`, and their
+/// percent-encoded forms), has no `..` segment and no control characters,
+/// and is at most 2048 bytes. A query and a fragment are allowed.
+pub(crate) fn check_href(href: &str) -> Result<(), String> {
+    let refuse = || Err("href must be a path inside the app, such as `/deals/42`".to_owned());
+    if href.is_empty() || href.len() > MAX_HREF || !href.starts_with('/') {
+        return refuse();
+    }
+    if href
+        .chars()
+        .any(|c| c.is_control() || c == '\\' || c.is_whitespace())
+    {
+        return refuse();
+    }
+    // The path, decoded once: what a client would follow.
+    let path = href.split(['?', '#']).next().unwrap_or_default();
+    let decoded: String = percent_decode(path);
+    if decoded.starts_with("//")
+        || decoded.contains('\\')
+        || decoded.chars().any(char::is_control)
+        || decoded
+            .split('/')
+            .any(|segment| segment == ".." || segment == ".")
+    {
+        return refuse();
+    }
+    Ok(())
+}
+
+/// `text` with each `%XX` decoded once (invalid escapes are kept).
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && let Some(hex) = text.get(i + 1..i + 3)
+            && let Ok(byte) = u8::from_str_radix(hex, 16)
+        {
+            out.push(byte);
+            i += 3;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_href_must_be_a_path_inside_the_app() {
+        for good in [
+            "/",
+            "/deals/42",
+            "/deals/42?tab=notes&from=push",
+            "/inbox#latest",
+            "/search?q=%2F%2Fnot-a-host",
+            "/files/a%20b",
+        ] {
+            assert!(check_href(good).is_ok(), "{good}");
+        }
+        for bad in [
+            "",
+            "deals/42",
+            "https://evil.example/",
+            "javascript:alert(1)",
+            "//evil.example",
+            "/\\evil.example",
+            "/%2Fevil.example",
+            "%2F%2Fevil.example",
+            "/%2F%2Fevil.example",
+            "/%5Cevil.example",
+            "/deals/../admin",
+            "/deals/%2E%2E/admin",
+            "/deals/./42",
+            "/deals\n/42",
+            "/deals/%0A",
+            "/deals 42",
+        ] {
+            assert!(check_href(bad).is_err(), "{bad:?}");
+        }
+        assert!(check_href(&format!("/{}", "a".repeat(MAX_HREF))).is_err());
+    }
+
+    #[test]
+    fn push_messages_check_their_fields() {
+        assert!(
+            PushMessage::new("Deal won")
+                .href("/deals/1")
+                .check()
+                .is_ok()
+        );
+        assert_eq!(
+            PushMessage::new("x").href("//x").check().unwrap_err().0,
+            "href"
+        );
+        assert_eq!(
+            PushMessage::new("x")
+                .collapse("c".repeat(65))
+                .check()
+                .unwrap_err()
+                .0,
+            "collapse"
+        );
+        assert_eq!(
+            PushMessage::new("x").sound("../x").check().unwrap_err().0,
+            "sound"
+        );
+        for key in ["aps", "href", "google.c.a", "GCM.x", "from", "collapse_key"] {
+            assert_eq!(
+                PushMessage::silent().data(key, "v").check().unwrap_err().0,
+                "data",
+                "{key}"
+            );
+        }
+        assert!(PushMessage::silent().is_silent());
+        assert!(!PushMessage::silent().badge(1).is_silent());
+        assert!(
+            PushMessage::silent()
+                .data("refresh", "inbox")
+                .check()
+                .is_ok()
+        );
+    }
 
     #[test]
     fn slack_payloads_carry_only_what_is_set() {

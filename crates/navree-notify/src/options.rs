@@ -105,7 +105,7 @@ pub struct PreferenceOptions {
     /// variable. Default: every channel but `broadcast`, which follows the
     /// `database` choice (the real-time event of an in-app notification).
     #[serde(deserialize_with = "navree_config::comma_list_of")]
-    #[config(default = "mail, database, slack, teams, sms, whatsapp, web_push")]
+    #[config(default = "mail, database, slack, teams, sms, whatsapp, web_push, push")]
     pub channels: Vec<Channel>,
     /// Categories that cannot be turned off (`security`): their
     /// notifications go out over every channel they name, and a change
@@ -122,8 +122,9 @@ impl Default for PreferenceOptions {
     fn default() -> Self {
         Self {
             enabled: true,
-            channels: Channel::ALL
-                .into_iter()
+            channels: Channel::EVERY
+                .iter()
+                .copied()
                 .filter(|channel| *channel != Channel::Broadcast)
                 .collect(),
             required: Vec::new(),
@@ -190,10 +191,10 @@ impl DigestOptions {
 #[serde(default)]
 pub struct DeferredOptions {
     /// The channels quiet hours and send windows hold. Default: `mail`,
-    /// `slack`, `teams`, `sms`, `whatsapp` and `web_push` (the database
-    /// and broadcast channels show in the app at once).
+    /// `slack`, `teams`, `sms`, `whatsapp`, `web_push` and `push` (the
+    /// database and broadcast channels show in the app at once).
     #[serde(deserialize_with = "navree_config::comma_list_of")]
-    #[config(default = "mail, slack, teams, sms, whatsapp, web_push")]
+    #[config(default = "mail, slack, teams, sms, whatsapp, web_push, push")]
     pub channels: Vec<Channel>,
     /// How many held deliveries one `notify:release` run releases at most.
     /// Default: 500.
@@ -218,6 +219,7 @@ impl Default for DeferredOptions {
                 Channel::Sms,
                 Channel::WhatsApp,
                 Channel::WebPush,
+                Channel::Push,
             ],
             batch: 500,
             max_attempts: 5,
@@ -458,6 +460,212 @@ impl WebPushOptions {
         }
         Ok(())
     }
+}
+
+/// How the push channel reaches native apps (configuration section
+/// `notify.push`): Apple's push service for iOS devices, Firebase Cloud
+/// Messaging for Android devices. A device whose platform has no
+/// configured service is skipped.
+///
+/// ```toml
+/// [notify.push]
+/// ttl_secs = 86400
+///
+/// [notify.push.apns]
+/// team_id = "DEF123GHIJ"
+/// key_id = "ABC123DEFG"
+/// key = "-----BEGIN PRIVATE KEY-----\n..."   # the .p8 file
+/// bundle_ids = ["com.acme.crm"]
+///
+/// [notify.push.fcm]
+/// service_account = '{"type": "service_account", ...}'   # the JSON key file
+/// packages = ["com.acme.crm"]
+/// ```
+///
+/// From the environment: `APP_NOTIFY__PUSH__APNS__KEY`,
+/// `APP_NOTIFY__PUSH__FCM__SERVICE_ACCOUNT`, ... Build it with
+/// `..PushOptions::default()` so new fields keep compiling. The keys are
+/// secrets: never serialized, printed or written into an error.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "notify.push", docs = "/docs/digging-deeper/notification-channels/", validate = Self::check)]
+#[serde(default)]
+pub struct PushOptions {
+    /// How long the services keep a notification for an offline device,
+    /// in seconds, when the message does not say (default 86400, one day).
+    pub ttl_secs: u32,
+    /// Apple's push service.
+    #[config(table)]
+    pub apns: ApnsOptions,
+    /// Firebase Cloud Messaging.
+    #[config(table)]
+    pub fcm: FcmOptions,
+}
+
+impl Default for PushOptions {
+    fn default() -> Self {
+        Self {
+            ttl_secs: 86_400,
+            apns: ApnsOptions::default(),
+            fcm: FcmOptions::default(),
+        }
+    }
+}
+
+impl PushOptions {
+    /// Checks the values (the boot calls this).
+    fn check(&self) -> Result<(), String> {
+        self.apns.check()?;
+        self.fcm.check()?;
+        for (key, url) in [
+            ("notify.push.apns.endpoint", &self.apns.endpoint),
+            (
+                "notify.push.apns.sandbox_endpoint",
+                &self.apns.sandbox_endpoint,
+            ),
+            ("notify.push.fcm.endpoint", &self.fcm.endpoint),
+            ("notify.push.fcm.token_url", &self.fcm.token_url),
+        ] {
+            if let Some(url) = url.as_deref().filter(|url| !url.trim().is_empty()) {
+                check_url(key, url)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// `notify.push.apns`: token-based authentication with Apple's push
+/// service. The key signs the provider tokens (ES256); a key Apple limits
+/// to one environment goes in `key` (production) or `sandbox_key`, a key
+/// for both in `key` alone.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
+#[serde(default)]
+pub struct ApnsOptions {
+    /// The team id (10 characters, from the developer account).
+    pub team_id: String,
+    /// The id of `key` (10 characters).
+    #[config(public)]
+    pub key_id: String,
+    /// The `.p8` signing key (PEM). It signs for the sandbox too unless
+    /// `sandbox_key` is set.
+    #[serde(skip_serializing)]
+    pub key: Secret<String>,
+    /// The id of `sandbox_key`.
+    #[config(public)]
+    pub sandbox_key_id: Option<String>,
+    /// A `.p8` key for the sandbox environment only.
+    #[serde(skip_serializing)]
+    pub sandbox_key: Secret<String>,
+    /// The apps' bundle ids: the topics notifications are sent to. A
+    /// device can register only for one of them. A list, or a
+    /// comma-separated string from an environment variable.
+    #[serde(deserialize_with = "navree_config::comma_list")]
+    pub bundle_ids: Vec<String>,
+    /// The production service (default `https://api.push.apple.com`).
+    pub endpoint: Option<String>,
+    /// The sandbox service (default `https://api.sandbox.push.apple.com`).
+    pub sandbox_endpoint: Option<String>,
+}
+
+impl ApnsOptions {
+    /// Whether Apple's service is configured.
+    pub fn is_configured(&self) -> bool {
+        !self.team_id.trim().is_empty()
+    }
+
+    fn check(&self) -> Result<(), String> {
+        if !self.is_configured() {
+            return Ok(());
+        }
+        let id =
+            |value: &str| value.len() == 10 && value.chars().all(|c| c.is_ascii_alphanumeric());
+        if !id(&self.team_id) {
+            return Err("notify.push.apns.team_id must be the 10-character team id".into());
+        }
+        let production = !self.key.expose().trim().is_empty();
+        let sandbox = !self.sandbox_key.expose().trim().is_empty();
+        if !production && !sandbox {
+            return Err(
+                "notify.push.apns needs key (or sandbox_key) with notify.push.apns.team_id".into(),
+            );
+        }
+        if production && !id(&self.key_id) {
+            return Err(
+                "notify.push.apns.key_id must be the 10-character id of notify.push.apns.key"
+                    .into(),
+            );
+        }
+        if sandbox && !self.sandbox_key_id.as_deref().is_some_and(id) {
+            return Err("notify.push.apns.sandbox_key_id must be the 10-character id of notify.push.apns.sandbox_key".into());
+        }
+        if self.bundle_ids.is_empty() {
+            return Err("notify.push.apns.bundle_ids must list the apps' bundle ids".into());
+        }
+        if let Some(bad) = self.bundle_ids.iter().find(|id| !is_app_id(id)) {
+            return Err(format!(
+                "notify.push.apns.bundle_ids: `{bad}` is not a bundle id"
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// `notify.push.fcm`: Firebase Cloud Messaging's HTTP v1 API with a
+/// service account (its JSON key file, from the Firebase console).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ConfigTable)]
+#[serde(default)]
+pub struct FcmOptions {
+    /// The Firebase project id (default: the service account's
+    /// `project_id`).
+    pub project_id: Option<String>,
+    /// The service account's JSON key file, as text.
+    #[serde(skip_serializing)]
+    pub service_account: Secret<String>,
+    /// The apps' package names. A device can register only for one of
+    /// them. A list, or a comma-separated string.
+    #[serde(deserialize_with = "navree_config::comma_list")]
+    pub packages: Vec<String>,
+    /// The API's base URL (default `https://fcm.googleapis.com`).
+    pub endpoint: Option<String>,
+    /// Where the service account's assertion is exchanged for an access
+    /// token (default: the key file's `token_uri`, else
+    /// `https://oauth2.googleapis.com/token`).
+    #[config(public)]
+    pub token_url: Option<String>,
+}
+
+impl FcmOptions {
+    /// Whether Firebase Cloud Messaging is configured.
+    pub fn is_configured(&self) -> bool {
+        !self.service_account.expose().trim().is_empty()
+    }
+
+    fn check(&self) -> Result<(), String> {
+        if !self.is_configured() {
+            return Ok(());
+        }
+        if self.packages.is_empty() {
+            return Err("notify.push.fcm.packages must list the apps' package names".into());
+        }
+        if let Some(bad) = self.packages.iter().find(|id| !is_app_id(id)) {
+            return Err(format!(
+                "notify.push.fcm.packages: `{bad}` is not a package name"
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// A bundle id or package name: dot-separated letters, digits, `-` and
+/// `_`, at most 255 bytes.
+pub(crate) fn is_app_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 255
+        && id.split('.').all(|part| {
+            !part.is_empty()
+                && part
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        })
 }
 
 /// `notify.twilio`.
@@ -814,6 +1022,116 @@ mod tests {
     }
 
     #[test]
+    fn push_options_read_from_notify_push() {
+        let sources = ConfigSources::new().env_vars(
+            "APP_",
+            [
+                ("APP_NOTIFY__PUSH__TTL_SECS", "600"),
+                ("APP_NOTIFY__PUSH__APNS__TEAM_ID", "DEF123GHIJ"),
+                ("APP_NOTIFY__PUSH__APNS__KEY_ID", "ABC123DEFG"),
+                ("APP_NOTIFY__PUSH__APNS__KEY", "p8-key-value"),
+                (
+                    "APP_NOTIFY__PUSH__APNS__BUNDLE_IDS",
+                    "com.acme.crm, com.acme.crm.dev",
+                ),
+                (
+                    "APP_NOTIFY__PUSH__FCM__SERVICE_ACCOUNT",
+                    "service-account-value",
+                ),
+                ("APP_NOTIFY__PUSH__FCM__PACKAGES", "com.acme.crm"),
+            ],
+        );
+        let options = Config::load(&sources)
+            .unwrap()
+            .typed::<PushOptions>()
+            .unwrap();
+        assert_eq!(options.ttl_secs, 600);
+        assert_eq!(
+            options.apns.bundle_ids,
+            ["com.acme.crm", "com.acme.crm.dev"]
+        );
+        assert_eq!(options.apns.key.expose(), "p8-key-value");
+        assert!(options.apns.is_configured() && options.fcm.is_configured());
+        assert_eq!(options.fcm.packages, ["com.acme.crm"]);
+        assert_eq!(
+            Config::load(&ConfigSources::new())
+                .unwrap()
+                .typed::<PushOptions>()
+                .unwrap(),
+            PushOptions::default()
+        );
+    }
+
+    #[test]
+    fn push_secrets_are_never_printed_or_serialized() {
+        let mut options = PushOptions::default();
+        options.apns.key = Secret::new("apns-p8-value".to_owned());
+        options.apns.sandbox_key = Secret::new("apns-sandbox-value".to_owned());
+        options.fcm.service_account = Secret::new("fcm-account-value".to_owned());
+        let printed = format!("{options:?}");
+        let json = serde_json::to_string(&options).unwrap();
+        for value in ["apns-p8-value", "apns-sandbox-value", "fcm-account-value"] {
+            assert!(!printed.contains(value), "{printed}");
+            assert!(!json.contains(value), "{json}");
+        }
+        let schema = PushOptions::schema().expect("schema");
+        assert_eq!(schema.key, "notify.push");
+        assert!(
+            schema.unmarked_secrets().is_empty(),
+            "{:?}",
+            schema.unmarked_secrets()
+        );
+        let mut secrets = schema.secret_paths();
+        secrets.sort();
+        assert_eq!(
+            secrets,
+            [
+                "notify.push.apns.key",
+                "notify.push.apns.sandbox_key",
+                "notify.push.fcm.service_account",
+            ]
+        );
+    }
+
+    #[test]
+    fn apns_needs_its_team_key_and_apps() {
+        let mut options = PushOptions::default();
+        assert!(options.validate().is_ok(), "nothing configured is fine");
+        options.apns.team_id = "DEF123GHIJ".to_owned();
+        assert!(options.validate().unwrap_err().contains("key"));
+        options.apns.key = Secret::new("pem".to_owned());
+        assert!(options.validate().unwrap_err().contains("key_id"));
+        options.apns.key_id = "ABC123DEFG".to_owned();
+        assert!(options.validate().unwrap_err().contains("bundle_ids"));
+        options.apns.bundle_ids = vec!["com.acme..crm".to_owned()];
+        assert!(options.validate().unwrap_err().contains("not a bundle id"));
+        options.apns.bundle_ids = vec!["com.acme.crm".to_owned()];
+        assert!(options.validate().is_ok());
+        options.apns.sandbox_key = Secret::new("pem".to_owned());
+        assert!(options.validate().unwrap_err().contains("sandbox_key_id"));
+        options.apns.sandbox_key_id = Some("XYZ123DEFG".to_owned());
+        assert!(options.validate().is_ok());
+        options.apns.team_id = "short".to_owned();
+        assert!(options.validate().unwrap_err().contains("team_id"));
+    }
+
+    #[test]
+    fn fcm_needs_its_apps_and_http_urls() {
+        let mut options = PushOptions::default();
+        options.fcm.service_account = Secret::new("{}".to_owned());
+        assert!(options.validate().unwrap_err().contains("packages"));
+        options.fcm.packages = vec!["com.acme.crm".to_owned()];
+        assert!(options.validate().is_ok());
+        options.fcm.endpoint = Some("ftp://x".to_owned());
+        assert!(
+            options
+                .validate()
+                .unwrap_err()
+                .contains("notify.push.fcm.endpoint")
+        );
+    }
+
+    #[test]
     fn a_channel_list_names_only_known_channels() {
         let sources = ConfigSources::new()
             .env_vars("APP_", [("APP_NOTIFY__DEFERRED__CHANNELS", "sms, carrier")]);
@@ -915,7 +1233,7 @@ mod tests {
         assert!(defaults["sms"]["driver"].is_null());
         assert_eq!(
             defaults["deferred"]["channels"],
-            "mail, slack, teams, sms, whatsapp, web_push"
+            "mail, slack, teams, sms, whatsapp, web_push, push"
         );
     }
 }

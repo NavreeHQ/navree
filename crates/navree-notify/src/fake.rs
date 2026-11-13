@@ -1,5 +1,5 @@
 //! Fakes of the channel drivers: [`SlackFake`], [`TeamsFake`], [`SmsFake`],
-//! [`WhatsAppFake`] and [`WebPushFake`]. Each records what it is asked to
+//! [`WhatsAppFake`], [`WebPushFake`] and [`PushFake`]. Each records what it is asked to
 //! send instead of sending it, can be told to refuse, and the SMS and
 //! WhatsApp fakes play the provider: they report statuses and replies
 //! through the app's [`DeliveryLog`], as a provider's callbacks would.
@@ -12,10 +12,10 @@ use navree_contracts::BoxFuture;
 use navree_kernel::AppContext;
 
 use crate::{
-    Channel, ChannelCallback, ChannelError, DeliveryLog, DeliveryStatus, InboundMessage, Ingested,
-    NotifyError, PushTarget, SentMessage, SlackDriver, SlackMessage, SlackRoute, SmsDriver,
-    SmsMessage, StatusUpdate, TeamsDriver, TeamsMessage, TeamsRoute, WebPushDriver, WebPushMessage,
-    WhatsAppDriver, WhatsAppMessage,
+    Channel, ChannelCallback, ChannelError, DeliveryLog, DeliveryStatus, DeviceTarget,
+    InboundMessage, Ingested, NotifyError, PushDriver, PushMessage, PushTarget, SentMessage,
+    SlackDriver, SlackMessage, SlackRoute, SmsDriver, SmsMessage, StatusUpdate, TeamsDriver,
+    TeamsMessage, TeamsRoute, WebPushDriver, WebPushMessage, WhatsAppDriver, WhatsAppMessage,
 };
 
 /// The provider name the fakes record and report under.
@@ -495,6 +495,67 @@ impl WebPushDriver for WebPushFake {
         message: &'a WebPushMessage,
     ) -> BoxFuture<'a, Result<SentMessage, ChannelError>> {
         let result = self.shared.send(target, message, &target.endpoint);
+        Box::pin(async move { result })
+    }
+}
+
+/// Records native app push notifications instead of sending them;
+/// [`expire`](PushFake::expire) makes a device token answer like a
+/// service that no longer knows it. Install it with
+/// `override_value::<dyn PushDriver>(fake.driver())`.
+///
+/// ```
+/// use navree_notify::{DeviceTarget, PushDriver, PushFake, PushMessage, PushPlatform};
+///
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() {
+/// let fake = PushFake::new();
+/// let phone = DeviceTarget::new(PushPlatform::Android, "fcm-token-of-simran", "com.acme.crm");
+/// fake.driver()
+///     .send(&phone, &PushMessage::new("Deal won").href("/deals/42"))
+///     .await
+///     .unwrap();
+/// assert_eq!(fake.sent_to("fcm-token-of-simran")[0].href.as_deref(), Some("/deals/42"));
+/// # }
+/// ```
+#[derive(Clone)]
+pub struct PushFake {
+    shared: Shared<DeviceTarget, PushMessage>,
+}
+
+impl PushFake {
+    /// An empty fake.
+    pub fn new() -> Self {
+        Self {
+            shared: Shared::new("push"),
+        }
+    }
+
+    /// The notifications pushed to the device with `token`.
+    pub fn sent_to(&self, token: &str) -> Vec<PushMessage> {
+        self.sent()
+            .into_iter()
+            .filter(|sent| sent.to.token == token)
+            .map(|sent| sent.message)
+            .collect()
+    }
+
+    /// Answers pushes to `token` from now on with [`ChannelError::Gone`],
+    /// so the channel deletes its device.
+    pub fn expire(&self, token: &str) {
+        self.shared.state().gone.insert(token.to_owned());
+    }
+}
+
+common!(PushFake, DeviceTarget, PushMessage, PushDriver);
+
+impl PushDriver for PushFake {
+    fn send<'a>(
+        &'a self,
+        device: &'a DeviceTarget,
+        message: &'a PushMessage,
+    ) -> BoxFuture<'a, Result<SentMessage, ChannelError>> {
+        let result = self.shared.send(device, message, &device.token);
         Box::pin(async move { result })
     }
 }

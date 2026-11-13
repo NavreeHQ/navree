@@ -1,11 +1,11 @@
 ---
 title: "Notification channels"
-description: "Send notifications over Slack, Teams, SMS, WhatsApp and web push: drivers, VAPID keys, the delivery log, STOP opt-outs, provider callbacks and test fakes."
+description: "Send notifications over Slack, Teams, SMS, WhatsApp, web push and native app push (Apple and Firebase): drivers, VAPID and service keys, push devices tied to sessions, the delivery log, STOP opt-outs, provider callbacks and test fakes."
 ---
 
 ## Introduction
 
-<Badge feature="notify" /> [Notifications](/docs/digging-deeper/notifications/) reach users inside the app and by mail. Some messages belong where people already are: the team's Slack channel, a chat with your Teams bot, a text message, WhatsApp, a push notification on their phone. Five more channels take the same notification there:
+<Badge feature="notify" /> [Notifications](/docs/digging-deeper/notifications/) reach users inside the app and by mail. Some messages belong where people already are: the team's Slack channel, a chat with your Teams bot, a text message, WhatsApp, a push notification in their browser or in your native app. Six more channels take the same notification there:
 
 | Channel | Renders with | Goes to | Sent through |
 |---|---|---|---|
@@ -14,6 +14,7 @@ description: "Send notifications over Slack, Teams, SMS, WhatsApp and web push: 
 | `Channel::Sms` | `to_sms` → `SmsMessage` | `route_sms`, read as E.164 | Twilio, Vonage or Amazon SNS |
 | `Channel::WhatsApp` | `to_whatsapp` → `WhatsAppMessage` | `route_whatsapp`, read as E.164 | Twilio or the WhatsApp Cloud API |
 | `Channel::WebPush` | `to_web_push` → `WebPushMessage` | Every push subscription of the notifiable | The browsers' push services, encrypted and signed with your VAPID key |
+| `Channel::Push` | `to_push` → `PushMessage` | Every push device of the notifiable whose session is still signed in | Apple's push service (iOS) and Firebase Cloud Messaging (Android) |
 
 Every delivery over these channels is a row in `notification_deliveries`. Status callbacks from the providers move it to delivered, read or failed, a reply of STOP opts the number out, and each channel has a fake for tests.
 
@@ -155,6 +156,7 @@ impl Notification for TrainingDue {
 | `to_sms` | `Option<SmsMessage>` | `None` |
 | `to_whatsapp` | `Option<WhatsAppMessage>` | `None` |
 | `to_web_push` | `Option<WebPushMessage>` | `None` |
+| `to_push` | `Option<PushMessage>` | `None` |
 
 Send it as any notification, with `notifier.send(&employee, TrainingDue { .. })`. A message that names its own recipient (`SlackMessage::to`, `TeamsMessage::to`, `SmsMessage::to`, `WhatsAppMessage::to`) goes there instead of to the notifiable's route, so a notification can post to a team channel whoever it was sent to:
 
@@ -171,7 +173,7 @@ fn to_slack(&self, _notifiable: &dyn Notifiable) -> Option<SlackMessage> {
 }
 ```
 
-The new channels go out like mail and broadcasts: after the request's transaction commits, or as one `notify.send` job each with `notify.queue` on (see [queueing](/docs/digging-deeper/notifications/#queueing-notifications)). The job carries the rendered message, so a worker sends exactly what the request rendered. For web push, the subscriptions are read when the job runs.
+The new channels go out like mail and broadcasts: after the request's transaction commits, or as one `notify.send` job each with `notify.queue` on (see [queueing](/docs/digging-deeper/notifications/#queueing-notifications)). The job carries the rendered message, so a worker sends exactly what the request rendered. For web push and push, the subscriptions and devices are read when the job runs.
 
 ## Configuration
 
@@ -216,7 +218,7 @@ access_token = ""                 # APP_NOTIFY__META__ACCESS_TOKEN
 
 | Key | Default | Meaning |
 |---|---|---|
-| `notify.deliveries` | `true` | Record every delivery over the five channels in `notification_deliveries` (needs `DatabaseModule`). |
+| `notify.deliveries` | `true` | Record every delivery over the six channels in `notification_deliveries` (needs `DatabaseModule`). |
 | `notify.slack.bot_token` | empty | The bot token of [channel routes](#slack) without a connection. |
 | `notify.slack.endpoint` | `https://slack.com/api` | The Web API's base URL. |
 | `notify.teams.app_id` | none | The Microsoft app id of your Azure Bot, for [conversation routes](#microsoft-teams) without a connection. |
@@ -243,7 +245,7 @@ access_token = ""                 # APP_NOTIFY__META__ACCESS_TOKEN
 | `notify.meta.phone_number_id`, `access_token` | empty | WhatsApp Cloud API credentials, for `whatsapp.driver = "meta"`. |
 | `notify.meta.api_version` | `v21.0` | The Graph API version. |
 
-The `slack`, `twilio`, `vonage`, `sns` and `meta` tables also take an `endpoint`, the API's base URL, for a regional endpoint or a local mock server in tests. A driver configured without its credentials fails the boot with the keys it needs (`notify.sms.driver \`twilio\` needs notify.twilio.account_sid and notify.twilio.auth_token`). Tokens, secrets and keys are read from the configuration and never serialized, logged or shown in errors; keep them in environment variables.
+The `slack`, `twilio`, `vonage`, `sns` and `meta` tables also take an `endpoint`, the API's base URL, for a regional endpoint or a local mock server in tests. A driver configured without its credentials fails the boot with the keys it needs (`notify.sms.driver \`twilio\` needs notify.twilio.account_sid and notify.twilio.auth_token`). Tokens, secrets and keys are read from the configuration and never serialized, logged or shown in errors; keep them in environment variables. The push services of native apps have a section of their own, `notify.push`: see [native app push](#native-app-push).
 
 ## Slack
 
@@ -446,18 +448,172 @@ The channel sends to every subscription of the notifiable when the notification 
 
 The service worker receives `payload()`: a JSON object with `title` and each of `body`, `icon`, `url`, `tag` and `data` that is set. One push message holds at most 3993 bytes of it.
 
+## Native app push
+
+The push channel shows a notification from your iOS or Android app: through Apple's push service (APNs) for iOS, and Firebase Cloud Messaging (FCM) for Android. The app registers its device token with the server while someone is signed in, and the device belongs to that signed-in session: when the session ends (signing out, ending it from another device, a password change, offboarding), the phone gets nothing more.
+
+<Steps>
+<Step title="Configure the services">
+
+```toml title="config/app.toml"
+[notify.push]
+ttl_secs = 86400                    # how long an offline device's notification is kept
+
+[notify.push.apns]
+team_id = "DEF123GHIJ"              # from the Apple developer account
+key_id = "ABC123DEFG"               # the id of the key below
+key = ""                            # APP_NOTIFY__PUSH__APNS__KEY: the .p8 file's text
+bundle_ids = ["com.acme.crm"]       # the apps devices may register for
+
+[notify.push.fcm]
+service_account = ""                # APP_NOTIFY__PUSH__FCM__SERVICE_ACCOUNT: the key file's JSON
+packages = ["com.acme.crm"]
+```
+
+Apple: create a key with Apple Push Notifications enabled under Certificates, Identifiers & Profiles. A key Apple limits to the sandbox goes in `sandbox_key` with `sandbox_key_id`; a key for both environments goes in `key` alone. Firebase: in the project's settings, Service accounts, generate a private key, and paste the downloaded JSON into `service_account`. The project id comes from the file unless `project_id` says otherwise.
+
+</Step>
+<Step title="Register the device from the app">
+
+The native app asks the system for permission and a token, then posts it with its session cookie (and the `X-XSRF-TOKEN` header, as for any form post from the session):
+
+```http
+POST /api/notifications/push-devices
+Content-Type: application/json
+
+{"platform": "ios", "token": "740f4707bebcf74f9b7c25d48e3358945f6aa01da5ddb387462c7eaf61bb78ad", "app_id": "com.acme.crm", "environment": "sandbox"}
+```
+
+The app sends it at every launch (tokens change), and `DELETE /api/notifications/push-devices` with `{"token": "..."}` when the person signs out.
+
+</Step>
+<Step title="Render the notification">
+
+```rust title="src/modules/orders/notifications.rs"
+use navree::notify::{Channel, Notifiable, Notification, PushMessage};
+use serde::{Deserialize, Serialize};
+
+/// An order left the warehouse.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OrderShipped {
+    pub order: String,
+    pub city: String,
+}
+
+impl Notification for OrderShipped {
+    const TYPE: &'static str = "order_shipped";
+    const CATEGORY: &'static str = "orders";
+
+    fn via(&self, _notifiable: &dyn Notifiable) -> Vec<Channel> {
+        vec![Channel::Database, Channel::Push]
+    }
+
+    fn to_push(&self, _notifiable: &dyn Notifiable) -> Option<PushMessage> {
+        Some(
+            PushMessage::new("Your order has shipped")
+                .body(format!("Order {} is on its way to {}", self.order, self.city))
+                .href(format!("/orders/{}", self.order))
+                .collapse(format!("order-{}", self.order))
+                .thread("orders"),
+        )
+    }
+}
+```
+
+</Step>
+</Steps>
+
+The routes are part of the [notification routes](/docs/digging-deeper/notifications/#the-http-routes) (`notify.routes`), for the signed-in user:
+
+| Route | Result |
+|---|---|
+| `POST /api/notifications/push-devices` | 201 with the saved device (`id`, `platform`, `app_id`, `environment`, `created_at`, `last_seen_at`, `last_used_at`; never its token). 403 without a signed-in session (an API token of its own has none); 422 naming `token`, `app_id` or `environment`; 429 after 30 changes a minute. |
+| `DELETE /api/notifications/push-devices` | 204. The body is `{"token": "..."}`; 404 when it isn't one of yours. |
+
+| Field | |
+|---|---|
+| `platform` | `ios` or `android` |
+| `token` | Apple's device token as hexadecimal, or Firebase's registration token |
+| `app_id` | The bundle id or package name: one of `notify.push.apns.bundle_ids` or `notify.push.fcm.packages` |
+| `environment` | `sandbox` for a development build on iOS; default `production` |
+
+Registering a token that is already saved moves it to the signed-in user and session: a phone belongs to whoever signed in on it last. A session keeps one device per app, so a new token replaces the one the system dropped. In code, `PushDevices` has `register(notifiable, session_id, device)`, `unregister`, `of(notifiable_type, notifiable_id)`, `delete`, `end_session(session_id)` and `end_all`.
+
+The channel sends to each device of the recipient when the notification goes out. Before it does, it asks the app's `dyn LiveSessions` which of their sessions are still signed in, and a device of an ended session is deleted instead of sent to. Register one that answers from your sessions; with navree-auth, the ones `GET /auth/sessions` lists:
+
+```rust title="src/modules/push/sessions.rs"
+use navree::auth::AuthService;
+use navree::contracts::{BoxError, BoxFuture};
+use navree::notify::LiveSessions;
+use std::sync::Arc;
+use uuid::Uuid;
+
+/// A push device lives as long as the navree-auth session that registered it.
+pub struct SignedInSessions(pub Arc<AuthService>);
+
+impl LiveSessions for SignedInSessions {
+    fn live<'a>(
+        &'a self,
+        user_id: Uuid,
+        sessions: &'a [String],
+    ) -> BoxFuture<'a, Result<Vec<String>, BoxError>> {
+        Box::pin(async move {
+            let live = self.0.sessions(user_id, None).await?;
+            Ok(live
+                .into_iter()
+                .map(|session| session.id.to_string())
+                .filter(|id| sessions.contains(id))
+                .collect())
+        })
+    }
+}
+```
+
+Without one, every device is sent to and the notifier logs a warning once. Offboarding a user deletes their devices too.
+
+| `PushMessage` | Apple | Android (Firebase) |
+|---|---|---|
+| `PushMessage::new(title)`, `.body(text)` | `aps.alert` | `notification` |
+| `.href(path)` | `href` beside `aps` | `data.href` |
+| `.badge(count)` | `aps.badge` | `android.notification.notification_count` |
+| `.sound("default")` | `aps.sound` | `android.notification.sound` |
+| `.thread(id)` | `aps.thread-id` | `data.thread` |
+| `.collapse(key)` | `apns-collapse-id` | `android.collapse_key` and `android.notification.tag` |
+| `.ttl_secs(secs)` | `apns-expiration` | `android.ttl` (at most 28 days) |
+| `.urgency(Urgency::High)` | `apns-priority` 10 (`Normal` and `Low` 5, `VeryLow` 1) | `android.priority` `HIGH` (else `NORMAL`) |
+| `.mutable_content()` | `aps.mutable-content`: a notification service extension may rewrite it | |
+| `.data(key, value)` | beside `aps` | in `data` |
+| `PushMessage::silent()` | `apns-push-type: background`, `aps.content-available`, priority 5 | a data message |
+
+`href` is a path inside the app (`/orders/A-1042?tab=tracking`): a message whose `href` has a scheme or a host (`https://..`, `//host`, `/\host`, their encoded forms) or a `..` segment is refused before anything is sent, so a notification can never open another site. The client opens it with a GET when the notification is tapped. Payloads go through Apple's and Google's servers and show on a locked screen: keep one-time codes, balances and private messages out of them, or send a generic text with `.mutable_content()` and let the app fetch the rest. A payload over 4096 bytes is refused before it is sent. The data keys `aps`, `href`, `thread`, `from`, `notification`, `message_type`, `collapse_key` and those starting with `google` or `gcm` are reserved.
+
+Apple's provider token (an ES256 JWT of your team and key) is signed once and used for 45 minutes, and signed again at once when Apple answers `ExpiredProviderToken`. Firebase's access token is exchanged for a signed service account assertion and kept until a minute before it expires, and fetched again on a `401`. A device Apple reports `Unregistered`, `ExpiredToken`, `BadDeviceToken` or `DeviceTokenNotForTopic`, or Firebase reports `UNREGISTERED`, `SENDER_ID_MISMATCH` or an invalid registration token, is deleted, and the notification still succeeds. Throttling (`429`) and server errors fail the channel, so a queued `notify.send` job is retried, skipping the devices an earlier attempt reached.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `notify.push.ttl_secs` | `86400` | How long a notification is kept for an offline device, unless the message says. |
+| `notify.push.apns.team_id` | empty | The 10-character team id. Apple's service is on when it is set. |
+| `notify.push.apns.key_id`, `key` | empty | The `.p8` key (PEM) and its 10-character id. |
+| `notify.push.apns.sandbox_key_id`, `sandbox_key` | none | A key for the sandbox only. Without it, `key` signs for the sandbox too. |
+| `notify.push.apns.bundle_ids` | none | The apps' bundle ids, which are the topics. Required with `team_id`. |
+| `notify.push.apns.endpoint`, `sandbox_endpoint` | `https://api.push.apple.com`, `https://api.sandbox.push.apple.com` | The services, for a local mock server in tests. |
+| `notify.push.fcm.service_account` | empty | The service account key file (JSON). Firebase is on when it is set. |
+| `notify.push.fcm.project_id` | the key file's | The Firebase project. |
+| `notify.push.fcm.packages` | none | The apps' package names. Required with `service_account`. |
+| `notify.push.fcm.endpoint`, `token_url` | `https://fcm.googleapis.com`, the key file's `token_uri` | The API and the token endpoint, for a local mock server in tests. |
+
 ## The delivery log
 
-With `notify.deliveries` on and `DatabaseModule` in the app, every attempt over the five channels is a row of `notification_deliveries`, the navree-orm model `NotificationDelivery`:
+With `notify.deliveries` on and `DatabaseModule` in the app, every attempt over the six channels is a row of `notification_deliveries`, the navree-orm model `NotificationDelivery`:
 
 | Column | |
 |---|---|
 | `id` | A UUID v7 |
 | `notification_id`, `notification_type` | The notification (`send`'s return value) and its `TYPE` |
 | `notifiable_type`, `notifiable_id` | The recipient |
-| `channel` | `slack`, `teams`, `sms`, `whatsapp` or `web_push` |
-| `provider` | The driver: `slack`, `teams`, `twilio`, `vonage`, `sns`, `meta`, `web_push`, `log` or `fake` |
-| `recipient` | The E.164 number, the Slack channel, the Teams conversation, the push subscription id, or `webhook:<host>` for a webhook (its URL is a secret) |
+| `channel` | `slack`, `teams`, `sms`, `whatsapp`, `web_push` or `push` |
+| `provider` | The driver: `slack`, `teams`, `twilio`, `vonage`, `sns`, `meta`, `web_push`, `apns`, `fcm`, `log` or `fake` |
+| `recipient` | The E.164 number, the Slack channel, the Teams conversation, the push subscription or push device id, or `webhook:<host>` for a webhook (its URL is a secret) |
 | `provider_message_id` | The provider's id of the message, which status callbacks name |
 | `status` | `sent`, `delivered`, `read`, `failed` or `opted_out` |
 | `error` | Why it failed |
@@ -539,7 +695,7 @@ A Slack or Teams route can name a connection of [Integrations](/docs/packages/in
 
 ## Testing
 
-Each channel has a fake that records what it is asked to send: `SlackFake`, `TeamsFake`, `SmsFake`, `WhatsAppFake` and `WebPushFake`. Install it in place of the driver with `override_value::<dyn SmsDriver>(fake.driver())`, and so on. The SMS and WhatsApp fakes also play the provider: `deliver`, `fail` (and `read` for WhatsApp) report a status for the last message to a number, and `reply` sends the app a message from one, through the same `DeliveryLog::ingest` the real callbacks use.
+Each channel has a fake that records what it is asked to send: `SlackFake`, `TeamsFake`, `SmsFake`, `WhatsAppFake`, `WebPushFake` and `PushFake`. Install it in place of the driver with `override_value::<dyn SmsDriver>(fake.driver())`, and so on. The SMS and WhatsApp fakes also play the provider: `deliver`, `fail` (and `read` for WhatsApp) report a status for the last message to a number, and `reply` sends the app a message from one, through the same `DeliveryLog::ingest` the real callbacks use.
 
 ```rust title="tests/training.rs"
 use navree::notify::{
@@ -595,6 +751,7 @@ async fn due_training_is_texted_and_stop_opts_out() {
 | `SlackFake`, `TeamsFake` | `sent()`: each route and message, with the id it gave | `refuse(reason)`, `accept()` |
 | `SmsFake`, `WhatsAppFake` | `sent()`, `sent_to(number)` | `refuse`, `opt_out_at_provider(number)`, `deliver`, `fail`, `reply`; `read` for WhatsApp |
 | `WebPushFake` | `sent()`, `sent_to(endpoint)` | `refuse`, `expire(endpoint)`: the endpoint answers as gone |
+| `PushFake` | `sent()` (each `DeviceTarget` and `PushMessage`), `sent_to(token)` | `refuse`, `expire(token)`: the device answers as gone |
 
 Every fake has `assert_sent(|sent| ..)` and `assert_nothing_sent()`, and records deliveries as provider `fake`. `temp_database()` creates a SQLite database, so the app's tests need the `sqlite` Cargo feature ([database tests](/docs/testing/database-tests/)). To test a real driver against a local mock server, give its table an `endpoint`: the HTTP client's SSRF policy allows a configured endpoint's host.
 
@@ -608,7 +765,8 @@ A driver that does not send fails its channel with `NotifyError::Channel { chann
 | `Unreachable { provider, source }` | The provider could not be reached, or the URL was refused by the SSRF policy. |
 | `OptedOut { provider }` | The recipient opted out at the provider. The notifier records the opt-out and treats it as handled, not as an error. |
 | `InvalidRecipient(reason)` | A push subscription's keys are malformed, or a Teams service URL is not an http(s) URL. |
-| `Gone` | The push subscription expired. The notifier deletes it and treats it as handled. |
+| `Gone` | The push subscription or device expired. The notifier deletes it and treats it as handled. |
+| `InvalidMessage(reason)` | A push notification whose `href` is not a path inside the app, or whose payload is over 4096 bytes. Nothing was sent. |
 | `Config(reason)` | The driver lacks what this message needs: a bot route without a token, a message without a sender. |
 
 `NotifyError::InvalidRecipient` is a number that isn't valid E.164, and `NotifyError::Unavailable` a channel without a driver, such as SMS without `notify.sms.driver`. Messages never contain message bodies, tokens or webhook URLs.

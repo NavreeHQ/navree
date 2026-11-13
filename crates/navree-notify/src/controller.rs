@@ -1,8 +1,9 @@
-//! `{api_prefix}/notifications`: the signed-in user's notifications and
-//! push subscriptions.
+//! `{api_prefix}/notifications`: the signed-in user's notifications, push
+//! subscriptions and push devices.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use http::{HeaderMap, Method, Uri, header};
 use navree_contracts::Principal;
@@ -19,27 +20,38 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::deferred::recipient_zone;
+use crate::devices::not_an_app;
 use crate::schema::{
-    new_push_subscription_schema, notification_page_schema, preferences_patch_schema,
-    preferences_schema, push_key_schema, push_subscription_schema, unread_count_schema,
-    unsubscribe_schema,
+    new_push_device_schema, new_push_subscription_schema, notification_page_schema,
+    preferences_patch_schema, preferences_schema, push_device_schema, push_key_schema,
+    push_subscription_schema, remove_device_schema, unread_count_schema, unsubscribe_schema,
 };
 use crate::{
-    DatabaseNotification, Digest, NewPushSubscription, Notifiable, NotificationCatalog,
-    NotificationCategory, NotificationList, NotificationPreferences, Notifier, NotifyError,
-    PreferenceOwner, PushSubscriptions, ResolvedPreferences, USER_NOTIFIABLE_TYPE,
+    DatabaseNotification, Digest, NewPushDevice, NewPushSubscription, Notifiable,
+    NotificationCatalog, NotificationCategory, NotificationList, NotificationPreferences, Notifier,
+    NotifyError, PreferenceOwner, PushDevices, PushSubscriptions, ResolvedPreferences,
+    USER_NOTIFIABLE_TYPE,
 };
+
+/// How often one user may register or remove push devices, per minute.
+const DEVICE_CHANGES_PER_MINUTE: u32 = 30;
+
+/// The largest body the device routes read (a Firebase token is at most
+/// 4096 bytes).
+const DEVICE_BODY_LIMIT: usize = 8 * 1024;
 
 /// Serves `GET /notifications`, `GET /notifications/unread-count`,
 /// `POST /notifications/{id}/read` and `POST /notifications/read-all` for
 /// the signed-in user (notifiable type `user`), when
 /// [`NotifyOptions::routes`](crate::NotifyOptions::routes) is on; and
 /// `GET /notifications/push-key` (with a VAPID key pair) and `POST` /
-/// `DELETE /notifications/push-subscriptions`; and `GET` / `PATCH
+/// `DELETE /notifications/push-subscriptions`; `POST` / `DELETE
+/// /notifications/push-devices`; and `GET` / `PATCH
 /// /notifications/preferences` and `/notifications/preferences/workspace`.
 pub(crate) struct NotificationsController {
     notifier: Arc<Notifier>,
     push: Arc<PushSubscriptions>,
+    devices: Arc<PushDevices>,
     preferences: Arc<NotificationPreferences>,
     catalog: Arc<NotificationCatalog>,
 }
@@ -49,6 +61,7 @@ impl Injectable for NotificationsController {
         vec![
             ProviderKey::of::<Notifier>(),
             ProviderKey::of::<PushSubscriptions>(),
+            ProviderKey::of::<PushDevices>(),
             ProviderKey::of::<NotificationPreferences>(),
             ProviderKey::of::<NotificationCatalog>(),
         ]
@@ -59,6 +72,7 @@ impl Injectable for NotificationsController {
             Ok(NotificationsController {
                 notifier: r.get::<Notifier>().await?,
                 push: r.get::<PushSubscriptions>().await?,
+                devices: r.get::<PushDevices>().await?,
                 preferences: r.get::<NotificationPreferences>().await?,
                 catalog: r.get::<NotificationCatalog>().await?,
             })
@@ -72,6 +86,12 @@ struct Unsubscribe {
     endpoint: String,
 }
 
+/// The body of `DELETE /notifications/push-devices`.
+#[derive(Deserialize)]
+struct RemoveDevice {
+    token: String,
+}
+
 impl Controller for NotificationsController {
     fn prefix(&self) -> &'static str {
         "/notifications"
@@ -82,6 +102,7 @@ impl Controller for NotificationsController {
             return Vec::new();
         }
         let mut routes = self.clone().push_routes();
+        routes.extend(self.clone().device_routes());
         routes.extend(self.clone().preference_routes());
         routes.extend(self.read_routes());
         routes
@@ -408,6 +429,88 @@ impl NotificationsController {
         routes
     }
 
+    /// `POST` and `DELETE /push-devices`: a native app registers the device
+    /// token of the signed-in session, and removes it (signing out). Each
+    /// is throttled per user.
+    fn device_routes(self: Arc<Self>) -> Vec<RouteDef> {
+        let devices = self.devices.clone();
+        let register = move |CurrentPrincipal(me): CurrentPrincipal,
+                             _uow: Uow,
+                             uri: Uri,
+                             Json(input): Json<NewPushDevice>| {
+            let devices = devices.clone();
+            async move {
+                let Some(session) = me.session_id.as_deref().filter(|s| !s.is_empty()) else {
+                    return Err(AppError::forbidden()
+                        .with_detail("Registering a push device needs a signed-in session."));
+                };
+                if let Err((field, message)) = input.check() {
+                    return Err(field_error(field, message));
+                }
+                if !devices.allows(input.platform, input.app_id.trim()) {
+                    return Err(field_error("app_id", not_an_app()));
+                }
+                let device = devices
+                    .register(&SignedIn(me.user_id), session, input)
+                    .await
+                    .map_err(|error| match error {
+                        NotifyError::InvalidRecipient(message) => field_error("token", message),
+                        other => to_app_error(other),
+                    })?;
+                let location = format!("{}/{}", uri.path().trim_end_matches('/'), device.id);
+                Ok::<_, AppError>(Created(location, device))
+            }
+        };
+        let devices = self.devices.clone();
+        let remove = move |CurrentPrincipal(me): CurrentPrincipal,
+                           _uow: Uow,
+                           Json(input): Json<RemoveDevice>| {
+            let devices = devices.clone();
+            async move {
+                if devices
+                    .unregister(&SignedIn(me.user_id), &input.token)
+                    .await
+                    .map_err(to_app_error)?
+                {
+                    Ok(NoContent)
+                } else {
+                    Err(AppError::not_found())
+                }
+            }
+        };
+        let per_minute = Duration::from_secs(60);
+        vec![
+            RouteDef::on(Method::POST, "/push-devices", register)
+                .authenticated()
+                .throttle(DEVICE_CHANGES_PER_MINUTE, per_minute)
+                .body_limit(DEVICE_BODY_LIMIT)
+                .name("notifications.push_devices.store")
+                .api(ApiMeta {
+                    success_status: 201,
+                    request: Some(new_push_device_schema),
+                    ..api(
+                        "Register the native app device of the signed-in session for push notifications",
+                        &[400, 401, 403, 422, 429],
+                        Some(push_device_schema),
+                    )
+                }),
+            RouteDef::on(Method::DELETE, "/push-devices", remove)
+                .authenticated()
+                .throttle(DEVICE_CHANGES_PER_MINUTE, per_minute)
+                .body_limit(DEVICE_BODY_LIMIT)
+                .name("notifications.push_devices.destroy")
+                .api(ApiMeta {
+                    success_status: 204,
+                    request: Some(remove_device_schema),
+                    ..api(
+                        "Remove one of the signed-in user's push devices",
+                        &[400, 401, 404, 429],
+                        None,
+                    )
+                }),
+        ]
+    }
+
     /// The notification list and read state routes.
     fn read_routes(self: Arc<Self>) -> Vec<RouteDef> {
         let (index, count, read, read_all) = (self.clone(), self.clone(), self.clone(), self);
@@ -525,6 +628,11 @@ impl Notifiable for SignedIn {
     fn route_mail(&self) -> Option<String> {
         None
     }
+}
+
+/// A 422 naming `field`.
+fn field_error(field: &str, message: String) -> AppError {
+    AppError::validation(BTreeMap::from([(field.to_owned(), vec![message])]))
 }
 
 /// The HTTP error of a [`NotifyError`] from the push subscription and

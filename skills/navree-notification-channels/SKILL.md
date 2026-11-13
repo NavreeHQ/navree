@@ -1,15 +1,15 @@
 ---
 name: navree-notification-channels
-description: "Sends Navree notifications over Slack (webhooks, bot tokens), Microsoft Teams (webhooks, proactive bot messages), SMS (Twilio, Vonage, Amazon SNS), WhatsApp (Twilio, the WhatsApp Cloud API) and browser push (VAPID): `route_*` on the notifiable, `to_*` on the notification, the `notify.*` driver tables, E.164 numbers, STOP opt-outs (`OptOuts`), push subscriptions (`notify:vapid`, `/api/notifications/push-subscriptions`), the delivery log (`notification_deliveries`, `DeliveryLog`), provider callbacks (`/api/webhooks/notify/*`), connection tokens from integrations and the channel fakes. Use when texting users, posting to Slack or Teams, sending WhatsApp messages or push notifications, handling STOP replies or delivery statuses, or testing any of these."
+description: "Sends Navree notifications over Slack (webhooks, bot tokens), Microsoft Teams (webhooks, proactive bot messages), SMS (Twilio, Vonage, Amazon SNS), WhatsApp (Twilio, the WhatsApp Cloud API), browser push (VAPID) and native app push (Apple's APNs, Firebase Cloud Messaging): `route_*` on the notifiable, `to_*` on the notification, the `notify.*` driver tables, E.164 numbers, STOP opt-outs (`OptOuts`), push subscriptions (`notify:vapid`, `/api/notifications/push-subscriptions`), push devices tied to signed-in sessions (`notify.push`, `/api/notifications/push-devices`, `PushMessage`), the delivery log (`notification_deliveries`, `DeliveryLog`), provider callbacks (`/api/webhooks/notify/*`), connection tokens from integrations and the channel fakes. Use when texting users, posting to Slack or Teams, sending WhatsApp messages or push notifications to browsers or iOS and Android apps, handling STOP replies or delivery statuses, or testing any of these."
 ---
 
 # Notification channels
 
 The database, mail and broadcast channels are in
-`navree-mail-and-notifications`. This skill covers the other five, all in the
+`navree-mail-and-notifications`. This skill covers the other six, all in the
 `notify` facade feature (in `full`): `Channel::Slack`,
 `Channel::MicrosoftTeams`, `Channel::Sms`, `Channel::WhatsApp`,
-`Channel::WebPush`. They go out after the request commits (or as
+`Channel::WebPush`, `Channel::Push` (native apps). They go out after the request commits (or as
 `notify.send` jobs with `notify.queue`), like mail.
 
 ## Steps: add a channel to a notification
@@ -57,6 +57,49 @@ The service worker gets `{title, body?, icon?, url?, tag?, data?}` in
 Routes follow `notify.routes` (authenticated). In code: `PushSubscriptions`
 (`subscribe`, `unsubscribe`, `of`, `delete`).
 
+## Native app push (iOS and Android)
+
+```toml
+[notify.push.apns]
+team_id = "DEF123GHIJ"
+key_id = "ABC123DEFG"              # APP_NOTIFY__PUSH__APNS__KEY = the .p8 text
+bundle_ids = ["com.acme.crm"]
+
+[notify.push.fcm]
+packages = ["com.acme.crm"]        # APP_NOTIFY__PUSH__FCM__SERVICE_ACCOUNT = the key file JSON
+```
+
+```rust,ignore
+fn to_push(&self, _n: &dyn Notifiable) -> Option<PushMessage> {
+    Some(
+        PushMessage::new("Your order has shipped")
+            .body(format!("Order {} is on its way", self.order))
+            .href(format!("/orders/{}", self.order))   // a path inside the app, never a URL
+            .collapse(format!("order-{}", self.order)),
+    )
+}
+```
+
+- The app registers with its session: `POST /api/notifications/push-devices`
+  `{platform: "ios"|"android", token, app_id, environment?: "sandbox"}`
+  (403 without a session, 422 by field, 30 a minute); `DELETE` with
+  `{token}` on sign-out. The token is never returned.
+- A device belongs to the session that registered it: register a
+  `dyn LiveSessions` (with navree-auth, answer from
+  `AuthService::sessions(user_id, None)`) and the channel sends only to
+  devices whose session is live, deleting the rest; without one it sends to
+  all and warns once. Offboarding deletes them. A token re-registered by
+  another user moves.
+- `PushMessage`: `.body`, `.href`, `.badge`, `.sound("default")`, `.thread`,
+  `.collapse` (<= 64 bytes), `.ttl_secs`, `.urgency(Urgency::High)`,
+  `.mutable_content()`, `.data(k, v)`; `PushMessage::silent()` wakes the app
+  without showing anything. An `href` with a scheme or host, or a payload
+  over 4096 bytes, is refused before sending (`ChannelError::InvalidMessage`).
+- Apple's `Unregistered`/`BadDeviceToken` and Firebase's `UNREGISTERED`
+  delete the device; 429 and 5xx fail the channel so the queue retries.
+- Keep secrets out of the text: it passes through Apple and Google and shows
+  on the lock screen.
+
 ## Opt-outs and statuses
 
 - Replies STOP/STOPALL/UNSUBSCRIBE/CANCEL/END/QUIT/OPTOUT/REVOKE opt a
@@ -101,10 +144,10 @@ sms.deliver(app.ctx(), "+14155550100").await?;          // status callback
 sms.reply(app.ctx(), "+14155550100", "STOP").await?;    // inbound STOP
 ```
 
-Fakes: `SlackFake`, `TeamsFake`, `SmsFake`, `WhatsAppFake`, `WebPushFake`
+Fakes: `SlackFake`, `TeamsFake`, `SmsFake`, `WhatsAppFake`, `WebPushFake`, `PushFake`
 (`driver()`, `sent()`, `assert_sent`, `refuse`; SMS/WhatsApp `sent_to`,
-`opt_out_at_provider`, `deliver`, `fail`, `reply`, WhatsApp `read`; push
-`expire(endpoint)`). Install every channel `via` lists, or the missing ones
+`opt_out_at_provider`, `deliver`, `fail`, `reply`, WhatsApp `read`; web push
+`expire(endpoint)`; push `sent_to(token)`, `expire(token)`). Install every channel `via` lists, or the missing ones
 fail with `NotifyError::Unavailable`. Real drivers test against wiremock by
 setting the table's `endpoint`. `temp_database()` is SQLite: the app's
 `[dev-dependencies]` turn on the `sqlite` feature of `navree`.
@@ -117,6 +160,9 @@ setting the table's `endpoint`. `temp_database()` is SQLite: the app's
 - Behind a proxy, Twilio signs its public URL: set
   `webhooks.incoming.twilio.url` or forward `X-Forwarded-Proto`/`-Host`.
 - Webhook URLs (Slack, Teams) are secrets: the log records only their host.
+- A push `href` is a path (`/orders/42`), not `https://...`: a URL is refused.
+- Registering a push device from an API token without a session is refused:
+  native apps sign in with the session.
 
 ## Docs
 
