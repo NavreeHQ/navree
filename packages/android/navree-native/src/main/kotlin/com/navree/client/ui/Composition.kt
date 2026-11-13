@@ -2,6 +2,11 @@
 
 package com.navree.client.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,6 +35,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +61,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.navree.client.design.CompositionRules
+import com.navree.client.theme.LocalReducedMotion
 import com.navree.protocol.Navree
 
 /*
@@ -61,6 +69,38 @@ import com.navree.protocol.Navree
  * across, and a part for each room. Drawn with Material's own pieces; no
  * glass, no shadows of the page's choosing, nothing composed into a bar.
  */
+
+/** The ids a screen has drawn, and whether it is still at its first drawing. */
+internal class Shown {
+    var first = true
+    val ids = HashSet<String>()
+}
+
+internal val LocalShown = staticCompositionLocalOf<Shown?> { null }
+
+/**
+ * A part that comes in as the page says (`appear`) when an op adds it to a
+ * screen already drawn: a fade, a rise or a scale with the system's own
+ * timing. Never at a screen's first drawing, and never when the person
+ * turned animations off.
+ */
+@Composable
+internal fun Appearing(id: String?, appear: Navree.Appear?, content: @Composable () -> Unit) {
+    val shown = LocalShown.current
+    val fresh = remember(id) { appear != null && id != null && shown != null && !shown.first && id !in shown.ids }
+    if (id != null) SideEffect { shown?.ids?.add(id) }
+    if (!fresh || LocalReducedMotion.current) {
+        content()
+        return
+    }
+    val state = remember { MutableTransitionState(false).apply { targetState = true } }
+    val enter = when (appear) {
+        Navree.Appear.RISE -> fadeIn() + slideInVertically { it / 4 }
+        Navree.Appear.SCALE -> fadeIn() + scaleIn(initialScale = 0.92f)
+        else -> fadeIn()
+    }
+    AnimatedVisibility(visibleState = state, enter = enter) { content() }
+}
 
 /**
  * A card: Material's filled card, one variant for the whole client, in the
@@ -93,6 +133,7 @@ internal fun CardView(node: Navree.Card, place: Place, modifier: Modifier = Modi
             for (child in node.children) NodeView(child, place)
         }
     }
+    Appearing(node.id, node.appear) {
     Box(modifier.fillMaxWidth()) {
         when {
             node.menu.isNotEmpty() -> Card(
@@ -117,6 +158,7 @@ internal fun CardView(node: Navree.Card, place: Place, modifier: Modifier = Modi
                 MenuItems(node.menu, place) { menuOpen = false }
             }
         }
+    }
     }
 }
 

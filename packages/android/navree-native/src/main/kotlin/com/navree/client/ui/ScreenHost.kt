@@ -49,6 +49,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -92,6 +93,8 @@ import com.navree.client.design.ScreenPlan
 import com.navree.client.design.ScreenRules
 import com.navree.client.design.PagerRules
 import com.navree.client.design.SelectionRules
+import com.navree.client.design.nodeId
+import com.navree.client.design.walk
 import com.navree.client.design.SearchPlace
 import com.navree.client.design.SubmitPlace
 import com.navree.client.design.expressive.FloatingActions
@@ -266,7 +269,11 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     // A glance the page opened stands beside the content on a wide window.
     val side = if (ScreenRules.sheet(task = false, window = window) == Presentation.SideSheet) openGlance(place) else null
 
+    // What the screen showed at its first drawing comes in without motion; a part an op adds later may.
+    val shown = remember(view.id) { Shown().apply { screen.body.walk().mapNotNull { it.nodeId }.forEach { ids.add(it) } } }
+    LaunchedEffect(view.id) { shown.first = false }
     Row(Modifier.fillMaxSize()) {
+        CompositionLocalProvider(LocalShown provides shown) {
         Scaffold(
             modifier = Modifier.weight(1f).nestedScroll(behaviour.nestedScrollConnection),
             topBar = { ScreenBar(view, arranged, plan, place, info, behaviour, searching) { searching = it } },
@@ -310,6 +317,7 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
                     }
                 }
             }
+        }
         }
         if (side != null) {
             SideSheet(side, place, Modifier.width((window.widthDp * 0.4f).coerceIn(360f, 480f).dp))
