@@ -238,12 +238,15 @@ public struct IconShapeView: View {
     let fills: [String]
     let viewBox: CGRect
 
-    @ScaledMetric(relativeTo: .body) private var size: CGFloat = 20
+    @ScaledMetric private var size: CGFloat
 
-    public init(paths: [String], fills: [String], viewBox: String?) {
+    /// An icon `side` points wide and high before the person's text size,
+    /// following it as `style` does.
+    public init(paths: [String], fills: [String], viewBox: String?, side: Double = 20, relativeTo style: Font.TextStyle = .body) {
         self.paths = paths
         self.fills = fills
         self.viewBox = Self.box(viewBox)
+        _size = ScaledMetric(wrappedValue: CGFloat(side), relativeTo: style)
     }
 
     public var body: some View {

@@ -115,7 +115,7 @@ struct LinkPart: View {
     var body: some View {
         if link.children.isEmpty {
             Button {
-                context.send(.act(link.action, Place(overlay: overlay)))
+                context.send(.act(link.action, Place(overlay: overlay, from: link.id)))
             } label: {
                 Text(link.label)
             }
@@ -126,7 +126,7 @@ struct LinkPart: View {
             // What is drawn is the children, as one target with the system's
             // pressed state; the link's label is its name for VoiceOver.
             Button {
-                context.send(.act(link.action, Place(overlay: overlay)))
+                context.send(.act(link.action, Place(overlay: overlay, from: link.id)))
             } label: {
                 drawn.contentShape(Rectangle())
             }

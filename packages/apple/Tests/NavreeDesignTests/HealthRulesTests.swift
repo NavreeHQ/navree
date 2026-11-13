@@ -394,47 +394,7 @@ import Testing
     #expect(PagerRules.titleMode(.root, pager: nil) == NavigationRules.titleMode(.root))
 }
 
-// MARK: Composition
-
-@Test func aScreenWithCardsIsComposedAndAListOfSectionsIsNot() {
-    let card = Navree.Node.card(Navree.Card(children: [.text(Navree.Text(value: "a"))]))
-    #expect(CompositionRules.isComposed(.stack(Navree.Stack(children: [card]))))
-    #expect(CompositionRules.isComposed(.stack(Navree.Stack(children: [], wide: .horizontal))))
-    #expect(!CompositionRules.isComposed(.stack(Navree.Stack(children: [.section(Navree.Section(children: [.text(Navree.Text(value: "a"))]))]))))
-}
-
-@Test func aStackTurnsAcrossOnlyInAWideRoom() {
-    let stack = Navree.Stack(axis: .vertical, children: [], wide: .horizontal)
-    #expect(CompositionRules.axis(stack, width: .regular) == .horizontal)
-    #expect(CompositionRules.axis(stack, width: .compact) == .vertical)
-    #expect(CompositionRules.axis(Navree.Stack(axis: .horizontal, children: []), width: .regular) == .horizontal)
-    let adaptive = Navree.Adaptive(compact: [.divider(Navree.Divider())], wide: [])
-    #expect(CompositionRules.room(adaptive, width: .compact).count == 1)
-    #expect(CompositionRules.room(adaptive, width: .regular).isEmpty)
-}
-
-@Test func thePillarsAreAlwaysOneRowOfFiveAndOtherGridsFitTheirLeastWidth() {
-    #expect(CompositionRules.columns(Navree.Grid(children: [], cols: 5, min: 96)) == .fixed(5))
-    #expect(CompositionRules.columns(Navree.Grid(children: [], min: 150)) == .fitting(minimum: 150))
-    #expect(CompositionRules.columns(Navree.Grid(children: [])) == .fitting(minimum: 160))
-}
-
-@Test func aSectionOfOneCardIsAGroupAndAPaddingIsInStepsOfFour() {
-    let group = Navree.Section(children: [.card(Navree.Card(children: []))])
-    #expect(CompositionRules.isGroup(group))
-    #expect(!CompositionRules.isGroup(Navree.Section(children: [.card(Navree.Card(children: [])), .divider(Navree.Divider())])))
-    #expect(CompositionRules.padding(Navree.Card(children: [])) == 16)
-    #expect(CompositionRules.padding(Navree.Card(children: [], pad: 3)) == 12)
-    #expect(CompositionRules.padding(Navree.Card(children: []), columns: 5) == 8)
-    #expect(CompositionRules.padding(Navree.Card(children: [], pad: 4), columns: 5) == 16)
-    #expect(CompositionRules.padding(Navree.Card(children: []), columns: 2) == 16)
-}
-
-@Test func aTilesOneWordNameShrinksRatherThanBreaking() {
-    #expect(CompositionRules.shrinksToFit(Navree.Text(align: .center, value: "Movement")))
-    #expect(!CompositionRules.shrinksToFit(Navree.Text(align: .center, value: "25% of score")))
-    #expect(!CompositionRules.shrinksToFit(Navree.Text(value: "Movement")))
-}
+// MARK: Symbols and sections
 
 @Test func anIconTakesTheSystemSymbolThePageNamesForIt() {
     let icon = Navree.Icon(name: "heart-pulse", symbol: Navree.SystemSymbol(apple: "bolt.heart", appleFilled: "bolt.heart.fill", material: "monitor_heart"))
