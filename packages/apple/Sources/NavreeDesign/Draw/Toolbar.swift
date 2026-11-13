@@ -69,20 +69,79 @@ struct ToolbarAction: View {
             case .create:
                 Button(action: action) { ButtonLabel(button: button, mode: .icon) }
                     .disabled(button.disabled)
+            case .bar:
+                Button(role: buttonRole(button.role), action: action) { ButtonLabel(button: button, mode: .icon) }
+                    .disabled(button.disabled || button.pending)
+                    .help(ActionRules.reason(button) ?? "")
             default:
-                Button(role: buttonRole(button.role), action: action) { ButtonLabel(button: button, mode: .both) }
+                Button(role: buttonRole(button.role), action: action) { ReasonedLabel(button: button) }
                     .disabled(button.disabled)
+                    .help(ActionRules.reason(button) ?? "")
             }
         case .menu(let menu):
             Menu {
                 MenuItems(items: menu.items)
             } label: {
-                Label(menu.label, systemImage: "ellipsis")
+                if let icon = menu.icon, let symbol = Symbols.symbol(for: icon) {
+                    Label(menu.label, systemImage: symbol)
+                } else {
+                    Label(menu.label, systemImage: "ellipsis")
+                }
             }
         case .link(let link):
             Button(link.label) { context.send(.act(link.action, Place(overlay: overlay))) }
         default:
             EmptyView()
+        }
+    }
+}
+
+/// A button's words and symbol, with why it can't be used now under them
+/// when the server says why: what a menu item shows.
+struct ReasonedLabel: View {
+    let button: Navree.Button
+
+    var body: some View {
+        if let reason = ActionRules.reason(button) {
+            let symbol = button.standard.flatMap(Symbols.standard) ?? button.icon.flatMap(Symbols.symbol(for:))
+            if let symbol {
+                Label {
+                    Text(button.label)
+                    Text(reason)
+                } icon: {
+                    Image(systemName: symbol)
+                }
+            } else {
+                Text(button.label)
+                Text(reason)
+            }
+        } else {
+            ButtonLabel(button: button, mode: .both)
+        }
+    }
+}
+
+/// The toolbars that stand in a screen's body, as the bottom bar: each item
+/// a symbol, in the order the guidelines give roles.
+struct FootToolbar: ToolbarContent {
+    let toolbars: [Navree.Toolbar]
+
+    /// The bottom bar where a system has one; the window's toolbar on the Mac.
+    static var placement: ToolbarItemPlacement {
+        #if os(iOS)
+        .bottomBar
+        #else
+        .automatic
+        #endif
+    }
+
+    var body: some ToolbarContent {
+        let items = toolbars.flatMap(\.items).map(ActionRules.node(for:))
+        ToolbarItemGroup(placement: Self.placement) {
+            ForEach(Array(items.enumerated()), id: \.offset) { index, node in
+                if index > 0 { Spacer() }
+                ToolbarAction(node: node, slot: .bar, overlay: nil, form: nil)
+            }
         }
     }
 }

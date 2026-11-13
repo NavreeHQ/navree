@@ -221,18 +221,7 @@ struct ScreenPage: View {
             .environment(\.navree, client.context(for: state.id, depth: depth, base: configuration.base))
             .toolbar { toolbar }
             .modifier(Chromeless(hidden: !state.chrome))
-            .alert(
-                state.question?.title ?? "", isPresented: questionShown, presenting: state.question
-            ) { question in
-                Button(question.confirm, role: .destructive) {
-                    client.send(.answer(screen: state.id, question: question.id, yes: true))
-                }
-                Button(question.cancel ?? String(localized: "Cancel"), role: .cancel) {
-                    client.send(.answer(screen: state.id, question: question.id, yes: false))
-                }
-            } message: { question in
-                if let text = question.text { Text(text) }
-            }
+            .modifier(QuestionPresenter(state: state, client: client))
     }
 
     private var screenDepth: ScreenDepth {
@@ -318,12 +307,6 @@ struct ScreenPage: View {
                 }
             }
         }
-    }
-
-    /// The alert's two buttons are its only ways out, and each is an answer.
-    private var questionShown: Binding<Bool> {
-        let question = state.question
-        return Binding(get: { question != nil }, set: { _ in })
     }
 
     static func hasCancel(_ state: ScreenState) -> Bool {
@@ -418,5 +401,49 @@ struct AccountMenu: View {
     /// The account menu stands on no screen.
     private func act(_ action: Navree.Action, ask: Navree.Question?) {
         client.send(.act(.init(screen: nil, action: action, ask: ask, now: Int(Date().timeIntervalSince1970))))
+    }
+}
+
+/// The question the core asks before a control acts, in the server's words:
+/// a destructive act's own question as an action sheet (its answer in red
+/// first, Cancel last), any other as an alert. Each button is an answer.
+struct QuestionPresenter: ViewModifier {
+    let state: ScreenState
+    let client: NativeClient
+
+    func body(content: Content) -> some View {
+        let question = state.question
+        let asker = question.flatMap { question in state.screen.flatMap { QuestionRules.asker(title: question.title, in: $0) } }
+        let style = QuestionRules.style(asker: asker)
+        content
+            .alert(
+                question?.title ?? "", isPresented: shown(question, style == .alert), presenting: question
+            ) { question in
+                answers(question, destructive: false)
+            } message: { question in
+                if let text = question.text { Text(text) }
+            }
+            .confirmationDialog(
+                question?.title ?? "", isPresented: shown(question, style == .confirmationDialog),
+                titleVisibility: .visible, presenting: question
+            ) { question in
+                answers(question, destructive: true)
+            } message: { question in
+                if let text = question.text { Text(text) }
+            }
+    }
+
+    @ViewBuilder private func answers(_ question: Question, destructive: Bool) -> some View {
+        Button(question.confirm, role: destructive ? .destructive : nil) {
+            client.send(.answer(screen: state.id, question: question.id, yes: true))
+        }
+        Button(question.cancel ?? String(localized: "Cancel"), role: .cancel) {
+            client.send(.answer(screen: state.id, question: question.id, yes: false))
+        }
+    }
+
+    /// The buttons are its only ways out, and each is an answer.
+    private func shown(_ question: Question?, _ style: Bool) -> Binding<Bool> {
+        Binding(get: { question != nil && style }, set: { _ in })
     }
 }
