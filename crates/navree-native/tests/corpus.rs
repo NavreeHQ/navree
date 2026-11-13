@@ -2593,6 +2593,18 @@ fn ops_lists() -> Envelope {
                 ],
                 at: Edge::End,
                 more: Some(s("/orders?after=1039")),
+                prev: None,
+            },
+            // The records before the first, which move the table's cursor back.
+            Op::Rows {
+                target: s("orders"),
+                rows: vec![
+                    record("1045", "CH-1045", "₹3,150"),
+                    record("1044", "CH-1044", "₹54,000"),
+                ],
+                at: Edge::Start,
+                more: None,
+                prev: Some(s("/orders?before=1045")),
             },
             Op::Row {
                 target: s("1042"),

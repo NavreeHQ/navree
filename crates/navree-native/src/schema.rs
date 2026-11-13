@@ -777,7 +777,7 @@ union!(Op tag "op"
         Prepend { target, nodes } { before },
         Remove { target } {},
         Merge { target, since } { nodes, gone, at, more },
-        Rows { target, rows } { at, more },
+        Rows { target, rows } { at, more, prev },
         Row { target, row } {},
         Errors { form, fields } {},
         Open { target } {},

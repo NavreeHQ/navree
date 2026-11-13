@@ -62,6 +62,48 @@
       "more": "/orders?after=1039"
     },
     {
+      "op": "rows",
+      "target": "orders",
+      "rows": [
+        {
+          "id": "1045",
+          "cells": [
+            {
+              "t": "text",
+              "value": "CH-1045"
+            },
+            {
+              "t": "text",
+              "value": "₹3,150"
+            }
+          ],
+          "action": {
+            "t": "navigate",
+            "href": "/orders/1045"
+          }
+        },
+        {
+          "id": "1044",
+          "cells": [
+            {
+              "t": "text",
+              "value": "CH-1044"
+            },
+            {
+              "t": "text",
+              "value": "₹54,000"
+            }
+          ],
+          "action": {
+            "t": "navigate",
+            "href": "/orders/1044"
+          }
+        }
+      ],
+      "at": "start",
+      "prev": "/orders?before=1045"
+    },
+    {
       "op": "row",
       "target": "1042",
       "row": {

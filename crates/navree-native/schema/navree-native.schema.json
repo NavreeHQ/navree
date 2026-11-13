@@ -6094,6 +6094,18 @@
           "default": null,
           "x-since": 0
         },
+        "prev": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "rows": {
           "items": {
             "$ref": "#/$defs/TableRow"

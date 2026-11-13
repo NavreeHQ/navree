@@ -144,10 +144,19 @@ pub enum Op {
         /// Which end they join.
         #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
         at: Edge,
-        /// Where the records after these are, by cursor, or none when these are
-        /// the last: the table's `more` from now on.
+        /// For records that join the end: where the records after these are, by
+        /// cursor, or none when these are the last: the table's `more` from now
+        /// on. Records that join the start leave it out, and the table's `more`
+        /// stays as it was.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         more: Option<String>,
+        /// For records that join the start: where the records before these are,
+        /// by cursor, beside `more`: the table's `prev` from now on, so a table
+        /// that grows at its start moves its cursor back with it. An empty
+        /// address says there are none before. Left out, the table's `prev` stays
+        /// as it was, which is what records that join the end want.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prev: Option<String>,
     },
     /// Puts `row` in place of the table row `target`, keeping what the reader
     /// did to it: whether it is chosen, whether its detail is open.
@@ -331,6 +340,18 @@ mod tests {
             panic!("{rows:?}");
         };
         assert_eq!((rows.len(), *at, more.as_deref()), (1, Edge::End, Some("/orders?after=1043")));
+        // The cursor before is moved only when the op says so.
+        let Op::Rows { prev, .. } = serde_json::from_str::<Op>(
+            r#"{"op":"rows","target":"orders","rows":[{"id":"1045"}],"at":"start","prev":"/orders?before=1045"}"#,
+        )
+        .unwrap() else {
+            panic!("not rows");
+        };
+        assert_eq!(prev.as_deref(), Some("/orders?before=1045"));
+        let Op::Rows { prev, .. } = serde_json::from_str::<Op>(r#"{"op":"rows","target":"orders","rows":[]}"#).unwrap() else {
+            panic!("not rows");
+        };
+        assert_eq!(prev, None);
         assert!(serde_json::from_str::<Op>(r#"{"op":"row","target":"1043","row":{"id":"1043"}}"#).is_ok());
         // A revision is needed: without it the next ask could not say where it stands.
         assert!(serde_json::from_str::<Op>(r#"{"op":"merge","target":"inbox"}"#).is_err());
