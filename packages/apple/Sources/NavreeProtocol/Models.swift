@@ -56,6 +56,20 @@ extension Navree {
 }
 
 extension Navree {
+    /// One word of a closed list, read leniently: a word this build does not
+    /// know is read as none, and a list of words leaves it out. A value of
+    /// another shape is still an error.
+    struct Word<Value: RawRepresentable>: Decodable where Value.RawValue == String {
+        var value: Value?
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            self.value = container.decodeNil() ? nil : Value(rawValue: try container.decode(String.self))
+        }
+    }
+}
+
+extension Navree {
     /// `Accuracy`.
     public enum Accuracy: String, Codable, Hashable, Sendable, CaseIterable {
         case approximate = "approximate"
@@ -2850,7 +2864,7 @@ extension Navree {
             self.max = try container.decodeIfPresent(String.self, forKey: .max)
             self.min = try container.decodeIfPresent(String.self, forKey: .min)
             self.offDays = try container.decodeIfPresent([String].self, forKey: .offDays) ?? []
-            self.offWeekdays = try container.decodeIfPresent([Navree.Weekday].self, forKey: .offWeekdays) ?? []
+            self.offWeekdays = try container.decodeIfPresent([Navree.Word<Navree.Weekday>].self, forKey: .offWeekdays)?.compactMap(\.value) ?? []
             self.value = try container.decodeIfPresent(String.self, forKey: .value) ?? ""
         }
 
@@ -7525,7 +7539,7 @@ extension Navree {
             self.max = try container.decodeIfPresent(String.self, forKey: .max)
             self.min = try container.decodeIfPresent(String.self, forKey: .min)
             self.offDays = try container.decodeIfPresent([String].self, forKey: .offDays) ?? []
-            self.offWeekdays = try container.decodeIfPresent([Navree.Weekday].self, forKey: .offWeekdays) ?? []
+            self.offWeekdays = try container.decodeIfPresent([Navree.Word<Navree.Weekday>].self, forKey: .offWeekdays)?.compactMap(\.value) ?? []
             self.to = try container.decode(Navree.RangeEnd.self, forKey: .to)
         }
 
@@ -8483,7 +8497,7 @@ extension Navree {
 
         public init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            self.formats = try container.decodeIfPresent([Navree.CodeFormat].self, forKey: .formats) ?? []
+            self.formats = try container.decodeIfPresent([Navree.Word<Navree.CodeFormat>].self, forKey: .formats)?.compactMap(\.value) ?? []
             self.prompt = try container.decodeIfPresent(String.self, forKey: .prompt)
         }
 
