@@ -1727,6 +1727,10 @@ fn a_link_is_presented_as_the_shell_decides_unless_the_page_says() {
                 .href("/orders/1")
                 .presented(Presented::Sheet),
             Button::outline("Pay").href("https://pay.example/1"),
+            el("a")
+                .href("/orders/2")
+                .child("Order 2")
+                .presented(Presented::Sheet),
         ))
     };
     let page = TestNative::build(phone(), build);
@@ -1753,14 +1757,113 @@ fn a_link_is_presented_as_the_shell_decides_unless_the_page_says() {
             ("Pay".to_owned(), Present::External),
         ]
     );
+    // A link written as an element says it the same way.
+    let links: Vec<Present> = page
+        .screen()
+        .body
+        .children()
+        .into_iter()
+        .filter_map(|node| match node {
+            N::Link(link) => match &link.action {
+                Action::Navigate { present, .. } => Some(*present),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    assert_eq!(links, [Present::Sheet]);
     // Built for a browser, the page carries no word of it.
     let plain = View::new("x").body((
         Button::new("Orders").href("/orders"),
         Button::primary("New order").href("/orders/new"),
         Button::outline("Details").href("/orders/1"),
         Button::outline("Pay").href("https://pay.example/1"),
+        el("a").href("/orders/2").child("Order 2"),
     ));
     assert_eq!(build().to_html(), plain.to_html());
+}
+
+#[test]
+fn what_an_author_says_of_a_control_is_said_to_a_native_client_and_never_written() {
+    use navree_ui::Standard;
+    let build = || {
+        View::new("x").body((
+            Button::destructive("Archive").undoable(),
+            Button::outline("Send the invoice").standard(Standard::Share),
+            Button::new("Resend")
+                .disabled(true)
+                .reason("It went out at 09:41. It can go again after 09:46."),
+            // Said of a control that is on, a reason means nothing.
+            Button::new("Print").reason("nothing"),
+            // A page that says why in the button's own title is read.
+            Button::new("Cancel order")
+                .disabled(true)
+                .attr("title", "Shipped orders can't be cancelled"),
+            Button::new("Plain"),
+        ))
+    };
+    let page = TestNative::build(phone(), build);
+    assert!(page.is_native(), "{:?}", page.why());
+    let buttons: Vec<&n::Button> = page
+        .screen()
+        .body
+        .children()
+        .into_iter()
+        .filter_map(|node| match node {
+            N::Button(button) => Some(button),
+            _ => None,
+        })
+        .collect();
+    let [archive, share, resend, print, cancel, plain] = buttons.as_slice() else {
+        panic!("not six buttons: {buttons:?}");
+    };
+    assert!(archive.undoable && !share.undoable);
+    assert_eq!(share.standard, Some(n::Standard::Share));
+    assert_eq!(plain.standard, None);
+    assert_eq!(
+        resend.reason.as_deref(),
+        Some("It went out at 09:41. It can go again after 09:46.")
+    );
+    assert_eq!(print.reason, None);
+    assert_eq!(
+        cancel.reason.as_deref(),
+        Some("Shipped orders can't be cancelled")
+    );
+    assert_eq!(plain.reason, None);
+    // Built for a browser, the page is the page it was.
+    let browser = View::new("x").body((
+        Button::destructive("Archive"),
+        Button::outline("Send the invoice"),
+        Button::new("Resend").disabled(true),
+        Button::new("Print"),
+        Button::new("Cancel order")
+            .disabled(true)
+            .attr("title", "Shipped orders can't be cancelled"),
+        Button::new("Plain"),
+    ));
+    assert_eq!(build().to_html(), browser.to_html());
+}
+
+#[test]
+fn a_forms_cancel_link_is_the_cancel_role_by_itself() {
+    let page = TestNative::build(phone(), || {
+        View::new("Refund").body(refund_form().cancel("Back to the order", "/orders/1"))
+    });
+    assert!(page.is_native(), "{:?}", page.why());
+    let Some(N::Form(form)) = page.screen().body.children().into_iter().find(|node| matches!(node, N::Form(_))).or(Some(&page.screen().body)) else {
+        panic!("no form");
+    };
+    let mut stack: Vec<&N> = form.children.iter().collect();
+    let mut cancel = None;
+    while let Some(node) = stack.pop() {
+        if let N::Button(button) = node
+            && button.label == "Back to the order"
+        {
+            cancel = Some(button);
+        }
+        stack.extend(node.children());
+    }
+    assert_eq!(cancel.expect("the cancel link").role, n::Role::Cancel);
 }
 
 #[test]

@@ -8,7 +8,6 @@
 //! it came.
 
 use navree_native::input as i;
-use navree_native::node as n;
 
 use super::super::lower::{Control, Cx, N, Parts, Read, attr, elements, fail, has, hooks, id};
 use crate::node::{Element, Node};
@@ -93,6 +92,7 @@ fn selected(picker: &Element) -> Read<Option<String>> {
 
 #[cfg(all(test, feature = "phone"))]
 mod tests {
+    use navree_native::node as n;
     use navree_phone::Region;
 
     use super::super::testing::{misses, read, tamper};

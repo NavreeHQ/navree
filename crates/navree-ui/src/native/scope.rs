@@ -55,6 +55,9 @@ pub(crate) struct Request {
     /// The rows of the data tables built during the request, as trees, by a hash of
     /// the string the page keeps for them.
     pub(crate) rows: std::sync::Mutex<std::collections::HashMap<u64, crate::node::Node>>,
+    /// What authors said to a native client of the elements built during the request,
+    /// by the key the element holds: an element carries a number, not the words.
+    pub(crate) hints: std::sync::Mutex<Vec<crate::hint::Hints>>,
 }
 
 impl Request {
@@ -68,7 +71,31 @@ impl Request {
             sign_in: None,
             charts: std::sync::Mutex::default(),
             rows: std::sync::Mutex::default(),
+            hints: std::sync::Mutex::default(),
         }
+    }
+
+    /// Changes what is said of the element that holds `key` (0 for none yet), and gives
+    /// the key it holds from now on.
+    pub(crate) fn hint(&self, key: u32, set: impl FnOnce(&mut crate::hint::Hints)) -> u32 {
+        let Ok(mut hints) = self.hints.lock() else {
+            return key;
+        };
+        let at = match usize::try_from(key).ok().and_then(|key| key.checked_sub(1)) {
+            Some(at) if at < hints.len() => at,
+            _ => {
+                hints.push(crate::hint::Hints::default());
+                hints.len() - 1
+            }
+        };
+        set(&mut hints[at]);
+        u32::try_from(at + 1).unwrap_or(0)
+    }
+
+    /// What is said of the element that holds `key`.
+    pub(crate) fn hinted(&self, key: u32) -> Option<crate::hint::Hints> {
+        let at = usize::try_from(key).ok()?.checked_sub(1)?;
+        self.hints.lock().ok()?.get(at).cloned()
     }
 
     /// Keeps the values the chart `id` wrote.
@@ -142,6 +169,7 @@ pub(crate) fn read(headers: &HeaderMap, url: &str) -> Reading {
             sign_in: None,
             charts: std::sync::Mutex::default(),
             rows: std::sync::Mutex::default(),
+            hints: std::sync::Mutex::default(),
         }))),
         Err(error) => Reading::Refused(error),
     }

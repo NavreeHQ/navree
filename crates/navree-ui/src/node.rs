@@ -344,6 +344,11 @@ pub struct Element {
     pub(crate) attrs: Vec<Attr>,
     pub(crate) children: Vec<Node>,
     pub(crate) uses: Uses,
+    /// The key of what the element says to a native client beyond its markup (0 for
+    /// nothing), kept with the request and never written. A number, so an element is
+    /// no larger for it: it stands where the padding after `uses` was.
+    #[cfg(feature = "native-preview")]
+    pub(crate) hint: u32,
 }
 
 /// Elements a page never writes through the tree: each loads something, runs
@@ -370,6 +375,8 @@ pub fn el(tag: &'static str) -> Element {
         attrs: Vec::new(),
         children: Vec::new(),
         uses: Uses::NONE,
+        #[cfg(feature = "native-preview")]
+        hint: 0,
     }
 }
 
@@ -403,6 +410,41 @@ fn is_refused_attr(name: &str) -> bool {
 }
 
 impl Element {
+    /// Says how the screen this link leads to is presented by a native client, when the
+    /// page knows: a form to fill in is a [`Task`](crate::Presented::Task), a record to
+    /// glance at is a [`Sheet`](crate::Presented::Sheet). Without it the shell's routes
+    /// decide. It writes no HTML: a browser's page is the page it was.
+    ///
+    /// ```
+    /// use navree_ui::{Presented, el, render};
+    ///
+    /// let link = el("a").href("/orders/new").child("New order").presented(Presented::Task);
+    /// assert_eq!(render(&link.into()), r#"<a href="/orders/new">New order</a>"#);
+    /// ```
+    #[cfg_attr(not(feature = "native-preview"), allow(unused_variables, unused_mut))]
+    pub fn presented(mut self, how: crate::Presented) -> Self {
+        #[cfg(feature = "native-preview")]
+        self.say(|hints| hints.presented = Some(how));
+        self
+    }
+
+    /// Sets a hint for a native client, when one is asking.
+    #[cfg(feature = "native-preview")]
+    pub(crate) fn say(&mut self, set: impl FnOnce(&mut crate::hint::Hints)) {
+        if let Some(request) = crate::native::scope::native() {
+            self.hint = request.hint(self.hint, set);
+        }
+    }
+
+    /// What was said of this element to the native client the current request is from.
+    #[cfg(feature = "native-preview")]
+    pub(crate) fn said(&self) -> Option<crate::hint::Hints> {
+        if self.hint == 0 {
+            return None;
+        }
+        crate::native::scope::native()?.hinted(self.hint)
+    }
+
     /// The element's tag name.
     pub fn tag(&self) -> &'static str {
         self.tag

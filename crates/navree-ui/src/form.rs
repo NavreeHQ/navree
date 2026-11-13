@@ -1526,7 +1526,9 @@ impl<T: Form> FormView<T> {
                 fields,
                 el("div").slot("form-actions").children((
                     self.cancel
-                        .map(|(label, href)| Button::ghost(label).href(href)),
+                        .map(|(label, href)| {
+                            Button::ghost(label).href(href).role(crate::Role::Cancel)
+                        }),
                     Button::primary(self.submit).submit(),
                 )),
             ))

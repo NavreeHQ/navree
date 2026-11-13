@@ -1,6 +1,6 @@
 //! What a part means, in words that mean the same on the web: a button's
-//! [`Role`], how the screen a link leads to is [`Presented`], and a table
-//! column's [`ColumnRole`].
+//! [`Role`], how the screen a link leads to is [`Presented`], a [`Standard`]
+//! action, and a table column's [`ColumnRole`].
 //!
 //! A browser places a page's parts where the page puts them, so it needs
 //! none of this. A native client places them by what they mean, as its own
@@ -63,6 +63,55 @@ pub enum Presented {
     Full,
 }
 
+/// An action every system has its own symbol and words for, said by its meaning: a
+/// native client draws the system's own symbol and label for it (a share button
+/// looks like every other share button there), whatever icon and words the page gave.
+///
+/// ```
+/// use navree_ui::{Button, Standard};
+///
+/// let share = Button::outline("Send the invoice")
+///     .href("/invoices/7/share")
+///     .standard(Standard::Share);
+/// assert!(navree_ui::render(&share.into()).starts_with("<a "));
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Standard {
+    /// Sends something to another app or person.
+    Share,
+    /// Deletes something.
+    Delete,
+    /// Adds a new thing.
+    Add,
+    /// Changes something.
+    Edit,
+    /// Looks for something.
+    Search,
+    /// Finishes a task, keeping what was done.
+    Done,
+    /// Leaves a task, keeping nothing.
+    Cancel,
+    /// Offers more actions.
+    More,
+}
+
+/// What an element says to a native client beyond what its markup does. Written into
+/// the tree only while a native client asks, and never into the HTML: a page's markup
+/// does not change by a byte.
+#[cfg(feature = "native-preview")]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Hints {
+    /// How the screen a link leads to is presented.
+    pub(crate) presented: Option<Presented>,
+    /// Whether what the control does can be undone.
+    pub(crate) undoable: bool,
+    /// The standard action it is.
+    pub(crate) standard: Option<Standard>,
+    /// Why it can't be used now.
+    pub(crate) reason: Option<String>,
+}
+
 /// What a table's column is to a record, for a screen too narrow for a table,
 /// where each record is a row of a list: `#[col(role = title)]`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -79,7 +128,7 @@ pub enum ColumnRole {
 }
 
 #[cfg(feature = "native-preview")]
-pub(crate) use marks::{mark, presented_mark, presented_of, role_of};
+pub(crate) use marks::{mark, role_of};
 
 /// The marks a hint is written into the tree with: a zero-length slice of a
 /// text of the toolkit's own, which writes nothing wherever it stands, so the
@@ -87,47 +136,12 @@ pub(crate) use marks::{mark, presented_mark, presented_of, role_of};
 /// mark is told apart by where its slice starts.
 #[cfg(feature = "native-preview")]
 mod marks {
-    use super::{Presented, Role};
+    use super::Role;
     use crate::node::Node;
 
     /// The text the marks are slices of. Its first byte is no mark, so a slice
-    /// that ends another text just before it is never read as one; the roles
-    /// stand in the first half and the ways of presenting in the second.
-    static MARKS: &str = "----------------";
-
-    /// Where the mark of the first way of presenting starts.
-    const PRESENTED: usize = 9;
-
-    /// The mark of the way `how` of presenting.
-    pub(crate) fn presented_mark(how: Presented) -> Node {
-        let at = PRESENTED
-            + match how {
-                Presented::Push => 0,
-                Presented::Replace => 1,
-                Presented::Root => 2,
-                Presented::Sheet => 3,
-                Presented::Task => 4,
-                Presented::Full => 5,
-            };
-        Node::Static(&MARKS[at..at])
-    }
-
-    /// The way of presenting `text` marks, when it is a mark.
-    pub(crate) fn presented_of(text: &str) -> Option<Presented> {
-        if !text.is_empty() {
-            return None;
-        }
-        let at = (text.as_ptr() as usize).checked_sub(MARKS.as_ptr() as usize)?;
-        Some(match at.checked_sub(PRESENTED)? {
-            0 => Presented::Push,
-            1 => Presented::Replace,
-            2 => Presented::Root,
-            3 => Presented::Sheet,
-            4 => Presented::Task,
-            5 => Presented::Full,
-            _ => return None,
-        })
-    }
+    /// that ends another text just before it is never read as one.
+    static MARKS: &str = "--------";
 
     /// The mark of `role`.
     pub(crate) fn mark(role: Role) -> Node {
@@ -191,28 +205,5 @@ mod marks {
             assert_eq!(role_of(&MARKS[8..8]), None);
         }
 
-        #[test]
-        fn a_way_of_presenting_is_marked_the_same_way_and_is_no_role() {
-            for how in [
-                Presented::Push,
-                Presented::Replace,
-                Presented::Root,
-                Presented::Sheet,
-                Presented::Task,
-                Presented::Full,
-            ] {
-                let mark = presented_mark(how);
-                assert_eq!(render(&mark), "");
-                let Node::Static(text) = mark else {
-                    panic!("not a mark");
-                };
-                assert_eq!(presented_of(text), Some(how));
-                assert_eq!(role_of(text), None);
-            }
-            assert_eq!(presented_of(&MARKS[3..3]), None);
-            assert_eq!(presented_of(&MARKS[8..8]), None);
-            assert_eq!(presented_of(&MARKS[15..15]), None);
-            assert_eq!(presented_of("task"), None);
-        }
     }
 }

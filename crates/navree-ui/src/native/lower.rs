@@ -1145,17 +1145,12 @@ impl Cx {
         )?;
         let mut icon = None;
         let mut said = None;
-        let mut presented = None;
         for child in flat(element.child_nodes()) {
-            if let Node::Static(text) = child {
-                if let Some(role) = crate::hint::role_of(text) {
-                    said = Some(role);
-                    continue;
-                }
-                if let Some(how) = crate::hint::presented_of(text) {
-                    presented = Some(how);
-                    continue;
-                }
+            if let Node::Static(text) = child
+                && let Some(role) = crate::hint::role_of(text)
+            {
+                said = Some(role);
+                continue;
             }
             let Node::Element(part) = child else { continue };
             match slot(part).as_deref() {
@@ -1220,34 +1215,34 @@ impl Cx {
             }
             None => None,
         };
+        let disabled = has(element, "disabled")
+            || attr(element, "aria-disabled").as_deref() == Some("true");
+        let said = element.said();
+        let hints = said.as_ref();
+        // What the author said of why it is off comes first; a page that says it in the
+        // button's own `title` is read.
+        let reason = if disabled {
+            hints
+                .and_then(|hints| hints.reason.clone())
+                .or_else(|| attr(element, "title").map(Cow::into_owned))
+                .filter(|reason| !reason.is_empty())
+        } else {
+            None
+        };
         Ok(n::Button {
             id: id(element),
             label,
             icon,
             icon_only,
             role,
+            standard: hints.and_then(|hints| hints.standard).map(standard_of),
             prominence,
+            undoable: hints.is_some_and(|hints| hints.undoable),
             ask,
-            disabled: has(element, "disabled")
-                || attr(element, "aria-disabled").as_deref() == Some("true"),
+            disabled,
+            reason,
             pending: has(element, "data-pending"),
-            action: {
-                let mut action = self.action_of(element)?;
-                // What the page said of how the screen it leads to is presented.
-                if let (Some(how), Some(Action::Navigate { present, .. })) =
-                    (presented, action.as_mut())
-                {
-                    *present = match how {
-                        crate::Presented::Push => Present::Push,
-                        crate::Presented::Replace => Present::Replace,
-                        crate::Presented::Root => Present::Root,
-                        crate::Presented::Sheet => Present::Sheet,
-                        crate::Presented::Task => Present::Task,
-                        crate::Presented::Full => Present::Full,
-                    };
-                }
-                action
-            },
+            action: self.action_of(element)?,
             ..n::Button::default()
         })
     }
@@ -1273,6 +1268,16 @@ impl Cx {
                 href: href.into_owned(),
                 present: if outside {
                     Present::External
+                } else if let Some(how) = element.said().and_then(|hints| hints.presented) {
+                    // What the page said of how the screen it leads to is presented.
+                    match how {
+                        crate::Presented::Push => Present::Push,
+                        crate::Presented::Replace => Present::Replace,
+                        crate::Presented::Root => Present::Root,
+                        crate::Presented::Sheet => Present::Sheet,
+                        crate::Presented::Task => Present::Task,
+                        crate::Presented::Full => Present::Full,
+                    }
                 } else if has(element, "data-ui-in-region") {
                     Present::Replace
                 } else {
@@ -1568,6 +1573,20 @@ fn plain_number(input: &mut i::TextInput) {
         {
             *limit = Some(digits);
         }
+    }
+}
+
+/// The protocol's standard action for the page's.
+fn standard_of(standard: crate::Standard) -> n::Standard {
+    match standard {
+        crate::Standard::Share => n::Standard::Share,
+        crate::Standard::Delete => n::Standard::Delete,
+        crate::Standard::Add => n::Standard::Add,
+        crate::Standard::Edit => n::Standard::Edit,
+        crate::Standard::Search => n::Standard::Search,
+        crate::Standard::Done => n::Standard::Done,
+        crate::Standard::Cancel => n::Standard::Cancel,
+        crate::Standard::More => n::Standard::More,
     }
 }
 
@@ -1969,6 +1988,8 @@ pub(crate) fn is_inline(node: &Node) -> bool {
                     ) && !attr.name.starts_with("data-ui-")
                 })
                 && (element.tag() != "a" || has(element, "href"))
+                // A link the page said how to present is a link of its own, not words in a run.
+                && !(element.tag() == "a" && element.said().is_some_and(|said| said.presented.is_some()))
                 && element.child_nodes().iter().all(is_inline)
         }
     }

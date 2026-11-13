@@ -130,7 +130,7 @@ pub use flow::{
     TreeSelect, TreeSelection, TreeState, Wizard, WizardOutcome, WizardPage, WizardStep,
 };
 pub use form::{FormView, Money, Submit};
-pub use hint::{Presented, Role};
+pub use hint::{Presented, Role, Standard};
 pub use html::{Href, HrefError, LocalHref, SafeHtml};
 pub use island::{Island, IslandScript};
 pub use localize::{Localizer, ReaderWords};
