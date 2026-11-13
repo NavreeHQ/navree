@@ -19,9 +19,15 @@ struct FakeIndex {
     registry: Registry,
     /// Reads of a crate's file that still miss it after it was uploaded.
     lag: BTreeMap<String, usize>,
+    /// Crates the registry has no version of at all, until they are uploaded.
+    never_published: BTreeSet<String>,
 }
 
 impl Index for FakeIndex {
+    fn known(&mut self, name: &str) -> Result<bool, String> {
+        Ok(!self.never_published.contains(name) || self.registry.borrow().contains(name))
+    }
+
     fn has(&mut self, name: &str, _version: &str) -> Result<bool, String> {
         if !self.registry.borrow().contains(name) {
             return Ok(false);
@@ -179,7 +185,95 @@ fn index_of(registry: &Registry) -> FakeIndex {
     FakeIndex {
         registry: registry.clone(),
         lag: BTreeMap::new(),
+        never_published: BTreeSet::new(),
     }
+}
+
+#[test]
+fn a_crate_never_published_takes_the_first_publish_token_and_the_rest_trusted_publishing() {
+    let reg = registry(&[]);
+    let mut cargo = FakeCargo::new(&reg);
+    let mut tokens = FakeTokens::default();
+    let mut index = index_of(&reg);
+    index.never_published.insert("b".to_owned());
+    let mut options = Options::new("1.0.0");
+    options.first_publish_token = Some("first".to_owned());
+    let order = names(&["a", "b", "c"]);
+    let (result, log) = run(
+        &order,
+        &options,
+        &mut index,
+        &mut cargo,
+        &mut FakeClock::at(NOW),
+        Some(&mut tokens),
+    );
+    assert_eq!(result.unwrap().published, order);
+    assert_eq!(
+        cargo.calls,
+        [
+            ("a".to_owned(), Some("token-1".to_owned())),
+            ("b".to_owned(), Some("first".to_owned())),
+            ("c".to_owned(), Some("token-1".to_owned())),
+        ]
+    );
+    // The first-publish token is the maintainer's to remove: it is never revoked here.
+    assert_eq!(tokens.revoked, ["token-1"]);
+    assert!(
+        log.iter()
+            .any(|l| l.contains("b: the registry has no version of it")),
+        "{log:?}"
+    );
+}
+
+#[test]
+fn a_crate_never_published_stops_the_run_when_no_token_is_given_for_it() {
+    let reg = registry(&[]);
+    let mut cargo = FakeCargo::new(&reg);
+    let mut tokens = FakeTokens::default();
+    let mut index = index_of(&reg);
+    index.never_published.insert("b".to_owned());
+    let order = names(&["a", "b", "c"]);
+    let (result, _) = run(
+        &order,
+        &Options::new("1.0.0"),
+        &mut index,
+        &mut cargo,
+        &mut FakeClock::at(NOW),
+        Some(&mut tokens),
+    );
+    let stopped = result.unwrap_err();
+    assert!(
+        stopped.message.contains("b has never been published")
+            && stopped.message.contains("NAVREE_FIRST_PUBLISH_TOKEN"),
+        "{}",
+        stopped.message
+    );
+    assert_eq!(stopped.report.published, names(&["a"]));
+    assert_eq!(stopped.report.remaining, names(&["b", "c"]));
+    assert_eq!(cargo.attempts("b"), 0, "nothing was tried without a token");
+    assert_eq!(
+        tokens.revoked,
+        ["token-1"],
+        "the short-lived token is not left alive"
+    );
+}
+
+#[test]
+fn without_trusted_publishing_a_new_crate_is_published_as_any_other() {
+    let reg = registry(&[]);
+    let mut cargo = FakeCargo::new(&reg);
+    let mut index = index_of(&reg);
+    index.never_published.insert("a".to_owned());
+    let (result, _) = run(
+        &names(&["a"]),
+        &Options::new("1.0.0"),
+        &mut index,
+        &mut cargo,
+        &mut FakeClock::at(NOW),
+        None,
+    );
+    assert_eq!(result.unwrap().published, names(&["a"]));
+    assert_eq!(cargo.calls, [("a".to_owned(), None)]);
 }
 
 #[test]

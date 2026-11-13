@@ -15,6 +15,10 @@ pub trait Index {
     /// Whether the registry has `version` of `name` (yanked or not: a
     /// yanked version can never be published again either).
     fn has(&mut self, name: &str, version: &str) -> Result<bool, String>;
+
+    /// Whether the registry has any version of `name`: a crate it has none of
+    /// is published for the first time, which trusted publishing cannot do.
+    fn known(&mut self, name: &str) -> Result<bool, String>;
 }
 
 /// The path of a crate's file in an index: `1/a`, `2/ab`, `3/a/abc`,
@@ -78,8 +82,9 @@ impl SparseIndex {
     }
 }
 
-impl Index for SparseIndex {
-    fn has(&mut self, name: &str, version: &str) -> Result<bool, String> {
+impl SparseIndex {
+    /// The index file of `name`, or `None` when the index has no such crate.
+    fn file(&self, name: &str) -> Result<Option<String>, String> {
         let url = format!("{}{}", self.base, index_path(name));
         let mut last = String::new();
         for attempt in 0..3 {
@@ -87,16 +92,28 @@ impl Index for SparseIndex {
                 std::thread::sleep(std::time::Duration::from_secs(5 * attempt));
             }
             match curl("GET", &url, &[], Stdin::None) {
-                Ok(response) if response.status == 200 => {
-                    return Ok(lists_version(&response.body, version));
-                }
+                Ok(response) if response.status == 200 => return Ok(Some(response.body)),
                 // An index answers 404 (or 410, or 451) for a crate it does not have.
-                Ok(response) if matches!(response.status, 404 | 410 | 451) => return Ok(false),
+                Ok(response) if matches!(response.status, 404 | 410 | 451) => return Ok(None),
                 Ok(response) => last = format!("{url}: HTTP {}", response.status),
                 Err(error) => last = error,
             }
         }
         Err(last)
+    }
+}
+
+impl Index for SparseIndex {
+    fn has(&mut self, name: &str, version: &str) -> Result<bool, String> {
+        Ok(self
+            .file(name)?
+            .is_some_and(|file| lists_version(&file, version)))
+    }
+
+    fn known(&mut self, name: &str) -> Result<bool, String> {
+        Ok(self
+            .file(name)?
+            .is_some_and(|file| file.lines().any(|line| !line.trim().is_empty())))
     }
 }
 

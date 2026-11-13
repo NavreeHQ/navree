@@ -14,11 +14,11 @@
 #    Crates that exist on crates.io publish with trusted publishing, a fresh
 #    30-minute token for every 25 crates. A crate's very first publish needs
 #    an API token instead: store it in the environment as CARGO_REGISTRY_TOKEN
-#    for that release (scopes publish-new and publish-update, crates
-#    `navree*`, a day's expiry) and delete it afterwards. 75 new crates take
-#    about 12 hours at crates.io's rate for new crates, longer than a job may
-#    run, so the first release publishes from a maintainer's machine with the
-#    same command and this job then finds every crate published.
+#    for that release (scopes publish-new and publish-update, the new crates
+#    only, a few days' expiry). The job uses it for the crates crates.io has
+#    no version of and trusted publishing for all the others, and stops at a
+#    new crate when the secret is not set. Afterwards delete the secret,
+#    revoke the token and add the new crate's trusted publisher.
 # 5. npm (environment `npm`, which asks for an approval): the five
 #    `@navree/*` packages with provenance (`pnpm -r publish`, which skips a
 #    version npm has already). The secret NPM_TOKEN is used when set (a
@@ -219,15 +219,10 @@ jobs:
 
       - name: Publish the crates
         env:
-          FIRST_PUBLISH_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          # The verify job built every crate as published, on this commit.
-          if [ -n "$FIRST_PUBLISH_TOKEN" ]; then
-            export CARGO_REGISTRY_TOKEN="$FIRST_PUBLISH_TOKEN"
-            cargo xtask release publish --skip-verify
-          else
-            cargo xtask release publish --skip-verify --trusted-publishing
-          fi
+          # Used only for a crate crates.io has no version of; empty in most releases.
+          NAVREE_FIRST_PUBLISH_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        # The verify job built every crate as published, on this commit.
+        run: cargo xtask release publish --skip-verify --trusted-publishing
 
       - name: Keep the publish log
         if: ${{ always() }}
