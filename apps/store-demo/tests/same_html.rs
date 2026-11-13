@@ -41,6 +41,7 @@ const PAGES: &[&str] = &[
     "/orders/1/peek",
     "/inventory",
     "/inventory?page=2",
+    "/shelves",
     "/fragments/figures",
     "/fragments/sales",
     "/fragments/shelves",

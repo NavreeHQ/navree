@@ -464,7 +464,7 @@ pub fn native_actions(view: &OrderView, open_as_page: bool) -> Vec<Button> {
 }
 
 /// Where a refund goes back to, in words.
-fn back_to(order: &Order) -> String {
+pub(crate) fn back_to(order: &Order) -> String {
     match order.method.as_str() {
         "card" => format!("{} ending {}", order.card_brand, order.card_last4),
         "upi" => "the customer's UPI account".to_owned(),
@@ -473,7 +473,7 @@ fn back_to(order: &Order) -> String {
 }
 
 /// How an order is paid, in words: `UPI`, `RuPay ending 4821`, `Cash on delivery`.
-fn paid_with(order: &Order) -> String {
+pub(crate) fn paid_with(order: &Order) -> String {
     match order.method.as_str() {
         "card" => format!("{} ending {}", order.card_brand, order.card_last4),
         method => method_words(method).to_owned(),
