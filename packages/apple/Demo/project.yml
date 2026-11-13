@@ -21,8 +21,10 @@ targets:
     platform: iOS
     sources:
       - path: NavreeDemo
-      # The toolkit's own stylesheet, for the recorded web page.
+      # The toolkit's own stylesheets, for the recorded web page.
       - path: ../../../crates/navree-ui/dist/navree-ui.css
+        buildPhase: resources
+      - path: ../../../crates/navree-ui/dist/charts-styles.css
         buildPhase: resources
     dependencies:
       - package: NavreeNative

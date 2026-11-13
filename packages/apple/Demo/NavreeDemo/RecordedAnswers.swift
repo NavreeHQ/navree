@@ -62,15 +62,28 @@ nonisolated final class RecordedAnswers: URLProtocol, @unchecked Sendable {
     }
 
     /// The markup of a page the web view shows, for an address.
+    ///
+    /// The web view asks the network for what the page links to, never this
+    /// URL protocol, and the recorded origin has no server: a stylesheet linked
+    /// in the head would hold the page's first paint until its request fails,
+    /// however long that takes. So the toolkit's own stylesheets, font and
+    /// scripts are taken out and its stylesheets put in the page itself.
     static func page(for address: String) -> String? {
         let path = address.split(separator: "?").first.map(String.init) ?? "/"
         guard path == "/", let url = resource("index.embed", "html"),
             var html = try? String(contentsOf: url, encoding: .utf8)
         else { return nil }
-        if let css = resource("navree-ui", "css").flatMap({ try? String(contentsOf: $0, encoding: .utf8) }) {
-            html = html.replacingOccurrences(of: "</head>", with: "<style>\(css)</style></head>")
+        for pattern in [#"<link [^>]*href="/_navree/ui/[^"]*"[^>]*>"#, #"<script [^>]*src="/_navree/ui/[^"]*"[^>]*></script>"#] {
+            html = html.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
         }
-        return html.replacingOccurrences(of: "content=\"dark\"", with: "content=\"light dark\"")
+        let css = ["navree-ui", "charts-styles"]
+            .compactMap { resource($0, "css").flatMap { try? String(contentsOf: $0, encoding: .utf8) } }
+            .joined(separator: "\n")
+        html = html.replacingOccurrences(of: "</head>", with: "<style>\(css)</style></head>")
+        // The page follows the system's appearance, as the bars around it do.
+        return html
+            .replacingOccurrences(of: "content=\"dark\"", with: "content=\"light dark\"")
+            .replacingOccurrences(of: "<html ", with: "<html data-mode=\"system\" ")
     }
 
     static func file(_ name: String) -> Data? {
