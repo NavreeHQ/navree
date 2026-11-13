@@ -133,7 +133,7 @@ internal fun CardView(node: Navree.Card, place: Place, modifier: Modifier = Modi
     val content: @Composable () -> Unit = {
         Column(Modifier.fillMaxWidth().padding(pad), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // What the card holds has the card's width less its padding.
-            CompositionLocalProvider(LocalInLine provides false) {
+            CompositionLocalProvider(LocalInLine provides false, LocalInCard provides true) {
                 Roomed(if (room > 0f) (room - 2 * pad.value).coerceAtLeast(1f) else 0f) {
                     for (child in node.children) NodeView(child, place)
                 }

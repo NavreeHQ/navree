@@ -85,10 +85,12 @@ import com.navree.client.R
 import com.navree.client.design.BidiRules
 import com.navree.client.core.Events
 import com.navree.client.design.ClockRules
+import com.navree.client.design.KeyRules
 import com.navree.client.design.PagerRules
 import com.navree.client.design.RingRules
 import com.navree.client.design.RingsRules
 import com.navree.client.design.ShareRules
+import com.navree.client.design.TrendRules
 import com.navree.client.design.ZoneRules
 import com.navree.client.theme.Hct
 import com.navree.client.theme.Hues
@@ -310,7 +312,22 @@ internal fun RingView(node: Navree.Ring, modifier: Modifier = Modifier) {
                 node.hint?.let { HintMark(it) }
             }
         }
+        // How the value stands and which way it goes, in the ring's own words under it.
+        if (TrendRules.saysStatus(node.prominence)) {
+            node.status?.let { StatusView(it) }
+            node.trend?.let { TrendView(it) }
+        }
         node.caption?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = ink.mark) }
+    }
+}
+
+/** A trend: its arrow, which way it goes, and its words, in the colour of the news it is (not of the arrow). */
+@Composable
+internal fun TrendView(trend: Navree.Trend, modifier: Modifier = Modifier) {
+    val tint = markColour(trend.tone)
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        symbolVector(TrendRules.symbol(trend.direction))?.let { Icon(it, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp)) }
+        trend.text?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = tint, modifier = Modifier.padding(start = 4.dp)) }
     }
 }
 
@@ -551,8 +568,9 @@ internal fun DayClockView(node: Navree.DayClock, modifier: Modifier = Modifier) 
                 }
             }
         }
-        Key(node.key.mapIndexed { index, category -> keyInks[index].mark to category.name })
-        val moments = node.moments.mapIndexed { index, moment -> momentInks[index].mark to moment.name }
+        Key(node.key.mapIndexed { index, category -> keyInks[index].mark to KeyRules.entry(category.name, category.detail) })
+        // A moment's time is written here, in the person's clock.
+        val moments = node.moments.mapIndexed { index, moment -> momentInks[index].mark to ClockRules.momentEntry(moment.name, moment.at, is24, locale) }
         // Now is told in the key too: the dot inside the dial.
         val marked = if (node.now != null) moments + (now to stringResource(R.string.navree_now)) else moments
         if (marked.isNotEmpty()) Key(marked)
@@ -637,7 +655,7 @@ internal fun MiniColumnsView(node: Navree.MiniColumns, modifier: Modifier = Modi
                 }
             }
         }
-        Key(node.parts.mapIndexed { index, part -> inks[index].mark to part.name })
+        Key(node.parts.mapIndexed { index, part -> inks[index].mark to KeyRules.entry(part.name, part.detail) })
     }
 }
 
@@ -671,7 +689,14 @@ internal fun StripView(node: Navree.ColorStrip, modifier: Modifier = Modifier) {
                 if (node.cells.size > 1) Text(node.cells.last().label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Key(node.key.mapIndexed { index, category -> inks[index].mark to (if (node.shares) "${category.name} ${ShareRules.percent(shares[index])}%" else category.name) })
+        // What the page says beside a name is said as it is, and no share is worked out; the shares are for a page that says none.
+        Key(node.key.mapIndexed { index, category ->
+            inks[index].mark to when {
+                category.detail != null -> KeyRules.entry(category.name, category.detail)
+                node.shares -> "${category.name} ${ShareRules.percent(shares[index])}%"
+                else -> category.name
+            }
+        })
     }
 }
 
@@ -760,18 +785,7 @@ internal fun HealthFigureView(node: Navree.Figure, place: Place, modifier: Modif
                 node.aside?.let { aside -> NodeView(aside, place) }
             }
             node.status?.let { StatusView(it) }
-            node.trend?.let { trend ->
-                val symbol = when (trend.direction) {
-                    Navree.Direction.UP -> "trending_up"
-                    Navree.Direction.DOWN -> "trending_down"
-                    Navree.Direction.FLAT -> "trending_flat"
-                }
-                val tint = markColour(trend.tone)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    symbolVector(symbol)?.let { Icon(it, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp)) }
-                    trend.text?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = tint, modifier = Modifier.padding(start = 4.dp)) }
-                }
-            }
+            node.trend?.let { trend -> TrendView(trend) }
             node.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             node.chart?.let { chart -> NodeView(chart, place) }
         }

@@ -29,6 +29,25 @@ class BlocksTest {
     }
 
     @Test
+    fun a_stack_that_turns_along_the_line_is_one_block_and_widens_the_column() {
+        val lead = Navree.Stack(
+            id = "lead",
+            wide = Navree.Axis.HORIZONTAL,
+            children = listOf(
+                Navree.Stack(align = Navree.Align.CENTER, children = listOf(Navree.Ring(max = 100.0, value = 79.0, prominence = Navree.Prominence.HIGH))),
+                Navree.Stack(grow = true, children = listOf(Navree.Text(value = "words"))),
+            ),
+        )
+        val body = Navree.Stack(children = listOf(Navree.Text(value = "Hello"), lead, Navree.Text(value = "end")))
+        val flat = blocks(body, view(Navree.Screen(body = body, title = "Home")), widthDp = 1060)
+        val single = flat.filterIsInstance<Block.Single>().map { it.node }
+        assertTrue("the lead is drawn whole, so its centred ring stays centred and it can turn", single.any { it === lead })
+        assertTrue(single.none { it is Navree.Ring })
+        assertTrue(cardsSideBySide(flat))
+        assertFalse(cardsSideBySide(blocks(Navree.Stack(children = listOf(Navree.Text(value = "a"))), view(Navree.Screen(title = "x")), widthDp = 1060)))
+    }
+
+    @Test
     fun a_line_can_be_made_as_tall_as_its_tallest_unless_a_part_measures_while_it_lays_out() {
         assertTrue("a grid knows its width from the room it is given", measuresAhead(Navree.Card(children = listOf(Navree.Grid(children = listOf(Navree.Text(value = "a")))))))
         assertTrue(measuresAhead(Navree.Card(children = listOf(Navree.Meter()))))

@@ -1,6 +1,7 @@
 package com.navree.client.ui
 
 import com.navree.client.core.ScreenView
+import com.navree.client.design.CompositionRules
 import com.navree.client.design.ContentRules
 import com.navree.client.design.ListRules
 import com.navree.client.design.PagerRules
@@ -69,8 +70,15 @@ internal fun measuresAhead(node: Navree.Node): Boolean = node.walk().none {
         it is Navree.Tabs || it is Navree.Table || it is Navree.List || it is Navree.Split
 }
 
-/** Whether some cards in these blocks stand side by side: the screen's one column is then as wide as cards need. */
-internal fun cardsSideBySide(blocks: List<Block>): Boolean = blocks.any { it is Block.Cards && it.nodes.size > 1 }
+/**
+ * Whether the screen asks for parts side by side: some cards stand in a line,
+ * or a stack turns along the line in a wide room. Its one column is then as
+ * wide as they need.
+ */
+internal fun cardsSideBySide(blocks: List<Block>): Boolean = blocks.any { block ->
+    (block is Block.Cards && block.nodes.size > 1) ||
+        (block is Block.Single && (block.node as? Navree.Stack)?.let { it.wide != null && it.wide != it.axis } == true)
+}
 
 /** Whether the node draws anything where it stands. Overlays are drawn over the screen, not in it. */
 internal fun inFlow(node: Navree.Node, screen: ScreenView): Boolean = when {
@@ -127,7 +135,7 @@ internal fun blocks(
     fun add(node: Navree.Node, path: String, form: String?, region: String?, top: Boolean) {
         if (node === omit || !inFlow(node, screen)) return
         when (node) {
-            is Navree.Stack -> if (node.axis == Navree.Axis.VERTICAL) {
+            is Navree.Stack -> if (CompositionRules.splitsIntoBlocks(node, widthDp.toFloat())) {
                 val gap = ContentRules.gap(node.gap)
                 var any = false
                 val shown = node.children.count { it !== omit && inFlow(it, screen) }

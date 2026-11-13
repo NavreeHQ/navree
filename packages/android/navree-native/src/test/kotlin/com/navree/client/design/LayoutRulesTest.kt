@@ -78,6 +78,99 @@ class LineRulesTest {
     }
 }
 
+class StackRulesTest {
+    @Test
+    fun a_vertical_stack_is_taken_apart_only_when_it_says_no_more_than_one_under_the_other() {
+        assertTrue(CompositionRules.splitsIntoBlocks(Navree.Stack(), 412f))
+        assertTrue(CompositionRules.splitsIntoBlocks(Navree.Stack(align = Navree.Align.START, wide = Navree.Axis.VERTICAL), 1060f))
+        assertFalse("centred parts are placed within the stack", CompositionRules.splitsIntoBlocks(Navree.Stack(align = Navree.Align.CENTER), 412f))
+        assertFalse(CompositionRules.splitsIntoBlocks(Navree.Stack(align = Navree.Align.END), 412f))
+        assertFalse("a stack that turns along the line is one thing", CompositionRules.splitsIntoBlocks(Navree.Stack(wide = Navree.Axis.HORIZONTAL), 1060f))
+        assertTrue("in a pane too narrow to turn it, it is a plain column", CompositionRules.splitsIntoBlocks(Navree.Stack(wide = Navree.Axis.HORIZONTAL), 412f))
+        assertFalse(CompositionRules.splitsIntoBlocks(Navree.Stack(pad = 2), 412f))
+        assertFalse(CompositionRules.splitsIntoBlocks(Navree.Stack(axis = Navree.Axis.HORIZONTAL), 412f))
+    }
+
+    @Test
+    fun parts_that_grow_share_the_room_that_is_left() {
+        val two = listOf(Navree.Stack(grow = true), Navree.Stack(grow = true))
+        assertEquals((500f - 20f) / 2f, CompositionRules.roomLeftDp(500f, two, 20f, 1f), 0.01f)
+    }
+
+    @Test
+    fun a_grid_that_gives_a_count_and_no_least_width_is_that_many_columns() {
+        assertEquals(5, ListRules.gridColumns(379, null, 8, most = 5))
+        assertEquals("never more than it has parts", 3, ListRules.gridColumns(379, null, 8, most = 5, count = 3))
+        assertEquals("with a least width, as many as fit up to the count", 3, ListRules.gridColumns(379, 96, 8, most = 5))
+        assertEquals(2, ListRules.gridColumns(379, null, 8))
+    }
+}
+
+class FactRulesTest {
+    private fun fact(label: String, value: String) = Navree.Fact(label = label, value = listOf(Navree.Text(value = value)))
+
+    @Test
+    fun a_few_short_facts_stand_as_figures() {
+        val three = Navree.Facts(items = listOf(fact("Efficiency", "94%"), fact("Fell asleep in", "8 min"), fact("Awake", "11 min")))
+        assertTrue(ContentRules.factsAsFigures(three))
+        assertFalse("one is not a set", ContentRules.factsAsFigures(Navree.Facts(items = three.items.take(1))))
+        assertFalse("nine are a list", ContentRules.factsAsFigures(Navree.Facts(items = List(9) { fact("a", "1") })))
+        assertFalse("a long value is a line of its own", ContentRules.factsAsFigures(Navree.Facts(items = listOf(fact("a", "1"), fact("b", "twenty words or more here")))))
+        assertFalse("an icon or details make it a row", ContentRules.factsAsFigures(Navree.Facts(items = listOf(fact("a", "1"), Navree.Fact(label = "b", details = listOf("more"), value = listOf(Navree.Text(value = "2")))))))
+    }
+
+    @Test
+    fun figures_stand_in_as_many_columns_as_fit_up_to_four_and_one_at_the_largest_text() {
+        assertEquals(2, ContentRules.factColumns(379f, 3, 1f))
+        assertEquals(3, ContentRules.factColumns(1000f, 3, 1f))
+        assertEquals(4, ContentRules.factColumns(1000f, 6, 1f))
+        assertEquals(1, ContentRules.factColumns(379f, 3, 2f))
+    }
+}
+
+class MomentRulesTest {
+    @Test
+    fun a_moments_time_is_written_in_the_persons_clock() {
+        assertEquals("7:07 AM", ClockRules.timeLabel(7.1167, is24 = false, locale = Locale.US))
+        assertEquals("07:07", ClockRules.timeLabel(7.1167, is24 = true, locale = Locale.US))
+        assertEquals("12:00 AM", ClockRules.timeLabel(0.0, is24 = false, locale = Locale.US))
+        assertEquals("11:59 PM", ClockRules.timeLabel(23.99, is24 = false, locale = Locale.US))
+        assertEquals("a day's end is the next day's start", "12:00 AM", ClockRules.timeLabel(24.0, is24 = false, locale = Locale.US))
+        assertEquals("1:30 PM", ClockRules.timeLabel(13.5, is24 = false, locale = Locale.US))
+    }
+
+    @Test
+    fun the_key_says_a_moment_by_its_name_and_its_time_unless_the_name_has_one() {
+        assertEquals("Woke up, 7:07 AM", ClockRules.momentEntry("Woke up", 7.1167, is24 = false, locale = Locale.US))
+        assertEquals("Woke up, 6:30 am", ClockRules.momentEntry("Woke up, 6:30 am", 6.5, is24 = false, locale = Locale.US))
+    }
+
+    @Test
+    fun a_key_says_what_the_page_says_beside_a_name() {
+        assertEquals("Deep \u00b7 15.6% of the night", KeyRules.entry("Deep", "15.6% of the night"))
+        assertEquals("Deep", KeyRules.entry("Deep", null))
+        assertEquals("Deep", KeyRules.entry("Deep", " "))
+    }
+
+    @Test
+    fun a_ring_says_its_status_and_trend_unless_it_is_small() {
+        assertTrue(TrendRules.saysStatus(Navree.Prominence.HIGH))
+        assertTrue(TrendRules.saysStatus(Navree.Prominence.MEDIUM))
+        assertFalse(TrendRules.saysStatus(Navree.Prominence.LOW))
+        assertEquals("trending_up", TrendRules.symbol(Navree.Direction.UP))
+        assertEquals("trending_down", TrendRules.symbol(Navree.Direction.DOWN))
+        assertEquals("trending_flat", TrendRules.symbol(Navree.Direction.FLAT))
+    }
+
+    @Test
+    fun a_progress_bar_takes_the_colour_of_its_measure_before_the_colour_of_its_meaning() {
+        val both = Navree.Progress(colour = Navree.Colour(hue = Navree.Hue.ORANGE), tone = Navree.Tone.SUCCESS)
+        assertEquals(ProgressRules.Fill.Measure, ProgressRules.fill(both))
+        assertEquals(ProgressRules.Fill.Tone, ProgressRules.fill(Navree.Progress(tone = Navree.Tone.WARNING)))
+        assertEquals(ProgressRules.Fill.Accent, ProgressRules.fill(Navree.Progress()))
+    }
+}
+
 class ColumnRulesTest {
     @Test
     fun the_column_is_as_wide_as_cards_need_only_where_cards_stand_side_by_side() {

@@ -124,6 +124,28 @@ object ClockRules {
         return "%d %s".format(locale, twelve, halves[if (hour % 24 < 12) 0 else 1])
     }
 
+    /**
+     * A time of day in hours past midnight as the person's clock writes it:
+     * "7:07 AM" on a 12 hour clock, "07:07" on a 24 hour one.
+     */
+    fun timeLabel(at: Double, is24: Boolean, locale: Locale): String {
+        val minutes = Math.round(((at % 24.0) + 24.0) % 24.0 * 60.0).toInt() % (24 * 60)
+        val hour = minutes / 60
+        val minute = minutes % 60
+        if (is24) return "%02d:%02d".format(locale, hour, minute)
+        val halves = DateFormatSymbols.getInstance(locale).amPmStrings
+        val twelve = if (hour % 12 == 0) 12 else hour % 12
+        return "%d:%02d %s".format(locale, twelve, minute, halves[if (hour < 12) 0 else 1])
+    }
+
+    /**
+     * What the key says of a moment of the day: its name and its time, the
+     * time written in the person's clock. A name that already holds a time is
+     * said as it is.
+     */
+    fun momentEntry(name: String, at: Double, is24: Boolean, locale: Locale): String =
+        if (Regex("\\d:\\d\\d").containsMatchIn(name)) name else name + ", " + timeLabel(at, is24, locale)
+
     /** The radii of the dial, in dp, for one that is `halfDp` from its middle to its edge. */
     data class Dial(
         /** Where the hours' bars end at their longest. */
@@ -171,6 +193,37 @@ object ClockRules {
 
     /** The width of one hour's bar at the dial's start, in dp: most of the gap between neighbours. */
     fun barDp(innerDp: Float): Float = (2f * Math.PI.toFloat() * innerDp / 24f) * 0.62f
+}
+
+/** The key of a chart: each kind's name and what the page says of it. */
+object KeyRules {
+    /** An entry of a key: the name and, when the page says it, its share or total beside it. */
+    fun entry(name: String, detail: String?): String = if (detail.isNullOrBlank()) name else "$name \u00b7 $detail"
+}
+
+/** What a progress bar's fill takes its colour from. */
+object ProgressRules {
+    enum class Fill { Measure, Tone, Accent }
+
+    /** The colour of the measure the bar belongs to wins over the colour of what it means; with neither, the accent. */
+    fun fill(progress: Navree.Progress): Fill = when {
+        progress.colour != null -> Fill.Measure
+        progress.tone != null -> Fill.Tone
+        else -> Fill.Accent
+    }
+}
+
+/** A ring's trend, drawn with the system's own arrow. */
+object TrendRules {
+    /** The Material Symbol that says which way a trend goes. */
+    fun symbol(direction: Navree.Direction): String = when (direction) {
+        Navree.Direction.UP -> "trending_up"
+        Navree.Direction.DOWN -> "trending_down"
+        Navree.Direction.FLAT -> "trending_flat"
+    }
+
+    /** Whether a ring says its status and trend: one with room, not a small one beside words. */
+    fun saysStatus(prominence: Navree.Prominence): Boolean = prominence != Navree.Prominence.LOW
 }
 
 /** Numbers and their units in the right to left languages. */
