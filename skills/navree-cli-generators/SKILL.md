@@ -174,7 +174,7 @@ async fn clear(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
 - Running `navree help` to list app commands (use `navree list`).
 - Leaving `AppShell` in a generated page of a Navree UI app that has a `Desk`:
   the page then shows no workspace and the generic user menu.
-- `navree new` writes `navree = "1.0.2"` (the CLI's own version) when it
+- `navree new` writes `navree = "1.1.0"` (the CLI's own version) when it
   can't find a checkout: pass `--navree-path`.
 
 ## Docs
