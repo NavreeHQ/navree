@@ -44,6 +44,8 @@ enum Plan {
 /// The screen as an app draws it at the root of a destination.
 struct Screen: View {
     let envelope: Navree.Envelope
+    /// As an app's stack has one, so a card that zooms is drawn as a source.
+    @Namespace private var zoom
 
     var body: some View {
         NavigationStack {
@@ -54,6 +56,7 @@ struct Screen: View {
             }
         }
         .environment(\.navree, DrawingContext(send: { _ in }, icons: envelope.icons))
+        .environment(\.navreeZoomSpace, zoom)
     }
 }
 
