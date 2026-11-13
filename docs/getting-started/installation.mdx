@@ -195,7 +195,7 @@ The listening socket isn't kept open across restarts, so requests fail for the m
 
 ## Running the app's own commands
 
-The CLI has a few commands of its own: `new`, `make:*`, `dev`, `check`, `gate`, `dock`, `dock:add`, `dock:remove`, Harbor's commands (`deploy`, `deploy:rollback`, `deploy:releases`, `build:image` and `harbor:*`), `mcp`, `skills:install`, `browser:install` and `openapi:client`. Every other command belongs to your app's binary. `navree <command>` runs `cargo run --quiet -- <command>` in the app, so these are the same:
+The CLI has a few commands of its own: `new`, `make:*`, `dev`, `check`, `gate`, `dock`, `dock:add`, `dock:remove`, Harbor's commands (`deploy`, `deploy:rollback`, `deploy:releases`, `build:image` and `harbor:*`), `mcp`, `skills:install`, `browser:install`, `openapi:client`, `native:coverage` and `native:doctor`. Every other command belongs to your app's binary. `navree <command>` runs `cargo run --quiet -- <command>` in the app, so these are the same:
 
 ```sh
 navree migrate

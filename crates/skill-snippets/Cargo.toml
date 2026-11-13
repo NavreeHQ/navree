@@ -26,6 +26,7 @@ navree = { workspace = true, features = [
     "search",
     "social",
     "sqlite",
+    "ui-native-preview",
 ] }
 serde = { workspace = true }
 serde_json = { workspace = true }
