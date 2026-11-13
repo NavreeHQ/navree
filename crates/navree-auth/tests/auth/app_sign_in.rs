@@ -514,17 +514,109 @@ async fn a_custom_scheme_app_never_gets_the_browsers_sign_in() {
     .assert_status(303);
     whoami(&browser).await.assert_status(401);
     let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
-    assert_eq!(
-        location(&to_sign_in),
-        "/sign-in?next=%2Fauth%2Fapp%2Ffinish"
-    );
-    sign_in_form(&browser, "simran@example.com", "/auth/app/finish")
+    let back = finish_with_attempt(&location(&to_sign_in));
+    let signed_in = sign_in_form(&browser, "simran@example.com", &back)
         .await
         .assert_status(303);
-    let handed = get(&browser, "/auth/app/finish").await.assert_status(303);
+    assert_eq!(location(&signed_in), back);
+    let handed = get(&browser, &back).await.assert_status(303);
     assert!(location(&handed).starts_with("com.example.legacy:/signed-in?code="));
     assert_eq!(handed.header("cache-control"), Some("no-store"));
     assert_eq!(handed.header("referrer-policy"), Some("no-referrer"));
+}
+
+/// The `next` of the sign-in page a custom-scheme hand-over sends the
+/// browser to: the finish address with the hand-over's `attempt`.
+fn finish_with_attempt(sign_in: &str) -> String {
+    let url = url::Url::parse(&format!("https://example.com{sign_in}")).unwrap();
+    assert_eq!(url.path(), "/sign-in");
+    let next = url
+        .query_pairs()
+        .find(|(key, _)| key == "next")
+        .map(|(_, next)| next.into_owned())
+        .expect("a next");
+    assert!(next.starts_with("/auth/app/finish?attempt="), "{next}");
+    assert!(next.len() > "/auth/app/finish?attempt=".len() + 20, "{next}");
+    next
+}
+
+/// `GET /auth/app/sign-in` for the custom-scheme Android app.
+async fn start_legacy(client: &TestClient, state: &str) -> TestResponse {
+    let (_, challenge) = pkce("legacy");
+    get(
+        client,
+        &format!(
+            "/auth/app/sign-in?platform=android&app=com.example.legacy\
+             &code_challenge={challenge}&code_challenge_method=S256&state={state}"
+        ),
+    )
+    .await
+}
+
+// Another app on the phone starts a hand-over for a custom-scheme app while
+// the browser is signed out, and the person leaves the sign-in page. Later
+// they sign in to the site for their own reasons, in the same browser; the
+// other app then opens the finish address itself. That sign-in was not made
+// for the hand-over, so no code leaves for the scheme, and the hand-over is
+// over.
+#[tokio::test]
+async fn a_sign_in_made_for_something_else_is_never_handed_to_a_custom_scheme_app() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    create_user(&app, "simran@example.com").await;
+    let browser = app.client();
+    start_legacy(&browser, "s-6").await.assert_status(303);
+    let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
+    let back = finish_with_attempt(&location(&to_sign_in));
+
+    // The person signs in to the site, not for the app.
+    clock.advance(Duration::from_secs(120));
+    sign_in_form(&browser, "simran@example.com", "/orders")
+        .await
+        .assert_status(303);
+    whoami(&browser).await.assert_status(200);
+
+    // The finish address opened without the attempt, or with another one.
+    for opened in ["/auth/app/finish", "/auth/app/finish?attempt=guessed"] {
+        let answer = get(&browser, opened).await;
+        assert_eq!(answer.status().as_u16(), 400, "{opened}");
+        assert_eq!(answer.header("location"), None, "{opened}");
+        // The hand-over is over: not even its own address works now.
+        let again = get(&browser, &back).await;
+        assert_eq!(again.status().as_u16(), 400, "{opened}");
+        assert_eq!(again.header("location"), None, "{opened}");
+        start_legacy(&browser, "s-7").await.assert_status(303);
+        // A new start signs the browser out: the person signs in afresh.
+        whoami(&browser).await.assert_status(401);
+        sign_in_form(&browser, "simran@example.com", "/orders")
+            .await
+            .assert_status(303);
+    }
+    let reasons: Vec<String> = sink
+        .with_action("auth.app_sign_in_refused")
+        .iter()
+        .map(|entry| entry.metadata["reason"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(
+        reasons,
+        [
+            "the sign-in was not made for this app sign-in",
+            "no app sign-in was started in this browser",
+            "the sign-in was not made for this app sign-in",
+            "no app sign-in was started in this browser",
+        ]
+    );
+
+    // The hand-over's own sign-in still finishes.
+    let browser = app.client();
+    start_legacy(&browser, "s-8").await.assert_status(303);
+    let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
+    let back = finish_with_attempt(&location(&to_sign_in));
+    sign_in_form(&browser, "simran@example.com", &back)
+        .await
+        .assert_status(303);
+    let handed = get(&browser, &back).await.assert_status(303);
+    assert!(location(&handed).starts_with("com.example.legacy:/signed-in?code="));
 }
 
 // A platform sign-in (Sign in with Apple in the app) that needs a second
