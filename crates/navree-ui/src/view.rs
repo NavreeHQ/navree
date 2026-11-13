@@ -620,6 +620,8 @@ pub(crate) struct NativeParts<'a> {
     pub(crate) status: StatusCode,
     pub(crate) cache: &'static str,
     pub(crate) cookies: &'a [HeaderValue],
+    /// The request headers the page said it differs by (`View::vary`).
+    pub(crate) vary: &'a [&'static str],
 }
 
 #[cfg(feature = "native-preview")]
@@ -656,6 +658,7 @@ impl View {
             status: self.status,
             cache: self.cache,
             cookies: &self.cookies,
+            vary: &self.vary,
         }
     }
 }

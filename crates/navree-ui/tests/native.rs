@@ -711,7 +711,11 @@ async fn a_native_client_gets_the_page_as_a_screen() {
         response.header("content-type"),
         Some("application/vnd.navree.native+json")
     );
-    assert_eq!(response.header("vary"), Some("x-navree-native"));
+    // What the client said of itself changes the answer as much as asking does.
+    assert_eq!(
+        response.header("vary"),
+        Some("x-navree-native, x-navree-client")
+    );
     assert_eq!(response.header("cache-control"), Some("no-store"));
     let envelope = envelope(&response.text());
     assert_eq!(envelope.navree, 1);

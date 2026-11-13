@@ -195,6 +195,7 @@ impl<'a> Answer<'a> {
                     answered
                 };
                 let mut response = swap::respond(parts.status, parts.cache, envelope, request, "");
+                swap::vary_also(&mut response, parts.vary);
                 response.extensions_mut().insert(answered);
                 response
             }
@@ -271,6 +272,7 @@ impl<'a> Answer<'a> {
         for cookie in parts.cookies {
             response.headers_mut().append(SET_COOKIE, cookie.clone());
         }
+        swap::vary_also(&mut response, parts.vary);
         response.extensions_mut().insert(answered);
         response
     }
@@ -329,8 +331,9 @@ fn finish(screen: &mut Screen, token: Option<&str>) {
 
 /// Gives a part what its function could not know: the shapes of each icon it
 /// names from the toolkit's set, with the system symbol that means the same,
-/// and the session's token in every post it makes (a form that posts, a
-/// control that posts on its own) that does not carry one already.
+/// and the session's token in every post it makes to this site (a form that
+/// posts, a control that posts on its own) that does not carry one already.
+/// A post to another site never carries the token.
 fn finish_part(part: &mut Part, token: Option<&str>) {
     let mut stack = vec![part];
     while let Some(node) = stack.pop() {
@@ -340,6 +343,7 @@ fn finish_part(part: &mut Part, token: Option<&str>) {
         if let Some(token) = token {
             if let Part::Form(form) = node
                 && form.method == n::Method::Post
+                && swap::on_this_site(&form.action)
                 && !form.hidden.iter().any(|hidden| hidden.name == CSRF_FIELD)
             {
                 form.hidden.push(n::Hidden {
@@ -351,9 +355,11 @@ fn finish_part(part: &mut Part, token: Option<&str>) {
             for action in node.actions_mut() {
                 if let Action::Request {
                     method: n::Method::Post,
+                    href,
                     fields,
                     ..
                 } = action
+                    && swap::on_this_site(href)
                     && !fields.iter().any(|pair| pair.name == CSRF_FIELD)
                 {
                     fields.push(Pair {
@@ -612,6 +618,120 @@ mod tests {
         });
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         assert_eq!(envelope(response).await.screen.unwrap().title, "Today");
+    }
+
+    #[test]
+    fn the_sessions_token_goes_only_with_a_post_to_this_site() {
+        let mut screen = Screen::titled("Pay").body(Stack::down().parts((
+            Form::post("/orders/1/refund").id("here"),
+            Form::post("https://pay.example.in/checkout").id("there"),
+            Form::post("//pay.example.in/checkout").id("no-scheme"),
+            Button::new("Resend").post("/orders/1/resend", [("copy", "1")]),
+            Button::new("Pay").post("https://pay.example.in/pay", [("order", "1")]),
+        )));
+        finish(&mut screen, Some("tok"));
+        let carries = |id: &str| {
+            let Some(Part::Form(form)) = screen.body.find(id) else {
+                panic!("no form {id}");
+            };
+            form.hidden.iter().any(|hidden| hidden.name == CSRF_FIELD)
+        };
+        assert!(carries("here"));
+        assert!(!carries("there"));
+        assert!(!carries("no-scheme"));
+        let posts: Vec<(String, bool)> = screen
+            .body
+            .children()
+            .into_iter()
+            .filter_map(|part| match part {
+                Part::Button(button) => match &button.action {
+                    Some(Action::Request { href, fields, .. }) => Some((
+                        href.clone(),
+                        fields.iter().any(|pair| pair.name == CSRF_FIELD),
+                    )),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            posts,
+            [
+                ("/orders/1/resend".to_owned(), true),
+                ("https://pay.example.in/pay".to_owned(), false),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_browsers_page_a_shared_cache_may_keep_varies_by_the_web_view_too() {
+        let page = |cache: Option<&'static str>| {
+            let mut response = "<p>Dal makhani</p>".into_response();
+            response.headers_mut().insert(
+                CONTENT_TYPE,
+                HeaderValue::from_static("text/html; charset=utf-8"),
+            );
+            if let Some(cache) = cache {
+                response
+                    .headers_mut()
+                    .insert(CACHE_CONTROL, HeaderValue::from_static(cache));
+            }
+            swap::vary_on_native(&mut response);
+            response
+                .headers()
+                .get_all(VARY)
+                .iter()
+                .filter_map(|value| value.to_str().ok())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        for kept in [Some("public, max-age=300"), Some("max-age=60"), None] {
+            assert_eq!(
+                page(kept),
+                "x-navree-native, x-navree-embed, user-agent",
+                "{kept:?}"
+            );
+        }
+        for not_kept in ["no-store", "private, max-age=60", "Private"] {
+            assert_eq!(page(Some(not_kept)), "x-navree-native", "{not_kept}");
+        }
+    }
+
+    #[tokio::test]
+    async fn an_envelope_varies_by_the_client_and_by_what_the_page_varies_by() {
+        let response = as_native("/menu", || {
+            View::new("Menu")
+                .cache("public, max-age=300")
+                .vary("Cookie")
+                .body(crate::Text::new("Dal makhani"))
+                .into_response()
+        });
+        let vary: Vec<&str> = response
+            .headers()
+            .get_all(VARY)
+            .iter()
+            .filter_map(|value| value.to_str().ok())
+            .collect();
+        let vary = vary.join(", ").to_ascii_lowercase();
+        for header in ["x-navree-native", "x-navree-client", "cookie"] {
+            assert!(vary.contains(header), "{header}: {vary}");
+        }
+        // The web view's page varies by what the page varies by too.
+        let response = scope::sync(Asked::Embed, || {
+            View::new("Menu")
+                .cache("public, max-age=300")
+                .vary("Cookie")
+                .body(crate::Text::new("Dal makhani"))
+                .into_response()
+        });
+        let vary: Vec<String> = response
+            .headers()
+            .get_all(VARY)
+            .iter()
+            .filter_map(|value| value.to_str().ok().map(str::to_ascii_lowercase))
+            .collect();
+        assert!(vary.iter().any(|value| value.contains("cookie")), "{vary:?}");
+        assert!(vary.iter().any(|value| value.contains("user-agent")), "{vary:?}");
     }
 
     #[tokio::test]

@@ -20,7 +20,7 @@ Add the facade feature to the `navree` dependency, or to a feature of your own a
 native-preview = ["navree/ui-native-preview"]
 ```
 
-With it on, `UiModule` answers a request that sends `X-Navree-Native: 1` and describes itself in `X-Navree-Client` with the page as a native tree, serves the app's shell (its destinations, user menu and the theme's accent) at `/_navree/native/shell`, and registers the `native:coverage` command. A request without the header gets HTML as before.
+With it on, `UiModule` answers a request that sends `X-Navree-Native: 1` and describes itself in `X-Navree-Client` with the page as a native tree, serves the app's shell (its destinations, user menu and the theme's accent) at `/_navree/native/shell`, and registers the `native:coverage` command. A request without the header gets HTML as before. Since one address answers both, the answers say so to caches: a native answer varies by `X-Navree-Native` and `X-Navree-Client`, and by whatever the page itself varies by (`View::vary("Cookie")`); a browser's page varies by `X-Navree-Native`, and, when a shared cache may keep it, by `X-Navree-Embed` and `User-Agent` too, because a native client's web view gets the page without the app's chrome.
 
 An app that builds its shell for each request, with the signed-in person's name and menu (`AppShell::user_menu`), also contributes an `ErrorShell`. The shell document is built by it, so the document names the same person and menu as that person's screens and carries the stamp they carry. Without it the document holds the menu the app registered for everyone, and a client fetches the shell a second time when its first screen names another stamp.
 
@@ -237,7 +237,7 @@ async fn dashboard(shell: AppShell) -> Response {
 }
 ```
 
-The layer adds what a screen function must not know: the destination the screen belongs to and a toast left for it, from the shell; the shell's stamp; the session's token in every post; and the shapes of the icons the screen names (`Icon::named("package")`). What a screen does goes to the same handlers the page uses, and a region or a list of the screen fetches from a route that answers a part or ops the same way: the native side may return a `Screen`, a part (`Node`), or `Vec<Op>`.
+The layer adds what a screen function must not know: the destination the screen belongs to and a toast left for it, from the shell; the shell's stamp; the session's token in every post to this site (a form or a control that posts to another host carries none); and the shapes of the icons the screen names (`Icon::named("package")`). What a screen does goes to the same handlers the page uses, and a region or a list of the screen fetches from a route that answers a part or ops the same way: the native side may return a `Screen`, a part (`Node`), or `Vec<Op>`.
 
 A link to the address of one of the shell's destinations switches to that destination. To open the same screen on top of the one the reader is on (what stands behind a card of a summary), the link says so with `Action::present("/sleep?date=2026-11-12", Present::Push)`: the screen then has a way back, and a card with `zoom` grows into it.
 
