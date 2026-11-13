@@ -137,7 +137,7 @@ A person's preferences are one JSON document. Every field is optional, and what 
 
 | Field | Meaning |
 |---|---|
-| `channels` | Channel switches for every category: `mail`, `database`, `slack`, `teams`, `sms`, `whatsapp`, `web_push`, `push` (`notify.preferences.channels`). |
+| `channels` | Channel switches for every category: `mail`, `database`, `slack`, `teams`, `sms`, `whatsapp`, `web_push`, and `push` while the app can push to native apps (`notify.preferences.channels`). |
 | `categories.<name>.channels` | Switches for one category (up to 200 categories have choices of their own). |
 | `categories.<name>.digest` | The digest of one category's mail. |
 | `digest` | The digest of every category's mail. |
@@ -456,14 +456,14 @@ schedule = true
 | Key | Default | Meaning |
 |---|---|---|
 | `notify.preferences.enabled` | `true` | Apply stored preferences when sending (with `DatabaseModule`). |
-| `notify.preferences.channels` | every channel but `broadcast` | The channels people may switch, in the order the routes list them. |
+| `notify.preferences.channels` | every channel but `broadcast` | The channels people may switch, in the order the routes list them. `push` is left out while the app can't push to native apps (no `notify.push.apns` or `notify.push.fcm`, and no `dyn PushDriver`). |
 | `notify.preferences.required` | none | Categories that always deliver. |
 | `notify.preferences.workspace_permission` | `workspace.update` | The permission that changes a workspace's defaults. |
 | `notify.digest.at` | `09:00` | The local time daily and weekly digests go out. |
 | `notify.digest.weekly_on` | `monday` | The day weekly digests go out. |
 | `notify.digest.subject` | `Your notifications` | The digest's subject, a template with `count` and `digest`. |
 | `notify.digest.template` | `notify/digest` | The digest's templates. |
-| `notify.deferred.channels` | every channel but `database` and `broadcast` | The channels quiet hours and send windows hold. |
+| `notify.deferred.channels` | every channel but `database` and `broadcast` | The channels quiet hours and send windows hold. `push` is left out, as above, while the app can't push. |
 | `notify.deferred.batch` | `500` | Held deliveries one release sends at most. |
 | `notify.deferred.max_attempts` | `5` | Attempts before a release that keeps failing is dropped. |
 | `notify.deferred.retry_secs` | `300` | Seconds before a failed release is tried again. |

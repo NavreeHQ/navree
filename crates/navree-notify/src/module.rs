@@ -23,7 +23,7 @@ use crate::devices::{DeviceRevoker, RegisteredApps};
 use crate::digest::DIGEST_TEMPLATES;
 use crate::notifier::Parts;
 use crate::{
-    DeliveryLog, ModuleBuilderNotifyExt, Notification, NotificationCatalog,
+    Channel, DeliveryLog, ModuleBuilderNotifyExt, Notification, NotificationCatalog,
     NotificationPreferences, Notifier, NotifyOptions, OptOuts, PushDevices, PushOptions,
     PushSubscriptions, Released, SendNotificationJob, commands, migration,
 };
@@ -145,13 +145,30 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
     }
     m.config_section::<PushOptions>();
     m.credential_revoker::<DeviceRevoker>();
-    let deps = source.deps();
+    let mut deps = source.deps();
+    deps.push(ProviderKey::of::<PushOptions>());
     let options_key = || vec![ProviderKey::of::<NotifyOptions>()];
     m.global()
         .factory(
             Factory::<NotifyOptions>::new(move |r| {
                 let source = source.clone();
-                async move { Ok(Arc::new(source.options(&r).await?)) }
+                async move {
+                    let mut options = source.options(&r).await?;
+                    // An app that can't push to native apps lists no switch
+                    // and no hold for that channel; `push` still parses.
+                    let push = r.get::<PushOptions>().await?;
+                    if !can_push(&r, &push).await {
+                        options
+                            .preferences
+                            .channels
+                            .retain(|channel| *channel != Channel::Push);
+                        options
+                            .deferred
+                            .channels
+                            .retain(|channel| *channel != Channel::Push);
+                    }
+                    Ok(Arc::new(options))
+                }
             })
             .deps(deps),
         )

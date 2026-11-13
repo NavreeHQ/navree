@@ -106,7 +106,10 @@ impl Notifier {
         self.drivers.application_server_key()
     }
 
-    /// The options.
+    /// The options, as the app runs with them: in an app that can't push to
+    /// native apps (no `notify.push.apns` or `notify.push.fcm`, and no
+    /// `dyn PushDriver`), [`Channel::Push`] is left out of
+    /// `preferences.channels` and `deferred.channels`.
     pub fn options(&self) -> &NotifyOptions {
         &self.options
     }

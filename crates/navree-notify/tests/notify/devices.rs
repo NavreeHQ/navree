@@ -305,6 +305,49 @@ async fn invalid_devices_and_other_apps_are_refused() {
 }
 
 #[tokio::test]
+async fn push_is_listed_for_switches_and_quiet_hours_only_where_the_app_can_push() {
+    let names = |channels: &[Channel]| -> Vec<&'static str> {
+        channels.iter().map(|channel| channel.as_str()).collect()
+    };
+    // No push service: the lists of an app before native app push.
+    let app = support::app().await;
+    let options = app.get::<Notifier>().await.options().clone();
+    assert_eq!(
+        names(&options.preferences.channels),
+        ["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"]
+    );
+    assert_eq!(
+        names(&options.deferred.channels),
+        ["mail", "slack", "teams", "sms", "whatsapp", "web_push"]
+    );
+    let body = app
+        .acting_as(principal(Uuid::now_v7()))
+        .get("/api/notifications/preferences")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(
+        body["channels"],
+        json!(["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"])
+    );
+    // `push` named where nothing can push is just not listed.
+    let mut named = NotifyOptions::default();
+    named.preferences.channels = vec![Channel::Mail, Channel::Push];
+    named.deferred.channels = vec![Channel::Push, Channel::Sms];
+    let app = support::builder(named).build().await;
+    let options = app.get::<Notifier>().await.options().clone();
+    assert_eq!(names(&options.preferences.channels), ["mail"]);
+    assert_eq!(names(&options.deferred.channels), ["sms"]);
+
+    // A push service: listed in both.
+    let (app, _push, _sessions) = push_app().await;
+    let options = app.get::<Notifier>().await.options().clone();
+    assert_eq!(names(&options.preferences.channels).last(), Some(&"push"));
+    assert_eq!(names(&options.deferred.channels).last(), Some(&"push"));
+}
+
+#[tokio::test]
 async fn a_platform_with_no_app_listed_takes_no_device() {
     let push = PushFake::new();
     let sessions = Arc::new(Sessions::default());

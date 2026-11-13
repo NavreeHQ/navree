@@ -217,11 +217,10 @@ async fn the_routes_show_and_change_the_signed_in_users_preferences() {
     assert_eq!(body["data"], json!({}));
     assert_eq!(body["workspace"], Value::Null);
     assert_eq!(body["time_zone"], "UTC");
+    // No push service here: no switch for native app push.
     assert_eq!(
         body["channels"],
-        json!([
-            "mail", "database", "slack", "teams", "sms", "whatsapp", "web_push", "push"
-        ])
+        json!(["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"])
     );
     let categories: Vec<&str> = body["categories"]
         .as_array()
