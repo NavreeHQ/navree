@@ -125,7 +125,7 @@ internal fun FieldView(field: Navree.Field, place: Place, modifier: Modifier = M
         is Navree.ChoiceInput -> ChoiceView(field, input, place, modifier)
         is Navree.ChoicesInput -> ChoicesView(field, input, place, modifier)
         is Navree.DateInput -> DateView(field, input, place, modifier)
-        is Navree.RangeInput -> RangeView(field, input, place, modifier)
+        is Navree.RangeInput -> DateRangeView(field, input, place, modifier)
         is Navree.SliderInput -> SliderView(field, input, place, modifier)
         // A screen with an input this client cannot draw was shown in the web view instead.
         else -> Unit
@@ -767,7 +767,7 @@ private fun SearchedChoice(
  * each end had and picks its days.
  */
 @Composable
-private fun RangeView(field: Navree.Field, input: Navree.RangeInput, place: Place, modifier: Modifier) {
+private fun DateRangeView(field: Navree.Field, input: Navree.RangeInput, place: Place, modifier: Modifier) {
     val ui = LocalUi.current
     val held = place.value(field) as? FieldValue.Range ?: FieldValue.Range(input.from.value, input.to.value)
     val support = support(field, place)

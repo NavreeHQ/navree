@@ -169,7 +169,7 @@ internal fun grown(target: Float): Float {
 }
 
 /** A number as the person's locale writes it, with no decimals it does not need. */
-internal fun number(value: Double): String {
+internal fun amount(value: Double): String {
     val format = NumberFormat.getNumberInstance()
     format.maximumFractionDigits = if (value % 1.0 == 0.0) 0 else 1
     return format.format(value)
@@ -279,7 +279,7 @@ internal fun RingView(node: Navree.Ring, modifier: Modifier = Modifier) {
                     Navree.Centre.ICON -> node.icon?.let { IconView(it, Modifier.size(diameter * 0.32f), tint = if (node.value == null) MaterialTheme.colorScheme.onSurfaceVariant else ink.mark) }
                     else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            if (node.value == null) "–" else node.shown ?: number(node.value!!),
+                            if (node.value == null) "–" else node.shown ?: amount(node.value!!),
                             style = if (high) MaterialTheme.typography.displayMedium else MaterialTheme.typography.titleLarge,
                             maxLines = 1,
                         )
@@ -312,7 +312,7 @@ internal fun RingsView(node: Navree.Rings, modifier: Modifier = Modifier) {
     val inks = rings.mapIndexed { index, ring -> inkOf(ring.colour, SLOTS[(index + 1) % SLOTS.size]) }
     val progress = rings.map { ring -> RingRules.sweep(ring.value, ring.max)?.let { it.laps + it.part } ?: 0f }
     val grownAll = progress.map { grown(it) }
-    val said = node.summary ?: rings.joinToString(". ") { "${it.name} ${it.shown ?: it.value?.let(::number) ?: "–"}" }
+    val said = node.summary ?: rings.joinToString(". ") { "${it.name} ${it.shown ?: it.value?.let(::amount) ?: "–"}" }
     val low = node.prominence == Navree.Prominence.LOW
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (!low) ChartHeading(node.title, node.hint)
@@ -329,7 +329,7 @@ internal fun RingsView(node: Navree.Rings, modifier: Modifier = Modifier) {
                         Navree.RingsCentre.VALUES -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             rings.forEachIndexed { index, ring ->
                                 Text(
-                                    "${ring.shown ?: ring.value?.let(::number) ?: "–"}/${number(ring.max)}",
+                                    "${ring.shown ?: ring.value?.let(::amount) ?: "–"}/${amount(ring.max)}",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = inks[index].mark,
                                     maxLines = 1,
@@ -350,7 +350,7 @@ internal fun RingsView(node: Navree.Rings, modifier: Modifier = Modifier) {
                         Column {
                             Text(ring.name, style = MaterialTheme.typography.labelLarge, color = inks[index].mark)
                             Text(
-                                listOfNotNull("${ring.shown ?: ring.value?.let(::number) ?: "–"}/${number(ring.max)}", ring.unit).joinToString(" "),
+                                listOfNotNull("${ring.shown ?: ring.value?.let(::amount) ?: "–"}/${amount(ring.max)}", ring.unit).joinToString(" "),
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             ring.value?.let { value ->
@@ -389,7 +389,7 @@ internal fun HealthGaugeView(node: Navree.Gauge, modifier: Modifier = Modifier) 
     val ink = inkOf(node.colour ?: zone?.colour, fallback)
     val zoneInks = node.zones.map { inkOf(it.colour, Navree.Hue.NEUTRAL) }
     val at = grown(ZoneRules.position(node.value, node.min, node.max))
-    val said = node.summary ?: listOfNotNull(node.label, node.shown ?: number(node.value), zone?.label ?: node.caption).joinToString(", ")
+    val said = node.summary ?: listOfNotNull(node.label, node.shown ?: amount(node.value), zone?.label ?: node.caption).joinToString(", ")
     val diameter = (176f * scale.coerceIn(1f, 1.5f)).dp
     val halo = MaterialTheme.colorScheme.surface
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -421,7 +421,7 @@ internal fun HealthGaugeView(node: Navree.Gauge, modifier: Modifier = Modifier) 
                 drawCircle(ink.mark, px * 0.28f, c)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(node.shown ?: number(node.value), style = MaterialTheme.typography.headlineMedium, maxLines = 1, textAlign = TextAlign.Center)
+                Text(node.shown ?: amount(node.value), style = MaterialTheme.typography.headlineMedium, maxLines = 1, textAlign = TextAlign.Center)
                 (zone?.label ?: node.caption)?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = ink.mark) }
             }
         }
@@ -637,7 +637,7 @@ internal fun RangeView(node: Navree.RangeScale, modifier: Modifier = Modifier) {
         ChartHeading(node.title, node.hint)
         Column(Modifier.clearAndSetSemantics { contentDescription = said }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.Bottom) {
-                Text(if (node.value == null) "–" else node.shown ?: number(node.value!!), style = MaterialTheme.typography.headlineMedium)
+                Text(if (node.value == null) "–" else node.shown ?: amount(node.value!!), style = MaterialTheme.typography.headlineMedium)
                 node.unit?.let { Text(it, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)) }
                 Spacer(Modifier.weight(1f))
                 zone?.label?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = ink.mark, modifier = Modifier.padding(bottom = 4.dp)) }
@@ -660,8 +660,8 @@ internal fun RangeView(node: Navree.RangeScale, modifier: Modifier = Modifier) {
                 }
             }
             Row(Modifier.fillMaxWidth()) {
-                Text(node.low ?: number(node.min), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                Text(node.high ?: number(node.max), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(node.low ?: amount(node.min), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text(node.high ?: amount(node.max), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         if (node.zones.any { it.label != null }) Key(node.zones.mapIndexedNotNull { index, z -> z.label?.let { zoneInks[index].mark to it } })

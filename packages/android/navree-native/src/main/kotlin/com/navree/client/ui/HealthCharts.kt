@@ -88,7 +88,7 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
     val spark = node.kind == Navree.ChartKind.SPARKLINE
     val said = node.summary ?: node.series.joinToString("; ") { series ->
         series.label + ": " + node.labels.indices.joinToString(", ") { at ->
-            val shown = series.shown.getOrNull(at) ?: series.values.getOrNull(at)?.let(::number) ?: "–"
+            val shown = series.shown.getOrNull(at) ?: series.values.getOrNull(at)?.let(::amount) ?: "–"
             (node.labels.getOrNull(at)?.let { "$it $shown" } ?: shown)
         }
     }
@@ -101,7 +101,7 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
         Canvas(Modifier.fillMaxWidth().height(height).clearAndSetSemantics { contentDescription = said }) {
             if (count == 0) return@Canvas
             // Room for the value axis' numbers or the levels' names at the start, and the labels under.
-            val axisWords = if (spark) emptyList() else if (node.levels.isNotEmpty()) node.levels else listOf(number(bounds.high), number(bounds.low))
+            val axisWords = if (spark) emptyList() else if (node.levels.isNotEmpty()) node.levels else listOf(amount(bounds.high), amount(bounds.low))
             val gutter = if (spark || node.horizontal) 0f else (axisWords.maxOfOrNull { measurer.measure(it, small).size.width } ?: 0) + 8.dp.toPx()
             val labelsRoom = if (spark || node.horizontal) 0f else measurer.measure("0", small).size.height + 6.dp.toPx()
             val plot = Rect(if (rtl) 0f else gutter, 4.dp.toPx(), if (rtl) size.width - gutter else size.width, size.height - labelsRoom)
@@ -129,7 +129,7 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
                     }
                 } else {
                     for (value in listOf(bounds.low, bounds.high)) {
-                        val text = measurer.measure(number(value), small)
+                        val text = measurer.measure(amount(value), small)
                         val left = if (rtl) plot.right + 8.dp.toPx() else plot.left - 8.dp.toPx() - text.size.width
                         drawText(text, topLeft = Offset(left, (y(value) - text.size.height / 2f).coerceIn(0f, size.height - text.size.height)))
                     }
@@ -437,7 +437,7 @@ internal fun ScatterView(node: Navree.Scatter, modifier: Modifier = Modifier) {
         val shape = if (node.equalAxes) Modifier.fillMaxWidth(0.86f).aspectRatio(1f) else Modifier.fillMaxWidth().aspectRatio(1.5f)
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Canvas(shape.clearAndSetSemantics { contentDescription = said }) {
-                val words = listOf(number(ys.low), number(ys.high))
+                val words = listOf(amount(ys.low), amount(ys.high))
                 val gutter = (words.maxOf { measurer.measure(it, small).size.width }) + 6.dp.toPx()
                 val under = measurer.measure("0", small).size.height + 4.dp.toPx()
                 val plot = Rect(if (rtl) 0f else gutter, 0f, if (rtl) size.width - gutter else size.width, size.height - under)
@@ -465,7 +465,7 @@ internal fun ScatterView(node: Navree.Scatter, modifier: Modifier = Modifier) {
                     drawText(text, topLeft = Offset(left, (py(value) - text.size.height / 2f).coerceIn(0f, size.height - text.size.height)))
                 }
                 for (value in listOf(xs.low, xs.high)) {
-                    val text = measurer.measure(number(value), small)
+                    val text = measurer.measure(amount(value), small)
                     val left = (px(value) - text.size.width / 2f).coerceIn(0f, size.width - text.size.width)
                     drawText(text, topLeft = Offset(left, plot.bottom + 4.dp.toPx()))
                 }
