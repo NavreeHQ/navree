@@ -54,7 +54,7 @@ class HealthScreensTest {
                 "/fitness" to "screen-fitness",
                 "/designed" to "screen-designed-health",
                 // A screen with no destination of its own: opened from a card, it is pushed on the screen it came from.
-                "/heart" to "screen-form",
+                "/heart" to "screen-designed-store",
                 "/shelves" to "screen-designed-store",
             ),
         )
@@ -140,7 +140,7 @@ class HealthScreensTest {
         // At the largest text the card is below the first screen: scroll to it first.
         compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasContentDescription("Heart, 20% of score"))
         compose.onNodeWithContentDescription("Heart, 20% of score").performClick()
-        front(app, "New customer")
+        front(app, "Shelves")
         Shots.take("designed-health-opened")
         send(app, Events.back)
         front(app, "Today")
