@@ -249,6 +249,37 @@ class DialRulesTest {
     }
 }
 
+class SpreadRulesTest {
+    @Test
+    fun marks_that_would_overlap_stand_side_by_side_about_their_middle() {
+        val placed = ClockRules.spread(listOf(18.0, 18.25), 0.44)
+        assertEquals(0.44, placed[1] - placed[0], 1e-9)
+        assertEquals("about their middle", 18.125, (placed[0] + placed[1]) / 2.0, 1e-9)
+    }
+
+    @Test
+    fun marks_far_apart_do_not_move_and_the_order_stays() {
+        val ats = listOf(18.25, 7.1, 18.0)
+        val placed = ClockRules.spread(ats, 0.44)
+        assertEquals(7.1, placed[1], 1e-9)
+        assertTrue("the later stays later", placed[0] > placed[2])
+        assertTrue(placed[0] - placed[2] >= 0.44 - 1e-9)
+    }
+
+    @Test
+    fun a_chain_of_close_marks_ends_with_every_gap_kept() {
+        val placed = ClockRules.spread(listOf(10.0, 10.1, 10.2), 0.44).sorted()
+        assertTrue(placed[1] - placed[0] >= 0.44 - 1e-6)
+        assertTrue(placed[2] - placed[1] >= 0.44 - 1e-6)
+    }
+
+    @Test
+    fun small_figures_of_facts_are_as_wide_as_their_share_but_never_wider_than_240() {
+        assertEquals(181.5f, ContentRules.factCellDp(379f, 2), 0.01f)
+        assertEquals(240f, ContentRules.factCellDp(1000f, 3), 0.01f)
+    }
+}
+
 class GaugeRulesTest {
     @Test
     fun an_arc_open_at_the_foot_needs_less_than_its_square() {

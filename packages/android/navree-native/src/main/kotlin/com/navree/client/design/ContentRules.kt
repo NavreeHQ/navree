@@ -410,6 +410,13 @@ object ContentRules {
 
     const val FACT_GAP_DP = 16
 
+    /** The widest a small figure of facts is, in dp: in a wide room the figures stand together at the start, not far apart. */
+    const val FACT_MOST_DP = 240
+
+    /** The width of each of `columns` small figures in a room this wide. */
+    fun factCellDp(roomDp: Float, columns: Int): Float =
+        minOf((roomDp - FACT_GAP_DP * (columns - 1)) / columns, FACT_MOST_DP.toFloat())
+
     /**
      * How a status is drawn. In a row it is a word in its tone's colour after
      * a small dot, as plain as the row's other lines; a status that stands
