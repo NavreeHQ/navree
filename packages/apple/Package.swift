@@ -15,7 +15,10 @@ let package = Package(
         .library(
             name: "NavreeNative",
             targets: ["NavreeProtocol", "NavreeDesign", "NavreeShell", "NavreeCoreBridge"]
-        )
+        ),
+        // The protocol and the drawing alone, without the core: what the
+        // picture tool in Shots/ draws screens with.
+        .library(name: "NavreeDesign", targets: ["NavreeProtocol", "NavreeDesign"]),
     ],
     targets: [
         .target(name: "NavreeProtocol"),

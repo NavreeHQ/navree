@@ -7,3 +7,6 @@
 /Demo/Generated/
 # Assembled from the runtime core's libraries by the build, never committed
 /NavreeCore.xcframework/
+# The picture tool's own build
+/Shots/.build/
+/Shots/.swiftpm/
