@@ -235,7 +235,7 @@ struct RowContent: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(alignment: Self.leadsWithPicture(row) ? .center : .firstTextBaseline, spacing: 12) {
             if let leading = row.leading {
                 NodeView(leading).font(.body)
             } else if let state = row.state {
@@ -264,6 +264,15 @@ struct RowContent: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// A row led by a picture with no words in it (a chip, an avatar, an
+    /// image) sets it beside the middle of its words, as Mail and Fitness do.
+    static func leadsWithPicture(_ row: Navree.Row) -> Bool {
+        switch row.leading {
+        case .layers?, .avatar?, .image?, .shape?: true
+        default: false
+        }
     }
 
     static func symbol(_ state: Navree.RowState) -> String {

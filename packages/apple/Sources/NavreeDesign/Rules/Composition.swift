@@ -56,8 +56,16 @@ public enum CompositionRules {
         Double(steps) * 4
     }
 
-    /// The padding inside a card: its own, or the system's 16 points.
-    public static func padding(_ card: Navree.Card) -> Double {
-        card.pad.map { points(steps: $0) } ?? 16
+    /// The padding inside a card: its own, or the system's 16 points; a card
+    /// in a row of four or more (a tile) keeps the room for its words with 8.
+    public static func padding(_ card: Navree.Card, columns: Int? = nil) -> Double {
+        if let pad = card.pad { return points(steps: pad) }
+        return (columns ?? 1) >= 4 ? 8 : 16
+    }
+
+    /// Whether a text shrinks to fit rather than breaking: one word set in
+    /// the middle of a narrow place (a tile's name) is never cut in two.
+    public static func shrinksToFit(_ text: Navree.Text) -> Bool {
+        text.align == .center && !text.value.contains(" ")
     }
 }

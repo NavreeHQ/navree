@@ -48,6 +48,7 @@ public struct ComposedContent: View {
 /// tap of its own.
 struct CardPart: View {
     let card: Navree.Card
+    @Environment(\.navreeGridColumns) private var columns
     @Environment(\.navree) private var context
     @Environment(\.navreeInControl) private var inControl
     @Environment(\.colorScheme) private var scheme
@@ -76,7 +77,7 @@ struct CardPart: View {
                 NodeView(child).environment(\.navreeWordsAbove, HeadingRules.wordsAbove(card.children, index: index))
             }
         }
-        .padding(CompositionRules.padding(card))
+        .padding(CompositionRules.padding(card, columns: columns))
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
@@ -220,4 +221,6 @@ struct CarouselPart: View {
 extension EnvironmentValues {
     /// The axis of the stack the parts being drawn stand in.
     @Entry var navreeParentAxis: Navree.Axis = .vertical
+    /// The fixed number of columns of the grid the parts being drawn stand in.
+    @Entry var navreeGridColumns: Int? = nil
 }
