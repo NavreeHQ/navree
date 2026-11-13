@@ -28,6 +28,7 @@ struct FigurePart: View {
     }
 
     @Environment(\.colorScheme) private var scheme
+    @State private var hintOpen = false
 
     private var hue: Color {
         Hues.text(figure.colour, fallback: figure.tone.map(Hues.color) ?? .secondary, scheme: scheme)
@@ -42,7 +43,7 @@ struct FigurePart: View {
                             Glyph(icon: icon, icons: context.icons).imageScale(.small)
                         }
                         Text(figure.label).lineLimit(2)
-                        if let hint = figure.hint { HintButton(hint: hint).foregroundStyle(.secondary) }
+                        if let hint = figure.hint { HintButton(hint: hint, open: $hintOpen).foregroundStyle(.secondary) }
                     }
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(figure.icon != nil || figure.colour != nil ? hue : Color.secondary)
@@ -83,6 +84,7 @@ struct FigurePart: View {
             }
         }
         .accessibilityElement(children: .combine)
+        .modifier(HintAction(hint: inControl ? nil : figure.hint, open: $hintOpen))
     }
 
     /// What stands at a figure's end: a small ring or the system's small gauge.
@@ -105,6 +107,22 @@ struct FigurePart: View {
             var small = ring
             small.prominence = .low
             return small
+        }
+    }
+}
+
+/// A part that is one element to VoiceOver keeps its hint within reach: the
+/// hint's info button is read with the rest, so it is offered as one of the
+/// element's actions, which opens the same words.
+struct HintAction: ViewModifier {
+    let hint: Navree.Hint?
+    let open: Binding<Bool>
+
+    func body(content: Content) -> some View {
+        if let hint {
+            content.accessibilityAction(named: Text(HintRules.actionName(hint))) { open.wrappedValue = true }
+        } else {
+            content
         }
     }
 }
