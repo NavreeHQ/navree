@@ -21,7 +21,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::node::{Icon, Prominence, Tone, is_default, is_false};
+use crate::node::{Icon, Node, Prominence, Tone, is_default, is_false};
 
 /// A colour of data by name. A client draws each as its own system's colour of
 /// that name, so a pillar that is violet is the system's violet on iPhone and
@@ -530,6 +530,79 @@ pub struct DayClock {
     /// A note about what the clock means, shown when asked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hint: Option<Hint>,
+}
+
+/// Where a day the person chooses is asked for.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DayPick {
+    /// The address of the screen.
+    pub href: String,
+    /// The name the chosen day is added to it under, as a query value in the
+    /// form `2026-11-11`: `date`.
+    pub name: String,
+}
+
+/// The words of a day pager's controls, in the page's language.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PagerWords {
+    /// What the control to the day before is called: `Previous day`.
+    pub previous: String,
+    /// What the control to the day after is called: `Next day`.
+    pub next: String,
+    /// What the control that opens the choice of a day is called: `Choose a day`.
+    pub choose: String,
+}
+
+/// The control that steps a screen from day to day: the day shown, the day
+/// before and the day after, a way back to today and a choice of any day.
+///
+/// The day is said twice: `day` in the page's words (`Today`, `Wed, 11 Nov`)
+/// and `date` as a date, which a client's date control takes. The addresses are
+/// where the screen of each day is: a client steps to `previous` and `next`,
+/// to `today` when it is not today, and to the day the person chooses by asking
+/// `pick`. A step replaces the day on the screen; it does not add a screen to
+/// the back stack, so Back leaves the screen and never walks through the days.
+/// A day with nothing to step to has no address: the control is shown without
+/// it. `first` and `last` bound the days that can be chosen.
+///
+/// A client draws it with its own date control and steppers, in the place its
+/// system puts them (the top of the screen, a bar), and takes the words for the
+/// steppers from `words`. `scores` is a small graphic before the date: the
+/// day's scores as small rings.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DayPager {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The day shown, in the page's words.
+    pub day: String,
+    /// The day shown, as a date: `2026-11-11`.
+    pub date: String,
+    /// Where the day before is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous: Option<String>,
+    /// Where the day after is. None when this is the last day there is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next: Option<String>,
+    /// Where today is. None when the day shown is today.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub today: Option<String>,
+    /// The first day that can be chosen, as a date.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first: Option<String>,
+    /// The last day that can be chosen, as a date: usually today.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last: Option<String>,
+    /// How a day the person chooses is asked for. None when only the steps are
+    /// offered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pick: Option<DayPick>,
+    /// A small graphic before the date: the day's scores as small rings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scores: Option<Box<Node>>,
+    /// The words of its controls.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub words: Option<PagerWords>,
 }
 
 #[cfg(test)]

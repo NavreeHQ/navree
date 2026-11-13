@@ -2736,6 +2736,152 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "DayPager": {
+      "properties": {
+        "date": {
+          "type": "string",
+          "x-since": 0
+        },
+        "day": {
+          "type": "string",
+          "x-since": 0
+        },
+        "first": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "last": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "next": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "pick": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DayPick"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "previous": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "scores": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Node"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "today": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "words": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PagerWords"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "day",
+        "date"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "DayPick": {
+      "properties": {
+        "href": {
+          "type": "string",
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "href",
+        "name"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "Delivery": {
       "enum": [
         "sending",
@@ -5748,6 +5894,21 @@
           "required": [
             "t"
           ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/DayPager"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "day_pager"
+            }
+          },
+          "required": [
+            "t"
+          ]
         }
       ],
       "x-kind": "union",
@@ -5980,6 +6141,11 @@
         {
           "tag": "day_clock",
           "type": "DayClock",
+          "x-since": 0
+        },
+        {
+          "tag": "day_pager",
+          "type": "DayPager",
           "x-since": 0
         }
       ]
@@ -6860,6 +7026,30 @@
       "format": "origin-path",
       "type": "string",
       "x-kind": "string",
+      "x-since": 0
+    },
+    "PagerWords": {
+      "properties": {
+        "choose": {
+          "type": "string",
+          "x-since": 0
+        },
+        "next": {
+          "type": "string",
+          "x-since": 0
+        },
+        "previous": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "previous",
+        "next",
+        "choose"
+      ],
+      "type": "object",
+      "x-kind": "object",
       "x-since": 0
     },
     "Pair": {

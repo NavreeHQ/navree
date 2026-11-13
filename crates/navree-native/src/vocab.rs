@@ -267,6 +267,7 @@ kinds! {
     Ring(Ring) => "ring" since 0,
     Rings(Rings) => "rings" since 0,
     DayClock(DayClock) => "day_clock" since 0,
+    DayPager(DayPager) => "day_pager" since 0,
 }
 
 /// A field that arrived after its type did: the type's name in the schema
@@ -604,6 +605,40 @@ impl Node {
                     items,
                 })
             }
+            Self::DayPager(node) => {
+                // The day between two buttons; a button with no address is dimmed.
+                let step = |address: &Option<String>, word: Option<&str>, fallback: &str| {
+                    Node::Button(n::Button {
+                        label: word.unwrap_or(fallback).to_owned(),
+                        role: n::Role::Navigation,
+                        disabled: address.is_none(),
+                        action: address.as_deref().map(crate::action::Action::navigate),
+                        ..n::Button::default()
+                    })
+                };
+                let words = node.words.as_ref();
+                Node::Stack(n::Stack {
+                    id: node.id.clone(),
+                    axis: n::Axis::Horizontal,
+                    gap: 2,
+                    align: Some(n::Align::Center),
+                    justify: Some(n::Justify::Between),
+                    children: [
+                        Some(step(
+                            &node.previous,
+                            words.map(|words| words.previous.as_str()),
+                            "Previous day",
+                        )),
+                        node.scores.as_deref().cloned(),
+                        Some(Node::text(node.day.clone())),
+                        Some(step(&node.next, words.map(|words| words.next.as_str()), "Next day")),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .collect(),
+                    ..n::Stack::default()
+                })
+            }
             Self::Unknown(node) => return node.alt.as_deref().cloned(),
             _ => return None,
         })
@@ -660,10 +695,10 @@ pub fn newer_than(node: &Node, vocab: u32) -> Option<Kind> {
 mod tests {
     use super::*;
     use crate::node::{
-        Avatar, Badge, Chart, ClockMoment, Colour, DayClock, Direction, FeedRow, Figure, Gauge,
-        Hour, Hue, Icon, Message, Moment, Pane, PaneRole, Ring, RingValue, Rings, RingsCentre,
-        RowState, Run, Section, Stack, Standard, Timeline, Tone, Toolbar, ToolbarItem, Trend,
-        Unknown, Zone,
+        Avatar, Badge, Chart, ClockMoment, Colour, DayClock, DayPager, Direction, FeedRow, Figure,
+        Gauge, Hour, Hue, Icon, Message, Moment, PagerWords, Pane, PaneRole, Ring, RingValue,
+        Rings, RingsCentre, RowState, Run, Section, Stack, Standard, Timeline, Tone, Toolbar,
+        ToolbarItem, Trend, Unknown, Zone,
     };
 
     #[test]
@@ -804,6 +839,20 @@ mod tests {
                 colour: Some(Colour::new(Hue::Success)),
                 ..Ring::default()
             }),
+            Node::DayPager(DayPager {
+                id: Some("pager".to_owned()),
+                day: "Wed, 11 Nov".to_owned(),
+                date: "2026-11-11".to_owned(),
+                previous: Some("/?date=2026-11-10".to_owned()),
+                next: None,
+                scores: Some(Box::new(Node::Ring(Ring::default()))),
+                words: Some(PagerWords {
+                    previous: "Day before".to_owned(),
+                    next: "Day after".to_owned(),
+                    choose: "Pick a day".to_owned(),
+                }),
+                ..DayPager::default()
+            }),
             Node::DayClock(DayClock {
                 id: Some("day".to_owned()),
                 title: Some("Steps by hour".to_owned()),
@@ -871,7 +920,8 @@ mod tests {
             | Kind::Pane
             | Kind::Ring
             | Kind::Rings
-            | Kind::DayClock => 1,
+            | Kind::DayClock
+            | Kind::DayPager => 1,
             kind => kind.since(),
         }
     }
@@ -986,6 +1036,31 @@ mod tests {
         };
         assert_eq!(progress.label.as_deref(), Some("Load ratio: 1.12 (Overuse)"));
         assert_eq!(progress.value, Some(560));
+    }
+
+    #[test]
+    fn a_day_pager_becomes_the_day_between_two_buttons() {
+        let pager = part(Kind::DayPager);
+        let Downgraded::Node(Node::Stack(stack)) = downgrade_by(pager, 0, only(Kind::DayPager))
+        else {
+            panic!("a pager becomes a stack");
+        };
+        assert_eq!(stack.id.as_deref(), Some("pager"));
+        let kinds: Vec<Kind> = stack.children.iter().map(Node::kind).collect();
+        assert_eq!(kinds, [Kind::Button, Kind::Ring, Kind::Text, Kind::Button]);
+        let (Node::Button(before), Node::Button(after)) = (&stack.children[0], &stack.children[3])
+        else {
+            panic!("buttons stand at the ends");
+        };
+        // The day before is a button that goes there, in the page's words; there is no day after.
+        assert_eq!(before.label, "Day before");
+        assert_eq!(
+            before.action,
+            Some(crate::Action::navigate("/?date=2026-11-10"))
+        );
+        assert!(!before.disabled);
+        assert_eq!(after.label, "Day after");
+        assert!(after.disabled && after.action.is_none());
     }
 
     #[test]

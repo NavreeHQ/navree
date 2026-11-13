@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::action::Action;
 pub use crate::charts::{
-    Category, Centre, ClockMoment, Colour, DayClock, Hint, HintMark, Hour, Hue, Ring, RingValue,
-    Rings, RingsCentre, Zone,
+    Category, Centre, ClockMoment, Colour, DayClock, DayPager, DayPick, Hint, HintMark, Hour, Hue,
+    PagerWords, Ring, RingValue, Rings, RingsCentre, Zone,
 };
 use crate::input::Input;
 
@@ -123,6 +123,8 @@ pub enum Node {
     Rings(Rings),
     /// A day as 24 hours round a dial, with its moments.
     DayClock(DayClock),
+    /// The control that steps a screen from day to day.
+    DayPager(DayPager),
     /// A kind this build has never heard of, from a newer server. A client
     /// draws its `alt`, or shows the page in its web view when it has none.
     Unknown(Unknown),
@@ -221,6 +223,7 @@ impl Node {
             Self::Ring(node) => node.id.as_deref(),
             Self::Rings(node) => node.id.as_deref(),
             Self::DayClock(node) => node.id.as_deref(),
+            Self::DayPager(node) => node.id.as_deref(),
             Self::Unknown(node) => node.id.as_deref(),
         }
     }
@@ -265,6 +268,7 @@ impl Node {
                 .collect(),
             Self::Link(node) => node.children.iter().collect(),
             Self::Figure(node) => boxed(&node.aside).chain(boxed(&node.chart)).collect(),
+            Self::DayPager(node) => boxed(&node.scores).collect(),
             Self::Menu(node) => node.items.iter().collect(),
             Self::Form(node) => node.children.iter().collect(),
             Self::Sheet(node) => node.children.iter().chain(&node.actions).collect(),
@@ -347,6 +351,7 @@ impl Node {
                 .collect(),
             Self::Link(node) => node.children.iter_mut().collect(),
             Self::Figure(node) => boxed(&mut node.aside).chain(boxed(&mut node.chart)).collect(),
+            Self::DayPager(node) => boxed(&mut node.scores).collect(),
             Self::Menu(node) => node.items.iter_mut().collect(),
             Self::Form(node) => node.children.iter_mut().collect(),
             Self::Sheet(node) => node
@@ -2514,6 +2519,30 @@ mod tests {
         assert_eq!(clock.moments[0].at.as_f64(), Some(6.5));
         // A moment says when and what.
         assert!(serde_json::from_str::<Node>(r#"{"t":"day_clock","moments":[{"at":6.5}]}"#).is_err());
+    }
+
+    #[test]
+    fn a_day_pager_says_the_day_twice_and_where_its_neighbours_are() {
+        let node: Node = serde_json::from_str(
+            r#"{"t":"day_pager","day":"Yesterday","date":"2026-11-12",
+                "previous":"/?date=2026-11-11","next":"/?date=2026-11-13","today":"/",
+                "first":"2026-01-02","last":"2026-11-13","pick":{"href":"/","name":"date"}}"#,
+        )
+        .unwrap();
+        let Node::DayPager(pager) = &node else {
+            panic!("not a pager");
+        };
+        assert_eq!((pager.day.as_str(), pager.date.as_str()), ("Yesterday", "2026-11-12"));
+        assert_eq!(pager.today.as_deref(), Some("/"));
+        assert_eq!(pager.pick.as_ref().map(|pick| pick.name.as_str()), Some("date"));
+        assert!(node.children().is_empty());
+        // The day is said as words and as a date: a pager with only one is refused, as is a pick
+        // that does not say how the day is asked for.
+        assert!(serde_json::from_str::<Node>(r#"{"t":"day_pager","day":"Today"}"#).is_err());
+        assert!(serde_json::from_str::<Node>(
+            r#"{"t":"day_pager","day":"Today","date":"2026-11-13","pick":{"href":"/"}}"#
+        )
+        .is_err());
     }
 
     #[test]

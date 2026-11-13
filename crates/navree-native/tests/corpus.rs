@@ -24,12 +24,13 @@ use navree_native::input::{
 };
 use navree_native::node::{
     Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Category, Centre, Chart,
-    ChartKind, ClockMoment, Code, Colour, Column, ColumnRole, DayClock, Delivery, Dialog,
+    ChartKind, ClockMoment, Code, Colour, Column, ColumnRole, DayClock, DayPager, DayPick,
+    Delivery, Dialog,
     Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Hour, Icon, Image, Justify, Link, List, Live,
     Menu, Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress, Prominence,
-    Purpose, Question, Region, Reorder, Rich, Ring, RingValue, Rings, RingsCentre, Role, Row,
-    RowState, Run, Section, SectionStyle,
+    PagerWords, Purpose, Question, Region, Reorder, Rich, Ring, RingValue, Rings, RingsCentre,
+    Role, Row, RowState, Run, Section, SectionStyle,
     Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table,
     TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown,
     WebRegion, Zone,
@@ -2274,9 +2275,60 @@ fn screen_today() -> Envelope {
         summary: Some(s("9,412 steps in the day so far. Busiest at 7 am: 1,850. 3 moments: Woke up, 6:30 am, Morning run, 3.2 km, Highest heart rate, 158 bpm.")),
         ..DayClock::default()
     });
+    // The control that steps the screen from day to day, with the day's three
+    // scores as small rings before the date.
+    let pager = Node::DayPager(DayPager {
+        id: Some(s("day")),
+        day: s("Today"),
+        date: s("2026-11-13"),
+        previous: Some(s("/?date=2026-11-12")),
+        next: None,
+        today: None,
+        first: Some(s("2026-01-02")),
+        last: Some(s("2026-11-13")),
+        pick: Some(DayPick {
+            href: s("/"),
+            name: s("date"),
+        }),
+        scores: Some(Box::new(Node::Rings(Rings {
+            id: Some(s("day-scores")),
+            rings: vec![
+                RingValue {
+                    name: s("Movement"),
+                    value: Some(number(35)),
+                    shown: Some(s("35")),
+                    colour: Some(Colour::new(Hue::Orange)),
+                    ..RingValue::default()
+                },
+                RingValue {
+                    name: s("Recovery"),
+                    value: Some(number(72)),
+                    shown: Some(s("72")),
+                    colour: Some(Colour::new(Hue::Green)),
+                    ..RingValue::default()
+                },
+                RingValue {
+                    name: s("Sleep"),
+                    value: Some(number(78)),
+                    shown: Some(s("78")),
+                    colour: Some(Colour::new(Hue::Violet)),
+                    ..RingValue::default()
+                },
+            ],
+            prominence: Prominence::Low,
+            summary: Some(s("Today's scores: Movement 35, Recovery 72, Sleep 78.")),
+            ..Rings::default()
+        }))),
+        words: Some(PagerWords {
+            previous: s("Previous day"),
+            next: s("Next day"),
+            choose: s("Choose a day"),
+        }),
+    });
     let body = Node::Stack(Stack {
         gap: 4,
         children: vec![
+            pager,
             Node::Text(Text {
                 value: s("Good evening, Amandeep"),
                 style: TextStyle::LargeTitle,

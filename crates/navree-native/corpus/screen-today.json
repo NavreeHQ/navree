@@ -11,6 +11,59 @@
       "gap": 4,
       "children": [
         {
+          "t": "day_pager",
+          "id": "day",
+          "day": "Today",
+          "date": "2026-11-13",
+          "previous": "/?date=2026-11-12",
+          "first": "2026-01-02",
+          "last": "2026-11-13",
+          "pick": {
+            "href": "/",
+            "name": "date"
+          },
+          "scores": {
+            "t": "rings",
+            "id": "day-scores",
+            "rings": [
+              {
+                "name": "Movement",
+                "value": 35,
+                "max": 100,
+                "shown": "35",
+                "colour": {
+                  "hue": "orange"
+                }
+              },
+              {
+                "name": "Recovery",
+                "value": 72,
+                "max": 100,
+                "shown": "72",
+                "colour": {
+                  "hue": "green"
+                }
+              },
+              {
+                "name": "Sleep",
+                "value": 78,
+                "max": 100,
+                "shown": "78",
+                "colour": {
+                  "hue": "violet"
+                }
+              }
+            ],
+            "prominence": "low",
+            "summary": "Today's scores: Movement 35, Recovery 72, Sleep 78."
+          },
+          "words": {
+            "previous": "Previous day",
+            "next": "Next day",
+            "choose": "Choose a day"
+          }
+        },
+        {
           "t": "text",
           "value": "Good evening, Amandeep",
           "style": "large_title",
