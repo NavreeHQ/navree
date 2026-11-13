@@ -247,8 +247,9 @@ internal fun CarouselView(node: Navree.Carousel, place: Place, modifier: Modifie
 @Composable
 internal fun AdaptiveView(node: Navree.Adaptive, place: Place, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
+        val room = CompositionRules.room(node, maxWidth.value)
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            for (child in CompositionRules.room(node, maxWidth.value)) NodeView(child, place)
+            for (child in room) NodeView(child, place)
         }
     }
 }
