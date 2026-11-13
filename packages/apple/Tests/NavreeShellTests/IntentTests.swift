@@ -120,3 +120,20 @@ struct IntentTests {
         #expect(NativeClient.formID(FormRef(key: "refund")) == "refund")
     }
 }
+
+/// What a card or a figure opens carries the part's id, and the screen it
+/// opens knows it: what a zoom from the card into its screen is drawn from.
+@MainActor
+@Test func aScreenOpenedFromAPartKnowsWhichPart() throws {
+    var answers = Shell.store
+    answers["/orders/1"] = (200, "store/order.json")
+    let shell = try Shell(answers: answers)
+    shell.client.begin()
+    shell.client.send(.select(destination: 1))
+    let orders = try #require(shell.client.nav.front)
+    shell.client.perform(.act(.navigate(.init(href: "/orders/1")), Place(from: "order-card")), on: orders)
+    let order = try #require(shell.client.nav.front)
+    #expect(order != orders)
+    #expect(shell.client.screen(order)?.from == "order-card")
+    #expect(shell.client.context(for: order, depth: 1, base: nil).from == "order-card")
+}

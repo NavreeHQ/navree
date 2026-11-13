@@ -27,6 +27,7 @@ extension NativeClient {
                 return RegionStatus(loading: view?.loading ?? false, failed: view?.failure != nil)
             },
             focus: state?.focus.map { FocusRequest(target: $0.target, serial: $0.serial) },
+            from: state?.from,
             address: state?.url ?? "/",
             base: base,
             depth: depth
