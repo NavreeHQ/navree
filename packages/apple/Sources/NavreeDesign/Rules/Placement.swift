@@ -18,6 +18,8 @@ public enum Slot: Sendable, Equatable {
     case destructiveSection
     /// The top bar's leading end, for going somewhere (`navigation`).
     case leading
+    /// On a bar as its symbol alone, its words for VoiceOver and the overflow.
+    case bar
 }
 
 /// What placement needs to know of an action.

@@ -93,13 +93,18 @@ struct ButtonPart: View {
             }
         }
         .disabled(button.disabled || button.pending)
-        Group {
-            if prominent || (button.prominence == .high && button.role != .destructive) {
-                control.buttonStyle(.borderedProminent)
-            } else if button.prominence == .low {
-                control.buttonStyle(.borderless)
-            } else {
-                control.buttonStyle(.bordered)
+        VStack(alignment: .leading, spacing: 4) {
+            Group {
+                if prominent || (button.prominence == .high && button.role != .destructive) {
+                    control.buttonStyle(.borderedProminent)
+                } else if button.prominence == .low {
+                    control.buttonStyle(.borderless)
+                } else {
+                    control.buttonStyle(.bordered)
+                }
+            }
+            if let reason = ActionRules.reason(button) {
+                Text(reason).font(.footnote).foregroundStyle(.secondary)
             }
         }
     }
@@ -194,7 +199,7 @@ struct MenuItems: View {
                     context.send(.act(action, Place(overlay: overlay, ask: PresentationRules.question(button))))
                 }
             } label: {
-                ButtonLabel(button: button, mode: .both)
+                ReasonedLabel(button: button)
             }
             .disabled(button.disabled)
         case .link(let link):

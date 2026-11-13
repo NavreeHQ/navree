@@ -308,7 +308,12 @@ struct ButtonRow: View {
             }
         } label: {
             HStack {
-                ButtonLabel(button: button, mode: .title)
+                VStack(alignment: .leading, spacing: 2) {
+                    ButtonLabel(button: button, mode: .title)
+                    if let reason = ActionRules.reason(button), !inFootedSection {
+                        Text(reason).font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
                 if button.pending {
                     Spacer()
                     ProgressView()
@@ -317,6 +322,9 @@ struct ButtonRow: View {
         }
         .disabled(button.disabled || button.pending)
     }
+
+    /// Set where the section's footer already says why.
+    var inFootedSection = false
 }
 
 /// A row that says something did not come, and offers to try again.

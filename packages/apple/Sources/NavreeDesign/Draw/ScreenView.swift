@@ -45,6 +45,9 @@ public struct ScreenView: View {
         self.failure = failure
     }
 
+    /// The screen's own actions, a toolbar's items among them.
+    private var actions: [Navree.Node] { ActionRules.expand(screen.actions) }
+
     public var body: some View {
         let sections = SectionRules.sections(screen.body)
         let width = WidthClass(sizeClass)
@@ -56,7 +59,9 @@ public struct ScreenView: View {
             .modifier(TitleDisplay(mode: PagerRules.titleMode(depth, pager: screen.pager)))
             .modifier(PagerInBar(pager: screen.pager))
             .toolbar {
-                PlacedActions(actions: screen.actions.filter { !Self.isDestructive($0) }, depth: depth, overlay: nil, form: nil)
+                PlacedActions(actions: actions.filter { !Self.isDestructive($0) }, depth: depth, overlay: nil, form: nil)
+                let foot = ActionRules.footToolbars(screen.body)
+                if !foot.isEmpty { FootToolbar(toolbars: foot) }
                 if let query, query.hasFilters || !query.sorts.isEmpty {
                     ToolbarItem(placement: .primaryAction) {
                         QueryButtons(query: query)
@@ -92,12 +97,18 @@ public struct ScreenView: View {
                 ForEach(sections) { section in
                     SectionView(section: section)
                 }
-                let destructive = screen.actions.filter(Self.isDestructive)
+                let destructive = actions.filter(Self.isDestructive)
                 if !destructive.isEmpty {
+                    let buttons = destructive.compactMap { node -> Navree.Button? in
+                        if case .button(let button) = node { return button }
+                        return nil
+                    }
                     Section {
-                        ForEach(Array(destructive.enumerated()), id: \.offset) { _, node in
-                            if case .button(let button) = node { ButtonRow(button: button) }
+                        ForEach(Array(buttons.enumerated()), id: \.offset) { _, button in
+                            ButtonRow(button: button, inFootedSection: true)
                         }
+                    } footer: {
+                        if let footer = ActionRules.footer(buttons) { Text(footer) }
                     }
                 }
             }
