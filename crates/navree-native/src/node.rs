@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::action::Action;
 pub use crate::charts::{
-    Centre, Colour, Hint, HintMark, Hue, Ring, RingValue, Rings, RingsCentre,
+    Centre, Colour, Hint, HintMark, Hue, Ring, RingValue, Rings, RingsCentre, Zone,
 };
 use crate::input::Input;
 
@@ -1981,6 +1981,12 @@ pub struct ToolbarItem {
 
 /// A value within a range, read at a glance: a level, a meter, a dial. The
 /// numbers are the page's own; `shown` is the value in the page's words.
+///
+/// The scale may be divided into named zones, each its stretch of the scale in
+/// its own colour (what is below, in and above the usual range). The value is
+/// in the zone that holds it, the last one where they overlap; a client draws
+/// the zones on the scale, draws the value in the colour of its zone, and says
+/// the zone's name beside the value so that the colour is never alone.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Gauge {
     /// The node's id.
@@ -1998,9 +2004,45 @@ pub struct Gauge {
     /// The value in the page's words: `72%`, `₹42,000 of ₹60,000`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shown: Option<String>,
+    /// A quieter line after the label: `Optimal`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caption: Option<String>,
+    /// The zones of the scale, with their names and bounds.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zones: Vec<Zone>,
     /// What its colour means.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
     pub tone: Option<Tone>,
+    /// Its colour by hue, when it has no zones to take it from and its colour
+    /// is not a tone's. It wins over `tone`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+    /// One sentence that says the whole gauge to a reader who can't see it:
+    /// the value, the scale and the zone the value is in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// A note about what the gauge means, shown when asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
+}
+
+impl Default for Gauge {
+    fn default() -> Self {
+        Self {
+            id: None,
+            value: 0.into(),
+            min: 0.into(),
+            max: 100.into(),
+            label: None,
+            shown: None,
+            caption: None,
+            zones: Vec::new(),
+            tone: None,
+            colour: None,
+            summary: None,
+            hint: None,
+        }
+    }
 }
 
 /// Which way a figure is going.
@@ -2415,6 +2457,31 @@ mod tests {
             serde_json::to_string(&Figure::default()).unwrap(),
             r#"{"label":"","value":""}"#
         );
+    }
+
+    #[test]
+    fn a_gauge_reads_as_it_did_before_it_had_zones_and_takes_a_zone_of_a_newer_hue() {
+        let node: Node = serde_json::from_str(
+            r#"{"t":"gauge","value":72,"min":0,"max":100,"label":"Space","shown":"72%","tone":"warning"}"#,
+        )
+        .unwrap();
+        let Node::Gauge(gauge) = node else {
+            panic!("not a gauge");
+        };
+        assert!(gauge.zones.is_empty() && gauge.colour.is_none() && gauge.hint.is_none());
+        assert_eq!(gauge.tone, Some(Tone::Warning));
+        // A zone names its colour; a hue this build lacks is neutral, and the zone still holds.
+        let node: Node = serde_json::from_str(
+            r#"{"t":"gauge","value":1.12,"min":0,"max":2,"zones":[{"from":0.8,"to":1.3,"label":"Optimal","colour":{"hue":"teal"}}]}"#,
+        )
+        .unwrap();
+        let Node::Gauge(gauge) = node else {
+            panic!("not a gauge");
+        };
+        assert_eq!(gauge.zones[0].label.as_deref(), Some("Optimal"));
+        assert_eq!(gauge.zones[0].colour, Some(Colour::new(Hue::Neutral)));
+        // A zone needs both its ends.
+        assert!(serde_json::from_str::<Zone>(r#"{"from":1}"#).is_err());
     }
 
     #[test]

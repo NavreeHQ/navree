@@ -416,6 +416,18 @@ impl Node {
                     (Some(label), Some(shown)) => Some(format!("{label}: {shown}")),
                     (label, shown) => label.clone().or_else(|| shown.clone()),
                 };
+                // The zone the value is in, where the scale has them, is said beside it.
+                let zone = node
+                    .zones
+                    .iter()
+                    .rev()
+                    .find(|zone| number(&zone.from) <= value && value <= number(&zone.to))
+                    .and_then(|zone| zone.label.clone());
+                let label = match (label, zone) {
+                    (Some(label), Some(zone)) => Some(format!("{label} ({zone})")),
+                    (None, Some(zone)) => Some(zone),
+                    (label, None) => label,
+                };
                 Node::Progress(n::Progress {
                     id: node.id.clone(),
                     // A share between 0 and 1, in thousandths.
@@ -599,7 +611,7 @@ mod tests {
     use crate::node::{
         Avatar, Badge, Chart, Colour, Direction, FeedRow, Figure, Gauge, Hue, Icon, Message,
         Moment, Pane, PaneRole, Ring, RingValue, Rings, RingsCentre, RowState, Run, Section,
-        Stack, Standard, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown,
+        Stack, Standard, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown, Zone,
     };
 
     #[test]
@@ -678,7 +690,7 @@ mod tests {
                 max: 60.into(),
                 label: Some("Space".to_owned()),
                 shown: Some("25%".to_owned()),
-                tone: None,
+                ..Gauge::default()
             }),
             Node::Figure(Figure {
                 label: "Revenue".to_owned(),
@@ -859,6 +871,46 @@ mod tests {
         assert_eq!(figure.value, "–");
         assert_eq!(figure.detail.as_deref(), Some("of 100%"));
         assert_eq!(figure.tone, None);
+    }
+
+    /// A number, written without a fraction when it has none.
+    fn quantity(value: f64) -> serde_json::Number {
+        if value.fract() == 0.0 {
+            (value as i64).into()
+        } else {
+            serde_json::Number::from_f64(value).unwrap()
+        }
+    }
+
+    fn zone(from: f64, to: f64, label: &str, hue: Hue) -> Zone {
+        Zone {
+            from: quantity(from),
+            to: quantity(to),
+            label: Some(label.to_owned()),
+            colour: Some(Colour::new(hue)),
+        }
+    }
+
+    #[test]
+    fn a_gauge_with_zones_says_the_zone_its_value_is_in() {
+        let gauge = Node::Gauge(Gauge {
+            value: quantity(1.12),
+            max: 2.into(),
+            label: Some("Load ratio".to_owned()),
+            shown: Some("1.12".to_owned()),
+            zones: vec![
+                zone(0.0, 0.8, "Undertraining", Hue::Violet),
+                zone(0.8, 1.3, "Optimal", Hue::Green),
+                // Where zones overlap, the last holds the value.
+                zone(1.0, 2.0, "Overuse", Hue::Red),
+            ],
+            ..Gauge::default()
+        });
+        let Some(Node::Progress(progress)) = gauge.older() else {
+            panic!("a gauge becomes a progress");
+        };
+        assert_eq!(progress.label.as_deref(), Some("Load ratio: 1.12 (Overuse)"));
+        assert_eq!(progress.value, Some(560));
     }
 
     #[test]

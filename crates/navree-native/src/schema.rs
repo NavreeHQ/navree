@@ -39,7 +39,7 @@ use serde_json::{Map, Value, json};
 
 use crate::action::{Action, Command, Pair, Present, State};
 use crate::charts::{
-    Centre, Colour, Hint, HintMark, Hue, Ring, RingValue, Rings, RingsCentre,
+    Centre, Colour, Hint, HintMark, Hue, Ring, RingValue, Rings, RingsCentre, Zone,
 };
 use crate::client::{ClientDescriptor, Contrast, FormFactor, Platform, Scheme};
 use crate::device::{
@@ -691,7 +691,9 @@ object!(Toolbar {} { id, items });
 object!(ToolbarItem { title, icon } {
     id, standard, role, prominence, undoable, ask, disabled, reason, action, menu
 });
-object!(Gauge { value, min, max } { id, label, shown, tone });
+object!(Gauge { value, min, max } {
+    id, label, shown, caption, zones, tone, colour, summary, hint
+});
 names!(Direction { Up, Down, Flat });
 object!(Trend { direction } { text, tone });
 object!(Figure { label, value } {
@@ -718,6 +720,7 @@ object!(Ring { max } {
     id, value, unit, shown, label, caption, colour, centre, icon, prominence, summary, hint
 });
 names!(RingsCentre { Nothing, Values, Icon });
+object!(Zone { from, to } { label, colour });
 object!(RingValue { name, max } { value, unit, shown, colour });
 object!(Rings {} {
     id, title, rings, centre, icon, legend, prominence, summary, hint

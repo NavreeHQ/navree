@@ -179,6 +179,38 @@ pub struct Hint {
     pub mark: HintMark,
 }
 
+/// A stretch of a scale with a name and a colour: the zones of a gauge (what
+/// is under, in and over the usual range), the bands behind a line, the parts
+/// of a scale a value stands in.
+///
+/// The ends are in the scale's own units. Zones may touch, and where they
+/// overlap the one listed last holds the value.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Zone {
+    /// Where it starts.
+    pub from: serde_json::Number,
+    /// Where it ends.
+    pub to: serde_json::Number,
+    /// What it is: `Optimal`. A client names the zone a value is in beside the
+    /// value, so the colour is never alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// Its colour. A client takes its colours in turn when there is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+}
+
+impl Default for Zone {
+    fn default() -> Self {
+        Self {
+            from: 0.into(),
+            to: 0.into(),
+            label: None,
+            colour: None,
+        }
+    }
+}
+
 /// What stands in the middle of a ring.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

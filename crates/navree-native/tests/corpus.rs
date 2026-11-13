@@ -32,7 +32,7 @@ use navree_native::node::{
     RowState, Run, Section, SectionStyle,
     Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table,
     TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown,
-    WebRegion,
+    WebRegion, Zone,
 };
 use navree_native::op::{Edge, Op, Toast, ToastAction, UrlMode};
 use navree_native::shell::{
@@ -1734,6 +1734,15 @@ fn number(value: i64) -> serde_json::Number {
     value.into()
 }
 
+/// A number written without a fraction when it has none (`2`, not `2.0`).
+fn decimal(value: f64) -> serde_json::Number {
+    if value.fract() == 0.0 {
+        number(value as i64)
+    } else {
+        serde_json::Number::from_f64(value).unwrap()
+    }
+}
+
 /// A shop's day at a glance: figures with their trends, a gauge, a timeline,
 /// an activity feed, the screen's toolbar and a note in rich blocks.
 fn screen_dashboard() -> Envelope {
@@ -1845,6 +1854,7 @@ fn screen_dashboard() -> Envelope {
                 label: Some(s("Ludhiana warehouse space")),
                 shown: Some(s("72%")),
                 tone: Some(Tone::Warning),
+                ..Gauge::default()
             }),
             Node::Section(Section {
                 title: Some(s("CH-1042 today")),
@@ -2256,6 +2266,73 @@ fn screen_today() -> Envelope {
     });
     let mut screen = Screen::new("Today", body);
     screen.nav = Some(s("/"));
+    screen.refresh = true;
+    Envelope::screen(BUILD, screen)
+}
+
+/// A week of training: how hard it was against the weeks before, and, as the
+/// kinds are added, the calendar, the links between measures and the beats.
+fn screen_fitness() -> Envelope {
+    let zone = |from: f64, to: f64, label: &str, hue: Hue| Zone {
+        from: decimal(from),
+        to: decimal(to),
+        label: Some(s(label)),
+        colour: Some(Colour::new(hue)),
+    };
+    let load = Node::Gauge(Gauge {
+        id: Some(s("load-ratio")),
+        value: decimal(1.12),
+        min: number(0),
+        max: number(2),
+        label: Some(s("Acute to chronic load ratio")),
+        shown: Some(s("1.12")),
+        caption: Some(s("Optimal")),
+        zones: vec![
+            zone(0.0, 0.8, "Undertraining", Hue::Violet),
+            zone(0.8, 1.3, "Optimal", Hue::Green),
+            zone(1.3, 1.5, "Overreaching", Hue::Amber),
+            zone(1.5, 2.0, "Overuse", Hue::Red),
+        ],
+        summary: Some(s("Acute to chronic load ratio: 1.12, on a scale from 0 to 2. Optimal: from 0.8 to 1.3.")),
+        hint: Some(Hint {
+            about: s("the load ratio"),
+            title: Some(s("What the ratio compares")),
+            text: s("This week's training load against the average of the four weeks before it. It describes your own pattern of training and is not advice."),
+            ..Hint::default()
+        }),
+        ..Gauge::default()
+    });
+    let vo2 = Node::Gauge(Gauge {
+        id: Some(s("vo2-max")),
+        value: decimal(44.2),
+        min: number(20),
+        max: number(70),
+        label: Some(s("VO2 max")),
+        shown: Some(s("44.2 mL/kg/min")),
+        colour: Some(Colour::blend(Hue::Green, Hue::Cyan)),
+        summary: Some(s("VO2 max: 44.2 mL/kg/min, on a scale from 20 to 70.")),
+        ..Gauge::default()
+    });
+    let body = Node::Stack(Stack {
+        gap: 4,
+        children: vec![
+            Node::Section(Section {
+                title: Some(s("Training load")),
+                style: SectionStyle::Card,
+                children: vec![load],
+                ..Section::default()
+            }),
+            Node::Section(Section {
+                title: Some(s("Fitness")),
+                style: SectionStyle::Card,
+                children: vec![vo2],
+                ..Section::default()
+            }),
+        ],
+        ..Stack::default()
+    });
+    let mut screen = Screen::new("Fitness", body);
+    screen.nav = Some(s("/fitness"));
     screen.refresh = true;
     Envelope::screen(BUILD, screen)
 }
@@ -2919,6 +2996,7 @@ fn envelopes() -> Vec<(&'static str, Envelope)> {
         ("screen-dashboard", screen_dashboard()),
         ("screen-inbox", screen_inbox()),
         ("screen-today", screen_today()),
+        ("screen-fitness", screen_fitness()),
         ("screen-device", screen_device()),
         ("ops-device", ops_device()),
         ("screen-with-toast", screen_with_toast()),
