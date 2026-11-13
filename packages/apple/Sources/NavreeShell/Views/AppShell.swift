@@ -6,6 +6,8 @@ import SwiftUI
 
 #if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
 #endif
 
 /// The app's chrome, drawn from the runtime core's view state: its
@@ -25,6 +27,8 @@ public struct AppShell: View {
     /// Set while the app is away: the system brings the scene back with it
     /// only when it ended the app itself, never after the person quit it.
     @SceneStorage("navree.restorable") private var restorable = false
+    /// This window's own name, so each window keeps what it showed apart.
+    @SceneStorage("navree.scene") private var scene = ""
 
     public init(configuration: ShellConfiguration) {
         _session = State(initialValue: Session(configuration: configuration))
@@ -33,11 +37,13 @@ public struct AppShell: View {
     public var body: some View {
         Group {
             if let client = session.client {
-                Chrome(client: client, configuration: session.configuration)
+                Chrome(client: client, configuration: session.configuration, commands: session.commands)
                     .environment(\.navreeStartsEditing, session.configuration.launch.editing)
                     .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
-                        session.window(WindowRules.width(sizeClass: WidthClass(sizeClass), points: width))
+                        session.window(WindowRules.width(sizeClass: WindowRules.system(sizeClass), points: width))
                     }
+                    .focusedSceneValue(\.navreeCommands, session.commands)
+                    .modifier(OptionalConfirmation(commands: session.commands))
             } else {
                 ContentUnavailableView(
                     "This App Can't Start", systemImage: "exclamationmark.triangle",
@@ -46,8 +52,12 @@ public struct AppShell: View {
             }
         }
         .task {
-            session.begin(restoring: restorable)
-            restorable = false
+            if scene.isEmpty { scene = UUID().uuidString }
+            session.begin(restoring: restorable, scene: scene)
+            // A Mac brings its windows back as they were, also after the
+            // person quit (unless they asked the system not to): a window it
+            // restores starts from what it showed.
+            restorable = WindowRules.restoresAfterQuit
             session.environment(traits)
         }
         .onChange(of: traits) { _, traits in session.environment(traits) }
@@ -60,9 +70,14 @@ public struct AppShell: View {
                 session.keep()
                 restorable = true
             default:
-                break
+                if WindowRules.restoresAfterQuit { session.keep() }
             }
         }
+        #if os(macOS)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            session.keep()
+        }
+        #endif
         .onOpenURL { url in session.client?.send(.openLink(url: url.absoluteString)) }
         .onReceive(NotificationCenter.default.publisher(for: AppEvents.pushToken)) { note in
             if let token = note.userInfo?["token"] as? String {
@@ -97,9 +112,13 @@ final class Session {
     let configuration: ShellConfiguration
     let client: NativeClient?
     let effects: SystemEffects?
+    /// What the menu bar's commands act on in this window.
+    let commands: WindowCommands?
     @ObservationIgnored private var heard: DeviceTraits
     @ObservationIgnored private var width: Width?
     @ObservationIgnored private var launched = false
+    /// The name what this window keeps is written under.
+    @ObservationIgnored private var kept = Session.snapshot
 
     init(configuration: ShellConfiguration) {
         self.configuration = configuration
@@ -109,21 +128,25 @@ final class Session {
         guard let core = Core(config: config) else {
             client = nil
             effects = nil
+            commands = nil
             return
         }
         let effects = SystemEffects(
             transport: configuration.transport(), signedWith: configuration.signedWith, origin: configuration.base
         )
         self.effects = effects
-        client = NativeClient(core: core, effects: effects)
+        let client = NativeClient(core: core, effects: effects)
+        self.client = client
+        commands = WindowCommands(client: client)
     }
 
     /// Starts once: from the kept snapshot when the system brings back a
     /// scene it ended, else plainly (and what was kept is let go).
-    func begin(restoring: Bool) {
+    func begin(restoring: Bool, scene: String = "") {
         guard let client, let effects, !client.began else { return }
-        let snapshot = restoring ? effects.snapshots.readData(Self.snapshot) : nil
-        if snapshot == nil { effects.snapshots.clear() }
+        kept = scene.isEmpty ? Self.snapshot : Self.snapshot + "-" + scene
+        let snapshot = restoring ? effects.snapshots.readData(kept) : nil
+        if snapshot == nil { effects.snapshots.writeData(kept, nil) }
         client.begin(restoring: snapshot)
         // The token is asked for at every launch of a build signed for push.
         if configuration.signedWith.contains(.pushNotifications) { AppEvents.registerForPush() }
@@ -133,7 +156,7 @@ final class Session {
     /// The app went away: what the core keeps for a launch the system may end.
     func keep() {
         guard let client, let effects else { return }
-        effects.snapshots.writeData(Self.snapshot, client.snapshot())
+        effects.snapshots.writeData(kept, client.snapshot())
     }
 
     func window(_ width: Width) {
@@ -226,13 +249,39 @@ enum LaunchSteps {
 
 /// What a window and the person's settings are, in the core's words.
 public enum WindowRules {
-    /// The window's width class: compact as the system's compact size class;
-    /// a regular one is medium until it is as wide as a tablet held across.
-    public static func width(sizeClass: WidthClass, points: CGFloat) -> Width {
-        switch sizeClass {
-        case .compact: .compact
-        case .regular: points < 1000 ? .medium : .expanded
-        }
+    /// The window's width class, from the size class the system gives it and
+    /// its width in points. Compact as the system's compact size class, and
+    /// for any window narrower than a phone held across (a narrow Stage
+    /// Manager window), whatever the system says; a regular one is medium
+    /// until it is as wide as a tablet held across. A window the system gives
+    /// no size class (a Mac's) is never compact: its sidebar folds away by
+    /// itself, and a Mac app never takes a phone's tab bar.
+    public static func width(sizeClass: WidthClass?, points: CGFloat) -> Width {
+        Width(rawValue: WindowClass(sizeClass: sizeClass, points: Double(points)).rawValue) ?? .compact
+    }
+
+    /// Whether windows come back as they were after the person quit the app:
+    /// a Mac's do; an iPhone's and an iPad's only after the system ended it.
+    static var restoresAfterQuit: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// The size class the system gives the window: none on a Mac.
+    static func system(_ sizeClass: UserInterfaceSizeClass?) -> WidthClass? {
+        #if os(macOS)
+        nil
+        #else
+        WidthClass(sizeClass)
+        #endif
+    }
+
+    /// The drawing's width, as the core was told it.
+    public static func window(_ width: Width) -> WindowClass {
+        WindowClass(rawValue: width.rawValue) ?? .compact
     }
 
     /// The text size as a share of the default, from the body style's size at
@@ -272,7 +321,7 @@ public enum WindowRules {
 struct Chrome: View {
     let client: NativeClient
     let configuration: ShellConfiguration
-    @Environment(\.horizontalSizeClass) private var sizeClass
+    var commands: WindowCommands?
 
     var body: some View {
         switch client.nav.stage {
@@ -303,13 +352,15 @@ struct Chrome: View {
             destinations
                 .modifier(Modals(level: 0, client: client, configuration: configuration))
                 .tint(ThemeColor.accent(client.app?.theme))
+                .modifier(WindowWidth(width: WindowRules.window(client.nav.width)))
+                .environment(\.navreeFind, commands?.finding ?? 0)
         }
     }
 
     @ViewBuilder private var destinations: some View {
         let items = client.nav.destinations
         let groups = Set(items.compactMap(\.group)).count
-        switch NavigationRules.structure(destinations: items.count, width: WidthClass(sizeClass)) {
+        switch NavigationRules.structure(destinations: items.count, width: WindowRules.window(client.nav.width).widthClass) {
         case .single:
             if let first = items.first {
                 StackView(stack: first.stack, client: client, configuration: configuration)
@@ -327,6 +378,7 @@ struct Chrome: View {
                 }
             }
             .tabViewStyle(.sidebarAdaptable)
+            .modifier(SidebarAccount(client: client))
         case .sidebarAdaptable:
             TabView(selection: selection) {
                 ForEach(DestinationGroup.of(items)) { group in
@@ -338,6 +390,7 @@ struct Chrome: View {
                 }
             }
             .tabViewStyle(.sidebarAdaptable)
+            .modifier(SidebarAccount(client: client))
         }
     }
 
@@ -418,5 +471,68 @@ enum ThemeColor {
         let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
         guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
         return (Double((value >> 16) & 0xFF) / 255, Double((value >> 8) & 0xFF) / 255, Double(value & 0xFF) / 255)
+    }
+}
+
+/// The window's width, as the core was told it, for the drawing and for the
+/// system's own components: a window the core was told is compact draws as
+/// compact everywhere, whatever the device.
+struct WindowWidth: ViewModifier {
+    let width: WindowClass
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.navreeWindow, width)
+            .environment(\.horizontalSizeClass, width == .compact ? .compact : .regular)
+    }
+}
+
+/// Where the person's account stands: a button at the trailing end of each
+/// destination's first screen on iPhone and iPad; on a Mac, the App menu and
+/// the foot of the sidebar, never the toolbar.
+enum AccountPlacement {
+    static var inToolbar: Bool {
+        #if os(macOS)
+        false
+        #else
+        true
+        #endif
+    }
+}
+
+/// The account at the foot of a Mac's sidebar, as Mail and Music keep it.
+struct SidebarAccount: ViewModifier {
+    let client: NativeClient
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        if let user = client.app?.user {
+            content.tabViewSidebarFooter {
+                AccountMenu(user: user, client: client)
+                    .menuStyle(.button)
+                    .buttonStyle(.borderless)
+                    .labelStyle(.titleAndIcon)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 6)
+            }
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}
+
+/// The question a destructive command of the menu bar asks, when the window has commands.
+struct OptionalConfirmation: ViewModifier {
+    let commands: WindowCommands?
+
+    func body(content: Content) -> some View {
+        if let commands {
+            content.modifier(CommandConfirmation(commands: commands))
+        } else {
+            content
+        }
     }
 }
