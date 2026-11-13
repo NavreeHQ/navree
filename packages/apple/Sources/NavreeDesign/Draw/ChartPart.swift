@@ -122,7 +122,8 @@ struct ChartPart: View {
 
     private func ticks(width: CGFloat) -> [Int] {
         let longest = chart.labels.map(\.count).max() ?? 4
-        let most = small ? 3 : AxisRules.most(width: Double(width), label: Double(longest) * 6.5)
+        // The plot is the chart less the values' axis at its end.
+        let most = small ? 3 : AxisRules.most(width: Double(width) - 40, label: Double(longest) * 6.5)
         return AxisRules.ticks(count: count, most: most)
     }
 

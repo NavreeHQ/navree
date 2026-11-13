@@ -303,7 +303,9 @@ import Testing
     #expect(AxisRules.ticks(count: 87, most: 4) == [0, 24, 48, 72])
     #expect(AxisRules.ticks(count: 14, most: 3) == [0, 5, 10])
     #expect(AxisRules.ticks(count: 0, most: 5) == [])
-    #expect(AxisRules.most(width: 300, label: 48) == 5)
+    // The first label starts at its mark: a gap holds a label and a half.
+    #expect(AxisRules.most(width: 300, label: 48) == 4)
+    #expect(AxisRules.most(width: 260, label: 39) == 4)
     #expect(AxisRules.most(width: 10, label: 48) == 2)
 }
 
