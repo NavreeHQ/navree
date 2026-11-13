@@ -195,6 +195,108 @@
               "summary": "Sleep cycles: 4 cycles of Deep, REM and Core. The longest, Cycle 1, was 1 h 34 min."
             }
           ]
+        },
+        {
+          "t": "section",
+          "title": "Through the night",
+          "style": "card",
+          "children": [
+            {
+              "t": "strip",
+              "id": "sleep-strip",
+              "title": "The night in half hours",
+              "key": [
+                {
+                  "name": "Deep",
+                  "colour": {
+                    "hue": "violet"
+                  }
+                },
+                {
+                  "name": "REM",
+                  "colour": {
+                    "hue": "cyan"
+                  }
+                },
+                {
+                  "name": "Core",
+                  "colour": {
+                    "hue": "blue"
+                  }
+                },
+                {
+                  "name": "Awake",
+                  "colour": {
+                    "hue": "amber"
+                  }
+                }
+              ],
+              "cells": [
+                {
+                  "label": "11:00 pm",
+                  "category": 3
+                },
+                {
+                  "label": "11:30 pm",
+                  "category": 2
+                },
+                {
+                  "label": "12:00 am",
+                  "category": 2
+                },
+                {
+                  "label": "12:30 am",
+                  "category": 0
+                },
+                {
+                  "label": "1:00 am",
+                  "category": 0
+                },
+                {
+                  "label": "1:30 am",
+                  "category": 2
+                },
+                {
+                  "label": "2:00 am",
+                  "category": 1
+                },
+                {
+                  "label": "2:30 am",
+                  "category": 2
+                },
+                {
+                  "label": "3:00 am",
+                  "category": 2
+                },
+                {
+                  "label": "3:30 am",
+                  "category": 0
+                },
+                {
+                  "label": "4:00 am",
+                  "category": 2
+                },
+                {
+                  "label": "4:30 am",
+                  "category": 1
+                },
+                {
+                  "label": "5:00 am",
+                  "category": 1
+                },
+                {
+                  "label": "5:30 am",
+                  "category": 2
+                },
+                {
+                  "label": "6:00 am",
+                  "category": 3
+                }
+              ],
+              "shares": true,
+              "summary": "The night in half hours: 15 cells from 11:00 pm to 6:00 am. Core was the most common stage, 7 of 15."
+            }
+          ]
         }
       ]
     }

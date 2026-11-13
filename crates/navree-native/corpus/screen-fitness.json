@@ -87,6 +87,101 @@
               "summary": "VO2 max: 44.2 mL/kg/min, on a scale from 20 to 70."
             }
           ]
+        },
+        {
+          "t": "section",
+          "title": "Morning run",
+          "style": "card",
+          "children": [
+            {
+              "t": "strip",
+              "id": "run-zones",
+              "title": "Heart rate zones, morning run",
+              "key": [
+                {
+                  "name": "Easy",
+                  "colour": {
+                    "hue": "blue"
+                  }
+                },
+                {
+                  "name": "Steady",
+                  "colour": {
+                    "hue": "green"
+                  }
+                },
+                {
+                  "name": "Hard",
+                  "colour": {
+                    "hue": "amber"
+                  }
+                }
+              ],
+              "cells": [
+                {
+                  "label": "7:15 am",
+                  "category": 0,
+                  "value": 92
+                },
+                {
+                  "label": "7:16 am",
+                  "category": 0,
+                  "value": 104
+                },
+                {
+                  "label": "7:17 am",
+                  "category": 1,
+                  "value": 118
+                },
+                {
+                  "label": "7:18 am",
+                  "category": 1,
+                  "value": 131
+                },
+                {
+                  "label": "7:19 am",
+                  "category": 2,
+                  "value": 142
+                },
+                {
+                  "label": "7:20 am",
+                  "category": 2,
+                  "value": 149
+                },
+                {
+                  "label": "7:21 am"
+                },
+                {
+                  "label": "7:22 am",
+                  "category": 2,
+                  "value": 151
+                },
+                {
+                  "label": "7:23 am",
+                  "category": 2,
+                  "value": 147
+                },
+                {
+                  "label": "7:24 am",
+                  "category": 1,
+                  "value": 138
+                },
+                {
+                  "label": "7:25 am",
+                  "category": 1,
+                  "value": 126
+                },
+                {
+                  "label": "7:26 am",
+                  "category": 1,
+                  "value": 112
+                }
+              ],
+              "label": "Heart rate",
+              "unit": "bpm",
+              "summary": "Heart rate zones, morning run: 12 minutes. Steady for 5, Hard for 4, Easy for 2; one minute has no reading."
+            }
+          ]
         }
       ]
     }

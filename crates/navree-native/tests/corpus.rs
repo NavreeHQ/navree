@@ -24,14 +24,15 @@ use navree_native::input::{
 };
 use navree_native::node::{
     Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Category, Centre, Chart,
-    ChartKind, ClockMoment, Code, Colour, Column, ColumnRole, DayClock, DayPager, DayPick,
+    ChartKind, ClockMoment, Code, ColorStrip, Colour, Column, ColumnRole, DayClock, DayPager,
+    DayPick,
     Delivery, Dialog,
     Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Hour, Icon, Image, Justify, Link, List, Live,
     Menu, Message, Meter, Method, MiniColumn, MiniColumns, Moment, NativeView, Node, Pane,
     PaneRole, Popover, Progress, Prominence,
     PagerWords, Purpose, Question, Region, Reorder, Rich, Ring, RingValue, Rings, RingsCentre,
-    Role, Row, RowState, Run, Section, SectionStyle, Segment,
+    Role, Row, RowState, Run, Section, SectionStyle, Segment, StripCell,
     Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table,
     TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown,
     WebRegion, Zone,
@@ -2507,6 +2508,38 @@ fn screen_sleep() -> Envelope {
         summary: Some(s("Sleep cycles: 4 cycles of Deep, REM and Core. The longest, Cycle 1, was 1 h 34 min.")),
         ..MiniColumns::default()
     });
+    // The night in half hours: every cell is the stage that half hour was in,
+    // so the strip is in proportion to time.
+    let stage = |name: &str, hue: Hue| Category {
+        name: s(name),
+        colour: Some(Colour::new(hue)),
+    };
+    let night = [
+        ("11:00 pm", 3), ("11:30 pm", 2), ("12:00 am", 2), ("12:30 am", 0), ("1:00 am", 0),
+        ("1:30 am", 2), ("2:00 am", 1), ("2:30 am", 2), ("3:00 am", 2), ("3:30 am", 0),
+        ("4:00 am", 2), ("4:30 am", 1), ("5:00 am", 1), ("5:30 am", 2), ("6:00 am", 3),
+    ];
+    let strip = Node::Strip(ColorStrip {
+        id: Some(s("sleep-strip")),
+        title: Some(s("The night in half hours")),
+        key: vec![
+            stage("Deep", Hue::Violet),
+            stage("REM", Hue::Cyan),
+            stage("Core", Hue::Blue),
+            stage("Awake", Hue::Amber),
+        ],
+        cells: night
+            .iter()
+            .map(|(label, category)| StripCell {
+                label: s(label),
+                category: Some(*category),
+                value: None,
+            })
+            .collect(),
+        shares: true,
+        summary: Some(s("The night in half hours: 15 cells from 11:00 pm to 6:00 am. Core was the most common stage, 7 of 15.")),
+        ..ColorStrip::default()
+    });
     let body = Node::Stack(Stack {
         gap: 4,
         children: vec![
@@ -2528,6 +2561,12 @@ fn screen_sleep() -> Envelope {
                 title: Some(s("Cycles")),
                 style: SectionStyle::Card,
                 children: vec![cycles],
+                ..Section::default()
+            }),
+            Node::Section(Section {
+                title: Some(s("Through the night")),
+                style: SectionStyle::Card,
+                children: vec![strip],
                 ..Section::default()
             }),
         ],
@@ -2582,6 +2621,44 @@ fn screen_fitness() -> Envelope {
         summary: Some(s("VO2 max: 44.2 mL/kg/min, on a scale from 20 to 70.")),
         ..Gauge::default()
     });
+    // A heart rate every minute of a run, each cell the zone the reading fell in.
+    // A minute with no reading has no zone.
+    let zones = ["Easy", "Steady", "Hard"];
+    let readings: [Option<i64>; 12] = [
+        Some(92), Some(104), Some(118), Some(131), Some(142), Some(149), None, Some(151),
+        Some(147), Some(138), Some(126), Some(112),
+    ];
+    let run = Node::Strip(ColorStrip {
+        id: Some(s("run-zones")),
+        title: Some(s("Heart rate zones, morning run")),
+        key: vec![
+            Category {
+                name: s(zones[0]),
+                colour: Some(Colour::new(Hue::Blue)),
+            },
+            Category {
+                name: s(zones[1]),
+                colour: Some(Colour::new(Hue::Green)),
+            },
+            Category {
+                name: s(zones[2]),
+                colour: Some(Colour::new(Hue::Amber)),
+            },
+        ],
+        cells: readings
+            .iter()
+            .enumerate()
+            .map(|(minute, reading)| StripCell {
+                label: format!("7:{:02} am", 15 + minute),
+                category: reading.map(|bpm| if bpm < 110 { 0 } else if bpm < 140 { 1 } else { 2 }),
+                value: reading.map(number),
+            })
+            .collect(),
+        label: Some(s("Heart rate")),
+        unit: Some(s("bpm")),
+        summary: Some(s("Heart rate zones, morning run: 12 minutes. Steady for 5, Hard for 4, Easy for 2; one minute has no reading.")),
+        ..ColorStrip::default()
+    });
     let body = Node::Stack(Stack {
         gap: 4,
         children: vec![
@@ -2595,6 +2672,12 @@ fn screen_fitness() -> Envelope {
                 title: Some(s("Fitness")),
                 style: SectionStyle::Card,
                 children: vec![vo2],
+                ..Section::default()
+            }),
+            Node::Section(Section {
+                title: Some(s("Morning run")),
+                style: SectionStyle::Card,
+                children: vec![run],
                 ..Section::default()
             }),
         ],

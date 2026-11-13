@@ -637,6 +637,67 @@ pub struct MiniColumns {
     pub hint: Option<Hint>,
 }
 
+/// One cell of a [`ColorStrip`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StripCell {
+    /// What it stands for: a time, a number. `11:30 pm`.
+    pub label: String,
+    /// What it was: the place of one of the strip's `key`, from 0. None for a
+    /// cell with no reading, which a client draws in the quiet colour.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<u32>,
+    /// The reading the cell stands for, when the strip is of readings: its
+    /// category is the band the reading fell in, which the server has worked
+    /// out. None for a strip of stages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<serde_json::Number>,
+}
+
+/// The most cells a client draws; a longer strip is drawn from every few cells.
+pub const MAX_CELLS: usize = 600;
+
+/// A row of cells of equal width, each in the colour of its category: the stage
+/// each half hour of a night was in, the zone each heart rate reading of a
+/// workout fell in, the state of each check of a service. The cells are equal
+/// in width, so the strip is in proportion to the number of cells, and to time
+/// only when the cells are equal in time.
+///
+/// A client lists the `key` beside the strip, each category with its colour,
+/// and with its share of the cells when `shares` is set. For a strip of
+/// readings, `label` names what the readings are and `unit` what they count.
+///
+/// The strip is named by its `summary`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ColorStrip {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What the strip shows: `The night in half hours`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// What a cell can be, each with its colour: the key of the strip.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub key: Vec<Category>,
+    /// The cells, in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cells: Vec<StripCell>,
+    /// What a reading is: `Heart rate`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// What a reading counts: `bpm`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    /// Whether the key gives each category's share of the cells.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub shares: bool,
+    /// One sentence that says the whole strip to a reader who can't see it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// A note about what the strip means, shown when asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
+}
+
 /// Where a day the person chooses is asked for.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DayPick {

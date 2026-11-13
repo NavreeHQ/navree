@@ -270,6 +270,7 @@ kinds! {
     DayPager(DayPager) => "day_pager" since 0,
     Meter(Meter) => "meter" since 0,
     Columns(MiniColumns) => "columns" since 0,
+    Strip(ColorStrip) => "strip" since 0,
 }
 
 /// A field that arrived after its type did: the type's name in the schema
@@ -710,6 +711,34 @@ impl Node {
                     })
                     .collect(),
             }),
+            Self::Strip(node) => Node::Facts(n::Facts {
+                id: node.id.clone(),
+                // Each category with its share of the cells.
+                items: node
+                    .key
+                    .iter()
+                    .enumerate()
+                    .map(|(at, category)| {
+                        let count = node
+                            .cells
+                            .iter()
+                            .filter(|cell| cell.category == u32::try_from(at).ok())
+                            .count();
+                        let share = if node.cells.is_empty() {
+                            0.0
+                        } else {
+                            count as f64 / node.cells.len() as f64 * 100.0
+                        };
+                        n::Fact {
+                            label: category.name.clone(),
+                            value: vec![Node::text(format!("{}%", share.round()))],
+                            icon: None,
+                            tone: category.colour.as_ref().and_then(|colour| colour.hue.tone()),
+                            details: Vec::new(),
+                        }
+                    })
+                    .collect(),
+            }),
             Self::Unknown(node) => return node.alt.as_deref().cloned(),
             _ => return None,
         })
@@ -767,9 +796,10 @@ mod tests {
     use super::*;
     use crate::node::{
         Avatar, Badge, Chart, ClockMoment, Colour, DayClock, DayPager, Direction, FeedRow, Figure,
-        Category, Gauge, Hour, Hue, Icon, Message, Meter, MiniColumn, MiniColumns, Moment,
-        PagerWords, Pane, PaneRole, Ring, RingValue, Rings, RingsCentre, RowState, Run, Section,
-        Segment, Stack, Standard, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown, Zone,
+        Category, ColorStrip, Gauge, Hour, Hue, Icon, Message, Meter, MiniColumn, MiniColumns,
+        Moment, PagerWords, Pane, PaneRole, Ring, RingValue, Rings, RingsCentre, RowState, Run,
+        Section, Segment, Stack, Standard, StripCell, Timeline, Tone, Toolbar, ToolbarItem, Trend,
+        Unknown, Zone,
     };
 
     #[test]
@@ -910,6 +940,43 @@ mod tests {
                 colour: Some(Colour::new(Hue::Success)),
                 ..Ring::default()
             }),
+            Node::Strip(ColorStrip {
+                id: Some("night".to_owned()),
+                key: vec![
+                    Category {
+                        name: "Deep".to_owned(),
+                        colour: Some(Colour::new(Hue::Violet)),
+                    },
+                    Category {
+                        name: "Awake".to_owned(),
+                        colour: Some(Colour::new(Hue::Warning)),
+                    },
+                ],
+                cells: vec![
+                    StripCell {
+                        label: "11:00 pm".to_owned(),
+                        category: Some(1),
+                        value: None,
+                    },
+                    StripCell {
+                        label: "11:30 pm".to_owned(),
+                        category: Some(0),
+                        value: None,
+                    },
+                    StripCell {
+                        label: "12:00 am".to_owned(),
+                        category: Some(0),
+                        value: None,
+                    },
+                    // A cell with no reading is in no category.
+                    StripCell {
+                        label: "12:30 am".to_owned(),
+                        ..StripCell::default()
+                    },
+                ],
+                shares: true,
+                ..ColorStrip::default()
+            }),
             Node::Columns(MiniColumns {
                 id: Some("cycles".to_owned()),
                 parts: vec![
@@ -1046,7 +1113,8 @@ mod tests {
             | Kind::DayClock
             | Kind::DayPager
             | Kind::Meter
-            | Kind::Columns => 1,
+            | Kind::Columns
+            | Kind::Strip => 1,
             kind => kind.since(),
         }
     }
@@ -1161,6 +1229,23 @@ mod tests {
         };
         assert_eq!(progress.label.as_deref(), Some("Load ratio: 1.12 (Overuse)"));
         assert_eq!(progress.value, Some(560));
+    }
+
+    #[test]
+    fn a_strip_becomes_each_category_with_its_share_of_the_cells() {
+        let strip = part(Kind::Strip);
+        let Downgraded::Node(Node::Facts(facts)) = downgrade_by(strip, 0, only(Kind::Strip)) else {
+            panic!("a strip becomes facts");
+        };
+        assert_eq!(facts.id.as_deref(), Some("night"));
+        let share = |at: usize| match &facts.items[at].value[..] {
+            [Node::Text(text)] => text.value.clone(),
+            other => panic!("{other:?}"),
+        };
+        // Two of the four cells are deep, one is awake and one has no reading.
+        assert_eq!((facts.items[0].label.as_str(), share(0)), ("Deep", "50%".to_owned()));
+        assert_eq!((facts.items[1].label.as_str(), share(1)), ("Awake", "25%".to_owned()));
+        assert_eq!(facts.items[1].tone, Some(Tone::Warning));
     }
 
     #[test]

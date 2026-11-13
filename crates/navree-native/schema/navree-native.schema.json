@@ -1666,6 +1666,107 @@
       "x-kind": "enum",
       "x-since": 0
     },
+    "ColorStrip": {
+      "properties": {
+        "cells": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/StripCell"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "key": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Category"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "shares": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "Colour": {
       "properties": {
         "dark": {
@@ -6131,6 +6232,21 @@
           "required": [
             "t"
           ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ColorStrip"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "strip"
+            }
+          },
+          "required": [
+            "t"
+          ]
         }
       ],
       "x-kind": "union",
@@ -6378,6 +6494,11 @@
         {
           "tag": "columns",
           "type": "MiniColumns",
+          "x-since": 0
+        },
+        {
+          "tag": "strip",
+          "type": "ColorStrip",
           "x-since": 0
         }
       ]
@@ -9774,6 +9895,47 @@
       ],
       "type": "string",
       "x-kind": "enum",
+      "x-since": 0
+    },
+    "StripCell": {
+      "properties": {
+        "category": {
+          "anyOf": [
+            {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "type": "string",
+          "x-since": 0
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object",
+      "x-kind": "object",
       "x-since": 0
     },
     "SystemSymbol": {
