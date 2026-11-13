@@ -3,6 +3,45 @@ title: "Release notes"
 description: "What Navree 1.0.0, the first release, includes: the framework and ORM, Navree UI, the tools, packages, agent skills and CLI, and the limits that hold."
 ---
 
+## Navree 1.1.0
+
+Navree 1.1.0 is a minor release. To update, run `cargo update` in your app, which takes it within the range your `Cargo.toml` allows, and `cargo install navree-cli --force` for the command-line tool.
+
+### Added
+
+- Radial charts in `navree::ui::charts`: `Ring` (one value from twelve o'clock, with a second lap past its goal), `Rings` (up to six values inside each other), `Gauge` (an open arc on any scale, with zones) and `DayClock` (24 wedges by value, category and level, with moments and an hour band). Each has its table and summary, and a size per screen width.
+- Linear charts: `Meter` (segments of a whole, with shares, a legend and detail lines), `MiniColumns` (one stacked column per item), `ColorStrip` (a cell per item in its category's or band's colour) and `RangeScale` (a value on a gradient track). `Trend` draws an arrow and a signed change, and a `Stat` can carry one.
+- Grid charts: `CalendarHeatmap` (a day per cell in weeks, a five-step scale, month labels and a "Less … More" legend), `MatrixHeatmap` (a diverging scale over pairs, focusable cells), `Scatter` (translucent points, with an identity line) and `RelationList` (pairs ranked by a signed value).
+- Options for every chart: gradients, theme inks and glow (`Gradient`, `Ink`); colour by value or threshold (`ColorScale`); motion that is off by default and off under reduced motion (`Motion`, `CountUp`); axis, gridline and tick switches and padded or fixed domains (`Axis`, `Gridlines`, `Ticks`, `Domain`); reference levels and bands (`Reference`, `Zone`); point dots, an active dot, step curves over named levels and big-value tooltips (`Dots`, `ActiveDot`, `Curve`, `TooltipStyle`); `Chart::baseline`, `Chart::lanes` and `NumberFormat::clock`. `Sparkline`, `Progress` and `Bars` take the same paint, and draw what they drew before when none is set. Each chart family links a stylesheet of its own.
+- App blocks: `AppSheet`, `AppFont` and `AppImage` (an app's own stylesheet, font and picture, compiled in and served by content hash), a `Stat` that grows into a dashboard tile (icon, unit, status, a small chart beside or under the figure, a link), `InfoTip`, `ChartSkeleton`, `BreathingGuide`, `Dock` (with `Dock::below`), `DayPager`, `CopyField`, `Grid::ratio` and `Grid::fit`. They share one stylesheet and load no script.
+- Marketing blocks for a public site, drawn on the server with no script: `SitePage`, `SiteHeader`, `Hero`, `Section`, `LogoCloud`, `FeatureGrid`, `FeatureRows`, `StatBand`, `BrowserFrame` and `PhoneFrame`, `Testimonials`, `Pricing`, `Faq`, `CtaBand`, `Newsletter`, `LegalPage` and `SiteFooter` with its theme toggle. `Picture` writes `srcset`, `sizes`, AVIF and WebP sources and light and dark versions.
+- `View::seo` writes a page's description, robots, canonical and language links, social cards and JSON-LD (escaped so no text can close the block), and `Seo::problems` lists what a search result would hold against the page. `Sitemap` and `RobotsTxt` answer as files.
+- `AuthPages` draws the sign-in pages in the app's look (its shell's theme, sheets, fonts and title template, or `appearance`, `stylesheet`, `font`, `aside` and `view` without one), on `AuthLayout`. `AuthPages::sign_up()` adds a sign-up page when `auth.registration` is on, and `AuthPages::after_sign_out` sets where a signed-out browser goes.
+- `AppPage::topbar` puts a page's own part in the middle of the top bar, and `Shell::title_template` with `AppPage::document_title` titles the browser tab apart from the heading. `ThemeMenu` shows only the modes when one theme is on offer.
+- `RouteDef::on_guest_or`: one address that answers a guest with one handler and a signed-in reader with another, such as a public home page and the app's home.
+- `csrf::SameOriginOnly`: a module names a path whose posts are checked by their origin in place of the CSRF token. `Session::is_resumed` says whether the request came with the session's cookie.
+
+### Changed
+
+- Every form of `AuthPages` needs the session's cookie: a state-changing request to those pages without it is refused with a 403 before anything runs. A form left open until its session expired is drawn again with "Your session expired. Please try again.", keeping nothing that was typed.
+- `POST /auth/register` takes five requests a minute per client, as the sign-up page does.
+- navree-ui's appearance route checks the request's origin in place of the CSRF token, so a theme toggle on a page cached for everyone works for a reader with a session too, and it goes back only to a path of this site.
+- An `on_guest_or` answer to a signed-in reader goes out as `Cache-Control: private, no-store` unless its handler kept it private, without the headers a CDN reads in place of `Cache-Control`, and with `Vary: Cookie, Authorization`.
+- A `ColorScale` on a `Gauge` or a `Ring` reads its thresholds as values in the chart's own units, as every other chart does.
+- A `RelationList` is a named group of list rows a screen reader walks, not a picture; a `Gauge` on a scale that starts above zero says in its summary and table when the value is below or above the scale; a list cut at 50 says so under `only_significant()` too.
+- Warm chart colours keep their hue in light mode: gradients and vivid stops take a deeper end per theme (`--chart-N-vivid`), so orange and amber no longer mix toward brown.
+
+### Fixed
+
+- A region whose answer held a lazy part of its own (a lazy tab inside a lazy tab) replaced the whole page with that answer. A page the toolkit draws for a region's fetch is now marked as the region's fragment.
+- A light and dark toggle, or a theme menu without its themes, turned a page of another theme into the default theme: the appearance cookie now keeps only what was chosen.
+
+### Security
+
+- Login CSRF from a sibling subdomain, or from a browser that doesn't say where it posts from, is closed by refusing a sign-in page post without the session's cookie. Every such refusal is logged on `navree::security` and audited as `csrf.mismatch`.
+- A signed-in reader's page at an `on_guest_or` address is kept out of shared caches whatever its handler set. A CDN or proxy in front must still skip its cache for requests that carry the session cookie, since several ignore `Vary: Cookie`; the docs say so.
+- The security docs describe a risk that remains: someone can register an account with another person's address before that person signs up, and the account keeps their password after the owner verifies it. Keep registration closed, or refuse password sign-in for an unverified address with a sign-in policy, until a setting for it ships.
+
 ## Navree 1.0.2
 
 Navree 1.0.2 is a patch release. To update, run `cargo update` in your app, which takes it within the range your `Cargo.toml` allows, and `cargo install navree-cli --force` for the command-line tool.
