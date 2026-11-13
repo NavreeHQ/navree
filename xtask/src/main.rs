@@ -1,4 +1,5 @@
-//! `cargo xtask release <command>`: see the library's documentation.
+//! `cargo xtask release <command>` and `cargo xtask native-models`: see the
+//! library's documentation.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -6,12 +7,18 @@ use std::time::SystemTime;
 
 use xtask::metadata::Workspace;
 use xtask::publish::{Flags, Outcome};
-use xtask::{check, order, prepare, publish, stage, time};
+use xtask::{check, native_models, order, prepare, publish, stage, time};
 
 const USAGE: &str = "\
 cargo xtask release <command>
+cargo xtask native-models [--check]
 
-Commands:
+native-models [--check]
+    Writes the Kotlin and Swift models of Navree Native's protocol from
+    crates/navree-native/schema/navree-native.schema.json; with --check,
+    writes nothing and fails when a written model is stale.
+
+Release commands:
   prepare <version> [--date YYYY-MM-DD]
       Sets <version> in the workspace, its exact internal requirements, the
       npm packages and Cargo.lock, and adds its CHANGELOG.md section.
@@ -52,6 +59,8 @@ fn main() -> ExitCode {
         ["release", "stage"] => cmd_stage(false),
         ["release", "stage", "--clean"] => cmd_stage(true),
         ["release", "publish", rest @ ..] => cmd_publish(rest),
+        ["native-models"] => cmd_native_models(false),
+        ["native-models", "--check"] => cmd_native_models(true),
         ["help" | "--help" | "-h"] | ["release"] | ["release", "help" | "--help" | "-h"] | [] => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
@@ -205,6 +214,32 @@ fn cmd_publish(args: &[&str]) -> Result<ExitCode, String> {
             Ok(ExitCode::from(2))
         }
     }
+}
+
+fn cmd_native_models(check: bool) -> Result<ExitCode, String> {
+    let root = root();
+    let stale = native_models::run(&root, check)?;
+    if !check {
+        println!(
+            "wrote {} and {} from {}",
+            native_models::KOTLIN,
+            native_models::SWIFT,
+            native_models::SCHEMA
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
+    if stale.is_empty() {
+        println!("the native models are what {} describes", native_models::SCHEMA);
+        return Ok(ExitCode::SUCCESS);
+    }
+    for path in &stale {
+        eprintln!(
+            "- {} is stale",
+            path.strip_prefix(&root).unwrap_or(path).display()
+        );
+    }
+    eprintln!("write them again with `cargo xtask native-models`");
+    Ok(ExitCode::FAILURE)
 }
 
 fn value<'a>(args: &mut std::slice::Iter<'_, &'a str>, flag: &str) -> Result<&'a str, String> {

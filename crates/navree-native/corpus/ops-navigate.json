@@ -1,0 +1,40 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "ops": [
+    {
+      "op": "toast",
+      "tone": "info",
+      "text": "This demo has no accounts to sign out of."
+    },
+    {
+      "op": "toast",
+      "tone": "success",
+      "text": "CH-1042 was archived.",
+      "action": {
+        "label": "Undo",
+        "href": "/orders/1042/unarchive",
+        "post": true,
+        "fields": [
+          {
+            "name": "_csrf",
+            "value": "tok"
+          }
+        ]
+      }
+    },
+    {
+      "op": "navigate",
+      "href": "/",
+      "present": "root"
+    },
+    {
+      "op": "navigate_external",
+      "href": "https://pay.example/session/7"
+    },
+    {
+      "op": "reload"
+    }
+  ]
+}

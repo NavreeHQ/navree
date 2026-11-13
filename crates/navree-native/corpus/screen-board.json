@@ -1,0 +1,373 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "screen": {
+    "title": "Board",
+    "nav": "/board",
+    "actions": [
+      {
+        "t": "toolbar",
+        "items": [
+          {
+            "title": "Clear done",
+            "icon": {
+              "name": "trash-2",
+              "paths": [
+                "M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"
+              ],
+              "symbol": {
+                "apple": "trash",
+                "apple_filled": "trash.fill",
+                "material": "delete"
+              }
+            },
+            "standard": "delete",
+            "role": "destructive",
+            "ask": {
+              "title": "Clear 1 done card?",
+              "confirm": "Clear"
+            },
+            "action": {
+              "t": "request",
+              "method": "post",
+              "href": "/board/clear-done",
+              "fields": [
+                {
+                  "name": "_csrf",
+                  "value": "tok"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "body": {
+      "t": "stack",
+      "gap": 3,
+      "children": [
+        {
+          "t": "menu",
+          "id": "board-view",
+          "label": "View",
+          "items": [
+            {
+              "t": "button",
+              "label": "Show archived cards",
+              "checked": false,
+              "action": {
+                "t": "navigate",
+                "href": "/board?archived=1"
+              }
+            },
+            {
+              "t": "divider"
+            },
+            {
+              "t": "button",
+              "label": "By due date",
+              "checked": true,
+              "one_of": "order",
+              "action": {
+                "t": "navigate",
+                "href": "/board?order=due"
+              }
+            },
+            {
+              "t": "button",
+              "label": "By who it is for",
+              "checked": false,
+              "one_of": "order",
+              "action": {
+                "t": "navigate",
+                "href": "/board?order=owner"
+              }
+            }
+          ]
+        },
+        {
+          "t": "form",
+          "id": "watch",
+          "method": "post",
+          "action": "/board/watch",
+          "hidden": [
+            {
+              "name": "_csrf",
+              "value": "tok"
+            }
+          ],
+          "children": [
+            {
+              "t": "field",
+              "name": "watching",
+              "label": "Tell me when cards move",
+              "input": {
+                "t": "toggle",
+                "on": true
+              },
+              "changed": {
+                "t": "submit"
+              }
+            }
+          ]
+        },
+        {
+          "t": "grid",
+          "cols": 3,
+          "min": 220,
+          "gap": 3,
+          "children": [
+            {
+              "t": "section",
+              "title": "To do",
+              "children": [
+                {
+                  "t": "list",
+                  "id": "board-todo",
+                  "children": [
+                    {
+                      "t": "row",
+                      "id": "c-7",
+                      "key": "7",
+                      "title": "Restock Brass Kadhai",
+                      "subtitle": "Ravneet Kaur",
+                      "action": {
+                        "t": "navigate",
+                        "href": "/cards/c-7",
+                        "present": "push"
+                      }
+                    },
+                    {
+                      "t": "row",
+                      "id": "c-8",
+                      "key": "8",
+                      "title": "Photograph the Diwali range",
+                      "subtitle": "Jaspreet Singh",
+                      "action": {
+                        "t": "navigate",
+                        "href": "/cards/c-8",
+                        "present": "push"
+                      }
+                    }
+                  ],
+                  "reorder": {
+                    "href": "/cards/move",
+                    "key": "todo",
+                    "group": "board",
+                    "fields": [
+                      {
+                        "name": "_csrf",
+                        "value": "tok"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "t": "section",
+              "title": "Doing",
+              "children": [
+                {
+                  "t": "list",
+                  "id": "board-doing",
+                  "children": [
+                    {
+                      "t": "row",
+                      "id": "c-5",
+                      "key": "5",
+                      "title": "Call the Jalandhar supplier",
+                      "subtitle": "Amandeep Gill",
+                      "action": {
+                        "t": "navigate",
+                        "href": "/cards/c-5",
+                        "present": "push"
+                      }
+                    }
+                  ],
+                  "reorder": {
+                    "href": "/cards/move",
+                    "key": "doing",
+                    "group": "board",
+                    "limit": 3,
+                    "fields": [
+                      {
+                        "name": "_csrf",
+                        "value": "tok"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "t": "section",
+              "title": "Done",
+              "children": [
+                {
+                  "t": "list",
+                  "id": "board-done",
+                  "children": [
+                    {
+                      "t": "row",
+                      "id": "c-2",
+                      "key": "2",
+                      "title": "Archived 14 old cards",
+                      "subtitle": "The nightly clean-up",
+                      "action": {
+                        "t": "navigate",
+                        "href": "/cards/c-2",
+                        "present": "push"
+                      },
+                      "muted": true
+                    }
+                  ],
+                  "reorder": {
+                    "href": "/cards/move",
+                    "key": "done",
+                    "group": "board",
+                    "fields": [
+                      {
+                        "name": "_csrf",
+                        "value": "tok"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "t": "feed_row",
+          "id": "board-event-77",
+          "icon": {
+            "name": "refresh-cw",
+            "symbol": {
+              "apple": "arrow.clockwise",
+              "material": "refresh"
+            }
+          },
+          "runs": [
+            {
+              "text": "The board was tidied up overnight"
+            }
+          ],
+          "time": "03:00",
+          "muted": true
+        },
+        {
+          "t": "button",
+          "label": "New card",
+          "icon": {
+            "name": "plus",
+            "paths": [
+              "M5 12h14M12 5v14"
+            ],
+            "symbol": {
+              "apple": "plus",
+              "material": "add"
+            }
+          },
+          "role": "create",
+          "action": {
+            "t": "navigate",
+            "href": "/cards/new",
+            "present": "task"
+          }
+        },
+        {
+          "t": "sheet",
+          "id": "new-card",
+          "title": "New card",
+          "task": true,
+          "children": [
+            {
+              "t": "form",
+              "id": "card-form",
+              "method": "post",
+              "action": "/cards",
+              "hidden": [
+                {
+                  "name": "_csrf",
+                  "value": "tok"
+                }
+              ],
+              "children": [
+                {
+                  "t": "field",
+                  "name": "title",
+                  "label": "Title",
+                  "required": true,
+                  "input": {
+                    "t": "text"
+                  }
+                },
+                {
+                  "t": "field",
+                  "name": "budget",
+                  "label": "Budget",
+                  "input": {
+                    "t": "text",
+                    "kind": "decimal",
+                    "prefix": "₹"
+                  }
+                },
+                {
+                  "t": "field",
+                  "name": "estimate",
+                  "label": "Estimate",
+                  "input": {
+                    "t": "text",
+                    "kind": "number",
+                    "suffix": "hours"
+                  }
+                },
+                {
+                  "t": "field",
+                  "id": "card-notes",
+                  "name": "notes",
+                  "label": "Notes",
+                  "help": "0/160",
+                  "input": {
+                    "t": "text",
+                    "kind": "multiline",
+                    "max_length": 160
+                  },
+                  "changed": {
+                    "t": "commands",
+                    "list": [
+                      {
+                        "c": "count",
+                        "id": "notes-count",
+                        "max": 160
+                      }
+                    ]
+                  }
+                },
+                {
+                  "t": "text",
+                  "id": "notes-count",
+                  "value": "0/160",
+                  "muted": true
+                }
+              ]
+            }
+          ],
+          "actions": [
+            {
+              "t": "button",
+              "label": "Add card",
+              "role": "confirm",
+              "action": {
+                "t": "submit",
+                "form": "card-form"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

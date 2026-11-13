@@ -14,6 +14,10 @@
 //! | `stage [--clean]` | copies the skills, the docs and the UI catalog into Navigator's crate ([`stage`]) |
 //! | `publish` | publishes every crate in dependency order, resumably ([`publish`]) |
 //!
+//! And outside the release, `cargo xtask native-models [--check]` writes the
+//! Kotlin and Swift models of Navree Native's protocol from its schema, or
+//! says which are stale ([`native_models`]).
+//!
 //! Nothing here keeps state of its own: the registry's index says which
 //! crates already have the version, so a publish that stops part-way is
 //! started again with the same command.
@@ -23,6 +27,7 @@ pub mod check;
 pub mod docs;
 pub mod index;
 pub mod metadata;
+pub mod native_models;
 pub mod order;
 pub mod prepare;
 pub mod process;

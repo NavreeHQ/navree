@@ -1,0 +1,525 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "screen": {
+    "title": "Sleep",
+    "nav": "/sleep",
+    "refresh": true,
+    "body": {
+      "t": "stack",
+      "gap": 4,
+      "children": [
+        {
+          "t": "day_pager",
+          "id": "night",
+          "day": "Thursday night",
+          "date": "2026-11-12",
+          "previous": "/sleep?date=2026-11-11",
+          "next": "/sleep?date=2026-11-13",
+          "today": "/sleep",
+          "first": "2026-01-02",
+          "last": "2026-11-13",
+          "pick": {
+            "href": "/sleep",
+            "name": "date"
+          },
+          "scores": {
+            "t": "ring",
+            "value": 78,
+            "max": 100,
+            "shown": "78",
+            "colour": {
+              "hue": "violet"
+            },
+            "centre": "nothing",
+            "prominence": "low",
+            "summary": "Sleep score: 78 of 100, 78%."
+          },
+          "words": {
+            "previous": "Previous night",
+            "next": "Next night",
+            "choose": "Choose a night"
+          }
+        },
+        {
+          "t": "grid",
+          "cols": 2,
+          "min": 150,
+          "gap": 3,
+          "children": [
+            {
+              "t": "figure",
+              "id": "asleep",
+              "label": "Time asleep",
+              "value": "7 h 12 min",
+              "icon": {
+                "name": "moon",
+                "paths": [
+                  "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"
+                ]
+              },
+              "trend": {
+                "direction": "up",
+                "text": "18 min",
+                "tone": "success"
+              },
+              "detail": "against the week before",
+              "colour": {
+                "hue": "violet"
+              },
+              "action": {
+                "t": "navigate",
+                "href": "/sleep/week"
+              }
+            },
+            {
+              "t": "figure",
+              "id": "oxygen",
+              "label": "Blood oxygen",
+              "value": "96",
+              "unit": "%",
+              "icon": {
+                "name": "droplet",
+                "paths": [
+                  "M12 22a7 7 0 0 0 7-7c0-4-7-13-7-13S5 11 5 15a7 7 0 0 0 7 7z"
+                ]
+              },
+              "detail": "overnight average",
+              "colour": {
+                "hue": "info"
+              }
+            }
+          ]
+        },
+        {
+          "t": "section",
+          "title": "Stages",
+          "style": "card",
+          "children": [
+            {
+              "t": "meter",
+              "id": "sleep-stages",
+              "title": "Sleep stages, last night",
+              "segments": [
+                {
+                  "name": "Deep",
+                  "value": 83,
+                  "shown": "1 h 23 min",
+                  "detail": "19% of the night",
+                  "colour": {
+                    "hue": "violet"
+                  }
+                },
+                {
+                  "name": "REM",
+                  "value": 96,
+                  "shown": "1 h 36 min",
+                  "detail": "22% of the night",
+                  "colour": {
+                    "hue": "cyan"
+                  }
+                },
+                {
+                  "name": "Core",
+                  "value": 253,
+                  "shown": "4 h 13 min",
+                  "detail": "56% of the night",
+                  "colour": {
+                    "hue": "blue"
+                  }
+                },
+                {
+                  "name": "Awake",
+                  "value": 21,
+                  "shown": "21 min",
+                  "detail": "5% of the night",
+                  "colour": {
+                    "hue": "amber"
+                  }
+                }
+              ],
+              "summary": "Sleep stages, last night: Deep 1 h 23 min, REM 1 h 36 min, Core 4 h 13 min, Awake 21 min."
+            }
+          ],
+          "hint": {
+            "about": "the estimated stages",
+            "title": "An estimate",
+            "text": "Stages are estimated from movement and heart rate while you sleep. They show a pattern in your nights, not a measurement of your brain.",
+            "mark": "info"
+          }
+        },
+        {
+          "t": "section",
+          "title": "Cycles",
+          "style": "card",
+          "children": [
+            {
+              "t": "columns",
+              "id": "sleep-cycles",
+              "title": "Sleep cycles",
+              "parts": [
+                {
+                  "name": "Deep",
+                  "colour": {
+                    "hue": "violet"
+                  },
+                  "detail": "1 h 23 min"
+                },
+                {
+                  "name": "REM",
+                  "colour": {
+                    "hue": "cyan"
+                  },
+                  "detail": "1 h 36 min"
+                },
+                {
+                  "name": "Core",
+                  "colour": {
+                    "hue": "blue"
+                  },
+                  "detail": "4 h 13 min"
+                }
+              ],
+              "columns": [
+                {
+                  "label": "Cycle 1",
+                  "values": [
+                    36,
+                    18,
+                    40
+                  ],
+                  "shown": "1 h 34 min"
+                },
+                {
+                  "label": "Cycle 2",
+                  "values": [
+                    22,
+                    30,
+                    41
+                  ],
+                  "shown": "1 h 33 min"
+                },
+                {
+                  "label": "Cycle 3",
+                  "values": [
+                    14,
+                    36,
+                    38
+                  ],
+                  "shown": "1 h 28 min"
+                },
+                {
+                  "label": "Cycle 4",
+                  "values": [
+                    11,
+                    12,
+                    34
+                  ],
+                  "shown": "57 min"
+                }
+              ],
+              "highlight": 2,
+              "summary": "Sleep cycles: 4 cycles of Deep, REM and Core. The longest, Cycle 1, was 1 h 34 min."
+            }
+          ]
+        },
+        {
+          "t": "section",
+          "title": "Through the night",
+          "style": "card",
+          "children": [
+            {
+              "t": "strip",
+              "id": "sleep-strip",
+              "title": "The night in half hours",
+              "key": [
+                {
+                  "name": "Deep",
+                  "colour": {
+                    "hue": "violet"
+                  },
+                  "detail": "19% of the night"
+                },
+                {
+                  "name": "REM",
+                  "colour": {
+                    "hue": "cyan"
+                  },
+                  "detail": "22% of the night"
+                },
+                {
+                  "name": "Core",
+                  "colour": {
+                    "hue": "blue"
+                  },
+                  "detail": "56% of the night"
+                },
+                {
+                  "name": "Awake",
+                  "colour": {
+                    "hue": "amber"
+                  },
+                  "detail": "5% of the night"
+                }
+              ],
+              "cells": [
+                {
+                  "label": "11:00 pm",
+                  "category": 3
+                },
+                {
+                  "label": "11:30 pm",
+                  "category": 2
+                },
+                {
+                  "label": "12:00 am",
+                  "category": 2
+                },
+                {
+                  "label": "12:30 am",
+                  "category": 0
+                },
+                {
+                  "label": "1:00 am",
+                  "category": 0
+                },
+                {
+                  "label": "1:30 am",
+                  "category": 2
+                },
+                {
+                  "label": "2:00 am",
+                  "category": 1
+                },
+                {
+                  "label": "2:30 am",
+                  "category": 2
+                },
+                {
+                  "label": "3:00 am",
+                  "category": 2
+                },
+                {
+                  "label": "3:30 am",
+                  "category": 0
+                },
+                {
+                  "label": "4:00 am",
+                  "category": 2
+                },
+                {
+                  "label": "4:30 am",
+                  "category": 1
+                },
+                {
+                  "label": "5:00 am",
+                  "category": 1
+                },
+                {
+                  "label": "5:30 am",
+                  "category": 2
+                },
+                {
+                  "label": "6:00 am",
+                  "category": 3
+                }
+              ],
+              "shares": true,
+              "summary": "The night in half hours: 15 cells from 11:00 pm to 6:00 am. Core was the most common stage, 7 of 15."
+            }
+          ]
+        },
+        {
+          "t": "section",
+          "title": "Overnight heart rate",
+          "style": "card",
+          "children": [
+            {
+              "t": "range",
+              "id": "resting-rate",
+              "title": "Resting heart rate overnight",
+              "value": 54,
+              "min": 40,
+              "max": 120,
+              "unit": "bpm",
+              "shown": "54",
+              "low": "Slower",
+              "high": "Faster",
+              "zones": [
+                {
+                  "from": 40,
+                  "to": 50,
+                  "label": "Lower",
+                  "colour": {
+                    "hue": "cyan"
+                  }
+                },
+                {
+                  "from": 50,
+                  "to": 70,
+                  "label": "Usual",
+                  "colour": {
+                    "hue": "success"
+                  }
+                },
+                {
+                  "from": 70,
+                  "to": 90,
+                  "label": "Higher",
+                  "colour": {
+                    "hue": "warning"
+                  }
+                },
+                {
+                  "from": 90,
+                  "to": 120,
+                  "label": "Much higher",
+                  "colour": {
+                    "hue": "danger"
+                  }
+                }
+              ],
+              "summary": "Resting heart rate overnight: 54 bpm, on a scale from 40 to 120 bpm. Usual: 50 to 70 bpm.",
+              "hint": {
+                "about": "the resting heart rate",
+                "text": "The lowest heart rate you held while still. It describes your own nights and moves with sleep, training and the weather; it is not advice.",
+                "mark": "info"
+              }
+            }
+          ]
+        },
+        {
+          "t": "section",
+          "title": "The week",
+          "style": "card",
+          "children": [
+            {
+              "t": "chart",
+              "id": "sleep-hypnogram",
+              "kind": "area",
+              "title": "Sleep stages through the night",
+              "labels": [
+                "11:00 pm",
+                "11:30 pm",
+                "12:00 am",
+                "12:30 am",
+                "1:00 am",
+                "1:30 am",
+                "2:00 am",
+                "2:30 am",
+                "3:00 am",
+                "3:30 am",
+                "4:00 am",
+                "4:30 am"
+              ],
+              "series": [
+                {
+                  "label": "Stage",
+                  "values": [
+                    3,
+                    1,
+                    1,
+                    0,
+                    0,
+                    1,
+                    2,
+                    1,
+                    1,
+                    0,
+                    1,
+                    2
+                  ],
+                  "colour": {
+                    "hue": "violet"
+                  }
+                }
+              ],
+              "levels": [
+                "Deep",
+                "Core",
+                "REM",
+                "Awake"
+              ],
+              "curve": "step",
+              "summary": "Sleep stages through the night: awake at 11:00 pm, then Core, Deep from 12:30 am to 1:30 am, and REM at 2:00 am and 4:30 am."
+            },
+            {
+              "t": "chart",
+              "id": "sleep-week",
+              "kind": "bar",
+              "title": "Hours asleep, last 7 nights",
+              "labels": [
+                "Fri",
+                "Sat",
+                "Sun",
+                "Mon",
+                "Tue",
+                "Wed",
+                "Thu"
+              ],
+              "series": [
+                {
+                  "label": "Asleep",
+                  "values": [
+                    6.8,
+                    7.4,
+                    7,
+                    6.2,
+                    7.9,
+                    8.1,
+                    7.2
+                  ],
+                  "shown": [
+                    "6 h 48 min",
+                    "7 h 24 min",
+                    "7 h",
+                    "6 h 12 min",
+                    "7 h 54 min",
+                    "8 h 6 min",
+                    "7 h 12 min"
+                  ],
+                  "colour": {
+                    "hue": "violet"
+                  }
+                }
+              ],
+              "x": {
+                "name": "Night"
+              },
+              "y": {
+                "unit": "h",
+                "min": 0,
+                "max": 10
+              },
+              "references": [
+                {
+                  "value": 8,
+                  "label": "Your need: 8 h",
+                  "colour": {
+                    "hue": "amber"
+                  }
+                }
+              ],
+              "zones": [
+                {
+                  "from": 7,
+                  "to": 9,
+                  "label": "Usual range",
+                  "colour": {
+                    "hue": "green"
+                  }
+                }
+              ],
+              "summary": "Hours asleep, last 7 nights: from 6 h 12 min on Monday to 8 h 6 min on Wednesday. Your need is 8 h.",
+              "hint": {
+                "about": "hours asleep",
+                "text": "Time asleep each night, against the hours you said you need. It describes your own nights and is not advice."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

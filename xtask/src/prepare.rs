@@ -189,7 +189,15 @@ pub fn prepare(root: &Path, version: &str, date: &str) -> Result<Vec<PathBuf>, S
     let workspace = Workspace::load(root)?;
     let mut changed = Vec::new();
 
-    let internal: Vec<String> = workspace.members.iter().map(|p| p.name.clone()).collect();
+    // A crate with a version of its own (a protocol at 0.x) keeps it, and so
+    // does the requirement that names it.
+    let current = crate::metadata::workspace_version(root)?;
+    let internal: Vec<String> = workspace
+        .members
+        .iter()
+        .filter(|package| package.version == current)
+        .map(|package| package.name.clone())
+        .collect();
     let manifest = root.join("Cargo.toml");
     let text = read(&manifest)?;
     let new = set_root_manifest(&text, version, &internal)?;

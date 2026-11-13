@@ -4328,6 +4328,7 @@ dependencies = [
  "navree-http-client",
  "navree-kernel",
  "navree-mail",
+ "navree-notify",
  "navree-observe",
  "navree-openapi",
  "navree-orm",
@@ -5457,6 +5458,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-native"
+version = "1.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "navree-native-core"
+version = "0.1.0"
+dependencies = [
+ "jni-sys",
+ "navree-native",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+]
+
+[[package]]
 name = "navree-navigator"
 version = "1.1.0"
 dependencies = [
@@ -5979,6 +5999,8 @@ dependencies = [
  "navree-kernel",
  "navree-openapi",
  "navree-orm",
+ "navree-session",
+ "navree-social",
  "navree-testing",
  "ring",
  "serde",
@@ -6163,6 +6185,7 @@ dependencies = [
  "navree-http",
  "navree-kernel",
  "navree-markdown",
+ "navree-native",
  "navree-orm",
  "navree-phone",
  "navree-storage",

@@ -1,0 +1,359 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "screen": {
+    "title": "Orders",
+    "back": {
+      "title": "Dashboard",
+      "href": "/"
+    },
+    "nav": "/orders",
+    "actions": [
+      {
+        "t": "button",
+        "label": "New order",
+        "icon": {
+          "name": "plus",
+          "paths": [
+            "M5 12h14M12 5v14"
+          ]
+        },
+        "role": "create",
+        "prominence": "high",
+        "action": {
+          "t": "navigate",
+          "href": "/orders/new",
+          "present": "sheet"
+        }
+      }
+    ],
+    "refresh": true,
+    "body": {
+      "t": "region",
+      "id": "orders-region",
+      "src": "/orders",
+      "live": {
+        "src": "/broadcasting/stream",
+        "event": "orders"
+      },
+      "children": [
+        {
+          "t": "table",
+          "id": "orders",
+          "caption": "Orders",
+          "columns": [
+            {
+              "key": "number",
+              "label": "Order",
+              "sort": {
+                "href": "/orders?sort=number"
+              },
+              "role": "title"
+            },
+            {
+              "key": "status",
+              "label": "Status",
+              "role": "status"
+            },
+            {
+              "key": "total",
+              "label": "Total",
+              "numeric": true,
+              "align": "end",
+              "sort": {
+                "href": "/orders?sort=total"
+              },
+              "role": "trailing"
+            },
+            {
+              "key": "placed_on",
+              "label": "Placed",
+              "sort": {
+                "href": "/orders?sort=placed_on",
+                "dir": "desc"
+              },
+              "secondary": true
+            },
+            {
+              "key": "note",
+              "label": "Delivery note",
+              "secondary": true
+            }
+          ],
+          "rows": [
+            {
+              "id": "1042",
+              "cells": [
+                {
+                  "t": "stack",
+                  "children": [
+                    {
+                      "t": "button",
+                      "label": "CH-1042",
+                      "prominence": "low",
+                      "action": {
+                        "t": "submit"
+                      }
+                    },
+                    {
+                      "t": "text",
+                      "value": "Harpreet Sandhu",
+                      "muted": true
+                    }
+                  ]
+                },
+                {
+                  "t": "badge",
+                  "text": "Open",
+                  "tone": "info",
+                  "dot": true
+                },
+                {
+                  "t": "text",
+                  "value": "₹1,24,050"
+                },
+                {
+                  "t": "text",
+                  "value": "Today, 09:41"
+                },
+                {
+                  "t": "form",
+                  "id": "note-1042",
+                  "method": "post",
+                  "action": "/orders/1042/note",
+                  "hidden": [
+                    {
+                      "name": "_csrf",
+                      "value": "tok"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "t": "field",
+                      "name": "note",
+                      "label": "Delivery note",
+                      "input": {
+                        "t": "text",
+                        "max_length": 120
+                      }
+                    },
+                    {
+                      "t": "button",
+                      "label": "Update note",
+                      "role": "secondary",
+                      "prominence": "low",
+                      "action": {
+                        "t": "submit"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "action": {
+                "t": "navigate",
+                "href": "/orders/1042"
+              },
+              "unchoosable": true
+            },
+            {
+              "id": "1041",
+              "cells": [
+                {
+                  "t": "stack",
+                  "children": [
+                    {
+                      "t": "button",
+                      "label": "CH-1041",
+                      "prominence": "low",
+                      "action": {
+                        "t": "submit"
+                      }
+                    },
+                    {
+                      "t": "text",
+                      "value": "Simran Bhatia",
+                      "muted": true
+                    }
+                  ]
+                },
+                {
+                  "t": "badge",
+                  "text": "Delivered",
+                  "tone": "success",
+                  "dot": true
+                },
+                {
+                  "t": "text",
+                  "value": "₹2,499"
+                },
+                {
+                  "t": "text",
+                  "value": "Yesterday, 18:02"
+                },
+                {
+                  "t": "form",
+                  "id": "note-1041",
+                  "method": "post",
+                  "action": "/orders/1041/note",
+                  "hidden": [
+                    {
+                      "name": "_csrf",
+                      "value": "tok"
+                    }
+                  ],
+                  "children": [
+                    {
+                      "t": "field",
+                      "name": "note",
+                      "label": "Delivery note",
+                      "input": {
+                        "t": "text",
+                        "value": "Left with the neighbour",
+                        "max_length": 120
+                      }
+                    },
+                    {
+                      "t": "button",
+                      "label": "Update note",
+                      "role": "secondary",
+                      "prominence": "low",
+                      "action": {
+                        "t": "submit"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "action": {
+                "t": "navigate",
+                "href": "/orders/1041"
+              },
+              "selected": true,
+              "open": true,
+              "detail": [
+                {
+                  "t": "text",
+                  "value": "2 units of Phulkari dupatta, to Patiala",
+                  "muted": true
+                }
+              ]
+            }
+          ],
+          "query": {
+            "id": "orders-f",
+            "action": "/orders",
+            "children": [
+              {
+                "t": "field",
+                "name": "search",
+                "label": "Search",
+                "input": {
+                  "t": "text",
+                  "kind": "search",
+                  "placeholder": "Search orders"
+                },
+                "purpose": "search",
+                "changed": {
+                  "t": "submit"
+                }
+              },
+              {
+                "t": "field",
+                "name": "filter[status][in]",
+                "label": "Status",
+                "input": {
+                  "t": "choices",
+                  "options": [
+                    {
+                      "value": "open",
+                      "label": "Open",
+                      "detail": "212"
+                    },
+                    {
+                      "value": "cancelled",
+                      "label": "Cancelled",
+                      "detail": "9"
+                    }
+                  ],
+                  "values": [
+                    "open"
+                  ]
+                },
+                "purpose": "filter"
+              },
+              {
+                "t": "field",
+                "name": "placed_on",
+                "label": "Placed",
+                "input": {
+                  "t": "range",
+                  "from": {
+                    "name": "filter[placed_on][gte]",
+                    "value": "2026-11-01"
+                  },
+                  "to": {
+                    "name": "filter[placed_on][lte]"
+                  },
+                  "max": "2026-11-13"
+                },
+                "purpose": "filter"
+              },
+              {
+                "t": "field",
+                "name": "sort",
+                "label": "Order by",
+                "input": {
+                  "t": "choice",
+                  "options": [
+                    {
+                      "value": "-placed_on",
+                      "label": "Newest first"
+                    },
+                    {
+                      "value": "-total",
+                      "label": "Largest first"
+                    }
+                  ],
+                  "value": "-placed_on"
+                },
+                "purpose": "sort"
+              },
+              {
+                "t": "field",
+                "name": "per_page",
+                "label": "Rows a page",
+                "input": {
+                  "t": "choice",
+                  "options": [
+                    {
+                      "value": "25",
+                      "label": "25"
+                    },
+                    {
+                      "value": "100",
+                      "label": "100"
+                    }
+                  ],
+                  "value": "25"
+                },
+                "purpose": "page_size"
+              }
+            ]
+          },
+          "select": {
+            "name": "ids[]",
+            "form": "orders-bulk",
+            "across": {
+              "name": "all_matching",
+              "value": "eyJzdGF0dXMiOiJvcGVuIn0",
+              "total": 1204
+            }
+          },
+          "more": "/orders?after=eyJpZCI6MTA0MX0",
+          "summary": "1–25 of 1,204"
+        }
+      ]
+    }
+  }
+}
