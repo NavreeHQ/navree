@@ -403,9 +403,10 @@ jobs:
           path: ${{ runner.temp }}/screens
           retention-days: 30
 
-  # The Apple client: the package's tests on the Mac and in an iPhone
-  # simulator, the core's iOS libraries from the job above made into an
-  # XCFramework, the demo app built from its text project, and its UI tests run
+  # The Apple client: the core's libraries from the job above made into an
+  # XCFramework, the package's tests on the Mac (in an iPhone simulator while
+  # the core's artifact has no Mac library), the demo app built from its text
+  # project with the core linked, and its UI tests run
   # in light, dark, the largest text size, right to left and an iPad's regular
   # width, with what each screen looked like kept as an artifact. Once on the
   # current Xcode and once on the one before, the two systems the client
@@ -453,23 +454,15 @@ jobs:
         with:
           name: navree-native-core
           path: ${{ runner.temp }}/navree-native-core
-      # The header and the device and simulator archives as one XCFramework, the
-      # package's binary target (never committed).
+      # The header and the artifact's libraries as one XCFramework, the
+      # package's binary target (never committed): an iPhone's, the
+      # simulator's, and the Mac's when the artifact holds it.
       - name: The core as an XCFramework
+        id: core
         run: |
-          core="$RUNNER_TEMP/navree-native-core"
-          (cd "$core" && shasum -a 256 -c SHA256SUMS)
-          cat "$core/COMMIT" "$core/ios/links.txt"
-          headers="$RUNNER_TEMP/navree-core-headers"
-          mkdir -p "$headers"
-          cp "$core/include/navree_core.h" "$headers/"
-          printf 'module NavreeCore {\n    header "navree_core.h"\n    export *\n}\n' > "$headers/module.modulemap"
-          rm -rf NavreeCore.xcframework
-          xcodebuild -create-xcframework \
-            -library "$core/ios/device/libnavree_native_core.a" -headers "$headers" \
-            -library "$core/ios/simulator/libnavree_native_core.a" -headers "$headers" \
-            -output NavreeCore.xcframework
+          bash scripts/build-core.sh --from "$RUNNER_TEMP/navree-native-core"
           ls -R NavreeCore.xcframework | head -30
+          if [ -d NavreeCore.xcframework/macos-arm64 ]; then echo "mac=true"; else echo "mac=false"; fi >> "$GITHUB_OUTPUT"
       - name: Restore XcodeGen
         id: xcodegen
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -491,8 +484,19 @@ jobs:
       - name: Put XcodeGen on the path
         run: |
           echo "$HOME/xcodegen/xcodegen/bin" >> "$GITHUB_PATH"
+      # The bridge to the core links on the Mac only with the core's Mac
+      # library. Without it the package's tests run in an iPhone simulator,
+      # against the simulator's library, and the Mac only compiles the targets
+      # that do not need the core.
       - name: Package tests on the Mac
+        if: steps.core.outputs.mac == 'true'
         run: swift test 2>&1 | tee swift-test.log
+      - name: Package tests in an iPhone simulator
+        if: steps.core.outputs.mac != 'true'
+        run: |
+          echo "::notice::The core's artifact has no Mac library: the package's tests run in an iPhone simulator."
+          swift build --target NavreeShell 2>&1 | tee swift-build.log
+          bash scripts/test-in-simulator.sh
       - name: Demo app screens in an iPhone simulator
         if: ${{ !cancelled() }}
         run: |
@@ -513,6 +517,8 @@ jobs:
           name: apple-results-xcode-${{ matrix.xcode }}
           path: |
             packages/apple/swift-test.log
+            packages/apple/swift-build.log
+            packages/apple/build/core/links.txt
             packages/apple/build/logs
             packages/apple/build/results
           if-no-files-found: warn
