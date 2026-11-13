@@ -13,9 +13,9 @@
 use std::fmt;
 use std::marker::PhantomData;
 
+use serde::Deserialize;
 use serde::de::value::{Error as Plain, StrDeserializer};
 use serde::de::{DeserializeOwned, Deserializer, Error, IntoDeserializer, Visitor};
-use serde::Deserialize;
 
 /// Reads one word: the value it names, or nothing for a word the list lacks.
 struct Word<T>(PhantomData<T>);
@@ -112,16 +112,24 @@ mod tests {
         );
 
         // A field that may hold a word holds none; a word the list has is read as ever.
-        let node: Node = serde_json::from_str(r#"{"t":"text","value":"Paid","tone":"celebration","style":"marquee"}"#).unwrap();
+        let node: Node = serde_json::from_str(
+            r#"{"t":"text","value":"Paid","tone":"celebration","style":"marquee"}"#,
+        )
+        .unwrap();
         let Node::Text(text) = node else {
             panic!("not a text");
         };
         assert_eq!((text.tone, text.style), (None, TextStyle::Body));
-        let node: Node = serde_json::from_str(r#"{"t":"text","value":"Paid","tone":"success","style":"title"}"#).unwrap();
+        let node: Node =
+            serde_json::from_str(r#"{"t":"text","value":"Paid","tone":"success","style":"title"}"#)
+                .unwrap();
         let Node::Text(text) = node else {
             panic!("not a text");
         };
-        assert_eq!((text.tone, text.style), (Some(Tone::Success), TextStyle::Title));
+        assert_eq!(
+            (text.tone, text.style),
+            (Some(Tone::Success), TextStyle::Title)
+        );
         // `null` is a field left out.
         assert!(serde_json::from_str::<Node>(r#"{"t":"badge","text":"x","tone":null}"#).is_ok());
     }
@@ -139,7 +147,11 @@ mod tests {
             panic!("not a toast");
         };
         assert_eq!(toast.tone, Tone::Neutral);
-        let Op::Morph { node: Node::Field(field), .. } = &envelope.ops[2] else {
+        let Op::Morph {
+            node: Node::Field(field),
+            ..
+        } = &envelope.ops[2]
+        else {
             panic!("not a field");
         };
         let Input::Date(date) = &field.input else {
@@ -152,6 +164,9 @@ mod tests {
     #[test]
     fn a_value_of_another_shape_is_still_refused() {
         assert!(serde_json::from_str::<Node>(r#"{"t":"badge","text":"x","tone":7}"#).is_err());
-        assert!(serde_json::from_str::<Node>(r#"{"t":"badge","text":"x","tone":{"t":"success"}}"#).is_err());
+        assert!(
+            serde_json::from_str::<Node>(r#"{"t":"badge","text":"x","tone":{"t":"success"}}"#)
+                .is_err()
+        );
     }
 }

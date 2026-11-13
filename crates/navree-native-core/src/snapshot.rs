@@ -21,18 +21,18 @@
 
 use std::collections::BTreeMap;
 
+use navree_native::Input;
 use navree_native::action::Present;
 use navree_native::input::TextKind;
 use navree_native::node::Node;
-use navree_native::Input;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::Core;
 use crate::effect::Change;
 use crate::event::FieldValue;
 use crate::state::{Modal, Query, Restored, ScreenId, ScreenView, ViewState};
 use crate::tree::{fits, roots, value_of, walk};
-use crate::Core;
 
 /// The version of the snapshot's form. One of another version is not used.
 pub const SNAPSHOT_VERSION: u32 = 1;
@@ -100,7 +100,12 @@ pub struct Snapshot {
 
 /// A name for the person a shell is for, which says nothing of them.
 fn person_of(user: Option<&(String, Option<String>)>) -> Option<String> {
-    user.map(|(name, email)| crate::sign_in::fingerprint(&format!("navree-person\n{name}\n{}", email.as_deref().unwrap_or(""))))
+    user.map(|(name, email)| {
+        crate::sign_in::fingerprint(&format!(
+            "navree-person\n{name}\n{}",
+            email.as_deref().unwrap_or("")
+        ))
+    })
 }
 
 /// Whether what a field holds may be kept: never a password, never a file.
@@ -113,7 +118,11 @@ fn may_keep(input: &Input, value: &FieldValue) -> bool {
 fn kept(view: &ScreenView) -> KeptScreen {
     let mut fields = BTreeMap::new();
     if let Some(screen) = view.screen() {
-        let held: BTreeMap<&String, &FieldValue> = view.forms.values().flat_map(|form| form.fields.iter().map(|(id, field)| (id, &field.value))).collect();
+        let held: BTreeMap<&String, &FieldValue> = view
+            .forms
+            .values()
+            .flat_map(|form| form.fields.iter().map(|(id, field)| (id, &field.value)))
+            .collect();
         for root in roots(screen) {
             walk(root, &mut |node| {
                 if let Node::Field(field) = node
@@ -150,12 +159,21 @@ impl Core {
     /// Where the person is now, for a client to store. See [`Snapshot`].
     pub fn snapshot(&self) -> Snapshot {
         let view: &ViewState = &self.view;
-        let screens = |stack: &[ScreenId]| -> Vec<KeptScreen> { stack.iter().filter_map(|id| view.screens.get(id)).map(kept).collect() };
+        let screens = |stack: &[ScreenId]| -> Vec<KeptScreen> {
+            stack
+                .iter()
+                .filter_map(|id| view.screens.get(id))
+                .map(kept)
+                .collect()
+        };
         Snapshot {
             version: SNAPSHOT_VERSION,
             origin: self.config.origin.clone(),
             person: person_of(self.inner.user.as_ref()),
-            selected: view.destinations.get(view.selected).map(|destination| destination.href.clone()),
+            selected: view
+                .destinations
+                .get(view.selected)
+                .map(|destination| destination.href.clone()),
             destinations: view
                 .destinations
                 .iter()
@@ -188,10 +206,16 @@ impl Core {
                     self.report("snapshot", format!("a snapshot of version {} is not used: this build reads version {SNAPSHOT_VERSION}", snapshot.version));
                 }
                 Ok(snapshot) if snapshot.origin != self.config.origin => {
-                    self.report("snapshot", "a snapshot of another origin is not used".to_owned());
+                    self.report(
+                        "snapshot",
+                        "a snapshot of another origin is not used".to_owned(),
+                    );
                 }
                 Ok(snapshot) => self.inner.restore = Some(snapshot),
-                Err(error) => self.report("snapshot", format!("a snapshot that does not read is not used: {error}")),
+                Err(error) => self.report(
+                    "snapshot",
+                    format!("a snapshot that does not read is not used: {error}"),
+                ),
             }
         }
         self.start();
@@ -204,7 +228,10 @@ impl Core {
             return false;
         };
         if snapshot.person != person_of(self.inner.user.as_ref()) {
-            self.report("snapshot", "a snapshot taken for another person is not used".to_owned());
+            self.report(
+                "snapshot",
+                "a snapshot taken for another person is not used".to_owned(),
+            );
             return false;
         }
         // Only onto a core that holds no screen yet.
@@ -216,11 +243,16 @@ impl Core {
             let mut stack = Vec::new();
             for screen in screens {
                 // An address that is no longer the app's is left out.
-                let crate::origin::Target::Inside(url) = core.inner.origin.resolve(&screen.url, "/") else {
+                let crate::origin::Target::Inside(url) =
+                    core.inner.origin.resolve(&screen.url, "/")
+                else {
                     continue;
                 };
                 let id = core.new_screen(&url);
-                if let (Some(view), Some(inner)) = (core.view.screens.get_mut(&id), core.inner.screens.get_mut(&id)) {
+                if let (Some(view), Some(inner)) = (
+                    core.view.screens.get_mut(&id),
+                    core.inner.screens.get_mut(&id),
+                ) {
                     view.title = screen.title;
                     view.from = screen.from;
                     // Fetched when it comes to the front.
@@ -235,14 +267,24 @@ impl Core {
             stack
         };
         for held in snapshot.destinations {
-            let Some(at) = self.view.destinations.iter().position(|destination| destination.href == held.href) else {
+            let Some(at) = self
+                .view
+                .destinations
+                .iter()
+                .position(|destination| destination.href == held.href)
+            else {
                 continue;
             };
             let stack = put(self, held.stack);
             any |= !stack.is_empty();
             self.view.destinations[at].stack = stack;
         }
-        if let Some(at) = snapshot.selected.and_then(|href| self.view.destinations.iter().position(|destination| destination.href == href)) {
+        if let Some(at) = snapshot.selected.and_then(|href| {
+            self.view
+                .destinations
+                .iter()
+                .position(|destination| destination.href == href)
+        }) {
             self.view.selected = at;
         }
         for held in snapshot.modals {
@@ -268,10 +310,18 @@ impl Core {
     /// back into the fields that are still there and of the same kind, and
     /// the sheets that were open are opened.
     pub(crate) fn restore_typed(&mut self, id: ScreenId) {
-        let Some(restored) = self.inner.screens.get_mut(&id).and_then(|inner| inner.restored.take()) else {
+        let Some(restored) = self
+            .inner
+            .screens
+            .get_mut(&id)
+            .and_then(|inner| inner.restored.take())
+        else {
             return;
         };
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         let ScreenView { content, forms, .. } = view;

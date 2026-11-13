@@ -74,7 +74,8 @@ pub(crate) fn can_start(config: &Config, call: &Call) -> bool {
     if built_with(config, call.feature()) {
         return true;
     }
-    matches!(call, Call::PlatformSignIn(sign_in) if sign_in.web.is_some()) && built_with(config, Some(Feature::AuthSession))
+    matches!(call, Call::PlatformSignIn(sign_in) if sign_in.web.is_some())
+        && built_with(config, Some(Feature::AuthSession))
 }
 
 /// Looks at what a control does. `Err` names what this build can't do with
@@ -84,7 +85,11 @@ pub(crate) fn can_start(config: &Config, call: &Call) -> bool {
 fn settle(action: &mut Option<Action>, config: &Config) -> Result<Option<Option<String>>, String> {
     match action {
         Some(Action::Unknown) => Err("action:unknown".to_owned()),
-        Some(Action::Commands { list }) if list.iter().any(|command| matches!(command, Command::Unknown)) => {
+        Some(Action::Commands { list })
+            if list
+                .iter()
+                .any(|command| matches!(command, Command::Unknown)) =>
+        {
             Err("command:unknown".to_owned())
         }
         Some(Action::Device(device)) if !can_start(config, &device.call) => {
@@ -109,7 +114,11 @@ fn nothing() -> Node {
     })
 }
 
-fn button(button: &mut Button, config: &Config, missing: &mut Vec<String>) -> Option<Option<String>> {
+fn button(
+    button: &mut Button,
+    config: &Config,
+    missing: &mut Vec<String>,
+) -> Option<Option<String>> {
     match settle(&mut button.action, config) {
         Ok(stand_in) => stand_in,
         Err(why) => {
@@ -143,7 +152,8 @@ fn check(node: &mut Node, config: &Config, missing: &mut Vec<String>) {
     // What a control does: an action or a command this build does not know
     // can't be left to do nothing, and a device call it lacks has a stand-in.
     let mut stand_in = None;
-    let one = |action: &mut Option<Action>, missing: &mut Vec<String>| match settle(action, config) {
+    let one = |action: &mut Option<Action>, missing: &mut Vec<String>| match settle(action, config)
+    {
         Ok(Some(_)) => *action = None,
         Ok(None) => {}
         Err(why) => missing.push(why),
@@ -161,18 +171,26 @@ fn check(node: &mut Node, config: &Config, missing: &mut Vec<String>) {
         }
         Node::Row(row) => {
             one(&mut row.action, missing);
-            row.swipe.retain_mut(|swipe| button(swipe, config, missing).is_none());
+            row.swipe
+                .retain_mut(|swipe| button(swipe, config, missing).is_none());
         }
-        Node::Table(table) => table.rows.iter_mut().for_each(|row| one(&mut row.action, missing)),
+        Node::Table(table) => table
+            .rows
+            .iter_mut()
+            .for_each(|row| one(&mut row.action, missing)),
         Node::FeedRow(row) => one(&mut row.action, missing),
         Node::Figure(figure) => one(&mut figure.action, missing),
-        Node::Toolbar(toolbar) => toolbar.items.retain_mut(|item| match settle(&mut item.action, config) {
-            Ok(stand_in) => stand_in.is_none(),
-            Err(why) => {
-                missing.push(why);
-                true
-            }
-        }),
+        Node::Toolbar(toolbar) => {
+            toolbar
+                .items
+                .retain_mut(|item| match settle(&mut item.action, config) {
+                    Ok(stand_in) => stand_in.is_none(),
+                    Err(why) => {
+                        missing.push(why);
+                        true
+                    }
+                })
+        }
         Node::Field(field) => {
             let input = match &field.input {
                 Input::Text(_) => "text",
@@ -188,7 +206,11 @@ fn check(node: &mut Node, config: &Config, missing: &mut Vec<String>) {
             };
             if input == "unknown" {
                 missing.push("input:unknown".to_owned());
-            } else if config.undrawable.iter().any(|name| name.strip_prefix("input:") == Some(input)) {
+            } else if config
+                .undrawable
+                .iter()
+                .any(|name| name.strip_prefix("input:") == Some(input))
+            {
                 missing.push(format!("client:input:{input}"));
             }
         }
@@ -201,7 +223,9 @@ fn check(node: &mut Node, config: &Config, missing: &mut Vec<String>) {
     }
     for slot in slots(node) {
         match slot {
-            Slot::Many(list) => list.iter_mut().for_each(|child| check(child, config, missing)),
+            Slot::Many(list) => list
+                .iter_mut()
+                .for_each(|child| check(child, config, missing)),
             Slot::Maybe(child) => {
                 if let Some(child) = child.as_deref_mut() {
                     check(child, config, missing);
@@ -221,7 +245,8 @@ fn check_row(row: &mut TableRow, config: &Config, missing: &mut Vec<String>) {
     }) {
         missing.push(why);
     }
-    row.nodes_mut().for_each(|node| check(node, config, missing));
+    row.nodes_mut()
+        .for_each(|node| check(node, config, missing));
 }
 
 fn check_screen(screen: &mut Screen, config: &Config, missing: &mut Vec<String>) {
@@ -246,7 +271,9 @@ const READING_STACK: usize = 4 * 1024 * 1024;
 pub(crate) fn with_room<T: Send>(read: impl FnOnce() -> T + Send) -> Option<T> {
     let mut read = Some(read);
     let made = std::thread::scope(|scope| {
-        let spawned = std::thread::Builder::new().stack_size(READING_STACK).spawn_scoped(scope, || read.take().map(|read| read()));
+        let spawned = std::thread::Builder::new()
+            .stack_size(READING_STACK)
+            .spawn_scoped(scope, || read.take().map(|read| read()));
         spawned.ok().map(|thread| thread.join().ok().flatten())
     });
     match made {
@@ -272,7 +299,10 @@ fn envelope_here(body: &str, config: &Config) -> Result<Read, Failure> {
         Err(error) => {
             // A tree nested past what the protocol allows is not read at all.
             let text = error.to_string();
-            if text.contains("nodes deep") || text.contains("recursion limit") || navree_native::nesting(body) > MAX_NESTING {
+            if text.contains("nodes deep")
+                || text.contains("recursion limit")
+                || navree_native::nesting(body) > MAX_NESTING
+            {
                 read.missing.push("client:depth".to_owned());
                 return Ok(read);
             }
@@ -298,11 +328,17 @@ fn envelope_here(body: &str, config: &Config) -> Result<Read, Failure> {
     }
     for op in &mut read.envelope.ops {
         match op {
-            Op::Morph { node, .. } | Op::Replace { node, .. } => check(node, config, &mut read.missing),
-            Op::Append { nodes, .. } | Op::Prepend { nodes, .. } | Op::Merge { nodes, .. } => {
-                nodes.iter_mut().for_each(|node| check(node, config, &mut read.missing));
+            Op::Morph { node, .. } | Op::Replace { node, .. } => {
+                check(node, config, &mut read.missing)
             }
-            Op::Rows { rows, .. } => rows.iter_mut().for_each(|row| check_row(row, config, &mut read.missing)),
+            Op::Append { nodes, .. } | Op::Prepend { nodes, .. } | Op::Merge { nodes, .. } => {
+                nodes
+                    .iter_mut()
+                    .for_each(|node| check(node, config, &mut read.missing));
+            }
+            Op::Rows { rows, .. } => rows
+                .iter_mut()
+                .for_each(|row| check_row(row, config, &mut read.missing)),
             Op::Row { row, .. } => check_row(row, config, &mut read.missing),
             Op::Unknown => read.reload = true,
             _ => {}
@@ -337,7 +373,13 @@ pub(crate) fn read(response: Response, asked: &str, origin: &Origin, config: &Co
     let media = response
         .content_type
         .as_deref()
-        .map(|kind| kind.split(';').next().unwrap_or("").trim().to_ascii_lowercase())
+        .map(|kind| {
+            kind.split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase()
+        })
         .unwrap_or_default();
     let status = response.status;
     if media == CONTENT_TYPE {
@@ -395,7 +437,9 @@ mod tests {
     }
 
     fn body(screen_body: &str) -> String {
-        format!(r#"{{"navree":1,"build":"b1","vocab":0,"screen":{{"title":"Orders","body":{screen_body}}}}}"#)
+        format!(
+            r#"{{"navree":1,"build":"b1","vocab":0,"screen":{{"title":"Orders","body":{screen_body}}}}}"#
+        )
     }
 
     #[test]
@@ -419,14 +463,25 @@ mod tests {
             &config(),
         )
         .unwrap();
-        assert_eq!(read.missing, ["action:unknown", "command:unknown", "input:unknown", "kind:hologram"]);
+        assert_eq!(
+            read.missing,
+            [
+                "action:unknown",
+                "command:unknown",
+                "input:unknown",
+                "kind:hologram"
+            ]
+        );
         // What this build was told it can't draw yet is named too.
         let read = envelope(
             &body(r#"{"t":"stack","children":[{"t":"chart"},{"t":"field","name":"photo","input":{"t":"file"}},{"t":"native","name":"map"}]}"#),
             &config(),
         )
         .unwrap();
-        assert_eq!(read.missing, ["client:chart", "client:input:file", "native:map"]);
+        assert_eq!(
+            read.missing,
+            ["client:chart", "client:input:file", "native:map"]
+        );
         // A plugin view the build lacks is drawn from its alt.
         let read = envelope(
             &body(r#"{"t":"native","name":"map","alt":{"t":"text","value":"Ludhiana"}}"#),
@@ -446,10 +501,23 @@ mod tests {
         .unwrap();
         assert!(read.reload);
         assert_eq!(read.envelope.ops.len(), 4);
-        assert!(matches!(read.envelope.ops[2], Op::Navigate { present: navree_native::Present::Sheet, .. }));
-        assert_eq!((read.envelope.shell.as_str(), read.envelope.app.as_str()), ("s7", "a4"));
+        assert!(matches!(
+            read.envelope.ops[2],
+            Op::Navigate {
+                present: navree_native::Present::Sheet,
+                ..
+            }
+        ));
+        assert_eq!(
+            (read.envelope.shell.as_str(), read.envelope.app.as_str()),
+            ("s7", "a4")
+        );
         // A word this build can't read in a closed list is the field's default, and the page is drawn.
-        let read = envelope(&body(r#"{"t":"button","label":"Go","role":"teleporter"}"#), &config()).unwrap();
+        let read = envelope(
+            &body(r#"{"t":"button","label":"Go","role":"teleporter"}"#),
+            &config(),
+        )
+        .unwrap();
         assert!(read.missing.is_empty() && read.envelope.screen.is_some());
         // A shape it can't read is another matter: nothing of the answer is trusted.
         let read = envelope(&body(r#"{"t":"button","label":7}"#), &config()).unwrap();
@@ -459,14 +527,24 @@ mod tests {
 
     #[test]
     fn a_device_call_the_build_lacks_is_what_stands_in_for_it() {
-        let call = |feature: &str, alt: &str| format!(r#"{{"t":"button","label":"Go","action":{{"t":"device","call":{{"f":"{feature}"}}{alt}}}}}"#);
+        let call = |feature: &str, alt: &str| {
+            format!(
+                r#"{{"t":"button","label":"Go","action":{{"t":"device","call":{{"f":"{feature}"}}{alt}}}}}"#
+            )
+        };
         let read = envelope(
             &body(&format!(
                 r#"{{"t":"stack","children":[{},{},{},{},{}]}}"#,
                 call("share", ""),
                 call("scan_code", ""),
-                call("scan_code", r#","alt":{"t":"text","text":"Type the code instead."}"#),
-                call("scan_code", r#","alt":{"t":"navigate","href":"/codes/new"}"#),
+                call(
+                    "scan_code",
+                    r#","alt":{"t":"text","text":"Type the code instead."}"#
+                ),
+                call(
+                    "scan_code",
+                    r#","alt":{"t":"navigate","href":"/codes/new"}"#
+                ),
                 call("teleport", r#","alt":{"t":"hide"}"#),
             )),
             &config(),
@@ -478,10 +556,22 @@ mod tests {
         // The build has `share`: the control stays as it came.
         assert_eq!(children[0]["action"]["call"]["f"], "share");
         // It lacks `scan_code`: not drawn, a line of text, or another page.
-        assert_eq!(children[1], serde_json::json!({"t": "stack", "hidden": true}));
-        assert_eq!(children[2], serde_json::json!({"t": "text", "value": "Type the code instead."}));
-        assert_eq!(children[3]["action"], serde_json::json!({"t": "navigate", "href": "/codes/new"}));
-        assert_eq!(children[4], serde_json::json!({"t": "stack", "hidden": true}));
+        assert_eq!(
+            children[1],
+            serde_json::json!({"t": "stack", "hidden": true})
+        );
+        assert_eq!(
+            children[2],
+            serde_json::json!({"t": "text", "value": "Type the code instead."})
+        );
+        assert_eq!(
+            children[3]["action"],
+            serde_json::json!({"t": "navigate", "href": "/codes/new"})
+        );
+        assert_eq!(
+            children[4],
+            serde_json::json!({"t": "stack", "hidden": true})
+        );
     }
 
     #[test]
@@ -498,9 +588,22 @@ mod tests {
 
     #[test]
     fn another_major_and_what_is_not_an_envelope_are_refused() {
-        assert_eq!(envelope(r#"{"navree":2,"build":"b","vocab":0}"#, &config()).unwrap_err(), Failure::Protocol);
-        assert_eq!(envelope(r#"{"navree":2,"build":"b","vocab":0,"screen":{"t":"x"}}"#, &config()).unwrap_err(), Failure::Protocol);
-        assert_eq!(envelope("<html>", &config()).unwrap_err(), Failure::Protocol);
+        assert_eq!(
+            envelope(r#"{"navree":2,"build":"b","vocab":0}"#, &config()).unwrap_err(),
+            Failure::Protocol
+        );
+        assert_eq!(
+            envelope(
+                r#"{"navree":2,"build":"b","vocab":0,"screen":{"t":"x"}}"#,
+                &config()
+            )
+            .unwrap_err(),
+            Failure::Protocol
+        );
+        assert_eq!(
+            envelope("<html>", &config()).unwrap_err(),
+            Failure::Protocol
+        );
         assert_eq!(envelope("[1]", &config()).unwrap_err(), Failure::Protocol);
     }
 
@@ -538,15 +641,32 @@ mod tests {
         let origin = Origin::parse("https://shop.example", &[], false).unwrap();
         let config = config();
         let read = |response| read(response, "/orders", &origin, &config);
-        assert!(matches!(read(response(200, "text/html; charset=utf-8", "<p>")), Answer::Html { url } if url == "/orders"));
+        assert!(
+            matches!(read(response(200, "text/html; charset=utf-8", "<p>")), Answer::Html { url } if url == "/orders")
+        );
         assert!(matches!(read(response(204, "", "")), Answer::Empty));
-        assert!(matches!(read(response(503, "text/html", "<p>")), Answer::Failed(Failure::Server)));
-        assert!(matches!(read(response(415, "application/json", "{}")), Answer::Failed(Failure::Server)));
-        assert!(matches!(read(response(200, "application/json", "{}")), Answer::Failed(Failure::Protocol)));
+        assert!(matches!(
+            read(response(503, "text/html", "<p>")),
+            Answer::Failed(Failure::Server)
+        ));
+        assert!(matches!(
+            read(response(415, "application/json", "{}")),
+            Answer::Failed(Failure::Server)
+        ));
+        assert!(matches!(
+            read(response(200, "application/json", "{}")),
+            Answer::Failed(Failure::Protocol)
+        ));
         // A page that says it is missing is still an envelope, with its status.
-        let mut missing = response(404, "application/vnd.navree.native+json", &body(r#"{"t":"text","value":"x"}"#));
+        let mut missing = response(
+            404,
+            "application/vnd.navree.native+json",
+            &body(r#"{"t":"text","value":"x"}"#),
+        );
         missing.headers = vec![("X-Navree-Shell".to_owned(), "s1".to_owned())];
-        assert!(matches!(read(missing), Answer::Tree { status: 404, shell: Some(shell), .. } if shell == "s1"));
+        assert!(
+            matches!(read(missing), Answer::Tree { status: 404, shell: Some(shell), .. } if shell == "s1")
+        );
         let mut elsewhere = response(200, "application/vnd.navree.native+json", "{}");
         elsewhere.url = "https://evil.example/orders".to_owned();
         assert!(matches!(read(elsewhere), Answer::Left(_)));

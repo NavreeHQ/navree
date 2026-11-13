@@ -10,9 +10,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::Core;
 use crate::effect::Effect;
 use crate::state::{Content, ScreenId};
-use crate::Core;
 
 /// The answers kept in memory, and what the client keeps.
 #[derive(Debug, Default)]
@@ -140,7 +140,8 @@ impl Core {
         if let Some((status, body)) = self.inner.cache.get(url) {
             let body = body.to_owned();
             self.show_kept(id, status, &body);
-        } else if self.config.cache.persist && self.inner.cache.disk.iter().any(|kept| kept == url) {
+        } else if self.config.cache.persist && self.inner.cache.disk.iter().any(|kept| kept == url)
+        {
             self.effects.push(Effect::CacheRead {
                 key: format!("page:{url}"),
             });
@@ -187,7 +188,9 @@ impl Core {
                 .view
                 .screens
                 .values()
-                .filter(|screen| screen.url == url && screen.loading && matches!(screen.content, Content::Blank))
+                .filter(|screen| {
+                    screen.url == url && screen.loading && matches!(screen.content, Content::Blank)
+                })
                 .map(|screen| screen.id)
                 .collect();
             for id in waiting {

@@ -528,7 +528,10 @@ impl Node {
             }),
             Self::Message(node) => Node::Row(n::Row {
                 id: node.id.clone(),
-                leading: node.avatar.clone().map(|avatar| Box::new(Node::Avatar(avatar))),
+                leading: node
+                    .avatar
+                    .clone()
+                    .map(|avatar| Box::new(Node::Avatar(avatar))),
                 title: node.author.clone(),
                 subtitle: node.time.clone(),
                 detail: node.body.clone(),
@@ -545,7 +548,11 @@ impl Node {
                 Node::Figure(n::Figure {
                     id: node.id.clone(),
                     label: node.label.clone().unwrap_or_default(),
-                    value: words(node.shown.as_deref(), node.value.as_ref(), node.unit.as_deref()),
+                    value: words(
+                        node.shown.as_deref(),
+                        node.value.as_ref(),
+                        node.unit.as_deref(),
+                    ),
                     detail: Some(match &node.caption {
                         Some(caption) => format!("{caption} · {goal}"),
                         None => goal,
@@ -647,7 +654,11 @@ impl Node {
                         )),
                         node.scores.as_deref().cloned(),
                         Some(Node::text(node.day.clone())),
-                        Some(step(&node.next, words.map(|words| words.next.as_str()), "Next day")),
+                        Some(step(
+                            &node.next,
+                            words.map(|words| words.next.as_str()),
+                            "Next day",
+                        )),
                     ]
                     .into_iter()
                     .flatten()
@@ -717,7 +728,8 @@ impl Node {
                                 .iter()
                                 .zip(amounts)
                                 .filter_map(|(part, amount)| {
-                                    amount.map(|amount| format!("{} {}", part.name, quantity(amount)))
+                                    amount
+                                        .map(|amount| format!("{} {}", part.name, quantity(amount)))
                                 })
                                 .collect(),
                         }
@@ -746,7 +758,10 @@ impl Node {
                             label: category.name.clone(),
                             value: vec![Node::text(format!("{}%", share.round()))],
                             icon: None,
-                            tone: category.colour.as_ref().and_then(|colour| colour.hue.tone()),
+                            tone: category
+                                .colour
+                                .as_ref()
+                                .and_then(|colour| colour.hue.tone()),
                             details: Vec::new(),
                         }
                     })
@@ -761,7 +776,8 @@ impl Node {
                         .rev()
                         .find(|zone| {
                             let (from, to) = (zone.from.as_f64(), zone.to.as_f64());
-                            from.is_some_and(|from| from <= value) && to.is_some_and(|to| value <= to)
+                            from.is_some_and(|from| from <= value)
+                                && to.is_some_and(|to| value <= to)
                         })
                         .and_then(|zone| zone.label.clone())
                 });
@@ -776,7 +792,11 @@ impl Node {
                 Node::Figure(n::Figure {
                     id: node.id.clone(),
                     label: node.title.clone().unwrap_or_default(),
-                    value: words(node.shown.as_deref(), node.value.as_ref(), node.unit.as_deref()),
+                    value: words(
+                        node.shown.as_deref(),
+                        node.value.as_ref(),
+                        node.unit.as_deref(),
+                    ),
                     detail: Some(match zone {
                         Some(zone) => format!("{zone} · {scale}"),
                         None => scale,
@@ -817,9 +837,7 @@ impl Node {
                     .relations
                     .iter()
                     .filter(|relation| relation.significant)
-                    .filter_map(|relation| {
-                        Some((relation.value.as_ref()?.as_f64()?, relation))
-                    })
+                    .filter_map(|relation| Some((relation.value.as_ref()?.as_f64()?, relation)))
                     .collect();
                 linked.sort_by(|a, b| b.0.abs().total_cmp(&a.0.abs()));
                 Node::Facts(n::Facts {
@@ -849,16 +867,17 @@ impl Node {
                 let unit = |measure: &Option<n::Measure>| {
                     measure.as_ref().and_then(|measure| measure.unit.clone())
                 };
-                let range = |name: &str, values: Vec<f64>, unit: Option<String>| -> Option<String> {
-                    let low = values.iter().copied().reduce(f64::min)?;
-                    let high = values.iter().copied().reduce(f64::max)?;
-                    let unit = unit.as_deref();
-                    Some(format!(
-                        "{name}: {} to {}",
-                        words(None, Some(&quantity(low)), unit),
-                        words(None, Some(&quantity(high)), unit)
-                    ))
-                };
+                let range =
+                    |name: &str, values: Vec<f64>, unit: Option<String>| -> Option<String> {
+                        let low = values.iter().copied().reduce(f64::min)?;
+                        let high = values.iter().copied().reduce(f64::max)?;
+                        let unit = unit.as_deref();
+                        Some(format!(
+                            "{name}: {} to {}",
+                            words(None, Some(&quantity(low)), unit),
+                            words(None, Some(&quantity(high)), unit)
+                        ))
+                    };
                 Node::Facts(n::Facts {
                     id: node.id.clone(),
                     items: node
@@ -1014,9 +1033,9 @@ mod tests {
     use crate::node::{
         Avatar, Badge, CalendarHeatmap, Category, Chart, ClockMoment, ColorStrip, Colour, DayClock,
         DayPager, Direction, FeedRow, Figure, Gauge, HeatDay, Hour, Hue, Icon, MatrixHeatmap,
-        Message, Meter, Measure, MiniColumn, MiniColumns, Moment, PagerWords, Pane, PaneRole, Point,
-        PointSeries, RangeScale, Relation, Ring, RingValue, Rings, RingsCentre, RowState, Run,
-        Scatter, Section, Segment, Stack, Standard, StripCell, Timeline, Tone, Toolbar,
+        Measure, Message, Meter, MiniColumn, MiniColumns, Moment, PagerWords, Pane, PaneRole,
+        Point, PointSeries, RangeScale, Relation, Ring, RingValue, Rings, RingsCentre, RowState,
+        Run, Scatter, Section, Segment, Stack, Standard, StripCell, Timeline, Tone, Toolbar,
         ToolbarItem, Trend, Unknown, Zone,
     };
 
@@ -1191,7 +1210,9 @@ mod tests {
             }),
             Node::MatrixHeatmap(MatrixHeatmap {
                 id: Some("links".to_owned()),
-                measures: ["Sleep", "Stress", "Steps", "HRV"].map(String::from).to_vec(),
+                measures: ["Sleep", "Stress", "Steps", "HRV"]
+                    .map(String::from)
+                    .to_vec(),
                 relations: vec![
                     Relation {
                         a: 0,
@@ -1501,7 +1522,10 @@ mod tests {
             Node::Adaptive(Adaptive {
                 id: Some("summary".to_owned()),
                 compact: vec![Node::text("3 shelves are empty")],
-                wide: vec![Node::text("3 shelves are empty"), Node::text("12 are running low")],
+                wide: vec![
+                    Node::text("3 shelves are empty"),
+                    Node::text("12 are running low"),
+                ],
             }),
         ]
     }
@@ -1514,44 +1538,62 @@ mod tests {
                 panic!("{kind:?} has no older form");
             };
             assert!(
-                kinds_in(&older).iter().all(|kind| arrived_later(*kind) == 0),
+                kinds_in(&older)
+                    .iter()
+                    .all(|kind| arrived_later(*kind) == 0),
                 "{kind:?} became {older:?}"
             );
         }
         let mut parts = composed_parts();
         // A card that is tapped is a section holding a link round its parts, its menu beside it.
-        let Downgraded::Node(Node::Section(section)) = downgrade_by(parts.remove(0), 0, only(Kind::Card))
+        let Downgraded::Node(Node::Section(section)) =
+            downgrade_by(parts.remove(0), 0, only(Kind::Card))
         else {
             panic!("a card becomes a section");
         };
         assert_eq!(section.id.as_deref(), Some("shelf-7"));
         assert_eq!(section.style, crate::node::SectionStyle::Card);
-        assert!(matches!(section.actions.as_slice(), [Node::Button(button)] if button.label == "Restock"));
+        assert!(
+            matches!(section.actions.as_slice(), [Node::Button(button)] if button.label == "Restock")
+        );
         let [Node::Link(link)] = section.children.as_slice() else {
             panic!("its parts are in a link: {:?}", section.children);
         };
         assert_eq!(link.label, "Brass lota, 3 left");
         assert_eq!(link.children, [Node::text("Brass lota")]);
         // Parts over each other are parts one under another, at the side they were placed at.
-        let Downgraded::Node(Node::Stack(stack)) = downgrade_by(parts.remove(0), 0, only(Kind::Layers))
+        let Downgraded::Node(Node::Stack(stack)) =
+            downgrade_by(parts.remove(0), 0, only(Kind::Layers))
         else {
             panic!("layers become a stack");
         };
-        assert_eq!((stack.align, stack.children.len()), (Some(crate::node::Align::End), 2));
+        assert_eq!(
+            (stack.align, stack.children.len()),
+            (Some(crate::node::Align::End), 2)
+        );
         // A shape that says something says it in words.
-        let Downgraded::Node(Node::Badge(badge)) = downgrade_by(parts.remove(0), 0, only(Kind::Shape))
+        let Downgraded::Node(Node::Badge(badge)) =
+            downgrade_by(parts.remove(0), 0, only(Kind::Shape))
         else {
             panic!("a shape with a label becomes a badge");
         };
-        assert_eq!((badge.text.as_str(), badge.tone, badge.dot), ("Out of stock", Some(Tone::Danger), true));
+        assert_eq!(
+            (badge.text.as_str(), badge.tone, badge.dot),
+            ("Out of stock", Some(Tone::Danger), true)
+        );
         // A run that scrolls across is a row that wraps.
-        let Downgraded::Node(Node::Stack(row)) = downgrade_by(parts.remove(0), 0, only(Kind::Carousel))
+        let Downgraded::Node(Node::Stack(row)) =
+            downgrade_by(parts.remove(0), 0, only(Kind::Carousel))
         else {
             panic!("a carousel becomes a stack");
         };
-        assert_eq!((row.axis, row.wrap, row.gap), (crate::node::Axis::Horizontal, true, 3));
+        assert_eq!(
+            (row.axis, row.wrap, row.gap),
+            (crate::node::Axis::Horizontal, true, 3)
+        );
         // The parts for a compact room are the ones every client can lay out.
-        let Downgraded::Node(Node::Stack(narrow)) = downgrade_by(parts.remove(0), 0, only(Kind::Adaptive))
+        let Downgraded::Node(Node::Stack(narrow)) =
+            downgrade_by(parts.remove(0), 0, only(Kind::Adaptive))
         else {
             panic!("an adaptive part becomes a stack");
         };
@@ -1579,7 +1621,10 @@ mod tests {
             actions += node.actions_mut().len();
             stack.extend(node.children_mut());
         }
-        assert_eq!(actions, 2, "the card stands in the tree twice, with one action each time");
+        assert_eq!(
+            actions, 2,
+            "the card stands in the tree twice, with one action each time"
+        );
     }
 
     /// A vocabulary in which only `newer` has yet to arrive, so the older form
@@ -1613,8 +1658,14 @@ mod tests {
             children: newer_parts(),
             ..Stack::default()
         });
-        assert_eq!(downgrade(tree.clone(), crate::VOCAB), Downgraded::Node(tree.clone()));
-        assert_eq!(downgrade_by(tree.clone(), 1, arrived_later), Downgraded::Node(tree));
+        assert_eq!(
+            downgrade(tree.clone(), crate::VOCAB),
+            Downgraded::Node(tree.clone())
+        );
+        assert_eq!(
+            downgrade_by(tree.clone(), 1, arrived_later),
+            Downgraded::Node(tree)
+        );
     }
 
     #[test]
@@ -1625,7 +1676,9 @@ mod tests {
                 panic!("{kind:?} has no older form");
             };
             assert!(
-                kinds_in(&older).iter().all(|kind| arrived_later(*kind) == 0),
+                kinds_in(&older)
+                    .iter()
+                    .all(|kind| arrived_later(*kind) == 0),
                 "{kind:?} became {older:?}"
             );
         }
@@ -1647,7 +1700,10 @@ mod tests {
         assert_eq!(figure.id.as_deref(), Some("steps"));
         assert_eq!(figure.label, "Steps");
         assert_eq!(figure.value, "12,450 steps");
-        assert_eq!(figure.detail.as_deref(), Some("Goal reached · of 10000 steps"));
+        assert_eq!(
+            figure.detail.as_deref(),
+            Some("Goal reached · of 10000 steps")
+        );
         assert_eq!(figure.tone, Some(Tone::Success));
         // A day with no reading is a dash, and a unit that is a sign keeps no space.
         let empty = Node::Ring(Ring {
@@ -1655,7 +1711,8 @@ mod tests {
             unit: Some("%".to_owned()),
             ..Ring::default()
         });
-        let Downgraded::Node(Node::Figure(figure)) = downgrade_by(empty, 0, only(Kind::Ring)) else {
+        let Downgraded::Node(Node::Figure(figure)) = downgrade_by(empty, 0, only(Kind::Ring))
+        else {
             panic!("a ring becomes a figure");
         };
         assert_eq!(figure.value, "–");
@@ -1690,7 +1747,10 @@ mod tests {
         let Some(Node::Progress(progress)) = gauge.older() else {
             panic!("a gauge becomes a progress");
         };
-        assert_eq!(progress.label.as_deref(), Some("Load ratio: 1.12 (Overuse)"));
+        assert_eq!(
+            progress.label.as_deref(),
+            Some("Load ratio: 1.12 (Overuse)")
+        );
         assert_eq!(progress.value, Some(560));
     }
 
@@ -1706,11 +1766,20 @@ mod tests {
             [Node::Text(text)] => text.value.clone(),
             other => panic!("{other:?}"),
         };
-        assert_eq!((facts.items[0].label.as_str(), value(0)), ("Resting", "2 points".to_owned()));
+        assert_eq!(
+            (facts.items[0].label.as_str(), value(0)),
+            ("Resting", "2 points".to_owned())
+        );
         // The axis is named and counted in its unit; the second has no name, so it is y.
-        assert_eq!(facts.items[0].details, ["Interval n: 812 ms to 820 ms", "y: 805 to 820"]);
+        assert_eq!(
+            facts.items[0].details,
+            ["Interval n: 812 ms to 820 ms", "y: 805 to 820"]
+        );
         // A cloud with no points has no range to say.
-        assert_eq!((facts.items[1].label.as_str(), value(1)), ("No points", "0 points".to_owned()));
+        assert_eq!(
+            (facts.items[1].label.as_str(), value(1)),
+            ("No points", "0 points".to_owned())
+        );
         assert!(facts.items[1].details.is_empty());
     }
 
@@ -1738,7 +1807,10 @@ mod tests {
         let chance: Relation =
             serde_json::from_str(r#"{"a":0,"b":1,"value":0.1,"significant":false}"#).unwrap();
         assert!(!chance.significant);
-        assert_eq!(serde_json::to_string(&pair).unwrap(), r#"{"a":0,"b":1,"value":0.5}"#);
+        assert_eq!(
+            serde_json::to_string(&pair).unwrap(),
+            r#"{"a":0,"b":1,"value":0.5}"#
+        );
     }
 
     #[test]
@@ -1784,7 +1856,10 @@ mod tests {
         let Some(Node::Figure(figure)) = described.older() else {
             panic!("a range becomes a figure");
         };
-        assert_eq!((figure.value.as_str(), figure.detail.as_deref()), ("–", Some("from Slower to Faster")));
+        assert_eq!(
+            (figure.value.as_str(), figure.detail.as_deref()),
+            ("–", Some("from Slower to Faster"))
+        );
     }
 
     #[test]
@@ -1799,8 +1874,14 @@ mod tests {
             other => panic!("{other:?}"),
         };
         // Two of the four cells are deep, one is awake and one has no reading.
-        assert_eq!((facts.items[0].label.as_str(), share(0)), ("Deep", "50%".to_owned()));
-        assert_eq!((facts.items[1].label.as_str(), share(1)), ("Awake", "25%".to_owned()));
+        assert_eq!(
+            (facts.items[0].label.as_str(), share(0)),
+            ("Deep", "50%".to_owned())
+        );
+        assert_eq!(
+            (facts.items[1].label.as_str(), share(1)),
+            ("Awake", "25%".to_owned())
+        );
         assert_eq!(facts.items[1].tone, Some(Tone::Warning));
     }
 
@@ -1816,10 +1897,16 @@ mod tests {
             [Node::Text(text)] => text.value.clone(),
             other => panic!("{other:?}"),
         };
-        assert_eq!((facts.items[0].label.as_str(), value(0)), ("Cycle 1", "54 min".to_owned()));
+        assert_eq!(
+            (facts.items[0].label.as_str(), value(0)),
+            ("Cycle 1", "54 min".to_owned())
+        );
         assert_eq!(facts.items[0].details, ["Deep 36", "REM 18"]);
         // With no total in words, the sum of the parts; an empty part has no detail.
-        assert_eq!((facts.items[1].label.as_str(), value(1)), ("Cycle 2", "22".to_owned()));
+        assert_eq!(
+            (facts.items[1].label.as_str(), value(1)),
+            ("Cycle 2", "22".to_owned())
+        );
         assert_eq!(facts.items[1].details, ["Deep 22"]);
     }
 
@@ -1837,7 +1924,10 @@ mod tests {
             [Node::Text(text)] => text.value.clone(),
             other => panic!("{other:?}"),
         };
-        assert_eq!((value(0), value(1), value(2)), ("1 h 23 min".into(), "253".into(), "–".into()));
+        assert_eq!(
+            (value(0), value(1), value(2)),
+            ("1 h 23 min".into(), "253".into(), "–".into())
+        );
         assert_eq!(facts.items[0].details, ["25%"]);
         assert_eq!(facts.items[1].details, ["75%", "Most of the night"]);
         assert!(facts.items[2].details.is_empty());
@@ -1881,9 +1971,18 @@ mod tests {
             other => panic!("{other:?}"),
         };
         // 120 + 1850 steps, and no hour of zero among the hours with no reading.
-        assert_eq!((facts.items[0].label.as_str(), at(0)), ("Steps by hour", "1970 steps".to_owned()));
-        assert_eq!((facts.items[1].label.as_str(), at(1)), ("Woke up", "06:30".to_owned()));
-        assert_eq!((facts.items[2].label.as_str(), at(2)), ("Evening walk", "18:00".to_owned()));
+        assert_eq!(
+            (facts.items[0].label.as_str(), at(0)),
+            ("Steps by hour", "1970 steps".to_owned())
+        );
+        assert_eq!(
+            (facts.items[1].label.as_str(), at(1)),
+            ("Woke up", "06:30".to_owned())
+        );
+        assert_eq!(
+            (facts.items[2].label.as_str(), at(2)),
+            ("Evening walk", "18:00".to_owned())
+        );
         assert_eq!(facts.items[2].tone, Some(Tone::Success));
     }
 
@@ -1993,6 +2092,10 @@ mod tests {
         let Downgraded::Node(older) = downgrade_by(tree, 0, arrived_later) else {
             panic!("a gauge has an older form");
         };
-        assert!(older.find("space").is_some_and(|node| node.kind() == Kind::Progress));
+        assert!(
+            older
+                .find("space")
+                .is_some_and(|node| node.kind() == Kind::Progress)
+        );
     }
 }

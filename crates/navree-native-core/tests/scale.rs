@@ -46,9 +46,16 @@ fn request_of(update: &navree_native_core::Update) -> u64 {
 
 #[test]
 fn ten_thousand_rows_by_cursor() {
-    let mut core = Core::new(Config::new("https://shop.example", Client::new(Platform::Android, FormFactor::Phone)));
+    let mut core = Core::new(Config::new(
+        "https://shop.example",
+        Client::new(Platform::Android, FormFactor::Phone),
+    ));
     let shell = request_of(&core.send(Event::Start));
-    let page = request_of(&answer(&mut core, shell, &json!({"navree": 1, "build": "b1", "name": "Charkha Supply Co.", "home": "/"})));
+    let page = request_of(&answer(
+        &mut core,
+        shell,
+        &json!({"navree": 1, "build": "b1", "name": "Charkha Supply Co.", "home": "/"}),
+    ));
     let first: Vec<Value> = (0..25).map(row).collect();
     answer(
         &mut core,
@@ -95,7 +102,10 @@ fn ten_thousand_rows_by_cursor() {
             });
             assert_eq!(part["nodes"].as_array().map(Vec::len), Some(25));
             assert_eq!(part["nodes"][0]["id"], "order-5000");
-            assert_eq!(part["forms"].as_object().map(serde_json::Map::len), Some(25));
+            assert_eq!(
+                part["forms"].as_object().map(serde_json::Map::len),
+                Some(25)
+            );
         }
     }
     let took = started.elapsed();
@@ -105,7 +115,10 @@ fn ten_thousand_rows_by_cursor() {
     let rows = content["screen"]["body"]["children"].as_array().unwrap();
     assert_eq!(rows.len(), 10_000);
     assert_eq!(rows[9_999]["id"], "order-9999");
-    assert!(content["screen"]["body"].get("more").is_none(), "the list has ended");
+    assert!(
+        content["screen"]["body"].get("more").is_none(),
+        "the list has ended"
+    );
     assert_eq!(view.screens[&screen].forms.len(), 10_000);
     // The end of the list asks for nothing.
     let done = core.send(Event::More {
@@ -118,7 +131,10 @@ fn ten_thousand_rows_by_cursor() {
     println!("10,000 rows in 399 pages: {took:?} in all, the slowest page {slowest:?}");
     // A page of rows costs the page, not the list: far under a frame in a release
     // build. The bound here is loose, for a debug build on a busy machine.
-    assert!(slowest.as_millis() < 500, "the slowest page took {slowest:?}");
+    assert!(
+        slowest.as_millis() < 500,
+        "the slowest page took {slowest:?}"
+    );
 }
 
 /// What a change costs once ten thousand rows are loaded: a merge into a list
@@ -127,9 +143,16 @@ fn ten_thousand_rows_by_cursor() {
 /// state changed: neither asks for the screen to be read again.
 #[test]
 fn a_change_among_ten_thousand_rows() {
-    let mut core = Core::new(Config::new("https://shop.example", Client::new(Platform::Android, FormFactor::Phone)));
+    let mut core = Core::new(Config::new(
+        "https://shop.example",
+        Client::new(Platform::Android, FormFactor::Phone),
+    ));
     let shell = request_of(&core.send(Event::Start));
-    let page = request_of(&answer(&mut core, shell, &json!({"navree": 1, "build": "b1", "name": "Charkha Supply Co.", "home": "/"})));
+    let page = request_of(&answer(
+        &mut core,
+        shell,
+        &json!({"navree": 1, "build": "b1", "name": "Charkha Supply Co.", "home": "/"}),
+    ));
     let rows: Vec<Value> = (0..10_000).map(row).collect();
     let records: Vec<Value> = (0..10_000)
         .map(|number| json!({"id": format!("r-{number}"), "cells": [{"t": "text", "value": format!("CS-{number}")}, {"t": "text", "value": "Gurpreet Kaur, Ludhiana"}, {"t": "text", "value": "₹1,24,050"}]}))
@@ -194,8 +217,14 @@ fn a_change_among_ten_thousand_rows() {
     });
     let reading = step.elapsed();
     assert_eq!(part["rows"].as_array().map(Vec::len), Some(2));
-    assert_eq!((&part["rows"][0]["id"], &part["rows"][0]["before"]), (&json!("order-10000"), &json!("order-0")));
-    assert_eq!(part["rows"][1]["node"]["subtitle"], "Simran Bhatia, Chandigarh · ₹1,499");
+    assert_eq!(
+        (&part["rows"][0]["id"], &part["rows"][0]["before"]),
+        (&json!("order-10000"), &json!("order-0"))
+    );
+    assert_eq!(
+        part["rows"][1]["node"]["subtitle"],
+        "Simran Bhatia, Chandigarh · ₹1,499"
+    );
     assert_eq!(part["rows"][1]["before"], "order-5001");
     assert_eq!(part["gone"], json!(["order-7"]));
     assert_eq!(part["since"], "42");
@@ -204,7 +233,12 @@ fn a_change_among_ten_thousand_rows() {
     let step = Instant::now();
     let whole = core.part(&Query::Screen { id: screen });
     let whole_read = step.elapsed();
-    assert_eq!(whole["content"]["screen"]["body"]["children"][0]["children"].as_array().map(Vec::len), Some(10_000));
+    assert_eq!(
+        whole["content"]["screen"]["body"]["children"][0]["children"]
+            .as_array()
+            .map(Vec::len),
+        Some(10_000)
+    );
 
     // A tick says only that the table's state changed, and the part read holds no row.
     let step = Instant::now();
@@ -234,5 +268,7 @@ fn a_change_among_ten_thousand_rows() {
     assert_eq!(part["selected"], json!(["r-9000"]));
     assert_eq!(part["rows"].as_array().map(Vec::len), Some(0));
 
-    println!("among 10,000 rows: a merge of 3 rows took {merged:?} and its rows read again {reading:?} (the whole screen: {whole_read:?}); a tick took {ticked:?} and its part {part_read:?}");
+    println!(
+        "among 10,000 rows: a merge of 3 rows took {merged:?} and its rows read again {reading:?} (the whole screen: {whole_read:?}); a tick took {ticked:?} and its part {part_read:?}"
+    );
 }

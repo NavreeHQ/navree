@@ -201,7 +201,10 @@ impl Envelope {
             stack.push(&mut screen.body);
             stack.extend(&mut screen.actions);
             // The day's scores a pager carries are parts too.
-            let scores = screen.pager.as_mut().and_then(|pager| pager.scores.as_deref_mut());
+            let scores = screen
+                .pager
+                .as_mut()
+                .and_then(|pager| pager.scores.as_deref_mut());
             stack.extend(scores);
         }
         for op in &mut self.ops {
@@ -210,7 +213,9 @@ impl Envelope {
                 Op::Append { nodes, .. } | Op::Prepend { nodes, .. } | Op::Merge { nodes, .. } => {
                     stack.extend(nodes);
                 }
-                Op::Rows { rows, .. } => stack.extend(rows.iter_mut().flat_map(TableRow::nodes_mut)),
+                Op::Rows { rows, .. } => {
+                    stack.extend(rows.iter_mut().flat_map(TableRow::nodes_mut))
+                }
                 Op::Row { row, .. } => stack.extend(row.nodes_mut()),
                 _ => {}
             }

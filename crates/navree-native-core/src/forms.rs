@@ -26,14 +26,16 @@ use navree_native::action::{Pair, Present};
 use navree_native::node::{Field, Form, Method, Node};
 use navree_native::{Action, Input};
 
+use crate::Core;
 use crate::decode::Answer;
 use crate::effect::{Body, Change, Part};
 use crate::event::FieldValue;
 use crate::origin::Target;
 use crate::reduce::SEND_LIMIT;
-use crate::state::{Content, FieldView, FormView, Held, Notice, Pending, Question, ScreenId, TimerFor, Waiting};
+use crate::state::{
+    Content, FieldView, FormView, Held, Notice, Pending, Question, ScreenId, TimerFor, Waiting,
+};
 use crate::tree::{fields_of, find_in, form_of, has_id};
-use crate::Core;
 
 /// How long typing in a table's query waits for a pause, in milliseconds.
 const TYPING_PAUSE: u32 = 100;
@@ -42,7 +44,9 @@ fn encode_into(out: &mut String, text: &str) {
     // Line breaks are sent as CR LF, as a browser's form does.
     let mut bytes = text.bytes().peekable();
     let push = |out: &mut String, byte: u8| match byte {
-        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'*' | b'-' | b'.' | b'_' => out.push(char::from(byte)),
+        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'*' | b'-' | b'.' | b'_' => {
+            out.push(char::from(byte))
+        }
         b' ' => out.push('+'),
         other => {
             out.push('%');
@@ -103,13 +107,21 @@ fn field_parts(field: &Field, value: &FieldValue, out: &mut Vec<Part>) {
         }
         // A phone number names the country it is read in, as a second field
         // beside it: the one the person picked, or the one the page came with.
-        (Input::Text(input), FieldValue::Phone { text: number, country }) => {
+        (
+            Input::Text(input),
+            FieldValue::Phone {
+                text: number,
+                country,
+            },
+        ) => {
             out.push(text(name, number));
             if let Some(held) = &input.country {
                 out.push(text(&held.name, country));
             }
         }
-        (Input::Text(input), FieldValue::Text { text: number }) if input.kind == navree_native::input::TextKind::Phone && input.country.is_some() => {
+        (Input::Text(input), FieldValue::Text { text: number })
+            if input.kind == navree_native::input::TextKind::Phone && input.country.is_some() =>
+        {
             out.push(text(name, number));
             if let Some(held) = &input.country {
                 out.push(text(&held.name, &held.value));
@@ -121,7 +133,9 @@ fn field_parts(field: &Field, value: &FieldValue, out: &mut Vec<Part>) {
             out.push(text(&range.to.name, to));
         }
         (_, FieldValue::Text { text: value }) => out.push(text(name, value)),
-        (_, FieldValue::Many { values }) => out.extend(values.iter().map(|value| text(name, value))),
+        (_, FieldValue::Many { values }) => {
+            out.extend(values.iter().map(|value| text(name, value)))
+        }
         (_, FieldValue::Files { files }) => out.extend(files.iter().map(|file| Part::File {
             name: name.to_owned(),
             token: file.token.clone(),
@@ -149,7 +163,11 @@ pub(crate) fn parts(form: &Form, state: Option<&FormView>, with: Option<&Pair>) 
         if field.disabled || (field.name.is_empty() && !matches!(field.input, Input::Range(_))) {
             continue;
         }
-        let held = field.id.as_deref().and_then(|id| state?.fields.get(id)).map(|field| &field.value);
+        let held = field
+            .id
+            .as_deref()
+            .and_then(|id| state?.fields.get(id))
+            .map(|field| &field.value);
         match held {
             Some(value) => field_parts(field, value, &mut out),
             None => field_parts(field, &crate::tree::value_of(&field.input), &mut out),
@@ -165,7 +183,9 @@ fn body_of(parts: Vec<Part>) -> Body {
     if parts.iter().any(|part| matches!(part, Part::File { .. })) {
         Body::Multipart { parts }
     } else {
-        Body::Form { text: encode(&parts) }
+        Body::Form {
+            text: encode(&parts),
+        }
     }
 }
 
@@ -174,26 +194,53 @@ fn same_kind(a: &FieldValue, b: &FieldValue) -> bool {
     use FieldValue::{Files, Flag, Many, None, Phone, Range, Text};
     matches!(
         (a, b),
-        (Text { .. } | None | Phone { .. }, Text { .. } | None | Phone { .. }) | (Flag { .. }, Flag { .. }) | (Many { .. }, Many { .. }) | (Files { .. }, Files { .. }) | (Range { .. }, Range { .. })
+        (
+            Text { .. } | None | Phone { .. },
+            Text { .. } | None | Phone { .. }
+        ) | (Flag { .. }, Flag { .. })
+            | (Many { .. }, Many { .. })
+            | (Files { .. }, Files { .. })
+            | (Range { .. }, Range { .. })
     )
 }
 
 impl Core {
     /// The person changed a field.
-    pub(crate) fn field_changed(&mut self, id: ScreenId, form: Option<&str>, field: &str, value: FieldValue) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+    pub(crate) fn field_changed(
+        &mut self,
+        id: ScreenId,
+        form: Option<&str>,
+        field: &str,
+        value: FieldValue,
+    ) {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         // The form the client named, or whichever holds the field.
-        let named = form.filter(|form| view.forms.get(*form).is_some_and(|form| form.fields.contains_key(field)));
+        let named = form.filter(|form| {
+            view.forms
+                .get(*form)
+                .is_some_and(|form| form.fields.contains_key(field))
+        });
         let handle = match named {
             Some(form) => form.to_owned(),
-            None => match view.forms.iter().find(|(_, form)| form.fields.contains_key(field)) {
+            None => match view
+                .forms
+                .iter()
+                .find(|(_, form)| form.fields.contains_key(field))
+            {
                 Some((handle, _)) => handle.clone(),
                 None => return,
             },
         };
-        let Some(held) = view.forms.get_mut(&handle).and_then(|form| form.fields.get_mut(field)) else {
+        let Some(held) = view
+            .forms
+            .get_mut(&handle)
+            .and_then(|form| form.fields.get_mut(field))
+        else {
             return;
         };
         if !same_kind(&held.value, &value) {
@@ -207,12 +254,21 @@ impl Core {
             screen: id,
             form: handle.clone(),
         });
-        let (typed, changed) = match view.screen().and_then(|screen| find_in(screen, &|node| matches!(node, Node::Field(_)) && has_id(node, field))) {
-            Some(Node::Field(found)) => (matches!(found.input, Input::Text(_)), found.changed.clone()),
+        let (typed, changed) = match view.screen().and_then(|screen| {
+            find_in(screen, &|node| {
+                matches!(node, Node::Field(_)) && has_id(node, field)
+            })
+        }) {
+            Some(Node::Field(found)) => {
+                (matches!(found.input, Input::Text(_)), found.changed.clone())
+            }
             _ => (false, Option::None),
         };
         // A table's query asks by itself: at once for a choice, after a pause for typing.
-        let asks = inner.forms.get(&handle).is_some_and(|meta| meta.query_of.is_some());
+        let asks = inner
+            .forms
+            .get(&handle)
+            .is_some_and(|meta| meta.query_of.is_some());
         let sends = matches!(changed, Some(Action::Submit { .. }));
         if asks || sends {
             let old = inner.query_timers.remove(&handle);
@@ -222,7 +278,13 @@ impl Core {
         }
         if asks {
             if typed {
-                let timer = self.timer(TYPING_PAUSE, TimerFor::Query { screen: id, form: handle.clone() });
+                let timer = self.timer(
+                    TYPING_PAUSE,
+                    TimerFor::Query {
+                        screen: id,
+                        form: handle.clone(),
+                    },
+                );
                 if let Some(inner) = self.inner.screens.get_mut(&id) {
                     inner.query_timers.insert(handle, timer);
                 }
@@ -234,10 +296,16 @@ impl Core {
         // What the field itself says happens as it changes.
         match changed {
             Some(Action::Commands { list }) => {
-                let held = self.view.screens.get(&id).and_then(|view| view.forms.get(&handle)).and_then(|form| form.fields.get(field)).and_then(|field| match &field.value {
-                    FieldValue::Text { text } => Some(text.clone()),
-                    _ => Option::None,
-                });
+                let held = self
+                    .view
+                    .screens
+                    .get(&id)
+                    .and_then(|view| view.forms.get(&handle))
+                    .and_then(|form| form.fields.get(field))
+                    .and_then(|field| match &field.value {
+                        FieldValue::Text { text } => Some(text.clone()),
+                        _ => Option::None,
+                    });
                 self.commands(id, list, held.as_deref());
             }
             Some(action @ Action::Submit { .. }) if typed => {
@@ -268,9 +336,15 @@ impl Core {
     // A choice whose options are found on the server.
 
     /// The control of the field `field`, when it is a choice.
-    fn choice_of(&self, id: ScreenId, field: &str) -> Option<(Option<navree_native::input::ChoiceSearch>, Option<String>)> {
+    fn choice_of(
+        &self,
+        id: ScreenId,
+        field: &str,
+    ) -> Option<(Option<navree_native::input::ChoiceSearch>, Option<String>)> {
         let screen = self.view.screens.get(&id)?.screen()?;
-        match find_in(screen, &|node| matches!(node, Node::Field(_)) && has_id(node, field))? {
+        match find_in(screen, &|node| {
+            matches!(node, Node::Field(_)) && has_id(node, field)
+        })? {
             Node::Field(found) => match &found.input {
                 Input::Choice(choice) => Some((choice.search.clone(), choice.more.clone())),
                 Input::Choices(choices) => Some((choices.search.clone(), choices.more.clone())),
@@ -281,18 +355,40 @@ impl Core {
     }
 
     fn field_state(&mut self, id: ScreenId, form: &str, field: &str) -> Option<&mut FieldView> {
-        self.view.screens.get_mut(&id)?.forms.get_mut(form)?.fields.get_mut(field)
+        self.view
+            .screens
+            .get_mut(&id)?
+            .forms
+            .get_mut(form)?
+            .fields
+            .get_mut(field)
     }
 
     /// The person typed in a searched choice, or wants the options after
     /// those it shows.
-    pub(crate) fn options(&mut self, id: ScreenId, form: Option<&str>, field: &str, words: Option<String>, more: bool) {
+    pub(crate) fn options(
+        &mut self,
+        id: ScreenId,
+        form: Option<&str>,
+        field: &str,
+        words: Option<String>,
+        more: bool,
+    ) {
         let Some(view) = self.view.screens.get(&id) else {
             return;
         };
         // The form the client named, or whichever holds the field.
-        let named = form.filter(|form| view.forms.get(*form).is_some_and(|form| form.fields.contains_key(field)));
-        let Some(handle) = named.map(str::to_owned).or_else(|| view.forms.iter().find(|(_, form)| form.fields.contains_key(field)).map(|(handle, _)| handle.clone())) else {
+        let named = form.filter(|form| {
+            view.forms
+                .get(*form)
+                .is_some_and(|form| form.fields.contains_key(field))
+        });
+        let Some(handle) = named.map(str::to_owned).or_else(|| {
+            view.forms
+                .iter()
+                .find(|(_, form)| form.fields.contains_key(field))
+                .map(|(handle, _)| handle.clone())
+        }) else {
             return;
         };
         let Some((search, own_more)) = self.choice_of(id, field) else {
@@ -322,7 +418,12 @@ impl Core {
         if words.chars().count() < usize::from(search.min) {
             // Too few characters to search with: the control shows its own options again,
             // and an answer on its way is for a search that is over.
-            if let Some(ask) = self.inner.screens.get_mut(&id).and_then(|inner| inner.options.get_mut(field)) {
+            if let Some(ask) = self
+                .inner
+                .screens
+                .get_mut(&id)
+                .and_then(|inner| inner.options.get_mut(field))
+            {
                 ask.turn += 1;
                 ask.more = Option::None;
             }
@@ -332,7 +433,10 @@ impl Core {
                 state.options = Option::None;
                 state.searching = false;
                 state.more = false;
-                self.changed.insert(Change::Form { screen: id, form: handle });
+                self.changed.insert(Change::Form {
+                    screen: id,
+                    form: handle,
+                });
             }
             return;
         }
@@ -344,7 +448,12 @@ impl Core {
                 field: field.to_owned(),
             },
         );
-        if let Some(ask) = self.inner.screens.get_mut(&id).and_then(|inner| inner.options.get_mut(field)) {
+        if let Some(ask) = self
+            .inner
+            .screens
+            .get_mut(&id)
+            .and_then(|inner| inner.options.get_mut(field))
+        {
             ask.timer = Some(timer);
         }
     }
@@ -354,7 +463,12 @@ impl Core {
         let Some((Some(search), _)) = self.choice_of(id, field) else {
             return;
         };
-        let Some(ask) = self.inner.screens.get_mut(&id).and_then(|inner| inner.options.get_mut(field)) else {
+        let Some(ask) = self
+            .inner
+            .screens
+            .get_mut(&id)
+            .and_then(|inner| inner.options.get_mut(field))
+        else {
             return;
         };
         ask.timer = Option::None;
@@ -397,7 +511,16 @@ impl Core {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn options_answered(&mut self, id: ScreenId, visit: u64, form: &str, field: &str, turn: u64, more: bool, answer: Answer) {
+    pub(crate) fn options_answered(
+        &mut self,
+        id: ScreenId,
+        visit: u64,
+        form: &str,
+        field: &str,
+        turn: u64,
+        more: bool,
+        answer: Answer,
+    ) {
         let Some(inner) = self.inner.screens.get_mut(&id) else {
             return;
         };
@@ -407,7 +530,13 @@ impl Core {
             return;
         }
         let mut found = Option::None;
-        if let Answer::Tree { status, mut read, shell, .. } = answer {
+        if let Answer::Tree {
+            status,
+            mut read,
+            shell,
+            ..
+        } = answer
+        {
             if self.note(&mut read, shell) {
                 return;
             }
@@ -416,16 +545,23 @@ impl Core {
             }
             // The first field in the answer holds the options, whatever its name.
             if let Some(screen) = read.envelope.screen.as_ref().filter(|_| status < 400)
-                && let Some(Node::Field(holder)) = find_in(screen, &|node| matches!(node, Node::Field(_)))
+                && let Some(Node::Field(holder)) =
+                    find_in(screen, &|node| matches!(node, Node::Field(_)))
             {
                 found = match &holder.input {
                     Input::Choice(choice) => Some((choice.options.clone(), choice.more.clone())),
-                    Input::Choices(choices) => Some((choices.options.clone(), choices.more.clone())),
+                    Input::Choices(choices) => {
+                        Some((choices.options.clone(), choices.more.clone()))
+                    }
                     _ => Option::None,
                 };
             }
         }
-        if let Some(ask) = self.inner.screens.get_mut(&id).and_then(|inner| inner.options.get_mut(field))
+        if let Some(ask) = self
+            .inner
+            .screens
+            .get_mut(&id)
+            .and_then(|inner| inner.options.get_mut(field))
             && let Some((_, next)) = &found
         {
             ask.more.clone_from(next);
@@ -452,8 +588,16 @@ impl Core {
     // A control that asks first.
 
     /// Holds what a control was about to do, and shows its question.
-    pub(crate) fn ask_first(&mut self, id: ScreenId, ask: navree_native::node::Question, mut held: Held) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+    pub(crate) fn ask_first(
+        &mut self,
+        id: ScreenId,
+        ask: navree_native::node::Question,
+        mut held: Held,
+    ) {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         self.inner.next.question += 1;
@@ -471,28 +615,48 @@ impl Core {
 
     /// The person answered a screen's question.
     pub(crate) fn answer(&mut self, id: ScreenId, question: u64, yes: bool) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         // An answer to a question that is no longer asked changes nothing.
-        if view.question.as_ref().is_none_or(|asked| asked.id != question) {
+        if view
+            .question
+            .as_ref()
+            .is_none_or(|asked| asked.id != question)
+        {
             return;
         }
         view.question = Option::None;
         let held = inner.held.take();
         self.touch_screen(id);
         if let (true, Some(held)) = (yes, held) {
-            self.act(id, held.action, held.form, held.overlay, held.text, held.now, held.from);
+            self.act(
+                id,
+                held.action,
+                held.form,
+                held.overlay,
+                held.text,
+                held.now,
+                held.from,
+            );
         }
     }
 
     /// Asks a table's query: the form's values as a query to its address,
     /// answered in the table's place.
     pub(crate) fn query(&mut self, id: ScreenId, handle: &str) {
-        let (Some(view), Some(inner)) = (self.view.screens.get(&id), self.inner.screens.get(&id)) else {
+        let (Some(view), Some(inner)) = (self.view.screens.get(&id), self.inner.screens.get(&id))
+        else {
             return;
         };
-        let Some(region) = inner.forms.get(handle).and_then(|meta| meta.query_of.clone()) else {
+        let Some(region) = inner
+            .forms
+            .get(handle)
+            .and_then(|meta| meta.query_of.clone())
+        else {
             return;
         };
         let Some(form) = view.screen().and_then(|screen| form_of(screen, handle)) else {
@@ -501,7 +665,11 @@ impl Core {
         // An empty control says nothing: it stays out of the address.
         let mut said = parts(form, view.forms.get(handle), None);
         said.retain(|part| !matches!(part, Part::Text { name, value } if value.is_empty() && name != "sort"));
-        let action = if form.action.is_empty() { view.url.clone() } else { form.action.clone() };
+        let action = if form.action.is_empty() {
+            view.url.clone()
+        } else {
+            form.action.clone()
+        };
         let Target::Inside(address) = self.resolve(&action, id) else {
             return;
         };
@@ -524,17 +692,29 @@ impl Core {
         let Some(search) = view.screen().and_then(|screen| screen.search.as_ref()) else {
             return;
         };
-        let mut said: Vec<Part> = search.hidden.iter().map(|pair| text(&pair.name, &pair.value)).collect();
+        let mut said: Vec<Part> = search
+            .hidden
+            .iter()
+            .map(|pair| text(&pair.name, &pair.value))
+            .collect();
         if !words.is_empty() {
             said.push(text(&search.name, words));
         }
-        let action = if search.action.is_empty() { view.url.clone() } else { search.action.clone() };
+        let action = if search.action.is_empty() {
+            view.url.clone()
+        } else {
+            search.action.clone()
+        };
         let Target::Inside(address) = self.resolve(&action, id) else {
             return;
         };
         let path = address.split('?').next().unwrap_or("/");
         let query = encode(&said);
-        let url = if query.is_empty() { path.to_owned() } else { format!("{path}?{query}") };
+        let url = if query.is_empty() {
+            path.to_owned()
+        } else {
+            format!("{path}?{query}")
+        };
         if url != view.url {
             self.replace(id, &url);
         }
@@ -550,12 +730,17 @@ impl Core {
             crate::tree::walk(root, &mut |node| {
                 let handle = match node {
                     Node::Form(form) => form.id.as_deref(),
-                    Node::Table(table) => table.query.as_ref().and_then(|query| query.id.as_deref()),
+                    Node::Table(table) => {
+                        table.query.as_ref().and_then(|query| query.id.as_deref())
+                    }
                     _ => None,
                 };
                 if let Some(handle) = handle
                     && found.is_none()
-                    && inner.server_ids.get(handle).is_some_and(|server| server.as_deref() == Some(id))
+                    && inner
+                        .server_ids
+                        .get(handle)
+                        .is_some_and(|server| server.as_deref() == Some(id))
                 {
                     found = Some(handle.to_owned());
                 }
@@ -575,7 +760,13 @@ impl Core {
     }
 
     /// Sends a form. `named` is the id an action or an op knows it by.
-    pub(crate) fn submit(&mut self, id: ScreenId, named: &str, href: Option<String>, with: Option<Pair>) {
+    pub(crate) fn submit(
+        &mut self,
+        id: ScreenId,
+        named: &str,
+        href: Option<String>,
+        with: Option<Pair>,
+    ) {
         let Some(handle) = self.form_named(id, named) else {
             return;
         };
@@ -583,13 +774,20 @@ impl Core {
             return;
         }
         let chosen = self.chosen(id, &handle);
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         let Some(form) = view.screen().and_then(|screen| form_of(screen, &handle)) else {
             return;
         };
-        if inner.forms.get(&handle).is_some_and(|meta| meta.query_of.is_some()) {
+        if inner
+            .forms
+            .get(&handle)
+            .is_some_and(|meta| meta.query_of.is_some())
+        {
             return self.query(id, &handle);
         }
         let method = form.method;
@@ -645,23 +843,50 @@ impl Core {
         if get {
             let query = encode(&sent);
             let path = address.split('?').next().unwrap_or("/");
-            let url = if query.is_empty() { path.to_owned() } else { format!("{path}?{query}") };
+            let url = if query.is_empty() {
+                path.to_owned()
+            } else {
+                format!("{path}?{query}")
+            };
             self.fetch(purpose, Method::Get, &url, None, SEND_LIMIT);
         } else {
-            self.fetch(purpose, Method::Post, &address, Some(body_of(sent)), SEND_LIMIT);
+            self.fetch(
+                purpose,
+                Method::Post,
+                &address,
+                Some(body_of(sent)),
+                SEND_LIMIT,
+            );
         }
     }
 
     /// A button's own post. `action` is what the button holds, so the button
     /// shows that it waits and a second tap is not a second post.
-    pub(crate) fn post(&mut self, id: ScreenId, href: &str, fields: Vec<Pair>, action: Option<Action>) {
+    pub(crate) fn post(
+        &mut self,
+        id: ScreenId,
+        href: &str,
+        fields: Vec<Pair>,
+        action: Option<Action>,
+    ) {
         self.request(id, Method::Post, href, fields, action);
     }
 
-    pub(crate) fn request(&mut self, id: ScreenId, method: Method, href: &str, fields: Vec<Pair>, action: Option<Action>) {
+    pub(crate) fn request(
+        &mut self,
+        id: ScreenId,
+        method: Method,
+        href: &str,
+        fields: Vec<Pair>,
+        action: Option<Action>,
+    ) {
         let url = match self.resolve(href, id) {
             Target::Inside(url) => url,
-            Target::Outside(url) => return self.effects.push(crate::Effect::OpenUrl { url, inside: false }),
+            Target::Outside(url) => {
+                return self
+                    .effects
+                    .push(crate::Effect::OpenUrl { url, inside: false });
+            }
             Target::Refused => return,
         };
         if !self.may_send(id) {
@@ -670,7 +895,10 @@ impl Core {
         let Some(inner) = self.inner.screens.get_mut(&id) else {
             return;
         };
-        let sent: Vec<Part> = fields.iter().map(|pair| text(&pair.name, &pair.value)).collect();
+        let sent: Vec<Part> = fields
+            .iter()
+            .map(|pair| text(&pair.name, &pair.value))
+            .collect();
         let said = format!("{method:?} {url} {}", encode(&sent));
         let key = format!("request {said}");
         // A second tap while the first is on its way is not a second request.
@@ -692,7 +920,11 @@ impl Core {
         };
         if get {
             let query = encode(&sent);
-            let url = if query.is_empty() { url } else { format!("{}?{query}", url.split('?').next().unwrap_or("/")) };
+            let url = if query.is_empty() {
+                url
+            } else {
+                format!("{}?{query}", url.split('?').next().unwrap_or("/"))
+            };
             self.fetch(purpose, Method::Get, &url, None, SEND_LIMIT);
         } else {
             self.fetch(purpose, Method::Post, &url, Some(body_of(sent)), SEND_LIMIT);
@@ -703,7 +935,9 @@ impl Core {
     /// Marks the buttons whose own request is on its way as waiting, and the
     /// others as not.
     pub(crate) fn mark_busy(&mut self, id: ScreenId) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get(&id)) else {
+        let (Some(view), Some(inner)) =
+            (self.view.screens.get_mut(&id), self.inner.screens.get(&id))
+        else {
             return;
         };
         let Content::Native { screen } = &mut view.content else {
@@ -715,7 +949,10 @@ impl Core {
             if let Node::Button(button) = node
                 && matches!(button.action, Some(Action::Request { .. }))
             {
-                let waits = button.action.as_ref().is_some_and(|action| busy.iter().any(|(_, sent)| sent == action));
+                let waits = button
+                    .action
+                    .as_ref()
+                    .is_some_and(|action| busy.iter().any(|(_, sent)| sent == action));
                 if button.pending != waits {
                     button.pending = waits;
                     *changed = true;
@@ -723,7 +960,9 @@ impl Core {
             }
             for slot in crate::tree::slots(node) {
                 match slot {
-                    crate::tree::Slot::Many(list) => list.iter_mut().for_each(|child| mark(child, busy, changed)),
+                    crate::tree::Slot::Many(list) => {
+                        list.iter_mut().for_each(|child| mark(child, busy, changed))
+                    }
                     crate::tree::Slot::Maybe(child) => {
                         if let Some(child) = child.as_deref_mut() {
                             mark(child, busy, changed);
@@ -744,7 +983,16 @@ impl Core {
     /// The action of something the person tapped. `from` is the id of the
     /// part they tapped, when it has one: a screen the action opens keeps it.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn act(&mut self, id: ScreenId, action: Action, form: Option<String>, overlay: Option<String>, text: Option<String>, now: Option<i64>, from: Option<String>) {
+    pub(crate) fn act(
+        &mut self,
+        id: ScreenId,
+        action: Action,
+        form: Option<String>,
+        overlay: Option<String>,
+        text: Option<String>,
+        now: Option<i64>,
+        from: Option<String>,
+    ) {
         if !self.view.holds(id) {
             return;
         }
@@ -753,11 +1001,22 @@ impl Core {
         self.inner.acting = None;
     }
 
-    fn perform(&mut self, id: ScreenId, action: Action, form: Option<String>, overlay: Option<String>, text: Option<String>, now: Option<i64>) {
+    fn perform(
+        &mut self,
+        id: ScreenId,
+        action: Action,
+        form: Option<String>,
+        overlay: Option<String>,
+        text: Option<String>,
+        now: Option<i64>,
+    ) {
         match action {
             // A step of a day pager takes the day's place on the screen: the
             // person stays where they are in the stack.
-            Action::Navigate { href, present } => match self.day_step(id, &href, text.as_deref()).filter(|_| present == Present::Auto) {
+            Action::Navigate { href, present } => match self
+                .day_step(id, &href, text.as_deref())
+                .filter(|_| present == Present::Auto)
+            {
                 Some(Some(address)) => {
                     if let Target::Inside(url) = self.resolve(&address, id) {
                         self.go_as(Some(id), &url, Present::Replace);
@@ -769,14 +1028,22 @@ impl Core {
                     self.navigate(Some(id), &href, present);
                 }
             },
-            Action::Submit { form: named, href, with } => {
+            Action::Submit {
+                form: named,
+                href,
+                with,
+            } => {
                 // The form the button names, or the one it stands in.
                 if let Some(named) = named.or(form) {
                     self.close_alert(id, overlay.as_deref());
                     self.submit(id, &named, href, with);
                 }
             }
-            Action::Request { ref method, ref href, ref fields } => {
+            Action::Request {
+                ref method,
+                ref href,
+                ref fields,
+            } => {
                 let (method, href, fields) = (*method, href.clone(), fields.clone());
                 // A system alert goes away when one of its buttons is tapped.
                 self.close_alert(id, overlay.as_deref());
@@ -805,7 +1072,14 @@ impl Core {
             let picks = pager.pick.as_ref().filter(|pick| pick.href == href);
             if let (Some(pick), Some(day)) = (picks, day) {
                 let bytes = day.as_bytes();
-                let date = bytes.len() == 10 && bytes.iter().enumerate().all(|(at, byte)| if at == 4 || at == 7 { *byte == b'-' } else { byte.is_ascii_digit() });
+                let date = bytes.len() == 10
+                    && bytes.iter().enumerate().all(|(at, byte)| {
+                        if at == 4 || at == 7 {
+                            *byte == b'-'
+                        } else {
+                            byte.is_ascii_digit()
+                        }
+                    });
                 // Dates written this way sort as days do.
                 let early = pager.first.as_deref().is_some_and(|first| day < first);
                 let late = pager.last.as_deref().is_some_and(|last| day > last);
@@ -813,14 +1087,19 @@ impl Core {
                     // The day takes the place of one the address already names.
                     let (path, query) = href.split_once('?').unwrap_or((href, ""));
                     let mut address = format!("{path}?");
-                    for pair in query.split('&').filter(|pair| !pair.is_empty() && pair.split('=').next() != Some(pick.name.as_str())) {
+                    for pair in query.split('&').filter(|pair| {
+                        !pair.is_empty() && pair.split('=').next() != Some(pick.name.as_str())
+                    }) {
                         address.push_str(pair);
                         address.push('&');
                     }
                     address.push_str(&encode(&[text(&pick.name, day)]));
                     address
                 }))
-            } else if [&pager.previous, &pager.next, &pager.today].into_iter().any(|step| step.as_deref() == Some(href)) {
+            } else if [&pager.previous, &pager.next, &pager.today]
+                .into_iter()
+                .any(|step| step.as_deref() == Some(href))
+            {
                 Some(Some(href.to_owned()))
             } else {
                 None
@@ -833,7 +1112,17 @@ impl Core {
         let Some(overlay) = overlay else {
             return;
         };
-        let alert = self.view.screens.get(&id).and_then(|view| view.screen()).and_then(|screen| find_in(screen, &|node| has_id(node, overlay) && matches!(node, Node::Dialog(_)))).is_some_and(|node| matches!(node, Node::Dialog(dialog) if dialog.alert));
+        let alert = self
+            .view
+            .screens
+            .get(&id)
+            .and_then(|view| view.screen())
+            .and_then(|screen| {
+                find_in(screen, &|node| {
+                    has_id(node, overlay) && matches!(node, Node::Dialog(_))
+                })
+            })
+            .is_some_and(|node| matches!(node, Node::Dialog(dialog) if dialog.alert));
         if alert {
             self.set_open(id, overlay, false);
         }
@@ -848,18 +1137,37 @@ impl Core {
         });
         match open {
             Some(open) => self.set_open(id, &open, false),
-            None if self.view.modals.iter().any(|modal| !modal.locked && modal.stack.contains(&id)) => self.dismissed(id),
+            None if self
+                .view
+                .modals
+                .iter()
+                .any(|modal| !modal.locked && modal.stack.contains(&id)) =>
+            {
+                self.dismissed(id)
+            }
             None => {}
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn send_answered(&mut self, id: ScreenId, visit: u64, key: &str, write: bool, in_place: bool, asked: &str, answer: Answer) {
+    pub(crate) fn send_answered(
+        &mut self,
+        id: ScreenId,
+        visit: u64,
+        key: &str,
+        write: bool,
+        in_place: bool,
+        asked: &str,
+        answer: Answer,
+    ) {
         // The send is over, whatever came of it.
         let mut waiting = None;
         let mut chrome = true;
         let mut same_visit = false;
-        if let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) {
+        if let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) {
             inner.sending.remove(key);
             inner.busy.retain(|(sent, _)| sent != key);
             waiting = inner.waiting.remove(key);
@@ -880,7 +1188,14 @@ impl Core {
         self.mark_busy(id);
         let alive = self.view.holds(id);
         let front = self.front() == Some(id);
-        let cover = self.view.modals.iter().find(|modal| modal.stack.contains(&id)).and_then(|modal| modal.stack.first()).and_then(|first| self.inner.screens.get(first)).and_then(|inner| inner.cover.clone());
+        let cover = self
+            .view
+            .modals
+            .iter()
+            .find(|modal| modal.stack.contains(&id))
+            .and_then(|modal| modal.stack.first())
+            .and_then(|first| self.inner.screens.get(first))
+            .and_then(|inner| inner.cover.clone());
         let mut told = false;
         // Whether the answer left the screen as it was: ops that lead nowhere.
         let mut kept = false;
@@ -889,7 +1204,9 @@ impl Core {
                 self.failed(failure, Some(id));
                 told = true;
             }
-            Answer::Left(url) => self.effects.push(crate::Effect::OpenUrl { url, inside: false }),
+            Answer::Left(url) => self
+                .effects
+                .push(crate::Effect::OpenUrl { url, inside: false }),
             Answer::Empty => {
                 if write {
                     self.wrote(id);
@@ -909,7 +1226,13 @@ impl Core {
                     self.arrive(id, &url, shown);
                 }
             }
-            Answer::Tree { url, status, mut read, body, shell } => {
+            Answer::Tree {
+                url,
+                status,
+                mut read,
+                body,
+                shell,
+            } => {
                 if self.note(&mut read, shell) {
                     return;
                 }
@@ -938,14 +1261,26 @@ impl Core {
                 let reload = read.reload;
                 let shown = self.shown(&url, status, &mut read, body);
                 let ops = std::mem::take(&mut read.envelope.ops);
-                let leads = shown.is_some() || ops.iter().any(|op| matches!(op, navree_native::Op::Navigate { .. } | navree_native::Op::NavigateExternal { .. }));
+                let leads = shown.is_some()
+                    || ops.iter().any(|op| {
+                        matches!(
+                            op,
+                            navree_native::Op::Navigate { .. }
+                                | navree_native::Op::NavigateExternal { .. }
+                        )
+                    });
                 if !alive || !front {
                     // The person has moved on: the answer changes its own screen's
                     // tree, says what it has to say, and takes them nowhere.
                     let mut quiet = Vec::new();
                     for op in ops {
                         match op {
-                            navree_native::Op::Navigate { .. } | navree_native::Op::NavigateExternal { .. } | navree_native::Op::Reload | navree_native::Op::Open { .. } | navree_native::Op::Focus { .. } | navree_native::Op::Url { .. } => {}
+                            navree_native::Op::Navigate { .. }
+                            | navree_native::Op::NavigateExternal { .. }
+                            | navree_native::Op::Reload
+                            | navree_native::Op::Open { .. }
+                            | navree_native::Op::Focus { .. }
+                            | navree_native::Op::Url { .. } => {}
                             other => quiet.push(other),
                         }
                     }
@@ -964,7 +1299,9 @@ impl Core {
                             }
                         }
                     }
-                } else if cover.as_ref().is_some_and(|route| write && worked && leaves(route, &url, shown.is_some(), &ops)) {
+                } else if cover.as_ref().is_some_and(|route| {
+                    write && worked && leaves(route, &url, shown.is_some(), &ops)
+                }) {
                     // The way in the session's end put up has done its work: the
                     // person is back where they were. Who is signed in may have
                     // changed, so the shell is asked for again.
@@ -977,7 +1314,12 @@ impl Core {
                     // The page the sign-in led to is often the very one they
                     // were on: it is shown there. Otherwise that screen is
                     // fetched again as it comes to the front.
-                    let under = self.front().filter(|under| self.view.screens.get(under).is_some_and(|view| view.url == url));
+                    let under = self.front().filter(|under| {
+                        self.view
+                            .screens
+                            .get(under)
+                            .is_some_and(|view| view.url == url)
+                    });
                     if let (Some(under), Some(shown)) = (under, shown) {
                         self.show(under, &url, shown);
                         if let Some(inner) = self.inner.screens.get_mut(&under) {
@@ -1016,7 +1358,11 @@ impl Core {
         // it was typed: after ops that left the screen alone, on the same visit,
         // to the same form.
         if let Some(waiting) = waiting {
-            let there = self.inner.screens.get(&id).is_some_and(|inner| inner.visit == visit && inner.forms.contains_key(key) && !inner.replaced.contains(key));
+            let there = self.inner.screens.get(&id).is_some_and(|inner| {
+                inner.visit == visit
+                    && inner.forms.contains_key(key)
+                    && !inner.replaced.contains(key)
+            });
             if kept && there {
                 self.submit(id, key, waiting.href, waiting.with);
             } else if !told {
@@ -1124,7 +1470,9 @@ mod tests {
             "a".to_owned(),
             FieldView {
                 name: "note".to_owned(),
-                value: FieldValue::Text { text: "a~b*c".to_owned() },
+                value: FieldValue::Text {
+                    text: "a~b*c".to_owned(),
+                },
                 errors: Vec::new(),
                 options: None,
                 more: false,
@@ -1143,14 +1491,26 @@ mod tests {
             },
         );
         let sent = parts(&form, Some(&state), None);
-        assert_eq!(encode(&sent), "_csrf=t0k%2Fen%2B&note=a%7Eb*c&gift=on&wrap=paper&tag%5B%5D=new&tag%5B%5D=sale");
-        assert_eq!(body_of(sent.clone()), Body::Form { text: encode(&sent) });
+        assert_eq!(
+            encode(&sent),
+            "_csrf=t0k%2Fen%2B&note=a%7Eb*c&gift=on&wrap=paper&tag%5B%5D=new&tag%5B%5D=sale"
+        );
+        assert_eq!(
+            body_of(sent.clone()),
+            Body::Form {
+                text: encode(&sent)
+            }
+        );
     }
 
     #[test]
     fn a_file_makes_the_post_multipart() {
         let form = Form {
-            children: vec![field("p", "photo", Input::File(navree_native::input::FileInput::default()))],
+            children: vec![field(
+                "p",
+                "photo",
+                Input::File(navree_native::input::FileInput::default()),
+            )],
             ..Form::default()
         };
         let mut state = FormView::default();

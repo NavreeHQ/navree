@@ -54,7 +54,9 @@ fn give(bytes: Vec<u8>) -> NavreeBytes {
 }
 
 fn error(what: &str) -> Vec<u8> {
-    serde_json::json!({ "error": what }).to_string().into_bytes()
+    serde_json::json!({ "error": what })
+        .to_string()
+        .into_bytes()
 }
 
 /// The bytes a caller passed, or nothing for a null pointer.
@@ -73,7 +75,9 @@ unsafe fn taken<'a>(ptr: *const u8, len: usize) -> &'a [u8] {
 fn new(config: &[u8]) -> Option<Box<NavreeCore>> {
     let config: Config = serde_json::from_slice(config).ok()?;
     let core = catch_unwind(|| Core::new(config)).ok()?;
-    Some(Box::new(NavreeCore { core: Mutex::new(core) }))
+    Some(Box::new(NavreeCore {
+        core: Mutex::new(core),
+    }))
 }
 
 fn send(handle: &NavreeCore, event: &[u8]) -> Vec<u8> {
@@ -85,7 +89,9 @@ fn send(handle: &NavreeCore, event: &[u8]) -> Vec<u8> {
         return error("the core stopped after an earlier failure");
     };
     match catch_unwind(AssertUnwindSafe(|| core.send(event))) {
-        Ok(update) => serde_json::to_vec(&update).unwrap_or_else(|_| error("the update does not write")),
+        Ok(update) => {
+            serde_json::to_vec(&update).unwrap_or_else(|_| error("the update does not write"))
+        }
         Err(_) => error("the core failed on this event"),
     }
 }
@@ -127,7 +133,11 @@ pub unsafe extern "C" fn navree_core_new(config: *const u8, len: usize) -> *mut 
 /// `core` came from [`navree_core_new`] and was not freed. `event` is null, or
 /// points to `len` bytes that stay valid for the call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn navree_core_send(core: *mut NavreeCore, event: *const u8, len: usize) -> NavreeBytes {
+pub unsafe extern "C" fn navree_core_send(
+    core: *mut NavreeCore,
+    event: *const u8,
+    len: usize,
+) -> NavreeBytes {
     // SAFETY: the caller says `core` is a live handle; it is only read here,
     // and the lock inside it is what gives the core to one call at a time.
     let Some(handle) = (unsafe { core.as_ref() }) else {
@@ -144,7 +154,11 @@ pub unsafe extern "C" fn navree_core_send(core: *mut NavreeCore, event: *const u
 /// `core` came from [`navree_core_new`] and was not freed. `query` is null, or
 /// points to `len` bytes that stay valid for the call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn navree_core_view(core: *const NavreeCore, query: *const u8, len: usize) -> NavreeBytes {
+pub unsafe extern "C" fn navree_core_view(
+    core: *const NavreeCore,
+    query: *const u8,
+    len: usize,
+) -> NavreeBytes {
     // SAFETY: as in `navree_core_send`.
     let Some(handle) = (unsafe { core.as_ref() }) else {
         return give(error("no core"));
@@ -236,7 +250,11 @@ pub mod jni {
     /// # Safety
     /// Called by the Java runtime with a live environment.
     #[unsafe(no_mangle)]
-    pub unsafe extern "system" fn Java_com_navree_core_Core_nativeNew(env: *mut JNIEnv, _class: jclass, config: jbyteArray) -> jlong {
+    pub unsafe extern "system" fn Java_com_navree_core_Core_nativeNew(
+        env: *mut JNIEnv,
+        _class: jclass,
+        config: jbyteArray,
+    ) -> jlong {
         // SAFETY: the runtime passes a live environment and a byte array.
         let config = unsafe { read(env, config) };
         new(&config).map_or(0, |core| Box::into_raw(core) as jlong)
@@ -248,7 +266,12 @@ pub mod jni {
     /// Called by the Java runtime with a live environment; `handle` came from
     /// `nativeNew` and was not freed.
     #[unsafe(no_mangle)]
-    pub unsafe extern "system" fn Java_com_navree_core_Core_nativeSend(env: *mut JNIEnv, _class: jclass, handle: jlong, event: jbyteArray) -> jbyteArray {
+    pub unsafe extern "system" fn Java_com_navree_core_Core_nativeSend(
+        env: *mut JNIEnv,
+        _class: jclass,
+        handle: jlong,
+        event: jbyteArray,
+    ) -> jbyteArray {
         // SAFETY: the runtime passes a live environment; the class keeps the
         // handle alive until `nativeFree`.
         unsafe {
@@ -266,7 +289,12 @@ pub mod jni {
     /// # Safety
     /// As `nativeSend`.
     #[unsafe(no_mangle)]
-    pub unsafe extern "system" fn Java_com_navree_core_Core_nativeView(env: *mut JNIEnv, _class: jclass, handle: jlong, query: jbyteArray) -> jbyteArray {
+    pub unsafe extern "system" fn Java_com_navree_core_Core_nativeView(
+        env: *mut JNIEnv,
+        _class: jclass,
+        handle: jlong,
+        query: jbyteArray,
+    ) -> jbyteArray {
         // SAFETY: as in `nativeSend`.
         unsafe {
             let query = read(env, query);
@@ -284,7 +312,11 @@ pub mod jni {
     /// `handle` is zero, or came from `nativeNew` and was not freed, and no
     /// other call is using it.
     #[unsafe(no_mangle)]
-    pub unsafe extern "system" fn Java_com_navree_core_Core_nativeFree(_env: *mut JNIEnv, _class: jclass, handle: jlong) {
+    pub unsafe extern "system" fn Java_com_navree_core_Core_nativeFree(
+        _env: *mut JNIEnv,
+        _class: jclass,
+        handle: jlong,
+    ) {
         // SAFETY: the caller upholds what `navree_core_free` asks.
         unsafe { super::navree_core_free(handle as *mut NavreeCore) };
     }
@@ -316,7 +348,10 @@ mod tests {
             let update = text(navree_core_send(core, event.as_ptr(), event.len()));
             let update: serde_json::Value = serde_json::from_str(&update).unwrap();
             assert_eq!(update["effects"][0]["t"], "fetch");
-            assert_eq!(update["effects"][0]["url"], "https://shop.example/_navree/native/shell");
+            assert_eq!(
+                update["effects"][0]["url"],
+                "https://shop.example/_navree/native/shell"
+            );
 
             let all = text(navree_core_view(core, std::ptr::null(), 0));
             let all: serde_json::Value = serde_json::from_str(&all).unwrap();
@@ -335,16 +370,24 @@ mod tests {
             assert!(navree_core_new(std::ptr::null(), 0).is_null());
             let junk = b"{not json";
             assert!(navree_core_new(junk.as_ptr(), junk.len()).is_null());
-            assert!(text(navree_core_send(std::ptr::null_mut(), std::ptr::null(), 0)).contains("no core"));
+            assert!(
+                text(navree_core_send(std::ptr::null_mut(), std::ptr::null(), 0))
+                    .contains("no core")
+            );
 
             let core = navree_core_new(CONFIG.as_ptr(), CONFIG.len());
             let unknown = br#"{"t":"teleport"}"#;
-            assert!(text(navree_core_send(core, unknown.as_ptr(), unknown.len())).contains("error"));
+            assert!(
+                text(navree_core_send(core, unknown.as_ptr(), unknown.len())).contains("error")
+            );
             assert!(text(navree_core_send(core, std::ptr::null(), 0)).contains("error"));
             let query = br#"{"part":"nowhere"}"#;
             assert!(text(navree_core_view(core, query.as_ptr(), query.len())).contains("error"));
             let gone = br#"{"part":"screen","id":99}"#;
-            assert_eq!(text(navree_core_view(core, gone.as_ptr(), gone.len())), "null");
+            assert_eq!(
+                text(navree_core_view(core, gone.as_ptr(), gone.len())),
+                "null"
+            );
             navree_bytes_free(NavreeBytes {
                 ptr: std::ptr::null_mut(),
                 len: 0,

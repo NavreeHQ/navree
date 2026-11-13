@@ -265,7 +265,9 @@ impl Origin {
             Some(scheme) if HANDED_TO_SYSTEM.contains(&scheme) => Target::Outside(text.to_owned()),
             Some(_) => Target::Refused,
             None => {
-                let base_path = base.as_ref().map_or_else(|| path_of(from), |parts| parts.path.clone());
+                let base_path = base
+                    .as_ref()
+                    .map_or_else(|| path_of(from), |parts| parts.path.clone());
                 let text = text.split('#').next().unwrap_or("");
                 let (path, query) = match text.split_once('?') {
                     Some((path, query)) => (path, Some(query)),
@@ -303,7 +305,10 @@ mod tests {
     fn origin() -> Origin {
         Origin::parse(
             "https://shop.example",
-            &["https://*.shop.example".to_owned(), "https://pay.example:8443".to_owned()],
+            &[
+                "https://*.shop.example".to_owned(),
+                "https://pay.example:8443".to_owned(),
+            ],
             false,
         )
         .unwrap()
@@ -316,8 +321,14 @@ mod tests {
     #[test]
     fn an_address_is_inside_outside_or_refused() {
         let origin = origin();
-        assert_eq!(origin.resolve("/orders/7?tab=items#notes", "/"), inside("/orders/7?tab=items"));
-        assert_eq!(origin.resolve("https://shop.example/orders", "/"), inside("/orders"));
+        assert_eq!(
+            origin.resolve("/orders/7?tab=items#notes", "/"),
+            inside("/orders/7?tab=items")
+        );
+        assert_eq!(
+            origin.resolve("https://shop.example/orders", "/"),
+            inside("/orders")
+        );
         assert_eq!(origin.resolve("HTTPS://Shop.Example:443", "/"), inside("/"));
         assert_eq!(origin.resolve("//shop.example/a", "/"), inside("/a"));
         assert_eq!(
@@ -325,17 +336,41 @@ mod tests {
             Target::Outside("https://other.example/a".to_owned())
         );
         // The same name on another scheme or port is another site.
-        assert!(matches!(origin.resolve("http://shop.example/a", "/"), Target::Outside(_)));
-        assert!(matches!(origin.resolve("https://shop.example:8443/a", "/"), Target::Outside(_)));
+        assert!(matches!(
+            origin.resolve("http://shop.example/a", "/"),
+            Target::Outside(_)
+        ));
+        assert!(matches!(
+            origin.resolve("https://shop.example:8443/a", "/"),
+            Target::Outside(_)
+        ));
         // A name before an `@` is not the host.
-        assert!(matches!(origin.resolve("https://shop.example@evil.example/", "/"), Target::Outside(_)));
-        assert!(matches!(origin.resolve("https://user@shop.example/", "/"), Target::Outside(_)));
+        assert!(matches!(
+            origin.resolve("https://shop.example@evil.example/", "/"),
+            Target::Outside(_)
+        ));
+        assert!(matches!(
+            origin.resolve("https://user@shop.example/", "/"),
+            Target::Outside(_)
+        ));
         assert_eq!(
             origin.resolve("mailto:help@shop.example", "/"),
             Target::Outside("mailto:help@shop.example".to_owned())
         );
-        assert_eq!(origin.resolve("tel:+911234567890", "/"), Target::Outside("tel:+911234567890".to_owned()));
-        for refused in ["", "#top", "javascript:alert(1)", "file:///etc/passwd", "data:text/html,x", "/\\evil.example", "/a\nb", "https:orders"] {
+        assert_eq!(
+            origin.resolve("tel:+911234567890", "/"),
+            Target::Outside("tel:+911234567890".to_owned())
+        );
+        for refused in [
+            "",
+            "#top",
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "data:text/html,x",
+            "/\\evil.example",
+            "/a\nb",
+            "https:orders",
+        ] {
             assert_eq!(origin.resolve(refused, "/"), Target::Refused, "{refused:?}");
         }
     }
@@ -344,9 +379,18 @@ mod tests {
     fn a_relative_address_is_read_against_the_page() {
         let origin = origin();
         assert_eq!(origin.resolve("edit", "/orders/7"), inside("/orders/edit"));
-        assert_eq!(origin.resolve("edit", "/orders/7/"), inside("/orders/7/edit"));
-        assert_eq!(origin.resolve("../inventory", "/orders/7"), inside("/inventory"));
-        assert_eq!(origin.resolve("?page=2", "/orders?page=1"), inside("/orders?page=2"));
+        assert_eq!(
+            origin.resolve("edit", "/orders/7/"),
+            inside("/orders/7/edit")
+        );
+        assert_eq!(
+            origin.resolve("../inventory", "/orders/7"),
+            inside("/inventory")
+        );
+        assert_eq!(
+            origin.resolve("?page=2", "/orders?page=1"),
+            inside("/orders?page=2")
+        );
         assert_eq!(origin.resolve("./", "/orders/7"), inside("/orders/"));
         // A path can't climb out of the origin.
         assert_eq!(origin.resolve("/../../etc", "/"), inside("/etc"));
@@ -361,20 +405,41 @@ mod tests {
             origin.resolve("https://patiala.shop.example/orders?x=1", "/"),
             inside("https://patiala.shop.example/orders?x=1")
         );
-        assert_eq!(origin.resolve("https://pay.example:8443/pay", "/"), inside("https://pay.example:8443/pay"));
+        assert_eq!(
+            origin.resolve("https://pay.example:8443/pay", "/"),
+            inside("https://pay.example:8443/pay")
+        );
         // Under the name, not merely ending in it, and never the bare pattern.
-        assert!(matches!(origin.resolve("https://evilshop.example/", "/"), Target::Outside(_)));
-        assert!(matches!(origin.resolve("https://.shop.example/", "/"), Target::Outside(_)));
-        assert!(matches!(origin.resolve("https://pay.example/pay", "/"), Target::Outside(_)));
+        assert!(matches!(
+            origin.resolve("https://evilshop.example/", "/"),
+            Target::Outside(_)
+        ));
+        assert!(matches!(
+            origin.resolve("https://.shop.example/", "/"),
+            Target::Outside(_)
+        ));
+        assert!(matches!(
+            origin.resolve("https://pay.example/pay", "/"),
+            Target::Outside(_)
+        ));
         // A page on another allowed origin reads its own links against itself.
         assert_eq!(
             origin.resolve("/inventory", "https://patiala.shop.example/orders"),
             inside("https://patiala.shop.example/inventory")
         );
-        assert_eq!(origin.resolve("https://shop.example/x", "https://patiala.shop.example/"), inside("/x"));
+        assert_eq!(
+            origin.resolve("https://shop.example/x", "https://patiala.shop.example/"),
+            inside("/x")
+        );
         assert_eq!(origin.absolute("/orders"), "https://shop.example/orders");
-        assert_eq!(origin.absolute("https://patiala.shop.example/orders"), "https://patiala.shop.example/orders");
-        assert_eq!(path_of("https://patiala.shop.example/orders?x=1"), "/orders");
+        assert_eq!(
+            origin.absolute("https://patiala.shop.example/orders"),
+            "https://patiala.shop.example/orders"
+        );
+        assert_eq!(
+            path_of("https://patiala.shop.example/orders?x=1"),
+            "/orders"
+        );
     }
 
     #[test]

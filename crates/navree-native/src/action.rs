@@ -57,7 +57,11 @@ pub enum Action {
         href: String,
         /// How it is presented: [`Present::Auto`], the shell's routes, unless
         /// the page said.
-        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+        #[serde(
+            default,
+            skip_serializing_if = "is_default",
+            deserialize_with = "crate::lenient::or_default"
+        )]
         present: Present,
     },
     /// Sends a form.
@@ -75,7 +79,11 @@ pub enum Action {
     /// Sends a request of its own: a button that posts.
     Request {
         /// `get` or `post`.
-        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+        #[serde(
+            default,
+            skip_serializing_if = "is_default",
+            deserialize_with = "crate::lenient::or_default"
+        )]
         method: crate::node::Method,
         /// Where to.
         href: String,
@@ -250,7 +258,11 @@ pub enum Command {
     /// Shows a toast.
     Toast {
         /// What it means.
-        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+        #[serde(
+            default,
+            skip_serializing_if = "is_default",
+            deserialize_with = "crate::lenient::or_default"
+        )]
         tone: Tone,
         /// What it says.
         text: String,
@@ -318,11 +330,23 @@ mod tests {
             Action::Navigate { present, .. } => present,
             other => panic!("{other:?}"),
         };
-        assert_eq!(said(r#"{"t":"navigate","href":"/orders/new"}"#), Present::Auto);
-        assert_eq!(said(r#"{"t":"navigate","href":"/orders/new","present":"push"}"#), Present::Push);
-        assert_eq!(said(r#"{"t":"navigate","href":"/orders/new","present":"task"}"#), Present::Task);
+        assert_eq!(
+            said(r#"{"t":"navigate","href":"/orders/new"}"#),
+            Present::Auto
+        );
+        assert_eq!(
+            said(r#"{"t":"navigate","href":"/orders/new","present":"push"}"#),
+            Present::Push
+        );
+        assert_eq!(
+            said(r#"{"t":"navigate","href":"/orders/new","present":"task"}"#),
+            Present::Task
+        );
         // A word this build does not know is not said.
-        assert_eq!(said(r#"{"t":"navigate","href":"/orders/new","present":"portal"}"#), Present::Auto);
+        assert_eq!(
+            said(r#"{"t":"navigate","href":"/orders/new","present":"portal"}"#),
+            Present::Auto
+        );
         let push = Action::Navigate {
             href: "/orders/7".to_owned(),
             present: Present::Push,

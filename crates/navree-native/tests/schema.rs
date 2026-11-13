@@ -62,7 +62,9 @@ impl Problems<'_> {
                         self.found.push(format!("{at}: {value} is not a {name}"));
                     }
                 }
-                kind => self.found.push(format!("{at}: {name} is of no kind: {kind:?}")),
+                kind => self
+                    .found
+                    .push(format!("{at}: {name} is of no kind: {kind:?}")),
             }
             return;
         }
@@ -147,8 +149,9 @@ impl Problems<'_> {
             }
             None => {
                 if value.as_object().is_some_and(|fields| fields.len() > 1) {
-                    self.found
-                        .push(format!("{at}: the variant `{label}` holds nothing, yet has fields"));
+                    self.found.push(format!(
+                        "{at}: the variant `{label}` holds nothing, yet has fields"
+                    ));
                 }
             }
         }
@@ -168,7 +171,11 @@ fn every_example_holds_only_what_the_schema_describes() {
             continue;
         }
         let value: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        let root = if name == "shell.json" { "Shell" } else { "Envelope" };
+        let root = if name == "shell.json" {
+            "Shell"
+        } else {
+            "Envelope"
+        };
         let mut problems = Problems {
             defs,
             found: Vec::new(),
@@ -178,11 +185,7 @@ fn every_example_holds_only_what_the_schema_describes() {
             &value,
             &name,
         );
-        assert!(
-            problems.found.is_empty(),
-            "{}",
-            problems.found.join("\n")
-        );
+        assert!(problems.found.is_empty(), "{}", problems.found.join("\n"));
         checked.insert(name);
     }
     assert!(checked.len() > 10, "{checked:?}");
@@ -200,7 +203,11 @@ fn an_example_with_a_field_the_schema_lacks_is_caught() {
         "screen": {"title": "x", "body": {"t": "badge", "text": "Paid", "glow": 3}},
         "ops": [{"op": "toast"}, {"op": "teleport"}],
     });
-    problems.check(&serde_json::json!({"$ref": "#/$defs/Envelope"}), &value, "e");
+    problems.check(
+        &serde_json::json!({"$ref": "#/$defs/Envelope"}),
+        &value,
+        "e",
+    );
     assert_eq!(
         problems.found,
         [

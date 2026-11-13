@@ -14,8 +14,8 @@ use crate::action::Action;
 pub use crate::charts::{
     CalendarHeatmap, Category, Centre, ClockMoment, ColorStrip, Colour, Curve, DayClock, DayPager,
     DayPick, HeatDay, Hint, HintMark, Hour, Hue, MatrixHeatmap, Measure, Meter, MiniColumn,
-    MiniColumns, PagerWords, Point, PointSeries, RangeScale, Reference, ReferenceKind, Relation, Ring,
-    RingValue, Rings, RingsCentre, Scatter, Segment, Stacking, StripCell, Zone,
+    MiniColumns, PagerWords, Point, PointSeries, RangeScale, Reference, ReferenceKind, Relation,
+    Ring, RingValue, Rings, RingsCentre, Scatter, Segment, Stacking, StripCell, Zone,
 };
 pub use crate::compose::{
     Adaptive, Appear, Card, Carousel, Change, Layers, Place, Shape, ShapeForm, Size, Transition,
@@ -301,11 +301,7 @@ impl Node {
                 .query
                 .iter()
                 .flat_map(|form| &form.children)
-                .chain(
-                    node.rows
-                        .iter()
-                        .flat_map(TableRow::nodes),
-                )
+                .chain(node.rows.iter().flat_map(TableRow::nodes))
                 .chain(boxed(&node.empty))
                 .collect(),
             Self::Link(node) => node.children.iter().collect(),
@@ -396,28 +392,18 @@ impl Node {
                 .query
                 .iter_mut()
                 .flat_map(|form| &mut form.children)
-                .chain(
-                    node.rows
-                        .iter_mut()
-                        .flat_map(TableRow::nodes_mut),
-                )
+                .chain(node.rows.iter_mut().flat_map(TableRow::nodes_mut))
                 .chain(boxed(&mut node.empty))
                 .collect(),
             Self::Link(node) => node.children.iter_mut().collect(),
-            Self::Figure(node) => boxed(&mut node.aside).chain(boxed(&mut node.chart)).collect(),
+            Self::Figure(node) => boxed(&mut node.aside)
+                .chain(boxed(&mut node.chart))
+                .collect(),
             Self::DayPager(node) => boxed(&mut node.scores).collect(),
             Self::Menu(node) => node.items.iter_mut().collect(),
             Self::Form(node) => node.children.iter_mut().collect(),
-            Self::Sheet(node) => node
-                .children
-                .iter_mut()
-                .chain(&mut node.actions)
-                .collect(),
-            Self::Dialog(node) => node
-                .children
-                .iter_mut()
-                .chain(&mut node.actions)
-                .collect(),
+            Self::Sheet(node) => node.children.iter_mut().chain(&mut node.actions).collect(),
+            Self::Dialog(node) => node.children.iter_mut().chain(&mut node.actions).collect(),
             Self::Popover(node) => node.children.iter_mut().collect(),
             Self::Native(node) => boxed(&mut node.alt).collect(),
             Self::Toolbar(node) => node
@@ -609,16 +595,28 @@ pub struct Stack {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     /// Down or across.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub axis: Axis,
     /// The room between parts, in steps of the system's spacing scale: `0` is none.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub gap: u8,
     /// Where parts sit across the axis.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub align: Option<Align>,
     /// How the room along the axis is shared.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub justify: Option<Justify>,
     /// Whether parts that do not fit go to a new line.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -638,10 +636,18 @@ pub struct Stack {
     /// The axis it runs along in a wide room, when that is not `axis`: a
     /// stack that runs down a phone and across a tablet. The client turns it
     /// as the room changes, with no request, and keeps what its parts hold.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub wide: Option<Axis>,
     /// How it comes in when it joins a screen already drawn.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub appear: Option<Appear>,
     /// The parts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -694,7 +700,11 @@ pub struct Section {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subtitle: Option<String>,
     /// How it is set off.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub style: SectionStyle,
     /// What a reader may do with the whole section, beside its heading.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -840,7 +850,11 @@ pub struct Row {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub badge: Option<Badge>,
     /// How far along the thing the row stands for is.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub state: Option<RowState>,
     /// What a tap on the row does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1016,10 +1030,18 @@ pub struct Text {
     /// The words.
     pub value: String,
     /// What the text is for.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub style: TextStyle,
     /// What its colour means.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub tone: Option<Tone>,
     /// Whether it is secondary: drawn quieter than the text around it.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -1031,21 +1053,33 @@ pub struct Text {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub heading: Option<u8>,
     /// How heavy it is set, when not as its style is.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub weight: Option<Weight>,
     /// Its colour by hue, when the thing it names has a colour of its own.
     /// It wins over `tone`, and never carries meaning alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub colour: Option<Colour>,
     /// Where its lines sit in the room it has: `start`, `center` or `end`.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub align: Option<Align>,
     /// Whether its figures are all one width, so a number that changes does
     /// not shift what stands beside it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub tabular: bool,
     /// How it shows that its words changed.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub change: Option<Change>,
 }
 
@@ -1063,7 +1097,11 @@ pub struct Rich {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blocks: Vec<Block>,
     /// What the text is for.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub style: TextStyle,
     /// Whether it is secondary.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -1094,7 +1132,11 @@ pub enum BlockKind {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Block {
     /// What it is.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub kind: BlockKind,
     /// Its runs, in order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1151,7 +1193,11 @@ pub struct Image {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<u16>,
     /// How it fills its box.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub fit: Option<Fit>,
 }
 
@@ -1183,7 +1229,11 @@ pub struct Icon {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     /// What its colour means.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub tone: Option<Tone>,
     /// The system's own symbol that means the same, where there is one: a
     /// client that has it draws it, filled when it stands for the selected
@@ -1193,7 +1243,11 @@ pub struct Icon {
     pub symbol: Option<SystemSymbol>,
     /// The text style it is as large as, when it is not the size of the text
     /// beside it: a symbol at the head of a card, as large as a title.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub scale: Option<TextStyle>,
     /// Its colour by hue. It wins over `tone`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1257,7 +1311,11 @@ impl Node {
     pub fn icons_mut(&mut self) -> Vec<&mut Icon> {
         match self {
             Self::Icon(icon) => vec![icon],
-            Self::Tabs(node) => node.items.iter_mut().filter_map(|tab| tab.icon.as_mut()).collect(),
+            Self::Tabs(node) => node
+                .items
+                .iter_mut()
+                .filter_map(|tab| tab.icon.as_mut())
+                .collect(),
             Self::Row(node) => node
                 .swipe
                 .iter_mut()
@@ -1285,7 +1343,11 @@ impl Node {
             Self::DayClock(node) => node
                 .icon
                 .iter_mut()
-                .chain(node.moments.iter_mut().filter_map(|moment| moment.icon.as_mut()))
+                .chain(
+                    node.moments
+                        .iter_mut()
+                        .filter_map(|moment| moment.icon.as_mut()),
+                )
                 .collect(),
             _ => Vec::new(),
         }
@@ -1304,7 +1366,11 @@ impl Node {
             Self::Row(node) => node
                 .action
                 .iter_mut()
-                .chain(node.swipe.iter_mut().filter_map(|button| button.action.as_mut()))
+                .chain(
+                    node.swipe
+                        .iter_mut()
+                        .filter_map(|button| button.action.as_mut()),
+                )
                 .collect(),
             Self::Table(node) => node
                 .rows
@@ -1350,7 +1416,11 @@ pub struct Badge {
     /// The words.
     pub text: String,
     /// What its colour means.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub tone: Option<Tone>,
     /// Whether a dot in the tone's colour stands before the words.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -1371,7 +1441,11 @@ pub struct Progress {
     pub label: Option<String>,
     /// What its colour means, when it measures something that is good or
     /// bad news: a part of a score that is low.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub tone: Option<Tone>,
     /// Its colour by name, when a tone does not say it: the colour its
     /// measure wears everywhere on the screen. It wins over `tone`.
@@ -1386,7 +1460,11 @@ pub struct Banner {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     /// What it means.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub tone: Option<Tone>,
     /// Its heading.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1444,7 +1522,11 @@ pub struct Fact {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<Icon>,
     /// What its colour means.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub tone: Option<Tone>,
     /// Lines under the value.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1487,7 +1569,11 @@ pub struct Sort {
     /// The page a tap on the heading asks for.
     pub href: String,
     /// The way the table is sorted by this column now, when it is.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub dir: Option<SortDir>,
 }
 
@@ -1503,13 +1589,21 @@ pub struct Column {
     #[serde(default, skip_serializing_if = "is_false")]
     pub numeric: bool,
     /// Where its cells sit.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub align: Option<Align>,
     /// How it sorts, when it does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sort: Option<Sort>,
     /// What it is to its row.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub role: Option<ColumnRole>,
     /// Whether a narrow screen may leave it out.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -1724,7 +1818,11 @@ pub struct Chart {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     /// The kind.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub kind: ChartKind,
     /// What it shows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1752,10 +1850,18 @@ pub struct Chart {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub levels: Vec<String>,
     /// How a line or an area runs from one value to the next.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub curve: Curve,
     /// How the series of a bar or area chart sit.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub stacking: Stacking,
     /// Whether bars lie along rows, each with its label: for long names and
     /// ranked lists.
@@ -1798,14 +1904,26 @@ pub struct Button {
     #[serde(default, skip_serializing_if = "is_false")]
     pub icon_only: bool,
     /// What it means.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub role: Role,
     /// The standard action it is, when it is one. A client draws the system's
     /// own symbol and words for it, whatever icon and label it carries.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub standard: Option<Standard>,
     /// How loud it is.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub prominence: Prominence,
     /// Whether what it does can be undone. A destructive action that can be
     /// undone asks nothing first on a system whose guidelines say so, and
@@ -1953,7 +2071,11 @@ pub struct Form {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     /// How it is sent.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub method: Method,
     /// Where it is sent. The screen's own address when empty.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -1995,7 +2117,11 @@ pub struct Field {
     /// What the field is for, in a form that asks for records (a table's
     /// query), so a client puts it where its system puts that: the search in
     /// the search bar, filters with the filters, the order with the sorting.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub purpose: Option<Purpose>,
     /// What the client does when the person changes the value, besides
     /// holding it: send the form (`submit`: a box that saves as it is ticked, a
@@ -2064,7 +2190,11 @@ pub struct Sheet {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subtitle: Option<String>,
     /// How much of the screen it takes.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub size: SheetSize,
     /// Whether it is a task the person finishes or cancels (a form), not a
     /// glance at something: each system presents the two its own way, as with
@@ -2171,13 +2301,25 @@ pub struct ToolbarItem {
     pub icon: Icon,
     /// The standard action it is, when it is one: the system's own symbol and
     /// words take the place of `icon` and `title`.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub standard: Option<Standard>,
     /// What it means.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub role: Role,
     /// How loud it is.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub prominence: Prominence,
     /// Whether what it does can be undone.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -2231,7 +2373,11 @@ pub struct Gauge {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub zones: Vec<Zone>,
     /// What its colour means.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub tone: Option<Tone>,
     /// Its colour by hue, when it has no zones to take it from and its colour
     /// is not a tone's. It wins over `tone`.
@@ -2289,7 +2435,11 @@ pub struct Trend {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     /// Whether it is good (`success`) or bad (`danger`) news.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub tone: Option<Tone>,
 }
 
@@ -2327,7 +2477,11 @@ pub struct Figure {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<Badge>,
     /// What its colour means.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub tone: Option<Tone>,
     /// The hue of its icon, when the thing it is about has a colour of its
     /// own (sleep is violet) and the colour says nothing good or bad. It is
@@ -2376,13 +2530,21 @@ pub struct Moment {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time: Option<String>,
     /// Whether it has happened, is happening or is to come.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub state: Option<RowState>,
     /// Its icon.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<Icon>,
     /// What its colour means.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub tone: Option<Tone>,
     /// More under it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -2412,7 +2574,11 @@ pub struct FeedRow {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time: Option<String>,
     /// What its colour means.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub tone: Option<Tone>,
     /// More under it: a comment, a change from one value to another.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -2470,7 +2636,11 @@ pub struct Message {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time: Option<String>,
     /// How far it has got.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub delivery: Option<Delivery>,
 }
 
@@ -2569,9 +2739,16 @@ mod tests {
         let Node::Toolbar(toolbar) = item else {
             panic!("not a toolbar");
         };
-        assert_eq!(toolbar.items[0].reason.as_deref(), Some("3 orders are still to be packed."));
+        assert_eq!(
+            toolbar.items[0].reason.as_deref(),
+            Some("3 orders are still to be packed.")
+        );
         // A control that can be used says nothing of why it can't.
-        assert!(!serde_json::to_string(&Button::default()).unwrap().contains("reason"));
+        assert!(
+            !serde_json::to_string(&Button::default())
+                .unwrap()
+                .contains("reason")
+        );
     }
 
     #[test]
@@ -2588,7 +2765,10 @@ mod tests {
             unchoosable: true,
             ..TableRow::default()
         };
-        assert_eq!(serde_json::to_string(&held).unwrap(), r#"{"unchoosable":true}"#);
+        assert_eq!(
+            serde_json::to_string(&held).unwrap(),
+            r#"{"unchoosable":true}"#
+        );
     }
 
     #[test]
@@ -2606,10 +2786,23 @@ mod tests {
             })
         );
         // The number is only for the words, so it may be left out; the field and its value are not.
-        let bare: Selection = serde_json::from_str(r#"{"name":"ids[]","across":{"name":"all_matching","value":"q"}}"#).unwrap();
+        let bare: Selection = serde_json::from_str(
+            r#"{"name":"ids[]","across":{"name":"all_matching","value":"q"}}"#,
+        )
+        .unwrap();
         assert_eq!(bare.across.map(|across| across.total), Some(None));
-        assert!(serde_json::from_str::<Selection>(r#"{"name":"ids[]","across":{"name":"all_matching"}}"#).is_err());
-        assert_eq!(serde_json::from_str::<Selection>(r#"{"name":"ids[]"}"#).unwrap().across, None);
+        assert!(
+            serde_json::from_str::<Selection>(
+                r#"{"name":"ids[]","across":{"name":"all_matching"}}"#
+            )
+            .is_err()
+        );
+        assert_eq!(
+            serde_json::from_str::<Selection>(r#"{"name":"ids[]"}"#)
+                .unwrap()
+                .across,
+            None
+        );
     }
 
     #[test]
@@ -2623,7 +2816,12 @@ mod tests {
         let Node::List(list) = node else {
             panic!("not a list");
         };
-        assert_eq!(list.reorder.as_ref().and_then(|reorder| reorder.key.as_deref()), Some("doing"));
+        assert_eq!(
+            list.reorder
+                .as_ref()
+                .and_then(|reorder| reorder.key.as_deref()),
+            Some("doing")
+        );
         let keys: Vec<_> = list
             .children
             .iter()
@@ -2636,7 +2834,13 @@ mod tests {
         assert_eq!(keys, [Some("5"), None]);
         // What a move posts is named once.
         assert_eq!(
-            [Reorder::ITEM, Reorder::FROM, Reorder::TO, Reorder::BEFORE, Reorder::POSITION],
+            [
+                Reorder::ITEM,
+                Reorder::FROM,
+                Reorder::TO,
+                Reorder::BEFORE,
+                Reorder::POSITION
+            ],
             ["item", "from", "to", "before", "position"]
         );
     }
@@ -2644,9 +2848,13 @@ mod tests {
     #[test]
     fn a_moment_may_be_quiet_like_a_row_and_a_feed_entry() {
         let moment: Moment =
-            serde_json::from_str(r#"{"title":"Reminder sent to the carrier","muted":true}"#).unwrap();
+            serde_json::from_str(r#"{"title":"Reminder sent to the carrier","muted":true}"#)
+                .unwrap();
         assert!(moment.muted);
-        assert_eq!(serde_json::to_string(&Moment::default()).unwrap(), r#"{"title":""}"#);
+        assert_eq!(
+            serde_json::to_string(&Moment::default()).unwrap(),
+            r#"{"title":""}"#
+        );
     }
 
     #[test]
@@ -2665,12 +2873,17 @@ mod tests {
             panic!("not a figure");
         };
         assert_eq!(figure.unit.as_deref(), Some("bpm"));
-        assert_eq!(figure.status.as_ref().map(|status| status.text.as_str()), Some("Athletic"));
+        assert_eq!(
+            figure.status.as_ref().map(|status| status.text.as_str()),
+            Some("Athletic")
+        );
         assert_eq!(figure.colour, Some(Colour::new(Hue::Rose)));
         assert!(figure.action.is_some() && figure.hint.is_some());
         // The graphics are parts of the tree: they are found, and walked.
         assert_eq!(node.children().len(), 2);
-        assert!(matches!(node.find("rhr-ring"), Some(Node::Ring(ring)) if ring.centre == Centre::Nothing));
+        assert!(
+            matches!(node.find("rhr-ring"), Some(Node::Ring(ring)) if ring.centre == Centre::Nothing)
+        );
         assert!(matches!(node.find("rhr-days"), Some(Node::Chart(_))));
         // A plain figure writes none of it.
         assert_eq!(
@@ -2722,7 +2935,9 @@ mod tests {
         assert_eq!(serde_json::to_string(&clock.hours[1]).unwrap(), "{}");
         assert_eq!(clock.moments[0].at.as_f64(), Some(6.5));
         // A moment says when and what.
-        assert!(serde_json::from_str::<Node>(r#"{"t":"day_clock","moments":[{"at":6.5}]}"#).is_err());
+        assert!(
+            serde_json::from_str::<Node>(r#"{"t":"day_clock","moments":[{"at":6.5}]}"#).is_err()
+        );
     }
 
     #[test]
@@ -2736,17 +2951,25 @@ mod tests {
         let Node::DayPager(pager) = &node else {
             panic!("not a pager");
         };
-        assert_eq!((pager.day.as_str(), pager.date.as_str()), ("Yesterday", "2026-11-12"));
+        assert_eq!(
+            (pager.day.as_str(), pager.date.as_str()),
+            ("Yesterday", "2026-11-12")
+        );
         assert_eq!(pager.today.as_deref(), Some("/"));
-        assert_eq!(pager.pick.as_ref().map(|pick| pick.name.as_str()), Some("date"));
+        assert_eq!(
+            pager.pick.as_ref().map(|pick| pick.name.as_str()),
+            Some("date")
+        );
         assert!(node.children().is_empty());
         // The day is said as words and as a date: a pager with only one is refused, as is a pick
         // that does not say how the day is asked for.
         assert!(serde_json::from_str::<Node>(r#"{"t":"day_pager","day":"Today"}"#).is_err());
-        assert!(serde_json::from_str::<Node>(
-            r#"{"t":"day_pager","day":"Today","date":"2026-11-13","pick":{"href":"/"}}"#
-        )
-        .is_err());
+        assert!(
+            serde_json::from_str::<Node>(
+                r#"{"t":"day_pager","day":"Today","date":"2026-11-13","pick":{"href":"/"}}"#
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -2755,8 +2978,13 @@ mod tests {
             r#"{"kind":"bar","title":"Orders","labels":["Mon"],"series":[{"label":"UPI","values":[41]}]}"#,
         )
         .unwrap();
-        assert!(old.x.is_none() && old.y.is_none() && old.references.is_empty() && old.zones.is_empty());
-        assert_eq!((old.curve, old.stacking, old.horizontal), (Curve::Linear, Stacking::Apart, false));
+        assert!(
+            old.x.is_none() && old.y.is_none() && old.references.is_empty() && old.zones.is_empty()
+        );
+        assert_eq!(
+            (old.curve, old.stacking, old.horizontal),
+            (Curve::Linear, Stacking::Apart, false)
+        );
         // A newer server's words read as the usual ones, and the chart still draws.
         let newer: Chart = serde_json::from_str(
             r#"{"kind":"line","curve":"wiggly","stacking":"layers",
@@ -2764,13 +2992,19 @@ mod tests {
                 "series":[{"label":"Asleep","colour":{"hue":"teal"}}]}"#,
         )
         .unwrap();
-        assert_eq!((newer.curve, newer.stacking), (Curve::Linear, Stacking::Apart));
+        assert_eq!(
+            (newer.curve, newer.stacking),
+            (Curve::Linear, Stacking::Apart)
+        );
         assert_eq!(newer.references[0].kind, ReferenceKind::Level);
         assert_eq!(newer.series[0].colour, Some(Colour::new(Hue::Neutral)));
         // The diagonal where x equals y has no level of its own.
         let diagonal: Reference =
             serde_json::from_str(r#"{"kind":"diagonal","label":"Equal"}"#).unwrap();
-        assert_eq!((diagonal.kind, diagonal.value), (ReferenceKind::Diagonal, None));
+        assert_eq!(
+            (diagonal.kind, diagonal.value),
+            (ReferenceKind::Diagonal, None)
+        );
         // Nothing is written for what a chart does not say.
         assert_eq!(serde_json::to_string(&Chart::default()).unwrap(), "{}");
     }
@@ -2785,8 +3019,15 @@ mod tests {
             panic!("not a section");
         };
         let hint = section.hint.expect("a hint");
-        assert_eq!((hint.about.as_str(), hint.mark), ("the sleep stages", HintMark::Info));
-        assert!(!serde_json::to_string(&Section::default()).unwrap().contains("hint"));
+        assert_eq!(
+            (hint.about.as_str(), hint.mark),
+            ("the sleep stages", HintMark::Info)
+        );
+        assert!(
+            !serde_json::to_string(&Section::default())
+                .unwrap()
+                .contains("hint")
+        );
     }
 
     #[test]

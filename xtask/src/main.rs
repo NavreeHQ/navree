@@ -229,7 +229,10 @@ fn cmd_native_models(check: bool) -> Result<ExitCode, String> {
         return Ok(ExitCode::SUCCESS);
     }
     if stale.is_empty() {
-        println!("the native models are what {} describes", native_models::SCHEMA);
+        println!(
+            "the native models are what {} describes",
+            native_models::SCHEMA
+        );
         return Ok(ExitCode::SUCCESS);
     }
     for path in &stale {

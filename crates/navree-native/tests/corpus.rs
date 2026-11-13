@@ -9,7 +9,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use navree_native::action::{Action, Command, Pair, Present, State};
-use navree_native::charts::{Curve, Hint, HintMark, Hue, Measure, Reference, ReferenceKind, Stacking};
+use navree_native::charts::{
+    Curve, Hint, HintMark, Hue, Measure, Reference, ReferenceKind, Stacking,
+};
 use navree_native::device::{
     Accuracy, Alt, AppLock, AuthSession, CancelNotification, CodeFormat, Confirm, ConfirmMethod,
     CopyText, DeviceCall, Haptic, HapticKind, HttpsUrl, LocateOnce, Notify, OpenSettings, OpenUrl,
@@ -19,24 +21,21 @@ use navree_native::device::{
 use navree_native::envelope::{Back, Envelope, Screen, Upgrade, Web};
 use navree_native::input::{
     ChoiceCreate, ChoiceInput, ChoiceKind, ChoiceOption, ChoiceSearch, ChoicesInput, ColourInput,
-    DateInput, DateKind, FileInput, Input, PhoneCountry, RangeEnd, RangeInput, SliderInput, TextInput, TextKind,
-    ToggleInput, ToggleKind, Weekday,
+    DateInput, DateKind, FileInput, Input, PhoneCountry, RangeEnd, RangeInput, SliderInput,
+    TextInput, TextKind, ToggleInput, ToggleKind, Weekday,
 };
 use navree_native::node::{
-    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, CalendarHeatmap, Category,
-    Centre, Chart, ChartKind, ClockMoment, Code, ColorStrip, Colour, Column, ColumnRole, DayClock,
-    DayPager, DayPick, HeatDay,
-    Delivery, Dialog,
-    Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
-    Field, Figure, Fit, Form, Gauge, Grid, Hidden, Hour, Icon, Image, Justify, Link, List, Live,
-    MatrixHeatmap, Menu, Message, Meter, Method, MiniColumn, MiniColumns, Moment, NativeView,
-    Node, Pane, PaneRole, Point, PointSeries, Popover, Progress, Prominence,
-    PagerWords, Purpose, Question, Region, Reorder, Rich, Ring, RingValue, Rings, RingsCentre,
-    RangeScale, Relation, Role, Row, RowState, Run, Scatter, Section, SectionStyle, Segment,
-    StripCell,
-    Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table,
-    TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown,
-    WebRegion, Zone,
+    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, CalendarHeatmap,
+    Category, Centre, Chart, ChartKind, ClockMoment, Code, ColorStrip, Colour, Column, ColumnRole,
+    DayClock, DayPager, DayPick, Delivery, Dialog, Direction, Disclosure, Divider, Empty, Fact,
+    Facts, FeedRow, Field, Figure, Fit, Form, Gauge, Grid, HeatDay, Hidden, Hour, Icon, Image,
+    Justify, Link, List, Live, MatrixHeatmap, Menu, Message, Meter, Method, MiniColumn,
+    MiniColumns, Moment, NativeView, Node, PagerWords, Pane, PaneRole, Point, PointSeries, Popover,
+    Progress, Prominence, Purpose, Question, RangeScale, Region, Relation, Reorder, Rich, Ring,
+    RingValue, Rings, RingsCentre, Role, Row, RowState, Run, Scatter, Section, SectionStyle,
+    Segment, Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard,
+    StripCell, Tab, Table, TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar, ToolbarItem,
+    Trend, Unknown, WebRegion, Zone,
 };
 use navree_native::op::{Edge, Op, Toast, ToastAction, UrlMode};
 use navree_native::shell::{
@@ -1895,7 +1894,12 @@ fn screen_dashboard() -> Envelope {
                         // What a machine did, among what people did.
                         Moment {
                             muted: true,
-                            ..moment("Reminder sent to the carrier", "11:30", RowState::Done, "bell")
+                            ..moment(
+                                "Reminder sent to the carrier",
+                                "11:30",
+                                RowState::Done,
+                                "bell",
+                            )
                         },
                         Moment {
                             tone: Some(Tone::Info),
@@ -1960,7 +1964,10 @@ fn screen_dashboard() -> Envelope {
                     },
                     Block {
                         kind: BlockKind::Paragraph,
-                        runs: vec![run("Orders double in the week before. "), bold("Restock early.")],
+                        runs: vec![
+                            run("Orders double in the week before. "),
+                            bold("Restock early."),
+                        ],
                         level: 0,
                     },
                     Block {
@@ -1980,7 +1987,9 @@ fn screen_dashboard() -> Envelope {
                     },
                     Block {
                         kind: BlockKind::Quote,
-                        runs: vec![run("Ship nothing after the 28th that can't arrive by the 31st.")],
+                        runs: vec![run(
+                            "Ship nothing after the 28th that can't arrive by the 31st.",
+                        )],
                         level: 0,
                     },
                     Block {
@@ -2114,7 +2123,9 @@ fn screen_today() -> Envelope {
         hint: Some(Hint {
             about: s("the health score"),
             title: Some(s("How the score is made")),
-            text: s("Your health score blends five pillars, each scored from 0 to 100 from your own readings. A pillar with no data that day is left out and the rest are weighed up. It describes a pattern in your readings; it is not advice."),
+            text: s(
+                "Your health score blends five pillars, each scored from 0 to 100 from your own readings. A pillar with no data that day is left out and the rest are weighed up. It describes a pattern in your readings; it is not advice.",
+            ),
             mark: HintMark::Question,
         }),
         ..Ring::default()
@@ -2139,7 +2150,9 @@ fn screen_today() -> Envelope {
         ],
         centre: RingsCentre::Values,
         legend: true,
-        summary: Some(s("Activity rings: Move 540 of 600 kcal, 90%. Exercise 38 of 30 min, 127%. Stand 9 of 12 hr, 75%.")),
+        summary: Some(s(
+            "Activity rings: Move 540 of 600 kcal, 90%. Exercise 38 of 30 min, 127%. Stand 9 of 12 hr, 75%.",
+        )),
         ..Rings::default()
     });
     // The day's figures: what the extended tile carries (an icon in its hue,
@@ -2155,7 +2168,13 @@ fn screen_today() -> Envelope {
             ..Ring::default()
         })
     };
-    let tile = |label: &str, value: &str, unit: Option<&str>, glyph: Icon, hue: Hue, caption: &str, href: &str| Figure {
+    let tile = |label: &str,
+                value: &str,
+                unit: Option<&str>,
+                glyph: Icon,
+                hue: Hue,
+                caption: &str,
+                href: &str| Figure {
         id: Some(format!("figure-{}", label.to_lowercase().replace(' ', "-"))),
         label: s(label),
         value: s(value),
@@ -2173,12 +2192,20 @@ fn screen_today() -> Envelope {
         gap: 3,
         children: vec![
             Node::Figure(Figure {
-                aside: Some(Box::new(small_ring(9412, 10_000, Hue::Green, "Steps: 9,412 of 10,000, 94%."))),
+                aside: Some(Box::new(small_ring(
+                    9412,
+                    10_000,
+                    Hue::Green,
+                    "Steps: 9,412 of 10,000, 94%.",
+                ))),
                 ..tile(
                     "Steps",
                     "9,412",
                     None,
-                    icon("footprints", "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z"),
+                    icon(
+                        "footprints",
+                        "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z",
+                    ),
                     Hue::Green,
                     "94% of 10,000",
                     "/fitness/steps",
@@ -2188,7 +2215,10 @@ fn screen_today() -> Envelope {
                 "Active energy",
                 "540",
                 Some("kcal"),
-                icon("flame", "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.3.1-4.4 2-5.5.3 2.4 2 4 3.6 5.4 1.4 1.3 2.4 3 2.4 5.1a6 6 0 0 1-12 0c0-.9.3-1.8.5-2.5"),
+                icon(
+                    "flame",
+                    "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.3.1-4.4 2-5.5.3 2.4 2 4 3.6 5.4 1.4 1.3 2.4 3 2.4 5.1a6 6 0 0 1-12 0c0-.9.3-1.8.5-2.5",
+                ),
                 Hue::Orange,
                 "90% of 600 kcal",
                 "/fitness/energy",
@@ -2197,7 +2227,10 @@ fn screen_today() -> Envelope {
                 "Distance",
                 "6.4",
                 Some("km"),
-                icon("route", "M6 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM9 16h6a3 3 0 0 0 0-6H9"),
+                icon(
+                    "route",
+                    "M6 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM9 16h6a3 3 0 0 0 0-6H9",
+                ),
                 Hue::Cyan,
                 "Across Ludhiana and back",
                 "/fitness/distance",
@@ -2217,7 +2250,10 @@ fn screen_today() -> Envelope {
                     "Exercise",
                     "38",
                     Some("min"),
-                    icon("timer", "M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"),
+                    icon(
+                        "timer",
+                        "M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z",
+                    ),
                     Hue::Green,
                     "against your goal of 30",
                     "/fitness/exercise",
@@ -2233,11 +2269,13 @@ fn screen_today() -> Envelope {
         142,
     ];
     let levels = [
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.9, 0.5, 0.3, 0.25, 0.4, 0.5, 0.2, 0.2, 0.25, 0.4,
-        0.8, 0.55, 0.3, 0.1,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.9, 0.5, 0.3, 0.25, 0.4, 0.5, 0.2, 0.2, 0.25, 0.4, 0.8,
+        0.55, 0.3, 0.1,
     ];
     // 0 active, 1 calm, 2 rest: the hours of the night are rest.
-    let kinds = [2, 2, 2, 2, 2, 2, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1];
+    let kinds = [
+        2, 2, 2, 2, 2, 2, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1,
+    ];
     let hours: Vec<Hour> = (0..24)
         .map(|hour| match steps.get(hour) {
             Some(count) => Hour {
@@ -2279,19 +2317,28 @@ fn screen_today() -> Envelope {
             moment(
                 6.5,
                 "Woke up, 6:30 am",
-                icon("sunrise", "M12 2v6M4.9 10.9l1.4 1.4M2 18h2M20 18h2M17.7 12.3l1.4-1.4M22 22H2M16 18a4 4 0 0 0-8 0"),
+                icon(
+                    "sunrise",
+                    "M12 2v6M4.9 10.9l1.4 1.4M2 18h2M20 18h2M17.7 12.3l1.4-1.4M22 22H2M16 18a4 4 0 0 0-8 0",
+                ),
                 Hue::Amber,
             ),
             moment(
                 7.25,
                 "Morning run, 3.2 km",
-                icon("footprints", "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z"),
+                icon(
+                    "footprints",
+                    "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z",
+                ),
                 Hue::Green,
             ),
             moment(
                 18.4,
                 "Highest heart rate, 158 bpm",
-                icon("heart-pulse", "M19.5 12.6 12 20l-7.5-7.4a5 5 0 0 1 7.5-6.6 5 5 0 0 1 7.5 6.6zM3 12h4l2-3 3 6 2-3h5"),
+                icon(
+                    "heart-pulse",
+                    "M19.5 12.6 12 20l-7.5-7.4a5 5 0 0 1 7.5-6.6 5 5 0 0 1 7.5 6.6zM3 12h4l2-3 3 6 2-3h5",
+                ),
                 Hue::Rose,
             ),
         ],
@@ -2299,10 +2346,15 @@ fn screen_today() -> Envelope {
         unit: Some(s("steps")),
         shown: Some(s("9,412")),
         label: Some(s("Steps")),
-        icon: Some(icon("footprints", "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z")),
+        icon: Some(icon(
+            "footprints",
+            "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z",
+        )),
         colour: Some(Colour::new(Hue::Blue)),
         hub: Some(Colour::new(Hue::Violet)),
-        summary: Some(s("9,412 steps in the day so far. Busiest at 7 am: 1,850. 3 moments: Woke up, 6:30 am, Morning run, 3.2 km, Highest heart rate, 158 bpm.")),
+        summary: Some(s(
+            "9,412 steps in the day so far. Busiest at 7 am: 1,850. 3 moments: Woke up, 6:30 am, Morning run, 3.2 km, Highest heart rate, 158 bpm.",
+        )),
         ..DayClock::default()
     });
     // The control that steps the screen from day to day, with the day's three
@@ -2419,7 +2471,9 @@ fn screen_today() -> Envelope {
                 children: vec![activity, figures],
                 hint: Some(Hint {
                     about: s("how activity is counted"),
-                    text: s("Move counts the energy your body spent moving, Exercise the minutes of brisk activity and Stand the hours in which you stood and moved for a minute."),
+                    text: s(
+                        "Move counts the energy your body spent moving, Exercise the minutes of brisk activity and Stand the hours in which you stood and moved for a minute.",
+                    ),
                     mark: HintMark::Info,
                     ..Hint::default()
                 }),
@@ -2502,7 +2556,9 @@ fn screen_sleep() -> Envelope {
             stage("Core", 253, "4 h 13 min", Hue::Blue, "56% of the night"),
             stage("Awake", 21, "21 min", Hue::Amber, "5% of the night"),
         ],
-        summary: Some(s("Sleep stages, last night: Deep 1 h 23 min, REM 1 h 36 min, Core 4 h 13 min, Awake 21 min.")),
+        summary: Some(s(
+            "Sleep stages, last night: Deep 1 h 23 min, REM 1 h 36 min, Core 4 h 13 min, Awake 21 min.",
+        )),
         ..Meter::default()
     });
     // The cycles of the night, each split into the same three stages and drawn
@@ -2535,7 +2591,9 @@ fn screen_sleep() -> Envelope {
             cycle("Cycle 4", [11, 12, 34], "57 min"),
         ],
         highlight: Some(2),
-        summary: Some(s("Sleep cycles: 4 cycles of Deep, REM and Core. The longest, Cycle 1, was 1 h 34 min.")),
+        summary: Some(s(
+            "Sleep cycles: 4 cycles of Deep, REM and Core. The longest, Cycle 1, was 1 h 34 min.",
+        )),
         ..MiniColumns::default()
     });
     // The night in half hours: every cell is the stage that half hour was in,
@@ -2548,9 +2606,21 @@ fn screen_sleep() -> Envelope {
         detail: Some(s(share)),
     };
     let night = [
-        ("11:00 pm", 3), ("11:30 pm", 2), ("12:00 am", 2), ("12:30 am", 0), ("1:00 am", 0),
-        ("1:30 am", 2), ("2:00 am", 1), ("2:30 am", 2), ("3:00 am", 2), ("3:30 am", 0),
-        ("4:00 am", 2), ("4:30 am", 1), ("5:00 am", 1), ("5:30 am", 2), ("6:00 am", 3),
+        ("11:00 pm", 3),
+        ("11:30 pm", 2),
+        ("12:00 am", 2),
+        ("12:30 am", 0),
+        ("1:00 am", 0),
+        ("1:30 am", 2),
+        ("2:00 am", 1),
+        ("2:30 am", 2),
+        ("3:00 am", 2),
+        ("3:30 am", 0),
+        ("4:00 am", 2),
+        ("4:30 am", 1),
+        ("5:00 am", 1),
+        ("5:30 am", 2),
+        ("6:00 am", 3),
     ];
     let strip = Node::Strip(ColorStrip {
         id: Some(s("sleep-strip")),
@@ -2570,7 +2640,9 @@ fn screen_sleep() -> Envelope {
             })
             .collect(),
         shares: true,
-        summary: Some(s("The night in half hours: 15 cells from 11:00 pm to 6:00 am. Core was the most common stage, 7 of 15.")),
+        summary: Some(s(
+            "The night in half hours: 15 cells from 11:00 pm to 6:00 am. Core was the most common stage, 7 of 15.",
+        )),
         ..ColorStrip::default()
     });
     // Where one value sits between a low and a high end, on its zones: the heart
@@ -2597,10 +2669,14 @@ fn screen_sleep() -> Envelope {
             rate_zone(70, 90, "Higher", Hue::Warning),
             rate_zone(90, 120, "Much higher", Hue::Danger),
         ],
-        summary: Some(s("Resting heart rate overnight: 54 bpm, on a scale from 40 to 120 bpm. Usual: 50 to 70 bpm.")),
+        summary: Some(s(
+            "Resting heart rate overnight: 54 bpm, on a scale from 40 to 120 bpm. Usual: 50 to 70 bpm.",
+        )),
         hint: Some(Hint {
             about: s("the resting heart rate"),
-            text: s("The lowest heart rate you held while still. It describes your own nights and moves with sleep, training and the weather; it is not advice."),
+            text: s(
+                "The lowest heart rate you held while still. It describes your own nights and moves with sleep, training and the weather; it is not advice.",
+            ),
             mark: HintMark::Info,
             ..Hint::default()
         }),
@@ -2611,13 +2687,25 @@ fn screen_sleep() -> Envelope {
         id: Some(s("sleep-week")),
         kind: ChartKind::Bar,
         title: Some(s("Hours asleep, last 7 nights")),
-        labels: ["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"].map(s).to_vec(),
+        labels: ["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"]
+            .map(s)
+            .to_vec(),
         series: vec![Series {
             label: s("Asleep"),
-            values: [6.8, 7.4, 7.0, 6.2, 7.9, 8.1, 7.2].map(|hours| Some(decimal(hours))).to_vec(),
-            shown: ["6 h 48 min", "7 h 24 min", "7 h", "6 h 12 min", "7 h 54 min", "8 h 6 min", "7 h 12 min"]
-                .map(s)
+            values: [6.8, 7.4, 7.0, 6.2, 7.9, 8.1, 7.2]
+                .map(|hours| Some(decimal(hours)))
                 .to_vec(),
+            shown: [
+                "6 h 48 min",
+                "7 h 24 min",
+                "7 h",
+                "6 h 12 min",
+                "7 h 54 min",
+                "8 h 6 min",
+                "7 h 12 min",
+            ]
+            .map(s)
+            .to_vec(),
             colour: Some(Colour::new(Hue::Violet)),
             ..Series::default()
         }],
@@ -2643,10 +2731,14 @@ fn screen_sleep() -> Envelope {
             label: Some(s("Usual range")),
             colour: Some(Colour::new(Hue::Green)),
         }],
-        summary: Some(s("Hours asleep, last 7 nights: from 6 h 12 min on Monday to 8 h 6 min on Wednesday. Your need is 8 h.")),
+        summary: Some(s(
+            "Hours asleep, last 7 nights: from 6 h 12 min on Monday to 8 h 6 min on Wednesday. Your need is 8 h.",
+        )),
         hint: Some(Hint {
             about: s("hours asleep"),
-            text: s("Time asleep each night, against the hours you said you need. It describes your own nights and is not advice."),
+            text: s(
+                "Time asleep each night, against the hours you said you need. It describes your own nights and is not advice.",
+            ),
             ..Hint::default()
         }),
         ..Chart::default()
@@ -2665,13 +2757,17 @@ fn screen_sleep() -> Envelope {
         .to_vec(),
         series: vec![Series {
             label: s("Stage"),
-            values: [3, 1, 1, 0, 0, 1, 2, 1, 1, 0, 1, 2].map(|stage| Some(number(stage))).to_vec(),
+            values: [3, 1, 1, 0, 0, 1, 2, 1, 1, 0, 1, 2]
+                .map(|stage| Some(number(stage)))
+                .to_vec(),
             colour: Some(Colour::new(Hue::Violet)),
             ..Series::default()
         }],
         levels: ["Deep", "Core", "REM", "Awake"].map(s).to_vec(),
         curve: Curve::Step,
-        summary: Some(s("Sleep stages through the night: awake at 11:00 pm, then Core, Deep from 12:30 am to 1:30 am, and REM at 2:00 am and 4:30 am.")),
+        summary: Some(s(
+            "Sleep stages through the night: awake at 11:00 pm, then Core, Deep from 12:30 am to 1:30 am, and REM at 2:00 am and 4:30 am.",
+        )),
         ..Chart::default()
     });
     let oxygen = Node::Figure(Figure {
@@ -2679,7 +2775,10 @@ fn screen_sleep() -> Envelope {
         label: s("Blood oxygen"),
         value: s("96"),
         unit: Some(s("%")),
-        icon: Some(icon("droplet", "M12 22a7 7 0 0 0 7-7c0-4-7-13-7-13S5 11 5 15a7 7 0 0 0 7 7z")),
+        icon: Some(icon(
+            "droplet",
+            "M12 22a7 7 0 0 0 7-7c0-4-7-13-7-13S5 11 5 15a7 7 0 0 0 7 7z",
+        )),
         detail: Some(s("overnight average")),
         colour: Some(Colour::new(Hue::Info)),
         ..Figure::default()
@@ -2702,7 +2801,9 @@ fn screen_sleep() -> Envelope {
                 hint: Some(Hint {
                     about: s("the estimated stages"),
                     title: Some(s("An estimate")),
-                    text: s("Stages are estimated from movement and heart rate while you sleep. They show a pattern in your nights, not a measurement of your brain."),
+                    text: s(
+                        "Stages are estimated from movement and heart rate while you sleep. They show a pattern in your nights, not a measurement of your brain.",
+                    ),
                     mark: HintMark::Info,
                 }),
                 ..Section::default()
@@ -2763,11 +2864,15 @@ fn screen_fitness() -> Envelope {
             zone(1.3, 1.5, "Overreaching", Hue::Amber),
             zone(1.5, 2.0, "Overuse", Hue::Red),
         ],
-        summary: Some(s("Acute to chronic load ratio: 1.12, on a scale from 0 to 2. Optimal: from 0.8 to 1.3.")),
+        summary: Some(s(
+            "Acute to chronic load ratio: 1.12, on a scale from 0 to 2. Optimal: from 0.8 to 1.3.",
+        )),
         hint: Some(Hint {
             about: s("the load ratio"),
             title: Some(s("What the ratio compares")),
-            text: s("This week's training load against the average of the four weeks before it. It describes your own pattern of training and is not advice."),
+            text: s(
+                "This week's training load against the average of the four weeks before it. It describes your own pattern of training and is not advice.",
+            ),
             ..Hint::default()
         }),
         ..Gauge::default()
@@ -2787,8 +2892,18 @@ fn screen_fitness() -> Envelope {
     // A minute with no reading has no zone.
     let zones = ["Easy", "Steady", "Hard"];
     let readings: [Option<i64>; 12] = [
-        Some(92), Some(104), Some(118), Some(131), Some(142), Some(149), None, Some(151),
-        Some(147), Some(138), Some(126), Some(112),
+        Some(92),
+        Some(104),
+        Some(118),
+        Some(131),
+        Some(142),
+        Some(149),
+        None,
+        Some(151),
+        Some(147),
+        Some(138),
+        Some(126),
+        Some(112),
     ];
     let run = Node::Strip(ColorStrip {
         id: Some(s("run-zones")),
@@ -2815,13 +2930,23 @@ fn screen_fitness() -> Envelope {
             .enumerate()
             .map(|(minute, reading)| StripCell {
                 label: format!("7:{:02} am", 15 + minute),
-                category: reading.map(|bpm| if bpm < 110 { 0 } else if bpm < 140 { 1 } else { 2 }),
+                category: reading.map(|bpm| {
+                    if bpm < 110 {
+                        0
+                    } else if bpm < 140 {
+                        1
+                    } else {
+                        2
+                    }
+                }),
                 value: reading.map(number),
             })
             .collect(),
         label: Some(s("Heart rate")),
         unit: Some(s("bpm")),
-        summary: Some(s("Heart rate zones, morning run: 12 minutes. Steady for 5, Hard for 4, Easy for 2; one minute has no reading.")),
+        summary: Some(s(
+            "Heart rate zones, morning run: 12 minutes. Steady for 5, Hard for 4, Easy for 2; one minute has no reading.",
+        )),
         ..ColorStrip::default()
     });
     // Ten weeks of training, a day a cell: a rest day is a day of nothing, and a
@@ -2841,9 +2966,16 @@ fn screen_fitness() -> Envelope {
             loads.push((format!("2026-{month:02}-{day:02}"), value));
         }
     }
-    let active = loads.iter().filter(|(_, load)| load.is_some_and(|load| load > 0)).count();
+    let active = loads
+        .iter()
+        .filter(|(_, load)| load.is_some_and(|load| load > 0))
+        .count();
     let missing = loads.iter().filter(|(_, load)| load.is_none()).count();
-    let highest = loads.iter().filter_map(|(_, load)| *load).max().unwrap_or(0);
+    let highest = loads
+        .iter()
+        .filter_map(|(_, load)| *load)
+        .max()
+        .unwrap_or(0);
     let calendar = Node::CalendarHeatmap(CalendarHeatmap {
         id: Some(s("training-calendar")),
         title: Some(s("Training calendar")),
@@ -2899,21 +3031,30 @@ fn screen_fitness() -> Envelope {
         negative: Some(Colour::new(Hue::Orange)),
         peak: Some(number(1)),
         label: Some(s("Correlation")),
-        summary: Some(s("What moves together: 4 measures, 6 pairs, 5 tested, 3 significant. Strongest: Sleep and HRV, 0.71.")),
+        summary: Some(s(
+            "What moves together: 4 measures, 6 pairs, 5 tested, 3 significant. Strongest: Sleep and HRV, 0.71.",
+        )),
         hint: Some(Hint {
             about: s("what moves together"),
             title: Some(s("How to read it")),
-            text: s("Each cell compares two measures over your last 30 days: blue where they rise and fall together, orange where one rises as the other falls. A grey cell is a pattern that may be chance. It shows a pattern, never a cause."),
+            text: s(
+                "Each cell compares two measures over your last 30 days: blue where they rise and fall together, orange where one rises as the other falls. A grey cell is a pattern that may be chance. It shows a pattern, never a cause.",
+            ),
             ..Hint::default()
         }),
     });
     // The time between one heartbeat and the next, each against the one before:
     // a cloud of points, on axes of one range so that the diagonal is "no
     // change". One cloud is the resting beats and one the beats after a run.
-    let beats = [812, 820, 805, 830, 841, 823, 818, 836, 829, 811, 827, 845, 838, 822, 815, 833, 826];
+    let beats = [
+        812, 820, 805, 830, 841, 823, 818, 836, 829, 811, 827, 845, 838, 822, 815, 833, 826,
+    ];
     let after = [684, 691, 678, 702, 695, 688, 710, 699, 693];
     let cloud = |intervals: &[i64]| -> Vec<(i64, i64)> {
-        intervals.windows(2).map(|pair| (pair[0], pair[1])).collect()
+        intervals
+            .windows(2)
+            .map(|pair| (pair[0], pair[1]))
+            .collect()
     };
     let resting_beats = cloud(&beats);
     let run_beats = cloud(&after);
@@ -2963,10 +3104,16 @@ fn screen_fitness() -> Envelope {
             label: Some(s("No change")),
             ..Reference::default()
         }],
-        summary: Some(s("Successive heartbeat intervals: 24 points in 2 series. Resting: 16 points, from 805 to 845 ms. After the run: 8 points, from 678 to 710 ms.")),
+        summary: Some(s(
+            "Successive heartbeat intervals: 24 points in 2 series. Resting: 16 points, from 805 to 845 ms. After the run: 8 points, from 678 to 710 ms.",
+        )),
         ..Scatter::default()
     });
-    let days = || ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(s).to_vec();
+    let days = || {
+        ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+            .map(s)
+            .to_vec()
+    };
     let minutes = |name: &str, hue: Hue, values: [i64; 7]| Series {
         label: s(name),
         values: values.map(|minutes| Some(number(minutes))).to_vec(),
@@ -2989,7 +3136,9 @@ fn screen_fitness() -> Envelope {
             ..Measure::default()
         }),
         stacking: Stacking::Values,
-        summary: Some(s("Active minutes by intensity, last 7 days: most on Saturday, 86 minutes.")),
+        summary: Some(s(
+            "Active minutes by intensity, last 7 days: most on Saturday, 86 minutes.",
+        )),
         ..Chart::default()
     });
     // The same minutes as shares of each day, along rows.
@@ -3005,7 +3154,9 @@ fn screen_fitness() -> Envelope {
         ],
         stacking: Stacking::Shares,
         horizontal: true,
-        summary: Some(s("What each day was made of: Thursday had the largest share of Hard minutes, 22%.")),
+        summary: Some(s(
+            "What each day was made of: Thursday had the largest share of Hard minutes, 22%.",
+        )),
         ..Chart::default()
     });
     // The load of six weeks as a smooth line, with its average across it.
@@ -3014,28 +3165,36 @@ fn screen_fitness() -> Envelope {
         kind: ChartKind::Line,
         title: Some(s("Training load by week")),
         labels: ["W41", "W42", "W43", "W44", "W45", "W46"].map(s).to_vec(),
-        series: vec![Series {
-            label: s("Load"),
-            values: [310, 355, 402, 388, 441, 462].map(|load| Some(number(load))).to_vec(),
-            colour: Some(Colour::new(Hue::Rose)),
-            unit: Some(s("load")),
-            ..Series::default()
-        },
-        // The six weeks before, in the quiet colour: not the subject.
-        Series {
-            label: s("The six weeks before"),
-            values: [285, 301, 296, 322, 340, 331].map(|load| Some(number(load))).to_vec(),
-            colour: Some(Colour::new(Hue::Neutral)),
-            unit: Some(s("load")),
-            ..Series::default()
-        }],
+        series: vec![
+            Series {
+                label: s("Load"),
+                values: [310, 355, 402, 388, 441, 462]
+                    .map(|load| Some(number(load)))
+                    .to_vec(),
+                colour: Some(Colour::new(Hue::Rose)),
+                unit: Some(s("load")),
+                ..Series::default()
+            },
+            // The six weeks before, in the quiet colour: not the subject.
+            Series {
+                label: s("The six weeks before"),
+                values: [285, 301, 296, 322, 340, 331]
+                    .map(|load| Some(number(load)))
+                    .to_vec(),
+                colour: Some(Colour::new(Hue::Neutral)),
+                unit: Some(s("load")),
+                ..Series::default()
+            },
+        ],
         references: vec![Reference {
             value: Some(number(393)),
             label: Some(s("Average: 393")),
             ..Reference::default()
         }],
         curve: Curve::Smooth,
-        summary: Some(s("Training load by week: from 310 in week 41 to 462 in week 46, above the average of 393.")),
+        summary: Some(s(
+            "Training load by week: from 310 in week 41 to 462 in week 46, above the average of 393.",
+        )),
         ..Chart::default()
     });
     // A tile with its small chart under it: a sparkline of the last week.
@@ -3044,7 +3203,10 @@ fn screen_fitness() -> Envelope {
         label: s("Resting heart rate"),
         value: s("58"),
         unit: Some(s("bpm")),
-        icon: Some(icon("heart-pulse", "M19.5 12.6 12 20l-7.5-7.4a5 5 0 0 1 7.5-6.6 5 5 0 0 1 7.5 6.6zM3 12h4l2-3 3 6 2-3h5")),
+        icon: Some(icon(
+            "heart-pulse",
+            "M19.5 12.6 12 20l-7.5-7.4a5 5 0 0 1 7.5-6.6 5 5 0 0 1 7.5 6.6zM3 12h4l2-3 3 6 2-3h5",
+        )),
         trend: Some(Trend {
             direction: Direction::Down,
             text: Some(s("3.3%")),
@@ -3063,7 +3225,9 @@ fn screen_fitness() -> Envelope {
             labels: days(),
             series: vec![Series {
                 label: s("Resting heart rate"),
-                values: [61, 60, 62, 59, 58, 59, 58].map(|bpm| Some(number(bpm))).to_vec(),
+                values: [61, 60, 62, 59, 58, 59, 58]
+                    .map(|bpm| Some(number(bpm)))
+                    .to_vec(),
                 colour: Some(Colour::new(Hue::Rose)),
                 unit: Some(s("bpm")),
                 ..Series::default()
@@ -3252,7 +3416,10 @@ fn screen_inbox() -> Envelope {
                 changed: None,
                 input: Input::Choice(ChoiceInput {
                     kind: ChoiceKind::Menu,
-                    options: vec![option("ludhiana", "Ludhiana"), option("amritsar", "Amritsar")],
+                    options: vec![
+                        option("ludhiana", "Ludhiana"),
+                        option("amritsar", "Amritsar"),
+                    ],
                     create: Some(ChoiceCreate {
                         label: s("Another city"),
                         href: None,
@@ -3426,7 +3593,11 @@ fn screen_inbox() -> Envelope {
                 id: Some(s("conversation-list")),
                 more: Some(s("/inbox/rows?after=88")),
                 children: vec![
-                    conversation("88", "Harpreet Sandhu", "My order CH-1042 has not come yet."),
+                    conversation(
+                        "88",
+                        "Harpreet Sandhu",
+                        "My order CH-1042 has not come yet.",
+                    ),
                     conversation("87", "Simran Bhatia", "Thank you, it arrived."),
                 ],
                 ..List::default()
@@ -3626,11 +3797,7 @@ fn screen_board() -> Envelope {
                         None,
                         vec![
                             Node::Row(card("c-7", "Restock Brass Kadhai", "Ravneet Kaur")),
-                            Node::Row(card(
-                                "c-8",
-                                "Photograph the Diwali range",
-                                "Jaspreet Singh",
-                            )),
+                            Node::Row(card("c-8", "Photograph the Diwali range", "Jaspreet Singh")),
                         ],
                     ),
                     column(
@@ -3657,11 +3824,13 @@ fn screen_board() -> Envelope {
             }),
             Node::FeedRow(FeedRow {
                 id: Some(s("board-event-77")),
-                icon: Some(Icon {
-                    name: Some(s("refresh-cw")),
-                    ..Icon::default()
-                }
-                .with_symbol()),
+                icon: Some(
+                    Icon {
+                        name: Some(s("refresh-cw")),
+                        ..Icon::default()
+                    }
+                    .with_symbol(),
+                ),
                 runs: vec![run("The board was tidied up overnight")],
                 time: Some(s("03:00")),
                 muted: true,
@@ -3970,7 +4139,9 @@ fn the_future_reads_as_unknown_parts_that_keep_their_stand_ins() {
         panic!("the body is a stack");
     };
     let mut drawn = body.clone();
-    drawn.children.retain(|node| node.id() != Some("no-stand-in"));
+    drawn
+        .children
+        .retain(|node| node.id() != Some("no-stand-in"));
     let navree_native::vocab::Downgraded::Node(Node::Stack(drawn)) =
         navree_native::vocab::downgrade(Node::Stack(drawn), VOCAB)
     else {
@@ -4064,7 +4235,10 @@ fn words_in(value: &serde_json::Value, found: &mut BTreeMap<&'static str, BTreeS
                         .get("kind")
                         .and_then(serde_json::Value::as_str)
                         .unwrap_or("level");
-                    found.entry("reference").or_default().insert(kind.to_owned());
+                    found
+                        .entry("reference")
+                        .or_default()
+                        .insert(kind.to_owned());
                 }
             }
             for inner in map.values() {
@@ -4088,10 +4262,7 @@ fn kinds_in(
 ) {
     kinds.insert(node.kind().as_str());
     let mut seen = |list: &'static str, value: &dyn std::fmt::Debug| {
-        values
-            .entry(list)
-            .or_default()
-            .insert(format!("{value:?}"));
+        values.entry(list).or_default().insert(format!("{value:?}"));
     };
     match node {
         Node::Field(field) => {
@@ -4115,7 +4286,11 @@ fn kinds_in(
             }
         }
         Node::Toolbar(toolbar) => {
-            for standard in toolbar.items.iter().filter_map(|item| item.standard.as_ref()) {
+            for standard in toolbar
+                .items
+                .iter()
+                .filter_map(|item| item.standard.as_ref())
+            {
                 seen("standard", standard);
             }
         }
@@ -4136,7 +4311,11 @@ fn kinds_in(
             }
         }
         Node::Table(table) => {
-            for role in table.columns.iter().filter_map(|column| column.role.as_ref()) {
+            for role in table
+                .columns
+                .iter()
+                .filter_map(|column| column.role.as_ref())
+            {
                 seen("column", role);
             }
         }
@@ -4206,7 +4385,12 @@ fn the_corpus_holds_every_kind_of_node_and_every_control() {
         .map(|hue| hue.as_str().unwrap().to_owned())
         .collect();
     assert_eq!(hues.len(), 15, "a hue was added or taken away: {hues:?}");
-    let owned = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect::<Vec<_>>();
+    let owned = |names: &[&str]| {
+        names
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect::<Vec<_>>()
+    };
     for (list, names) in [
         ("hue", hues),
         ("centre", owned(&["value", "icon", "nothing"])),
@@ -4219,7 +4403,12 @@ fn the_corpus_holds_every_kind_of_node_and_every_control() {
         // What a composed screen is laid out with. A text style, a place and a
         // stack's other axis have more words than these: the examples hold the
         // ones a composed screen adds, and the places a mark sits at.
-        ("text_style", owned(&["display", "title2", "body", "headline", "caption", "callout"])),
+        (
+            "text_style",
+            owned(&[
+                "display", "title2", "body", "headline", "caption", "callout",
+            ]),
+        ),
         ("weight", owned(&["regular", "medium", "semibold", "bold"])),
         ("change", owned(&["count", "fade"])),
         ("appear", owned(&["fade", "rise", "scale"])),
@@ -4239,11 +4428,20 @@ fn the_corpus_holds_every_kind_of_node_and_every_control() {
     for (list, names) in [
         (
             "standard",
-            &["Share", "Delete", "Add", "Edit", "Search", "Done", "Cancel", "More"][..],
+            &[
+                "Share", "Delete", "Add", "Edit", "Search", "Done", "Cancel", "More",
+            ][..],
         ),
         (
             "block",
-            &["Paragraph", "Heading", "Quote", "Bullet", "Numbered", "Code"],
+            &[
+                "Paragraph",
+                "Heading",
+                "Quote",
+                "Bullet",
+                "Numbered",
+                "Code",
+            ],
         ),
         (
             "pane",
@@ -4258,7 +4456,9 @@ fn the_corpus_holds_every_kind_of_node_and_every_control() {
         ("edge", &["Start", "End"]),
         (
             "column",
-            &["Leading", "Title", "Subtitle", "Status", "Trailing", "Actions"],
+            &[
+                "Leading", "Title", "Subtitle", "Status", "Trailing", "Actions",
+            ],
         ),
         (
             "call",

@@ -22,10 +22,11 @@
 
 use std::collections::BTreeSet;
 
+use navree_native::Screen;
 use navree_native::node::{Method, Node, Reorder, Table, TableRow};
 use navree_native::op::Edge;
-use navree_native::Screen;
 
+use crate::Core;
 use crate::decode::Answer;
 use crate::effect::{Body, Change, Part};
 use crate::forms::encode;
@@ -33,8 +34,9 @@ use crate::origin::Target;
 use crate::reduce::SEND_LIMIT;
 use crate::regions::{MORE_LIMIT, QUIET, pages, table_of_mut};
 use crate::state::{Content, Notice, Pending, ScreenId, ScreenView, TimerFor};
-use crate::tree::{MAX_DEPTH, Names, Slot, Survey, depth, depth_of, find_in, find_in_mut, form_of, slots, walk};
-use crate::Core;
+use crate::tree::{
+    MAX_DEPTH, Names, Slot, Survey, depth, depth_of, find_in, find_in_mut, form_of, slots, walk,
+};
 
 fn is_list(node: &Node, id: &str) -> bool {
     matches!(node, Node::List(list) if list.id.as_deref() == Some(id))
@@ -48,7 +50,10 @@ fn has_row(node: &Node, id: &str) -> bool {
 fn row_mut<'a>(node: &'a mut Node, id: &str) -> Option<&'a mut TableRow> {
     if has_row(node, id) {
         return match node {
-            Node::Table(table) => table.rows.iter_mut().find(|row| row.id.as_deref() == Some(id)),
+            Node::Table(table) => table
+                .rows
+                .iter_mut()
+                .find(|row| row.id.as_deref() == Some(id)),
             _ => None,
         };
     }
@@ -75,7 +80,12 @@ fn text(name: &str, value: &str) -> Part {
 /// The ids of the rows chosen in `table`, in its order. A row that can't be
 /// chosen is never among them.
 pub(crate) fn chosen_in(table: &Table) -> Vec<&str> {
-    table.rows.iter().filter(|row| row.selected && !row.unchoosable).filter_map(|row| row.id.as_deref()).collect()
+    table
+        .rows
+        .iter()
+        .filter(|row| row.selected && !row.unchoosable)
+        .filter_map(|row| row.id.as_deref())
+        .collect()
 }
 
 /// The tables among `nodes` and under them, each with the name it goes by:
@@ -93,7 +103,9 @@ fn tables_in<'a>(nodes: impl Iterator<Item = &'a Node>) -> Vec<(Option<&'a str>,
                     }
                 }
             }
-            Node::Table(table) if !found.iter().any(|(_, held)| std::ptr::eq(*held, table)) => found.push((table.id.as_deref(), table)),
+            Node::Table(table) if !found.iter().any(|(_, held)| std::ptr::eq(*held, table)) => {
+                found.push((table.id.as_deref(), table))
+            }
             _ => {}
         });
     }
@@ -102,7 +114,15 @@ fn tables_in<'a>(nodes: impl Iterator<Item = &'a Node>) -> Vec<(Option<&'a str>,
 
 /// The name of the table that holds the row `row`.
 fn table_named(screen: &Screen, row: &str) -> Option<String> {
-    tables_in(crate::tree::roots(screen)).into_iter().find(|(_, table)| table.rows.iter().any(|held| held.id.as_deref() == Some(row))).and_then(|(name, _)| name.map(str::to_owned))
+    tables_in(crate::tree::roots(screen))
+        .into_iter()
+        .find(|(_, table)| {
+            table
+                .rows
+                .iter()
+                .any(|held| held.id.as_deref() == Some(row))
+        })
+        .and_then(|(name, _)| name.map(str::to_owned))
 }
 
 /// The id of the list that holds the row `row`.
@@ -135,7 +155,11 @@ fn before_of(screen: &Screen, id: &str) -> Option<String> {
 }
 
 /// A value of a list node that is read by the list's id.
-fn of_list<T>(screen: &Screen, id: &str, read: impl Fn(&navree_native::node::List) -> T) -> Option<T> {
+fn of_list<T>(
+    screen: &Screen,
+    id: &str,
+    read: impl Fn(&navree_native::node::List) -> T,
+) -> Option<T> {
     match find_in(screen, &|node| is_list(node, id)) {
         Some(Node::List(list)) => Some(read(list)),
         _ => None,
@@ -149,11 +173,25 @@ impl Core {
     /// or changed, `gone` the ids of the ones that left, `since` the revision
     /// it is at now.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn merge(&mut self, id: ScreenId, target: &str, mut nodes: Vec<Node>, gone: &[String], since: String, at: Edge, more: bool) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+    pub(crate) fn merge(
+        &mut self,
+        id: ScreenId,
+        target: &str,
+        mut nodes: Vec<Node>,
+        gone: &[String],
+        since: String,
+        at: Edge,
+        more: bool,
+    ) {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
-        let ScreenView { content, states, .. } = view;
+        let ScreenView {
+            content, states, ..
+        } = view;
         let Content::Native { screen } = content else {
             return;
         };
@@ -181,7 +219,12 @@ impl Core {
                     continue;
                 }
                 let survey = Survey::of(std::iter::once(child));
-                for field in survey.forms.iter().flat_map(|form| &form.fields).chain(&survey.loose) {
+                for field in survey
+                    .forms
+                    .iter()
+                    .flat_map(|form| &form.fields)
+                    .chain(&survey.loose)
+                {
                     if let Some(field) = &field.id {
                         inner.field_ids.remove(field);
                         if leaves {
@@ -196,31 +239,56 @@ impl Core {
                     }
                 }
                 if leaves {
-                    walk(child, &mut |other| forgotten.extend(other.id().map(str::to_owned)));
+                    walk(child, &mut |other| {
+                        forgotten.extend(other.id().map(str::to_owned))
+                    });
                 }
             }
         }
         for name in &forgotten {
             states.remove(name);
         }
-        let left: Vec<String> = list.children.iter().filter_map(Node::id).filter(|id| gone.iter().any(|gone| gone == id)).map(str::to_owned).collect();
-        list.children.retain(|child| !child.id().is_some_and(|id| gone.iter().any(|gone| gone == id)));
+        let left: Vec<String> = list
+            .children
+            .iter()
+            .filter_map(Node::id)
+            .filter(|id| gone.iter().any(|gone| gone == id))
+            .map(str::to_owned)
+            .collect();
+        list.children.retain(|child| {
+            !child
+                .id()
+                .is_some_and(|id| gone.iter().any(|gone| gone == id))
+        });
         Names {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
             server: &mut inner.server_ids,
         }
         .name(&mut nodes, Some(target));
-        let fresh: BTreeSet<String> = Survey::of(nodes.iter()).forms.iter().map(|form| form.handle.clone()).collect();
+        let fresh: BTreeSet<String> = Survey::of(nodes.iter())
+            .forms
+            .iter()
+            .map(|form| form.handle.clone())
+            .collect();
         // The rows a client draws again: every one that came, when each has an id.
-        let named: Option<Vec<String>> = nodes.iter().map(|node| node.id().map(str::to_owned)).collect();
+        let named: Option<Vec<String>> = nodes
+            .iter()
+            .map(|node| node.id().map(str::to_owned))
+            .collect();
         let mut new: Vec<Node> = Vec::new();
         for node in nodes {
-            let place = node.id().and_then(|id| list.children.iter().position(|child| child.id() == Some(id)));
+            let place = node.id().and_then(|id| {
+                list.children
+                    .iter()
+                    .position(|child| child.id() == Some(id))
+            });
             match place {
                 Some(place) => list.children[place] = node,
                 // A row is never in a list twice: of two new ones with one id the first stays.
-                None if node.id().is_some_and(|id| new.iter().any(|other| other.id() == Some(id))) => {}
+                None if node
+                    .id()
+                    .is_some_and(|id| new.iter().any(|other| other.id() == Some(id))) => {}
                 None => new.push(node),
             }
         }
@@ -247,7 +315,9 @@ impl Core {
     /// Asks what changed in a list since its revision, or, if an ask is still
     /// out, once more when it lands.
     pub(crate) fn ask_changes(&mut self, id: ScreenId, list: &str) {
-        let (Some(view), Some(inner)) = (self.view.screens.get(&id), self.inner.screens.get_mut(&id)) else {
+        let (Some(view), Some(inner)) =
+            (self.view.screens.get(&id), self.inner.screens.get_mut(&id))
+        else {
             return;
         };
         let Some(sub) = inner.live_lists.get_mut(list) else {
@@ -258,7 +328,10 @@ impl Core {
             sub.dirty = true;
             return;
         }
-        let since = view.screen().and_then(|screen| of_list(screen, list, |list| list.since.clone())).flatten();
+        let since = view
+            .screen()
+            .and_then(|screen| of_list(screen, list, |list| list.since.clone()))
+            .flatten();
         let mut url = sub.changes.clone();
         if let Some(since) = since {
             url.push(if url.contains('?') { '&' } else { '?' });
@@ -275,7 +348,13 @@ impl Core {
         self.fetch_part(purpose, &url, list, MORE_LIMIT);
     }
 
-    pub(crate) fn changes_answered(&mut self, id: ScreenId, visit: u64, list: &str, answer: Answer) {
+    pub(crate) fn changes_answered(
+        &mut self,
+        id: ScreenId,
+        visit: u64,
+        list: &str,
+        answer: Answer,
+    ) {
         let Some(inner) = self.inner.screens.get_mut(&id) else {
             return;
         };
@@ -286,7 +365,13 @@ impl Core {
         if inner.visit != visit {
             return;
         }
-        if let Answer::Tree { status, mut read, shell, .. } = answer {
+        if let Answer::Tree {
+            status,
+            mut read,
+            shell,
+            ..
+        } = answer
+        {
             if self.note(&mut read, shell) {
                 return;
             }
@@ -297,7 +382,12 @@ impl Core {
                 self.apply_ops(id, std::mem::take(&mut read.envelope.ops), false);
             }
         }
-        let Some(sub) = self.inner.screens.get_mut(&id).and_then(|inner| inner.live_lists.get_mut(list)) else {
+        let Some(sub) = self
+            .inner
+            .screens
+            .get_mut(&id)
+            .and_then(|inner| inner.live_lists.get_mut(list))
+        else {
             return;
         };
         if std::mem::take(&mut sub.again) {
@@ -310,7 +400,12 @@ impl Core {
 
     /// Asks what changed in a list once its stream has gone quiet.
     fn changes_soon(&mut self, id: ScreenId, list: &str) {
-        let waits = self.inner.screens.get(&id).and_then(|inner| inner.live_lists.get(list)).is_some_and(|sub| sub.timer.is_some());
+        let waits = self
+            .inner
+            .screens
+            .get(&id)
+            .and_then(|inner| inner.live_lists.get(list))
+            .is_some_and(|sub| sub.timer.is_some());
         if waits {
             return;
         }
@@ -321,7 +416,12 @@ impl Core {
                 list: list.to_owned(),
             },
         );
-        if let Some(sub) = self.inner.screens.get_mut(&id).and_then(|inner| inner.live_lists.get_mut(list)) {
+        if let Some(sub) = self
+            .inner
+            .screens
+            .get_mut(&id)
+            .and_then(|inner| inner.live_lists.get_mut(list))
+        {
             sub.timer = Some(timer);
         }
     }
@@ -352,10 +452,15 @@ impl Core {
     /// A stream spoke: the lists that listen ask what changed, once it is quiet.
     pub(crate) fn lists_heard(&mut self, id: ScreenId, url: &str, name: Option<&str>) {
         for list in self.lists_listening(id, url, Some(name)) {
-            let busy = self.inner.screens.get_mut(&id).and_then(|inner| inner.live_lists.get_mut(&list)).is_some_and(|sub| {
-                sub.dirty |= sub.busy;
-                sub.busy
-            });
+            let busy = self
+                .inner
+                .screens
+                .get_mut(&id)
+                .and_then(|inner| inner.live_lists.get_mut(&list))
+                .is_some_and(|sub| {
+                    sub.dirty |= sub.busy;
+                    sub.busy
+                });
             if !busy {
                 self.changes_soon(id, &list);
             }
@@ -374,7 +479,10 @@ impl Core {
 
     /// Asks for the rows before the first of a list or of a table.
     pub(crate) fn rows_before(&mut self, id: ScreenId, list: &str) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         // One fetch at a time.
@@ -401,8 +509,18 @@ impl Core {
         self.list_changed(id, list);
     }
 
-    pub(crate) fn before_answered(&mut self, id: ScreenId, visit: u64, list: &str, was: &str, answer: Answer) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+    pub(crate) fn before_answered(
+        &mut self,
+        id: ScreenId,
+        visit: u64,
+        list: &str,
+        was: &str,
+        answer: Answer,
+    ) {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         inner.before.remove(list);
@@ -418,7 +536,13 @@ impl Core {
         if !wanted {
             return;
         }
-        if let Answer::Tree { status, mut read, shell, .. } = answer {
+        if let Answer::Tree {
+            status,
+            mut read,
+            shell,
+            ..
+        } = answer
+        {
             if self.note(&mut read, shell) {
                 return;
             }
@@ -432,7 +556,13 @@ impl Core {
         // An answer that left `before` as it was has nothing before it.
         let same = self.view.screens.get(&id).and_then(now).as_deref() == Some(was);
         if same {
-            match self.view.screens.get_mut(&id).and_then(ScreenView::screen_mut).and_then(|screen| find_in_mut(screen, &|node| pages(node, list))) {
+            match self
+                .view
+                .screens
+                .get_mut(&id)
+                .and_then(ScreenView::screen_mut)
+                .and_then(|screen| find_in_mut(screen, &|node| pages(node, list)))
+            {
                 Some(Node::List(found)) => found.before = None,
                 Some(other) => {
                     if let Some(table) = table_of_mut(other) {
@@ -449,7 +579,13 @@ impl Core {
 
     /// Says which rows of a list or table changed, so a client draws those
     /// again and not the screen: `rows` are new, changed or moved, `gone` left.
-    pub(crate) fn redraw(&mut self, screen: ScreenId, list: &str, mut rows: Vec<String>, mut gone: Vec<String>) {
+    pub(crate) fn redraw(
+        &mut self,
+        screen: ScreenId,
+        list: &str,
+        mut rows: Vec<String>,
+        mut gone: Vec<String>,
+    ) {
         rows.sort_unstable();
         rows.dedup();
         gone.sort_unstable();
@@ -469,7 +605,15 @@ impl Core {
 
     /// Adds records to the table `target`: at its end, with where the ones
     /// after them are; or at its start, with where the ones before them are.
-    pub(crate) fn table_rows(&mut self, id: ScreenId, target: &str, mut rows: Vec<TableRow>, at: Edge, more: Option<String>, prev: Option<String>) {
+    pub(crate) fn table_rows(
+        &mut self,
+        id: ScreenId,
+        target: &str,
+        mut rows: Vec<TableRow>,
+        at: Edge,
+        more: Option<String>,
+        prev: Option<String>,
+    ) {
         let Some(screen) = self.view.screens.get(&id).and_then(ScreenView::screen) else {
             return;
         };
@@ -477,14 +621,25 @@ impl Core {
             return;
         };
         // A table may stand in the region that goes by this name.
-        let deepest = rows.iter().flat_map(TableRow::nodes).map(depth).max().unwrap_or(0);
+        let deepest = rows
+            .iter()
+            .flat_map(TableRow::nodes)
+            .map(depth)
+            .max()
+            .unwrap_or(0);
         if stands + 1 + deepest > MAX_DEPTH {
             return self.too_deep(target);
         }
         // Where the records before the first are: left out, the table's own
         // stays; empty, there are none before.
         if let Some(prev) = prev
-            && let Some(table) = self.view.screens.get_mut(&id).and_then(ScreenView::screen_mut).and_then(|screen| find_in_mut(screen, &|node| pages(node, target))).and_then(table_of_mut)
+            && let Some(table) = self
+                .view
+                .screens
+                .get_mut(&id)
+                .and_then(ScreenView::screen_mut)
+                .and_then(|screen| find_in_mut(screen, &|node| pages(node, target)))
+                .and_then(table_of_mut)
         {
             table.prev = Some(prev).filter(|prev| !prev.is_empty());
         }
@@ -496,19 +651,29 @@ impl Core {
             };
             return self.add_rows(id, target, page);
         }
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         let ScreenView { content, lists, .. } = view;
         let Content::Native { screen } = content else {
             return;
         };
-        let Some(table) = find_in_mut(screen, &|node| pages(node, target)).and_then(table_of_mut) else {
+        let Some(table) = find_in_mut(screen, &|node| pages(node, target)).and_then(table_of_mut)
+        else {
             return;
         };
-        let across = lists.get(table.id.as_deref().unwrap_or(target)).is_some_and(|state| state.across);
+        let across = lists
+            .get(table.id.as_deref().unwrap_or(target))
+            .is_some_and(|state| state.across);
         // A record is never in a table twice.
-        rows.retain(|row| row.id.as_ref().is_none_or(|id| !table.rows.iter().any(|held| held.id.as_ref() == Some(id))));
+        rows.retain(|row| {
+            row.id
+                .as_ref()
+                .is_none_or(|id| !table.rows.iter().any(|held| held.id.as_ref() == Some(id)))
+        });
         let mut names = Names {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
@@ -538,7 +703,10 @@ impl Core {
     /// Puts `row` in place of the table row `target`. Whether the person
     /// chose the row, and whether they opened what is under it, stay as they were.
     pub(crate) fn table_row(&mut self, id: ScreenId, target: &str, mut row: TableRow) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         let Content::Native { screen } = &mut view.content else {
@@ -551,12 +719,22 @@ impl Core {
             return self.too_deep(target);
         }
         let table = table_named(screen, target);
-        let Some(old) = screen.actions.iter_mut().chain(std::iter::once(&mut screen.body)).find_map(|root| row_mut(root, target)) else {
+        let Some(old) = screen
+            .actions
+            .iter_mut()
+            .chain(std::iter::once(&mut screen.body))
+            .find_map(|root| row_mut(root, target))
+        else {
             return;
         };
         {
             let survey = Survey::of(old.nodes());
-            for field in survey.forms.iter().flat_map(|form| &form.fields).chain(&survey.loose) {
+            for field in survey
+                .forms
+                .iter()
+                .flat_map(|form| &form.fields)
+                .chain(&survey.loose)
+            {
                 if let Some(field) = &field.id {
                     inner.field_ids.remove(field);
                 }
@@ -575,14 +753,20 @@ impl Core {
         names.name(&mut row.cells, scope);
         names.name(&mut row.actions, scope);
         names.name(&mut row.detail, scope);
-        let fresh: BTreeSet<String> = Survey::of(row.nodes()).forms.iter().map(|form| form.handle.clone()).collect();
+        let fresh: BTreeSet<String> = Survey::of(row.nodes())
+            .forms
+            .iter()
+            .map(|form| form.handle.clone())
+            .collect();
         row.selected = old.selected && !row.unchoosable;
         row.open = old.open;
         let now = row.id.clone();
         *old = row;
         self.reconcile(id, Some(&fresh));
         match (table, now) {
-            (Some(table), Some(now)) if now == target => self.redraw(id, &table, vec![now], Vec::new()),
+            (Some(table), Some(now)) if now == target => {
+                self.redraw(id, &table, vec![now], Vec::new())
+            }
             // The row goes by another id now: the old one left and this one came.
             (Some(table), Some(now)) => self.redraw(id, &table, vec![now], vec![target.to_owned()]),
             _ => self.touch_screen(id),
@@ -592,11 +776,21 @@ impl Core {
     /// Opens or shuts what is under the table row `target`. False when no
     /// row of that id has anything under it.
     pub(crate) fn row_open(&mut self, id: ScreenId, target: &str, open: bool) -> bool {
-        let Some(screen) = self.view.screens.get_mut(&id).and_then(ScreenView::screen_mut) else {
+        let Some(screen) = self
+            .view
+            .screens
+            .get_mut(&id)
+            .and_then(ScreenView::screen_mut)
+        else {
             return false;
         };
         let table = table_named(screen, target);
-        let Some(row) = screen.actions.iter_mut().chain(std::iter::once(&mut screen.body)).find_map(|root| row_mut(root, target)) else {
+        let Some(row) = screen
+            .actions
+            .iter_mut()
+            .chain(std::iter::once(&mut screen.body))
+            .find_map(|root| row_mut(root, target))
+        else {
             return false;
         };
         if row.detail.is_empty() {
@@ -617,7 +811,14 @@ impl Core {
     /// row it holds when `row` is none. A row that can't be chosen is passed
     /// over. With `across`, every record that matches the table's query is
     /// chosen, when the table offers that: until a row is cleared.
-    pub(crate) fn choose(&mut self, id: ScreenId, table: &str, row: Option<&str>, on: bool, across: bool) {
+    pub(crate) fn choose(
+        &mut self,
+        id: ScreenId,
+        table: &str,
+        row: Option<&str>,
+        on: bool,
+        across: bool,
+    ) {
         let Some(view) = self.view.screens.get_mut(&id) else {
             return;
         };
@@ -625,7 +826,8 @@ impl Core {
         let Content::Native { screen } = content else {
             return;
         };
-        let Some(found) = find_in_mut(screen, &|node| pages(node, table)).and_then(table_of_mut) else {
+        let Some(found) = find_in_mut(screen, &|node| pages(node, table)).and_then(table_of_mut)
+        else {
             return;
         };
         let Some(select) = &found.select else {
@@ -635,7 +837,10 @@ impl Core {
         let mut changed = false;
         for held in &mut found.rows {
             // A row with no id has nothing to send, so it can't be chosen.
-            if held.id.is_none() || held.unchoosable || row.is_some_and(|row| held.id.as_deref() != Some(row)) {
+            if held.id.is_none()
+                || held.unchoosable
+                || row.is_some_and(|row| held.id.as_deref() != Some(row))
+            {
                 continue;
             }
             changed |= std::mem::replace(&mut held.selected, on) != on;
@@ -677,21 +882,34 @@ impl Core {
             let Some(select) = &table.select else {
                 return;
             };
-            let across = key.and_then(|key| view.lists.get(key)).is_some_and(|state| state.across);
+            let across = key
+                .and_then(|key| view.lists.get(key))
+                .is_some_and(|state| state.across);
             match &select.across {
                 Some(all) if across => out.push(text(&all.name, &all.value)),
-                _ => out.extend(chosen_in(table).into_iter().map(|row| text(&select.name, row))),
+                _ => out.extend(
+                    chosen_in(table)
+                        .into_iter()
+                        .map(|row| text(&select.name, row)),
+                ),
             }
         };
         for (key, table) in tables_in(crate::tree::roots(screen)) {
-            let form = table.select.as_ref().and_then(|select| select.form.as_deref());
+            let form = table
+                .select
+                .as_ref()
+                .and_then(|select| select.form.as_deref());
             if form.and_then(|form| self.form_named(id, form)).as_deref() == Some(handle) {
                 take(key, table);
             }
         }
         if let Some(form) = form_of(screen, handle) {
             for (key, table) in tables_in(form.children.iter()) {
-                if table.select.as_ref().is_some_and(|select| select.form.is_none()) {
+                if table
+                    .select
+                    .as_ref()
+                    .is_some_and(|select| select.form.is_none())
+                {
                     take(key, table);
                 }
             }
@@ -703,7 +921,14 @@ impl Core {
 
     /// The person moved the row `item` from the list `from` into the list
     /// `to`, before the row `before` or at its end.
-    pub(crate) fn moved(&mut self, id: ScreenId, item: &str, from: &str, to: &str, before: Option<&str>) {
+    pub(crate) fn moved(
+        &mut self,
+        id: ScreenId,
+        item: &str,
+        from: &str,
+        to: &str,
+        before: Option<&str>,
+    ) {
         let Some(screen) = self.view.screens.get(&id).and_then(ScreenView::screen) else {
             return;
         };
@@ -711,7 +936,12 @@ impl Core {
             Some(Node::List(list)) => Some(list),
             _ => None,
         };
-        let at = found(from).and_then(|source| source.children.iter().position(|child| child.id() == Some(item)));
+        let at = found(from).and_then(|source| {
+            source
+                .children
+                .iter()
+                .position(|child| child.id() == Some(item))
+        });
         let (Some(source), Some(target), Some(at)) = (found(from), found(to), at) else {
             // The client moved something the core does not hold: it draws the screen as it is.
             return self.touch_screen(id);
@@ -724,8 +954,13 @@ impl Core {
         };
         // Within one list, or between the lists of one group; and never into a full one.
         let together = from == to || (leaves.group.is_some() && leaves.group == takes.group);
-        let full = from != to && takes.limit.is_some_and(|limit| target.children.len() >= usize::try_from(limit).unwrap_or(usize::MAX));
-        let deep = depth_of(screen, &|node| is_list(node, to)).unwrap_or(1) + depth(&source.children[at]) > MAX_DEPTH;
+        let full = from != to
+            && takes.limit.is_some_and(|limit| {
+                target.children.len() >= usize::try_from(limit).unwrap_or(usize::MAX)
+            });
+        let deep = depth_of(screen, &|node| is_list(node, to)).unwrap_or(1)
+            + depth(&source.children[at])
+            > MAX_DEPTH;
         if !together || full || deep || before == Some(item) {
             return stays(self);
         }
@@ -738,7 +973,14 @@ impl Core {
         let said_item = key_of(&source.children[at]).unwrap_or_default();
         let said_from = leaves.key.clone().unwrap_or_else(|| from.to_owned());
         let said_to = takes.key.clone().unwrap_or_else(|| to.to_owned());
-        let said_before = before.and_then(|before| target.children.iter().find(|child| child.id() == Some(before))).and_then(key_of);
+        let said_before = before
+            .and_then(|before| {
+                target
+                    .children
+                    .iter()
+                    .find(|child| child.id() == Some(before))
+            })
+            .and_then(key_of);
         let (href, fields) = (takes.href.clone(), takes.fields.clone());
         let Target::Inside(url) = self.resolve(&href, id) else {
             return stays(self);
@@ -746,7 +988,12 @@ impl Core {
         if !self.may_send(id) {
             return stays(self);
         }
-        let Some(screen) = self.view.screens.get_mut(&id).and_then(ScreenView::screen_mut) else {
+        let Some(screen) = self
+            .view
+            .screens
+            .get_mut(&id)
+            .and_then(ScreenView::screen_mut)
+        else {
             return;
         };
         let Some(Node::List(source)) = find_in_mut(screen, &|node| is_list(node, from)) else {
@@ -756,14 +1003,22 @@ impl Core {
         let Some(Node::List(target)) = find_in_mut(screen, &|node| is_list(node, to)) else {
             return;
         };
-        let stands = before.and_then(|before| target.children.iter().position(|child| child.id() == Some(before)));
+        let stands = before.and_then(|before| {
+            target
+                .children
+                .iter()
+                .position(|child| child.id() == Some(before))
+        });
         let position = stands.unwrap_or(target.children.len());
         target.children.insert(position, node);
         let mut sent = vec![
             text(Reorder::ITEM, &said_item),
             text(Reorder::FROM, &said_from),
             text(Reorder::TO, &said_to),
-            text(Reorder::BEFORE, stands.and(said_before.as_deref()).unwrap_or("")),
+            text(
+                Reorder::BEFORE,
+                stands.and(said_before.as_deref()).unwrap_or(""),
+            ),
             text(Reorder::POSITION, &position.to_string()),
         ];
         sent.extend(fields.iter().map(|pair| text(&pair.name, &pair.value)));
@@ -775,7 +1030,15 @@ impl Core {
             from: from.to_owned(),
             at,
         };
-        self.fetch(purpose, Method::Post, &url, Some(Body::Form { text: encode(&sent) }), SEND_LIMIT);
+        self.fetch(
+            purpose,
+            Method::Post,
+            &url,
+            Some(Body::Form {
+                text: encode(&sent),
+            }),
+            SEND_LIMIT,
+        );
         self.row_moved(id, item, from, to);
     }
 
@@ -789,7 +1052,12 @@ impl Core {
 
     /// Puts a row back where it was before a move the server did not take.
     fn put_back(&mut self, id: ScreenId, item: &str, from: &str, at: usize) {
-        let Some(screen) = self.view.screens.get_mut(&id).and_then(ScreenView::screen_mut) else {
+        let Some(screen) = self
+            .view
+            .screens
+            .get_mut(&id)
+            .and_then(ScreenView::screen_mut)
+        else {
             return;
         };
         // The list it came from is gone: it stays where it is.
@@ -800,7 +1068,11 @@ impl Core {
         let Some(Node::List(now)) = find_in_mut(screen, &holds) else {
             return;
         };
-        let Some(place) = now.children.iter().position(|child| child.id() == Some(item)) else {
+        let Some(place) = now
+            .children
+            .iter()
+            .position(|child| child.id() == Some(item))
+        else {
             return;
         };
         let was = now.id.clone();
@@ -816,9 +1088,21 @@ impl Core {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn move_answered(&mut self, id: ScreenId, visit: u64, item: &str, from: &str, at: usize, answer: Answer) {
+    pub(crate) fn move_answered(
+        &mut self,
+        id: ScreenId,
+        visit: u64,
+        item: &str,
+        from: &str,
+        at: usize,
+        answer: Answer,
+    ) {
         // A screen that was asked for again since shows the server's own order.
-        let same = self.inner.screens.get(&id).is_some_and(|inner| inner.visit == visit);
+        let same = self
+            .inner
+            .screens
+            .get(&id)
+            .is_some_and(|inner| inner.visit == visit);
         match answer {
             Answer::Failed(failure) => {
                 if same {
@@ -832,7 +1116,12 @@ impl Core {
                 self.wrote(id);
                 self.fetch_page(id, false);
             }
-            Answer::Tree { status, mut read, shell, .. } => {
+            Answer::Tree {
+                status,
+                mut read,
+                shell,
+                ..
+            } => {
                 if self.note(&mut read, shell) {
                     return;
                 }

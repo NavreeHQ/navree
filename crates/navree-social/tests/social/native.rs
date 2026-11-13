@@ -759,8 +759,7 @@ async fn offboarding_and_deletion_revoke_apples_tokens() {
 #[tokio::test]
 async fn a_token_apple_refuses_for_good_does_not_keep_apple_connected() {
     let sink = RecordingSink::default();
-    let native =
-        Native::start(|b| b.override_value::<dyn AuditSink>(Arc::new(sink.clone()))).await;
+    let native = Native::start(|b| b.override_value::<dyn AuditSink>(Arc::new(sink.clone()))).await;
     let body = native.apple_sign_in().await.assert_status(200).json_value();
     let (nonce, state) = native.nonce("google").await;
     let token = native.idp.rs256(&native.google_claims(&nonce, RELAY, true));
@@ -783,7 +782,12 @@ async fn a_token_apple_refuses_for_good_does_not_keep_apple_connected() {
         .await
         .assert_error_code(502, "provider_unavailable");
     assert_eq!(native.accounts().await.len(), 2);
-    assert!(!sink.actions().iter().any(|a| a == "social.token_revocation_refused"));
+    assert!(
+        !sink
+            .actions()
+            .iter()
+            .any(|a| a == "social.token_revocation_refused")
+    );
 
     native
         .idp
@@ -815,8 +819,7 @@ async fn a_token_apple_refuses_for_good_does_not_keep_apple_connected() {
 #[tokio::test]
 async fn offboarding_forgets_a_token_apple_refuses_and_keeps_one_it_could_not_reach() {
     let sink = RecordingSink::default();
-    let native =
-        Native::start(|b| b.override_value::<dyn AuditSink>(Arc::new(sink.clone()))).await;
+    let native = Native::start(|b| b.override_value::<dyn AuditSink>(Arc::new(sink.clone()))).await;
     let body = native.apple_sign_in().await.assert_status(200).json_value();
     let user_id: Uuid = serde_json::from_value(body["user"]["id"].clone()).unwrap();
     let social = native.app.get::<Social>().await;
@@ -832,7 +835,11 @@ async fn offboarding_forgets_a_token_apple_refuses_and_keeps_one_it_could_not_re
     // Apple refuses for good: forgotten, audited, not counted as revoked.
     native
         .idp
-        .mount_post("/auth/revoke", 400, json!({ "error": "unauthorized_client" }))
+        .mount_post(
+            "/auth/revoke",
+            400,
+            json!({ "error": "unauthorized_client" }),
+        )
         .await;
     let ended = native
         .app
@@ -845,7 +852,11 @@ async fn offboarding_forgets_a_token_apple_refuses_and_keeps_one_it_could_not_re
     let rows = native.accounts().await;
     assert_eq!(rows[0].refresh_token, None);
     assert_eq!(rows[0].access_token, None);
-    assert!(sink.actions().iter().any(|a| a == "social.token_revocation_refused"));
+    assert!(
+        sink.actions()
+            .iter()
+            .any(|a| a == "social.token_revocation_refused")
+    );
     // Nothing left to send.
     assert_eq!(social.revoke_tokens(user_id).await.unwrap(), 0);
     assert_eq!(native.idp.requests_to("/auth/revoke").await.len(), 2);

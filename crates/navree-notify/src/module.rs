@@ -212,7 +212,11 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
                     android: push.fcm.packages.clone(),
                 };
                 let served = can_push(&r, &push).await;
-                Ok(Arc::new(PushDevices::new(r.app().downgrade(), apps, served)))
+                Ok(Arc::new(PushDevices::new(
+                    r.app().downgrade(),
+                    apps,
+                    served,
+                )))
             })
             .deps(vec![ProviderKey::of::<PushOptions>()]),
         )

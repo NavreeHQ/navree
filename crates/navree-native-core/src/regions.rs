@@ -18,16 +18,16 @@
 //!   after 1 s, 2 s, 4 s … 30 s, and its regions then fetch once. Only the
 //!   screen in front holds streams, and a hidden app holds none.
 
-use navree_native::node::{Node, Region, Table};
 use navree_native::Screen;
+use navree_native::node::{Node, Region, Table};
 use serde_json::{Value, json};
 
+use crate::Core;
 use crate::decode::Answer;
 use crate::effect::{Change, Effect};
 use crate::origin::{Target, path_of};
 use crate::state::{Content, Notice, Pending, ScreenId, ScreenView, Stream, TimerFor};
 use crate::tree::{Names, Survey, find_in, find_in_mut, has_id, rewrite_in};
-use crate::Core;
 
 /// How long a region may take, in milliseconds.
 const REGION_LIMIT: u32 = 15_000;
@@ -82,7 +82,10 @@ pub(crate) fn rows(view: &ScreenView, id: &str, from: usize, count: usize) -> Op
     let state = view.lists.get(id).copied().unwrap_or_default();
     let forms = |nodes: &mut dyn Iterator<Item = &Node>| -> Value {
         let survey = Survey::of(nodes);
-        let found = survey.forms.iter().filter_map(|form| Some((form.handle.clone(), json!(view.forms.get(&form.handle)?))));
+        let found = survey
+            .forms
+            .iter()
+            .filter_map(|form| Some((form.handle.clone(), json!(view.forms.get(&form.handle)?))));
         Value::Object(found.collect())
     };
     match find_in(screen, &|node| pages(node, id))? {
@@ -104,7 +107,10 @@ pub(crate) fn rows(view: &ScreenView, id: &str, from: usize, count: usize) -> Op
             let table = table_of(other)?;
             let rows: Vec<_> = table.rows.iter().skip(from).take(count).collect();
             // The rows chosen, when the table's rows can be: all of them, not only among these.
-            let selected = table.select.as_ref().map(|_| crate::lists::chosen_in(table));
+            let selected = table
+                .select
+                .as_ref()
+                .map(|_| crate::lists::chosen_in(table));
             Some(json!({
                 "rows": rows,
                 "forms": forms(&mut rows.iter().flat_map(|row| row.nodes())),
@@ -123,25 +129,56 @@ pub(crate) fn rows(view: &ScreenView, id: &str, from: usize, count: usize) -> Op
 /// The rows a `redraw` change names, each with the id of the row it stands
 /// before now (none at the end), in the list's order; the ids that left, as
 /// they were given; and what the list says of itself, as the rows part does.
-pub(crate) fn redrawn(view: &ScreenView, id: &str, rows: &[String], gone: &[String]) -> Option<Value> {
+pub(crate) fn redrawn(
+    view: &ScreenView,
+    id: &str,
+    rows: &[String],
+    gone: &[String],
+) -> Option<Value> {
     let mut part = self::rows(view, id, usize::MAX, 0)?;
     let screen = view.screen()?;
     let wanted = |id: Option<&str>| id.is_some_and(|id| rows.iter().any(|row| row == id));
     let drawn: Vec<Value> = match find_in(screen, &|node| pages(node, id))? {
         Node::List(list) => {
-            let found: Vec<(usize, &Node)> = list.children.iter().enumerate().filter(|(_, node)| wanted(node.id())).collect();
+            let found: Vec<(usize, &Node)> = list
+                .children
+                .iter()
+                .enumerate()
+                .filter(|(_, node)| wanted(node.id()))
+                .collect();
             part["forms"] = {
                 let survey = Survey::of(found.iter().map(|(_, node)| *node));
-                Value::Object(survey.forms.iter().filter_map(|form| Some((form.handle.clone(), json!(view.forms.get(&form.handle)?)))).collect())
+                Value::Object(
+                    survey
+                        .forms
+                        .iter()
+                        .filter_map(|form| {
+                            Some((form.handle.clone(), json!(view.forms.get(&form.handle)?)))
+                        })
+                        .collect(),
+                )
             };
             found.into_iter().map(|(at, node)| json!({"id": node.id(), "before": list.children.get(at + 1).and_then(Node::id), "node": node})).collect()
         }
         other => {
             let table = table_of(other)?;
-            let found: Vec<(usize, &navree_native::node::TableRow)> = table.rows.iter().enumerate().filter(|(_, row)| wanted(row.id.as_deref())).collect();
+            let found: Vec<(usize, &navree_native::node::TableRow)> = table
+                .rows
+                .iter()
+                .enumerate()
+                .filter(|(_, row)| wanted(row.id.as_deref()))
+                .collect();
             part["forms"] = {
                 let survey = Survey::of(found.iter().flat_map(|(_, row)| row.nodes()));
-                Value::Object(survey.forms.iter().filter_map(|form| Some((form.handle.clone(), json!(view.forms.get(&form.handle)?)))).collect())
+                Value::Object(
+                    survey
+                        .forms
+                        .iter()
+                        .filter_map(|form| {
+                            Some((form.handle.clone(), json!(view.forms.get(&form.handle)?)))
+                        })
+                        .collect(),
+                )
             };
             found.into_iter().map(|(at, row)| json!({"id": row.id, "before": table.rows.get(at + 1).and_then(|next| next.id.as_deref()), "row": row})).collect()
         }
@@ -158,10 +195,17 @@ impl Core {
     /// holds its view shows it, and a lazy region in it that waited for its
     /// tab is fetched now; a tab that is a link takes the screen to its page.
     pub(crate) fn tab(&mut self, id: ScreenId, tabs: &str, index: usize) {
-        let Some(screen) = self.view.screens.get_mut(&id).and_then(ScreenView::screen_mut) else {
+        let Some(screen) = self
+            .view
+            .screens
+            .get_mut(&id)
+            .and_then(ScreenView::screen_mut)
+        else {
             return;
         };
-        let Some(Node::Tabs(found)) = find_in_mut(screen, &|node| matches!(node, Node::Tabs(_)) && has_id(node, tabs)) else {
+        let Some(Node::Tabs(found)) = find_in_mut(screen, &|node| {
+            matches!(node, Node::Tabs(_)) && has_id(node, tabs)
+        }) else {
             return;
         };
         let Some(chosen) = found.items.get(index) else {
@@ -189,7 +233,10 @@ impl Core {
     /// Fetches a region: from its own address, or from `go`, another address
     /// of itself (a sort, a page, a query).
     pub(crate) fn fetch_region(&mut self, id: ScreenId, region: &str, go: Option<String>) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         let Some(meta) = inner.regions.get(region) else {
@@ -223,8 +270,21 @@ impl Core {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn region_answered(&mut self, id: ScreenId, visit: u64, region: &str, turn: u64, epoch: u64, go: bool, url: &str, answer: Answer) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+    pub(crate) fn region_answered(
+        &mut self,
+        id: ScreenId,
+        visit: u64,
+        region: &str,
+        turn: u64,
+        epoch: u64,
+        go: bool,
+        url: &str,
+        answer: Answer,
+    ) {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         // The screen was asked for again, or a newer fetch of the region began.
@@ -242,7 +302,12 @@ impl Core {
         }
         self.live_landed(id, region);
         let fail = |core: &mut Core, failure| {
-            if let Some(state) = core.view.screens.get_mut(&id).and_then(|view| view.regions.get_mut(region)) {
+            if let Some(state) = core
+                .view
+                .screens
+                .get_mut(&id)
+                .and_then(|view| view.regions.get_mut(region))
+            {
                 state.failure = Some(failure);
             }
         };
@@ -250,7 +315,13 @@ impl Core {
             Answer::Failed(failure) => fail(self, failure),
             Answer::Left(_) | Answer::Empty => {}
             Answer::Html { .. } => self.whole_page_to_web(id, vec!["html".to_owned()]),
-            Answer::Tree { url: from, status, mut read, body, shell } => {
+            Answer::Tree {
+                url: from,
+                status,
+                mut read,
+                body,
+                shell,
+            } => {
                 if self.note(&mut read, shell) {
                     return;
                 }
@@ -264,7 +335,11 @@ impl Core {
                     return self.cover(id, route, &from, shown);
                 }
                 if read.envelope.web.is_some() || !read.missing.is_empty() {
-                    let why = read.envelope.web.take().map_or(read.missing.clone(), |web| web.why);
+                    let why = read
+                        .envelope
+                        .web
+                        .take()
+                        .map_or(read.missing.clone(), |web| web.why);
                     return self.whole_page_to_web(id, why);
                 }
                 if let Some(screen) = read.envelope.screen.take() {
@@ -286,7 +361,13 @@ impl Core {
     /// what was typed in it and what is open in it stay.
     fn fill_region(&mut self, id: ScreenId, region: &str, mut answer: Screen, went: Option<&str>) {
         let is = |node: &Node| matches!(node, Node::Region(other) if other.id == region);
-        let Some(Node::Region(old)) = self.view.screens.get(&id).and_then(ScreenView::screen).and_then(|screen| find_in(screen, &is)) else {
+        let Some(Node::Region(old)) = self
+            .view
+            .screens
+            .get(&id)
+            .and_then(ScreenView::screen)
+            .and_then(|screen| find_in(screen, &is))
+        else {
             return;
         };
         // The region of the same id in the answer, when the answer is the whole
@@ -339,7 +420,10 @@ impl Core {
 
     /// Asks for the next rows of a list or table.
     pub(crate) fn more(&mut self, id: ScreenId, list: &str) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         // One fetch at a time.
@@ -368,10 +452,16 @@ impl Core {
 
     /// Says that a list's own state changed, and no row of it.
     pub(crate) fn list_changed(&mut self, id: ScreenId, list: &str) {
-        let held = self.view.screens.get(&id).and_then(ScreenView::screen).and_then(|screen| find_in(screen, &|node| pages(node, list))).map_or(0, |node| match node {
-            Node::List(list) => list.children.len(),
-            other => table_of(other).map_or(0, |table| table.rows.len()),
-        });
+        let held = self
+            .view
+            .screens
+            .get(&id)
+            .and_then(ScreenView::screen)
+            .and_then(|screen| find_in(screen, &|node| pages(node, list)))
+            .map_or(0, |node| match node {
+                Node::List(list) => list.children.len(),
+                other => table_of(other).map_or(0, |table| table.rows.len()),
+            });
         self.touch(Change::Rows {
             screen: id,
             id: list.to_owned(),
@@ -380,13 +470,27 @@ impl Core {
         });
     }
 
-    pub(crate) fn more_answered(&mut self, id: ScreenId, visit: u64, list: &str, was: &str, answer: Answer) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+    pub(crate) fn more_answered(
+        &mut self,
+        id: ScreenId,
+        visit: u64,
+        list: &str,
+        was: &str,
+        answer: Answer,
+    ) {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         inner.more.remove(list);
         // The list changed while this was on its way: the answer is for a list that is gone.
-        let unchanged = view.screen().and_then(|screen| more_of(screen, list)).as_deref() == Some(was);
+        let unchanged = view
+            .screen()
+            .and_then(|screen| more_of(screen, list))
+            .as_deref()
+            == Some(was);
         let wanted = inner.visit == visit && unchanged;
         let failed = wanted && !matches!(answer, Answer::Tree { .. });
         if let Some(state) = view.lists.get_mut(list) {
@@ -399,7 +503,12 @@ impl Core {
         }
         match answer {
             Answer::Failed(_) | Answer::Html { .. } | Answer::Left(_) | Answer::Empty => return,
-            Answer::Tree { status, mut read, shell, .. } => {
+            Answer::Tree {
+                status,
+                mut read,
+                shell,
+                ..
+            } => {
                 if self.note(&mut read, shell) {
                     return;
                 }
@@ -409,7 +518,12 @@ impl Core {
                 let ops = std::mem::take(&mut read.envelope.ops);
                 if !ops.is_empty() {
                     self.apply_ops(id, ops, false);
-                } else if let Some(mut page) = read.envelope.screen.take().filter(|_| read.missing.is_empty()) {
+                } else if let Some(mut page) = read
+                    .envelope
+                    .screen
+                    .take()
+                    .filter(|_| read.missing.is_empty())
+                {
                     // The next rows came as a whole screen: the list or table of the same name in it is the page.
                     let mut taken = None;
                     rewrite_in(&mut page, &|node| pages(node, list), &mut |found| {
@@ -417,7 +531,9 @@ impl Core {
                         None
                     });
                     match taken {
-                        Some(Node::List(page)) => self.add(id, list, page.children, true, Some(page.more)),
+                        Some(Node::List(page)) => {
+                            self.add(id, list, page.children, true, Some(page.more))
+                        }
                         Some(mut other) => {
                             if let Some(table) = table_of_mut(&mut other) {
                                 let table = std::mem::take(table);
@@ -430,9 +546,22 @@ impl Core {
             }
         }
         // An answer that left `more` as it was has no page after it.
-        let same = self.view.screens.get(&id).and_then(ScreenView::screen).and_then(|screen| more_of(screen, list)).as_deref() == Some(was);
+        let same = self
+            .view
+            .screens
+            .get(&id)
+            .and_then(ScreenView::screen)
+            .and_then(|screen| more_of(screen, list))
+            .as_deref()
+            == Some(was);
         if same {
-            if let Some(node) = self.view.screens.get_mut(&id).and_then(ScreenView::screen_mut).and_then(|screen| find_in_mut(screen, &|node| pages(node, list))) {
+            if let Some(node) = self
+                .view
+                .screens
+                .get_mut(&id)
+                .and_then(ScreenView::screen_mut)
+                .and_then(|screen| find_in_mut(screen, &|node| pages(node, list)))
+            {
                 match node {
                     Node::List(list) => list.more = None,
                     other => {
@@ -448,20 +577,30 @@ impl Core {
 
     /// Adds the rows of the next page to a table, and takes the page's `more`.
     pub(crate) fn add_rows(&mut self, id: ScreenId, list: &str, mut page: Table) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         let ScreenView { content, lists, .. } = view;
         let Content::Native { screen } = content else {
             return;
         };
-        let Some(table) = find_in_mut(screen, &|node| pages(node, list)).and_then(table_of_mut) else {
+        let Some(table) = find_in_mut(screen, &|node| pages(node, list)).and_then(table_of_mut)
+        else {
             return;
         };
         // A record is never in a table twice.
-        page.rows.retain(|row| row.id.as_ref().is_none_or(|id| !table.rows.iter().any(|held| held.id.as_ref() == Some(id))));
+        page.rows.retain(|row| {
+            row.id
+                .as_ref()
+                .is_none_or(|id| !table.rows.iter().any(|held| held.id.as_ref() == Some(id)))
+        });
         // While every record that matches is chosen, so is one that just came.
-        let across = lists.get(table.id.as_deref().unwrap_or(list)).is_some_and(|state| state.across);
+        let across = lists
+            .get(table.id.as_deref().unwrap_or(list))
+            .is_some_and(|state| state.across);
         let mut names = Names {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
@@ -509,11 +648,23 @@ impl Core {
         if self.inner.background {
             return Vec::new();
         }
-        let Some(inner) = self.front().and_then(|front| self.inner.screens.get(&front)) else {
+        let Some(inner) = self
+            .front()
+            .and_then(|front| self.inner.screens.get(&front))
+        else {
             return Vec::new();
         };
-        let mut urls: Vec<String> = inner.regions.values().filter_map(|meta| Some(meta.live.as_ref()?.0.clone())).collect();
-        urls.extend(inner.live_lists.values().filter_map(|sub| Some(sub.live.as_ref()?.0.clone())));
+        let mut urls: Vec<String> = inner
+            .regions
+            .values()
+            .filter_map(|meta| Some(meta.live.as_ref()?.0.clone()))
+            .collect();
+        urls.extend(
+            inner
+                .live_lists
+                .values()
+                .filter_map(|sub| Some(sub.live.as_ref()?.0.clone())),
+        );
         urls.sort();
         urls.dedup();
         urls
@@ -522,7 +673,13 @@ impl Core {
     /// Opens the streams the screen in front needs and closes the others.
     pub(crate) fn sync_streams(&mut self) {
         let wanted = self.wanted();
-        let gone: Vec<Stream> = self.inner.streams.iter().filter(|stream| !wanted.contains(&stream.url)).cloned().collect();
+        let gone: Vec<Stream> = self
+            .inner
+            .streams
+            .iter()
+            .filter(|stream| !wanted.contains(&stream.url))
+            .cloned()
+            .collect();
         for stream in gone {
             if let Some(timer) = stream.reopen {
                 self.cancel_timer(timer);
@@ -530,7 +687,10 @@ impl Core {
             self.effects.push(Effect::StreamClose { stream: stream.id });
             self.inner.streams.retain(|other| other.id != stream.id);
         }
-        let missed = self.front().and_then(|front| self.inner.screens.get(&front)).is_some_and(|inner| inner.missed);
+        let missed = self
+            .front()
+            .and_then(|front| self.inner.screens.get(&front))
+            .is_some_and(|inner| inner.missed);
         for url in wanted {
             if self.inner.streams.iter().any(|stream| stream.url == url) {
                 continue;
@@ -553,7 +713,10 @@ impl Core {
 
     fn open_stream(&mut self, stream: &Stream) {
         let mut headers = vec![("accept".to_owned(), "text/event-stream".to_owned())];
-        headers.push((navree_native::NATIVE_HEADER.to_owned(), navree_native::MAJOR.to_string()));
+        headers.push((
+            navree_native::NATIVE_HEADER.to_owned(),
+            navree_native::MAJOR.to_string(),
+        ));
         self.effects.push(Effect::StreamOpen {
             stream: stream.id,
             url: self.inner.origin.absolute(&stream.url),
@@ -564,7 +727,10 @@ impl Core {
     /// The regions of the screen in front that listen to a stream: for an
     /// event of this name, or for any when `name` is none.
     fn listeners(&self, url: &str, name: Option<Option<&str>>) -> Vec<String> {
-        let Some(inner) = self.front().and_then(|front| self.inner.screens.get(&front)) else {
+        let Some(inner) = self
+            .front()
+            .and_then(|front| self.inner.screens.get(&front))
+        else {
             return Vec::new();
         };
         inner
@@ -617,14 +783,30 @@ impl Core {
         };
         self.lists_heard(front, &url, name);
         for region in self.listeners(&url, Some(name)) {
-            let Some(sub) = self.inner.screens.get_mut(&front).map(|inner| inner.live.entry(region.clone()).or_default()) else {
+            let Some(sub) = self
+                .inner
+                .screens
+                .get_mut(&front)
+                .map(|inner| inner.live.entry(region.clone()).or_default())
+            else {
                 continue;
             };
             if sub.busy {
                 sub.dirty = true;
             } else if sub.timer.is_none() {
-                let timer = self.timer(QUIET, TimerFor::Live { screen: front, region: region.clone() });
-                if let Some(sub) = self.inner.screens.get_mut(&front).and_then(|inner| inner.live.get_mut(&region)) {
+                let timer = self.timer(
+                    QUIET,
+                    TimerFor::Live {
+                        screen: front,
+                        region: region.clone(),
+                    },
+                );
+                if let Some(sub) = self
+                    .inner
+                    .screens
+                    .get_mut(&front)
+                    .and_then(|inner| inner.live.get_mut(&region))
+                {
                     sub.timer = Some(timer);
                 }
             }
@@ -642,7 +824,9 @@ impl Core {
             return;
         }
         stream.failures += 1;
-        let wait = FIRST.saturating_mul(1 << (stream.failures - 1).min(5)).min(LONGEST);
+        let wait = FIRST
+            .saturating_mul(1 << (stream.failures - 1).min(5))
+            .min(LONGEST);
         let timer = self.timer(wait, TimerFor::Reopen { stream: id });
         if let Some(stream) = self.inner.streams.iter_mut().find(|stream| stream.id == id) {
             stream.reopen = Some(timer);
@@ -676,13 +860,29 @@ impl Core {
 
     /// A live region's fetch landed: events that came meanwhile cost one more.
     fn live_landed(&mut self, id: ScreenId, region: &str) {
-        let Some(sub) = self.inner.screens.get_mut(&id).and_then(|inner| inner.live.get_mut(region)) else {
+        let Some(sub) = self
+            .inner
+            .screens
+            .get_mut(&id)
+            .and_then(|inner| inner.live.get_mut(region))
+        else {
             return;
         };
         sub.busy = false;
         if std::mem::take(&mut sub.dirty) && sub.timer.is_none() {
-            let timer = self.timer(QUIET, TimerFor::Live { screen: id, region: region.to_owned() });
-            if let Some(sub) = self.inner.screens.get_mut(&id).and_then(|inner| inner.live.get_mut(region)) {
+            let timer = self.timer(
+                QUIET,
+                TimerFor::Live {
+                    screen: id,
+                    region: region.to_owned(),
+                },
+            );
+            if let Some(sub) = self
+                .inner
+                .screens
+                .get_mut(&id)
+                .and_then(|inner| inner.live.get_mut(region))
+            {
                 sub.timer = Some(timer);
             }
         }

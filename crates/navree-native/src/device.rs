@@ -135,7 +135,9 @@ impl Feature {
 
     /// The feature named `name`, or nothing.
     pub fn parse(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|feature| feature.as_str() == name)
+        Self::ALL
+            .into_iter()
+            .find(|feature| feature.as_str() == name)
     }
 }
 
@@ -265,7 +267,10 @@ impl OriginPath {
         if decoded_path.starts_with(b"//") || path.starts_with("//") {
             return Err(PathError::OtherOrigin);
         }
-        if decoded_path.split(|byte| *byte == b'/').any(|segment| segment == b"..") {
+        if decoded_path
+            .split(|byte| *byte == b'/')
+            .any(|segment| segment == b"..")
+        {
             return Err(PathError::DotSegment);
         }
         Ok(Self(text.to_owned()))
@@ -961,7 +966,11 @@ pub enum SettingsPage {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OpenSettings {
     /// Which page.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub page: SettingsPage,
 }
 
@@ -1048,7 +1057,11 @@ pub struct Confirm {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     /// How it is signed.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub method: ConfirmMethod,
 }
 
@@ -1092,7 +1105,11 @@ pub struct Confirmed {
     pub credential: Option<String>,
     /// The method that signed. The passkey when left out, and when it is a
     /// method this build does not know.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub method: ConfirmedBy,
     /// The id of the challenge a device key's signature answers. A passkey's
     /// assertion holds its own challenge, so it posts none.
@@ -1121,7 +1138,11 @@ pub enum Accuracy {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LocateOnce {
     /// How exactly.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub accuracy: Accuracy,
     /// How old a fix the device already has may be, in seconds.
     #[serde(default, skip_serializing_if = "is_zero_u32")]
@@ -1186,7 +1207,11 @@ pub enum CodeFormat {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScanCode {
     /// The kinds it looks for; every kind when empty.
-    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::lenient::known")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "crate::lenient::known"
+    )]
     pub formats: Vec<CodeFormat>,
     /// What the scanner tells the person: `Scan the SKU on the box`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1788,7 +1813,10 @@ mod tests {
         let long = Ticket::from("a".repeat(Ticket::MAX + 1));
         assert_eq!(long.open(&key), Err(TicketError::Unreadable));
         let shown = format!("{:?}", claims());
-        assert!(!shown.contains("session-a") && !shown.contains("n-1"), "{shown}");
+        assert!(
+            !shown.contains("session-a") && !shown.contains("n-1"),
+            "{shown}"
+        );
     }
 
     #[test]
@@ -1876,7 +1904,11 @@ mod tests {
             ]
         );
         // A sign-in posts its token to its own route, not to a continuation.
-        assert!(calls.iter().any(|call| call.feature() == Some(SignedIn::FEATURE) && !call.posts()));
+        assert!(
+            calls
+                .iter()
+                .any(|call| call.feature() == Some(SignedIn::FEATURE) && !call.posts())
+        );
     }
 
     #[test]
@@ -1901,7 +1933,9 @@ mod tests {
 
     #[test]
     fn asking_for_push_permission_answers_with_whether_it_was_given_and_never_the_token() {
-        let call: Call = serde_json::from_str(r#"{"f":"register_push","categories":["orders","stock"]}"#).unwrap();
+        let call: Call =
+            serde_json::from_str(r#"{"f":"register_push","categories":["orders","stock"]}"#)
+                .unwrap();
         assert_eq!(
             call,
             Call::RegisterPush(RegisterPush {
@@ -1909,10 +1943,15 @@ mod tests {
             })
         );
         assert!(call.posts() && call.needs_gesture());
-        assert_eq!(serde_json::to_string(&PushRegistered { granted: true }).unwrap(), r#"{"granted":true}"#);
+        assert_eq!(
+            serde_json::to_string(&PushRegistered { granted: true }).unwrap(),
+            r#"{"granted":true}"#
+        );
         // A token, from a client that still sends one, is passed over and kept nowhere.
-        let answer: PushRegistered =
-            serde_json::from_str(r#"{"granted":false,"token":"9f2c4a7e00b1d35c","provider":"apns"}"#).unwrap();
+        let answer: PushRegistered = serde_json::from_str(
+            r#"{"granted":false,"token":"9f2c4a7e00b1d35c","provider":"apns"}"#,
+        )
+        .unwrap();
         assert_eq!(answer, PushRegistered { granted: false });
         assert!(!serde_json::to_string(&answer).unwrap().contains("9f2c"));
         // The answer is needed: without it the server does not know what the person said.
@@ -1922,7 +1961,8 @@ mod tests {
     #[test]
     fn a_confirmation_posts_the_assertion_and_needs_nothing_else_for_a_passkey() {
         let assertion = r#"{"id":"AQID","rawId":"AQID","type":"public-key","response":{"clientDataJSON":"e30","authenticatorData":"AQ","signature":"MEUC","userHandle":null}}"#;
-        let confirmed: Confirmed = serde_json::from_value(serde_json::json!({ "credential": assertion })).unwrap();
+        let confirmed: Confirmed =
+            serde_json::from_value(serde_json::json!({ "credential": assertion })).unwrap();
         assert_eq!(
             confirmed,
             Confirmed {
@@ -1974,13 +2014,20 @@ mod tests {
         let Call::PlatformSignIn(sign_in) = call else {
             panic!("{call:?}");
         };
-        assert_eq!(sign_in.second_step.as_ref().map(OriginPath::as_str), Some("/sign-in/two-factor"));
+        assert_eq!(
+            sign_in.second_step.as_ref().map(OriginPath::as_str),
+            Some("/sign-in/two-factor")
+        );
         // Left out, it is not written; the shell's page is the one used.
         let plain = PlatformSignIn {
             second_step: None,
             ..sign_in
         };
-        assert!(!serde_json::to_string(&plain).unwrap().contains("second_step"));
+        assert!(
+            !serde_json::to_string(&plain)
+                .unwrap()
+                .contains("second_step")
+        );
         // The page is the app's own: a page of another site is refused.
         assert!(serde_json::from_str::<PlatformSignIn>(
             r#"{"provider":"google","nonce":"/n","sign_in":"/s","second_step":"https://evil.example/2fa"}"#
@@ -2013,9 +2060,17 @@ mod tests {
         assert!(!json.contains("environment"), "{json}");
         assert_eq!(serde_json::from_str::<PushDevice>(&json).unwrap(), store);
         let shown = format!("{device:?}");
-        assert!(shown.contains("com.charkha.supply") && !shown.contains("9f2c4a7e"), "{shown}");
+        assert!(
+            shown.contains("com.charkha.supply") && !shown.contains("9f2c4a7e"),
+            "{shown}"
+        );
         // The route has no other platform.
-        assert!(serde_json::from_str::<PushDevice>(r#"{"platform":"windows","token":"t","app_id":"a"}"#).is_err());
+        assert!(
+            serde_json::from_str::<PushDevice>(
+                r#"{"platform":"windows","token":"t","app_id":"a"}"#
+            )
+            .is_err()
+        );
     }
 
     #[test]

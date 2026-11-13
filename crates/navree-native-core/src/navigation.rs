@@ -15,17 +15,22 @@
 
 use navree_native::action::Present;
 
+use crate::Core;
 use crate::config::DeepLinks;
 use crate::effect::{Change, Effect};
 use crate::origin::{Target, path_of, route_matches};
 use crate::reduce::Shown;
 use crate::state::{Content, Modal, ScreenId};
-use crate::Core;
 
 impl Core {
     /// Follows `href` as found on the screen `from`. Returns the screen now
     /// in front of that stack.
-    pub(crate) fn navigate(&mut self, from: Option<ScreenId>, href: &str, present: Present) -> Option<ScreenId> {
+    pub(crate) fn navigate(
+        &mut self,
+        from: Option<ScreenId>,
+        href: &str,
+        present: Present,
+    ) -> Option<ScreenId> {
         let target = match from {
             Some(from) => self.resolve(href, from),
             None => self.inner.origin.resolve(href, "/"),
@@ -58,9 +63,20 @@ impl Core {
     }
 
     /// Goes to `url`, an address inside, from the screen `from`.
-    pub(crate) fn go(&mut self, from: Option<ScreenId>, url: &str, present: Present) -> Option<ScreenId> {
+    pub(crate) fn go(
+        &mut self,
+        from: Option<ScreenId>,
+        url: &str,
+        present: Present,
+    ) -> Option<ScreenId> {
         // A sign-in with another site runs in the system's own session, never in a fetch.
-        if self.config.sign_in.paths.iter().any(|pattern| route_matches(pattern, url)) {
+        if self
+            .config
+            .sign_in
+            .paths
+            .iter()
+            .any(|pattern| route_matches(pattern, url))
+        {
             self.sign_in_session(url, false);
             return from;
         }
@@ -80,13 +96,24 @@ impl Core {
     }
 
     /// Goes to `url` presented exactly as `how` says, whatever the routes say.
-    pub(crate) fn go_as(&mut self, from: Option<ScreenId>, url: &str, how: Present) -> Option<ScreenId> {
+    pub(crate) fn go_as(
+        &mut self,
+        from: Option<ScreenId>,
+        url: &str,
+        how: Present,
+    ) -> Option<ScreenId> {
         self.go_with(from, url, how, true)
     }
 
     /// Goes to `url` presented as `how` says. With `select`, an address that
     /// is a destination's own selects that destination instead of stacking.
-    fn go_with(&mut self, from: Option<ScreenId>, url: &str, how: Present, select: bool) -> Option<ScreenId> {
+    fn go_with(
+        &mut self,
+        from: Option<ScreenId>,
+        url: &str,
+        how: Present,
+        select: bool,
+    ) -> Option<ScreenId> {
         if how == Present::External {
             let url = self.inner.origin.absolute(url);
             self.effects.push(Effect::OpenUrl { url, inside: false });
@@ -95,11 +122,18 @@ impl Core {
         if let Some(from) = from {
             self.close_overlays(from);
         }
-        if let (true, Some(tab), Present::Auto | Present::Push | Present::Root) = (select, self.destination_at(url), how) {
+        if let (true, Some(tab), Present::Auto | Present::Push | Present::Root) =
+            (select, self.destination_at(url), how)
+        {
             // A link to a top-level destination selects it.
             self.dismiss_modals();
             let stack = std::mem::take(&mut self.view.destinations[tab].stack);
-            let root = stack.first().copied().filter(|root| self.view.screens.get(root).is_some_and(|view| view.url == url));
+            let root = stack.first().copied().filter(|root| {
+                self.view
+                    .screens
+                    .get(root)
+                    .is_some_and(|view| view.url == url)
+            });
             for id in stack {
                 if Some(id) != root {
                     self.close(id);
@@ -143,9 +177,15 @@ impl Core {
             }
             _ => {
                 // A second tap on a link whose screen is still on its way opens it once.
-                let top = anchor.and_then(|anchor| self.view.stack_of(anchor)).and_then(|stack| stack.last().copied());
+                let top = anchor
+                    .and_then(|anchor| self.view.stack_of(anchor))
+                    .and_then(|stack| stack.last().copied());
                 if let Some(top) = top.filter(|top| Some(*top) != anchor) {
-                    let waiting = self.view.screens.get(&top).is_some_and(|view| view.url == url && view.loading);
+                    let waiting = self
+                        .view
+                        .screens
+                        .get(&top)
+                        .is_some_and(|view| view.url == url && view.loading);
                     if waiting {
                         return Some(top);
                     }
@@ -166,7 +206,9 @@ impl Core {
     /// A screen an action pushed or presented keeps the id of the part the
     /// person tapped, when the client named one.
     fn opened_from(&mut self, id: ScreenId) {
-        if let (Some(from), Some(view)) = (self.inner.acting.clone(), self.view.screens.get_mut(&id)) {
+        if let (Some(from), Some(view)) =
+            (self.inner.acting.clone(), self.view.screens.get_mut(&id))
+        {
             view.from = Some(from);
         }
     }
@@ -174,14 +216,22 @@ impl Core {
     /// The screen stays and takes another address's answer in its place. What
     /// it shows stays until the answer is here.
     pub(crate) fn replace(&mut self, id: ScreenId, url: &str) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         if path_of(&view.url) != path_of(url) {
             // Another page: what was typed and opened here belongs to the page being left.
             inner.dirty.clear();
             if matches!(view.content, Content::Blank) {
-                view.chrome = self.inner.routes.iter().find(|route| route_matches(&route.matches, url)).is_none_or(|route| route.chrome);
+                view.chrome = self
+                    .inner
+                    .routes
+                    .iter()
+                    .find(|route| route_matches(&route.matches, url))
+                    .is_none_or(|route| route.chrome);
             }
         }
         view.url = url.to_owned();
@@ -208,7 +258,11 @@ impl Core {
     /// The system's back.
     pub(crate) fn back(&mut self) {
         if let Some(front) = self.front() {
-            let open = self.view.screens.get(&front).and_then(|view| view.overlays.last().cloned());
+            let open = self
+                .view
+                .screens
+                .get(&front)
+                .and_then(|view| view.overlays.last().cloned());
             if let Some(open) = open {
                 return self.set_open(front, &open, false);
             }
@@ -221,7 +275,11 @@ impl Core {
             let gone = if modal.stack.len() > 1 {
                 modal.stack.pop().into_iter().collect()
             } else {
-                self.view.modals.pop().map(|modal| modal.stack).unwrap_or_default()
+                self.view
+                    .modals
+                    .pop()
+                    .map(|modal| modal.stack)
+                    .unwrap_or_default()
             };
             for id in gone {
                 self.close(id);
@@ -261,7 +319,12 @@ impl Core {
 
     /// The person took a sheet or cover away.
     pub(crate) fn dismissed(&mut self, id: ScreenId) {
-        let Some(at) = self.view.modals.iter().position(|modal| modal.stack.contains(&id)) else {
+        let Some(at) = self
+            .view
+            .modals
+            .iter()
+            .position(|modal| modal.stack.contains(&id))
+        else {
             return;
         };
         self.take_modals_from(at);
@@ -320,7 +383,12 @@ impl Core {
             // The presented screen has done its work: it goes, and what is under it carries on.
             self.dismissed(id);
             let under = self.front();
-            if let Some(under) = under.filter(|under| self.view.screens.get(under).is_some_and(|view| view.url == url)) {
+            if let Some(under) = under.filter(|under| {
+                self.view
+                    .screens
+                    .get(under)
+                    .is_some_and(|view| view.url == url)
+            }) {
                 self.settle_on(under, url, shown);
                 return under;
             }
@@ -343,7 +411,12 @@ impl Core {
         }
         let stack: Vec<ScreenId> = self.view.stack_of(id).cloned().unwrap_or_default();
         let at = stack.iter().position(|other| *other == id).unwrap_or(0);
-        let below = stack[..at].iter().rposition(|other| self.view.screens.get(other).is_some_and(|view| view.url == url));
+        let below = stack[..at].iter().rposition(|other| {
+            self.view
+                .screens
+                .get(other)
+                .is_some_and(|view| view.url == url)
+        });
         if let Some(below) = below {
             // That screen is already under this one: go back to it rather than stack a copy.
             let target = stack[below];
@@ -378,8 +451,14 @@ impl Core {
         if self.is_return(address) {
             return self.returned_as_a_link(address);
         }
-        let own = self.own_scheme(address).map(|rest| format!("/{}", rest.trim_start_matches('/')));
-        let Target::Inside(url) = self.inner.origin.resolve(own.as_deref().unwrap_or(address), "/") else {
+        let own = self
+            .own_scheme(address)
+            .map(|rest| format!("/{}", rest.trim_start_matches('/')));
+        let Target::Inside(url) = self
+            .inner
+            .origin
+            .resolve(own.as_deref().unwrap_or(address), "/")
+        else {
             return;
         };
         if !self.inner.has_shell {
@@ -410,7 +489,10 @@ impl Core {
             .enumerate()
             .filter_map(|(at, destination)| {
                 let root = path_of(&self.destination_url(&destination.href));
-                let under = root != "/" && path.strip_prefix(root.as_str()).is_some_and(|rest| rest.starts_with('/'));
+                let under = root != "/"
+                    && path
+                        .strip_prefix(root.as_str())
+                        .is_some_and(|rest| rest.starts_with('/'));
                 under.then_some((root.len(), at))
             })
             .max()
@@ -419,7 +501,12 @@ impl Core {
             self.view.selected = owner;
         }
         let selected = self.view.selected;
-        if self.view.destinations.get(selected).is_some_and(|destination| destination.stack.is_empty()) {
+        if self
+            .view
+            .destinations
+            .get(selected)
+            .is_some_and(|destination| destination.stack.is_empty())
+        {
             let root = self.destination_url(&self.view.destinations[selected].href);
             let root = self.open(&root);
             self.view.destinations[selected].stack.push(root);
@@ -435,7 +522,12 @@ impl Core {
     pub(crate) fn web_link(&mut self, id: ScreenId, url: &str) {
         match self.resolve(url, id) {
             // The page the web view already shows is not a place to go.
-            Target::Inside(inside) if self.view.screens.get(&id).is_some_and(|view| view.url == inside) => {}
+            Target::Inside(inside)
+                if self
+                    .view
+                    .screens
+                    .get(&id)
+                    .is_some_and(|view| view.url == inside) => {}
             Target::Inside(inside) => {
                 self.go(Some(id), &inside, Present::Auto);
             }

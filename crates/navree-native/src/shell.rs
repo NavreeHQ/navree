@@ -87,7 +87,11 @@ pub struct Route {
     #[serde(rename = "match")]
     pub matches: String,
     /// How a link to it is presented.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub present: Option<Present>,
     /// Whether the app's navigation stays around it. A sign-in screen has none.
     #[serde(default = "yes", skip_serializing_if = "is_true")]
@@ -385,15 +389,27 @@ mod tests {
         let sign_in = shell.sign_in.as_ref().unwrap();
         assert_eq!(sign_in.start.as_str(), "/auth/app/sign-in");
         assert_eq!(sign_in.exchange.as_str(), "/api/auth/app/exchange");
-        assert_eq!(sign_in.callback.as_deref(), Some("https://charkha.example/app/signed-in"));
-        assert_eq!(sign_in.second_step.as_ref().map(OriginPath::as_str), Some("/sign-in/two-factor"));
-        let push = shell.device.as_ref().and_then(|device| device.push.as_ref()).unwrap();
+        assert_eq!(
+            sign_in.callback.as_deref(),
+            Some("https://charkha.example/app/signed-in")
+        );
+        assert_eq!(
+            sign_in.second_step.as_ref().map(OriginPath::as_str),
+            Some("/sign-in/two-factor")
+        );
+        let push = shell
+            .device
+            .as_ref()
+            .and_then(|device| device.push.as_ref())
+            .unwrap();
         assert_eq!(push.register.as_str(), "/api/notifications/push-devices");
         // Only what the shell names is written; a shell with none says nothing of it.
         let written = serde_json::to_value(Shell::new("b", "Charkha Supply Co.")).unwrap();
         assert!(written.get("sign_in").is_none());
-        let minimal: SignIn =
-            serde_json::from_str(r#"{"start":"/auth/app/sign-in","exchange":"/api/auth/app/exchange"}"#).unwrap();
+        let minimal: SignIn = serde_json::from_str(
+            r#"{"start":"/auth/app/sign-in","exchange":"/api/auth/app/exchange"}"#,
+        )
+        .unwrap();
         assert_eq!((minimal.callback, minimal.second_step), (None, None));
     }
 
@@ -407,7 +423,9 @@ mod tests {
         ] {
             assert!(serde_json::from_str::<SignIn>(json).is_err(), "{json}");
         }
-        assert!(serde_json::from_str::<Push>(r#"{"register":"https://evil.example/push"}"#).is_err());
+        assert!(
+            serde_json::from_str::<Push>(r#"{"register":"https://evil.example/push"}"#).is_err()
+        );
     }
 
     #[test]
@@ -427,12 +445,17 @@ mod tests {
         );
         let shown = format!("{exchange:?}");
         assert!(shown.contains("com.charkha.supply"), "{shown}");
-        assert!(!shown.contains("k3xq") && !shown.contains("verifier-of"), "{shown}");
+        assert!(
+            !shown.contains("k3xq") && !shown.contains("verifier-of"),
+            "{shown}"
+        );
         // The server refuses a platform it has no app list for.
-        assert!(serde_json::from_str::<SignInExchange>(
-            r#"{"platform":"windows","app":"a","code":"c","code_verifier":"v"}"#
-        )
-        .is_err());
+        assert!(
+            serde_json::from_str::<SignInExchange>(
+                r#"{"platform":"windows","app":"a","code":"c","code_verifier":"v"}"#
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -440,7 +463,11 @@ mod tests {
         let shell = Shell::new("b1", "Charkha Supply Co.").stamped();
         assert_eq!(shell.stamp.len(), 16);
         assert!(shell.stamp.bytes().all(|byte| byte.is_ascii_hexdigit()));
-        assert_eq!(shell.clone().stamped(), shell, "stamping twice changes nothing");
+        assert_eq!(
+            shell.clone().stamped(),
+            shell,
+            "stamping twice changes nothing"
+        );
         let mut renamed = shell.clone();
         renamed.home = "/orders".to_owned();
         assert_ne!(renamed.stamped().stamp, shell.stamp);

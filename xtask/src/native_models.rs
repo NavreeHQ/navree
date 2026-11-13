@@ -161,11 +161,10 @@ fn ty(shape: &Value, at: &str) -> Result<Ty, String> {
         (Some("integer"), _) => Ok(Ty::Long),
         (Some("number"), _) => Ok(Ty::Double),
         (Some("array"), _) => Ok(Ty::List(Box::new(ty(&shape["items"], at)?))),
-        (Some("object"), _) => Ok(Ty::Map(Box::new(ty(
-            &shape["additionalProperties"],
-            at,
-        )?))),
-        _ => Err(format!("{at}: a shape the generator does not know: {shape}")),
+        (Some("object"), _) => Ok(Ty::Map(Box::new(ty(&shape["additionalProperties"], at)?))),
+        _ => Err(format!(
+            "{at}: a shape the generator does not know: {shape}"
+        )),
     }
 }
 
@@ -187,16 +186,14 @@ fn read(schema: &Value) -> Result<Read, String> {
                 let mut fields = Vec::new();
                 for (wire, property) in def["properties"].as_object().into_iter().flatten() {
                     let at = format!("{name}.{wire}");
-                    let default = if required.contains(wire.as_str()) {
-                        None
-                    } else {
-                        Some(
-                            property
-                                .get("default")
-                                .cloned()
-                                .ok_or_else(|| format!("{at}: may be left out but has no default"))?,
-                        )
-                    };
+                    let default =
+                        if required.contains(wire.as_str()) {
+                            None
+                        } else {
+                            Some(property.get("default").cloned().ok_or_else(|| {
+                                format!("{at}: may be left out but has no default")
+                            })?)
+                        };
                     fields.push(Field {
                         wire: wire.clone(),
                         ty: ty(property, &at)?,
@@ -242,7 +239,10 @@ fn read(schema: &Value) -> Result<Read, String> {
                     .collect::<Result<Vec<_>, String>>()?;
                 let mut keeps = Vec::new();
                 for (field, shape) in def["x-unknown"].as_object().into_iter().flatten() {
-                    keeps.push((field.clone(), ty(shape, &format!("{name}.x-unknown.{field}"))?));
+                    keeps.push((
+                        field.clone(),
+                        ty(shape, &format!("{name}.x-unknown.{field}"))?,
+                    ));
                 }
                 Def::Union {
                     tag,
@@ -251,14 +251,22 @@ fn read(schema: &Value) -> Result<Read, String> {
                 }
             }
             "string" => Def::Text,
-            _ => return Err(format!("{name}: a definition of no kind the generator knows")),
+            _ => {
+                return Err(format!(
+                    "{name}: a definition of no kind the generator knows"
+                ));
+            }
         };
         out.insert(name.clone(), read);
     }
     let read = Read {
         defs: out,
-        major: schema["x-major"].as_u64().ok_or("the schema has no `x-major`")?,
-        vocab: schema["x-vocab"].as_u64().ok_or("the schema has no `x-vocab`")?,
+        major: schema["x-major"]
+            .as_u64()
+            .ok_or("the schema has no `x-major`")?,
+        vocab: schema["x-vocab"]
+            .as_u64()
+            .ok_or("the schema has no `x-vocab`")?,
     };
     read.check()?;
     Ok(read)
@@ -278,7 +286,9 @@ impl Read {
                         refs.push((format!("{name}.{}", field.wire), field.ty.clone()));
                     }
                 }
-                Def::Union { variants, keeps, .. } => {
+                Def::Union {
+                    variants, keeps, ..
+                } => {
                     for variant in variants {
                         if let Some(payload) = &variant.payload {
                             match self.defs.get(payload) {
@@ -333,7 +343,9 @@ impl Read {
             let mut stack = held(start);
             while let Some(next) = stack.pop() {
                 if next == *start {
-                    return Err(format!("{start} holds itself with no list or union between"));
+                    return Err(format!(
+                        "{start} holds itself with no list or union between"
+                    ));
                 }
                 if seen.insert(next.clone()) {
                     stack.extend(held(&next));
@@ -500,20 +512,33 @@ impl Kotlin<'_> {
             (Ty::Bool, Value::Bool(value)) => value.to_string(),
             (Ty::Int, Value::Number(value)) => value.to_string(),
             (Ty::Long, Value::Number(value)) => format!("{value}L"),
-            (Ty::Double, Value::Number(value)) => format!("{:?}", value.as_f64().unwrap_or_default()),
+            (Ty::Double, Value::Number(value)) => {
+                format!("{:?}", value.as_f64().unwrap_or_default())
+            }
             (Ty::Text, Value::String(text)) => json_string(text).replace('$', "\\$"),
             (Ty::List(_), Value::Array(items)) if items.is_empty() => "emptyList()".to_owned(),
             (Ty::Map(_), Value::Object(map)) if map.is_empty() => "emptyMap()".to_owned(),
             (Ty::Ref(name), Value::String(value)) if self.0.is_enum(ty) => {
-                format!("Navree.{name}.{}", screaming(self.0.enum_value(name, value, at)?))
+                format!(
+                    "Navree.{name}.{}",
+                    screaming(self.0.enum_value(name, value, at)?)
+                )
             }
             (Ty::Ref(name), Value::Object(map)) if map.is_empty() => match self.0.defs.get(name) {
                 Some(Def::Object(fields)) if fields.iter().all(|field| field.default.is_some()) => {
                     format!("Navree.{name}()")
                 }
-                _ => return Err(format!("{at}: the default {{}} of {name}, which needs fields")),
+                _ => {
+                    return Err(format!(
+                        "{at}: the default {{}} of {name}, which needs fields"
+                    ));
+                }
             },
-            _ => return Err(format!("{at}: a default the generator can't write: {default}")),
+            _ => {
+                return Err(format!(
+                    "{at}: a default the generator can't write: {default}"
+                ));
+            }
         })
     }
 
@@ -608,7 +633,10 @@ impl Kotlin<'_> {
                 }
             }
         }
-        let parents: Vec<String> = unions.iter().map(|union| format!("Navree.{union}")).collect();
+        let parents: Vec<String> = unions
+            .iter()
+            .map(|union| format!("Navree.{union}"))
+            .collect();
         if parents.is_empty() {
             let _ = writeln!(out, "{pad})");
         } else {
@@ -640,7 +668,11 @@ impl Kotlin<'_> {
                 Some(Def::Text) => "String.serializer()".to_owned(),
                 _ => format!("Navree.{name}.serializer()"),
             },
-            _ => return Err(format!("{at}: a kept field of a shape the generator can't read")),
+            _ => {
+                return Err(format!(
+                    "{at}: a kept field of a shape the generator can't read"
+                ));
+            }
         })
     }
 
@@ -653,8 +685,14 @@ impl Kotlin<'_> {
         keeps: &[(String, Ty)],
     ) -> Result<(), String> {
         let read = self.0;
-        let _ = writeln!(out, "\n    /** `{name}`: one of its variants, told apart by `{tag}`. */");
-        let _ = writeln!(out, "    @Serializable(with = Navree.{name}Serializer::class)");
+        let _ = writeln!(
+            out,
+            "\n    /** `{name}`: one of its variants, told apart by `{tag}`. */"
+        );
+        let _ = writeln!(
+            out,
+            "    @Serializable(with = Navree.{name}Serializer::class)"
+        );
         let _ = writeln!(out, "    public sealed interface {name} {{");
         for variant in variants {
             match &variant.payload {
@@ -694,8 +732,14 @@ impl Kotlin<'_> {
 
         // The serializer.
         let tag_text = json_string(tag);
-        let _ = writeln!(out, "\n    /** Reads and writes a [{name}] by its `{tag}`. */");
-        let _ = writeln!(out, "    public object {name}Serializer : KSerializer<Navree.{name}> {{");
+        let _ = writeln!(
+            out,
+            "\n    /** Reads and writes a [{name}] by its `{tag}`. */"
+        );
+        let _ = writeln!(
+            out,
+            "    public object {name}Serializer : KSerializer<Navree.{name}> {{"
+        );
         out.push_str(
             "        override val descriptor: SerialDescriptor = JsonElement.serializer().descriptor\n\n",
         );
@@ -921,15 +965,26 @@ impl Swift<'_> {
             (Ty::List(_), Value::Array(items)) if items.is_empty() => "[]".to_owned(),
             (Ty::Map(_), Value::Object(map)) if map.is_empty() => "[:]".to_owned(),
             (Ty::Ref(name), Value::String(value)) if self.0.is_enum(ty) => {
-                format!("Navree.{name}.{}", Self::name(self.0.enum_value(name, value, at)?))
+                format!(
+                    "Navree.{name}.{}",
+                    Self::name(self.0.enum_value(name, value, at)?)
+                )
             }
             (Ty::Ref(name), Value::Object(map)) if map.is_empty() => match self.0.defs.get(name) {
                 Some(Def::Object(fields)) if fields.iter().all(|field| field.default.is_some()) => {
                     format!("Navree.{name}()")
                 }
-                _ => return Err(format!("{at}: the default {{}} of {name}, which needs fields")),
+                _ => {
+                    return Err(format!(
+                        "{at}: the default {{}} of {name}, which needs fields"
+                    ));
+                }
             },
-            _ => return Err(format!("{at}: a default the generator can't write: {default}")),
+            _ => {
+                return Err(format!(
+                    "{at}: a default the generator can't write: {default}"
+                ));
+            }
         })
     }
 
@@ -994,9 +1049,18 @@ impl Swift<'_> {
         Ok(out)
     }
 
-    fn object(&self, out: &mut String, name: &str, own: &str, fields: &[Field]) -> Result<(), String> {
+    fn object(
+        &self,
+        out: &mut String,
+        name: &str,
+        own: &str,
+        fields: &[Field],
+    ) -> Result<(), String> {
         let _ = writeln!(out, "    /// `{name}`.");
-        let _ = writeln!(out, "    public struct {own}: Codable, Hashable, Sendable {{");
+        let _ = writeln!(
+            out,
+            "    public struct {own}: Codable, Hashable, Sendable {{"
+        );
         for field in fields {
             let _ = writeln!(
                 out,
@@ -1040,7 +1104,9 @@ impl Swift<'_> {
         }
         out.push_str("        }\n\n");
         out.push_str("        public init(from decoder: any Decoder) throws {\n");
-        out.push_str("            let container = try decoder.container(keyedBy: CodingKeys.self)\n");
+        out.push_str(
+            "            let container = try decoder.container(keyedBy: CodingKeys.self)\n",
+        );
         for field in fields {
             let name_here = Self::name(&field.wire);
             let at = format!("{name}.{}", field.wire);
@@ -1117,7 +1183,10 @@ impl Swift<'_> {
         keeps: &[(String, Ty)],
     ) -> Result<(), String> {
         let _ = writeln!(out, "\nextension Navree {{");
-        let _ = writeln!(out, "    /// `{name}`: one of its variants, told apart by `{tag}`.");
+        let _ = writeln!(
+            out,
+            "    /// `{name}`: one of its variants, told apart by `{tag}`."
+        );
         let _ = writeln!(
             out,
             "    public indirect enum {name}: Codable, Hashable, Sendable {{"
@@ -1177,12 +1246,18 @@ impl Swift<'_> {
             match &variant.payload {
                 Some(_) => {
                     let _ = writeln!(out, "            case .{case}(let value):");
-                    let _ = writeln!(out, "                try container.encode({label}, forKey: .tag)");
+                    let _ = writeln!(
+                        out,
+                        "                try container.encode({label}, forKey: .tag)"
+                    );
                     out.push_str("                try value.encode(to: encoder)\n");
                 }
                 None => {
                     let _ = writeln!(out, "            case .{case}:");
-                    let _ = writeln!(out, "                try container.encode({label}, forKey: .tag)");
+                    let _ = writeln!(
+                        out,
+                        "                try container.encode({label}, forKey: .tag)"
+                    );
                 }
             }
         }
@@ -1200,7 +1275,12 @@ impl Swift<'_> {
         out.push_str("    public struct Unknown: Hashable, Sendable {\n");
         out.push_str("        public var tag: String\n");
         for (field, ty) in keeps {
-            let _ = writeln!(out, "        public var {}: {}?", Self::name(field), self.ty(ty));
+            let _ = writeln!(
+                out,
+                "        public var {}: {}?",
+                Self::name(field),
+                self.ty(ty)
+            );
         }
         out.push_str("\n        public init(tag: String");
         for (field, ty) in keeps {
@@ -1228,7 +1308,9 @@ impl Swift<'_> {
             }
             out.push_str("        }\n\n");
             out.push_str("        init(from decoder: any Decoder, tag: String) throws {\n");
-            out.push_str("            let container = try decoder.container(keyedBy: CodingKeys.self)\n");
+            out.push_str(
+                "            let container = try decoder.container(keyedBy: CodingKeys.self)\n",
+            );
             out.push_str("            self.tag = tag\n");
             for (field, ty) in keeps {
                 let field = Self::name(field);
@@ -1240,7 +1322,9 @@ impl Swift<'_> {
             }
             out.push_str("        }\n\n");
             out.push_str("        func encode(to encoder: any Encoder) throws {\n");
-            out.push_str("            var container = encoder.container(keyedBy: CodingKeys.self)\n");
+            out.push_str(
+                "            var container = encoder.container(keyedBy: CodingKeys.self)\n",
+            );
             for (field, _) in keeps {
                 let field = Self::name(field);
                 let _ = writeln!(
@@ -1449,11 +1533,16 @@ mod tests {
 
     #[test]
     fn the_protocol_schema_is_written_without_error() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join(SCHEMA);
-        let schema: Value =
-            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join(SCHEMA);
+        let schema: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let models = generate(&schema).unwrap();
         assert!(models.kotlin.contains("public sealed interface Node {"));
-        assert!(models.swift.contains("public indirect enum Node: Codable, Hashable, Sendable {"));
+        assert!(
+            models
+                .swift
+                .contains("public indirect enum Node: Codable, Hashable, Sendable {")
+        );
     }
 }

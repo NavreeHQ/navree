@@ -1,9 +1,9 @@
 //! [`Event`]: everything a client tells the core. One thing happened; the
 //! core answers with what changed and what to do about it.
 
+use navree_native::Action;
 use navree_native::action::Pair;
 use navree_native::client::{Contrast, Scheme};
-use navree_native::Action;
 use serde::{Deserialize, Serialize};
 
 use crate::state::{ScreenId, Width};
@@ -130,7 +130,10 @@ pub struct Response {
 impl Response {
     /// The value of the header `name`, whatever its case.
     pub(crate) fn header(&self, name: &str) -> Option<&str> {
-        self.headers.iter().find(|(other, _)| other.eq_ignore_ascii_case(name)).map(|(_, value)| value.as_str())
+        self.headers
+            .iter()
+            .find(|(other, _)| other.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
     }
 }
 

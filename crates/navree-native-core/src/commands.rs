@@ -7,11 +7,11 @@ use navree_native::action::{Command, State};
 use navree_native::node::Node;
 use navree_native::op::Toast;
 
+use crate::Core;
 use crate::effect::Effect;
 use crate::ops::set_state;
 use crate::state::{Content, Notice, ScreenId, ScreenView};
 use crate::tree::{find_in, find_in_mut, has_id, opens};
-use crate::Core;
 
 /// Unticks the items of the menu that holds the item `target` which belong
 /// to the same choice of one. True when one was ticked.
@@ -43,7 +43,9 @@ fn untick_others(node: &mut Node, target: &str, group: &str) -> bool {
                 }
                 any
             }
-            crate::tree::Slot::Maybe(child) => child.as_deref_mut().is_some_and(|child| untick_others(child, target, group)),
+            crate::tree::Slot::Maybe(child) => child
+                .as_deref_mut()
+                .is_some_and(|child| untick_others(child, target, group)),
             crate::tree::Slot::One(child) => untick_others(child, target, group),
         };
     }
@@ -65,7 +67,10 @@ impl Core {
                 Command::Open { id: target } => self.set_open(id, &target, true),
                 Command::Close { id: target } => self.set_open(id, &target, false),
                 Command::Copy { text } => {
-                    self.effects.push(Effect::Copy { text, sensitive: false });
+                    self.effects.push(Effect::Copy {
+                        text,
+                        sensitive: false,
+                    });
                     self.effects.push(Effect::Announce {
                         text: None,
                         notice: Some(Notice::Copied),
@@ -73,8 +78,19 @@ impl Core {
                     });
                 }
                 // A state from a newer server is not one this build keeps.
-                Command::Set { state: State::Unknown, .. } | Command::Flip { state: State::Unknown, .. } => {}
-                Command::Set { id: target, state, on } => self.put_state(id, &target, state, on),
+                Command::Set {
+                    state: State::Unknown,
+                    ..
+                }
+                | Command::Flip {
+                    state: State::Unknown,
+                    ..
+                } => {}
+                Command::Set {
+                    id: target,
+                    state,
+                    on,
+                } => self.put_state(id, &target, state, on),
                 Command::Flip { id: target, state } => {
                     let on = self.has_state(id, &target, state);
                     self.put_state(id, &target, state, !on);
@@ -112,7 +128,10 @@ impl Core {
         let Some(view) = self.view.screens.get(&id) else {
             return false;
         };
-        let beside = view.states.get(target).is_some_and(|set| set.contains(&state));
+        let beside = view
+            .states
+            .get(target)
+            .is_some_and(|set| set.contains(&state));
         let Some(screen) = view.screen() else {
             return beside;
         };
@@ -127,7 +146,9 @@ impl Core {
             (Some(Node::Disclosure(disclosure)), State::Open) => disclosure.open,
             (Some(Node::Button(button)), State::Disabled) => button.disabled,
             (Some(Node::Button(button)), State::Pending) => button.pending,
-            (Some(Node::Button(button)), State::Checked) if button.checked.is_some() => button.checked == Some(true),
+            (Some(Node::Button(button)), State::Checked) if button.checked.is_some() => {
+                button.checked == Some(true)
+            }
             (Some(Node::Field(field)), State::Disabled) => field.disabled,
             _ => beside,
         }
@@ -142,18 +163,27 @@ impl Core {
         let Some(view) = self.view.screens.get_mut(&id) else {
             return;
         };
-        let ScreenView { content, states, .. } = view;
+        let ScreenView {
+            content, states, ..
+        } = view;
         let Content::Native { screen } = content else {
             return;
         };
         // A menu item that is ticked says so itself, and one of a choice of one
         // unticks the others of its menu.
         if state == State::Checked
-            && let Some(Node::Button(button)) = find_in_mut(screen, &|node| has_id(node, target) && matches!(node, Node::Button(button) if button.checked.is_some()))
+            && let Some(Node::Button(button)) = find_in_mut(screen, &|node| {
+                has_id(node, target)
+                    && matches!(node, Node::Button(button) if button.checked.is_some())
+            })
         {
             let mut changed = button.checked.replace(on) != Some(on);
             if let Some(group) = button.one_of.clone().filter(|_| on) {
-                for root in screen.actions.iter_mut().chain(std::iter::once(&mut screen.body)) {
+                for root in screen
+                    .actions
+                    .iter_mut()
+                    .chain(std::iter::once(&mut screen.body))
+                {
                     changed |= untick_others(root, target, &group);
                 }
             }
@@ -184,10 +214,17 @@ impl Core {
     /// Sets the words of a text node. Nothing else takes words from a
     /// command: not a button's label, not a field's value.
     fn put_text(&mut self, id: ScreenId, target: &str, text: String) {
-        let Some(screen) = self.view.screens.get_mut(&id).and_then(ScreenView::screen_mut) else {
+        let Some(screen) = self
+            .view
+            .screens
+            .get_mut(&id)
+            .and_then(ScreenView::screen_mut)
+        else {
             return;
         };
-        let Some(Node::Text(node)) = find_in_mut(screen, &|node| has_id(node, target) && matches!(node, Node::Text(_))) else {
+        let Some(Node::Text(node)) = find_in_mut(screen, &|node| {
+            has_id(node, target) && matches!(node, Node::Text(_))
+        }) else {
             return;
         };
         if node.value != text {
@@ -207,22 +244,41 @@ impl Core {
                 Node::Table(table) => table.query.as_mut(),
                 _ => None,
             };
-            let hidden = form.and_then(|form| form.hidden.iter_mut().find(|hidden| hidden.id.as_deref() == Some(target)));
+            let hidden = form.and_then(|form| {
+                form.hidden
+                    .iter_mut()
+                    .find(|hidden| hidden.id.as_deref() == Some(target))
+            });
             if let Some(hidden) = hidden {
                 let changed = hidden.value != value;
                 value.clone_into(&mut hidden.value);
                 return Some(changed);
             }
-            crate::tree::slots(node).into_iter().find_map(|slot| match slot {
-                crate::tree::Slot::Many(list) => list.iter_mut().find_map(|child| set(child, target, value)),
-                crate::tree::Slot::Maybe(child) => child.as_deref_mut().and_then(|child| set(child, target, value)),
-                crate::tree::Slot::One(child) => set(child, target, value),
-            })
+            crate::tree::slots(node)
+                .into_iter()
+                .find_map(|slot| match slot {
+                    crate::tree::Slot::Many(list) => {
+                        list.iter_mut().find_map(|child| set(child, target, value))
+                    }
+                    crate::tree::Slot::Maybe(child) => child
+                        .as_deref_mut()
+                        .and_then(|child| set(child, target, value)),
+                    crate::tree::Slot::One(child) => set(child, target, value),
+                })
         }
-        let Some(screen) = self.view.screens.get_mut(&id).and_then(ScreenView::screen_mut) else {
+        let Some(screen) = self
+            .view
+            .screens
+            .get_mut(&id)
+            .and_then(ScreenView::screen_mut)
+        else {
             return;
         };
-        let found = screen.actions.iter_mut().chain(std::iter::once(&mut screen.body)).find_map(|root| set(root, target, &value));
+        let found = screen
+            .actions
+            .iter_mut()
+            .chain(std::iter::once(&mut screen.body))
+            .find_map(|root| set(root, target, &value));
         if found == Some(true) {
             self.touch_screen(id);
         }
