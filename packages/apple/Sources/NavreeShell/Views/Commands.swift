@@ -93,7 +93,6 @@ public struct NavreeCommands: Commands {
     /// The id of the app's window group, for New Window.
     let window: String
     @FocusedValue(\.navreeCommands) private var target
-    @Environment(\.openWindow) private var openWindow
 
     public init(window: String) {
         self.window = window
@@ -103,29 +102,19 @@ public struct NavreeCommands: Commands {
         SidebarCommands()
         ToolbarCommands()
         InspectorCommands()
+        // Each group's items are views, so they follow the window's screen
+        // as it changes, not only the window that is in front.
         CommandGroup(replacing: .newItem) {
-            ForEach(Array(entries(.new).enumerated()), id: \.offset) { _, entry in
-                item(entry)
-            }
-            Button("New Window") { openWindow(id: window) }
-                .keyboardShortcut(KeyCommand.equivalent(entries(.new).isEmpty ? .new : .newWindow))
+            NewCommands(target: target, window: window)
         }
         CommandGroup(before: .printItem) {
-            ForEach(Array(entries(.share).enumerated()), id: \.offset) { _, entry in
-                item(entry)
-            }
+            SlotCommands(target: target, slot: .share)
         }
         CommandGroup(before: .systemServices) {
             AccountCommands(target: target)
         }
         CommandGroup(after: .textEditing) {
-            ForEach(Array(entries(.find).enumerated()), id: \.offset) { _, entry in
-                item(entry)
-            }
-            if let screen = target?.front?.screen, CommandRules.searches(screen), entries(.find).isEmpty {
-                Button("Find…") { target?.finding += 1 }
-                    .keyboardShortcut(KeyCommand.equivalent(.find))
-            }
+            FindCommands(target: target)
         }
         CommandGroup(before: .sidebar) {
             ViewCommands(target: target)
@@ -139,16 +128,51 @@ public struct NavreeCommands: Commands {
         guard let nav = target?.client.nav, nav.destinations.indices.contains(nav.selected) else { return nil }
         return nav.destinations[nav.selected].label
     }
+}
 
-    private func entries(_ slot: MenuSlot) -> [MenuEntry] {
-        guard let target else { return [] }
-        return CommandRules.entries(target.screenActions).filter { $0.slot == slot }
+/// The front screen's commands of one place in the menu bar.
+struct SlotCommands: View {
+    let target: WindowCommands?
+    let slot: MenuSlot
+
+    var body: some View {
+        if let target, let front = target.client.nav.front {
+            let actions = target.screenActions
+            ForEach(Array(CommandRules.entries(actions).filter { $0.slot == slot }.enumerated()), id: \.offset) { _, entry in
+                CommandItem(entry: entry) { target.perform(actions[entry.index], on: front) }
+            }
+        }
     }
+}
 
-    @ViewBuilder private func item(_ entry: MenuEntry) -> some View {
-        let actions = target?.screenActions ?? []
-        if entry.index < actions.count, let front = target?.client.nav.front {
-            CommandItem(entry: entry) { target?.perform(actions[entry.index], on: front) }
+/// File's first group: what the screen makes new (⌘N for the first), and a
+/// new window (⌘N where nothing else takes it, else ⌥⌘N, as in Mail).
+struct NewCommands: View {
+    let target: WindowCommands?
+    let window: String
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        let creates = target.map { CommandRules.entries($0.screenActions).contains { $0.slot == .new } } ?? false
+        SlotCommands(target: target, slot: .new)
+        Button("New Window") { openWindow(id: window) }
+            .keyboardShortcut(KeyCommand.equivalent(creates ? .newWindow : .new))
+    }
+}
+
+/// Edit > Find: the screen's own search command, or Find… (⌘F) where the
+/// screen has a search field and no such command.
+struct FindCommands: View {
+    let target: WindowCommands?
+
+    var body: some View {
+        if let target {
+            let finds = CommandRules.entries(target.screenActions).contains { $0.slot == .find }
+            SlotCommands(target: target, slot: .find)
+            if !finds, let screen = target.front?.screen, CommandRules.searches(screen) {
+                Button("Find…") { target.finding += 1 }
+                    .keyboardShortcut(KeyCommand.equivalent(.find))
+            }
         }
     }
 }
