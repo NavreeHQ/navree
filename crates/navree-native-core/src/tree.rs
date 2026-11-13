@@ -34,6 +34,10 @@ pub(crate) enum Slot<'a> {
 }
 
 /// The places of `node` that hold nodes, in the order [`Node::children`] reads them.
+///
+/// A kind that holds nodes has an arm here. A test reads the protocol's schema
+/// for every place a kind holds nodes and fails for one this does not walk, so
+/// a kind or a place the protocol gains can't go unseen.
 pub(crate) fn slots(node: &mut Node) -> Vec<Slot<'_>> {
     match node {
         Node::Stack(n) => vec![Slot::Many(&mut n.children)],
@@ -90,6 +94,8 @@ pub(crate) fn slots(node: &mut Node) -> Vec<Slot<'_>> {
         Node::FeedRow(n) => vec![Slot::Many(&mut n.detail)],
         Node::Message(n) => vec![Slot::Many(&mut n.body)],
         Node::Pane(n) => vec![Slot::Many(&mut n.children)],
+        Node::Figure(n) => vec![Slot::Maybe(&mut n.aside), Slot::Maybe(&mut n.chart)],
+        Node::DayPager(n) => vec![Slot::Maybe(&mut n.scores)],
         Node::Unknown(n) => vec![Slot::Maybe(&mut n.alt)],
         _ => Vec::new(),
     }
@@ -701,11 +707,6 @@ mod tests {
     use navree_native::Envelope;
     use navree_native::node::{Dialog, Region, Sheet, Stack, Table, TableRow, Text};
 
-    fn corpus(name: &str) -> Envelope {
-        let path = format!("{}/../navree-native/corpus/{name}.json", env!("CARGO_MANIFEST_DIR"));
-        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
-    }
-
     fn label(node: &Node) -> String {
         format!("{}#{}", node.kind().as_str(), node.id().unwrap_or(""))
     }
@@ -725,36 +726,157 @@ mod tests {
         }
     }
 
-    #[test]
-    fn mutable_and_plain_walks_agree_on_the_corpus() {
-        let mut seen = BTreeSet::new();
-        let names = ["screen-list", "screen-detail", "screen-form", "screen-kinds", "screen-with-toast", "screen-dashboard", "screen-inbox", "screen-device", "from-the-future"];
-        for name in names {
-            let screen = corpus(name).screen.unwrap();
-            // What a screen may do with itself is made of nodes too.
-            for mut root in screen.actions.into_iter().chain(std::iter::once(screen.body)) {
-                let mut plain = Vec::new();
-                walk(&root, &mut |node| plain.push(label(node)));
-                let mut changing = Vec::new();
-                walk_mut(&mut root, &mut changing);
-                assert_eq!(plain, changing, "{name}");
-                // The protocol's own walk agrees too.
-                let mut protocol = Vec::new();
-                let mut stack = vec![&mut root];
-                while let Some(node) = stack.pop() {
-                    protocol.push(label(node));
-                    stack.extend(node.children_mut().into_iter().rev());
+    /// Places the protocol's own examples leave empty, so the walk of each is
+    /// held to something. When the test below names a place no example
+    /// fills, an example goes here.
+    const OWN: &[&str] = &[r#"{"t":"table","columns":[{"label":"Order"}],"empty":{"t":"empty","title":"No orders yet"}}"#];
+
+    /// Every root node of every example of the protocol that holds nodes (a
+    /// screen's body and actions, the nodes an op brings), and this file's own.
+    fn examples() -> Vec<(String, Node)> {
+        let dir = format!("{}/../navree-native/corpus", env!("CARGO_MANIFEST_DIR"));
+        let mut files: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|entry| entry.unwrap().path()).filter(|path| path.extension().is_some_and(|kind| kind == "json")).collect();
+        files.sort();
+        let mut roots = Vec::new();
+        for path in files {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            let value: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            // The shell and the like are not answers that hold a screen or ops.
+            if value.get("screen").is_none() && value.get("ops").is_none() {
+                continue;
+            }
+            let envelope: Envelope = serde_json::from_value(value).unwrap_or_else(|error| panic!("{name}: {error}"));
+            let mut nodes = Vec::new();
+            if let Some(screen) = envelope.screen {
+                nodes.extend(screen.actions);
+                nodes.push(screen.body);
+            }
+            let of_row = |row: TableRow| row.cells.into_iter().chain(row.actions).chain(row.detail);
+            for op in envelope.ops {
+                match op {
+                    navree_native::Op::Morph { node, .. } | navree_native::Op::Replace { node, .. } => nodes.push(node),
+                    navree_native::Op::Append { nodes: more, .. } | navree_native::Op::Prepend { nodes: more, .. } | navree_native::Op::Merge { nodes: more, .. } => nodes.extend(more),
+                    navree_native::Op::Rows { rows, .. } => nodes.extend(rows.into_iter().flat_map(of_row)),
+                    navree_native::Op::Row { row, .. } => nodes.extend(of_row(row)),
+                    _ => {}
                 }
-                assert_eq!(plain, protocol, "{name}");
-                walk(&root, &mut |node| {
-                    seen.insert(node.kind().as_str());
-                });
+            }
+            roots.extend(nodes.into_iter().map(|node| (name.clone(), node)));
+        }
+        roots.extend(OWN.iter().map(|own| ("this file's own".to_owned(), serde_json::from_str(own).unwrap())));
+        roots
+    }
+
+    /// The places under a schema that hold nodes, each as the names that lead
+    /// to it, with `[]` for "each of a list".
+    fn places(defs: &serde_json::Value, schema: &serde_json::Value, inside: &mut Vec<String>) -> Vec<Vec<String>> {
+        if let Some(name) = schema.get("$ref").and_then(serde_json::Value::as_str).and_then(|path| path.rsplit('/').next()) {
+            if name == "Node" {
+                return vec![Vec::new()];
+            }
+            if inside.iter().any(|seen| seen == name) {
+                return Vec::new();
+            }
+            inside.push(name.to_owned());
+            let found = places(defs, &defs[name], inside);
+            inside.pop();
+            return found;
+        }
+        let under = |name: &str, found: Vec<Vec<String>>| -> Vec<Vec<String>> {
+            found
+                .into_iter()
+                .map(|mut place| {
+                    place.insert(0, name.to_owned());
+                    place
+                })
+                .collect()
+        };
+        let mut out = Vec::new();
+        for key in ["anyOf", "oneOf", "allOf"] {
+            for part in schema.get(key).and_then(serde_json::Value::as_array).into_iter().flatten() {
+                out.extend(places(defs, part, inside));
             }
         }
-        // A kind this file has never walked would be a kind whose children it may miss.
+        if let Some(items) = schema.get("items") {
+            out.extend(under("[]", places(defs, items, inside)));
+        }
+        for (name, part) in schema.get("properties").and_then(serde_json::Value::as_object).into_iter().flatten() {
+            out.extend(under(name, places(defs, part, inside)));
+        }
+        out
+    }
+
+    /// Whether a node, as JSON, holds a node at a place.
+    fn filled(value: &serde_json::Value, place: &[String]) -> bool {
+        match place.split_first() {
+            None => !value.is_null(),
+            Some((each, rest)) if each == "[]" => value.as_array().is_some_and(|list| list.iter().any(|item| filled(item, rest))),
+            Some((name, rest)) => value.get(name).is_some_and(|inner| filled(inner, rest)),
+        }
+    }
+
+    /// The walk this file changes trees by knows every place a kind holds
+    /// nodes. The protocol's schema says what those places are; an example
+    /// fills each one; and on every example the walk finds what the
+    /// protocol's own walk finds, in the same order. A kind or a place the
+    /// protocol gains fails here until this file knows it.
+    #[test]
+    fn the_walk_knows_every_place_a_kind_holds_nodes() {
+        let schema = navree_native::schema::document();
+        let defs = &schema["$defs"];
+        let mut wanted: BTreeMap<String, Vec<Vec<String>>> = BTreeMap::new();
+        for kind in defs["Node"]["oneOf"].as_array().expect("the schema lists the kinds of node") {
+            let name = kind["properties"]["t"]["const"].as_str().expect("a kind has a name");
+            let held = kind["allOf"][0]["$ref"].as_str().and_then(|path| path.rsplit('/').next()).expect("a kind has a shape");
+            let mut found = places(defs, &defs[held], &mut vec![held.to_owned()]);
+            found.sort();
+            found.dedup();
+            wanted.insert(name.to_owned(), found);
+        }
+        for kind in navree_native::Kind::ALL {
+            assert!(wanted.contains_key(kind.as_str()), "the schema does not describe `{}`", kind.as_str());
+        }
+
+        let mut seen = BTreeSet::new();
+        let mut held = BTreeSet::new();
+        for (name, mut root) in examples() {
+            let mut plain = Vec::new();
+            walk(&root, &mut |node| plain.push(label(node)));
+            let mut changing = Vec::new();
+            walk_mut(&mut root, &mut changing);
+            assert_eq!(plain, changing, "{name}: the walk that changes a tree misses a child, or finds them in another order");
+            // The protocol's own walk that changes a tree agrees too.
+            let mut protocol = Vec::new();
+            let mut stack = vec![&mut root];
+            while let Some(node) = stack.pop() {
+                protocol.push(label(node));
+                stack.extend(node.children_mut().into_iter().rev());
+            }
+            assert_eq!(plain, protocol, "{name}");
+            walk(&root, &mut |node| {
+                let kind = node.kind().as_str();
+                seen.insert(kind);
+                let json = serde_json::to_value(node).unwrap();
+                for place in wanted.get(kind).into_iter().flatten() {
+                    if filled(&json, place) {
+                        held.insert(format!("{kind}.{}", place.join(".")));
+                    }
+                }
+            });
+        }
+        // A kind no example holds would be a kind whose children the walk may miss.
         for kind in navree_native::Kind::ALL {
             assert!(seen.contains(kind.as_str()), "no example of `{}` was walked", kind.as_str());
         }
+        // And so would a place no example fills.
+        for (kind, found) in &wanted {
+            for place in found {
+                let place = format!("{kind}.{}", place.join("."));
+                assert!(held.contains(&place), "no example holds a node at `{place}`: add one to OWN, so the walk of that place is held to something");
+            }
+        }
+        // Forty places today; fewer would mean the schema is no longer read as it is written.
+        assert!(wanted.values().map(Vec::len).sum::<usize>() >= 40, "the schema names fewer places than the walk knows");
     }
 
     fn text(id: &str, value: &str) -> Node {

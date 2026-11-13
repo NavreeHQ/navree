@@ -22,7 +22,7 @@
 //! - A control that asks a question first is held until the person answers:
 //!   yes runs what it was about to do, no lets it go.
 
-use navree_native::action::Pair;
+use navree_native::action::{Pair, Present};
 use navree_native::node::{Field, Form, Method, Node};
 use navree_native::{Action, Input};
 
@@ -748,9 +748,20 @@ impl Core {
             return;
         }
         match action {
-            Action::Navigate { href, present } => {
-                self.navigate(Some(id), &href, present);
-            }
+            // A step of a day pager takes the day's place on the screen: the
+            // person stays where they are in the stack.
+            Action::Navigate { href, present } => match self.day_step(id, &href, text.as_deref()).filter(|_| present == Present::Auto) {
+                Some(Some(address)) => {
+                    if let Target::Inside(url) = self.resolve(&address, id) {
+                        self.go_as(Some(id), &url, Present::Replace);
+                    }
+                }
+                // A day that can't be chosen is not gone to.
+                Some(None) => {}
+                None => {
+                    self.navigate(Some(id), &href, present);
+                }
+            },
             Action::Submit { form: named, href, with } => {
                 // The form the button names, or the one it stands in.
                 if let Some(named) = named.or(form) {
@@ -772,6 +783,49 @@ impl Core {
             // An action this build does not know does nothing.
             _ => {}
         }
+    }
+
+    /// Where an address a day pager of the screen names leads. `Some` with
+    /// the address for the pager's day before, day after or today, and, with
+    /// `day` (what the date control holds, `YYYY-MM-DD`), for the day picked:
+    /// the pager's `pick` address with the day under the name it gives.
+    /// `Some(None)` for a day that can't be picked: not a date, or outside the
+    /// days the pager says can be chosen. `None` when no pager names `href`.
+    fn day_step(&self, id: ScreenId, href: &str, day: Option<&str>) -> Option<Option<String>> {
+        let screen = self.view.screens.get(&id)?.screen()?;
+        let mut found = None;
+        for root in crate::tree::roots(screen) {
+            crate::tree::walk(root, &mut |node| {
+                let Node::DayPager(pager) = node else {
+                    return;
+                };
+                if found.is_some() {
+                    return;
+                }
+                let picks = pager.pick.as_ref().filter(|pick| pick.href == href);
+                if let (Some(pick), Some(day)) = (picks, day) {
+                    let bytes = day.as_bytes();
+                    let date = bytes.len() == 10 && bytes.iter().enumerate().all(|(at, byte)| if at == 4 || at == 7 { *byte == b'-' } else { byte.is_ascii_digit() });
+                    // Dates written this way sort as days do.
+                    let early = pager.first.as_deref().is_some_and(|first| day < first);
+                    let late = pager.last.as_deref().is_some_and(|last| day > last);
+                    found = Some((date && !early && !late).then(|| {
+                        // The day takes the place of one the address already names.
+                        let (path, query) = href.split_once('?').unwrap_or((href, ""));
+                        let mut address = format!("{path}?");
+                        for pair in query.split('&').filter(|pair| !pair.is_empty() && pair.split('=').next() != Some(pick.name.as_str())) {
+                            address.push_str(pair);
+                            address.push('&');
+                        }
+                        address.push_str(&encode(&[text(&pick.name, day)]));
+                        address
+                    }));
+                } else if [&pager.previous, &pager.next, &pager.today].into_iter().any(|step| step.as_deref() == Some(href)) {
+                    found = Some(Some(href.to_owned()));
+                }
+            });
+        }
+        found
     }
 
     /// Closes the alert a tapped button stands in.

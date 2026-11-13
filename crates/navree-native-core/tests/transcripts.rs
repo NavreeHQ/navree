@@ -488,6 +488,7 @@ const REQUIRED: &[&str] = &[
     "tabs",
     "snapshot",
     "snapshot-refused",
+    "health-charts",
 ];
 
 #[test]

@@ -1,0 +1,102 @@
+{
+ "navree": 1,
+ "build": "3f9a1c07b2de",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "morph",
+   "target": "figure-steps",
+   "node": {
+    "t": "figure",
+    "id": "figure-steps",
+    "label": "Steps",
+    "value": "9,640",
+    "icon": {
+     "name": "footprints",
+     "paths": [
+      "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z"
+     ]
+    },
+    "detail": "96% of 10,000",
+    "colour": {
+     "hue": "green"
+    },
+    "aside": {
+     "t": "ring",
+     "value": 9640,
+     "max": 10000,
+     "colour": {
+      "hue": "green"
+     },
+     "centre": "nothing",
+     "prominence": "low",
+     "summary": "Steps: 9,412 of 10,000, 94%.",
+     "id": "steps-ring"
+    },
+    "action": {
+     "t": "navigate",
+     "href": "/fitness/steps"
+    }
+   }
+  },
+  {
+   "op": "morph",
+   "target": "steps-ring",
+   "node": {
+    "t": "ring",
+    "value": 9700,
+    "max": 10000,
+    "colour": {
+     "hue": "green"
+    },
+    "centre": "nothing",
+    "prominence": "low",
+    "summary": "Steps: 9,700 of 10,000, 97%.",
+    "id": "steps-ring"
+   }
+  },
+  {
+   "op": "replace",
+   "target": "day-scores",
+   "node": {
+    "t": "rings",
+    "id": "day-scores",
+    "rings": [
+     {
+      "name": "Movement",
+      "value": 41,
+      "max": 100,
+      "shown": "41",
+      "colour": {
+       "hue": "orange"
+      }
+     },
+     {
+      "name": "Recovery",
+      "value": 72,
+      "max": 100,
+      "shown": "72",
+      "colour": {
+       "hue": "green"
+      }
+     },
+     {
+      "name": "Sleep",
+      "value": 78,
+      "max": 100,
+      "shown": "78",
+      "colour": {
+       "hue": "violet"
+      }
+     }
+    ],
+    "prominence": "low",
+    "summary": "Today's scores: Movement 35, Recovery 72, Sleep 78."
+   }
+  },
+  {
+   "op": "remove",
+   "target": "activity-rings"
+  }
+ ]
+}

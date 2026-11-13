@@ -165,6 +165,7 @@ fn check(node: &mut Node, config: &Config, missing: &mut Vec<String>) {
         }
         Node::Table(table) => table.rows.iter_mut().for_each(|row| one(&mut row.action, missing)),
         Node::FeedRow(row) => one(&mut row.action, missing),
+        Node::Figure(figure) => one(&mut figure.action, missing),
         Node::Toolbar(toolbar) => toolbar.items.retain_mut(|item| match settle(&mut item.action, config) {
             Ok(stand_in) => stand_in.is_none(),
             Err(why) => {
