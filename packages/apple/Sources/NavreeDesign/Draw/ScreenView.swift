@@ -56,12 +56,16 @@ public struct ScreenView: View {
 
     public var body: some View {
         let lifted = lifted
-        let drawn = screen.body
+        // A conversation's reply rests at the foot of the screen, not at the
+        // end of what scrolls.
+        let composer = depth == .sheet || depth == .cover ? nil : ComposerRules.composer(in: screen.body)
+        let drawn = composer?.rest ?? screen.body
         let sections = SectionRules.sections(drawn).map { lifted.confirms.isEmpty ? $0 : OverlayContent.withoutSubmits($0) }
         let width = WidthClass(sizeClass)
         let table = sections.compactMap(\.table).first
         let query = QueryForm(screen: screen, table: table, region: sections.first { $0.table != nil }?.region)
         content(drawn, sections: sections, width: width, table: table)
+            .modifier(ComposerDock(found: composer))
             .navigationTitle(NavigationRules.title(screen.title, appName: appName))
             .modifier(Subtitle(text: screen.subtitle))
             .modifier(TitleDisplay(mode: PagerRules.titleMode(depth, pager: screen.pager)))
