@@ -8,7 +8,7 @@
 //! sentence says the whole chart to a reader who can't see it. A kind never
 //! carries a size in points, a stroke width, a glow, the angle of a gradient
 //! or an animation. Where a choice of size says something (a hero ring against
-//! a small one) a closed word says it: [`Prominence`](crate::Prominence).
+//! a small one) a closed word says it: [`Prominence`].
 //!
 //! Colour is data, by name. A part that has a colour of its own names a
 //! [`Hue`] from one closed list, so each system draws its own purple, red,
@@ -17,7 +17,7 @@
 //! [`Hue::Neutral`].
 //!
 //! The chart kinds live in [`node`](crate::node) as well: they are the parts a
-//! [`Node`](crate::Node) holds.
+//! [`Node`] holds.
 
 use serde::{Deserialize, Serialize};
 

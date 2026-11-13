@@ -2207,7 +2207,6 @@ fn screen_today() -> Envelope {
                 )
             }),
         ],
-        ..Grid::default()
     });
     // The day as 24 wedges round a clock: steps an hour, what each hour was,
     // and the moments that stand out. It is 8 in the evening; the hours to come
@@ -2384,7 +2383,6 @@ fn screen_today() -> Envelope {
                             pillar("Movement", "fitness", Some(78), Hue::Orange, "20% of score"),
                             pillar("Mind", "mind", None, Hue::Cyan, "No data"),
                         ],
-                        ..Grid::default()
                     }),
                 ],
                 ..Section::default()
@@ -2580,7 +2578,6 @@ fn screen_sleep() -> Envelope {
             mark: HintMark::Info,
             ..Hint::default()
         }),
-        ..RangeScale::default()
     });
     // The week's nights as bars, with what the person needs drawn across them
     // and the usual range behind them.
@@ -2880,7 +2877,6 @@ fn screen_fitness() -> Envelope {
             text: s("Each cell compares two measures over your last 30 days: blue where they rise and fall together, orange where one rises as the other falls. A grey cell is a pattern that may be chance. It shows a pattern, never a cause."),
             ..Hint::default()
         }),
-        ..MatrixHeatmap::default()
     });
     // The time between one heartbeat and the next, each against the one before:
     // a cloud of points, on axes of one range so that the diagonal is "no
