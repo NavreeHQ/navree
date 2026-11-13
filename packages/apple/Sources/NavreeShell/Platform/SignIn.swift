@@ -118,6 +118,7 @@ final class SignInSession {
             )
             return done(nil)
         }
+        Self.log.info("a sign-in session opens, to come back on \(String(describing: returning), privacy: .public)")
         let handle = opener.open(url, returning: returning, ephemeral: ephemeral) { [weak self] returned in
             guard let self, self.serial == mine, self.ended != mine else { return }
             self.ended = mine
@@ -127,6 +128,7 @@ final class SignInSession {
         // It may have ended already, or never opened.
         guard ended != mine else { return }
         guard let handle else {
+            Self.log.error("the system would not open a sign-in session")
             ended = mine
             return done(nil)
         }
@@ -149,8 +151,29 @@ final class SystemSignInOpener: NSObject, SignInOpener, ASWebAuthenticationPrese
         }
         session.presentationContextProvider = self
         session.prefersEphemeralWebBrowserSession = ephemeral
+        let handle = Handle(session)
+        #if canImport(UIKit)
+        // The system opens a session only over an app in front: one asked
+        // for as the app starts (a link it was opened with) waits for that.
+        if UIApplication.shared.applicationState != .active {
+            handle.waiting = Task { @MainActor [weak handle] in
+                if UIApplication.shared.applicationState != .active {
+                    for await _ in NotificationCenter.default.notifications(named: UIApplication.didBecomeActiveNotification) {
+                        break
+                    }
+                }
+                guard let handle, !Task.isCancelled else { return }
+                handle.waiting = nil
+                if !handle.session.start() {
+                    SignInSession.log.error("the system would not open a sign-in session")
+                    done(nil)
+                }
+            }
+            return handle
+        }
+        #endif
         guard session.start() else { return nil }
-        return Handle(session)
+        return handle
     }
 
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
@@ -159,12 +182,16 @@ final class SystemSignInOpener: NSObject, SignInOpener, ASWebAuthenticationPrese
 
     final class Handle: SignInHandle {
         let session: ASWebAuthenticationSession
+        /// Waiting for the app to come to the front before it opens.
+        var waiting: Task<Void, Never>?
 
         init(_ session: ASWebAuthenticationSession) {
             self.session = session
         }
 
         func cancel() {
+            waiting?.cancel()
+            waiting = nil
             session.cancel()
         }
     }
