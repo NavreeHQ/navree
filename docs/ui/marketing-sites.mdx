@@ -1,0 +1,137 @@
+---
+title: "Marketing sites"
+description: "A whole public website drawn by a Navree app: the page and its landmarks, a header, a hero, sections, pricing, questions and a footer, with no script, in light and dark."
+---
+
+<UiPreview example="site-page/default" />
+
+The marketing blocks draw a public website on the server, from the same app as the product. Each block is a typed component that turns into a node and takes nodes, so a block holds any component (a chart in a browser frame, a form in a sign-up band) and any block can sit in a page of your own.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::theme::Mode;
+use navree::ui::*;
+
+let mode = Mode::System;
+let today = Picture::new("/img/today-1440.png", "Today in the Kesar app", 1440, 900);
+let features = FeatureGrid::new()
+    .cols(3)
+    .feature(Feature::new("Sleep in stages", "Deep, REM and light sleep, night by night.").icon(icons::BED));
+let plans = Pricing::new("plans").plan(Plan::new("Free").price("₹0", "for ever").action(Button::outline("Start free").href("/signup")));
+let questions = Faq::new("faq").item("Do I need a smartwatch to use Kesar?", "No. Kesar reads what your phone already records.");
+
+let page = SitePage::new()
+    .header(
+        SiteHeader::new(Brand::new("Kesar", "/").icon(icons::SUN))
+            .link("Features", "/#features")
+            .link("Pricing", "/pricing/")
+            .action(Button::ghost("Sign in").href("/login"))
+            .action(Button::primary("Start free").href("/signup")),
+    )
+    .section(
+        Hero::new(("Know your body, ", accent("one calm score a day.")))
+            .lead("Sleep, heart and steps from the phone you already carry.")
+            .action(Button::primary("Start free").href("/signup"))
+            .media(BrowserFrame::new(today).address("app.kesar.example/today")),
+    )
+    .section(Section::new("features").heading(SectionHeading::new("What it reads")).child(features))
+    .section(Section::new("pricing").child(plans))
+    .section(Section::new("faq").narrow().child(questions))
+    .section(CtaBand::new("start", "Start reading your body").action(Button::primary("Start free").href("/signup")))
+    .footer(SiteFooter::new(Brand::new("Kesar", "/")).theme_toggle(ThemeToggle::new(mode).back("/")));
+```
+
+## The blocks
+
+| Block | What it is |
+|---|---|
+| [SitePage](/docs/components/site-page/) | The skip link, the header, `<main>` and the footer, in that order |
+| [SiteHeader](/docs/components/site-header/) | Brand, main links, calls to action; a menu on a phone that needs no script |
+| [Hero](/docs/components/hero/) | The page's `h1`, a lead, calls to action, notes and a picture |
+| [Section](/docs/components/section/) | A part of the page with its heading, in the page's width and rhythm |
+| [LogoCloud](/docs/components/logo-cloud/) | The names or marks of those who use the product |
+| [FeatureGrid](/docs/components/feature-grid/), [FeatureRows](/docs/components/feature-rows/) | Features in cards, or told at length beside their pictures |
+| [StatBand](/docs/components/stat-band/) | A few large numbers |
+| [Device frames](/docs/components/device-frames/) | A browser window and a phone around a screenshot or the live product |
+| [Testimonials](/docs/components/testimonials/) | Quotes, with names, roles and stars |
+| [Pricing](/docs/components/pricing/) | Plans with a monthly or yearly switch that needs no script |
+| [Faq](/docs/components/faq/) | Questions that open to their answers, and their `FAQPage` data |
+| [CtaBand](/docs/components/cta-band/) | The call to action near the end of a page |
+| [Newsletter](/docs/components/newsletter/) | A sign-up or contact form checked on the server |
+| [LegalPage](/docs/components/legal-page/) | A policy with its contents |
+| [SiteFooter](/docs/components/site-footer/) | Columns of links, small print and a theme toggle |
+| [Picture](/docs/components/picture/) | A responsive image in AVIF, WebP and its own format |
+
+The head comes from [`View::seo`](/docs/ui/seo/): description, canonical, robots, Open Graph and Twitter cards, other languages and structured data.
+
+## No script for content
+
+Nothing a reader needs waits for JavaScript. The phone menu and the questions are `<details>`, the pricing switch is a pair of radio buttons whose choice the stylesheet follows, and the theme toggle is a form that posts and comes back. A page of blocks links the toolkit's stylesheet and the `marketing` sheet (at most 6 KB gzip, checked by the budgets test) and no script. A part that needs the runtime brings it: a [form](/docs/ui/forms/) loads the core runtime to post in place, a chart's tooltip loads the charts module.
+
+## No layout shift
+
+Every block is drawn at its final size on the server. A [Picture](/docs/components/picture/) carries its width and height, so its room is kept while it loads, and loads lazily unless it is the hero's. Fonts are the theme's own, with `font-display: optional`. The proof suite measures the page's layout shift while scrolling it, at 390 and 1440 px, and allows none.
+
+## Light, dark and your own theme
+
+Colours, corners and fonts come from the theme's tokens, so every block is right in light and dark, in the built-in themes and in a theme of your own from the [theme builder](/docs/ui/theme-builder/). Draw a public page with the reader's choice laid over the site's look, and give the footer's toggle the mode in use:
+
+```rust
+use http::HeaderMap;
+use navree::ui::seo::Seo;
+use navree::ui::theme::{Appearance, Theme};
+
+fn home(headers: &HeaderMap, query: Option<&str>, seo: Seo, page: SitePage, footer: SiteFooter) -> View {
+    let look = Appearance::new(Theme::SUNSET, Mode::System).for_reader(headers, query);
+    View::new("Kesar: sleep, heart and steps in one daily score")
+        .appearance(look.clone())
+        .seo(seo)
+        .body(page.footer(footer.theme_toggle(ThemeToggle::new(look.mode()).back("/"))))
+        .cache("private, no-cache")
+}
+```
+
+A [BrowserFrame](/docs/components/device-frames/) or a [PhoneFrame](/docs/components/device-frames/) can hold its own mode, so a dark screenshot stays dark on a light page. A [Picture](/docs/components/picture/#light-and-dark) can carry a light and a dark version and draw the one the page is in.
+
+The toggle posts to the toolkit's appearance route, which changes only the reader's theme cookie. The session layer checks that route's origin in place of the CSRF token, so a page with no token in it, cached for everyone, works for a reader who has a session too, and a post from another site is still refused. Don't add the route to `session.csrf_except`.
+
+Eyebrows and the legal page's date are labels, set in the theme's text face. A site that sets its labels in another face, its code face or a display face, says so in its own stylesheet: `:root { --font-label: var(--font-mono) }`.
+
+## One address for guests and readers
+
+A site's home page is often the app's home too: the public page for a guest, the reader's own day once they sign in. `RouteDef::on_guest_or` answers one address with two handlers, each with its own extractors, so the signed-in one may take an extractor that refuses guests and the guest one never runs it. The answer varies by `Cookie` and `Authorization`, and a signed-in reader's answer goes out as `Cache-Control: private, no-store` unless its handler kept it private itself.
+
+```rust
+use http::Method;
+use navree::http::{CurrentPrincipal, RouteDef};
+use navree::ui::View;
+
+fn home() -> RouteDef {
+    RouteDef::on_guest_or(
+        Method::GET,
+        "!/",
+        || async { View::new("Kesar: sleep, heart and steps in one daily score") },
+        |CurrentPrincipal(reader): CurrentPrincipal| async move {
+            View::new(format!("Today for {}", reader.user_id))
+        },
+    )
+}
+```
+
+A page that is the same for every guest can be cached as `public` for them: `View::cache` sets `Cache-Control`, and `View::vary("Cookie")` adds to `Vary`. `Vary` alone is not enough in front of a CDN: several, Cloudflare among them, ignore `Vary: Cookie`. Set the CDN or proxy to skip its cache (or bypass it) for any request that carries the session cookie or an `Authorization` header, or don't cache the guest's page at the edge at all.
+
+## Accessible by default
+
+- A skip link is the first stop and moves to `<main>`.
+- The header, `<main>` and the footer are landmarks; the header's and the footer's links are named navigation landmarks.
+- The hero holds the page's one `h1`; section titles are `h2`; features, plans and questions are `h3`, so headings never skip a level.
+- Every block keeps the theme's contrast pairs, and focus shows the theme's ring.
+- The proof suite runs axe on every page in dark and light at 390, 768 and 1440 px.
+
+## Building a site
+
+1. Pick or build a theme, and draw every page with `Appearance::for_reader`.
+2. Write each page as a function returning a `View` with its `SitePage` and its `Seo`.
+3. Serve `Sitemap` and `RobotsTxt` from `/sitemap.xml` and `/robots.txt`.
+4. Assert `View::seo_problems()` is empty for every public page in a test.
+5. Cache what is the same for everyone as `public`, and pages drawn in the reader's theme as `private`.

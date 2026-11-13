@@ -1,7 +1,10 @@
-//! [`Sparkline`]: a small line with no axes, beside a figure.
+//! [`Sparkline`]: a small line or a row of columns with no axes, beside a figure.
 
 use super::downsample::rows_to_keep;
 use super::format::NumberFormat;
+use super::marks::{Curve, curve_path};
+use super::motion::{Effect, Motion};
+use super::paint::{ColorScale, Defs, Gradient, Ink, glow};
 use super::scale::Linear;
 use super::value::{IntoValue, clean};
 use super::{
@@ -9,21 +12,31 @@ use super::{
     value_cell,
 };
 use crate::components::Tone;
-use crate::node::{Node, Uses, el};
+use crate::node::{Element, Node, Uses, el};
 
 /// A small line with no axes: the shape of a series beside its figure. It is a picture
 /// for assistive technology, named by its title and described by its summary, with the
 /// values in a table only a screen reader reads.
 ///
+/// It can be a smooth line, with a wash or a gradient under it, a dot at every point,
+/// a glow; or a row of columns, each in the colour of its value. It can draw itself on
+/// as it comes in ([`Motion`]). A plain sparkline is drawn by the toolkit's own sheet;
+/// the rest links the chart paint sheet, and none of it needs a script.
+///
 /// ```
-/// use navree_ui::charts::Sparkline;
+/// use navree_ui::charts::{Ink, Motion, Sparkline};
 /// use navree_ui::{Stat, Tone};
 ///
 /// let trend = Sparkline::new("Opens, last 12 hours", [3, 5, 4, 9, 12, 10, 14, 13, 18, 16, 21, 24])
 ///     .area()
 ///     .tone(Tone::Info);
+/// let movement = Sparkline::new("Movement, 12 days", [82, 75, 88, 92, 78, 85, 90, 87, 93, 89, 91, 94])
+///     .smooth()
+///     .fade()
+///     .ink(Ink::slot(2))
+///     .motion(Motion::new());
 /// let stat = Stat::new("Opened", "4,120").trend("+12%", true);
-/// # let _ = (navree_ui::render(&trend.into()), stat);
+/// # let _ = (navree_ui::render(&trend.into()), navree_ui::render(&movement.into()), stat);
 /// ```
 #[derive(Clone, Debug)]
 #[must_use]
@@ -37,6 +50,14 @@ pub struct Sparkline {
     height: u32,
     max_points: usize,
     cell: bool,
+    curve: Curve,
+    fill: Option<Gradient>,
+    fade: bool,
+    glow: bool,
+    points: bool,
+    columns: bool,
+    scale: Option<ColorScale>,
+    motion: Motion,
 }
 
 common_methods!(Sparkline);
@@ -60,6 +81,14 @@ impl Sparkline {
             height: 32,
             max_points: 120,
             cell: false,
+            curve: Curve::Linear,
+            fill: None,
+            fade: false,
+            glow: false,
+            points: false,
+            columns: false,
+            scale: None,
+            motion: Motion::none(),
         }
     }
 
@@ -95,6 +124,12 @@ impl Sparkline {
         self
     }
 
+    /// Colours it with any [`Ink`] of the theme: a chart colour, a tone, the accent.
+    pub fn ink(mut self, ink: impl Into<Ink>) -> Self {
+        self.color = ink.into().color();
+        self
+    }
+
     /// How values are written in the summary and the table.
     pub fn format(mut self, format: NumberFormat) -> Self {
         self.format = format;
@@ -104,6 +139,65 @@ impl Sparkline {
     /// The height in pixels, 16 to 120 (32 by default).
     pub fn height(mut self, px: u32) -> Self {
         self.height = px.clamp(16, 120);
+        self
+    }
+
+    /// Draws the line as a monotone curve, which never overshoots a value.
+    pub fn smooth(mut self) -> Self {
+        self.curve = Curve::Monotone;
+        self
+    }
+
+    /// How the line runs between points: straight, a monotone curve, or steps.
+    pub fn curve(mut self, curve: Curve) -> Self {
+        self.curve = curve;
+        self
+    }
+
+    /// Fills under the line, or the columns, with `gradient`. [`Ink::own`] in its stops
+    /// is the sparkline's colour (for columns, each column's).
+    pub fn fill(mut self, gradient: Gradient) -> Self {
+        self.fill = Some(gradient);
+        self.area = true;
+        self
+    }
+
+    /// A wash of its own colour under the line that fades to nothing at the bottom; on
+    /// columns, each column fading to half.
+    pub fn fade(mut self) -> Self {
+        self.fade = true;
+        self.area = true;
+        self
+    }
+
+    /// Puts a soft glow of its own colour around the line or the columns.
+    pub fn glow(mut self) -> Self {
+        self.glow = true;
+        self
+    }
+
+    /// Draws a small dot at every point, as well as the one at the end.
+    pub fn points(mut self) -> Self {
+        self.points = true;
+        self
+    }
+
+    /// Draws a column for each value instead of a line: rounded at both ends, from zero.
+    pub fn columns(mut self) -> Self {
+        self.columns = true;
+        self
+    }
+
+    /// Colours each column by the band its value falls in (the line keeps one colour).
+    pub fn colors(mut self, scale: ColorScale) -> Self {
+        self.scale = Some(scale);
+        self
+    }
+
+    /// How it comes in: the line draws from the start, columns grow from the baseline.
+    /// Off by default; always off for a reader who asks for less motion.
+    pub fn motion(mut self, motion: Motion) -> Self {
+        self.motion = motion;
         self
     }
 
@@ -139,6 +233,26 @@ impl Sparkline {
         }
     }
 
+    /// Whether it needs the chart paint sheet: anything past a plain line in the first
+    /// colour or a tone.
+    fn painted(&self) -> bool {
+        self.fill.is_some()
+            || self.fade
+            || self.glow
+            || self.points
+            || self.columns
+            || self.motion.is_on()
+            || !matches!(self.color, Color::Slot(1) | Color::Tone(_))
+    }
+
+    /// The colour of value `v`: its band's, or the sparkline's.
+    fn color_of(&self, v: f64) -> Color {
+        match &self.scale {
+            Some(scale) => scale.ink_of(v).resolve(self.color).color(),
+            None => self.color,
+        }
+    }
+
     fn draw(&mut self) -> Option<Drawn> {
         let total = self.values.len();
         if self.values.iter().all(Option::is_none) {
@@ -164,6 +278,12 @@ impl Sparkline {
             .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), (_, v)| {
                 (lo.min(*v), hi.max(*v))
             });
+        // Columns stand on zero; a line spans its own lowest and highest.
+        let (lo, hi) = if self.columns {
+            (lo.min(0.0), hi.max(0.0))
+        } else {
+            (lo, hi)
+        };
         let scale = if hi > lo {
             Linear { lo, hi }
         } else {
@@ -175,82 +295,123 @@ impl Sparkline {
         let h = f64::from(self.height);
         let pad = 4.0;
         let y = |v: f64| pad + (1.0 - scale.at(v)) * (h - 2.0 * pad);
-        let x = |i: usize| {
-            if total <= 1 {
-                50.0
-            } else {
-                i as f64 * 100.0 / (total - 1) as f64
-            }
-        };
-        let mut line = String::with_capacity(kept.len() * 12);
-        let mut area = String::new();
-        let mut run: Vec<(f64, f64)> = Vec::new();
-        let flush = |run: &mut Vec<(f64, f64)>, line: &mut String, area: &mut String| {
-            if run.len() >= 2 {
-                for (at, (px, py)) in run.iter().enumerate() {
-                    line.push(if at == 0 { 'M' } else { 'L' });
-                    num(line, px * 10.0, 1);
-                    line.push(' ');
-                    num(line, *py, 1);
-                }
-                if self.area {
-                    area.push('M');
-                    num(area, run[0].0 * 10.0, 1);
-                    area.push(' ');
-                    num(area, h, 1);
-                    for (px, py) in run.iter() {
-                        area.push('L');
-                        num(area, px * 10.0, 1);
-                        area.push(' ');
-                        num(area, *py, 1);
-                    }
-                    area.push('L');
-                    num(area, run[run.len() - 1].0 * 10.0, 1);
-                    area.push(' ');
-                    num(area, h, 1);
-                    area.push('Z');
-                }
-            }
-            run.clear();
-        };
-        for i in &kept {
-            match self.values[*i] {
-                Some(v) => run.push((x(*i), y(v))),
-                None => flush(&mut run, &mut line, &mut area),
-            }
-        }
-        flush(&mut run, &mut line, &mut area);
+        let mut defs = Defs::new(&self.common.id());
         let (last_at, last) = *finite.last()?;
-        let marks = svg()
-            .slot("chart-marks")
-            .attr("width", "100%")
-            .attr("height", i64::from(self.height))
-            .attr("viewBox", format!("0 0 1000 {}", self.height))
-            .attr("preserveAspectRatio", "none")
-            .attr("overflow", "visible")
-            .children((
-                (!area.is_empty())
-                    .then(|| self.color.on(el("path").slot("chart-area").attr("d", area))),
-                (!line.is_empty()).then(|| {
-                    self.color.on(el("path")
-                        .slot("chart-line")
-                        .attr("d", line)
-                        .attr("vector-effect", "non-scaling-stroke"))
-                }),
-            ));
+        let mut marks: Vec<Node> = Vec::new();
+        if self.columns {
+            marks.push(self.columns_node(&kept, &y, &mut defs).into());
+        } else {
+            let x = |i: usize| {
+                if total <= 1 {
+                    50.0
+                } else {
+                    i as f64 * 100.0 / (total - 1) as f64
+                }
+            };
+            let mut line = String::with_capacity(kept.len() * 12);
+            let mut area = String::new();
+            let mut run: Vec<(f64, f64)> = Vec::new();
+            let curve = self.curve;
+            let wash = self.area;
+            let flush = |run: &mut Vec<(f64, f64)>, line: &mut String, area: &mut String| {
+                if run.len() >= 2 {
+                    curve_path(line, run, curve, false, 10.0);
+                    if wash {
+                        area.push('M');
+                        num(area, run[0].0 * 10.0, 1);
+                        area.push(' ');
+                        num(area, h, 1);
+                        curve_path(area, run, curve, true, 10.0);
+                        area.push('L');
+                        num(area, run[run.len() - 1].0 * 10.0, 1);
+                        area.push(' ');
+                        num(area, h, 1);
+                        area.push('Z');
+                    }
+                }
+                run.clear();
+            };
+            for i in &kept {
+                match self.values[*i] {
+                    Some(v) => run.push((x(*i), y(v))),
+                    None => flush(&mut run, &mut line, &mut area),
+                }
+            }
+            flush(&mut run, &mut line, &mut area);
+            let gradient = self
+                .fill
+                .clone()
+                .or_else(|| self.fade.then(|| Gradient::fade(Ink::own())));
+            let area_path = (!area.is_empty()).then(|| {
+                let path = self.color.on(el("path").slot("chart-area").attr("d", area));
+                match &gradient {
+                    Some(g) => path.attr(
+                        "fill",
+                        defs.gradient(g, self.color, Some([0.0, 0.0, 1000.0, h])),
+                    ),
+                    None => path,
+                }
+            });
+            let line_path = (!line.is_empty()).then(|| {
+                self.color.on(el("path")
+                    .slot("chart-line")
+                    .attr("d", line)
+                    .attr("vector-effect", "non-scaling-stroke"))
+            });
+            let layer = svg()
+                .slot("chart-marks")
+                .attr("width", "100%")
+                .attr("height", i64::from(self.height))
+                .attr("viewBox", format!("0 0 1000 {}", self.height))
+                .attr("preserveAspectRatio", "none")
+                .attr("overflow", "visible")
+                .children((area_path, line_path));
+            let layer = if self.glow {
+                glow(self.color.on(layer))
+            } else {
+                layer
+            };
+            marks.push(self.motion.apply(layer, Effect::Wipe, 0).into());
+            if self.points {
+                for (at, i) in kept.iter().enumerate() {
+                    let Some(v) = self.values[*i] else { continue };
+                    if *i == last_at {
+                        continue;
+                    }
+                    let dot = self.color.on(el("circle")
+                        .slot("chart-point")
+                        .attr("cx", pct(x(*i)))
+                        .attr("cy", n(y(v), 1))
+                        .attr("r", "2.5"));
+                    let fraction = x(*i) / 100.0;
+                    marks.push(
+                        self.motion
+                            .after((fraction * 900.0) as u32)
+                            .stagger(0)
+                            .apply(dot, Effect::Pop, at)
+                            .into(),
+                    );
+                }
+            }
+            let end = self.color.on(el("circle")
+                .slot("chart-end")
+                .attr("cx", pct(x(last_at)))
+                .attr("cy", n(y(last), 1))
+                .attr("r", "3"));
+            let end = if self.glow { glow(end) } else { end };
+            marks.push(self.motion.after(1000).apply(end, Effect::Pop, 0).into());
+        }
         let drawing = svg()
             .slot("chart-plot")
             .attr("width", "100%")
             .attr("height", i64::from(self.height))
             .attr("overflow", "visible")
-            .children((
-                marks,
-                self.color.on(el("circle")
-                    .slot("chart-end")
-                    .attr("cx", pct(x(last_at)))
-                    .attr("cy", n(y(last), 1))
-                    .attr("r", "3")),
-            ));
+            .children((defs.node(), marks));
+        let drawing = if self.painted() {
+            drawing.uses(Uses::CHART_PAINT)
+        } else {
+            drawing
+        };
         let (first_at, first) = finite[0];
         let (min_at, min) = finite
             .iter()
@@ -303,14 +464,15 @@ impl Sparkline {
             note: None,
         };
         #[cfg(feature = "native-preview")]
-        let native = {
+        {
             let values: Vec<Option<f64>> = kept.iter().map(|i| self.values[*i]).collect();
             let names: Vec<String> = kept.iter().map(|i| name(*i)).collect();
-            crate::native::chart_numbers(
+            crate::native::record_chart_numbers(
+                &self.common.id(),
                 names.iter().map(String::as_str),
                 std::iter::once((self.common.title.as_str(), values.as_slice())),
-            )
-        };
+            );
+        }
         Some(Drawn {
             legend: None,
             body: drawing.into(),
@@ -320,9 +482,62 @@ impl Sparkline {
             height: self.height,
             note: None,
             interactive: false,
-            #[cfg(feature = "native-preview")]
-            native,
+            text: false,
+            tip: None,
         })
+    }
+
+    /// A column for each kept value, from zero, rounded at both ends, a pixel apart.
+    fn columns_node(&self, kept: &[usize], y: &dyn Fn(f64) -> f64, defs: &mut Defs) -> Element {
+        let count = kept.len().max(1);
+        let band = 100.0 / count as f64;
+        let zero = y(0.0);
+        let gradient = self
+            .fill
+            .clone()
+            .or_else(|| self.fade.then(|| Gradient::column(Ink::own())));
+        let mut painted: Vec<(Color, String)> = Vec::new();
+        let mut cols: Vec<Node> = Vec::with_capacity(kept.len());
+        for (at, i) in kept.iter().enumerate() {
+            let Some(v) = self.values[*i] else { continue };
+            let top = y(v);
+            // A value of zero stays a sliver, so the row keeps its rhythm.
+            let (top, h) = if (zero - top).abs() < 2.0 {
+                (zero.min(top) - if v >= 0.0 { 2.0 } else { 0.0 }, 2.0)
+            } else {
+                (zero.min(top), (zero - top).abs())
+            };
+            let color = self.color_of(v);
+            let col = color.on(el("rect")
+                .slot("chart-column")
+                .attr("x", pct(band * at as f64))
+                .attr("width", pct(band))
+                .attr("y", n(top, 1))
+                .attr("height", n(h, 1))
+                .attr("clip-path", "inset(0 max(1px, 22%) round 99px)"));
+            let col = match &gradient {
+                Some(g) => {
+                    let url = match painted.iter().find(|(c, _)| *c == color) {
+                        Some((_, url)) => url.clone(),
+                        None => {
+                            let url = defs.gradient(g, color, None);
+                            painted.push((color, url.clone()));
+                            url
+                        }
+                    };
+                    col.attr("fill", url)
+                }
+                None => col,
+            };
+            let col = if self.glow { glow(col) } else { col };
+            let effect = if v >= 0.0 {
+                Effect::GrowUp
+            } else {
+                Effect::GrowDown
+            };
+            cols.push(self.motion.apply(col, effect, at).into());
+        }
+        el("g").slot("chart-columns").child(cols)
     }
 }
 

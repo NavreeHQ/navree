@@ -1,6 +1,7 @@
 //! The components that show things: no behaviour, no script.
 
 use super::tone::Tone;
+use super::trend::Trend;
 use super::{Size, icon, root_methods};
 use crate::cmd::Cmd;
 use crate::html::Href;
@@ -1278,12 +1279,61 @@ impl Pagination {
 }
 
 /// How far along something is: the browser's `<progress>`.
+///
+/// Painted, it is drawn as a meter instead: an SVG bar with a rounded track, its fill
+/// in a gradient, a theme colour or the colour of its value's band, a goal marker, a
+/// glow, and a fill that grows in. It keeps the progress bar's role and values for
+/// assistive technology, and reads the same with no script.
+///
+/// ```
+/// use navree_ui::charts::{ColorScale, Gradient, Ink, Motion};
+/// use navree_ui::{Progress, Tone};
+///
+/// let plain = Progress::new(3, 8, "Profile complete");
+/// let sleep = Progress::new(402, 480, "Sleep, 6 h 42 min of 8 h")
+///     .fill(Gradient::horizontal().stop(0.0, Ink::slot(7)).stop_with_opacity(1.0, Ink::slot(7), 0.6))
+///     .goal(420)
+///     .motion(Motion::new().delay(400));
+/// let recovery = Progress::new(68, 100, "Recovery 68%").colors(
+///     ColorScale::new(Ink::tone(Tone::Danger))
+///         .from(50, Ink::tone(Tone::Warning))
+///         .from(75, Ink::tone(Tone::Success)),
+/// );
+/// # let _ = (plain, sleep, recovery);
+/// ```
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Progress {
     el: Element,
     percent: Option<u32>,
     show: bool,
+    value: u32,
+    max: u32,
+    meter: Meter,
+}
+
+/// What a painted progress bar draws past the plain one.
+#[derive(Clone, Debug, Default)]
+struct Meter {
+    fill: Option<crate::charts::Gradient>,
+    ink: Option<crate::charts::Ink>,
+    scale: Option<crate::charts::ColorScale>,
+    goal: Option<u32>,
+    glow: bool,
+    motion: crate::charts::Motion,
+    height: Option<u32>,
+}
+
+impl Meter {
+    fn is_on(&self) -> bool {
+        self.fill.is_some()
+            || self.ink.is_some()
+            || self.scale.is_some()
+            || self.goal.is_some()
+            || self.glow
+            || self.motion.is_on()
+            || self.height.is_some()
+    }
 }
 
 impl Progress {
@@ -1298,6 +1348,9 @@ impl Progress {
                 .attr("aria-label", label.into()),
             percent: Some(u32::try_from(percent).unwrap_or(100)),
             show: false,
+            value: value.min(max),
+            max: max.max(1),
+            meter: Meter::default(),
         }
     }
 
@@ -1309,7 +1362,140 @@ impl Progress {
                 .attr("aria-label", label.into()),
             percent: None,
             show: false,
+            value: 0,
+            max: 1,
+            meter: Meter::default(),
         }
+    }
+
+    /// Fills the bar with `gradient`, which spans the filled part. [`Ink::own`] in its
+    /// stops is the bar's colour.
+    ///
+    /// [`Ink::own`]: crate::charts::Ink::own
+    pub fn fill(mut self, gradient: crate::charts::Gradient) -> Self {
+        self.meter.fill = Some(gradient);
+        self
+    }
+
+    /// Colours the bar with any [`Ink`](crate::charts::Ink) of the theme.
+    pub fn ink(mut self, ink: impl Into<crate::charts::Ink>) -> Self {
+        self.meter.ink = Some(ink.into());
+        self
+    }
+
+    /// Colours the bar by the band its share (0 to 100) falls in: red when low, green
+    /// when good. Say what the band means in the label as well.
+    pub fn colors(mut self, scale: crate::charts::ColorScale) -> Self {
+        self.meter.scale = Some(scale);
+        self
+    }
+
+    /// Marks `goal` (out of the same `max`) on the track with a short upright line. Say
+    /// the goal in the label as well.
+    pub fn goal(mut self, goal: u32) -> Self {
+        self.meter.goal = Some(goal.min(self.max));
+        self
+    }
+
+    /// Puts a soft glow of its own colour around the fill.
+    pub fn glow(mut self) -> Self {
+        self.meter.glow = true;
+        self
+    }
+
+    /// How the fill comes in: it grows from the start. Off by default; always off for a
+    /// reader who asks for less motion.
+    pub fn motion(mut self, motion: crate::charts::Motion) -> Self {
+        self.meter.motion = motion;
+        self
+    }
+
+    /// The bar's thickness in pixels, 2 to 24 (6 by default).
+    pub fn height(mut self, px: u32) -> Self {
+        self.meter.height = Some(px.clamp(2, 24));
+        self
+    }
+
+    /// The meter: the progress bar's root as a `div` with the progressbar role, and an
+    /// SVG track, fill and goal marker.
+    fn meter_node(self) -> Element {
+        use crate::charts::motion::Effect;
+        use crate::charts::paint::{Defs, glow};
+        let meter = self.meter;
+        let h = meter.height.unwrap_or(6);
+        let share = f64::from(self.value) / f64::from(self.max) * 100.0;
+        let mut root = self.el;
+        root.tag = "div";
+        root.attrs
+            .retain(|a| !matches!(a.name, "value" | "max" | "data-slot"));
+        let root = root
+            .slot("meter")
+            .attr("role", "progressbar")
+            .attr("aria-valuemin", 0_i64)
+            .attr("aria-valuemax", i64::from(self.max))
+            .attr("aria-valuenow", i64::from(self.value))
+            .uses(Uses::CHART_PAINT);
+        let ink = match (&meter.scale, meter.ink) {
+            (Some(scale), _) => Some(scale.ink_of(share)),
+            (None, ink) => ink,
+        };
+        let root = match ink {
+            Some(ink) => {
+                // A colour asked for replaces the tone's.
+                let mut root = root;
+                root.attrs.retain(|a| a.name != "data-tone");
+                ink.on(root)
+            }
+            None => root,
+        };
+        let id = root
+            .attrs
+            .iter()
+            .find(|a| a.name == "id")
+            .and_then(|a| a.value.as_text().map(|t| t.into_owned()))
+            .unwrap_or_else(|| format!("meter-{:x}", fnv(&root)));
+        let mut defs = Defs::new(&id);
+        let color = ink.unwrap_or(crate::charts::Ink::muted()).color();
+        let radius = f64::from(h) / 2.0;
+        let fill = (self.value > 0).then(|| {
+            let rect = el("rect")
+                .slot("meter-fill")
+                .attr("width", pct(share))
+                .attr("height", i64::from(h))
+                .attr("rx", num_text(radius));
+            let rect = match &meter.fill {
+                Some(g) => rect.attr("fill", defs.gradient(g, color, None)),
+                None => rect,
+            };
+            let rect = if meter.glow { glow(rect) } else { rect };
+            meter.motion.apply(rect, Effect::GrowRight, 0)
+        });
+        let goal = meter.goal.map(|goal| {
+            let at = pct(f64::from(goal) / f64::from(self.max) * 100.0);
+            el("line")
+                .slot("meter-goal")
+                .attr("x1", at.clone())
+                .attr("x2", at)
+                .attr("y1", -3_i64)
+                .attr("y2", i64::from(h) + 3)
+        });
+        root.child(
+            el("svg")
+                .attr("aria-hidden", "true")
+                .attr("focusable", "false")
+                .attr("width", "100%")
+                .attr("height", i64::from(h))
+                .children((
+                    defs.node(),
+                    el("rect")
+                        .slot("meter-track")
+                        .attr("width", "100%")
+                        .attr("height", i64::from(h))
+                        .attr("rx", num_text(radius)),
+                    fill,
+                    goal,
+                )),
+        )
     }
 
     /// Colours the bar by what it means. The colour never carries the meaning alone:
@@ -1330,20 +1516,58 @@ impl Progress {
     }
 
     fn into_node(self) -> Node {
-        match (self.show, self.percent) {
+        let (show, percent) = (self.show, self.percent);
+        let bar = if percent.is_some() && self.meter.is_on() {
+            self.meter_node()
+        } else {
+            self.el
+        };
+        match (show, percent) {
             (true, Some(percent)) => el("div")
                 .slot("progress-row")
                 .children((
-                    self.el,
+                    bar,
                     el("span")
                         .slot("progress-value")
                         .attr("aria-hidden", "true")
                         .child(format!("{percent}%")),
                 ))
                 .into(),
-            _ => self.el.into(),
+            _ => bar.into(),
         }
     }
+}
+
+/// A share as an SVG length: `62.5%`.
+fn pct(share: f64) -> String {
+    let mut out = num_text(share.clamp(0.0, 100.0));
+    out.push('%');
+    out
+}
+
+/// A number with at most two decimals and no trailing zeros.
+fn num_text(value: f64) -> String {
+    let out = format!("{value:.2}");
+    let out = out.trim_end_matches('0').trim_end_matches('.');
+    if out.is_empty() || out == "-" {
+        "0".to_owned()
+    } else {
+        out.to_owned()
+    }
+}
+
+/// A short hash of an element's attributes: an id for a meter that has none, the same on
+/// every render of the same meter.
+fn fnv(element: &Element) -> u32 {
+    let mut hash: u32 = 0x811c_9dc5;
+    for attr in &element.attrs {
+        let value = attr.value.as_text().unwrap_or_default();
+        for byte in attr.name.bytes().chain(value.bytes()) {
+            hash ^= u32::from(byte);
+            hash = hash.wrapping_mul(0x0100_0193);
+        }
+    }
+    hash & 0x00ff_ffff
 }
 
 /// A line between things.
@@ -1751,15 +1975,54 @@ impl Text {
     }
 }
 
-/// One figure and what it is.
+/// One figure and what it is: a tile for a dashboard.
+///
+/// A plain stat is a label, a figure and how it moved. The same tile can carry what a
+/// health or finance dashboard puts on each of its figures: an [`icon`](Self::icon) in a
+/// chip, a [`unit`](Self::unit) after the number, a [`status`](Self::status) pill, a
+/// [`change`](Self::change) with a [`caption`](Self::caption) ("vs last week"), a small
+/// [`aside`](Self::aside) such as a [`Ring`](crate::charts::Ring) beside the figure, a
+/// [`chart`](Self::chart) such as a [`Sparkline`](crate::charts::Sparkline) under it, and an
+/// [`href`](Self::href) that makes the whole tile a link. Every piece is optional and a stat
+/// that uses none is the plain one. A row of tiles in a [`Grid::fit`](super::Grid::fit) wraps
+/// by the room it has, and the tile uses theme tokens only, so it follows light and dark.
+///
+/// ```
+/// use navree_ui::charts::{Ring, Sparkline};
+/// use navree_ui::{Badge, Stat, Tone, Trend, icons, render};
+///
+/// let resting = Stat::new("Resting heart rate", "58")
+///     .icon(icons::HEART_PULSE)
+///     .tone(Tone::Danger)
+///     .unit("bpm")
+///     .status(Badge::new("Athletic").tone(Tone::Success))
+///     .change(Trend::new(-3.3).up_is_bad())
+///     .caption("vs last week")
+///     .chart(Sparkline::new("Resting heart rate, 7 days", [61, 60, 62, 59, 58, 59, 58]).cell());
+/// let html = render(&resting.into());
+/// assert!(html.contains(r#"data-slot="stat-unit""#) && html.contains("vs last week"));
+///
+/// let recovery = Stat::new("Recovery", "82")
+///     .unit("%")
+///     .aside(Ring::new("Recovery", 82).size(56));
+/// # let _ = render(&recovery.into());
+/// ```
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Stat {
     el: Element,
     label: Node,
     value: Node,
+    unit: Option<Node>,
+    icon: Option<Icon>,
+    tone: Tone,
+    status: Option<Node>,
     trend: Option<(Node, bool)>,
+    change: Option<Node>,
+    caption: Option<Node>,
+    aside: Option<Node>,
     chart: Option<Node>,
+    href: Option<Href>,
 }
 
 impl Stat {
@@ -1769,8 +2032,16 @@ impl Stat {
             el: el("div").slot("stat"),
             label: label.into(),
             value: value.into(),
+            unit: None,
+            icon: None,
+            tone: Tone::Neutral,
+            status: None,
             trend: None,
+            change: None,
+            caption: None,
+            aside: None,
             chart: None,
+            href: None,
         }
     }
 
@@ -1787,62 +2058,312 @@ impl Stat {
         self
     }
 
+    /// Adds how it's moving as a [`Trend`]: an arrow, the change with its sign, and a
+    /// colour for what it means. It replaces [`trend`](Self::trend).
+    pub fn change(mut self, trend: Trend) -> Self {
+        self.change = Some(trend.into());
+        self
+    }
+
+    /// Puts an icon in a chip before the label. It is decoration: the label says what the
+    /// tile is.
+    pub fn icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// Colours the icon's chip by what the figure is about. The figure itself stays
+    /// neutral: its colour would say good or bad, which only a [`status`](Self::status) or a
+    /// [`Trend`] knows.
+    pub fn tone(mut self, tone: Tone) -> Self {
+        self.tone = tone;
+        self
+    }
+
+    /// What the figure counts, written smaller after it: `bpm`, `%`, `h`.
+    pub fn unit(mut self, unit: impl Into<Node>) -> Self {
+        self.unit = Some(unit.into());
+        self
+    }
+
+    /// A pill at the end of the label's line, such as a [`Badge`] saying "Athletic".
+    pub fn status(mut self, status: impl Into<Node>) -> Self {
+        self.status = Some(status.into());
+        self
+    }
+
+    /// Words after the change: "vs last week".
+    pub fn caption(mut self, caption: impl Into<Node>) -> Self {
+        self.caption = Some(caption.into());
+        self
+    }
+
+    /// Puts a small graphic beside the figure, at the end of its line: a
+    /// [`Ring`](crate::charts::Ring) of 48 to 72 pixels, or a few
+    /// [`MiniColumns`](crate::charts::MiniColumns).
+    pub fn aside(mut self, aside: impl Into<Node>) -> Self {
+        self.aside = Some(aside.into());
+        self
+    }
+
+    /// Makes the whole tile a link to `href`; the label is the link's name.
+    pub fn href(mut self, href: impl Into<Href>) -> Self {
+        self.href = Some(href.into());
+        self
+    }
+
     fn into_node(self) -> Node {
-        self.el
-            .children((
-                el("span").slot("stat-label").child(self.label),
-                el("span").slot("stat-value").child(self.value),
-                self.trend.map(|(text, good)| {
-                    el("span")
-                        .slot("stat-trend")
-                        .attr("data-tone", if good { "up" } else { "down" })
-                        .child(text)
-                }),
-                self.chart
-                    .map(|chart| el("div").slot("stat-chart").child(chart)),
-            ))
-            .into()
+        let rich = self.icon.is_some()
+            || self.unit.is_some()
+            || self.status.is_some()
+            || self.caption.is_some()
+            || self.aside.is_some()
+            || self.href.is_some();
+        let label = match self.href {
+            Some(href) => el("a")
+                .slot("stat-link")
+                .attr("href", href)
+                .child(self.label)
+                .into(),
+            None => self.label,
+        };
+        let label = el("span").slot("stat-label").child(label);
+        let head: Node = if self.icon.is_some() || self.status.is_some() {
+            el("div")
+                .slot("stat-head")
+                .children((
+                    self.icon.map(|glyph| {
+                        el("span")
+                            .slot("stat-icon")
+                            .attr_opt("data-tone", self.tone.value())
+                            .attr("aria-hidden", "true")
+                            .child(icon(glyph))
+                    }),
+                    label,
+                    self.status
+                        .map(|status| el("span").slot("stat-status").child(status)),
+                ))
+                .into()
+        } else {
+            label.into()
+        };
+        let value = el("span").slot("stat-value").children((
+            self.value,
+            self.unit
+                .map(|unit| Node::list((" ", el("span").slot("stat-unit").child(unit)))),
+        ));
+        let trend = match (self.change, self.trend, self.caption) {
+            (None, None, None) => None,
+            (Some(change), _, caption) => Some(el("span").slot("stat-trend").children((
+                change,
+                caption.map(|c| el("span").slot("stat-caption").child(c)),
+            ))),
+            (None, Some((text, good)), caption) => Some(
+                el("span")
+                    .slot("stat-trend")
+                    .attr("data-tone", if good { "up" } else { "down" })
+                    .children((
+                        text,
+                        caption.map(|c| el("span").slot("stat-caption").child(c)),
+                    )),
+            ),
+            (None, None, Some(caption)) => Some(
+                el("span")
+                    .slot("stat-trend")
+                    .child(el("span").slot("stat-caption").child(caption)),
+            ),
+        };
+        let figure: Node = match self.aside {
+            Some(aside) => el("div")
+                .slot("stat-body")
+                .children((
+                    el("div").slot("stat-figure").children((value, trend)),
+                    el("div").slot("stat-aside").child(aside),
+                ))
+                .into(),
+            None => Node::list((value, trend)),
+        };
+        let root = if rich {
+            self.el.uses(Uses::APP_BLOCKS)
+        } else {
+            self.el
+        };
+        root.children((
+            head,
+            figure,
+            self.chart
+                .map(|chart| el("div").slot("stat-chart").child(chart)),
+        ))
+        .into()
     }
 }
 
 /// A small bar chart, drawn on the server as SVG: no script and no style
 /// attribute. The description is what assistive technology gets.
+///
+/// Painted, its bars are rounded columns in a theme colour, a gradient or the colour of
+/// each value's band, and can grow in. For a table twin and a summary, use a
+/// [`Sparkline`](crate::charts::Sparkline) with [`columns`](crate::charts::Sparkline::columns).
+///
+/// ```
+/// use navree_ui::charts::{ColorScale, Gradient, Ink, Motion};
+/// use navree_ui::{Bars, Tone};
+///
+/// let hrv = Bars::new("Heart rate variability, 14 days", &[48, 52, 45, 61, 58, 44, 50, 63, 57, 49, 55, 60, 62, 59])
+///     .colors(ColorScale::new(Ink::tone(Tone::Warning)).from(50, Ink::tone(Tone::Success)))
+///     .pill()
+///     .motion(Motion::new());
+/// # let _ = hrv;
+/// ```
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Bars {
     el: Element,
+    values: Vec<u32>,
+    ink: Option<crate::charts::Ink>,
+    scale: Option<crate::charts::ColorScale>,
+    fill: Option<crate::charts::Gradient>,
+    pill: bool,
+    motion: crate::charts::Motion,
 }
 
 impl Bars {
     /// `values` as bars, described by `description`.
     pub fn new(description: impl Into<String>, values: &[u32]) -> Self {
-        let top = values.iter().copied().max().unwrap_or(0).max(1);
-        let bars: Vec<Element> = values
-            .iter()
-            .enumerate()
-            .map(|(at, value)| {
-                let height = i64::from(value.saturating_mul(100) / top);
-                el("rect")
-                    .attr("x", i64::try_from(at * 10).unwrap_or(0) + 1)
-                    .attr("y", 100 - height)
-                    .attr("width", 8_i64)
-                    .attr("height", height)
-            })
-            .collect();
-        let width = i64::try_from(values.len() * 10).unwrap_or(0);
         Self {
             el: el("svg")
                 .slot("bars")
-                .attr("viewBox", format!("0 0 {width} 100"))
-                .attr("preserveAspectRatio", "none")
                 .attr("role", "img")
-                .attr("aria-label", description.into())
-                .child(bars),
+                .attr("aria-label", description.into()),
+            values: values.to_vec(),
+            ink: None,
+            scale: None,
+            fill: None,
+            pill: false,
+            motion: crate::charts::Motion::none(),
         }
     }
 
+    /// Colours the bars with any [`Ink`](crate::charts::Ink) of the theme.
+    pub fn ink(mut self, ink: impl Into<crate::charts::Ink>) -> Self {
+        self.ink = Some(ink.into());
+        self
+    }
+
+    /// Colours each bar by the band its value falls in. Say what the colours mean beside
+    /// the bars.
+    pub fn colors(mut self, scale: crate::charts::ColorScale) -> Self {
+        self.scale = Some(scale);
+        self
+    }
+
+    /// Fills each bar with `gradient`; [`Ink::own`](crate::charts::Ink::own) in its
+    /// stops is the bar's colour.
+    pub fn fill(mut self, gradient: crate::charts::Gradient) -> Self {
+        self.fill = Some(gradient);
+        self
+    }
+
+    /// Rounds both ends of each bar into a pill.
+    pub fn pill(mut self) -> Self {
+        self.pill = true;
+        self
+    }
+
+    /// How the bars come in: they grow from the baseline, one after another. Off by
+    /// default; always off for a reader who asks for less motion.
+    pub fn motion(mut self, motion: crate::charts::Motion) -> Self {
+        self.motion = motion;
+        self
+    }
+
+    fn painted(&self) -> bool {
+        self.ink.is_some()
+            || self.scale.is_some()
+            || self.fill.is_some()
+            || self.pill
+            || self.motion.is_on()
+    }
+
     fn into_node(self) -> Node {
-        self.el.into()
+        let top = self.values.iter().copied().max().unwrap_or(0).max(1);
+        if !self.painted() {
+            let bars: Vec<Element> = self
+                .values
+                .iter()
+                .enumerate()
+                .map(|(at, value)| {
+                    let height = i64::from(value.saturating_mul(100) / top);
+                    el("rect")
+                        .attr("x", i64::try_from(at * 10).unwrap_or(0) + 1)
+                        .attr("y", 100 - height)
+                        .attr("width", 8_i64)
+                        .attr("height", height)
+                })
+                .collect();
+            let width = i64::try_from(self.values.len() * 10).unwrap_or(0);
+            return self
+                .el
+                .attr("viewBox", format!("0 0 {width} 100"))
+                .attr("preserveAspectRatio", "none")
+                .child(bars)
+                .into();
+        }
+        // Painted: x and width in percent, y and height in percent of the box, so the
+        // rounded ends keep their shape at any size.
+        use crate::charts::motion::Effect;
+        use crate::charts::paint::Defs;
+        let count = self.values.len().max(1);
+        let band = 100.0 / count as f64;
+        let id = format!("bars-{:x}", fnv(&self.el) ^ self.values.len() as u32);
+        let mut defs = Defs::new(&id);
+        let mut painted: Vec<(crate::charts::Ink, String)> = Vec::new();
+        let base = self.ink.unwrap_or(crate::charts::Ink::muted());
+        let clip = if self.pill {
+            "inset(0 max(1px, 15%) round 99px)"
+        } else {
+            "inset(0 max(1px, 10%) round 2px 2px 0 0)"
+        };
+        let bars: Vec<Node> = self
+            .values
+            .iter()
+            .enumerate()
+            .map(|(at, value)| {
+                let share = f64::from(*value) / f64::from(top) * 100.0;
+                // A bar of nothing keeps a sliver, so the row keeps its rhythm.
+                let share = if *value == 0 { 2.0 } else { share.max(4.0) };
+                let ink = match &self.scale {
+                    Some(scale) => scale.ink_of(f64::from(*value)),
+                    None => base,
+                };
+                let rect = ink.on(el("rect")
+                    .attr("x", pct(band * at as f64))
+                    .attr("width", pct(band))
+                    .attr("y", pct(100.0 - share))
+                    .attr("height", pct(share))
+                    .attr("clip-path", clip));
+                let rect = match &self.fill {
+                    Some(g) => {
+                        let url = match painted.iter().find(|(i, _)| *i == ink) {
+                            Some((_, url)) => url.clone(),
+                            None => {
+                                let url = defs.gradient(g, ink.color(), None);
+                                painted.push((ink, url.clone()));
+                                url
+                            }
+                        };
+                        rect.attr("fill", url)
+                    }
+                    None => rect,
+                };
+                self.motion.apply(rect, Effect::GrowUp, at).into()
+            })
+            .collect();
+        self.el
+            .attr("data-painted", "")
+            .uses(Uses::CHART_PAINT)
+            .children((defs.node(), bars))
+            .into()
     }
 }
 

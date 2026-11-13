@@ -210,7 +210,7 @@ impl From<Href> for AttrValue {
 /// What a page must load for the elements in it: a small set of bits, so
 /// finding out allocates nothing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Uses(pub(crate) u32);
+pub struct Uses(pub(crate) u64);
 
 impl Uses {
     /// Nothing: the page ships no script.
@@ -298,6 +298,35 @@ impl Uses {
     /// The conversation module: Enter sends from a composer, and a conversation the
     /// reader is at the end of stays there while an answer grows.
     pub const GENUI: Self = Self(1 << 24);
+    /// The chart paint stylesheet: no script, only the styles that chart marks share
+    /// beyond the plain ones: the colours of gradients, glow, draw and grow motion (off
+    /// when the reader asks for less motion), the points and columns of a sparkline, and
+    /// a progress bar drawn as a meter.
+    pub const CHART_PAINT: Self = Self(1 << 32);
+    /// The count-up module: a number that counts up to its value when it comes into
+    /// view. The value is written in the page, so it reads the same with no script and
+    /// when the reader asks for less motion.
+    pub const COUNT_UP: Self = Self(1 << 33);
+    /// The radial charts' stylesheet: no script, only the styles of rings, gauges and the
+    /// day clock: their tracks and arcs, the words in the middle sized by the ring, and the
+    /// size each takes from a screen width up.
+    pub const CHART_RADIAL: Self = Self(1 << 34);
+    /// The linear chart stylesheet: no script, only the styles of the meter, the mini
+    /// columns, the colour strip, the range scale and the trend indicator. The ones with
+    /// a tooltip link the charts module as well.
+    pub const CHART_LINEAR: Self = Self(1 << 35);
+    /// The grid charts stylesheet: no script of its own, only the styles of the calendar and
+    /// matrix heat maps and of the scatter plot, linked on a page that draws one. The charts
+    /// module moves between their cells and points.
+    pub const CHART_GRIDS: Self = Self(1 << 36);
+    /// The app blocks stylesheet: no script of its own, only the styles of a figure tile's
+    /// icon, unit, status and ring, the info tip, the chart skeletons, the breathing guide
+    /// and the dock, linked on a page that draws one. An info tip links the overlay module.
+    pub const APP_BLOCKS: Self = Self(1 << 37);
+    /// The marketing stylesheet: no script, only the styles of the blocks of a public site,
+    /// its header, hero, sections, pricing, questions, frames and footer, linked on a page
+    /// that draws one. A part of a block that needs a script, such as a form, loads its own.
+    pub const MARKETING: Self = Self(1 << 40);
 
     /// Both sets together.
     #[must_use]
@@ -344,11 +373,6 @@ pub struct Element {
     pub(crate) attrs: Vec<Attr>,
     pub(crate) children: Vec<Node>,
     pub(crate) uses: Uses,
-    /// The key of what the element says to a native client beyond its markup (0 for
-    /// nothing), kept with the request and never written. A number, so an element is
-    /// no larger for it: it stands where the padding after `uses` was.
-    #[cfg(feature = "native-preview")]
-    pub(crate) hint: u32,
 }
 
 /// Elements a page never writes through the tree: each loads something, runs
@@ -375,8 +399,6 @@ pub fn el(tag: &'static str) -> Element {
         attrs: Vec::new(),
         children: Vec::new(),
         uses: Uses::NONE,
-        #[cfg(feature = "native-preview")]
-        hint: 0,
     }
 }
 
@@ -428,21 +450,29 @@ impl Element {
         self
     }
 
-    /// Sets a hint for a native client, when one is asking.
+    /// Sets a hint for a native client, when one is asking. What is said is kept with the
+    /// request, and the element carries its key as a child that writes nothing (a
+    /// zero-length slice of a text of the toolkit's own), so an element is no larger and
+    /// the HTML is the HTML of the element without it.
     #[cfg(feature = "native-preview")]
     pub(crate) fn say(&mut self, set: impl FnOnce(&mut crate::hint::Hints)) {
-        if let Some(request) = crate::native::scope::native() {
-            self.hint = request.hint(self.hint, set);
+        let Some(request) = crate::native::scope::native() else {
+            return;
+        };
+        let held = self.children.iter().find_map(crate::hint::key_of);
+        let key = request.hint(held.unwrap_or(0), set);
+        if held.is_none()
+            && let Some(mark) = crate::hint::key_mark(key)
+        {
+            self.children.push(mark);
         }
     }
 
     /// What was said of this element to the native client the current request is from.
     #[cfg(feature = "native-preview")]
     pub(crate) fn said(&self) -> Option<crate::hint::Hints> {
-        if self.hint == 0 {
-            return None;
-        }
-        crate::native::scope::native()?.hinted(self.hint)
+        let key = self.children.iter().find_map(crate::hint::key_of)?;
+        crate::native::scope::native()?.hinted(key)
     }
 
     /// The element's tag name.

@@ -861,3 +861,161 @@ async fn security_events_are_audited() {
     assert_eq!(limited[0].metadata["path"], "/api/guarded");
     assert_eq!(limited[0].ip.as_deref(), Some("0.0.0.0"));
 }
+
+// One address, two answers: a guest gets the public page, a signed-in reader the app's,
+// each handler with its own extractors (the signed-in one's refuses guests, and is never
+// asked for one). The answer varies by what signs a request in.
+#[tokio::test]
+async fn one_address_answers_a_guest_and_a_signed_in_reader_apart() {
+    let app = Setup::new(vec![RouteDef::on_guest_or(
+        Method::GET,
+        "/home",
+        || async { "the public site" },
+        |CurrentPrincipal(who): CurrentPrincipal| async move { format!("desk of {}", who.user_id) },
+    )])
+    .authenticated()
+    .boot()
+    .await;
+
+    let guest = app.get("/api/home").await;
+    assert_eq!(guest.status, StatusCode::OK);
+    assert_eq!(guest.text(), "the public site");
+    assert_eq!(guest.header("vary"), Some("cookie, authorization"));
+
+    let reader = app.send(as_user("GET", "/api/home", ALICE)).await;
+    assert_eq!(reader.status, StatusCode::OK);
+    assert_eq!(reader.text(), format!("desk of {ALICE}"));
+    assert_eq!(reader.header("vary"), Some("cookie, authorization"));
+}
+
+// A signed-in reader's answer never reaches a shared cache, whatever its handler said: with
+// no Cache-Control, or one that lets a shared cache keep it, it goes out private and
+// unstored. A handler that kept it private says so itself, and the guest's answer is as
+// its handler wrote it.
+#[tokio::test]
+async fn a_signed_in_readers_answer_is_never_left_to_a_shared_cache() {
+    let with = |cache: Option<&'static str>| {
+        move || async move {
+            let mut response = http::Response::new(Body::from("page"));
+            if let Some(cache) = cache {
+                response.headers_mut().insert(
+                    http::header::CACHE_CONTROL,
+                    http::HeaderValue::from_static(cache),
+                );
+            }
+            response
+        }
+    };
+    let app = Setup::new(vec![
+        RouteDef::on_guest_or(
+            Method::GET,
+            "/none",
+            with(Some("public, max-age=300")),
+            with(None),
+        ),
+        RouteDef::on_guest_or(
+            Method::GET,
+            "/public",
+            with(None),
+            with(Some("public, max-age=300")),
+        ),
+        RouteDef::on_guest_or(
+            Method::GET,
+            "/shared",
+            with(None),
+            with(Some("max-age=60, S-MaxAge=600, private")),
+        ),
+        RouteDef::on_guest_or(Method::GET, "/aged", with(None), with(Some("max-age=60"))),
+        RouteDef::on_guest_or(
+            Method::GET,
+            "/private",
+            with(None),
+            with(Some("private, max-age=60")),
+        ),
+        RouteDef::on_guest_or(Method::GET, "/unstored", with(None), with(Some("no-store"))),
+    ])
+    .authenticated()
+    .boot()
+    .await;
+
+    let guest = app.get("/api/none").await;
+    assert_eq!(guest.header("cache-control"), Some("public, max-age=300"));
+    for path in ["/api/none", "/api/public", "/api/shared", "/api/aged"] {
+        let reader = app.send(as_user("GET", path, ALICE)).await;
+        assert_eq!(reader.status, StatusCode::OK, "{path}");
+        assert_eq!(
+            reader.header("cache-control"),
+            Some("private, no-store"),
+            "{path}"
+        );
+        assert_eq!(
+            reader.header("vary"),
+            Some("cookie, authorization"),
+            "{path}"
+        );
+    }
+    let kept = app.send(as_user("GET", "/api/private", ALICE)).await;
+    assert_eq!(kept.header("cache-control"), Some("private, max-age=60"));
+    let unstored = app.send(as_user("GET", "/api/unstored", ALICE)).await;
+    assert_eq!(unstored.header("cache-control"), Some("no-store"));
+}
+
+// `private="Set-Cookie"` makes only the named field private, so it leaves the page to a
+// shared cache; and a CDN's own caching headers would let it keep the page whatever
+// Cache-Control says. A signed-in reader's answer gets neither through.
+#[tokio::test]
+async fn a_signed_in_answer_loses_partial_privacy_and_cdn_caching_headers() {
+    let page = |cache: &'static str| {
+        move || async move {
+            let mut response = http::Response::new(Body::from("page"));
+            let headers = response.headers_mut();
+            headers.insert(
+                http::header::CACHE_CONTROL,
+                http::HeaderValue::from_static(cache),
+            );
+            for cdn in [
+                "cdn-cache-control",
+                "cloudflare-cdn-cache-control",
+                "surrogate-control",
+            ] {
+                headers.insert(cdn, http::HeaderValue::from_static("max-age=600"));
+            }
+            response
+        }
+    };
+    let app = Setup::new(vec![
+        RouteDef::on_guest_or(
+            Method::GET,
+            "/named",
+            page("public, max-age=60"),
+            page("private=\"Set-Cookie\", max-age=600"),
+        ),
+        RouteDef::on_guest_or(
+            Method::GET,
+            "/kept",
+            page("public, max-age=60"),
+            page("private, max-age=60"),
+        ),
+    ])
+    .authenticated()
+    .boot()
+    .await;
+
+    let named = app.send(as_user("GET", "/api/named", ALICE)).await;
+    assert_eq!(named.header("cache-control"), Some("private, no-store"));
+    let kept = app.send(as_user("GET", "/api/kept", ALICE)).await;
+    assert_eq!(kept.header("cache-control"), Some("private, max-age=60"));
+    for reader in [&named, &kept] {
+        for cdn in [
+            "cdn-cache-control",
+            "cloudflare-cdn-cache-control",
+            "surrogate-control",
+        ] {
+            assert_eq!(reader.header(cdn), None, "{cdn}");
+        }
+    }
+    // A guest's page is the guest handler's, CDN headers and all.
+    let guest = app.get("/api/named").await;
+    assert_eq!(guest.header("cache-control"), Some("public, max-age=60"));
+    assert_eq!(guest.header("surrogate-control"), Some("max-age=600"));
+}

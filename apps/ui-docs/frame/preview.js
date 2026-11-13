@@ -239,7 +239,7 @@ if ("navigation" in window) {
 // a stand-in of its size keeps its room meanwhile, so the control that opened it
 // stays under the pointer, and a hover card doesn't close as its trigger moves away.
 const PICTURES =
-  "[data-slot=dialog],[data-slot=alert-dialog],[data-slot=sheet],[data-slot=drawer],[data-slot=select-popup],[data-slot=command-dialog],[data-slot=popover-content],[data-slot=hover-card-content],[data-slot=tooltip-content],[data-slot=navigation-menu-content],[data-slot=dropdown-menu]";
+  "[data-slot=dialog],[data-slot=alert-dialog],[data-slot=sheet],[data-slot=drawer],[data-slot=select-popup],[data-slot=command-dialog],[data-slot=popover-content],[data-slot=hover-card-content],[data-slot=info-tip-content],[data-slot=tooltip-content],[data-slot=navigation-menu-content],[data-slot=dropdown-menu]";
 if (document.body.hasAttribute("data-preview-show")) {
   /** @type {Map<Element, HTMLElement>} */
   const kept = new Map();

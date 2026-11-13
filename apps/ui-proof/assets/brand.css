@@ -1,0 +1,26 @@
+/* The proof app's own stylesheet: a brand backdrop and a typeface of the app's own. */
+.proof-brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.5rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(120% 160% at 0% 0%, color-mix(in oklab, var(--accent) 20%, transparent), transparent 62%),
+    var(--ink-1);
+  font-family: "Brand Sans", system-ui, sans-serif;
+}
+.proof-brand h2 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.proof-brand p {
+  margin: 0;
+  color: var(--fg-1);
+}

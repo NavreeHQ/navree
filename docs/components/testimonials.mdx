@@ -1,0 +1,50 @@
+---
+title: "Testimonials"
+description: "Quotes from people who use the product, with their names, roles, initials or photos and stars, in columns."
+---
+
+<UiPreview example="testimonials/default" />
+
+`Testimonials` lays quotes in columns that fill from the top, as many as the width allows. Each `Testimonial` has the quote (the card draws the quotation marks), who said it, who they are, their initials or photo, and stars.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+Testimonials::new()
+    .item(
+        Testimonial::new("I finally know why Mondays feel heavy: Sunday nights.")
+            .author("Simran Kaur Gill")
+            .role("Teacher, Ludhiana")
+            .initials("SG")
+            .rating(5)
+            .featured(),
+    )
+```
+
+## Stars
+
+`.rating(n)` draws `n` of five stars, and says the number in words for assistive technology: `5 out of 5`, or the words of `.rating_label(...)`.
+
+## Anatomy
+
+<UiAnatomy component="testimonials" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- Each quote is a `<figure>` with a `<blockquote>` and its `<figcaption>`.
+- Initials are hidden from assistive technology: the name beside them says who.
+
+</UiA11y>
+
+## API
+
+### Testimonials
+
+<UiProps type="Testimonials" />
+
+### Testimonial
+
+<UiProps type="Testimonial" />

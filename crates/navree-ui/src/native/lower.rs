@@ -1768,6 +1768,8 @@ pub(crate) fn flat(nodes: &[Node]) -> Vec<&Node> {
     fn push<'a>(node: &'a Node, out: &mut Vec<&'a Node>) {
         match node {
             Node::Empty => {}
+            // What an author said to a native client of the element: written to no one.
+            Node::Static(text) if text.is_empty() && crate::hint::key_of(node).is_some() => {}
             Node::Fragment(nodes) => {
                 for node in nodes {
                     push(node, out);
@@ -2080,8 +2082,8 @@ pub(crate) fn is_inline(node: &Node) -> bool {
                     ) && !attr.name.starts_with("data-ui-")
                 })
                 && (element.tag() != "a" || has(element, "href"))
-                // A link the page said how to present is a link of its own, not words in a run.
-                && !(element.tag() == "a" && element.said().is_some_and(|said| said.presented.is_some()))
+                // A link the author said something of has a mark among its children, so it is
+                // a link of its own and not words in a run.
                 && element.child_nodes().iter().all(is_inline)
         }
     }

@@ -1,0 +1,96 @@
+---
+title: "Colour strip"
+description: "A row of equal-width cells, each in the colour of its category or of the band its reading falls in, with a legend. Drawn as SVG on the server."
+---
+
+<UiPreview example="color-strip/default" />
+
+`ColorStrip` shows a sequence at a glance: the zone every heart-rate reading of a run fell in, the stage every half hour of a night was in, the state of every check of a service. Each cell is one reading, all cells are equal in width, and the colour says which category it belongs to. The legend names the categories, and `.legend_shares()` adds each one's share of the cells.
+
+Cells are equal in width, so the strip is proportional to the number of readings and not to time. Say so beside it when readings are not evenly spaced.
+
+## Cells by category
+
+A cell has a label (a time, a number) and a category. Declare the categories to choose their colours and the order of the legend; a category that was not declared takes the next categorical colour.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+ColorStrip::new("Sleep stages, every 30 minutes")
+    .category("Awake", Ink::slot(4))
+    .category("REM", Ink::tone(Tone::named("cyan")))
+    .category("Core", Ink::slot(3))
+    .category("Deep", Ink::slot(7))
+    .cell("11:00 pm", "Awake")
+    .cell("11:30 pm", "Core")
+    .cell("12:00 am", "Deep")
+```
+
+<UiPreview example="color-strip/stages" />
+
+## Readings by band
+
+A reading is coloured by the band of a [`ColorScale`](/docs/components/progress/#painted) its value falls in. Name each band with `label`: the legend and the table use the names. The table keeps the reading as well as its band.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+ColorStrip::new("Heart rate zones")
+    .colors(
+        ColorScale::new(Ink::tone(Tone::named("slate")))
+            .label("Rest")
+            .from(100, Ink::tone(Tone::named("cyan")))
+            .label("Fat burn")
+            .from(130, Ink::tone(Tone::Warning))
+            .label("Cardio"),
+    )
+    .format(NumberFormat::number().suffix(" bpm"))
+    .value_name("Heart rate")
+    .reading("6:00 pm", 74)
+    .reading("6:01 pm", 112)
+    .reading("6:02 pm", 141)
+```
+
+A missing reading is a cell in the quiet colour, named "No value".
+
+## Many cells
+
+A strip draws at most 600 cells. A longer one draws every k-th cell and says so; the table lists the cells drawn. `.height(px)` sets the thickness, 4 to 32 (8 by default).
+
+## Motion
+
+`.motion(Motion::new())` fades the cells in from the start, one after another. However many cells there are, the sweep takes about a second. The cells are drawn finished, so a reader who asks for less motion sees the final state.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty). A strip with no cell is empty.
+
+## The table
+
+The table has a row for each cell: its label, its category and, for readings, the value. `.cell_name("Half hour")` and `.value_name("Heart rate")` name the columns. See [The table](/docs/components/line-chart/#the-table).
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the chart, which is one tab stop. |
+| `←`, `→`, `↑`, `↓` | Moves to the previous or the next cell. |
+| `Home`, `End` | Moves to the first or the last cell. |
+| `Page Up`, `Page Down` | Moves a tenth of the way back or on, and at least one cell. |
+| `Esc` | Hides the tooltip. |
+
+- The chart is a group named by its title and described by its summary: how many readings, in how many categories, and the most common one.
+- A move by key marks the cell, dims the others and is announced politely: its label, its category and its reading. With a pointer the tooltip says the same, floating above the cell.
+- The legend names every category, and a status tone adds an icon to its entry; the table twin names every cell's category, so colour is never alone.
+
+</UiA11y>
+
+## API
+
+### ColorStrip
+
+<UiProps type="ColorStrip" />

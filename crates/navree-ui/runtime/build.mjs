@@ -133,6 +133,7 @@ const FILES = [
   ["carousel", "js", "text/javascript; charset=utf-8", await js("carousel.js")],
   ["menubar", "js", "text/javascript; charset=utf-8", await js("menubar.js")],
   ["charts", "js", "text/javascript; charset=utf-8", await js("charts.js")],
+  ["count-up", "js", "text/javascript; charset=utf-8", await js("count-up.js")],
   ["islands", "js", "text/javascript; charset=utf-8", await js("islands.js")],
   ["parts", "js", "text/javascript; charset=utf-8", await js("parts.js")],
   ["genui", "js", "text/javascript; charset=utf-8", await js("genui.js")],
@@ -152,8 +153,20 @@ const FILES = [
   ["carousel-styles", "css", "text/css; charset=utf-8", await extraCss(["carousel.css"])],
   ["menubar-styles", "css", "text/css; charset=utf-8", await extraCss(["menubar.css"])],
   ["charts-styles", "css", "text/css; charset=utf-8", await extraCss(["charts.css"])],
+  // What chart marks share past the plain ones: paint, glow and motion. No script.
+  ["chart-paint", "css", "text/css; charset=utf-8", await extraCss(["chart-paint.css"])],
+  // Rings, gauges and the day clock. No script: the clock's keys and tooltip are the charts module's.
+  ["chart-radial", "css", "text/css; charset=utf-8", await extraCss(["chart-radial.css"])],
+  // The linear charts: a meter, mini columns, a colour strip, a range scale and a trend. No script.
+  ["chart-linear", "css", "text/css; charset=utf-8", await extraCss(["chart-linear.css"])],
+  // The grid charts: calendar and matrix heat maps and the scatter plot. No script.
+  ["chart-grids", "css", "text/css; charset=utf-8", await extraCss(["chart-grids.css"])],
+  // The app blocks: a figure tile's icon, unit and ring, the info tip, chart skeletons, the breathing guide and the dock. No script.
+  ["app-blocks", "css", "text/css; charset=utf-8", await extraCss(["app-blocks.css"])],
   // The styles of the parts that need no script, and of the parts module's own.
   ["parts-styles", "css", "text/css; charset=utf-8", await extraCss(["parts.css"])],
+  // The blocks of a public site: header, hero, sections, pricing, questions, frames, footer. No script.
+  ["marketing", "css", "text/css; charset=utf-8", await extraCss(["marketing.css"])],
 ];
 // The sheets of `MODULE_STYLES`, each from its sources in `styles`; the phone's ships with its feature.
 for (const [name, sources] of Object.entries(MODULE_STYLES)) {

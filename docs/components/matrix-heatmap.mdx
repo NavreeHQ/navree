@@ -1,0 +1,113 @@
+---
+title: "Matrix heat map"
+description: "Every measure against every other, such as a correlation matrix: one tone for a link that moves together, another for one that moves apart, depth for strength, neutral for chance and blank for a pair never tested."
+---
+
+<UiPreview example="matrix-heatmap/default" />
+
+`MatrixHeatmap` shows how a set of measures relate in pairs: sleep, stress, steps, heart rate variability and mood over 30 days. There is a row and a column for each measure and a cell for each pair. The colour says the sign, one tone for a link that moves together and another for one that moves apart, and the depth of the colour says how strong it is.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+MatrixHeatmap::new("Metric correlations")
+    .description("Last 30 days, Gurpreet Singh")
+    .metrics(["Sleep", "Stress", "Steps", "HRV", "Resting HR", "Mood"])
+    .relation("Sleep", "Stress", Relation::new(-0.58).note("30 days, p < 0.05"))
+    .relation("Sleep", "HRV", Relation::new(0.71).note("30 days, p < 0.05"))
+    .relation("Stress", "Mood", Relation::new(-0.67).note("30 days, p < 0.05"))
+    .relation("HRV", "Resting HR", Relation::new(-0.77).note("30 days, p < 0.05"))
+    .relation("Sleep", "Steps", Relation::new(0.21).significant(false).note("30 days, could be chance"))
+    .value_name("Correlation")
+    .lower_triangle()
+```
+
+`.metrics(...)` adds the measures in the order of the rows and columns, and `.relation(a, b, Relation)` says how two of them relate; the pair is the same either way round. A name that is not a measure is ignored, and a pair given twice keeps the last.
+
+## When to use it
+
+Use a matrix to show every pair of a handful of measures at once, where the pattern across pairs matters: which measures move with sleep, which against stress. When few of the pairs were tested, or the reader wants the strongest links first, use a [relation list](/docs/components/relation-list/), on its own or beside the matrix. To see the points behind one pair, use a [scatter chart](/docs/components/scatter-chart/).
+
+## Anatomy
+
+<UiAnatomy component="matrix-heatmap" />
+
+## A relation
+
+`Relation::new(value)` is a pair that came to a signed value, significant until told otherwise. `.significant(false)` says the value could be chance: the pair is drawn in a neutral tone whatever its value, so it is never read as a link. `Relation::untested()` is a pair never tested, too few days with both, say, and it is drawn almost blank, so it is never read as no link. `.note(...)` adds words about the pair, such as the days it rests on and the test, to its tooltip and its row of the table.
+
+A pair you never give is untested too.
+
+## The diverging scale
+
+A significant link takes the positive colour or the negative one by its sign, in six steps of depth by its size. The depth is deepest at `.peak(value)`, 1 by default for a correlation; a larger value is as deep as it. `.colors(positive, negative)` sets the two colours: blue and orange by default, which stay apart for every reader. Use tones when the sign means good and bad.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+MatrixHeatmap::new("Metric correlations")
+    .metrics(["Sleep", "Stress", "HRV"])
+    .relation("Sleep", "Stress", Relation::new(-0.58))
+    .relation("Sleep", "HRV", Relation::new(0.71))
+    .relation("Stress", "HRV", Relation::new(-0.52))
+    .colors(Ink::tone(Tone::Success), Ink::slot(5))
+    .show_values()
+```
+
+`.show_values()` writes each pair's value in its cell. It suits a matrix of a few measures; past eight or so the cells are too small for it. `.format(NumberFormat)` writes the values, with two decimals by default, and `.value_name(...)` names them in the tooltip and the table.
+
+<UiPreview example="matrix-heatmap/full" />
+
+## The lower triangle
+
+A full matrix draws every pair twice, once on each side of the diagonal, and leaves the diagonal blank. `.lower_triangle()` draws each pair once, below the diagonal, so the matrix is a staircase: the first measure heads the columns and the last heads the rows. It is half the cells to read, and the summary counts each pair once either way.
+
+## Motion
+
+`.motion(Motion::new())` fades the rows in, one after another. The cells are drawn finished, so a reader who asks for less motion sees the final state.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty). A matrix of fewer than two measures is empty.
+
+<UiPreview example="matrix-heatmap/states" />
+
+## The table
+
+The table has a row for each cell drawn: the pair, its value, what it came to (positive, negative, not significant or not tested) and its note. See [The table](/docs/components/line-chart/#the-table). The words the chart writes are fields of [`GridLabels`](/docs/components/calendar-heatmap/#words), passed to `.words(...)`.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the matrix, which is one tab stop. |
+| `←`, `→` | Moves to the cell before or after, in the same row. |
+| `↑`, `↓` | Moves to the row above or below, at the nearest column. |
+| `Home`, `End` | Moves to the first or the last cell of the row. |
+| `Page Up`, `Page Down` | Moves to the top or the bottom of the column. |
+| `Esc` | Hides the tooltip. |
+
+- The matrix is a group named by its title and described by its summary: how many measures and pairs, how many were tested and how many are significant, and the strongest pair with its value.
+- The row and the column of the cell under the pointer or the keys are highlighted. The tooltip names the pair in full where the headers are cut, and a move by key is announced politely.
+- The legend names the four kinds of cell: positive, negative, not significant and not tested. The table twin says what every pair came to in words, so neither the sign nor the strength rests on colour alone.
+- In a right-to-left page, `←` and `→` swap.
+
+</UiA11y>
+
+## API
+
+### MatrixHeatmap
+
+<UiProps type="MatrixHeatmap" />
+
+### Relation
+
+<UiProps type="Relation" />
+
+### GridLabels
+
+<UiProps type="GridLabels" />

@@ -6,7 +6,8 @@ use std::collections::BTreeMap;
 use navree::ui::assets::{self, Asset};
 use navree::ui::theme::Theme;
 use navree::ui::{
-    Input, LazyPage, Node, PAGE_CSP, Uses, View, components, el, icons, measure, render, tokens,
+    AppSheet, Input, LazyPage, Node, PAGE_CSP, Uses, View, components, el, icons, measure, render,
+    tokens,
 };
 use serde::Serialize;
 
@@ -275,6 +276,13 @@ fn theme_sheet_path(theme: &Theme) -> String {
     format!("_toolkit/theme/{}.css", theme.key())
 }
 
+/// Where a preview finds a stylesheet of the app's own, under the previews, named by its
+/// name and content hash as the app serves it. A preview carries no font files: a page's
+/// text is drawn in the fallback.
+fn app_sheet_path(sheet: &AppSheet) -> String {
+    format!("_app/{}", file_of(&sheet.url()))
+}
+
 /// The pages a preview's lists are answered from, as templates the preview
 /// script reads. Inert markup: nothing in a template runs or loads.
 fn answers(example: &Example) -> String {
@@ -342,6 +350,13 @@ fn document(example: &Example, stage: &Node, parts: &Parts<'_>, component: &Comp
         head.push_str(&format!(
             "<link rel=\"stylesheet\" href=\"../{}\" data-ui-theme>\n",
             theme_sheet_path(theme)
+        ));
+    }
+    // The app's own stylesheets, after the theme's, as the page links them.
+    for sheet in parts.page.map(View::app_sheets).unwrap_or_default() {
+        head.push_str(&format!(
+            "<link rel=\"stylesheet\" href=\"../{}\" data-ui-app>\n",
+            app_sheet_path(sheet)
         ));
     }
     head.push_str("<link rel=\"stylesheet\" href=\"../_frame/preview.css\">\n");
@@ -580,6 +595,12 @@ pub fn files(examples: &[Example], api: &BTreeMap<String, TypeDoc>) -> BTreeMap<
                 files.insert(format!("previews/{}", theme_sheet_path(theme)), css);
             }
         }
+        for sheet in page.as_ref().map(View::app_sheets).unwrap_or_default() {
+            files.insert(
+                format!("previews/{}", app_sheet_path(sheet)),
+                String::from_utf8_lossy(sheet.bytes()).into_owned(),
+            );
+        }
         let parts = Parts {
             page: page.as_ref(),
             scripts: &scripts,
@@ -719,6 +740,14 @@ pub fn files(examples: &[Example], api: &BTreeMap<String, TypeDoc>) -> BTreeMap<
         "previews/_frame/preview.js".to_owned(),
         include_str!("../frame/preview.js").replace("\r\n", "\n"),
     );
+    // The picture the responsive image example shows, at the two widths its `srcset` names.
+    let picture = include_str!("../frame/picture.svg").replace("\r\n", "\n");
+    for width in ["400", "800"] {
+        files.insert(
+            format!("previews/_frame/picture-{width}.svg"),
+            picture.clone(),
+        );
+    }
     files
 }
 

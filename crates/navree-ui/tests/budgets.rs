@@ -142,6 +142,35 @@ fn the_charts_module_is_at_most_3_kb_gzip() {
     assert!(size("charts") <= 3 * 1024, "{}", size("charts"));
 }
 
+/// The chart paint sheet (gradients, glow, motion, painted sparklines, meters and bars)
+/// and the count-up module stay small: every painted mark on a page links them.
+#[test]
+fn the_chart_paint_sheet_is_at_most_1_5_kb_and_the_count_up_module_1_kb_gzip() {
+    assert!(size("chart-paint") <= 1536, "{}", size("chart-paint"));
+    assert!(size("count-up") <= 1024, "{}", size("count-up"));
+}
+
+/// The radial sheet (rings, gauges and the day clock) stays small: a page with one ring
+/// links it, and no script comes with a ring or a gauge.
+#[test]
+fn the_radial_sheet_is_at_most_2_kb_gzip_and_a_ring_loads_no_script() {
+    use navree_ui::charts::{Gauge, Ring};
+    assert!(size("chart-radial") <= 2048, "{}", size("chart-radial"));
+    let page = View::new("x").body((Ring::new("Sleep score", 82), Gauge::new("Stress", 40)));
+    assert!(page.uses().has(Uses::CHART_RADIAL), "{:?}", page.uses());
+    let html = page.to_html();
+    assert!(html.contains(assets::CHART_RADIAL_URL), "{html}");
+    assert!(html.contains(assets::CHART_PAINT_URL), "{html}");
+    assert!(!html.contains("<script"), "{html}");
+}
+
+/// The linear charts' sheet (meter, mini columns, colour strip, range scale, trend) is
+/// linked only by a page that draws one, and stays under 2 KB gzip.
+#[test]
+fn the_chart_linear_sheet_is_at_most_2_kb_gzip() {
+    assert!(size("chart-linear") <= 2048, "{}", size("chart-linear"));
+}
+
 /// A page to read with a chart on it loads the charts module and no other.
 #[test]
 fn a_page_with_a_chart_loads_the_charts_module_alone() {
@@ -158,6 +187,32 @@ fn a_page_with_a_chart_loads_the_charts_module_alone() {
     let picture = View::new("x").body(Stat::new("Sent", "1").chart(Sparkline::new("Sent", [1, 2])));
     assert!(picture.uses().is_none());
     assert!(!picture.to_html().contains("<script"));
+}
+
+/// The grid charts' own sheet (calendar and matrix heat maps, scatter) stays at 2 KB, and a page
+/// with one loads the charts module and the grids' sheet, not the paint sheet or the core.
+#[test]
+fn the_chart_grids_sheet_is_at_most_2_kb_gzip_and_a_grid_chart_links_it_with_the_charts_module() {
+    use navree_ui::charts::{CalendarHeatmap, MatrixHeatmap, PointSeries, Relation, Scatter};
+    assert!(size("chart-grids") <= 2 * 1024, "{}", size("chart-grids"));
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 11, 12).unwrap();
+    let pages = [
+        View::new("x").body(CalendarHeatmap::new("Load").day(day, 5)),
+        View::new("x").body(MatrixHeatmap::new("Links").metrics(["a", "b"]).relation(
+            "a",
+            "b",
+            Relation::new(0.5),
+        )),
+        View::new("x").body(Scatter::new("Beats").series(PointSeries::new("a", [(1, 2)]))),
+    ];
+    for page in pages {
+        assert_eq!(page.uses(), Uses::CHARTS.with(Uses::CHART_GRIDS));
+        let html = page.to_html();
+        assert!(html.contains(assets::CHARTS_URL), "{html}");
+        assert!(html.contains(assets::CHART_GRIDS_URL), "{html}");
+        assert!(!html.contains(assets::CORE_URL));
+        assert!(!html.contains(assets::CHART_PAINT_URL));
+    }
 }
 
 #[test]
@@ -452,6 +507,11 @@ fn the_modules_styles_are_at_most_3_kb_gzip_each() {
         "carousel-styles",
         "menubar-styles",
         "charts-styles",
+        "chart-paint",
+        "chart-radial",
+        "chart-linear",
+        "chart-grids",
+        "app-blocks",
         "select-styles",
         "phone-styles",
         "slider-styles",
@@ -594,6 +654,52 @@ fn a_modules_own_styles_come_with_it_and_only_with_it() {
     assert_eq!(bar, ["navree-ui", "menus-styles", "toolbar-styles"]);
 }
 
+/// The marketing sheet (the blocks of a public site) stays at 6 KB gzip, and a whole public
+/// page of them links the toolkit's sheet and its own and loads no script: the menu, the
+/// questions and the pricing switch need none. Only a part that needs one, a form, brings it.
+#[test]
+fn the_marketing_sheet_is_at_most_6_kb_gzip_and_a_site_page_loads_no_script() {
+    use navree_ui::marketing::{
+        Brand, CtaBand, Faq, Feature, FeatureGrid, Hero, LegalPage, LegalSection, Plan, Pricing,
+        Section, SectionHeading, SiteFooter, SiteHeader, SitePage, ThemeToggle,
+    };
+    use navree_ui::theme::Mode;
+
+    assert!(size("marketing") <= 6 * 1024, "{}", size("marketing"));
+    let page = SitePage::new()
+        .header(
+            SiteHeader::new(Brand::new("Kesar", "/"))
+                .link("Pricing", "/pricing/")
+                .action(Button::primary("Start free").href("/signup")),
+        )
+        .section(Hero::new("Know your body").action(Button::primary("Start").href("/s")))
+        .section(
+            Section::new("features")
+                .heading(SectionHeading::new("Features"))
+                .child(FeatureGrid::new().feature(Feature::new("Sleep", "Stages"))),
+        )
+        .section(
+            Section::new("pricing").child(
+                Pricing::new("plans").plan(
+                    Plan::new("Plus")
+                        .monthly("₹299", "a month")
+                        .yearly("₹2,990", "a year"),
+                ),
+            ),
+        )
+        .section(Section::new("faq").child(Faq::new("faq").item("Free?", "Yes.")))
+        .section(LegalPage::new("Terms").section(LegalSection::new("a", "One").text("x")))
+        .section(CtaBand::new("cta", "Start today"))
+        .footer(
+            SiteFooter::new(Brand::new("Kesar", "/")).theme_toggle(ThemeToggle::new(Mode::System)),
+        );
+    let view = View::new("Kesar").body(page);
+    assert_eq!(view.uses(), Uses::MARKETING);
+    let html = view.to_html();
+    assert_eq!(linked(&html), (vec![], vec!["navree-ui", "marketing"]));
+    assert!(!html.contains("<script"), "{html}");
+}
+
 /// The bits are one each, so a page asks for exactly what it names.
 #[test]
 fn no_two_modules_share_a_bit() {
@@ -627,6 +733,13 @@ fn no_two_modules_share_a_bit() {
         Uses::PARTS,
         Uses::PARTS_STYLES,
         Uses::GENUI,
+        Uses::CHART_RADIAL,
+        Uses::COUNT_UP,
+        Uses::CHART_PAINT,
+        Uses::CHART_LINEAR,
+        Uses::CHART_GRIDS,
+        Uses::APP_BLOCKS,
+        Uses::MARKETING,
     ];
     for (at, one) in all.iter().enumerate() {
         for other in &all[at + 1..] {

@@ -5,7 +5,7 @@ description: "Bars from one baseline to compare amounts: grouped, stacked, negat
 
 <UiPreview example="bar-chart/default" />
 
-`Chart::bar` draws each value as a bar from one baseline. The value axis always starts at zero, so the length of a bar is its amount. Several series sit side by side in each group. A bar is at most 24 px wide, and a group never takes more than 70% of its place, so a chart with few bars doesn't draw slabs.
+`Chart::bar` draws each value as a bar from one baseline. The value axis starts at zero, so the length of a bar is its amount, unless the bars grow from a [baseline of your own](#bars-from-a-level-other-than-zero). Several series sit side by side in each group. A bar is at most 24 px wide, and a group never takes more than 70% of its place, so a chart with few bars doesn't draw slabs.
 
 ```rust
 use navree::ui::charts::*;
@@ -56,6 +56,12 @@ A value below zero hangs below the baseline, and the axis grows to hold it. In a
 
 <UiPreview example="bar-chart/negative" />
 
+## Bars from a level other than zero
+
+`.baseline(value)` makes bars grow from a level of their own: up for a value above it, down for one below. Use it when the distance from a reference is what matters and zero is far away, such as each part's age against a person's own, or a temperature against the normal. A line marks the level, and the axis holds the level and the values without reaching down to zero, so a domain such as `.y_domain(Domain::fixed(26, 46))` is kept. The table and the tooltip still say the values themselves. A stack always grows from zero.
+
+<UiPreview example="bar-chart/baseline" />
+
 ## Horizontal bars
 
 `.horizontal()` lays the bars along rows, with a label on each row and the value at its end. Use it for long names and for ranked lists: sort the categories, largest first, and a reader sees the order at once. It stacks too.
@@ -63,6 +69,29 @@ A value below zero hangs below the baseline, and the axis grows to hold it. In a
 <UiPreview example="bar-chart/horizontal" />
 
 <UiPreview example="bar-chart/horizontal-stacked" />
+
+## An average and sparse labels
+
+`.reference(Reference::average().label("Avg: {value}"))` draws the mean as a dashed line with its value; `.x_ticks(Ticks::every(3))` writes every third label; `.y_domain(Domain::fixed(0, 10))` keeps a score's axis from 0 to 10; and `.grid(Gridlines::horizontal().dashed())` dashes the gridlines. See [Axes and gridlines](/docs/components/line-chart/#axes-and-gridlines).
+
+<UiPreview example="bar-chart/reference" />
+
+## Colour by value
+
+`Series::colors(ColorScale)` colours each bar by the band its value falls in, and the bands' labels make the legend, each with its tone's icon, so colour is never alone. The tooltip's key takes the bar's colour.
+
+```rust
+Series::new("HRV", nights).unit("ms").colors(
+    ColorScale::new(Ink::tone(Tone::Danger))
+        .label("Low")
+        .from(40, Ink::tone(Tone::Warning))
+        .label("Fair")
+        .from(50, Ink::tone(Tone::Success))
+        .label("Good"),
+)
+```
+
+<UiPreview example="bar-chart/colors" />
 
 ## More bars than fit
 

@@ -23,8 +23,9 @@ around them.
 
 1. **Use components that exist.** The index at the end of this skill lists
    every one. A need that is not in it is a gap: say so, and do not make a
-   stand-in from raw elements, a stylesheet or a script. The stylesheet
-   reads only `data-*` attributes, so a `class` does nothing and `style` is
+   stand-in from raw elements, a stylesheet or a script. The toolkit's
+   stylesheet reads only `data-*` attributes, so a `class` does nothing
+   unless the app's own stylesheet (`AppSheet`) styles it, and `style` is
    dropped. The content security policy refuses inline script and style.
 2. **Every route has an access attribute.** A page route still needs
    `#[public]`, `#[authenticated]`, `#[roles(..)]`, `#[permissions(..)]` or
@@ -597,6 +598,8 @@ Each file below has code that compiles, for the components it names.
 | Light, dark and the device's mode; the seven themes and the theme menu; shell layouts; your own theme; icons and flags | [`references/themes.md`](references/themes.md) |
 | `Select`, `Combobox`, `MultiSelect`, the `Command` palette; `Calendar`, `DatePicker`, `DateRangePicker`, `TimePicker`, `DateTimePicker`; `PhoneInput` | [`references/pickers-and-dates.md`](references/pickers-and-dates.md) |
 | `LazyList`, `SplitPane`, `Timeline`, `ActivityFeed`; `Sortable` lists and boards; `Wizard`, `Stepper`, `Slider`, `TreeView`, `Toolbar` | [`references/display-and-flow.md`](references/display-and-flow.md) |
+| Rings, gauges and the day clock; meters, mini columns, colour strips and range scales; heat maps, the relation list and the scatter chart; gradients, colour by value, motion, axes, reference lines and zones | [`references/charts.md`](references/charts.md) |
+| The app's own stylesheet, fonts and mark; figure tiles, the info tip, chart skeletons, the breathing guide, the dock, the day pager, the copy field, page titles; a marketing site, its SEO, sitemap and robots file; one address for guests and signed-in readers; the sign-in pages in the app's look | [`references/app-and-site-blocks.md`](references/app-and-site-blocks.md) |
 
 ## 8. Test without a browser
 
@@ -732,10 +735,11 @@ Tell the owner they are coming.
   every request: build the shell per request (see above).
 - **Rich text editing and islands** (a part of a page with its own
   JavaScript component).
-- **An app's own stylesheet or static files.** The toolkit serves one
-  stylesheet, and the content security policy loads styles, scripts, fonts
-  and images only from the app's own origin. A theme picks Geist or a system
-  font stack.
+- **Static files past the app's own stylesheet, fonts and pictures.** The
+  content security policy loads styles, scripts, fonts and images only from
+  the app's own origin: an `AppSheet`, `AppFont` or `AppImage` is compiled in
+  and served by the toolkit (see
+  [`references/app-and-site-blocks.md`](references/app-and-site-blocks.md)).
 
 Navigator (`navree-navigator`) reads the UI docs through `search_docs` and
 `read_doc` (slugs such as `ui/forms` and `components/date-picker`),
@@ -761,8 +765,12 @@ come from the component catalog of the docs
 | Navigation | the App shell (`Shell`, `AppShell`, `AppPage`), `Tabs`, `Breadcrumb`, `Pagination`, `Command`, `NavigationMenu` |
 | Steps, ranges and trees | `Stepper`, `Wizard`, `Slider`, `TreeView`, `Toolbar` |
 | Data | `Table`, `DataTable`, `LazyList`, Stat and Bars, `Sortable` |
+| App blocks | App styles (`AppSheet`, `AppFont`, `AppImage`), the figure tile (`Stat` with a `Trend`), the info tip (`InfoTip`), the chart skeleton (`ChartSkeleton`), the breathing guide (`BreathingGuide`), `Dock`, the day pager (`DayPager`), the copy field (`CopyField`), the auth layout (`AuthLayout`), `Picture` |
+| Marketing site | `SitePage`, `SiteHeader`, `Hero`, `Section`, `LogoCloud`, `FeatureGrid`, `FeatureRows`, `StatBand`, device frames (`BrowserFrame`, `PhoneFrame`), `Testimonials`, `Pricing`, `Faq`, `CtaBand`, `Newsletter`, `LegalPage`, `SiteFooter`; in `navree::ui::marketing` |
+| Page SEO | `View::seo` with `Seo`, JSON-LD (`JsonLd`, `Organization`, `WebSite`, `FaqPage`), `Sitemap`, `RobotsTxt`; in `navree::ui::seo` |
+| Sign-in pages | `AuthPages` (navree-auth): sign-in, sign-up, two-factor and password pages in the app's look, in an `AuthLayout` |
 | Assistant | `Conversation`, `ChatMessage`, `PromptInput`, `ToolCallCard` and `Reasoning`, `ApprovalCard`, `SurfaceFrame`, `Suggestions`, `Sources` and `Citation`, `ThreadList` (the parts of a page where people talk with an assistant; see https://navree.com/docs/ai/generative-ui/) |
-| Charts | the line chart, area chart and bar chart (`Chart::line`, `area`, `bar`), the donut chart (`Donut`, and a pie), `Funnel`, `Sparkline`, and Reports (`Report`, for a date window); in `navree::ui::charts` |
+| Charts | the line chart, area chart and bar chart (`Chart::line`, `area`, `bar`), the donut chart (`Donut`, and a pie), `Funnel`, `Sparkline`, and Reports (`Report`, for a date window); radial: `Ring`, `Rings`, `Gauge`, the day clock (`DayClock`); linear: `Meter`, mini columns (`MiniColumns`), a colour strip (`ColorStrip`), a range scale (`RangeScale`); grids: the calendar heat map (`CalendarHeatmap`), the matrix heat map (`MatrixHeatmap`), the relation list (`RelationList`), the scatter chart (`Scatter`); in `navree::ui::charts` |
 | Foundations | Foundations (tokens, sizes), Themes, the Theme builder, Icons, Flags, Commands (`Cmd`, `Reply`, `Op`), Regions, Errors and states |
 
 Notes on a few: `Tabs` panels can load on first show with `Tab::lazy(src)`;
@@ -778,7 +786,18 @@ overlaps avatars and counts the rest in a `+N` tile; `Trace` lists the steps
 of a run (an agent, an import) with a spoken state each; `ColorPicker` is the
 browser's colour field, posting `#rrggbb`; `DateTimePicker` puts a date and a
 time side by side and posts one value (`2026-11-12T14:30`); `Questionnaire` asks one question
-at a time, each drawn again by the server, so it needs no script.
+at a time, each drawn again by the server, so it needs no script. A `Ring`
+shows one score or a value toward a goal, `Rings` up to six against their
+own goals, a `Gauge` a value on an open arc whose scale may start above zero,
+and the day clock a value per hour round a face; a `Meter` splits one whole
+into parts, mini columns split several items the same way, a colour strip
+colours each slot of time and a range scale places one reading between two
+ends; the calendar heat map shows a habit over months, the matrix heat map
+and the relation list how measures move together, and the scatter chart a
+cloud of pairs ([`references/charts.md`](references/charts.md)). The
+marketing blocks draw a public site from the same app with no script, and
+`View::seo` writes its head
+([`references/app-and-site-blocks.md`](references/app-and-site-blocks.md)).
 
 ## Common mistakes
 
@@ -821,6 +840,9 @@ at a time, each drawn again by the server, so it needs no script.
 - https://navree.com/docs/ui/foundations/
 - https://navree.com/docs/ui/icons/
 - https://navree.com/docs/ui/flags/
+- https://navree.com/docs/ui/app-styles/
+- https://navree.com/docs/ui/marketing-sites/
+- https://navree.com/docs/ui/seo/
 - https://navree.com/docs/ui/coming-next/
 - https://navree.com/docs/components/overview/
 - https://navree.com/docs/basics/errors/

@@ -1,0 +1,128 @@
+---
+title: "Scatter chart"
+description: "A translucent point for each pair of values, in one series or several, with axes that can be hidden, one range for both axes and the line where the two are equal. Drawn as SVG on the server."
+---
+
+<UiPreview example="scatter-chart/default" />
+
+`Scatter` draws a point for each pair of values: each heartbeat's interval against the next, a day's steps against its resting heart rate. Both axes are numbers. Points are translucent, so where they pile up the cloud is darker, and the summary gives each series' count, range, average and correlation, so a reader need not read a long table to know its shape.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+let beats = [(812, 820), (820, 805), (805, 830), (830, 841), (841, 823), (823, 816)];
+Scatter::new("Successive heartbeat intervals")
+    .description("Each point is a beat against the next, Simran Kaur, resting")
+    .locale("en-IN")
+    .series(PointSeries::new("Resting", beats).ink(Ink::slot(8)))
+    .x_name("This beat")
+    .y_name("Next beat")
+    .unit("ms")
+    .equal_domains()
+    .x_axis(Axis::hidden())
+    .y_axis(Axis::hidden())
+    .grid(Gridlines::none())
+    .reference(Reference::identity().label("Equal"))
+    .height(320)
+```
+
+A `PointSeries` is a name and its pairs; a pair with a value that is not a finite number is left out. `.ink(Ink)` colours its points (the chart colours in turn by default), and `.labels(...)` names each point, in the order given, for its tooltip and its row of the table; points past the names are numbered. `.series(...)` adds a series, and `.series_list(...)` several.
+
+## When to use it
+
+Use a scatter chart to show how two measures go together over many readings, or the shape of a cloud of them. For one measure over time, use a [line chart](/docs/components/line-chart/). For how strongly many pairs of measures relate, use a [matrix heat map](/docs/components/matrix-heatmap/) or a [relation list](/docs/components/relation-list/), and a scatter for the points behind one pair.
+
+## Anatomy
+
+<UiAnatomy component="scatter-chart" />
+
+## Equal domains and the identity line
+
+`.equal_domains()` gives both axes one range, from the lowest value of either to the highest of either, and draws the plot square, so the line where x equals y runs corner to corner at 45 degrees. `.reference(Reference::identity())` draws that line, dashed, with `.label(...)` to name it. A cloud of successive beats then reads at once: points on the line are beats as long as the one before, and the spread across it is how much the heart rate varies from beat to beat.
+
+For a cloud whose shape is the point, `.x_axis(Axis::hidden())`, `.y_axis(Axis::hidden())` and `.grid(Gridlines::none())` leave out the axes and the lines behind the points, and the plot takes their room.
+
+## Axes, names and units
+
+`.x_name(...)` and `.y_name(...)` say what each value is: the axis names, the tooltip's lines and the table's columns. `.unit("ms")` says what both count, and `.x_unit(...)` and `.y_unit(...)` set them apart. `.format(NumberFormat)` writes both values and `.y_format(...)` writes y another way; `.locale("en-IN")` groups numbers in lakh and crore.
+
+Axes and gridlines work as on a [line chart](/docs/components/line-chart/#axes-and-gridlines): `Axis::new().line()` draws an axis line, and the gridlines are hairlines both ways by default. `.x_domain(Domain)` and `.y_domain(Domain)` set each range; by default a range fits the data to nice numbers and does not start at zero.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+let weekdays = [(6_200, 64), (8_450, 62), (5_100, 66), (11_300, 60), (7_800, 63)];
+let weekends = [(12_400, 58), (9_900, 61), (14_200, 57)];
+Scatter::new("Steps and resting heart rate")
+    .description("A point for each day, Arjun Mehta")
+    .locale("en-IN")
+    .series(PointSeries::new("Weekdays", weekdays).ink(Ink::slot(1)))
+    .series(PointSeries::new("Weekends", weekends).ink(Ink::slot(2)))
+    .x_name("Steps")
+    .y_name("Resting heart rate")
+    .y_unit("BPM")
+    .x_axis(Axis::new().line())
+    .y_axis(Axis::new().line())
+    .grid(Gridlines::horizontal().dashed())
+    .y_domain(Domain::padded(2))
+    .reference(Reference::average().label("Average {value}"))
+```
+
+`.reference(...)` also draws a level of y across the plot: `Reference::level(value)`, `Reference::zero()`, or `Reference::average()`, the average y of the first series (`average_of(i)` for another). `{value}` in its label is the level as the chart writes y. A level outside the plot is left out.
+
+<UiPreview example="scatter-chart/axes" />
+
+## Points
+
+A point is a small circle, 3.5 pixels in radius by default: `.point_size(radius)` sets it, 1 to 12. `.opacity(0.65)` sets how opaque a point is, 0.1 to 1; where points overlap they add up. `.height(px)` sets the plot's height, 80 to 800 (280 by default).
+
+A few hundred points are cheap, and a chart draws at most 2,000: past that it keeps every k-th point of each series, so each keeps its share, and a note says how many are drawn. The table lists the points drawn.
+
+## Motion
+
+`.motion(Motion::new())` fades each series in after the one before. The points are drawn finished, so a reader who asks for less motion sees the final state.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty). A chart with no point is empty.
+
+<UiPreview example="scatter-chart/states" />
+
+## The table
+
+The table has a row for each point drawn: its name, its x and its y, and its series when there are several. See [The table](/docs/components/line-chart/#the-table). The words the chart writes are fields of [`GridLabels`](/docs/components/calendar-heatmap/#words), passed to `.words(...)`.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the chart, which is one tab stop. |
+| `→`, `↓` | Moves to the next point, in the order of the table. |
+| `←`, `↑` | Moves to the previous point. |
+| `Home`, `End` | Moves to the first or the last point. |
+| `Page Up`, `Page Down` | Moves a tenth of the way back or on, and at least one point. |
+| `Esc` | Hides the tooltip. |
+
+- The chart is a group named by its title and described by its summary, a sentence for each series: how many points, the range and the average of x and of y, and the correlation when there is one.
+- A move by key shows the point's tooltip and is announced politely: its name, its x and its y, and its series. With a pointer, the tooltip shows the point under it.
+- A chart of several series has a legend, and series are told apart by their names in the legend, the tooltip and the table, never by colour alone.
+
+</UiA11y>
+
+## API
+
+### Scatter
+
+<UiProps type="Scatter" />
+
+### PointSeries
+
+<UiProps type="PointSeries" />
+
+### GridLabels
+
+<UiProps type="GridLabels" />

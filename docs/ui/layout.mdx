@@ -39,6 +39,31 @@ Items in a row are centred across it. `.wrap()` lets them wrap onto more lines; 
 
 <UiPreview example="layout/grid" />
 
+`Grid::fit(min)` is the grid for a row of tiles: as many columns as fit, each at least `min` rem wide (8, 10, 12, 14, 16, 20 or 24; another number takes the nearest), sharing the width equally. It runs from one column on a phone to six on a wide screen with no breakpoint to choose, so a row of [Stat](/docs/components/stat/) tiles wraps by the room it has.
+
+```rust
+use navree::ui::*;
+
+Grid::fit(12).gap(3).children((
+    Stat::new("Steps", "9,412"),
+    Stat::new("Sleep", "7 h 20 min"),
+    Stat::new("Resting heart rate", "58 bpm"),
+))
+```
+
+### Columns in a ratio
+
+`Grid::ratio([7, 5])` makes columns of unequal width, in the ratio of the parts: a wide column of trends beside a narrower one of notes, or `[3, 2]`, or `[1, 2, 1]`. Two to four columns, each part 1 to 12. From 768 px up the columns stand side by side; on a phone they stack in the order given.
+
+```rust
+use navree::ui::*;
+
+Grid::ratio([7, 5]).gap(4).children((
+    Card::new().title("Trends").body(Text::new("The last 30 nights.")),
+    Card::new().title("Notes").body(Text::new("What changed this week.")),
+))
+```
+
 ## Spanning columns
 
 `.span(n)` on any component makes it take `n` columns of its grid.

@@ -244,13 +244,14 @@ impl Funnel {
             note: None,
         };
         #[cfg(feature = "native-preview")]
-        let native = {
+        {
             let values: Vec<Option<f64>> = self.stages.iter().map(|stage| stage.value).collect();
-            crate::native::chart_numbers(
+            crate::native::record_chart_numbers(
+                &self.common.id(),
                 self.stages.iter().map(|stage| stage.name.as_str()),
                 std::iter::once((&*labels.value, values.as_slice())),
-            )
-        };
+            );
+        }
         Some(Drawn {
             legend: None,
             body: el("ol")
@@ -272,8 +273,8 @@ impl Funnel {
                 )
             }),
             interactive: true,
-            #[cfg(feature = "native-preview")]
-            native,
+            text: false,
+            tip: None,
         })
     }
 }

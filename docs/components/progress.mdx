@@ -52,6 +52,20 @@ Progress::new(640, 1000, "Importing contacts")
     .show_value()
 ```
 
+## Painted
+
+`.fill(Gradient)`, `.ink(Ink)`, `.colors(ColorScale)`, `.goal(value)`, `.glow()`, `.height(px)` and `.motion(Motion)` draw the bar as a meter: an SVG track with a rounded fill in a gradient, a theme colour or the colour of its value's band, a goal marker, a glow, and a fill that grows in. It keeps the progress bar's role and values. Say the goal and what a colour means in the label as well.
+
+```rust
+Progress::new(402, 480, "Sleep, 6 h 42 min against a goal of 7 h")
+    .fill(Gradient::horizontal().stop(0.0, Ink::slot(7)).stop_with_opacity(1.0, Ink::slot(7), 0.6))
+    .goal(420)
+    .height(12)
+    .motion(Motion::new())
+```
+
+<UiPreview example="progress/painted" />
+
 ## Keyboard and accessibility
 
 <UiA11y>

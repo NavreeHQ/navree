@@ -90,6 +90,8 @@ impl Request {
         };
         let at = match usize::try_from(key).ok().and_then(|key| key.checked_sub(1)) {
             Some(at) if at < hints.len() => at,
+            // Past the keys a mark can carry, nothing more is said.
+            _ if hints.len() + 1 >= crate::hint::KEYS => return 0,
             _ => {
                 hints.push(crate::hint::Hints::default());
                 hints.len() - 1

@@ -1,0 +1,79 @@
+/* Grid charts: the calendar and matrix heat maps and the scatter plot, linked on a page that
+   draws one, after the charts sheet (the frame, the legend, the tooltip and the table are
+   there). A heat map is steps of one ink mixed into the surface: --c is the ink (data-color,
+   data-tone), --surface the page, so a theme's tokens set both and light and dark have a
+   ramp each. Nothing here needs a style attribute. */
+
+/* The steps. Zero is the ramp's faintest step, a wash of the ink; a day with no data is hollow. */
+[data-slot=heat-cell][data-level=none]{background:none;outline:1px dashed var(--line-2);outline-offset:-1px}
+:is([data-slot=heat-cell],[data-slot=heat-key]){background:var(--bg)}
+[data-level="0"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 16%,var(--surface)),color-mix(in oklab,var(--c) 18%,var(--surface)))}
+[data-level="1"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 34%,var(--surface)),color-mix(in oklab,var(--c) 40%,var(--surface)))}
+[data-level="2"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 54%,var(--surface)),color-mix(in oklab,var(--c) 60%,var(--surface)))}
+[data-level="3"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 76%,var(--surface)),color-mix(in oklab,var(--c) 80%,var(--surface)))}
+[data-level="4"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:var(--c)}
+/* A link's strength, six steps. */
+[data-m="1"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 16%,var(--surface)),color-mix(in oklab,var(--c) 24%,var(--surface)))}
+[data-m="2"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 30%,var(--surface)),color-mix(in oklab,var(--c) 40%,var(--surface)))}
+[data-m="3"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 46%,var(--surface)),color-mix(in oklab,var(--c) 56%,var(--surface)))}
+[data-m="4"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 62%,var(--surface)),color-mix(in oklab,var(--c) 72%,var(--surface)))}
+[data-m="5"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 80%,var(--surface)),color-mix(in oklab,var(--c) 88%,var(--surface)))}
+[data-m="6"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:var(--c)}
+[data-result=ns]:is([data-slot=heat-cell],[data-slot=heat-key]){background:color-mix(in oklab,var(--fg) 12%,var(--surface))}
+[data-result=none]:is([data-slot=heat-cell],[data-slot=heat-key]){background:none;outline:1px dotted var(--line-2);outline-offset:-1px}
+[data-result=self]{visibility:hidden}
+
+[data-slot=heat-cell]{box-sizing:border-box;width:var(--cell);height:var(--cell);flex:none;border-radius:max(2px,calc(var(--cell) * .16));forced-color-adjust:none}
+[data-slot=heat-cell][data-active]{outline:2px solid var(--fg);outline-offset:1px;position:relative;z-index:1}
+[data-slot=heat-pad]{width:var(--cell);height:var(--cell);flex:none}
+[data-slot=heat-key]{display:inline-block;width:12px;height:12px;flex:none;border-radius:2px;forced-color-adjust:none}
+[data-slot=heat-legend]{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0;padding:0;list-style:none;font-size:11px;color:var(--fg-3);justify-content:flex-end;& li{display:inline-flex;align-items:center;gap:.375rem}}
+[data-slot=heat-legend-word]{padding-inline:4px}
+[data-kind=matrix-heatmap] [data-slot=heat-legend]{justify-content:flex-start;gap:.375rem 1rem}
+
+/* The calendar: a column for each week, scrolling sideways when it is wider than the chart. */
+[data-kind=calendar-heatmap] [data-slot=chart-body],[data-kind=matrix-heatmap] [data-slot=chart-body]{overflow-x:auto;scrollbar-width:thin}
+[data-slot=heat],[data-slot=heat-matrix]{--cell:12px;--gap:3px;--head:18px}
+[data-slot=heat]{display:flex;gap:6px;width:max-content;padding-inline-end:1.5rem}
+[data-slot=heat-weeks]{display:flex;gap:var(--gap)}
+[data-slot=heat-week]{position:relative;display:flex;flex-direction:column;gap:var(--gap);padding-top:var(--head)}
+[data-slot=heat-days]{display:flex;flex-direction:column;gap:var(--gap);padding-top:var(--head);font-size:11px;color:var(--fg-3);white-space:nowrap;& span{height:var(--cell);line-height:var(--cell)}}
+[data-slot=heat-month]{position:absolute;top:0;inset-inline-start:0;font-size:11px;line-height:var(--head);color:var(--fg-3);white-space:nowrap}
+@container (min-width:560px){[data-slot=heat]:not([data-weeks=huge]){--cell:16px;--gap:4px}}
+@container (min-width:820px){[data-slot=heat][data-weeks=short]{--cell:24px}}
+
+/* The matrix: a row for each measure, headers cut to the cell and named in full by the tooltip. */
+[data-slot=heat-matrix]{--cell:40px;--head-w:6.5rem;display:flex;flex-direction:column;gap:var(--gap);width:max-content;padding-inline-end:.5rem}
+@container (min-width:520px){[data-slot=heat-matrix]{--cell:48px}}
+@container (min-width:760px){[data-slot=heat-matrix]{--cell:56px;--head-w:8rem}}
+[data-slot=heat-row]{display:flex;align-items:center;gap:var(--gap)}
+[data-slot=heat-corner],[data-slot=heat-rowhead]{flex:none;width:var(--head-w)}
+[data-slot=heat-rowhead]{padding-inline-end:6px;text-align:end;font-size:12px;color:var(--fg-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-slot=heat-colhead]{flex:none;width:var(--cell);font-size:11px;text-align:center;color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is([data-slot=heat-rowhead],[data-slot=heat-colhead])[data-active]{color:var(--fg);font-weight:600}
+[data-slot=heat-matrix] [data-slot=heat-cell]{display:grid;place-items:center;font-size:11px;font-variant-numeric:tabular-nums;color:var(--fg)}
+/* A value in a cell is black or white, whichever has more contrast with the step: black above a relative luminance of .179. */
+[data-slot=heat-matrix] [data-m]{color:color(from var(--bg) srgb-linear clamp(0,(.179 - .2126 * r - .7152 * g - .0722 * b) * 1000,1) clamp(0,(.179 - .2126 * r - .7152 * g - .0722 * b) * 1000,1) clamp(0,(.179 - .2126 * r - .7152 * g - .0722 * b) * 1000,1))}
+
+/* The scatter: translucent points that darken where they pile up; the hit area is wider than the dot. */
+[data-slot=chart-points]{fill:var(--c)}
+[data-slot=chart-points] circle{stroke:transparent;stroke-width:8px;pointer-events:all;transition:fill-opacity .1s}
+[data-slot=chart-points] circle[data-active]{fill-opacity:1;stroke:var(--fg);stroke-width:1.5px}
+[data-slot=chart] svg text[data-axis-name]{fill:var(--fg-2);font-weight:500}
+[data-slot=chart-frame][data-square]{width:fit-content;max-width:100%;margin-inline:auto}
+[data-kind=scatter] [data-slot=chart-plot]{max-width:100%}
+
+/* A ranked list of relations: the pair and its signed value, a bar from the centre (right
+   for a link that moves together, left for one that moves apart) and a note. */
+[data-slot=relation-list]{display:flex;flex-direction:column;gap:.875rem;margin:0;padding:0;list-style:none}
+[data-slot=relation]{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:.25rem .75rem;font-size:13px}
+[data-slot=relation-pair]{color:var(--fg-1);font-weight:500;overflow-wrap:anywhere}
+[data-slot=relation-value]{font-weight:700;font-variant-numeric:tabular-nums;color:color-mix(in oklab,var(--c,var(--fg-2)) 78%,var(--fg))}
+[data-result=ns] > [data-slot=relation-value]{color:var(--fg-3)}
+[data-slot=relation-bar]{grid-column:1/-1;display:block;width:100%;height:8px;overflow:visible}
+[data-slot=relation-track]{fill:color-mix(in oklab,var(--fg) 7%,transparent)}
+[data-slot=relation-fill]{fill:var(--c,color-mix(in oklab,var(--fg) 30%,transparent))}
+[data-slot=relation-centre]{stroke:var(--line-3);stroke-width:1.5px;vector-effect:non-scaling-stroke}
+[data-slot=relation-note]{grid-column:1/-1;font-size:12px;color:var(--fg-3)}
+[data-slot=relation-bar]:dir(rtl){scale:-1 1}
+@media (forced-colors:active){[data-slot=relation-fill]{fill:CanvasText}[data-slot=relation-track]{fill:Canvas;stroke:GrayText}}

@@ -14,5 +14,7 @@ error[E0277]: `f64` cannot be a model key
 note: required by a bound in `navree_orm::Model::Key`
  --> src/model.rs
   |
+  | pub trait Model: Clone + Send + Sync + Serialize + 'static {
+  |     /// The key's Rust type.
   |     type Key: PrimaryKey;
   |               ^^^^^^^^^^ required by this bound in `Model::Key`

@@ -1,0 +1,41 @@
+---
+title: "Auth layout"
+description: "The page of one form a guest fills in, such as signing in or up: the form centred, the app's own panel beside it on wide screens."
+---
+
+<UiPreview example="auth-layout/default" />
+
+`AuthLayout` is the page of one form a guest fills in: signing in, signing up, choosing a new password. The form stands centred in the window, a panel beside it holds the app's mark, a line about it and a picture, and the top corner holds a theme menu. navree-auth's [`AuthPages`](/docs/basics/sessions-and-csrf/#the-pages) draws every page in it, in the app's own look.
+
+```rust
+use navree::ui::*;
+use navree::ui::theme::{Appearance, Theme, ThemeMenu};
+
+let card = Stack::gap(4).children((
+    Heading::h1("Sign in"),
+    Card::new().body(Text::new("The sign-in form goes here.")),
+));
+AuthLayout::new(card)
+    .aside(Stack::gap(4).children((
+        Heading::h2("Your health, clearly understood."),
+        Text::new("Sleep, heart and steps, scored every day."),
+    )))
+    .aside_label("About Kesar")
+    .corner(ThemeMenu::new(&Appearance::default(), &[Theme::NAVREE]).back("/sign-in"))
+```
+
+The panel shows from 960 px up. On a phone the form stands alone and first, so nothing pushes it below the fold.
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The form's part is the page's `main` landmark, with the id `main` a skip link points at.
+- The panel is a `complementary` landmark named by `aside_label` ("About" by default).
+- The corner comes before the form in the page, so Tab reaches the theme menu first; a form whose first field has `autofocus`, as the sign-in form does, starts there.
+
+</UiA11y>
+
+## API
+
+<UiProps type="AuthLayout" />

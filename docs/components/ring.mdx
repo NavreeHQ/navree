@@ -1,0 +1,163 @@
+---
+title: "Ring"
+description: "One value on a ring: a score out of 100 or steps toward a goal, with the value in the middle, a second lap past the goal, and a colour, a gradient or a band. Drawn as SVG on the server."
+---
+
+<UiPreview example="ring/default" />
+
+`Ring` shows one value against a whole: a sleep score out of 100, steps toward a goal of 10,000, the share of a budget spent. The arc starts at twelve o'clock and runs clockwise, and the middle holds the value, with a label in small capitals and a quieter line under it.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Ring::new("Sleep score", 82)
+    .label("Sleep score")
+    .sublabel("Great recovery")
+    .fill(Gradient::sheen(Ink::slot(7)))
+    .glow()
+    .size(200)
+    .motion(Motion::new().delay(200))
+```
+
+A ring usually sits in a card that has a heading already, so its title is for assistive technology: it names the picture, and the summary describes it, "Sleep score: 82 of 100, 82%." `.show_title()` writes the title over the ring as a caption and adds the switch that shows the table.
+
+## When to use it
+
+Use a ring for one value with a clear whole: a score, a goal, a share. For a few values, each against its own goal, use [rings](/docs/components/rings/) inside each other. For a value on a scale that starts above zero, or with zones, use a [gauge](/docs/components/gauge/), or a [range scale](/docs/components/range-scale/) in a line of text. For a number with no whole, use a [Stat](/docs/components/stat/); its `aside` holds a small ring beside the figure. For the parts of a whole, use a [meter](/docs/components/meter/) or a [donut](/docs/components/donut-chart/).
+
+## Anatomy
+
+<UiAnatomy component="ring" />
+
+## The value and its goal
+
+The scale runs from 0 to 100 unless `.max(goal)` sets its top, and the arc runs as far round as the value's share of it. A value past the goal draws a second lap over the first, brighter, so 12,450 steps against a goal of 10,000 is a full ring and a quarter more. A value that is missing or not a number draws the empty state, never a zero.
+
+`.unit("%")` writes what the value counts after it: a sign such as `%` or `°C` sits against the number, and a word such as `kcal` gets a space. `.format(NumberFormat)` writes the value, and `.locale("en-IN")` groups it in lakh and crore.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Ring::new("Steps this month, Neha Sharma", 2_84_500)
+    .max(3_00_000)
+    .locale("en-IN")
+    .label("Steps")
+    .sublabel("This month")
+    .fill(Gradient::sheen(Ink::slot(3)))
+```
+
+<UiPreview example="ring/goal" />
+
+## The middle
+
+By default the middle holds the value, with `.label(...)` in small capitals under it and `.sublabel(...)` under that. The label also names the summary and the row of the table. Under 96 pixels there is no room inside, so the label and the sublabel are written under the ring.
+
+`.center_icon(icon)` puts an icon in the middle instead, `.center(node)` markup of your own, and `.center_none()` leaves it empty. The middle is hidden from assistive technology, which reads the summary, so when it says something of its own, say the same in the title: with no label, the title names the summary.
+
+<UiPreview example="ring/middle" />
+
+## Paint
+
+`.ink(Ink)` colours the arc with any colour of the theme, and `.tone(Tone)` by what it means. `.fill(Gradient)` paints it with a gradient that spans the whole ring, so the colour moves round it: `Gradient::sheen(ink)` turns a colour brighter along the diagonal, and a gradient of your own takes any stops, with `Ink::own()` as the arc's own colour. `.glow()` puts a soft glow of the arc's colour round it, and `.halo()` a thin ring just outside the track.
+
+`.track(RingTrack)` says what lies under the arc: a faint grey (`RingTrack::Theme`, the default), a faint tint of the arc's colour (`RingTrack::Tinted`) or nothing (`RingTrack::None`).
+
+<UiPreview example="ring/paint" />
+
+Colours are theme tokens, so a ring is right in light and dark and in every theme. Past its goal, each of the eight chart colours shows its sheen's far end and a second lap that stands apart from the first:
+
+<UiPreview example="ring/ends" />
+
+### Colour by band
+
+`.colors(ColorScale)` colours the arc by the band its value falls in. The thresholds are in the value's own units. Name each band with `label`: the summary and the table say the band, so the colour is never alone.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Ring::new("Recovery, Simran Kaur", 87)
+    .label("Recovery")
+    .unit("%")
+    .colors(
+        ColorScale::new(Ink::tone(Tone::Danger))
+            .label("Low")
+            .from(34, Ink::tone(Tone::Warning))
+            .label("Fair")
+            .from(67, Ink::tone(Tone::Success))
+            .label("Recovered"),
+    )
+    .glow()
+    .size(160)
+```
+
+<UiPreview example="ring/colors" />
+
+## Sizes
+
+`.size(px)` sets the drawing's width, 24 to 320 pixels (120 by default). `.size_on(Screen::Lg, 160)` gives it another width from a screen width up: `Screen::Sm` from 640 pixels, `Screen::Md` from 768 and `Screen::Lg` from 1024. The arc, its thickness and the words in the middle all scale with it, and no style attribute is written. `.thickness(px)` sets the arc's thickness at the base size; by default it grows with the size, a little thicker for its size when small.
+
+<UiPreview example="ring/sizes" />
+
+`.inline()` draws the ring small for a pill, a button or a table row: the picture alone in a span, named by its summary, with no caption and no table.
+
+## Motion
+
+`.motion(Motion::new())` draws the arc on from twelve o'clock and counts the value up, and a second lap draws after the first. `.delay(ms)` waits before it starts. Motion is only a way in: the ring is drawn finished, so a reader who asks for less motion, a page with no script and an image renderer all see the final ring.
+
+## Words
+
+The words every chart writes are its [`ChartLabels`](/docs/components/line-chart/#formats-and-languages). The ones only a radial chart writes, such as the Goal column and the summary's template, are fields of `RadialLabels`: change the ones you need and pass it to `.radial_labels(...)`.
+
+```rust
+use navree::ui::charts::*;
+
+let mut words = RadialLabels::english();
+words.goal = "लक्ष्य".into();
+Ring::new("कदम", 6_420)
+    .max(10_000)
+    .locale("hi")
+    .radial_labels(words)
+```
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty). A loading ring is a round placeholder the size of the ring, and [`ChartSkeleton::ring`](/docs/components/chart-skeleton/) holds its place in a region that loads late.
+
+<UiPreview example="ring/states" />
+
+## The table
+
+One row, named by the label or the title: the value, the goal and the share, and the band when the ring has one. The table is for screen readers only by default; `.show_title()` adds the switch that shows it, and `.table(TableMode)` sets it yourself. See [The table](/docs/components/line-chart/#the-table).
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The ring is a picture named by its title and described by its summary: "Sleep score: 82 of 100, 82%." With a band, the summary ends with the band's name. It is not a tab stop, because it has one value.
+- The drawing and the middle are hidden from assistive technology: the summary and the table say the same.
+- An inline ring is a picture named by its summary.
+- A band's colour is never alone: its name is in the summary and the table.
+- Nothing moves for a reader who asks for less motion.
+
+</UiA11y>
+
+## API
+
+### Ring
+
+<UiProps type="Ring" />
+
+### RingTrack
+
+<UiProps type="RingTrack" />
+
+### Screen
+
+<UiProps type="Screen" />
+
+### RadialLabels
+
+<UiProps type="RadialLabels" />

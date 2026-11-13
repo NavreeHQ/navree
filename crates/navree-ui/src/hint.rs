@@ -128,7 +128,7 @@ pub enum ColumnRole {
 }
 
 #[cfg(feature = "native-preview")]
-pub(crate) use marks::{mark, role_of};
+pub(crate) use marks::{key_mark, key_of, mark, role_of, KEYS};
 
 /// The marks a hint is written into the tree with: a zero-length slice of a
 /// text of the toolkit's own, which writes nothing wherever it stands, so the
@@ -142,6 +142,35 @@ mod marks {
     /// The text the marks are slices of. Its first byte is no mark, so a slice
     /// that ends another text just before it is never read as one.
     static MARKS: &str = "--------";
+
+    /// How many keys of what an element says there can be in one request.
+    pub(crate) const KEYS: usize = 1 << 16;
+
+    const KEY_BYTES: [u8; KEYS] = [b'-'; KEYS];
+
+    /// The text the keys are slices of: a key is where its slice starts.
+    static KEY_TEXT: &str = match std::str::from_utf8(&KEY_BYTES) {
+        Ok(text) => text,
+        Err(_) => "",
+    };
+
+    /// The mark that carries `key`, which is at least 1. `None` past the keys there are.
+    pub(crate) fn key_mark(key: u32) -> Option<Node> {
+        let at = usize::try_from(key).ok().filter(|at| (1..KEYS).contains(at))?;
+        Some(Node::Static(&KEY_TEXT[at..at]))
+    }
+
+    /// The key a node carries, when it is a mark of one.
+    pub(crate) fn key_of(node: &Node) -> Option<u32> {
+        let Node::Static(text) = node else {
+            return None;
+        };
+        if !text.is_empty() {
+            return None;
+        }
+        let at = (text.as_ptr() as usize).checked_sub(KEY_TEXT.as_ptr() as usize)?;
+        (1..KEYS).contains(&at).then(|| u32::try_from(at).ok()).flatten()
+    }
 
     /// The mark of `role`.
     pub(crate) fn mark(role: Role) -> Node {

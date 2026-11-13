@@ -65,6 +65,18 @@ pub use routes::{LOWERING, Stamp};
 pub(crate) use routes::{Routes, app_stamp};
 pub(crate) use slots::chart::written as chart_numbers;
 
+/// Keeps the typed values of the chart `id`: its labels and its series, written only
+/// while a native client asks.
+pub(crate) fn record_chart_numbers<'a>(
+    id: &str,
+    labels: impl Iterator<Item = &'a str>,
+    series: impl Iterator<Item = (&'a str, &'a [Option<f64>])>,
+) {
+    if let Some(values) = chart_numbers(labels, series) {
+        record_chart(id, values);
+    }
+}
+
 /// Keeps the tree of the table rows written as `html` for the native client whose
 /// request is current; a browser's request keeps nothing.
 pub(crate) fn keep_rows(html: &str, rows: Node) {

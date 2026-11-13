@@ -1,0 +1,117 @@
+---
+title: "App styles and fonts"
+description: "An app links its own stylesheet and typefaces from a page, served under the toolkit's content security policy, with a brand theme that keeps the toolkit's contrast checks."
+---
+
+<UiPreview example="app-styles/brand" />
+
+A theme sets the colours, the corners, the density and a text face from a short list. An app that wants its own art direction, a backdrop behind a headline, a typeface of its own, a rhythm the components don't have, adds two files of its own: a stylesheet and a font. The toolkit serves both the way it serves its own, so the page keeps its policy of files from its own origin and nothing inline.
+
+```rust
+use navree::prelude::*;
+use navree::ui::theme::{Appearance, Mode, Rgb, Theme, ThemeId};
+use navree::ui::*;
+
+/// The stylesheet and the font, compiled into the app: a file past its ceiling fails the build.
+/// An app writes `include_bytes!("../assets/brand.css")` and a woff2 file; the bytes here stand in.
+static BRAND: AppSheet = AppSheet::new("brand", b".hero{background:var(--ink-1)}", 16 * 1024);
+static DISPLAY: AppFont = AppFont::new("display", "Fraunces", b"wOF2....", 160 * 1024).weights(400, 700);
+
+// In one of the app's modules: the toolkit serves both.
+fn register(m: &mut ModuleBuilder) {
+    m.contribute(BRAND);
+    m.contribute(DISPLAY);
+}
+
+fn shell() -> Shell {
+    Shell::new("Sutlej Fit")
+        .appearance(Appearance::new(brand_theme(), Mode::System))
+        .font(&DISPLAY)
+        .stylesheet(&BRAND)
+}
+
+fn brand_theme() -> Theme {
+    // The brand's accent in both palettes, with the text on it and the focus ring derived.
+    let spec = Theme::NAVREE.spec().with_accent(Rgb::hex(0x2dd4bf), Rgb::hex(0x0f766e));
+    Theme::custom(ThemeId::parse("sutlej-fit").unwrap(), "Sutlej Fit", spec).unwrap()
+}
+```
+
+A page that isn't in the shell links them on its `View`: `View::new("Today").font(&DISPLAY).stylesheet(&BRAND)`. `Shell::stylesheet` and `Shell::font` put them on every page of the shell, and `AppPage::stylesheet` adds one to a single page.
+
+## What is served
+
+Each file is named by its content hash and served from the toolkit's mount, under `/_navree/ui/app/`:
+
+| File | Address |
+|---|---|
+| A stylesheet | `/_navree/ui/app/brand-3f9a1c07b2de.css` |
+| A font | `/_navree/ui/app/display-81d0a6c2e4f7.woff2` |
+| A font's `@font-face` rule | `/_navree/ui/app/display.face-5b7e22a91c40.css` |
+| A picture | `/_navree/ui/app/mark-7c1e90d4a2b6.svg` |
+
+They are cached for good (`immutable`) under the current hash, and an older hash still gets the file, uncached, so a page that stays open across a deploy keeps working. A stylesheet comes with its brotli form. A name that the app didn't contribute is a 404, and a path can't reach out of the mount.
+
+## Pictures
+
+The app's mark, its logo or an illustration every page shows is an `AppImage`: an SVG, PNG, WebP, JPEG, AVIF, GIF or ICO file compiled in, told apart by its first bytes, and contributed like a sheet. It is served under its hash and cached for good. A picture is inert because of how it is used: an `<img>` never runs an SVG's script, and opened on its own it is served under a content security policy that runs nothing, loads nothing and sandboxes it (`default-src 'none'; style-src 'unsafe-inline'; sandbox`). As a guard against mistakes, an SVG file with a `<script>` or `<foreignObject>` element, an `on…=` event attribute or a `javascript:` address fails the build, but that check can be got round and is not what makes the file safe. Never write an `AppImage`'s bytes into a page, with `SafeHtml::trusted` or as an inline `<svg>`: there only the page's own policy would stand between its script and the reader.
+
+```rust
+use navree::ui::*;
+
+/// The mark, compiled in: an app writes `include_bytes!("../assets/mark.svg")`.
+static MARK: AppImage = AppImage::new(
+    "mark",
+    br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15"/></svg>"#,
+    8 * 1024,
+);
+
+// In one of the app's modules: m.contribute(MARK);
+fn branded() -> (Shell, Picture) {
+    let shell = Shell::new("Kesar").logo(&MARK);
+    let hero = Picture::new(&MARK, "The Kesar mark", 96, 96);
+    (shell, hero)
+}
+```
+
+## Stylesheets
+
+A page links the app's stylesheets after everything else in its head: the toolkit's sheet, the sheets of the modules it uses, and its theme. A rule of yours wins over a rule of equal weight, and the sheets load in the order you add them, each once.
+
+Keep to the toolkit's tokens (`var(--accent)`, `var(--ink-1)`, `var(--line)`, `var(--fg)`), so what you write follows light and dark and the theme's accent. The sample at the top draws its backdrop from `color-mix()` over the accent and a chart colour, and a heading in the theme's text colour:
+
+```css
+.brand-hero {
+  background:
+    radial-gradient(120% 160% at 0% 0%, color-mix(in oklab, var(--accent) 20%, transparent), transparent 62%),
+    var(--ink-1);
+}
+```
+
+There is no `style` attribute and no `<style>` element on a Navree page, so the app's look is always a class or a data attribute in a file. The toolkit's own classes and slots (`[data-slot=stat]`) are open to your rules the same way.
+
+## Fonts
+
+`AppFont` is one woff2 file with the rule that names it: the family, the weights it covers (`weight(600)`, or `weights(100, 900)` for a variable font), `italic()`, and what the browser does while it loads (`display(FontDisplay::Swap)` by default). A page that links it preloads the file, so text paints in it on first load, and links the rule. A font that only some pages use is `lazy()`: it is fetched when text that needs it is drawn.
+
+Use the family in the app's sheet, as `font-family: "Fraunces", serif`, or as the page's text face:
+
+```css
+:root {
+  --font-sans: "Fraunces", system-ui, sans-serif;
+}
+```
+
+The file must be woff2, and the family is letters, digits, spaces and `-` only: both are checked when the app compiles, so a rule can't carry anything but a family.
+
+## A brand theme
+
+`Theme::custom` takes a palette for light and one for dark, and refuses a theme whose text falls short of WCAG AA (4.5:1) in either. `ThemeSpec::with_accent(dark, light)` sets a brand's accent in both and derives what reads on and around it: the text on the accent (white where white reads, else a deep shade of its hue), the accent as text, moved toward the page's text until it reaches 4.5:1 on every surface, and the focus ring at 3:1. A pale yellow or a deep indigo works as an accent, and a palette that still fails is refused with the pairs that fall short. The [theme builder](/docs/ui/theme-builder/) does the same with a form and exports the Rust.
+
+The chart colours stay the toolkit's eight, tested for 3:1 on every surface and for colour-blind separation. A brand's own chart set needs its own check.
+
+<UiProps type="AppSheet" />
+
+<UiProps type="AppFont" />
+
+<UiProps type="FontDisplay" />

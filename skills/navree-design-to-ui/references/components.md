@@ -12,8 +12,9 @@ teaches building the pages themselves, and has the full index of components.
 Each component is a Rust struct with builder methods that becomes a
 `Node`. Variants are enums, so a typo doesn't compile. Components carry no
 outer margin: spacing between them comes from `Stack`, `Row` and `Grid`.
-The stylesheet reads only `data-*` attributes: a `class` does nothing, and
-`style` is dropped.
+The toolkit's stylesheet reads only `data-*` attributes: a `class` does
+nothing unless the app's own stylesheet (`AppSheet`) styles it, and `style`
+is dropped.
 
 ## The frame
 
@@ -60,6 +61,25 @@ The stylesheet reads only `data-*` attributes: a `class` does nothing, and
 | Funnel | `Funnel::new(title).stage(Stage::new(name, count))` |
 | Trend beside a figure | `Stat::new(..).chart(Sparkline::new(title, values))` |
 | A report over a date window (Reports) | `Report::from_query(..)`, `report.chart(Chart::bar(title)).series(..)` |
+| A ring of progress, a score in a circle | `Ring::new(title, value).max(goal).label(..).sublabel(..)`; several against their goals: `Rings::new(title).ring(RingValue::new(name, value).max(goal))` |
+| A speedometer, a dial with bands | `Gauge::new(title, value).min(..).max(..).sweep(degrees).zone(Zone::new(from, to).label(..))` |
+| A day round a clock face | `DayClock::new(title).values(24 values).category(..).moment(Moment::new(hour, name))` |
+| A bar split into parts, sleep stages, time in zones | `Meter::new(title).segment(Segment::new(name, value).ink(..))`, `.minutes()`, `.compact()` in a table cell |
+| Small stacked columns per item | `MiniColumns::new(title).part(name, ink).column(MiniColumn::new(name, [values]))` |
+| A strip of coloured cells over time | `ColorStrip::new(title)` with `.category(..)` and `.cells(..)`, or `.colors(ColorScale)` and `.readings(..)` |
+| A reading on a scale between two ends | `RangeScale::new(title, value).range(min, max).ends(low, high).track(Gradient)` |
+| A change with an arrow, green or red | `Trend::new(change)`, `.up_is_bad()`, on a figure with `Stat::change(..)` |
+| A habit calendar, a contribution grid | `CalendarHeatmap::new(title).days((date, Some(value)))`, `.steps(HeatSteps::at(a, b, c))`; a missing day is hollow |
+| A correlation matrix, ranked pairs | `MatrixHeatmap::new(title).metrics(..).relation(a, b, Relation::new(r))`, `RelationList::new(title).relation(..)` |
+| A scatter plot | `Scatter::new(title).series(PointSeries::new(name, pairs))` |
+| Gradient strokes, glow, colour by band, marks growing in | `Gradient`, `Ink`, `ColorScale`, `.glow()`, `Motion`; see `navree-ui`'s `references/charts.md` |
+| A chart-shaped placeholder while loading | `ChartSkeleton::ring(size)`, `gauge`, `line`, `bars`, `heat_map`, `matrix`, `meter` |
+| A "?" or (i) beside a heading that explains it | `InfoTip::new(id, about).title(..).body(..)` |
+| A floating bar of icon links at the bottom (phones) | `Dock::new(label).below(Screen::Md).item(DockItem::new(label, href).icon(..).current())` |
+| Previous day, the date, next day | `DayPager::new(id, day).previous(href).next(href).scores(..)`, in the top bar with `AppPage::topbar(..)` |
+| A link or key with a Copy button | `CopyField::new(id, label, value)` |
+| A paced breathing circle | `BreathingGuide::new(id, title)` |
+| A responsive image, light and dark screenshots | `Picture::new(src, alt, width, height).srcset(..).webp(..).dark(..)` |
 | Person picture | `Avatar::image(src, alt)`, `Avatar::placeholder(label)`: no initials, no letter tile |
 | People side by side, the rest as `+N` | `AvatarGroup::new(label).max(3).total(count).children((Avatar::placeholder(..), ..))` |
 | List row with media and actions | `Item::new(title).media(..).description(..).actions(..).href(..)`, `ItemVariant` |
@@ -258,6 +278,34 @@ The handler returns a `View` of just that part.
 | A light design, a dark design, "follow the device" | `Mode::Light`, `Mode::Dark`, `Mode::System` in `Appearance::new(theme, mode)` |
 | Brand colours, other corners, density or font | a built-in theme (`Theme::NAVREE`, `NEUTRAL`, `OCEAN`, `VIOLET`, `SUNSET`, `ROSE`, `CONTRAST`), or a theme of the app's own from the theme builder (`Theme::custom`); see `tokens.md` |
 | A theme per workspace or per person | `shell.workspace(ThemeSetting)` (`.locked()`), `shell.user_theme(ThemeSetting)`, `Shell::theme_menu()` |
+| A brand typeface, a backdrop or rhythm a theme can't say, the app's logo | `AppFont`, `AppSheet` and `AppImage`, compiled in and served by the toolkit; `Shell::font(..)`, `.stylesheet(..)`, `.logo(..)` |
+| How the browser's tab reads | `Shell::title_template("{} · App")`, `AppPage::document_title(..)` |
+| Sign-in and sign-up pages with the app's panel beside the form | `AuthPages` with `.sign_up()`, `.aside(..)`, `.theme_menu()`; a guest page of your own in an `AuthLayout` |
+
+## Public pages
+
+A public website from the same app: the blocks of `navree::ui::marketing`,
+with no script. `navree-ui`'s `references/app-and-site-blocks.md` has the code.
+
+| Design element | navree-ui |
+|---|---|
+| The whole page, skip link and landmarks | `SitePage::new().header(..).section(..).footer(..)` |
+| Header with links, buttons and a phone menu | `SiteHeader::new(Brand::new(name, href)).link(..).action(..)` |
+| A hero: headline, lead, buttons, a screenshot | `Hero::new(title).eyebrow(..).lead(..).action(..).note(icon, text).media(..)`; `accent(..)` for the coloured half of a headline |
+| A section with its heading | `Section::new(id).heading(SectionHeading::new(title).eyebrow(..).lead(..))` |
+| Customer logos | `LogoCloud::new().title(..).logo(..)` or `.wordmark(..)` |
+| Feature cards, a bento grid | `FeatureGrid::new().cols(3).feature(Feature::new(title, text).icon(..))`, `.wide()` and `.media(..)` for a large tile |
+| Features beside pictures, alternating | `FeatureRows::new().row(FeatureRow::new(title).text(..).point(..).media(..))` |
+| A band of big numbers | `StatBand::new().stat(value, label)` |
+| A screenshot in a browser window or a phone | device frames: `BrowserFrame::new(content).address(..)`, `PhoneFrame::new(content)`, each `.mode(..)` |
+| Quotes with names and stars | `Testimonials::new().item(Testimonial::new(quote).author(..).role(..).rating(5))` |
+| A pricing table, monthly and yearly | `Pricing::new(id).plan(Plan::new(name).monthly(..).yearly(..).feature(..).action(..))` |
+| Questions and answers | `Faq::new(id).item(question, answer)`; `faq_page(url)` for its structured data |
+| A closing call to action | `CtaBand::new(id, title).action(..)` |
+| A sign-up form in a band | `Newsletter::new(id, title).form(FormView::<T>::new()..)` |
+| Privacy policy, terms | `LegalPage::new(title).section(LegalSection::new(id, title).text(..))` |
+| Footer with columns and a theme switch | `SiteFooter::new(brand).column(FooterColumn::new(..)).legal(..).theme_toggle(ThemeToggle::new(mode))` |
+| Search and link previews | `View::seo(Seo::new(description).canonical(..).image(..).json_ld(..))`, `Sitemap`, `RobotsTxt` |
 
 ## Errors and states
 
@@ -291,12 +339,10 @@ Also not there yet:
   goes under the app's with `Shell::context`. The signed-in person in the user
   menu is drawn per request: see "Signing in, workspaces and the person in the
   shell" in `navree-ui`.
-- A date and a time in one control: use a date picker and a time picker.
-- An app's own stylesheet or static files: the toolkit serves one
-  stylesheet, and the content security policy loads styles, scripts,
-  fonts and images only from the app's own origin.
-- Web fonts other than Geist: a theme picks Geist or the System, Humanist,
-  Geometric or Serif stack, and monospace text uses the system stack.
+- Static files past the app's own stylesheet, fonts and pictures: the
+  content security policy loads styles, scripts, fonts and images only from
+  the app's own origin, and the toolkit serves an `AppSheet`, `AppFont` or
+  `AppImage` the app compiles in.
 
 Check `crates/navree-ui/README.md`, `src/components/mod.rs` and
 `src/select/mod.rs` before naming a gap: the list shrinks as modules land.

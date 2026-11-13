@@ -39,7 +39,8 @@ pub struct ThemeMenu {
 }
 
 impl ThemeMenu {
-    /// A menu showing `current`, offering `themes`.
+    /// A menu showing `current`, offering `themes`. With one theme or none on offer
+    /// there is nothing to choose, so the menu shows the modes only.
     pub fn new(current: &Appearance, themes: &[Theme]) -> Self {
         Self {
             current: current.clone(),
@@ -49,7 +50,7 @@ impl ThemeMenu {
             csrf: None,
             id: "ui-theme-menu".to_owned(),
             modes: true,
-            themes_shown: true,
+            themes_shown: themes.len() > 1,
         }
     }
 
@@ -285,5 +286,24 @@ mod tests {
             "{html}"
         );
         assert!(html.contains("&lt;b&gt;Agra&lt;/b&gt;"), "{html}");
+    }
+
+    // An app with one theme has nothing to choose there: the menu holds the modes only.
+    #[test]
+    fn one_theme_on_offer_shows_the_modes_only() {
+        let mine = Theme::custom(
+            ThemeId::parse("agra").unwrap(),
+            "Agra",
+            *Theme::OCEAN.spec(),
+        )
+        .unwrap();
+        let menu = ThemeMenu::new(&Appearance::new(mine.clone(), Mode::Dark), &[mine]);
+        assert!(menu.sheets().is_empty(), "no card, so no sheet for one");
+        let html = render(&menu.into());
+        assert!(!html.contains(r#"name="theme""#), "{html}");
+        assert!(!html.contains("theme-cards"), "{html}");
+        assert_eq!(html.matches(r#"name="mode""#).count(), 3, "{html}");
+        let none = render(&ThemeMenu::new(&Appearance::default(), &[]).into());
+        assert!(!none.contains(r#"name="theme""#), "{none}");
     }
 }

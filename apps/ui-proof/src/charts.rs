@@ -277,6 +277,213 @@ fn cases() -> Vec<(&'static str, Node)> {
                 .into(),
         ),
         (
+            "paint",
+            Chart::area("Heart rate")
+                .id("paint")
+                .description("A gradient wash, a resting line, a zone and a big tooltip")
+                .times(hours(24))
+                .series(
+                    Series::new("Heart rate", wave(21, 24, 76.0, 18.0))
+                        .ink(Ink::slot(8))
+                        .unit("BPM")
+                        .fade()
+                        .glow()
+                        .stroke(
+                            Gradient::horizontal()
+                                .stop(0.0, Ink::own())
+                                .stop(1.0, Ink::own().vivid()),
+                        ),
+                )
+                .smooth()
+                .dots(Dots::All)
+                .active_dot(ActiveDot::Halo)
+                .y_domain(Domain::padded(10))
+                .grid(Gridlines::horizontal().dashed())
+                .x_ticks(Ticks::every(3).keep_ends())
+                .reference(Reference::level(58).label("Resting {value}"))
+                .zone(
+                    Zone::new(90, 110)
+                        .label("Cardio")
+                        .ink(Ink::tone(Tone::Warning)),
+                )
+                .tooltip(TooltipStyle::big())
+                .motion(Motion::new())
+                .into(),
+        ),
+        (
+            "steps",
+            Chart::area("Sleep stages")
+                .id("steps")
+                .times(hours(8))
+                .series(
+                    Series::new("Stage", [1, 0, 1, 2, 1, 0, 2, 3])
+                        .ink(Ink::slot(7))
+                        .colors(
+                            ColorScale::new(Ink::slot(7))
+                                .label("Deep")
+                                .from(1, Ink::slot(1))
+                                .label("Light")
+                                .from(2, Ink::slot(5))
+                                .label("REM")
+                                .from(3, Ink::slot(4))
+                                .label("Awake"),
+                        ),
+                )
+                .curve(Curve::Step)
+                .y_categories(["Deep", "Light", "REM", "Awake"])
+                .dots(Dots::None)
+                .detail(
+                    "Lasted",
+                    [
+                        "40 min", "55 min", "30 min", "20 min", "45 min", "60 min", "25 min",
+                        "5 min",
+                    ],
+                )
+                .tooltip(TooltipStyle::big())
+                .into(),
+        ),
+        (
+            "lanes",
+            Chart::area("Sleep stages in lanes")
+                .id("lanes")
+                .times(hours(8))
+                .series(Series::new("Stage", [1, 0, 1, 2, 1, 0, 2, 3]).ink(Ink::slot(7)))
+                .curve(Curve::Step)
+                .y_categories(["Deep", "Light", "REM", "Awake"])
+                .lanes()
+                .dots(Dots::None)
+                .into(),
+        ),
+        (
+            "bar-baseline",
+            Chart::bar("Body age by part")
+                .id("bar-baseline")
+                .categories(["Heart", "Lungs", "Muscle", "Metabolism"])
+                .series(Series::new("Age", [31, 38, 34, 41]).unit("years"))
+                .baseline(36)
+                .y_domain(Domain::fixed(26, 46))
+                .into(),
+        ),
+        (
+            "clock-axis",
+            Chart::line("Bedtime")
+                .id("clock-axis")
+                .categories(["Mon", "Tue", "Wed", "Thu", "Fri"])
+                .series(Series::new("To bed", [310, 340, 385, 290, 420]))
+                .series(Series::new("Woke up", [760, 750, 790, 745, 830]))
+                .format(NumberFormat::clock(18))
+                .into(),
+        ),
+        (
+            "meter-details",
+            Meter::new("Heart rate zones")
+                .id("meter-details")
+                .minutes()
+                .detail_name("Heart rate")
+                .segment(Segment::new("Zone 1", 14).detail("under 109 bpm"))
+                .segment(Segment::new("Zone 2", 19).detail("109–127 bpm"))
+                .segment(Segment::new("Zone 3", 8).detail("127–146 bpm"))
+                .segment(Segment::new("Zone 4", 0).detail("146–164 bpm"))
+                .segment(Segment::new("Zone 5", 0).detail(NASTY))
+                .into(),
+        ),
+        (
+            "meter",
+            Meter::new("Sleep stages")
+                .id("meter")
+                .description("A gradient, a gloss and labels inside the wide segments")
+                .minutes()
+                .gradient()
+                .gloss()
+                .motion(Motion::new())
+                .segment(Segment::new("Deep", 92).ink(Ink::slot(7)))
+                .segment(Segment::new("REM", 98).ink(Ink::tone(Tone::named("cyan"))))
+                .segment(Segment::new("Core", 215).ink(Ink::slot(3)))
+                .segment(Segment::new("Awake", 35).ink(Ink::slot(4)))
+                .segment(Segment::new("Unscored", 0))
+                .into(),
+        ),
+        (
+            "meter-compact",
+            Meter::new("Zones")
+                .id("meter-compact")
+                .compact()
+                .minutes()
+                .segment(Segment::new("Rest", 6).ink(Ink::tone(Tone::named("slate"))))
+                .segment(Segment::new("Cardio", 22).ink(Ink::tone(Tone::Success)))
+                .segment(Segment::new("Peak", 8).ink(Ink::tone(Tone::Danger)))
+                .into(),
+        ),
+        (
+            "meter-hostile",
+            Meter::new(NASTY)
+                .id("meter-hostile")
+                .description(NASTY)
+                .segment(Segment::new(NASTY, 3).text(NASTY))
+                .segment(Segment::new("Second", f64::NAN))
+                .segment(Segment::new("Huge", f64::MAX))
+                .into(),
+        ),
+        (
+            "mini-columns",
+            MiniColumns::new("Sleep cycles")
+                .id("mini-columns")
+                .minutes()
+                .column_name("Cycle")
+                .motion(Motion::new())
+                .part("Deep", Ink::slot(7))
+                .part("REM", Ink::tone(Tone::named("cyan")))
+                .part("Core", Ink::slot(3))
+                .column(MiniColumn::new("Cycle 1", [34, 8, 38]))
+                .column(MiniColumn::new("Cycle 2", [28, 16, 42]))
+                .column(MiniColumn::new("Cycle 3", [18, 24, 45]))
+                .column(MiniColumn::new("Cycle 4", [8, 31, 40]))
+                .column(MiniColumn::new("Gaps", [None, Some(5.0), None]))
+                .into(),
+        ),
+        (
+            "color-strip",
+            ColorStrip::new("Heart rate zones")
+                .id("color-strip")
+                .cell_name("Time")
+                .value_name("Heart rate")
+                .format(NumberFormat::number().suffix(" bpm"))
+                .legend_shares()
+                .motion(Motion::new())
+                .colors(
+                    ColorScale::new(Ink::tone(Tone::named("slate")))
+                        .label("Rest")
+                        .from(100, Ink::tone(Tone::named("cyan")))
+                        .label("Fat burn")
+                        .from(130, Ink::tone(Tone::Warning))
+                        .label("Cardio"),
+                )
+                .readings(
+                    wave(5, 120, 110.0, 30.0)
+                        .into_iter()
+                        .enumerate()
+                        .map(|(at, bpm)| (format!("{}:{:02}", at / 60, at % 60), bpm.round())),
+                )
+                .into(),
+        ),
+        (
+            "range-scale",
+            RangeScale::new("Resting heart rate", 58)
+                .id("range-scale")
+                .range(40, 120)
+                .format(NumberFormat::number().suffix(" bpm"))
+                .show_value()
+                .motion(Motion::new().delay(300))
+                .track(
+                    Gradient::horizontal()
+                        .stop_with_opacity(0.0, Ink::tone(Tone::Success), 0.55)
+                        .stop_with_opacity(0.3, Ink::tone(Tone::named("cyan")), 0.55)
+                        .stop_with_opacity(0.6, Ink::tone(Tone::named("orange")), 0.55)
+                        .stop_with_opacity(1.0, Ink::tone(Tone::Danger), 0.55),
+                )
+                .into(),
+        ),
+        (
             "sparkline",
             Grid::cols(3)
                 .gap(3)
@@ -391,6 +598,175 @@ fn cases() -> Vec<(&'static str, Node)> {
                     .series(Series::new("فُتحت", [802, 951, 500, 1_200, 1_310, 222, 180])),
             )
             .into(),
+        ),
+        (
+            "ring",
+            Grid::cols(3)
+                .gap(3)
+                .children((
+                    Ring::new("Sleep score", 82)
+                        .id("ring-1")
+                        .label("Sleep score")
+                        .sublabel("Great recovery")
+                        .size(140),
+                    Ring::new("Recovery", 87)
+                        .id("ring-2")
+                        .label("Recovery")
+                        .unit("%")
+                        .colors(
+                            ColorScale::new(Ink::tone(Tone::Danger))
+                                .label("Low")
+                                .from(67, Ink::tone(Tone::Success))
+                                .label("Recovered"),
+                        )
+                        .fill(Gradient::sheen(Ink::own()))
+                        .glow()
+                        .halo()
+                        .size(140)
+                        .size_on(Screen::Lg, 160)
+                        .motion(Motion::new()),
+                    Ring::new("Steps", 12_450)
+                        .id("ring-3")
+                        .max(10_000)
+                        .locale("en-IN")
+                        .label("Steps")
+                        .size(64),
+                ))
+                .into(),
+        ),
+        (
+            "rings",
+            Grid::cols(2)
+                .gap(3)
+                .children((
+                    Rings::new("Activity")
+                        .id("rings-1")
+                        .ring(
+                            RingValue::new("Move", 540)
+                                .max(600)
+                                .unit("kcal")
+                                .ink(Ink::slot(8)),
+                        )
+                        .ring(
+                            RingValue::new("Exercise", 38)
+                                .max(30)
+                                .unit("min")
+                                .ink(Ink::slot(3)),
+                        )
+                        .ring(
+                            RingValue::new("Stand", 9)
+                                .max(12)
+                                .unit("hr")
+                                .ink(Ink::slot(1)),
+                        )
+                        .track(RingTrack::Tinted)
+                        .center_values()
+                        .legend()
+                        .size(200)
+                        .motion(Motion::new()),
+                    Stack::gap(2).children((
+                        Rings::new("Nervous system")
+                            .id("rings-2")
+                            .ring(
+                                RingValue::new("Sympathetic", 42)
+                                    .unit("%")
+                                    .ink(Ink::slot(8)),
+                            )
+                            .ring(
+                                RingValue::new("Parasympathetic", 68)
+                                    .unit("%")
+                                    .ink(Ink::slot(1)),
+                            )
+                            .center_icon(icons::ACTIVITY)
+                            .size(140),
+                        Button::outline(Node::list((
+                            Rings::new("Movement 35, recovery 72, sleep 78")
+                                .id("rings-pill")
+                                .ring(RingValue::new("Movement", 35))
+                                .ring(RingValue::new("Recovery", 72))
+                                .ring(RingValue::new("Sleep", 78))
+                                .size(28)
+                                .inline(),
+                            "Wed, 11 Nov",
+                        ))),
+                    )),
+                    // Five rings in a row that sizes its items to their content: they keep
+                    // their drawing's width.
+                    Row::gap(4).children((
+                        ["Sleep", "Recovery", "Movement", "Stress", "Mind"]
+                            .iter()
+                            .zip([84, 71, 58, 36, 66])
+                            .fold(
+                                Rings::new("Today's scores").id("rings-3"),
+                                |rings, (name, value)| rings.ring(RingValue::new(*name, value)),
+                            )
+                            .center_values()
+                            .size(160),
+                        Text::new("Five scores of the day"),
+                    )),
+                ))
+                .into(),
+        ),
+        (
+            "gauge",
+            Grid::cols(2)
+                .gap(3)
+                .children((
+                    Gauge::new("Relaxation", 73)
+                        .id("gauge-1")
+                        .label("Recovery index")
+                        .fill(
+                            Gradient::horizontal()
+                                .stop(0.0, Ink::slot(3))
+                                .stop(1.0, Ink::slot(1)),
+                        )
+                        .size(180),
+                    Gauge::new("Body temperature", 36.7)
+                        .id("gauge-2")
+                        .min(34)
+                        .max(39)
+                        .unit("°C")
+                        .sweep(180.0)
+                        .size(160),
+                    Gauge::new("Load ratio", 1.12)
+                        .id("gauge-3")
+                        .max(2)
+                        .format(NumberFormat::decimals(2).fixed())
+                        .zone(Zone::new(0, 0.8).label("Undertraining"))
+                        .zone(Zone::new(0.8, 1.3).label("Optimal"))
+                        .zone(Zone::new(1.3, 1.5).label("Overreaching"))
+                        .zone(Zone::new(1.5, 2).label(NASTY))
+                        .size(180),
+                ))
+                .into(),
+        ),
+        (
+            "clock",
+            DayClock::new("Steps by hour")
+                .id("clock")
+                .values([
+                    0, 0, 0, 0, 0, 30, 640, 1_850, 920, 410, 380, 520, 760, 310, 280, 350, 620,
+                    1_240, 940, 430, 260, 120, 30, 0,
+                ])
+                .unit("steps")
+                .category("Active", Ink::slot(3))
+                .category("Calm", Ink::slot(1))
+                .category("Rest", Ink::slot(7))
+                .categories([
+                    2, 2, 2, 2, 2, 2, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 2, 2, 2,
+                ])
+                .moment(
+                    Moment::new(6.5, "Woke up")
+                        .icon(icons::SUNRISE)
+                        .ink(Ink::slot(4)),
+                )
+                .moment(Moment::new(7.5, "Morning walk").icon(icons::FOOTPRINTS))
+                .moment(Moment::new(13.5, NASTY).icon(icons::UTENSILS))
+                .now(15)
+                .band()
+                .locale("en-IN")
+                .motion(Motion::new())
+                .into(),
         ),
         (
             "locale",

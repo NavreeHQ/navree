@@ -136,3 +136,33 @@ async fn registration_disabled_is_404() {
         .await
         .assert_status(200);
 }
+
+// One client may ask for five accounts a minute; the sixth waits, which also slows a walk
+// through addresses asking which have accounts.
+#[tokio::test]
+async fn register_is_throttled_per_client() {
+    let app = support::app().await;
+    let client = app.client();
+    for n in 0..5 {
+        client
+            .post("/api/auth/register")
+            .json(&json!({
+                "name": "Simran Kaur",
+                "email": format!("simran{n}@example.com"),
+                "password": "correct horse battery",
+            }))
+            .send()
+            .await
+            .assert_status(201);
+    }
+    client
+        .post("/api/auth/register")
+        .json(&json!({
+            "name": "Simran Kaur",
+            "email": "simran5@example.com",
+            "password": "correct horse battery",
+        }))
+        .send()
+        .await
+        .assert_status(429);
+}

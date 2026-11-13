@@ -5,6 +5,7 @@ use crate::catalog::Example;
 
 mod actions;
 mod activity;
+mod app_blocks;
 mod board;
 mod charts;
 mod chat;
@@ -13,11 +14,14 @@ mod dates;
 mod display;
 mod feedback;
 mod flow;
+mod grids;
 mod icons;
 mod inbox;
 mod inputs;
 mod layout;
+mod linear;
 mod markdown;
+mod marketing;
 mod menu_bars;
 mod menus;
 mod navigation;
@@ -29,6 +33,7 @@ mod parts;
 mod patterns;
 mod phone;
 mod pickers;
+mod radial;
 mod sortable;
 mod states;
 mod store;
@@ -62,12 +67,17 @@ pub fn all() -> Vec<Example> {
     all.extend(data::all());
     all.extend(sortable::all());
     all.extend(charts::all());
+    all.extend(radial::all());
+    all.extend(linear::all());
+    all.extend(grids::all());
     all.extend(chat::all());
     all.extend(patterns::all());
     all.extend(themes::all());
+    all.extend(app_blocks::all());
     all.extend(icons::all());
     all.extend(store::all());
     all.extend(inbox::all());
     all.extend(board::all());
+    all.extend(marketing::all());
     all
 }

@@ -1,0 +1,44 @@
+---
+title: "Faq"
+description: "Questions that open to their answers with no script, and the same questions as FAQPage structured data."
+---
+
+<UiPreview example="faq/default" />
+
+`Faq` lists questions that open to their answers. Each question is an `h3` inside the `<summary>` of a `<details>`, so it opens with no script and a reader can jump to it by heading. `.exclusive()` keeps one open at a time. Answers are plain text, so `.faq_page(url)` gives answer engines the same words the page shows.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::seo::JsonLd;
+use navree::ui::*;
+
+let faq = Faq::new("faq")
+    .exclusive()
+    .item("Do I need a smartwatch to use Kesar?", "No. Kesar reads the steps, sleep and heart rate your phone already records.")
+    .item("Is Kesar a medical device?", "No. Kesar is a wellness guide. Its scores are estimates, never a diagnosis.");
+
+let data = JsonLd::new().node(faq.faq_page("https://kesar.example/"));
+```
+
+## Answers that answer engines quote
+
+An answer of 40 to 80 words is the length answer engines quote whole. A blank line in an answer starts a new paragraph on the page; the structured data keeps the text as written.
+
+## Anatomy
+
+<UiAnatomy component="faq" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- Enter and Space open and close a question; the browser says whether it is expanded.
+- With `.exclusive()`, opening one closes the one before, through the `name` all the questions share.
+
+</UiA11y>
+
+## API
+
+### Faq
+
+<UiProps type="Faq" />

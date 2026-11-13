@@ -274,3 +274,96 @@ fn the_funnels_faintest_step_still_reads_on_its_surface() {
     }
     assert!(found.is_empty(), "{}", found.join("\n"));
 }
+
+/// The vivid end of each chart colour, which a sheen ends in and a ring's second lap is
+/// drawn in: in every built-in theme and both palettes it still reads on every surface, it
+/// is deeper on a light page and brighter on a dark one, and it keeps its colour. A mix
+/// with the text's near-black dulls a warm colour toward brown on a light page; this end
+/// keeps most of the colour's chroma and stays within 20 degrees of its hue.
+#[test]
+fn each_chart_colour_has_a_vivid_end_of_its_own_colour() {
+    let mut found = Vec::new();
+    for theme in Theme::BUILT_IN {
+        for side in Side::BOTH {
+            let palette = theme.spec().palette(side);
+            for (at, token) in Token::CHARTS.iter().enumerate() {
+                let colour = palette.get(*token);
+                let vivid = colour.vivid(side);
+                let [l, c, h] = colour.to_oklch();
+                let [vl, vc, vh] = vivid.to_oklch();
+                let turn = ((vh - h + 540.0) % 360.0 - 180.0).abs();
+                let name = format!(
+                    "{} {} chart-{} {colour} -> {vivid}",
+                    theme.id(),
+                    side.as_str(),
+                    at + 1
+                );
+                // Lighter or darker by a step, and no greyer than the edge of sRGB makes it:
+                // a deep green has less room for chroma than a mid one.
+                let deeper = match side {
+                    Side::Light => vl < l - 0.05,
+                    Side::Dark => vl > l + 0.05,
+                } && vc >= (c * 0.8).max(CHROMA);
+                if !deeper {
+                    found.push(format!(
+                        "{name}: lightness {l:.3} -> {vl:.3}, chroma {c:.3} -> {vc:.3}"
+                    ));
+                }
+                if turn > 20.0 {
+                    found.push(format!("{name}: its hue turns {turn:.1} degrees"));
+                }
+                for surface in SURFACES {
+                    let ratio = vivid.contrast(palette.get(surface));
+                    if ratio < CONTRAST {
+                        found.push(format!("{name}: {ratio:.2}:1 on {}", surface.name()));
+                    }
+                }
+            }
+        }
+    }
+    assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+/// Orange and amber on a light page: a mix with the text's near-black makes them brown
+/// (chroma under 0.11); their vivid ends keep their colour.
+#[test]
+fn warm_colours_stay_warm_on_a_light_page() {
+    for hex in [0xdc5a24, 0xb07702] {
+        let colour = Rgb::hex(hex);
+        let brown = colour.mix(Rgb::hex(0x0a0e0c), 0.38);
+        let vivid = colour.vivid(Side::Light);
+        let (_, dull) = lightness_and_chroma(brown);
+        let (_, kept) = lightness_and_chroma(vivid);
+        assert!(dull < 0.11, "the mix is brown: {brown} {dull:.3}");
+        assert!(kept > 0.12, "{vivid} keeps its colour: {kept:.3}");
+    }
+}
+
+/// Every theme's stylesheet writes each chart colour's vivid end beside it, and the paint
+/// sheet reads it for the far stop of a sheen and for a ring's second lap.
+#[test]
+fn the_vivid_ends_are_tokens_the_sheets_read() {
+    let tokens = navree_ui::tokens::css();
+    for n in 1..=8 {
+        assert!(
+            tokens.contains(&format!(";--chart-{n}-vivid:")),
+            "chart-{n}"
+        );
+    }
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("styles/extra");
+    let paint = std::fs::read_to_string(dir.join("chart-paint.css")).unwrap();
+    for n in 1..=8 {
+        assert!(
+            paint.contains(&format!(
+                "[data-color=\"{n}\"]{{--c:var(--chart-{n});--c-vivid:var(--chart-{n}-vivid)}}"
+            )),
+            "slot {n}"
+        );
+    }
+    assert!(paint.contains("stop[data-mix=vivid]{stop-color:var(--c-vivid)}"));
+    let radial = std::fs::read_to_string(dir.join("chart-radial.css")).unwrap();
+    assert!(
+        radial.contains("[data-slot=radial-lap]{stroke:var(--c-vivid)"),
+        "the lap"
+    );
+}

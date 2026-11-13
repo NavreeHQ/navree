@@ -8,6 +8,7 @@
 
 mod actions;
 mod activity;
+mod app_blocks;
 mod carousel;
 mod clock;
 mod color_picker;
@@ -18,12 +19,13 @@ mod fact;
 mod flag;
 mod input_otp;
 mod inputs;
-mod layout;
+pub(crate) mod layout;
 mod lazy;
 mod live;
 mod menubar;
 mod navigation_menu;
 mod overlays;
+mod picture;
 mod questionnaire;
 mod split;
 mod tabs;
@@ -32,9 +34,14 @@ mod toast;
 mod toggle_group;
 mod tone;
 mod trace;
+mod trend;
 
 pub use actions::{Button, ButtonGroup, ButtonKind, ButtonVariant, Toggle};
 pub use activity::{ActivityFeed, ActivityItem, ActivityRows, FeedHeight};
+pub use app_blocks::{
+    AuthLayout, BreathingGuide, BreathingLabels, ChartSkeleton, CopyField, DayPager, Dock,
+    DockItem, InfoMark, InfoTip,
+};
 pub use carousel::{Carousel, CarouselHeight, CarouselLabels, CarouselSlide};
 pub use color_picker::ColorPicker;
 pub use context_menu::ContextMenu;
@@ -68,6 +75,7 @@ pub use overlays::{
     Accordion, AlertDialog, Collapsible, Dialog, Drawer, HoverCard, Popover, PopupAlign,
     ScrollArea, ScrollHeight, Sheet, SheetBackdrop, SheetSide, SheetWidth, Side, Tooltip,
 };
+pub use picture::Picture;
 pub use questionnaire::{Question, Questionnaire, QuestionnaireLabels, QuestionnaireMove};
 pub use split::{Pane, SplitHeight, SplitPane, SplitSave, SplitSizes, SplitWidth};
 pub use tabs::{Activation, Orientation, Tab, Tabs, TabsVariant};
@@ -76,6 +84,7 @@ pub use toast::{Toast, ToastAction, ToastDuration, ToastPosition, Toaster};
 pub use toggle_group::{ToggleGroup, ToggleItem, ToggleVariant};
 pub use tone::{DisplayLabels, Meta, Tone};
 pub use trace::{Trace, TraceLabels, TraceState, TraceStep};
+pub use trend::Trend;
 
 use crate::icons::Icon;
 use crate::node::{Node, el};

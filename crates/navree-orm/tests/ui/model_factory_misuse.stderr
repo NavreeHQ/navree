@@ -36,5 +36,7 @@ note: expected this to be `Person`
 note: required by a bound in `navree_orm::factory::HasFactory::Factory`
   --> src/factory/mod.rs
    |
+   | pub trait HasFactory: Model {
+   |     /// The model's factory.
    |     type Factory: ModelFactory<Model = Self> + Default;
    |                                ^^^^^^^^^^^^ required by this bound in `HasFactory::Factory`

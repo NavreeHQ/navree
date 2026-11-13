@@ -2,12 +2,11 @@
 //! default, the workspace's, the user's and the URL, in that order.
 
 use http::StatusCode;
-use http::header::{COOKIE, HOST, HeaderMap, HeaderValue, LOCATION, ORIGIN, SET_COOKIE};
+use http::header::{COOKIE, HeaderMap, HeaderValue, LOCATION, ORIGIN, SET_COOKIE};
 use navree_http::extract::urlencoded;
 use navree_http::response::{IntoResponse, Response};
 
 use super::Theme;
-use crate::html::LocalHref;
 
 /// The cookie holding a reader's own theme and mode, when the app keeps them in
 /// the browser: `dark.ocean`, or `light.v1-...` for a theme of the app's own.
@@ -117,6 +116,31 @@ impl Appearance {
             theme: setting.theme?,
             mode: setting.mode?,
         })
+    }
+
+    /// This look with the reader's own choice laid over it: the theme and mode kept in the
+    /// cookie that the theme menu and the theme toggle set, then `?theme=` and `?mode=` in
+    /// `query`, which last for this request only. For a page outside the app shell, such
+    /// as a public site's, whose [`AppShell`](crate::AppShell) would do this for it.
+    ///
+    /// A page drawn this way differs from reader to reader at one address: cache it as
+    /// `private`, or not at all.
+    ///
+    /// ```
+    /// use navree_ui::theme::{Appearance, Mode, Theme};
+    ///
+    /// let mut headers = http::HeaderMap::new();
+    /// headers.insert(http::header::COOKIE, "navree_ui_theme=light".parse().unwrap());
+    /// let site = Appearance::new(Theme::NAVREE, Mode::System);
+    /// assert_eq!(site.clone().for_reader(&headers, None).mode(), Mode::Light);
+    /// assert_eq!(site.for_reader(&headers, Some("mode=dark")).mode(), Mode::Dark);
+    /// ```
+    #[must_use]
+    pub fn for_reader(mut self, headers: &HeaderMap, query: Option<&str>) -> Self {
+        let (cookie, url) = read_setting(headers, query);
+        cookie.over(&mut self, false);
+        url.over(&mut self, false);
+        self
     }
 
     /// Whether this is what a page gets with nothing set: the default theme, dark.
@@ -255,15 +279,31 @@ pub(crate) fn read_setting(
 /// The `Set-Cookie` that keeps `appearance` in the browser for a year. The
 /// toolkit's own route adds `Secure` when the request came over HTTPS.
 pub fn appearance_cookie(appearance: &Appearance) -> HeaderValue {
-    cookie(appearance, false)
+    cookie(&appearance.to_value(), false)
 }
 
-fn cookie(appearance: &Appearance, secure: bool) -> HeaderValue {
+/// The text a cookie keeps for `setting`: `dark.ocean`, `dark` for a mode alone, `.ocean`
+/// for a theme alone, so a reader who chose only a mode keeps the theme of the app, the
+/// workspace or the site they are on. Nothing chosen keeps the default look.
+fn setting_value(setting: &ThemeSetting) -> String {
+    match (setting.mode, &setting.theme) {
+        (None, None) => Appearance::default().to_value(),
+        (mode, theme) => format!(
+            "{}{}",
+            mode.map_or("", Mode::id),
+            theme
+                .as_ref()
+                .map(|theme| format!(".{}", theme.short_form()))
+                .unwrap_or_default()
+        ),
+    }
+}
+
+fn cookie(value: &str, secure: bool) -> HeaderValue {
     // The value is a mode id, a dot and a built-in id or a short form: only
     // `[0-9a-z.-]`, which a header always carries.
     HeaderValue::from_str(&format!(
-        "{THEME_COOKIE}={}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly{}",
-        appearance.to_value(),
+        "{THEME_COOKIE}={value}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly{}",
         if secure { "; Secure" } else { "" }
     ))
     .unwrap_or(HeaderValue::from_static(
@@ -278,14 +318,12 @@ fn same_site(headers: &HeaderMap) -> bool {
     if let Some(site) = headers.get("sec-fetch-site") {
         return matches!(site.to_str(), Ok("same-origin" | "none"));
     }
-    match (headers.get(ORIGIN), headers.get(HOST)) {
-        (Some(origin), Some(host)) => origin
-            .to_str()
-            .ok()
-            .and_then(|origin| origin.split_once("://"))
-            .is_some_and(|(_, rest)| host.to_str().is_ok_and(|host| host == rest)),
-        (Some(_), None) => false,
-        (None, _) => true,
+    match headers.get(ORIGIN) {
+        // The route puts an HTTP/2 request's :authority in `Host` when it has none.
+        Some(origin) => origin.to_str().is_ok_and(|origin| {
+            navree_http::csrf::origin_is_host(origin, headers, &http::Uri::default())
+        }),
+        None => true,
     }
 }
 
@@ -315,12 +353,14 @@ fn over_https(headers: &HeaderMap) -> bool {
     })
 }
 
-/// What the settings route does with a posted form: the cookie to set and where
-/// to go, or why not.
+/// What the settings route does with a posted form: the reader's setting to keep and
+/// where to go, or why not. The setting is the cookie's with what was posted laid over
+/// it: a form that posts only a mode, such as a site's theme toggle, leaves the theme as
+/// it was, chosen or not.
 pub(crate) fn decide(
     headers: &HeaderMap,
     body: &[u8],
-) -> Result<(Appearance, String), ChoiceError> {
+) -> Result<(ThemeSetting, String), ChoiceError> {
     if !same_site(headers) {
         return Err(ChoiceError::CrossSite);
     }
@@ -329,38 +369,41 @@ pub(crate) fn decide(
         match &*name {
             "theme" => theme = Some(Theme::from_short_form(&value).ok_or(ChoiceError::Invalid)?),
             "mode" => mode = Some(Mode::from_id(&value).ok_or(ChoiceError::Invalid)?),
+            // A path of this site, checked as a sign-in's `next` is: a relative address would
+            // be read against this route's own (`/_navree/ui/...`), and an address with a
+            // host, or dot segments that climb to one, could be another site.
             "back" => {
-                back = LocalHref::parse(value.trim())
-                    .ok()
-                    .map(|href| href.as_str().to_owned())
-                    .filter(|href| !href.is_empty())
+                back =
+                    crate::pages::ReturnTo::parse(value.trim()).map(|back| back.as_str().to_owned())
             }
             _ => {}
         }
     }
-    let (cookie, _) = read_setting(headers, None);
-    let mut appearance = Appearance::default();
-    cookie.over(&mut appearance, false);
-    if let Some(theme) = theme {
-        appearance.theme = theme;
+    let (mut setting, _) = read_setting(headers, None);
+    if theme.is_some() {
+        setting.theme = theme;
     }
-    if let Some(mode) = mode {
-        appearance.mode = mode;
+    if mode.is_some() {
+        setting.mode = mode;
     }
-    Ok((appearance, back.unwrap_or_else(|| "/".to_owned())))
+    setting.locked = false;
+    Ok((setting, back.unwrap_or_else(|| "/".to_owned())))
 }
 
 /// Answers `POST /_navree/ui/appearance`: sets the cookie and sends the reader
 /// back with a 303, so it works as a plain form with JavaScript off.
 pub(crate) fn respond_setting(headers: &HeaderMap, body: &[u8]) -> Response {
     match decide(headers, body) {
-        Ok((appearance, back)) => {
+        Ok((setting, back)) => {
             let location = HeaderValue::from_str(&back).unwrap_or(HeaderValue::from_static("/"));
             (
                 StatusCode::SEE_OTHER,
                 [
                     (LOCATION, location),
-                    (SET_COOKIE, cookie(&appearance, over_https(headers))),
+                    (
+                        SET_COOKIE,
+                        cookie(&setting_value(&setting), over_https(headers)),
+                    ),
                 ],
             )
                 .into_response()
@@ -497,12 +540,36 @@ mod tests {
             cookie.contains("HttpOnly") && cookie.contains("SameSite=Lax"),
             "{cookie}"
         );
-        // Off the site, or a scheme: home instead.
+        // The page it was given, as it was given: a path with its query and fragment.
+        for back in [
+            "/pricing/",
+            "/",
+            "/deals?page=2#notes",
+            "/blog/na%C3%AFve-sleep",
+        ] {
+            let body = format!("mode=light&back={}", urlencode(back));
+            let response = respond_setting(&headers, body.as_bytes());
+            assert_eq!(response.status(), StatusCode::SEE_OTHER, "{back}");
+            assert_eq!(
+                response.headers()[LOCATION].as_bytes(),
+                back.as_bytes(),
+                "{back}"
+            );
+        }
+        // Off the site, a scheme, or an address that isn't a path: home instead.
         for back in [
             "https://evil.example/",
             "//evil.example",
+            "/\\evil.example",
             "javascript:alert(1)",
             "\\\\evil",
+            "pricing",
+            "?page=2",
+            "/..//evil.example",
+            "/a/../..//evil.example",
+            "/%2F/evil.example",
+            "/blog/naïve",
+            "#top",
         ] {
             let body = format!("theme=ocean&back={}", urlencode(back));
             let response = respond_setting(&headers, body.as_bytes());
@@ -520,6 +587,16 @@ mod tests {
                 .unwrap()
                 .starts_with("navree_ui_theme=light.rose;")
         );
+        // A mode alone, with no theme chosen before, keeps no theme: the page's own holds.
+        let mut fresh = HeaderMap::new();
+        fresh.insert("sec-fetch-site", HeaderValue::from_static("same-origin"));
+        let response = respond_setting(&fresh, b"mode=dark&back=%2Fpricing");
+        let cookie = response.headers()[SET_COOKIE].to_str().unwrap();
+        assert!(cookie.starts_with("navree_ui_theme=dark;"), "{cookie}");
+        let mut later = HeaderMap::new();
+        later.insert(COOKIE, HeaderValue::from_static("navree_ui_theme=dark"));
+        let site = Appearance::new(Theme::SUNSET, Mode::System).for_reader(&later, None);
+        assert_eq!(site, Appearance::new(Theme::SUNSET, Mode::Dark));
         // Bad values are refused, not stored.
         for body in ["theme=nope", "mode=dim", "theme=%3Cscript%3E"] {
             assert_eq!(
@@ -540,7 +617,7 @@ mod tests {
         );
         let mut headers = HeaderMap::new();
         headers.insert(ORIGIN, HeaderValue::from_static("https://evil.example"));
-        headers.insert(HOST, HeaderValue::from_static("app.example"));
+        headers.insert(http::header::HOST, HeaderValue::from_static("app.example"));
         assert_eq!(
             respond_setting(&headers, b"theme=ocean").status(),
             StatusCode::FORBIDDEN
@@ -549,6 +626,21 @@ mod tests {
         assert_eq!(
             respond_setting(&headers, b"theme=ocean").status(),
             StatusCode::SEE_OTHER
+        );
+        // Host and Origin are read as a host and a port: a default port written or not,
+        // case aside; another port is another origin.
+        headers.insert(
+            http::header::HOST,
+            HeaderValue::from_static("App.Example:443"),
+        );
+        assert_eq!(
+            respond_setting(&headers, b"theme=ocean").status(),
+            StatusCode::SEE_OTHER
+        );
+        headers.insert(ORIGIN, HeaderValue::from_static("https://app.example:8443"));
+        assert_eq!(
+            respond_setting(&headers, b"theme=ocean").status(),
+            StatusCode::FORBIDDEN
         );
     }
 

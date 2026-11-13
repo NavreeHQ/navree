@@ -1,0 +1,57 @@
+---
+title: "Chart skeleton"
+description: "A loading placeholder shaped like the chart that is coming: a ring, a gauge, a line, bars, a calendar, a matrix or a meter."
+---
+
+<UiPreview example="chart-skeleton/shapes" />
+
+`ChartSkeleton` holds the place of a chart that hasn't been drawn yet, in its shape, so a section that loads late doesn't jump when the chart arrives. It pulses, and holds still when the reader asks for less motion. A [Skeleton](/docs/components/skeleton/) is a line or a block; a chart skeleton is the ring, the line or the grid.
+
+```rust
+use navree::ui::*;
+
+ChartSkeleton::ring(120).label("Loading recovery")
+```
+
+## Shapes
+
+| Shape | Constructor | Holds the place of |
+|---|---|---|
+| Ring | `ChartSkeleton::ring(size)` | a [ring](/docs/components/ring/), 48 to 320 px |
+| Gauge | `ChartSkeleton::gauge(size)` | a [gauge](/docs/components/gauge/) |
+| Line | `ChartSkeleton::line(height)` | a line or area chart, the width of its place |
+| Bars | `ChartSkeleton::bars(count, height)` | a bar chart of up to 48 bars |
+| Heat map | `ChartSkeleton::heat_map(weeks)` | a [calendar heat map](/docs/components/calendar-heatmap/) of 4 to 53 weeks |
+| Matrix | `ChartSkeleton::matrix(size)` | a [matrix heat map](/docs/components/matrix-heatmap/), its lower triangle |
+| Meter | `ChartSkeleton::meter()` | a [meter](/docs/components/meter/) and its legend |
+
+A size outside its range is clamped, so a number from outside can't draw a huge picture.
+
+## In a region that loads late
+
+A chart's own `loading()` state keeps the chart's height. A skeleton is for the place where the chart isn't there at all: the first paint of a lazy [Region](/docs/ui/regions/). Give the region the skeleton as its children; the region's answer replaces it, and a region that fails hides it.
+
+```rust
+use navree::ui::*;
+
+Region::new("heart-rate")
+    .src("/fragments/heart-rate")
+    .lazy()
+    .children(ChartSkeleton::line(160).label("Loading heart rate"))
+```
+
+<UiPreview example="chart-skeleton/region" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- A skeleton is one status that says what is loading ("Loading heart rate"); the shapes are hidden from assistive technology. Name it, or it says "Loading".
+- The pulse stops when the reader asks for less motion.
+- It draws in the toolkit's line colours, visible against the page in both light and dark.
+
+</UiA11y>
+
+## API
+
+<UiProps type="ChartSkeleton" />

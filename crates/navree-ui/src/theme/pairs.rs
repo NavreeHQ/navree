@@ -179,6 +179,11 @@ fn build() -> Vec<Pair> {
             add(T(tone), T(surface), text);
         }
     }
+    // The orange tone is the warning and the danger colours mixed: as text, as a dot and
+    // as a mark, on every surface.
+    for surface in SURFACES {
+        add(Mix(Token::Amber, 60, Token::Danger), T(surface), text);
+    }
     // Text on the accent, at rest and on hover.
     add(T(Token::AccentInk), T(Token::Accent), text);
     add(T(Token::AccentInk), Hover(Token::Accent, 86), text);

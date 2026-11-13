@@ -72,6 +72,7 @@ pub const GROUPS: &[Group] = &[
             "typography",
             "kbd",
             "attachment",
+            "picture",
             "markdown",
             "code-block",
             "message",
@@ -157,6 +158,54 @@ pub const GROUPS: &[Group] = &[
             "donut-chart",
             "sparkline",
             "funnel",
+            "ring",
+            "rings",
+            "gauge",
+            "day-clock",
+            "meter",
+            "mini-columns",
+            "color-strip",
+            "range-scale",
+            "trend",
+            "calendar-heatmap",
+            "matrix-heatmap",
+            "relation-list",
+            "scatter-chart",
+        ],
+    },
+    Group {
+        id: "app-blocks",
+        title: "App blocks",
+        components: &[
+            "info-tip",
+            "chart-skeleton",
+            "breathing-guide",
+            "dock",
+            "day-pager",
+            "copy-field",
+            "auth-layout",
+        ],
+    },
+    Group {
+        id: "marketing",
+        title: "Marketing",
+        components: &[
+            "site-page",
+            "site-header",
+            "hero",
+            "section",
+            "logo-cloud",
+            "feature-grid",
+            "feature-rows",
+            "stat-band",
+            "device-frames",
+            "testimonials",
+            "pricing",
+            "faq",
+            "cta-band",
+            "newsletter",
+            "legal-page",
+            "site-footer",
         ],
     },
     Group {
@@ -718,6 +767,7 @@ pub const COMPONENTS: &[Component] = &[
             "Chart",
             "Series",
             "Annotation",
+            "Zone",
             "At",
             "NumberFormat",
             "TableMode",
@@ -751,6 +801,95 @@ pub const COMPONENTS: &[Component] = &[
     component("funnel", "Funnel", &["Funnel", "Stage"], "thumb")
         .about("How many reach each stage of an ordered process, and what share of the first and of the stage before.")
         .parts("default"),
+    component(
+        "ring",
+        "Ring",
+        &["Ring", "RingTrack", "Screen", "RadialLabels"],
+        "thumb",
+    )
+    .about("One value on a ring: a score out of 100, steps toward a goal, with the value in the middle.")
+    .parts("default"),
+    component("rings", "Rings", &["Rings", "RingValue", "RingTrack"], "thumb")
+        .about("Two to six values on rings inside each other, each against its own goal.")
+        .parts("default"),
+    component("gauge", "Gauge", &["Gauge", "Zone", "RingTrack", "Screen"], "thumb")
+        .about("One value on an open arc, 270 degrees or any sweep, on a scale that may start above zero.")
+        .parts("default"),
+    component("day-clock", "Day clock", &["DayClock", "Moment"], "thumb")
+        .about("A day round a clock face: a wedge for each hour, its length the value, its colour a category, with moments marked.")
+        .parts("default"),
+    component("meter", "Meter", &["Meter", "Segment", "LinearLabels"], "thumb")
+        .about("One bar split into segments that add up to the whole, with the share inside the wide ones and a legend of values.")
+        .parts("default"),
+    component(
+        "mini-columns",
+        "Mini columns",
+        &["MiniColumns", "MiniColumn"],
+        "thumb",
+    )
+    .about("Small multiples: one column per item, each split into the same parts and drawn to 100%.")
+    .parts("default"),
+    component("color-strip", "Colour strip", &["ColorStrip"], "thumb")
+        .about("A row of equal cells, each in the colour of its category or of the band its reading falls in.")
+        .parts("default"),
+    component("range-scale", "Range scale", &["RangeScale"], "thumb")
+        .about("One value on a scale between two ends, with a marker and a track that can be a gradient.")
+        .parts("default"),
+    component("trend", "Trend", &["Trend"], "thumb")
+        .about("Which way something moved and by how much: an arrow, a signed change and a colour for what it means.")
+        .parts("default"),
+    component(
+        "calendar-heatmap",
+        "Calendar heat map",
+        &["CalendarHeatmap", "HeatSteps", "GridLabels"],
+        "thumb",
+    )
+    .about("A day per cell in weeks, shaded in five steps: how consistent a habit is over months. A day with no data is hollow, not zero.")
+    .parts("default"),
+    component(
+        "matrix-heatmap",
+        "Matrix heat map",
+        &["MatrixHeatmap", "Relation", "GridLabels"],
+        "thumb",
+    )
+    .about("Every measure against every other, such as a correlation matrix: a tone for the sign, depth for the strength, neutral for chance and blank for untested.")
+    .parts("default"),
+    component(
+        "relation-list",
+        "Relation list",
+        &["RelationList", "Relation", "GridLabels"],
+        "thumb",
+    )
+    .about("Pairs of measures ranked by how strongly they move together: the signed value, a bar from the centre by sign and a note on each row.")
+    .parts("default"),
+    component(
+        "scatter-chart",
+        "Scatter chart",
+        &["Scatter", "PointSeries", "GridLabels"],
+        "thumb",
+    )
+    .about("A translucent point for each pair of values, in one series or several: a cloud of beats, steps against resting heart rate. Axes can be hidden and both can share a range.")
+    .parts("default"),
+    // App blocks
+    component("info-tip", "Info tip", &["InfoTip", "InfoMark"], "thumb")
+        .about("A small \"?\" or (i) chip that opens a note about the thing beside it: how to read a chart, what a score is made of."),
+    component("chart-skeleton", "Chart skeleton", &["ChartSkeleton"], "thumb")
+        .about("A loading placeholder shaped like the chart that is coming: a ring, a gauge, a line, bars, a calendar, a matrix or a meter."),
+    component(
+        "breathing-guide",
+        "Breathing guide",
+        &["BreathingGuide", "BreathingLabels"],
+        "thumb",
+    )
+    .about("A paced 4-7-8 breathing circle that runs from CSS alone and holds still when the reader asks for less motion."),
+    component("dock", "Dock", &["Dock", "DockItem"], "thumb")
+        .about("A floating row of icon links pinned to the bottom of the page: the main places of an app, with the current one lit."),
+    component("day-pager", "Day pager", &["DayPager"], "thumb")
+        .about("The day before, the day shown and the day after, with the day's scores and a calendar behind the date."),
+    component("copy-field", "Copy field", &["CopyField"], "thumb")
+        .about("A value to take elsewhere, such as an invite link or a key, in a read-only field with a Copy button."),
+    component("auth-layout", "Auth layout", &["AuthLayout"], "thumb")
+        .about("The page of one form a guest fills in, such as signing in or up, with the app's own panel beside it."),
     // Assistant
     component(
         "conversation",
@@ -812,6 +951,13 @@ pub const COMPONENTS: &[Component] = &[
     )
     .page("/docs/ui/themes/"),
     component(
+        "app-styles",
+        "App styles",
+        &["AppSheet", "AppFont", "FontDisplay"],
+        "brand",
+    )
+    .page("/docs/ui/app-styles/"),
+    component(
         "theme-builder",
         "Theme builder",
         &[
@@ -867,6 +1013,74 @@ pub const COMPONENTS: &[Component] = &[
         "thumb",
     )
     .page("/docs/ui/reports/"),
+    // Marketing
+    component("picture", "Picture", &["Picture"], "default").parts("default"),
+    component(
+        "site-page",
+        "SitePage",
+        &["SitePage", "Brand"],
+        "default",
+    )
+    .parts("default"),
+    component("site-header", "SiteHeader", &["SiteHeader", "Brand"], "default")
+        .parts("default"),
+    component("hero", "Hero", &["Hero", "Backdrop"], "default").parts("default"),
+    component(
+        "section",
+        "Section",
+        &["Section", "SectionHeading", "HeadingAlign", "SectionTone"],
+        "default",
+    )
+    .parts("default"),
+    component("logo-cloud", "LogoCloud", &["LogoCloud"], "default").parts("default"),
+    component(
+        "feature-grid",
+        "FeatureGrid",
+        &["FeatureGrid", "Feature"],
+        "default",
+    )
+    .parts("default"),
+    component(
+        "feature-rows",
+        "FeatureRows",
+        &["FeatureRows", "FeatureRow"],
+        "default",
+    )
+    .parts("default"),
+    component("stat-band", "StatBand", &["StatBand"], "default").parts("default"),
+    component(
+        "device-frames",
+        "Device frames",
+        &["BrowserFrame", "PhoneFrame"],
+        "default",
+    )
+    .parts("default")
+    .about("A screenshot or a live part of the product in a browser window or a phone, light or dark."),
+    component(
+        "testimonials",
+        "Testimonials",
+        &["Testimonials", "Testimonial"],
+        "default",
+    )
+    .parts("default"),
+    component("pricing", "Pricing", &["Pricing", "Plan"], "default").parts("default"),
+    component("faq", "Faq", &["Faq"], "default").parts("default"),
+    component("cta-band", "CtaBand", &["CtaBand"], "default").parts("default"),
+    component("newsletter", "Newsletter", &["Newsletter"], "default").parts("default"),
+    component(
+        "legal-page",
+        "LegalPage",
+        &["LegalPage", "LegalSection"],
+        "default",
+    )
+    .parts("default"),
+    component(
+        "site-footer",
+        "SiteFooter",
+        &["SiteFooter", "FooterColumn", "ThemeToggle"],
+        "default",
+    )
+    .parts("default"),
     // The example apps' views, shown on `/ui/` rather than a docs page.
     component(
         "build-anything",

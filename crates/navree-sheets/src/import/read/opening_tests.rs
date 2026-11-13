@@ -1740,8 +1740,15 @@ alone!(
     {
         // Half of the budget in relationships, the rest in empty shared
         // strings, the shapes that take the most beyond what they are charged.
+        // A relationship is charged 208 bytes and its 8-byte id. Measured on
+        // Linux, Rust 1.99.1 and 1.100.0 alike: a relationship held about 214
+        // bytes when it was charged 72 (233,016 of them held 49,950,720 bytes
+        // under a charge of 16 MiB, so that with the strings the file held
+        // 66.7 to 67.5 million bytes against a bound of 67.1 million). Now
+        // 77,672 of them with the strings hold 33.3 to 34.3 million bytes
+        // under a charge of 33.5 million, and peak at 34.9 million.
         let limit = 32 * MIB;
-        let count = limit / 2 / (64 + 8);
+        let count = limit / 2 / (208 + 8);
         let mut extra = String::new();
         for at in 0..count {
             extra.push_str(&format!(r#"<Relationship Id="{at:08x}" Target=""/>"#));

@@ -201,6 +201,13 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
             Ok(Arc::new(crate::native::app_stamp(&r.app()).await))
         }));
     }
+    // The appearance route sets only the reader's theme cookie and refuses posts from other
+    // sites itself: the session layer checks its origin in place of the token, so a theme
+    // toggle on a page cached for everyone (with no token in it) works for a reader with a
+    // session too.
+    m.contribute(navree_http::csrf::SameOriginOnly(
+        crate::theme::SETTINGS_PATH,
+    ));
     m.command(
         CommandSpec::new(
             "ui:render",
@@ -295,6 +302,7 @@ async fn reply_layer(request: Request, next: Next) -> Response {
         Err(back) => back,
     };
     let from_runtime = asked.is_runtime();
+    let for_region = request.headers().contains_key(REGION_HEADER);
     let accept = compress::accept_of(request.headers());
     let method = request.method().clone();
     // What the runtime asked for, for telemetry: a fetch ahead of a click is
@@ -321,6 +329,19 @@ async fn reply_layer(request: Request, next: Next) -> Response {
     // A native client asking the same URL gets another answer.
     #[cfg(feature = "native-preview")]
     crate::native::swap::vary_on_native(&mut response);
+    // A page the toolkit drew, answered to a region's own fetch, is that region's fragment
+    // even when it loads the runtime (a lazy tab inside it does): never a page elsewhere.
+    if for_region
+        && response.status().is_success()
+        && response
+            .extensions()
+            .get::<crate::view::ViewAnswer>()
+            .is_some()
+    {
+        response
+            .headers_mut()
+            .insert(FRAGMENT_HEADER, HeaderValue::from_static("1"));
+    }
     if let Some(kind) = operation {
         record_operation(kind, &response, ops, started);
     }
@@ -349,6 +370,9 @@ pub(crate) fn record_operation(
         )
     });
 }
+
+/// The header on a region's answer that says it is the region's fragment, not a page.
+pub(crate) const FRAGMENT_HEADER: HeaderName = HeaderName::from_static("x-navree-fragment");
 
 /// What a request from the runtime is: a region fetched again, a fragment
 /// of a page, a form posted or another action.
@@ -418,6 +442,7 @@ pub(crate) fn to_ops(fallback: Response, envelope: Envelope, status: StatusCode)
 struct Assets {
     wanted: bool,
     islands: Arc<Vec<crate::island::Served>>,
+    app_files: Arc<Vec<crate::app_files::Served>>,
 }
 
 impl Injectable for Assets {
@@ -433,9 +458,25 @@ impl Injectable for Assets {
                 .contributions::<crate::IslandScript>()
                 .into_iter()
                 .map(|contributed| *contributed.value);
+            let sheets = r
+                .app()
+                .contributions::<crate::AppSheet>()
+                .into_iter()
+                .map(|contributed| *contributed.value);
+            let fonts = r
+                .app()
+                .contributions::<crate::AppFont>()
+                .into_iter()
+                .map(|contributed| *contributed.value);
+            let images = r
+                .app()
+                .contributions::<crate::AppImage>()
+                .into_iter()
+                .map(|contributed| *contributed.value);
             Ok(Self {
                 wanted: gate.0.get().copied().unwrap_or(false),
                 islands: Arc::new(crate::island::served(scripts)),
+                app_files: Arc::new(crate::app_files::served(sheets, fonts, images)),
             })
         })
     }
@@ -486,6 +527,27 @@ impl Controller for Assets {
                  under an older hash it is still served, uncached.",
                 &[304, 404],
             )),
+            // The app's own stylesheets, fonts and pictures: by their name and content hash.
+            RouteDef::on(
+                Method::GET,
+                format!("!{}/{{file}}", crate::app_files::APP_PATH),
+                {
+                    let files = self.app_files.clone();
+                    move |Path(file): Path<String>, headers: HeaderMap| {
+                        let files = files.clone();
+                        async move { crate::app_files::respond(&file, &headers, &files) }
+                    }
+                },
+            )
+            .name("ui.app-files")
+            .public()
+            .api(api(
+                "A stylesheet, font or picture of the app",
+                "A file one of the app's modules contributed, by its name and content hash; \
+                 under an older hash it is still served, uncached. A picture is served under \
+                 a content security policy that runs nothing.",
+                &[304, 404],
+            )),
             // A theme of your own: the file's name is the theme, read by a strict parser.
             RouteDef::on(
                 Method::GET,
@@ -506,7 +568,15 @@ impl Controller for Assets {
             RouteDef::on(
                 Method::POST,
                 format!("!{}", crate::theme::SETTINGS_PATH),
-                |headers: HeaderMap, body: Bytes| async move {
+                |parts: http::request::Parts, body: Bytes| async move {
+                    let mut headers = parts.headers;
+                    // HTTP/2 and HTTP/3 name the host in `:authority`, and may send no `Host`.
+                    if !headers.contains_key(header::HOST)
+                        && let Some(authority) = parts.uri.authority()
+                        && let Ok(host) = HeaderValue::from_str(authority.as_str())
+                    {
+                        headers.insert(header::HOST, host);
+                    }
                     crate::theme::respond_setting(&headers, &body)
                 },
             )
@@ -517,8 +587,9 @@ impl Controller for Assets {
                 ..api(
                     "Sets the reader's theme and mode",
                     "The theme menu's form (`theme`, `mode`, `back`): sets the appearance cookie \
-                     and goes back to `back`, so it works with JavaScript off. A post from \
-                     another site is refused.",
+                     and goes back to `back` (a path of this site, else `/`), so it works with \
+                     JavaScript off. A post from another site is refused; the session layer \
+                     checks its origin in place of the CSRF token.",
                     &[400, 403],
                 )
             }),
@@ -703,6 +774,6 @@ mod tests {
             assert!(api.summary.is_some(), "{label}");
             assert_eq!(api.tags, ["UI"], "{label}");
         }
-        assert_eq!(toolkit, 4);
+        assert_eq!(toolkit, 5);
     }
 }

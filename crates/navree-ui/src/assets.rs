@@ -91,6 +91,7 @@ fn modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::ISLAND, ISLANDS_URL),
         (Uses::PARTS, PARTS_URL),
         (Uses::GENUI, GENUI_URL),
+        (Uses::COUNT_UP, COUNT_UP_URL),
         #[cfg(feature = "phone")]
         (Uses::PHONE, PHONE_URL),
     ]
@@ -129,7 +130,13 @@ fn sheet_modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::CAROUSEL, CAROUSEL_STYLES_URL),
         (Uses::MENUBAR, MENUBAR_STYLES_URL),
         (Uses::CHARTS, CHARTS_STYLES_URL),
+        (Uses::CHART_PAINT, CHART_PAINT_URL),
+        (Uses::CHART_RADIAL, CHART_RADIAL_URL),
+        (Uses::CHART_LINEAR, CHART_LINEAR_URL),
+        (Uses::CHART_GRIDS, CHART_GRIDS_URL),
+        (Uses::APP_BLOCKS, APP_BLOCKS_URL),
         (Uses::PARTS_STYLES, PARTS_STYLES_URL),
+        (Uses::MARKETING, MARKETING_URL),
     ]
     .into_iter()
 }
@@ -252,7 +259,7 @@ mod tests {
     fn every_module_has_a_bit_of_its_own() {
         let lists: [Vec<(Uses, &str)>; 2] = [modules().collect(), sheet_modules().collect()];
         for list in &lists {
-            let mut taken = 0_u32;
+            let mut taken = 0_u64;
             for (bit, url) in list {
                 assert_eq!(bit.0.count_ones(), 1, "{url} is loaded by one bit");
                 assert_eq!(taken & bit.0, 0, "{url} shares its bit with another module");

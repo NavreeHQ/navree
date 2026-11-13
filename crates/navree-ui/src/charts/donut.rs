@@ -297,13 +297,14 @@ impl Donut {
             note: None,
         };
         #[cfg(feature = "native-preview")]
-        let native = {
+        {
             let values: Vec<Option<f64>> = parts.iter().map(|(_, value, _)| *value).collect();
-            crate::native::chart_numbers(
+            crate::native::record_chart_numbers(
+                &self.common.id(),
                 parts.iter().map(|(name, ..)| name.as_str()),
                 std::iter::once((&*labels.value, values.as_slice())),
-            )
-        };
+            );
+        }
         Some(Drawn {
             legend: None,
             body: body.into(),
@@ -316,8 +317,8 @@ impl Donut {
             height: self.size,
             note: None,
             interactive: true,
-            #[cfg(feature = "native-preview")]
-            native,
+            text: false,
+            tip: None,
         })
     }
 }

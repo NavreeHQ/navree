@@ -1,4 +1,4 @@
-//! [`AuthPages`] (feature `ui`): the pages a browser signs in and out with,
+//! [`AuthPages`] (feature `ui`): the pages a browser signs in, up and out with,
 //! drawn with navree-ui on the session ([`AuthService::sign_in_session`]).
 
 mod account;
@@ -6,12 +6,15 @@ mod passkey;
 mod passwordless;
 
 use std::collections::BTreeMap;
+use std::convert::Infallible;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use http::request::Parts;
-use http::{HeaderValue, Method, StatusCode};
+use http::{HeaderMap, HeaderValue, Method, StatusCode};
 use navree_contracts::AuthState;
+use navree_db::Uow;
 use navree_http::ModuleBuilderHttpExt;
 use navree_http::extract::{Query, RawQuery};
 use navree_http::{ApiMeta, AppError, Controller, IntoResponse, Response, RouteDef};
@@ -21,22 +24,26 @@ use navree_kernel::{
 use navree_session::Session;
 use navree_ui::form::{FieldErrors, FormView, Rejected};
 use navree_ui::pages::{PagesOptions, ReturnTo};
+use navree_ui::theme::{Appearance, Theme, ThemeMenu};
 use navree_ui::{
-    Alert, AlertTone, Card, Container, ContainerSize, Form, LocalHref, Node, Reply, Stack, Submit,
-    Text, Validate, View, el,
+    Alert, AlertTone, AppFont, AppSheet, AuthLayout, Card, Form, LocalHref, Node, Reply, Shell,
+    Stack, Submit, Text, Validate, View, el,
 };
 use serde::Deserialize;
 
 use crate::session_auth::{SIGN_OUT_PATH, TWO_FACTOR_SETUP_PATH};
-use crate::{AuthError, AuthService, ClientMeta, SessionSignIn, TwoFactorProof};
+use crate::{AuthError, AuthService, ClientMeta, NewUser, SessionSignIn, TwoFactorProof};
 
 /// How many forgotten-password requests one client may send per minute.
 const FORGOT_PER_MINUTE: u32 = 5;
 
-/// The pages a browser signs in and out with, on the session cookie, drawn
-/// with navree-ui: sign-in (with "remember me"), the second factor,
-/// forgotten and reset password, and sign-out. A module: add it next to
-/// `AuthModule`, `SessionModule` and `UiModule`.
+/// How many sign-ups one client may send per minute.
+const SIGN_UP_PER_MINUTE: u32 = 5;
+
+/// The pages a browser signs in, up and out with, on the session cookie, drawn
+/// with navree-ui: sign-in (with "remember me"), sign-up when asked for, the
+/// second factor, forgotten and reset password, and sign-out. A module: add it
+/// next to `AuthModule`, `SessionModule` and `UiModule`.
 ///
 /// | Route | What it does |
 /// |---|---|
@@ -45,7 +52,8 @@ const FORGOT_PER_MINUTE: u32 = 5;
 /// | `GET`, `POST /sign-in/two-factor` | the code from the authenticator app, or a recovery code ([`AuthService::verify_two_factor_session`]) |
 /// | `GET`, `POST /forgot-password` | mails a reset link ([`AuthService::send_password_reset_link`]); always the same answer |
 /// | `GET /reset-password?token=&email=`, `POST /reset-password` | sets the new password ([`AuthService::reset_password`]), which signs every session out |
-/// | `POST /sign-out` | [`AuthService::sign_out_session`], then the sign-in page |
+/// | `GET`, `POST /sign-up` | with [`sign_up`](Self::sign_up) and `auth.registration` on: a new account ([`AuthService::register`]), signed in on this browser |
+/// | `POST /sign-out` | [`AuthService::sign_out_session`], then the sign-in page, or [`after_sign_out`](Self::after_sign_out) |
 /// | `GET`, `POST /account/two-factor`, `POST /account/two-factor/confirm` | sets two-factor authentication up: the secret as a picture and a key, the first code, the recovery codes shown once ([`AuthService::enable_two_factor`], [`AuthService::confirm_two_factor`]); a user a policy requires it of is sent here after signing in |
 /// | `POST /impersonate/stop` | an impersonating administrator goes back to their own sign-in ([`AuthService::stop_impersonating_session`]) |
 /// | `GET`, `POST /sign-in/link`, `GET`, `POST /sign-in/link/verify` | when `auth.magic_link.enabled`: mails a link; the link opens a page with one button that signs in ([`AuthService::login_with_magic_link_session`]); set `auth.magic_link.url` to `https://app.example.com/sign-in/link/verify` |
@@ -62,6 +70,14 @@ const FORGOT_PER_MINUTE: u32 = 5;
 /// page (`https://app.example.com/reset-password`) so the reset mail links
 /// to it.
 ///
+/// The pages are drawn in the app's look: the registered [`Shell`]'s default
+/// appearance, its stylesheets and its fonts, with the reader's own choice of
+/// theme and mode laid over them; [`appearance`](Self::appearance),
+/// [`stylesheet`](Self::stylesheet) and [`font`](Self::font) set them for an app
+/// with no shell or a look of their own. [`aside`](Self::aside) puts the app's
+/// panel beside the form and [`theme_menu`](Self::theme_menu) a menu of light
+/// and dark in the corner ([`AuthLayout`]).
+///
 /// ```no_run
 /// use navree_auth::{AuthModule, AuthPages};
 /// use navree_kernel::Navree;
@@ -74,7 +90,7 @@ const FORGOT_PER_MINUTE: u32 = 5;
 ///     .module(SessionModule::from_config())
 ///     .module(AuthModule::from_config())
 ///     .module(UiModule)
-///     .module(AuthPages::new().app_name("Agra CRM"))
+///     .module(AuthPages::new().app_name("Agra CRM").sign_up().after_sign_out("/"))
 ///     .run()
 /// # }
 /// ```
@@ -84,12 +100,105 @@ pub struct AuthPages {
     app_name: Option<String>,
     sign_in: Option<String>,
     home: Option<String>,
+    sign_up: bool,
+    sign_up_path: Option<String>,
+    after_sign_up: Option<String>,
+    after_sign_out: Option<String>,
+    appearance: Option<Appearance>,
+    sheets: Vec<AppSheet>,
+    fonts: Vec<AppFont>,
+    aside: Option<Node>,
+    theme_menu: bool,
+    dress: Option<fn(View) -> View>,
 }
 
 impl AuthPages {
     /// The pages at their default paths.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Adds the sign-up page, `GET` and `POST /sign-up` ([`sign_up_path`](Self::sign_up_path)
+    /// moves it), when `auth.registration` is on: a name, an email address and a password
+    /// typed twice, checked by [`AuthService::register`] (a unique address, the password
+    /// policy, the sign-in policies), then the new account signed in on this browser and
+    /// sent on to `next`, [`after_sign_up`](Self::after_sign_up) or home. The sign-in page
+    /// links to it. Its post carries the session's CSRF token like every other, and a client
+    /// may send at most five a minute.
+    pub fn sign_up(mut self) -> Self {
+        self.sign_up = true;
+        self
+    }
+
+    /// Where the sign-up page is, in place of `/sign-up` (a path on this site). It turns
+    /// the page on, as [`sign_up`](Self::sign_up) does.
+    pub fn sign_up_path(mut self, path: impl Into<String>) -> Self {
+        self.sign_up = true;
+        self.sign_up_path = Some(path.into());
+        self
+    }
+
+    /// Where a browser goes once its new account is made and signed in, when it has no
+    /// `next`: a welcome page, in place of the home page.
+    pub fn after_sign_up(mut self, path: impl Into<String>) -> Self {
+        self.after_sign_up = Some(path.into());
+        self
+    }
+
+    /// Where a browser goes after signing out (a path on this site, such as the public
+    /// site's home page), in place of the sign-in page with "You are signed out".
+    pub fn after_sign_out(mut self, path: impl Into<String>) -> Self {
+        self.after_sign_out = Some(path.into());
+        self
+    }
+
+    /// How the pages look before the reader chooses: a theme of the app's own and a mode.
+    /// The reader's choice (the theme cookie, `?theme=`, `?mode=`) lies over it. Without it
+    /// the pages take the default look of the app's [`Shell`], when one is registered, and
+    /// keep to the themes it offers.
+    pub fn appearance(mut self, appearance: Appearance) -> Self {
+        self.appearance = Some(appearance);
+        self
+    }
+
+    /// Links a stylesheet of the app's own on every page, after the registered
+    /// [`Shell`]'s. See [`View::stylesheet`].
+    pub fn stylesheet(mut self, sheet: &AppSheet) -> Self {
+        if !self.sheets.contains(sheet) {
+            self.sheets.push(*sheet);
+        }
+        self
+    }
+
+    /// Links a typeface of the app's own on every page, after the registered [`Shell`]'s.
+    /// See [`View::font`].
+    pub fn font(mut self, font: &AppFont) -> Self {
+        if !self.fonts.contains(font) {
+            self.fonts.push(*font);
+        }
+        self
+    }
+
+    /// Puts `aside` beside the form on wide screens: the app's mark, a line about it, a
+    /// picture. On a phone the form stands alone. See [`AuthLayout`].
+    pub fn aside(mut self, aside: impl Into<Node>) -> Self {
+        self.aside = Some(aside.into());
+        self
+    }
+
+    /// Puts a [`ThemeMenu`] in the pages' top corner, so a reader can choose light or dark
+    /// before signing in (and a theme, when the app offers more than one). On when the
+    /// registered [`Shell`] has one.
+    pub fn theme_menu(mut self) -> Self {
+        self.theme_menu = true;
+        self
+    }
+
+    /// Hands every page to `dress` last, to set what the options above don't: its
+    /// language, its density, another sheet.
+    pub fn view(mut self, dress: fn(View) -> View) -> Self {
+        self.dress = Some(dress);
+        self
     }
 
     /// The app's name, shown above every form.
@@ -218,6 +327,14 @@ struct Paths {
     code: String,
     passkey: String,
     setup: String,
+    /// The sign-up page, when it is on.
+    sign_up: Option<String>,
+    /// Where a new account goes without a `next`.
+    after_sign_up: String,
+    /// Where a browser goes after signing out.
+    after_sign_out: String,
+    /// How the pages look.
+    dressing: Arc<Dressing>,
     /// Which ways other than a password the app turned on.
     has_magic_link: bool,
     has_code: bool,
@@ -245,7 +362,39 @@ impl Paths {
                     .filter(|path| ReturnTo::parse(path).is_some())
             })
             .unwrap_or_else(|| "/".to_owned());
+        let sign_up = pages.sign_up.then(|| {
+            pages
+                .sign_up_path
+                .clone()
+                .filter(|path| local(path))
+                .map(|path| path.trim_end_matches('/').to_owned())
+                .filter(|path| !path.is_empty())
+                .unwrap_or_else(|| "/sign-up".to_owned())
+        });
+        let after_sign_up = pages
+            .after_sign_up
+            .clone()
+            .filter(|path| ReturnTo::parse(path).is_some())
+            .unwrap_or_else(|| home.clone());
+        let after_sign_out = pages
+            .after_sign_out
+            .clone()
+            .filter(|path| ReturnTo::parse(path).is_some())
+            .unwrap_or_else(|| format!("{sign_in}?status=signed-out"));
         Paths {
+            sign_up,
+            after_sign_up,
+            after_sign_out,
+            dressing: Arc::new(Dressing {
+                appearance: pages.appearance.clone(),
+                shell: None,
+                sheets: pages.sheets.clone(),
+                fonts: pages.fonts.clone(),
+                aside: pages.aside.clone(),
+                theme_menu: pages.theme_menu,
+                dress: pages.dress,
+                app_name: pages.app_name.clone(),
+            }),
             app_name: pages.app_name.clone(),
             two_factor: format!("{sign_in}/two-factor"),
             forgot: "/forgot-password".to_owned(),
@@ -266,6 +415,17 @@ impl Paths {
     /// other than the sign-in pages, else home.
     fn after(&self, next: Option<&str>) -> LocalHref {
         ReturnTo::resolve_for(next, &self.sign_in, &self.home)
+    }
+
+    /// Where a new account goes: `next` when it is a page of this site other
+    /// than the sign-in and sign-up pages, else [`AuthPages::after_sign_up`].
+    fn after_sign_up(&self, next: Option<&str>) -> LocalHref {
+        let next = next.filter(|next| {
+            self.sign_up
+                .as_deref()
+                .is_none_or(|sign_up| ReturnTo::parse_for(next, sign_up).is_some())
+        });
+        ReturnTo::resolve_for(next, &self.sign_in, &self.after_sign_up)
     }
 
     /// `path` with `next` carried along when it is safe.
@@ -292,6 +452,31 @@ struct SignInForm {
     #[validate(skip)]
     #[serde(default)]
     remember: bool,
+    #[validate(skip)]
+    #[form(widget = hidden)]
+    #[serde(default)]
+    next: Option<String>,
+}
+
+/// The sign-up form.
+#[derive(Debug, Deserialize, Validate, Form)]
+struct SignUpForm {
+    /// Your name
+    #[validate(length(min = 1, max = 120))]
+    #[form(autofocus, error = "Tell us what to call you.")]
+    name: String,
+    /// Email
+    #[validate(email, length(max = 255))]
+    #[form(widget = email, error = "Enter your email address.")]
+    email: String,
+    /// Password
+    #[validate(length(min = 1, max = 1024))]
+    #[form(widget = password, error = "Choose a password.")]
+    password: String,
+    /// Password again
+    #[validate(length(min = 1, max = 1024))]
+    #[form(widget = password, error = "Type the password again.")]
+    password_confirmation: String,
     #[validate(skip)]
     #[form(widget = hidden)]
     #[serde(default)]
@@ -380,20 +565,312 @@ fn notice(status: Option<&str>) -> Option<Alert> {
     Some(Alert::new(tone).title(text))
 }
 
-/// A page holding one card.
+/// How the pages look, settled at boot: the options of [`AuthPages`] and the
+/// app's [`Shell`].
+#[derive(Clone, Debug, Default)]
+struct Dressing {
+    appearance: Option<Appearance>,
+    shell: Option<Arc<Shell>>,
+    sheets: Vec<AppSheet>,
+    fonts: Vec<AppFont>,
+    aside: Option<Node>,
+    theme_menu: bool,
+    dress: Option<fn(View) -> View>,
+    app_name: Option<String>,
+}
+
+/// How one request's page looks: the reader's appearance, and the address the
+/// theme menu comes back to.
+#[derive(Clone, Debug)]
+struct Look {
+    appearance: Option<Appearance>,
+    back: String,
+    /// The page was drawn again after a post whose session had ended (`?status=expired`).
+    expired: bool,
+}
+
+tokio::task_local! {
+    /// The look of the request a page is drawn for: set around every route of
+    /// the pages by [`Looked`].
+    static LOOK: Look;
+}
+
+impl Dressing {
+    /// The look of a request at `path` with `query` and `headers`: the app's
+    /// appearance with the reader's choice over it. `None` when nothing says
+    /// anything, so the page keeps the toolkit's default.
+    fn look_for(&self, path: &str, query: Option<&str>, headers: &HeaderMap) -> Look {
+        let appearance = match (&self.appearance, &self.shell) {
+            (Some(own), _) => Some(own.clone().for_reader(headers, query)),
+            (None, Some(shell)) => {
+                let at = query.map_or_else(|| path.to_owned(), |query| format!("{path}?{query}"));
+                Some(shell.for_request(at, headers).appearance())
+            }
+            (None, None) => {
+                Some(Appearance::default().for_reader(headers, query)).filter(|a| !a.is_default())
+            }
+        };
+        let kept: Vec<&str> = query
+            .unwrap_or_default()
+            .split('&')
+            .filter(|pair| {
+                let key = pair.split_once('=').map_or(*pair, |(key, _)| key);
+                !pair.is_empty() && key != "theme" && key != "mode"
+            })
+            .collect();
+        let expired = kept.contains(&"status=expired");
+        let back = if kept.is_empty() {
+            path.to_owned()
+        } else {
+            format!("{path}?{}", kept.join("&"))
+        };
+        Look {
+            appearance,
+            back,
+            expired,
+        }
+    }
+
+    /// The themes the theme menu offers: the shell's, else the page's own alone
+    /// (so the menu holds the modes only).
+    fn themes(&self, current: &Appearance) -> Vec<Theme> {
+        match &self.shell {
+            Some(shell) if self.appearance.is_none() => shell.offered_themes().to_vec(),
+            _ => vec![current.theme().clone()],
+        }
+    }
+
+    /// `title` as the browser's tab reads it: through the shell's title
+    /// template, when there is one.
+    fn title(&self, title: &str) -> String {
+        match &self.shell {
+            Some(shell) => shell.document_title(title),
+            None => title.to_owned(),
+        }
+    }
+}
+
+/// Runs a route of the pages with its request's [`Look`] in [`LOOK`].
+#[derive(Clone)]
+struct Looked<S> {
+    inner: S,
+    dressing: Arc<Dressing>,
+    paths: Arc<Paths>,
+}
+
+impl Paths {
+    /// Where a page's form goes when it is posted without the session's cookie, as one
+    /// left open past the session's lifetime is: the page's own `GET` with a notice, never
+    /// with what was typed. Sign-out goes where it would have gone; a step with no page of
+    /// its own (a code, a second factor) starts again at the sign-in page; a new password
+    /// asks for a new link, since the old one's token isn't carried.
+    fn after_expiry(&self, path: &str) -> String {
+        if path == SIGN_OUT_PATH {
+            return self.after_sign_out.clone();
+        }
+        let page = if path == self.reset {
+            &self.forgot
+        } else if [
+            Some(&self.sign_in),
+            self.sign_up.as_ref(),
+            Some(&self.forgot),
+            Some(&self.magic_link),
+            Some(&self.code),
+        ]
+        .into_iter()
+        .flatten()
+        .any(|page| page == path)
+        {
+            path
+        } else {
+            &self.sign_in
+        };
+        format!("{page}?status=expired")
+    }
+}
+
+/// Whether `headers` say the body is a form a page posted.
+fn is_form_post(headers: &HeaderMap) -> bool {
+    headers
+        .get(http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|kind| {
+            let kind = kind.trim_start().to_ascii_lowercase();
+            kind.starts_with("application/x-www-form-urlencoded")
+                || kind.starts_with("multipart/form-data")
+        })
+}
+
+/// Logs a request refused for coming without the session's cookie, as the session layer
+/// logs its CSRF refusals: on `navree::security`, and in the audit trail as
+/// `csrf.mismatch` with the reason `no_session`.
+fn log_refusal(
+    request: &navree_http::extract::Request,
+) -> impl Future<Output = ()> + Send + 'static {
+    let method = request.method().to_string();
+    let path = request.uri().path().to_owned();
+    let ip = request
+        .extensions()
+        .get::<navree_http::ClientIp>()
+        .map(|ip| ip.0);
+    tracing::warn!(
+        target: "navree::security",
+        method,
+        path,
+        reason = "no_session",
+        ip = ip.map(tracing::field::display),
+        "CSRF token mismatch"
+    );
+    let ctx = request
+        .extensions()
+        .get::<navree_kernel::AppContext>()
+        .cloned();
+    let mut entry =
+        navree_contracts::AuditEntry::new(navree_contracts::AuditKind::Security, "csrf.mismatch")
+            .metadata(serde_json::json!({
+                "method": method,
+                "path": path,
+                "reason": "no_session",
+            }));
+    if let Some(ip) = ip {
+        entry = entry.ip(ip.to_string());
+    }
+    if let Some(request_id) = request.extensions().get::<navree_contracts::RequestId>() {
+        entry = entry.request_id(request_id.as_str());
+    }
+    async move {
+        let Some(ctx) = ctx else {
+            return;
+        };
+        let Some(sink) = ctx.try_get::<dyn navree_contracts::AuditSink>().await else {
+            return;
+        };
+        if let Err(error) = sink.record(entry).await {
+            tracing::warn!(target: "navree::security", %error, "could not audit a CSRF failure");
+        }
+    }
+}
+
+impl<S> tower::Service<navree_http::extract::Request> for Looked<S>
+where
+    S: tower::Service<navree_http::extract::Request, Response = Response, Error = Infallible>
+        + Clone
+        + Send
+        + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = Response;
+    type Error = Infallible;
+    type Future = BoxFuture<'static, Result<Response, Infallible>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Infallible>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, request: navree_http::extract::Request) -> Self::Future {
+        // Login CSRF: every form of these pages is drawn by a GET that starts the session,
+        // so a post without the session's cookie came from another page, perhaps a sibling
+        // subdomain's or one whose browser says nothing of where it posts from, and could
+        // sign the reader in to someone else's account. It is refused before anything runs.
+        let safe = matches!(
+            *request.method(),
+            Method::GET | Method::HEAD | Method::OPTIONS | Method::TRACE
+        );
+        let resumed = request
+            .extensions()
+            .get::<Session>()
+            .is_some_and(Session::is_resumed);
+        if !safe && !resumed {
+            let logged = log_refusal(&request);
+            // A form left open past the session's lifetime comes back the same way: its
+            // page is drawn again with a notice, and nothing in the post is used.
+            let answer = if is_form_post(request.headers()) {
+                Reply::redirect(LocalHref::from(
+                    self.paths.after_expiry(request.uri().path()),
+                ))
+                .into_response()
+            } else {
+                AppError::csrf_mismatch().into_response()
+            };
+            return Box::pin(async move {
+                logged.await;
+                Ok(answer)
+            });
+        }
+        let look = self.dressing.look_for(
+            request.uri().path(),
+            request.uri().query(),
+            request.headers(),
+        );
+        let answer = self.inner.call(request);
+        Box::pin(LOOK.scope(look, answer))
+    }
+}
+
+/// A page holding one card, in the app's look.
 fn page(paths: &Paths, title: &'static str, description: &'static str, body: Node) -> View {
+    let dressing = &paths.dressing;
+    let look = LOOK.try_with(Clone::clone).unwrap_or_else(|_| Look {
+        appearance: dressing.appearance.clone(),
+        back: paths.sign_in.clone(),
+        expired: false,
+    });
+    // The sign-in page says it in its own notice.
+    let expired = (look.expired && title != "Sign in")
+        .then(|| Alert::new(AlertTone::Warning).title("Your session expired. Please try again."));
     let heading = paths.app_name.clone().map(Text::muted);
-    View::new(title).body(
-        el("main").attr("data-auth-page", "").child(
-            Container::new()
-                .size(ContainerSize::Sm)
-                .children(Stack::gap(4).children((
-                    heading,
-                    el("h1").slot("page-title").child(title),
-                    Card::new().description(description).body(body),
-                ))),
-        ),
-    )
+    let card = Stack::gap(4).children((
+        heading,
+        el("h1").slot("page-title").child(title),
+        expired,
+        Card::new().description(description).body(body),
+    ));
+    let mut layout = AuthLayout::new(card);
+    if let Some(aside) = &dressing.aside {
+        layout = layout.aside(aside.clone());
+        if let Some(name) = &dressing.app_name {
+            layout = layout.aside_label(format!("About {name}"));
+        }
+    }
+    let mut view = View::new(dressing.title(title));
+    let menu = dressing.theme_menu
+        || dressing
+            .shell
+            .as_ref()
+            .is_some_and(|shell| shell.has_theme_menu());
+    if menu {
+        let current = look.appearance.clone().unwrap_or_default();
+        let menu = ThemeMenu::new(&current, &dressing.themes(&current)).back(look.back.clone());
+        for theme in menu.sheets() {
+            view = view.theme_sheet(&theme);
+        }
+        layout = layout.corner(menu);
+    }
+    view = view.body(layout);
+    if let Some(appearance) = look.appearance {
+        view = view.appearance(appearance);
+    }
+    let shell = dressing.shell.as_deref();
+    for font in shell
+        .map(Shell::fonts)
+        .unwrap_or_default()
+        .iter()
+        .chain(&dressing.fonts)
+    {
+        view = view.font(font);
+    }
+    for sheet in shell
+        .map(Shell::stylesheets)
+        .unwrap_or_default()
+        .iter()
+        .chain(&dressing.sheets)
+    {
+        view = view.stylesheet(sheet);
+    }
+    match dressing.dress {
+        Some(dress) => dress(view),
+        None => view,
+    }
 }
 
 /// A link under a form.
@@ -419,6 +896,12 @@ fn sign_in_page(
     next: Option<&str>,
 ) -> View {
     let mut others = vec![link("Forgot your password?", &paths.forgot)];
+    if let Some(sign_up) = &paths.sign_up {
+        others.push(link(
+            "New here? Create an account",
+            paths.with_next(sign_up, next).as_str(),
+        ));
+    }
     if paths.has_passkey {
         others.push(plain_link(
             "Sign in with a passkey",
@@ -444,7 +927,7 @@ fn sign_in_page(
         Stack::gap(4)
             .children((
                 notice,
-                Node::from(form.submit("Sign in")),
+                Node::from(form.one_column().submit("Sign in")),
                 Node::from(Stack::gap(2).children(others)),
             ))
             .into(),
@@ -477,6 +960,24 @@ fn signed_in_redirect(
     Reply::redirect(signed_in_target(service, session, paths, next)).into_response()
 }
 
+/// The sign-up page around `form`.
+fn sign_up_page(paths: &Paths, form: FormView<SignUpForm>, next: Option<&str>) -> View {
+    page(
+        paths,
+        "Create an account",
+        "Your name, your email address and a password.",
+        Stack::gap(4)
+            .children((
+                Node::from(form.one_column().submit("Create the account")),
+                link(
+                    "Already have an account? Sign in",
+                    paths.with_next(&paths.sign_in, next).as_str(),
+                ),
+            ))
+            .into(),
+    )
+}
+
 fn two_factor_page(paths: &Paths, form: FormView<TwoFactorForm>) -> View {
     page(
         paths,
@@ -484,7 +985,7 @@ fn two_factor_page(paths: &Paths, form: FormView<TwoFactorForm>) -> View {
         "Enter the code your authenticator app shows now, or one of your recovery codes.",
         Stack::gap(4)
             .children((
-                Node::from(form.submit("Continue")),
+                Node::from(form.one_column().submit("Continue")),
                 link("Sign in as someone else", &paths.sign_in),
             ))
             .into(),
@@ -504,7 +1005,7 @@ fn forgot_page(paths: &Paths, form: FormView<ForgotForm>, sent: bool) -> View {
         Stack::gap(4)
             .children((
                 sent,
-                Node::from(form.submit("Send the link")),
+                Node::from(form.one_column().submit("Send the link")),
                 link("Back to sign in", &paths.sign_in),
             ))
             .into(),
@@ -526,7 +1027,7 @@ fn reset_page(paths: &Paths, form: FormView<ResetForm>, refused: bool) -> View {
         Stack::gap(4)
             .children((
                 refused,
-                Node::from(form.submit("Change the password")),
+                Node::from(form.one_column().submit("Change the password")),
                 link("Ask for a new link", &paths.forgot),
             ))
             .into(),
@@ -596,7 +1097,16 @@ impl Injectable for PagesController {
             let pages = r.get::<AuthPages>().await?;
             let ui = r.app().try_get::<PagesOptions>().await;
             let mut paths = Paths::new(&pages, ui.as_deref());
+            let shell = r.app().try_get::<Shell>().await;
+            if shell.is_some() {
+                let mut dressing = (*paths.dressing).clone();
+                dressing.shell = shell;
+                paths.dressing = Arc::new(dressing);
+            }
             let options = service.options();
+            if !options.registration {
+                paths.sign_up = None;
+            }
             paths.has_magic_link = options.magic_link.enabled;
             paths.has_code = options.otp.enabled;
             paths.has_passkey = options.passkeys.enabled;
@@ -1097,10 +1607,9 @@ impl Controller for PagesController {
                             .sign_out_session(&session, &meta)
                             .await
                             .map_err(AuthError::into_app_error)?;
-                        let target = format!("{}?status=signed-out", paths.sign_in);
                         // A native client forgets what it holds of the person.
                         Ok::<_, AppError>(
-                            Reply::redirect(LocalHref::from(target))
+                            Reply::redirect(LocalHref::from(paths.after_sign_out.as_str()))
                                 .signed_out()
                                 .into_response(),
                         )
@@ -1112,7 +1621,9 @@ impl Controller for PagesController {
             .name("auth.pages.sign_out")
             .api(ApiMeta {
                 description: Some(
-                    "Ends the browser's sign-in, then goes to the sign-in page.".to_owned(),
+                    "Ends the browser's sign-in, then goes to the sign-in page (or the page \
+                     the app chose)."
+                        .to_owned(),
                 ),
                 ..api("Signs out", &[303, 403])
             }),
@@ -1126,7 +1637,198 @@ impl Controller for PagesController {
         if paths.has_passkey {
             routes.extend(self.passkey_routes());
         }
+        if paths.sign_up.is_some() {
+            routes.extend(self.sign_up_routes());
+        }
         routes.extend(self.account_routes());
+        // Every page is drawn in the look of the request it answers.
+        let dressing = paths.dressing.clone();
+        for route in &mut routes {
+            let (dressing, paths) = (dressing.clone(), paths.clone());
+            route.handler = route
+                .handler
+                .clone()
+                .layer(tower::layer::layer_fn(move |inner| Looked {
+                    inner,
+                    dressing: dressing.clone(),
+                    paths: paths.clone(),
+                }));
+        }
+        routes
+    }
+}
+
+impl PagesController {
+    /// `GET` and `POST` of the sign-up page.
+    fn sign_up_routes(&self) -> Vec<RouteDef> {
+        let paths = self.paths.clone();
+        let Some(path) = paths.sign_up.clone() else {
+            return Vec::new();
+        };
+        let absolute = format!("!{path}");
+        let mut routes = Vec::new();
+
+        let at = paths.clone();
+        routes.push(
+            RouteDef::on(
+                Method::GET,
+                absolute.clone(),
+                move |parts: Parts, session: Session, Query(query): Query<SignInQuery>| {
+                    let paths = at.clone();
+                    async move {
+                        if signed_in(&parts) {
+                            return Reply::redirect(paths.after_sign_up(query.next.as_deref()))
+                                .into_response();
+                        }
+                        let next = query
+                            .next
+                            .as_deref()
+                            .and_then(|next| ReturnTo::parse_for(next, &paths.sign_in))
+                            .map(|next| next.as_str().to_owned());
+                        let sign_up = paths.sign_up.clone().unwrap_or_default();
+                        let form = FormView::<SignUpForm>::new()
+                            .post(sign_up.as_str())
+                            .csrf(session.csrf_token())
+                            .of(&SignUpForm {
+                                name: String::new(),
+                                email: String::new(),
+                                password: String::new(),
+                                password_confirmation: String::new(),
+                                next: next.clone(),
+                            });
+                        sign_up_page(&paths, form, next.as_deref()).into_response()
+                    }
+                },
+            )
+            .public()
+            .page()
+            .name("auth.pages.sign_up")
+            .api(ApiMeta {
+                description: Some(
+                    "The form for a new account; a browser already signed in goes on (303)."
+                        .to_owned(),
+                ),
+                ..api("The sign-up page", &[303])
+            }),
+        );
+
+        let (service, at) = (self.service.clone(), paths.clone());
+        routes.push(
+            RouteDef::on(
+                Method::POST,
+                absolute,
+                move |parts: Parts,
+                      session: Session,
+                      meta: ClientMeta,
+                      uow: Uow,
+                      submitted: Result<Submit<SignUpForm>, Rejected<SignUpForm>>| {
+                    let (service, paths) = (service.clone(), at.clone());
+                    async move {
+                        let token = session.csrf_token();
+                        let redraw = |rejected: Rejected<SignUpForm>, next: Option<String>| {
+                            let paths = paths.clone();
+                            let token = token.clone();
+                            rejected.respond(move |form| {
+                                sign_up_page(&paths, form.csrf(token), next.as_deref())
+                            })
+                        };
+                        let input = match submitted {
+                            Ok(Submit(input)) => input,
+                            Err(rejected) => return Ok(redraw(rejected, None)),
+                        };
+                        let refuse = |field: &str, message: String| {
+                            redraw(
+                                Rejected::after_decode(&input, field_error(field, message), &parts),
+                                input.next.clone(),
+                            )
+                        };
+                        if input.password != input.password_confirmation {
+                            return Ok(refuse(
+                                "password_confirmation",
+                                "The two passwords are not the same.".to_owned(),
+                            ));
+                        }
+                        let created = service
+                            .register(
+                                &uow,
+                                NewUser {
+                                    name: input.name.trim().to_owned(),
+                                    email: input.email.trim().to_owned(),
+                                    password: input.password.clone(),
+                                },
+                            )
+                            .await;
+                        match created {
+                            Ok(_) => {}
+                            Err(AuthError::EmailTaken) => {
+                                return Ok(refuse(
+                                    "email",
+                                    "An account already uses this address. Sign in instead."
+                                        .to_owned(),
+                                ));
+                            }
+                            Err(AuthError::Invalid { field, message }) => {
+                                let field = if field == "name" || field == "email" {
+                                    field
+                                } else {
+                                    "password"
+                                };
+                                return Ok(refuse(field, message));
+                            }
+                            Err(AuthError::SignInRefused { message, .. }) => {
+                                let mut response = refuse("email", message);
+                                *response.status_mut() = StatusCode::FORBIDDEN;
+                                return Ok(response);
+                            }
+                            Err(error) => return Err::<Response, AppError>(error.into_app_error()),
+                        }
+                        uow.commit().await?;
+                        // The new account signs in as the sign-in page does: a policy
+                        // may still ask for a second factor first.
+                        match service
+                            .sign_in_session(
+                                &session,
+                                input.email.trim(),
+                                &input.password,
+                                false,
+                                &meta,
+                            )
+                            .await
+                        {
+                            Ok(SessionSignIn::SignedIn(_)) => {
+                                let target = if service.two_factor_setup_required(&session) {
+                                    paths.with_next(&paths.setup, input.next.as_deref())
+                                } else {
+                                    paths.after_sign_up(input.next.as_deref())
+                                };
+                                Ok(Reply::redirect(target).into_response())
+                            }
+                            Ok(SessionSignIn::TwoFactorRequired) => Ok(Reply::redirect(
+                                paths.with_next(&paths.two_factor, input.next.as_deref()),
+                            )
+                            .into_response()),
+                            Err(_) => Ok(Reply::redirect(LocalHref::from(paths.sign_in.as_str()))
+                                .into_response()),
+                        }
+                    }
+                },
+            )
+            .public()
+            .page()
+            .throttle(SIGN_UP_PER_MINUTE, Duration::from_secs(60))
+            .name("auth.pages.sign_up.submit")
+            .api(ApiMeta {
+                description: Some(
+                    "Makes the account ([`AuthService::register`]: a unique address, the \
+                     password policy, the sign-in policies), signs it in on this browser and \
+                     goes on to `next` (303). A form the checks refuse is drawn again with \
+                     the errors (422); an address a sign-in policy keeps from passwords \
+                     answers 403."
+                        .to_owned(),
+                ),
+                ..api("Creates an account and signs it in", &[303, 403, 422, 429])
+            }),
+        );
         routes
     }
 }

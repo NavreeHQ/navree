@@ -1,0 +1,48 @@
+---
+title: "Dock"
+description: "A floating row of icon links pinned to the bottom of the page: the main places of an app, with the current one lit."
+---
+
+<UiPreview example="dock/default" />
+
+`Dock` is the navigation of an app that lives on a phone: five or fewer places as icons in a pill that floats at the bottom centre of the page. The current place is lit in its own colour. Beside the app shell's sidebar, it is the way to move between a few main screens without a menu.
+
+```rust
+use navree::ui::*;
+
+Dock::new("Sections")
+    .item(DockItem::new("Sleep", "/sleep").icon(icons::MOON).tone(Tone::named("violet")))
+    .item(DockItem::new("Home", "/").icon(icons::HOUSE).prominent().current())
+    .item(DockItem::new("Fitness", "/fitness").icon(icons::ACTIVITY).tone(Tone::Success))
+```
+
+Each item is a link, so it works with no script and a boosted link keeps the page's feel. `.current()` marks the page the reader is on and `.prominent()` draws one larger, between the others: the home place. `.tone(Tone)` is the colour its icon takes when it is current.
+
+The dock is fixed to the window, so the page leaves it room with a bottom padding of its own (about 5 rem), and it keeps clear of the home bar on a phone with a notch.
+
+## On phones only
+
+An app whose top bar holds the same places on wider screens wants the dock on a phone only. `.below(Screen::Md)` draws it under 768 px and not at all from there on, so it is neither seen nor read twice; `Screen::Sm` (640 px) and `Screen::Lg` (1024 px) are the other widths.
+
+```rust
+use navree::ui::charts::Screen;
+
+Dock::new("Sections").below(Screen::Md)
+```
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The dock is a `nav` landmark named by the label you give it.
+- Each icon link is named by its label, which a screen reader reads and a pointer sees as a tooltip. There are no visible labels, so choose icons that read at a glance.
+- The current item is `aria-current="page"` and is also lit, never by colour alone: its background and a glow mark it.
+- Tab moves between the items in order and shows a focus ring.
+
+</UiA11y>
+
+## API
+
+<UiProps type="Dock" />
+
+<UiProps type="DockItem" />

@@ -4,15 +4,17 @@ use std::borrow::Cow;
 
 use http::StatusCode;
 use http::header::{
-    CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HeaderName, HeaderValue, SET_COOKIE,
+    CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HeaderName, HeaderValue, SET_COOKIE, VARY,
 };
 use navree_http::response::{IntoResponse, Response};
 
+use crate::app_files::{AppFont, AppSheet};
 use crate::assets;
 use crate::form::csrf_field;
 use crate::html::escape_into;
 use crate::node::{IntoNodes, Node, Uses, el};
 use crate::render::{Measure, POST_FORM, measure, render_into};
+use crate::seo::Seo;
 use crate::theme::{Appearance, Density, Font, Theme};
 
 /// The content security policy of every page: scripts, styles, fonts and
@@ -25,6 +27,9 @@ const SPECULATION_RULES: HeaderName = HeaderName::from_static("speculation-rules
 
 /// What the document head costs before its title and scripts.
 const HEAD_BYTES: usize = 512;
+
+/// What a page's search and preview tags usually cost, structured data included.
+const SEO_BYTES: usize = 2048;
 
 /// A whole page: `<head>` from the toolkit, `<body>` from you.
 ///
@@ -48,16 +53,20 @@ pub struct View {
     body: Node,
     status: StatusCode,
     cache: &'static str,
+    vary: Vec<&'static str>,
     cookies: Vec<HeaderValue>,
     csrf: Option<String>,
     appearance: Option<Appearance>,
     density: Option<Density>,
     sheets: Vec<Theme>,
+    app_sheets: Vec<AppSheet>,
+    app_fonts: Vec<AppFont>,
     mark_build: bool,
     /// The page in the app's shell this view was made from while a native
     /// client asked: its body is then built only if the view is written as HTML.
     #[cfg(feature = "native-preview")]
     note: Option<Box<crate::shell::PageNote>>,
+    seo: Option<Box<Seo>>,
 }
 
 impl View {
@@ -69,14 +78,18 @@ impl View {
             body: Node::Empty,
             status: StatusCode::OK,
             cache: "no-store",
+            vary: Vec::new(),
             cookies: Vec::new(),
             csrf: None,
             appearance: None,
             density: None,
             sheets: Vec::new(),
+            app_sheets: Vec::new(),
+            app_fonts: Vec::new(),
             mark_build: false,
             #[cfg(feature = "native-preview")]
             note: None,
+            seo: None,
         }
     }
 
@@ -103,6 +116,37 @@ impl View {
             self.sheets.push(theme.clone());
         }
         self
+    }
+
+    /// Links a stylesheet of the app's own ([`AppSheet`]), after the toolkit's sheets and the
+    /// page's theme, so its rules win over rules of equal weight. Sheets load in the order
+    /// they are added, each once.
+    pub fn stylesheet(mut self, sheet: &AppSheet) -> Self {
+        if !self.app_sheets.contains(sheet) {
+            self.app_sheets.push(*sheet);
+        }
+        self
+    }
+
+    /// Links a typeface of the app's own ([`AppFont`]): its `@font-face` rule, and its file
+    /// as a preload, so text drawn in it paints right on first load. Each font once.
+    pub fn font(mut self, font: &AppFont) -> Self {
+        if !self.app_fonts.contains(font) {
+            self.app_fonts.push(*font);
+        }
+        self
+    }
+
+    /// The app's stylesheets the page links, in order. A static copy of the page writes each
+    /// one's [`AppSheet::bytes`] where its [`AppSheet::url`] points.
+    pub fn app_sheets(&self) -> &[AppSheet] {
+        &self.app_sheets
+    }
+
+    /// The app's fonts the page links. A static copy of the page writes each one's
+    /// [`AppFont::face`] and [`AppFont::bytes`] where their URLs point.
+    pub fn app_fonts(&self) -> &[AppFont] {
+        &self.app_fonts
     }
 
     /// The stylesheets of the themes the page draws, its own first: each URL once.
@@ -161,6 +205,44 @@ impl View {
             .map_or("dark", |appearance| appearance.mode().color_scheme())
     }
 
+    /// Says what the page is to search engines, link previews and answer engines: its
+    /// description, canonical address, robots rules, Open Graph and Twitter cards, its other
+    /// languages and its structured data, all written in the head after the title. See
+    /// [`seo`](crate::seo).
+    ///
+    /// ```
+    /// use navree_ui::View;
+    /// use navree_ui::seo::Seo;
+    ///
+    /// let html = View::new("Pricing: Kesar plans in rupees, monthly or yearly")
+    ///     .seo(
+    ///         Seo::new("Three plans for sleep, heart and steps tracking, from free to family.")
+    ///             .canonical("https://kesar.example/pricing/"),
+    ///     )
+    ///     .to_html();
+    /// assert!(html.contains(r#"<meta name="description" content="Three plans"#));
+    /// assert!(html.contains(r#"<meta property="og:title" content="Pricing: Kesar plans"#));
+    /// ```
+    pub fn seo(mut self, seo: Seo) -> Self {
+        self.seo = Some(Box::new(seo));
+        self
+    }
+
+    /// What [`seo`](Self::seo) says about the page, when it was set.
+    pub fn seo_info(&self) -> Option<&Seo> {
+        self.seo.as_deref()
+    }
+
+    /// What a search engine or a link preview would hold against the page: see
+    /// [`Seo::problems`]. A page with no [`seo`](Self::seo) has one problem, that it says
+    /// nothing; a test of a public site's pages asserts this is empty.
+    pub fn seo_problems(&self) -> Vec<String> {
+        match &self.seo {
+            Some(seo) => seo.problems(&self.title),
+            None => vec!["the page says nothing about itself: no `View::seo`".to_owned()],
+        }
+    }
+
     /// Sets the page's language.
     pub fn lang(mut self, lang: &'static str) -> Self {
         self.lang = lang;
@@ -189,6 +271,38 @@ impl View {
     /// `private`, never in a shared cache.
     pub fn cache(mut self, cache: &'static str) -> Self {
         self.cache = cache;
+        self
+    }
+
+    /// Adds a request header to `Vary`: the page differs by it, so a cache keeps one copy
+    /// per value. A page that is public for a guest and private for a reader who is signed
+    /// in varies by `Cookie` (and `Authorization`, for a client that signs in with a token),
+    /// for the caches that honour it. Several CDNs ignore `Vary: Cookie`: in front of one,
+    /// also skip the cache for requests that carry the session cookie, and send a signed-in
+    /// reader's page as `private, no-store`:
+    ///
+    /// ```
+    /// use navree_http::response::IntoResponse;
+    /// use navree_ui::View;
+    ///
+    /// let response = View::new("Kesar")
+    ///     .cache("public, max-age=300")
+    ///     .vary("Cookie")
+    ///     .vary("Authorization")
+    ///     .into_response();
+    /// assert_eq!(response.headers()["vary"], "Cookie, Authorization");
+    /// ```
+    ///
+    /// A name that is not a header's is passed over, and each name is written once.
+    pub fn vary(mut self, header: &'static str) -> Self {
+        if HeaderName::from_bytes(header.as_bytes()).is_ok()
+            && !self
+                .vary
+                .iter()
+                .any(|have| have.eq_ignore_ascii_case(header))
+        {
+            self.vary.push(header);
+        }
         self
     }
 
@@ -231,7 +345,8 @@ impl View {
     /// The page's HTML.
     pub fn to_html(&self) -> String {
         let found = measure(self.body_node());
-        let mut out = String::with_capacity(found.bytes + self.title.len() + HEAD_BYTES);
+        let seo = if self.seo.is_some() { SEO_BYTES } else { 0 };
+        let mut out = String::with_capacity(found.bytes + self.title.len() + HEAD_BYTES + seo);
         self.write(&mut out, &found);
         out
     }
@@ -259,6 +374,9 @@ impl View {
         out.push_str("\"><title>");
         escape_into(out, &self.title);
         out.push_str("</title>");
+        if let Some(seo) = &self.seo {
+            seo.write_head(out, &self.title);
+        }
         // Geist is preloaded only for a theme that sets its text in Geist.
         if self
             .appearance
@@ -269,6 +387,14 @@ impl View {
                 "<link rel=\"preload\" as=\"font\" type=\"font/woff2\" crossorigin href=\"",
             );
             out.push_str(assets::GEIST_URL);
+            out.push_str("\">");
+        }
+        // The app's fonts are asked for first, so the file is on its way while the sheets load.
+        for font in self.app_fonts.iter().filter(|font| font.preloads()) {
+            out.push_str(
+                "<link rel=\"preload\" as=\"font\" type=\"font/woff2\" crossorigin href=\"",
+            );
+            out.push_str(&font.url());
             out.push_str("\">");
         }
         out.push_str("<link rel=\"stylesheet\" href=\"");
@@ -284,6 +410,17 @@ impl View {
             out.push_str("<link rel=\"stylesheet\" href=\"");
             out.push_str(&url);
             out.push_str("\" data-ui-theme>");
+        }
+        // The app's own, last of the sheets: its fonts' rules, then its stylesheets.
+        for font in &self.app_fonts {
+            out.push_str("<link rel=\"stylesheet\" href=\"");
+            out.push_str(&font.face_url());
+            out.push_str("\" data-ui-app>");
+        }
+        for sheet in &self.app_sheets {
+            out.push_str("<link rel=\"stylesheet\" href=\"");
+            out.push_str(&sheet.url());
+            out.push_str("\" data-ui-app>");
         }
         out.push_str("<link rel=\"icon\" href=\"");
         out.push_str(assets::FAVICON_URL);
@@ -562,12 +699,26 @@ impl IntoResponse for View {
                 HeaderValue::from_static(assets::SPECULATION_HEADER),
             );
         }
+        if !self.vary.is_empty()
+            && let Ok(vary) = HeaderValue::from_str(&self.vary.join(", "))
+        {
+            headers.append(VARY, vary);
+        }
         for cookie in self.cookies {
             headers.append(SET_COOKIE, cookie);
         }
+        // Whether a region's fetch was answered with a page the toolkit drew: see `ViewAnswer`.
+        response.extensions_mut().insert(ViewAnswer);
         response
     }
 }
+
+/// On a response a [`View`] made. A region's fetch answered with one, successfully, is the
+/// region's fragment, whatever its body uses: the reply layer says so in `X-Navree-Fragment`,
+/// so the runtime draws it in place rather than taking a page that loads the runtime for a
+/// page of its own (somewhere else, such as a sign-in page).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ViewAnswer;
 
 #[cfg(test)]
 mod tests {
@@ -673,6 +824,69 @@ mod tests {
         for (name, value) in page.look() {
             assert!(html.contains(&format!(" {name}=\"{value}\"")), "{html}");
         }
+    }
+
+    #[test]
+    fn the_apps_own_sheets_and_fonts_come_after_the_toolkits_and_the_themes() {
+        use crate::app_files::{AppFont, AppSheet};
+        use crate::theme::{Mode, Rgb, ThemeId};
+        static BRAND: AppSheet = AppSheet::new("brand", b".hero{color:var(--accent)}", 1024);
+        static ART: AppSheet = AppSheet::new("art", b".blob{opacity:.5}", 1024);
+        static DISPLAY: AppFont =
+            AppFont::new("display", "Fraunces", b"wOF2\0\0\0\0", 1024).weights(400, 700);
+        static BODY: AppFont = AppFont::new("body", "Inter Tight", b"wOF2\0\0\0\0", 1024).lazy();
+
+        let mine = Theme::custom(
+            ThemeId::parse("brand").unwrap(),
+            "Brand",
+            Theme::NAVREE
+                .spec()
+                .with_accent(Rgb::hex(0x2dd4bf), Rgb::hex(0x0f766e)),
+        )
+        .unwrap();
+        let html = View::new("x")
+            .appearance(Appearance::new(mine.clone(), Mode::Light))
+            .stylesheet(&BRAND)
+            .font(&DISPLAY)
+            .stylesheet(&ART)
+            .stylesheet(&BRAND)
+            .font(&DISPLAY)
+            .font(&BODY)
+            .to_html();
+        let at = |needle: &str| {
+            html.find(needle)
+                .unwrap_or_else(|| panic!("{needle} in {html}"))
+        };
+        // Once each, in the order they were added, after the theme's sheet and before the icon.
+        for url in [BRAND.url(), ART.url(), DISPLAY.face_url(), BODY.face_url()] {
+            assert_eq!(html.matches(url.as_str()).count(), 1, "{url}");
+        }
+        let theme = at(&mine.stylesheet().unwrap());
+        let (display, body) = (at(&DISPLAY.face_url()), at(&BODY.face_url()));
+        let (brand, art) = (at(&BRAND.url()), at(&ART.url()));
+        let icon = at("rel=\"icon\"");
+        assert!(theme < display && display < body, "fonts after the theme");
+        assert!(
+            body < brand && brand < art && art < icon,
+            "sheets after fonts"
+        );
+        // The file of a font that is preloaded is asked for before any sheet; a lazy one is not.
+        let preload = at(&format!(
+            "rel=\"preload\" as=\"font\" type=\"font/woff2\" crossorigin href=\"{}\"",
+            DISPLAY.url()
+        ));
+        assert!(preload < at(assets::NAVREE_UI_URL), "{html}");
+        assert!(
+            !html.contains(&format!("href=\"{}\"", BODY.url())),
+            "{html}"
+        );
+        // The page lists what it links, for a static copy of it.
+        let page = View::new("x").stylesheet(&BRAND).font(&DISPLAY);
+        assert_eq!(page.app_sheets(), &[BRAND]);
+        assert_eq!(page.app_fonts(), &[DISPLAY]);
+        // Nothing inline: the policy allows files of the page's own origin only.
+        assert!(!html.contains("<style"), "{html}");
+        assert!(!html.contains(" style="), "{html}");
     }
 
     #[test]

@@ -4344,6 +4344,7 @@ dependencies = [
  "sha2 0.11.1",
  "thiserror",
  "tokio",
+ "tower",
  "tracing",
  "url",
  "uuid",

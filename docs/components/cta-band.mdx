@@ -1,0 +1,37 @@
+---
+title: "CtaBand"
+description: "A band near the end of a page that asks the reader to act: a title, a line, buttons and a note, over soft light."
+---
+
+<UiPreview example="cta-band/default" />
+
+`CtaBand` is the call to action near the end of a page: a title (`h2`), a line, the buttons, the primary one first, and a small note, centred in a panel over soft light from the theme's accent.
+
+```rust
+use navree::ui::marketing::*;
+use navree::ui::*;
+
+CtaBand::new("start", ("Your data is already there. ", accent("Start reading it.")))
+    .lead("Free for one person, for ever.")
+    .action(Button::primary("Build my dashboard").href("/signup"))
+    .action(Button::outline("Talk to us").href("/contact/"))
+    .note("No card needed.")
+```
+
+## Anatomy
+
+<UiAnatomy component="cta-band" />
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+- The band is a region named by its title.
+
+</UiA11y>
+
+## API
+
+### CtaBand
+
+<UiProps type="CtaBand" />

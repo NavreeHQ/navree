@@ -11,7 +11,8 @@
 //!   in one pass to one `String`.
 //! - [`Cmd`]: what an element does in the browser with no request. [`Op`] and
 //!   [`Reply`]: what the server sends back from an action.
-//! - [`View`]: a page, with its strict content security policy.
+//! - [`View`]: a page, with its strict content security policy. [`seo`]: what it tells
+//!   search engines, link previews and answer engines, and its sitemap and robots file.
 //! - [`assets`]: one stylesheet and the runtime's modules, embedded with
 //!   brotli and gzip forms, at content-hash URLs.
 //! - [`tokens`]: the design tokens' one source. [`theme`]: the built-in themes,
@@ -21,9 +22,14 @@
 //! - [`described`]: a table whose columns and a form whose fields are given at run
 //!   time, drawn by the same [`DataTable`] and [`FormView`].
 //! - [`sortable`]: [`Sortable`] lists and boards, and the [`Move`] each drop posts.
-//! - [`charts`]: line, area, bar, donut, sparkline and funnel charts drawn as SVG on
-//!   the server, each with its data as a table, and [`charts::Report`] for a date
-//!   range from the URL cut into periods.
+//! - [`charts`]: line, area, bar, donut, sparkline and funnel charts, calendar and
+//!   matrix heat maps and a scatter plot, drawn as SVG or HTML on the server, each
+//!   with its data as a table, and [`charts::Report`] for a date range from the URL
+//!   cut into periods.
+//! - [`marketing`]: the blocks of a public website: a header whose menu needs no
+//!   script, a hero, sections, features, pricing with a monthly or yearly switch,
+//!   questions with their structured data, browser and phone frames, a legal page and a
+//!   footer with a theme toggle. [`Picture`]: a responsive image in every format.
 //! - [`TestView`]: drive a page in a plain test, with no browser.
 //! - [`UiModule`]: serves the files and picks ops or a page for each reply.
 //! - [`pages`]: what the app shows when a request ends in an error, or a place has
@@ -78,6 +84,7 @@ pub mod prelude {
 
 #[cfg(feature = "access")]
 pub mod ability;
+pub mod app_files;
 mod asked;
 mod hint;
 pub mod assets;
@@ -98,6 +105,7 @@ pub mod icons;
 pub mod island;
 pub mod localize;
 pub mod markdown;
+pub mod marketing;
 mod module;
 #[cfg(feature = "native-preview")]
 pub mod native;
@@ -108,6 +116,7 @@ pub mod pages;
 pub mod phone;
 pub mod render;
 pub mod select;
+pub mod seo;
 pub mod shell;
 pub mod sortable;
 pub mod table;
@@ -119,6 +128,7 @@ pub mod view;
 #[cfg(feature = "time")]
 mod zone;
 
+pub use app_files::{AppFont, AppImage, AppSheet, FontDisplay, ImageKind};
 pub use cmd::{Cmd, Commands, Trigger};
 pub use components::*;
 /// Country flags under the name the facade documents: `navree::flags` is feature flags,

@@ -9,8 +9,10 @@
 [data-slot=chart] [data-tone]{--c:var(--tone,var(--fg-3))}
 [data-slot=chart-body]{position:relative;min-width:0;border-radius:var(--radius);outline:none}
 [data-slot=chart-plot]{display:block;overflow:visible}
-[data-slot=chart-line]{fill:none;stroke:var(--c);stroke-width:2px;stroke-linejoin:round;stroke-linecap:round}
-[data-slot=chart-area]{fill:var(--c);fill-opacity:.14;stroke:none}
+[data-slot=chart-line]{fill:none;stroke-width:2px;stroke-linejoin:round;stroke-linecap:round}
+[data-slot=chart-line]:not([stroke]){stroke:var(--c)}
+[data-slot=chart-area]{stroke:none}
+[data-slot=chart-area]:not([fill]){fill:var(--c);fill-opacity:.14}
 [data-slot=chart-end]{fill:var(--c);stroke:var(--surface);stroke-width:2px}
 [data-slot=chart-data]{position:relative}
 [data-slot=chart-table]{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}

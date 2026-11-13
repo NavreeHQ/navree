@@ -5,13 +5,20 @@ use std::fmt::Write as _;
 
 use chrono::{NaiveDate, NaiveDateTime, Weekday};
 
+use super::axes::{Axis, Domain, Gridlines, Ticks};
 use super::downsample::{merge_ranges, rows_to_keep};
 use super::format::NumberFormat;
+use super::marks::{
+    ActiveDot, Curve, Dots, RefAt, Reference, TooltipStyle, Zone, curve_path, mark_text,
+    reference_line, short, zone_rect,
+};
+use super::motion::{Effect, Motion};
+use super::paint::{ColorScale, Defs, Gradient, Ink, glow};
 use super::scale::{Grain, Linear, nice, seconds_of, time_label, time_name, time_of, time_ticks};
 use super::value::{IntoValue, clean, finite};
 use super::{
-    Color, Common, Drawn, Key, LegendItem, MAX_SERIES, TableData, common_methods, fill, frame,
-    legend, n, nodes, num, pct, svg, value_cell,
+    Color, Common, Drawn, Key, LegendItem, MAX_SERIES, TableData, Tip, TipLine, column_name,
+    common_methods, fill, frame, legend, n, nodes, num, pct, svg, value_cell,
 };
 use crate::components::Tone;
 use crate::node::{AttrValue, Element, Node, el};
@@ -39,6 +46,25 @@ pub struct Series {
     pub(crate) name: String,
     pub(crate) values: Vec<Option<f64>>,
     pub(crate) color: Option<Color>,
+    pub(crate) paint: Paint,
+}
+
+/// How a series is painted past its colour.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Paint {
+    /// An area's or a bar's fill.
+    pub fill: Option<Gradient>,
+    /// A fill of the series' own colour fading down: to nothing for an area, to half
+    /// for a bar.
+    pub fade: bool,
+    /// A line's stroke.
+    pub stroke: Option<Gradient>,
+    /// A glow around the line or the bars.
+    pub glow: bool,
+    /// A colour for each value: bars, and the values in the tooltip and the table.
+    pub scale: Option<ColorScale>,
+    /// What the values count, written after them in the tooltip and the table's head.
+    pub unit: Option<String>,
 }
 
 impl Series {
@@ -48,7 +74,57 @@ impl Series {
             name: name.into(),
             values: clean(values),
             color: None,
+            paint: Paint::default(),
         }
+    }
+
+    /// Colours the series with any [`Ink`] of the theme: a slot, a tone, the accent.
+    pub fn ink(mut self, ink: impl Into<Ink>) -> Self {
+        self.color = Some(ink.into().color());
+        self
+    }
+
+    /// Fills an area or the bars with `gradient`. [`Ink::own`] in its stops is the
+    /// series' colour.
+    pub fn fill(mut self, gradient: Gradient) -> Self {
+        self.paint.fill = Some(gradient);
+        self
+    }
+
+    /// Fills an area with a wash of its own colour that fades to nothing at the bottom
+    /// ([`Gradient::fade`]); bars with their colour fading to half
+    /// ([`Gradient::column`]).
+    pub fn fade(mut self) -> Self {
+        self.paint.fade = true;
+        self.paint.fill = None;
+        self
+    }
+
+    /// Strokes the line with `gradient`, which spans the plot: a horizontal one runs
+    /// from the left edge to the right whatever part of the plot the line covers.
+    pub fn stroke(mut self, gradient: Gradient) -> Self {
+        self.paint.stroke = Some(gradient.across_plot());
+        self
+    }
+
+    /// Puts a soft glow of its own colour around the line or the bars.
+    pub fn glow(mut self) -> Self {
+        self.paint.glow = true;
+        self
+    }
+
+    /// Colours each value by `scale`: each bar in the colour of its band, and the value
+    /// in the tooltip's key. The bands' labels make the legend.
+    pub fn colors(mut self, scale: ColorScale) -> Self {
+        self.paint.scale = Some(scale);
+        self
+    }
+
+    /// What the values count (`BPM`, `kg`, `h`): written after the value in the tooltip,
+    /// and after the series' name in the table's head.
+    pub fn unit(mut self, unit: impl Into<String>) -> Self {
+        self.paint.unit = Some(unit.into());
+        self
     }
 
     /// Colours the series by what it means: [`Tone::Success`] for a good outcome,
@@ -241,7 +317,7 @@ pub struct Chart {
     kind: Kind,
     horizontal: bool,
     stack: Stack,
-    smooth: bool,
+    curve: Curve,
     x: X,
     grain: Option<Grain>,
     x_label: Option<String>,
@@ -257,10 +333,24 @@ pub struct Chart {
     max_bars: usize,
     merge: Merge,
     toggles: bool,
-    dots: bool,
+    dots: Dots,
+    active_dot: ActiveDot,
     week_start: Weekday,
     rtl: bool,
     drill: Vec<String>,
+    x_axis: Axis,
+    y_axis: Axis,
+    grid: Gridlines,
+    x_ticks: Ticks,
+    domain: Domain,
+    references: Vec<Reference>,
+    zones: Vec<Zone>,
+    y_categories: Option<Vec<String>>,
+    lanes: bool,
+    baseline: Option<f64>,
+    tooltip: TooltipStyle,
+    details: Vec<(String, Vec<String>)>,
+    motion: Motion,
 }
 
 common_methods!(Chart);
@@ -272,7 +362,7 @@ impl Chart {
             kind,
             horizontal: false,
             stack: Stack::None,
-            smooth: false,
+            curve: Curve::Linear,
             x: X::None,
             grain: None,
             x_label: None,
@@ -288,10 +378,24 @@ impl Chart {
             max_bars: 120,
             merge: Merge::Sum,
             toggles: false,
-            dots: true,
+            dots: Dots::End,
+            active_dot: ActiveDot::Plain,
             week_start: Weekday::Mon,
             rtl: false,
             drill: Vec::new(),
+            x_axis: Axis::new(),
+            y_axis: Axis::new(),
+            grid: Gridlines::horizontal(),
+            x_ticks: Ticks::auto(),
+            domain: Domain::auto(),
+            references: Vec::new(),
+            zones: Vec::new(),
+            y_categories: None,
+            lanes: false,
+            baseline: None,
+            tooltip: TooltipStyle::new(),
+            details: Vec::new(),
+            motion: Motion::none(),
         }
     }
 
@@ -328,9 +432,150 @@ impl Chart {
         self
     }
 
-    /// Draws lines as a monotone curve, which never overshoots a value.
+    /// Draws lines as a monotone curve, which never overshoots a value: the same as
+    /// `.curve(Curve::Monotone)`.
     pub fn smooth(mut self) -> Self {
-        self.smooth = true;
+        self.curve = Curve::Monotone;
+        self
+    }
+
+    /// How lines and areas run between points: straight, a monotone curve, or steps.
+    pub fn curve(mut self, curve: Curve) -> Self {
+        self.curve = curve;
+        self
+    }
+
+    /// Which points of a line show a dot: the last (the default), all, or none.
+    pub fn dots(mut self, dots: Dots) -> Self {
+        self.dots = dots;
+        self
+    }
+
+    /// The dot that marks the value under the pointer or the keys.
+    pub fn active_dot(mut self, dot: ActiveDot) -> Self {
+        self.active_dot = dot;
+        self
+    }
+
+    /// What the x axis draws: its labels (the default), its line, its tick marks.
+    /// [`Axis::hidden`] gives the plot the room the labels took.
+    pub fn x_axis(mut self, axis: Axis) -> Self {
+        self.x_axis = axis;
+        self
+    }
+
+    /// What the value axis draws: its labels (the default), its line, its tick marks.
+    /// [`Axis::hidden`] gives the plot the room the labels took.
+    pub fn y_axis(mut self, axis: Axis) -> Self {
+        self.y_axis = axis;
+        self
+    }
+
+    /// The gridlines behind the marks: across at each value tick by default.
+    pub fn grid(mut self, grid: Gridlines) -> Self {
+        self.grid = grid;
+        self
+    }
+
+    /// Which x labels are written: every n-th, at most n, the first and the last.
+    pub fn x_ticks(mut self, ticks: Ticks) -> Self {
+        self.x_ticks = ticks;
+        self
+    }
+
+    /// The range of the value axis: from the data, padded, or fixed.
+    pub fn y_domain(mut self, domain: Domain) -> Self {
+        self.domain = domain;
+        self
+    }
+
+    /// Names the values of the value axis: value 0 is `names[0]`, 1 is `names[1]`.
+    /// Each name is a tick, the axis runs from the first to the last, and the table and
+    /// the tooltip write the name, not the number: for states such as sleep stages, with
+    /// [`Curve::Step`].
+    pub fn y_categories<S: Into<String>>(mut self, names: impl IntoIterator<Item = S>) -> Self {
+        let names: Vec<String> = names.into_iter().map(Into::into).collect();
+        self.y_categories = (!names.is_empty()).then_some(names);
+        self
+    }
+
+    /// Gives each of the [named values](Self::y_categories) a lane of its own: the axis
+    /// runs half a step past the first and the last, so each name sits in the middle of
+    /// its band, and an area fills down to the foot of the lowest lane. A stepped area
+    /// over sleep stages then shows the lowest stage (deep sleep) as an area like the
+    /// others, not as a line along the foot of the plot.
+    ///
+    /// ```
+    /// use navree_ui::charts::{Chart, Curve, Series};
+    ///
+    /// let night = Chart::area("Sleep stages")
+    ///     .numbers([0, 30, 60, 90, 120])
+    ///     .series(Series::new("Stage", [3, 1, 0, 2, 0]))
+    ///     .curve(Curve::Step)
+    ///     .y_categories(["Deep", "Core", "REM", "Awake"])
+    ///     .lanes();
+    /// # let _ = navree_ui::render(&night.into());
+    /// ```
+    pub fn lanes(mut self) -> Self {
+        self.lanes = true;
+        self
+    }
+
+    /// Bars grow from `value`, up for a value above it and down for one below, rather
+    /// than from zero: years from an age, degrees from a normal temperature, a score
+    /// against a reference. A line is drawn at the level, and the value axis holds it
+    /// and the values without reaching down to zero, so a [domain](Self::y_domain) such
+    /// as `Domain::fixed(18, 60)` is kept. Bars side by side only: a stack still grows
+    /// from zero. The table and the tooltip say the values as they are.
+    ///
+    /// ```
+    /// use navree_ui::charts::{Chart, Series};
+    ///
+    /// let ages = Chart::bar("Body age by part")
+    ///     .categories(["Heart", "Lungs", "Muscle", "Metabolism"])
+    ///     .series(Series::new("Age", [31, 38, 34, 41]).unit("years"))
+    ///     .baseline(36);
+    /// # let _ = navree_ui::render(&ages.into());
+    /// ```
+    pub fn baseline(mut self, value: impl IntoValue) -> Self {
+        self.baseline = value.into_value().filter(|v| v.is_finite());
+        self
+    }
+
+    /// Adds a reference line: a level, an average, a zero baseline, the diagonal.
+    pub fn reference(mut self, reference: Reference) -> Self {
+        self.references.push(reference);
+        self
+    }
+
+    /// Adds a band of the value axis, shaded behind the data: a target zone.
+    pub fn zone(mut self, zone: Zone) -> Self {
+        self.zones.push(zone);
+        self
+    }
+
+    /// What the tooltip shows.
+    pub fn tooltip(mut self, tooltip: TooltipStyle) -> Self {
+        self.tooltip = tooltip;
+        self
+    }
+
+    /// Adds a column of words, one for each x: in the table after the series, and as a
+    /// line of the tooltip (`Duration`, `23 min`).
+    pub fn detail<S: Into<String>>(
+        mut self,
+        name: impl Into<String>,
+        texts: impl IntoIterator<Item = S>,
+    ) -> Self {
+        self.details
+            .push((name.into(), texts.into_iter().map(Into::into).collect()));
+        self
+    }
+
+    /// How the marks come in: lines draw from the start, bars grow from the baseline,
+    /// dots pop in. Off by default; always off for a reader who asks for less motion.
+    pub fn motion(mut self, motion: Motion) -> Self {
+        self.motion = motion;
         self
     }
 
@@ -474,9 +719,9 @@ impl Chart {
         self
     }
 
-    /// Leaves out the dot at the end of each line.
+    /// Leaves out the dot at the end of each line: the same as `.dots(Dots::None)`.
     pub fn no_dots(mut self) -> Self {
-        self.dots = false;
+        self.dots = Dots::None;
         self
     }
 
@@ -503,7 +748,7 @@ impl Chart {
         let height = if self.horizontal {
             0
         } else {
-            self.height + X_BAND as u32 + TOP as u32
+            self.height + self.x_band() as u32 + TOP as u32
         };
         let mut this = self;
         let drawn = this.draw();
@@ -533,6 +778,30 @@ struct Ready {
     name: String,
     color: Color,
     values: Vec<Option<f64>>,
+    paint: Paint,
+}
+
+impl Ready {
+    /// The fill of an area or of bars: the one given, or the fade asked for.
+    fn fill(&self, bars: bool) -> Option<Gradient> {
+        self.paint.fill.clone().or_else(|| {
+            self.paint.fade.then(|| {
+                if bars {
+                    Gradient::column(Ink::own())
+                } else {
+                    Gradient::fade(Ink::own())
+                }
+            })
+        })
+    }
+
+    /// The colour of value `v`: its band's, or the series'.
+    fn color_of(&self, v: f64) -> Color {
+        match &self.paint.scale {
+            Some(scale) => scale.ink_of(v).resolve(self.color).color(),
+            None => self.color,
+        }
+    }
 }
 
 /// One series' figures for the summary, over all its data.
@@ -670,6 +939,7 @@ impl Chart {
                 name: self.common.labels.other.to_string(),
                 values,
                 color: Some(Color::Other),
+                paint: Paint::default(),
             });
         }
         // Categorical slots go in order to the series that mean nothing by colour.
@@ -683,6 +953,7 @@ impl Chart {
                 }),
                 name: s.name,
                 values: s.values,
+                paint: s.paint,
             })
             .collect()
     }
@@ -704,6 +975,8 @@ impl Chart {
         // x shorter than the values: the extra values have no place.
         let n = n.min(self.x.len());
         self.sort_rows();
+        // A time of day is written as the chart's language writes one.
+        self.format = std::mem::take(&mut self.format).with_dates(&self.common.dates);
         let mut series = self.ready_series(n);
         if series.iter().all(|s| s.values.iter().all(Option::is_none)) {
             return None;
@@ -714,7 +987,26 @@ impl Chart {
         };
         let labels = self.common.labels.clone();
         let numbers = self.common.numbers.clone();
-        let fmt = |v: f64| self.format.format(v, &numbers);
+        let categories = self.y_categories.clone();
+        let fmt = |v: f64| match &categories {
+            Some(names) => category_name(names, v),
+            None => self.format.format(v, &numbers),
+        };
+
+        // The averages a reference line may stand at, over every value.
+        let averages: Vec<Option<f64>> = series
+            .iter()
+            .map(|s| {
+                let (sum, count) = s
+                    .values
+                    .iter()
+                    .flatten()
+                    .fold((0.0, 0_usize), |(sum, count), v| (sum + v, count + 1));
+                (count > 0)
+                    .then(|| sum / count as f64)
+                    .filter(|v| v.is_finite())
+            })
+            .collect();
 
         // The summary, over every value before any is merged or left out.
         let bars = self.kind == Kind::Bar;
@@ -771,7 +1063,7 @@ impl Chart {
         if series.iter().any(|s| s.values.iter().flatten().count() > 1) {
             note = None;
         }
-        let marks: Vec<String> = self
+        let mut marks: Vec<String> = self
             .annotations
             .iter()
             .map(|a| match a {
@@ -779,6 +1071,22 @@ impl Chart {
                 Annotation::Event { label, .. } | Annotation::Band { label, .. } => label.clone(),
             })
             .collect();
+        for r in &self.references {
+            if let (Some(label), Some(v)) = (&r.label, reference_value(r, &averages)) {
+                let value = fmt(v);
+                let text = fill(label, &[("value", &value)]);
+                marks.push(if label.contains("{value}") {
+                    text
+                } else {
+                    format!("{text} ({value})")
+                });
+            }
+        }
+        for z in &self.zones {
+            if let Some(label) = &z.label {
+                marks.push(format!("{label} ({} – {})", fmt(z.from), fmt(z.to)));
+            }
+        }
         if !marks.is_empty() {
             summary.push(fill(&labels.summary_marks, &[("marks", &marks.join(", "))]));
         }
@@ -923,10 +1231,22 @@ impl Chart {
                 })
                 .collect()
         } else {
+            // Bars from their baseline; an area over lanes from the foot of the lowest.
+            let floor = match (&self.y_categories, bars) {
+                (_, true) => self.baseline.unwrap_or(0.0),
+                (Some(_), false) if self.lanes => -0.5,
+                _ => 0.0,
+            };
             shown
                 .iter()
-                .map(|values| values.iter().map(|v| v.map(|v| (0.0, v))).collect())
+                .map(|values| values.iter().map(|v| v.map(|v| (floor, v))).collect())
                 .collect()
+        };
+        // Where bars start, and the level the zero line marks.
+        let origin = if bars && !stacked {
+            self.baseline.unwrap_or(0.0)
+        } else {
+            0.0
         };
 
         // The value scale.
@@ -934,7 +1254,9 @@ impl Chart {
         let mut hi = f64::NEG_INFINITY;
         for column in &edges {
             for (base, top) in column.iter().flatten() {
-                if stacked || bars || self.kind == Kind::Area {
+                // An area's baseline counts unless a domain was asked for: then the area
+                // runs down to the foot of the plot.
+                if stacked || bars || (self.kind == Kind::Area && self.domain == Domain::auto()) {
                     lo = lo.min(*base);
                     hi = hi.max(*base);
                 }
@@ -950,7 +1272,38 @@ impl Chart {
                 hi = hi.max(*value);
             }
         }
-        let zero = bars || self.kind == Kind::Area || stacked || self.y_zero.unwrap_or(true);
+        if !percent {
+            // Levels and zones are in the data's units: the scale holds them.
+            for r in &self.references {
+                if let RefAt::Level(v) = r.at {
+                    lo = lo.min(v);
+                    hi = hi.max(v);
+                }
+            }
+            for z in &self.zones {
+                lo = lo.min(z.from);
+                hi = hi.max(z.to);
+            }
+        }
+        // The range asked for: the categories' own, a domain, or the chart's rules.
+        let ranged = match &categories {
+            Some(names) if self.lanes => {
+                Some((lo.min(-0.5), hi.max((names.len().max(1) - 1) as f64 + 0.5)))
+            }
+            Some(names) => Some((lo.min(0.0), hi.max((names.len().max(2) - 1) as f64))),
+            None if percent => None,
+            None => self.domain.range(lo, hi),
+        };
+        // Bars reach zero unless they grow from a baseline of their own; a line of times
+        // of day starts where its times do.
+        let from_baseline = bars && !stacked && self.baseline.is_some();
+        let zero = (bars && !from_baseline)
+            || stacked
+            || (ranged.is_none()
+                && (self.kind == Kind::Area || self.y_zero.unwrap_or(!self.format.is_clock())));
+        if let Some((a, b)) = ranged {
+            (lo, hi) = (a, b);
+        }
         if zero {
             lo = lo.min(0.0);
             hi = hi.max(0.0);
@@ -971,14 +1324,37 @@ impl Chart {
             self.format.clone()
         };
         let count = usize::from(self.y_ticks.unwrap_or((self.height / 50).clamp(2, 8) as u8));
-        let ticks = nice(lo, hi, count, format.whole());
-        let compact = format.axis_compact(ticks.values.iter().fold(0.0_f64, |m, v| m.max(v.abs())));
-        let tick_text = |v: f64| {
-            if compact {
-                format.format_compact(v, &numbers)
-            } else {
-                format.format_places(v, &numbers, ticks.places)
+        let ticks = match &categories {
+            // A tick for each name, from the first to the last.
+            Some(names) => super::scale::Ticks {
+                scale: Linear { lo, hi },
+                values: (0..names.len()).map(|i| i as f64).collect(),
+                places: 0,
+            },
+            None if self.format.is_clock() && !percent => {
+                clock_ticks(lo, hi, count, self.domain.is_exact())
             }
+            None if self.domain.is_exact() && !percent => {
+                let found = nice(lo, hi, count, format.whole());
+                let slack = (hi - lo).abs() * 1e-9;
+                super::scale::Ticks {
+                    scale: Linear { lo, hi },
+                    values: found
+                        .values
+                        .into_iter()
+                        .filter(|v| *v >= lo - slack && *v <= hi + slack)
+                        .collect(),
+                    places: found.places,
+                }
+            }
+            None => nice(lo, hi, count, format.whole()),
+        };
+        let compact = categories.is_none()
+            && format.axis_compact(ticks.values.iter().fold(0.0_f64, |m, v| m.max(v.abs())));
+        let tick_text = |v: f64| match &categories {
+            Some(names) => category_name(names, v),
+            None if compact => format.format_compact(v, &numbers),
+            None => format.format_places(v, &numbers, ticks.places),
         };
 
         // The table: the rows drawn, every series, a total for stacks.
@@ -990,17 +1366,29 @@ impl Chart {
             }),
             None,
         )];
-        head.extend(series.iter().map(|s| (s.name.clone(), Some(s.color))));
+        head.extend(
+            series
+                .iter()
+                .map(|s| (column_name(&s.name, s.paint.unit.as_deref()), Some(s.color))),
+        );
         if stacked {
             head.push((labels.total.to_string(), None));
         }
+        head.extend(self.details.iter().map(|(name, _)| (name.clone(), None)));
         let table_rows = rows
             .iter()
             .enumerate()
             .map(|(i, row)| {
                 let mut cells: Vec<Node> = series
                     .iter()
-                    .map(|s| value_cell(s.values[i].map(fmt), &labels))
+                    .map(|s| {
+                        let cell = value_cell(s.values[i].map(fmt), &labels);
+                        // A value coloured by its band says so to the tooltip's key.
+                        match (s.values[i], &s.paint.scale) {
+                            (Some(v), Some(_)) => s.color_of(v).on(el("span")).child(cell).into(),
+                            _ => cell,
+                        }
+                    })
                     .collect();
                 if stacked {
                     let sum: Option<f64> = series
@@ -1008,6 +1396,14 @@ impl Chart {
                         .filter_map(|s| s.values[i])
                         .fold(None, |acc, v| Some(acc.unwrap_or(0.0) + v));
                     cells.push(value_cell(sum.map(fmt), &labels));
+                }
+                for (_, texts) in &self.details {
+                    let range = &rows_kept[i];
+                    let text = (range.len() == 1)
+                        .then(|| texts.get(range.start).cloned())
+                        .flatten()
+                        .filter(|t| !t.is_empty());
+                    cells.push(value_cell(text, &labels));
                 }
                 (row.name.clone(), cells)
             })
@@ -1030,21 +1426,77 @@ impl Chart {
             }),
         };
 
-        let legend_node = (series.len() > 1).then(|| {
+        // A series coloured by value shows its bands in the legend instead of itself.
+        let banded = series.iter().any(|s| {
+            s.paint
+                .scale
+                .as_ref()
+                .is_some_and(|scale| !scale.labelled().is_empty())
+        });
+        let legend_node = (series.len() > 1 || banded).then(|| {
+            let key = if self.kind == Kind::Line {
+                Key::Line
+            } else {
+                Key::Block
+            };
             let items: Vec<LegendItem> = series
                 .iter()
-                .map(|s| LegendItem {
-                    name: s.name.clone(),
-                    color: s.color,
-                    key: if self.kind == Kind::Line {
-                        Key::Line
+                .flat_map(|s| {
+                    let bands = s
+                        .paint
+                        .scale
+                        .as_ref()
+                        .map(ColorScale::labelled)
+                        .unwrap_or_default();
+                    if bands.is_empty() {
+                        vec![LegendItem {
+                            name: s.name.clone(),
+                            color: s.color,
+                            key,
+                        }]
                     } else {
-                        Key::Block
-                    },
+                        bands
+                            .into_iter()
+                            .map(|(ink, name)| LegendItem {
+                                name,
+                                color: ink.resolve(s.color).color(),
+                                key: Key::Block,
+                            })
+                            .collect()
+                    }
                 })
                 .collect();
-            legend(&self.common.id(), &items, self.toggles && !stacked)
+            legend(
+                &self.common.id(),
+                &items,
+                self.toggles && !stacked && !banded,
+            )
         });
+
+        // The tooltip: a line per series with its unit, then the total and the details.
+        let mut tip_lines: Vec<TipLine> = series
+            .iter()
+            .map(|s| TipLine {
+                name: column_name(&s.name, s.paint.unit.as_deref()),
+                unit: s.paint.unit.clone(),
+                color: Some(s.color),
+                key: true,
+            })
+            .collect();
+        if stacked {
+            tip_lines.push(TipLine {
+                name: labels.total.to_string(),
+                unit: None,
+                color: None,
+                key: true,
+            });
+        }
+        tip_lines.extend(self.details.iter().map(|(name, _)| TipLine {
+            name: name.clone(),
+            unit: None,
+            color: None,
+            key: false,
+        }));
 
         let plan = Plan {
             rows: &rows,
@@ -1055,12 +1507,23 @@ impl Chart {
             tick_text: &tick_text,
             height: f64::from(self.height),
             stacked,
+            origin,
+            averages: &averages,
+            fmt: &fmt,
         };
         let (body, body_attrs, height) = if self.horizontal && bars {
             self.horizontal_body(&plan)
         } else {
             self.vertical_body(&plan, grain, n)
         };
+        #[cfg(feature = "native-preview")]
+        crate::native::record_chart_numbers(
+            &self.common.id(),
+            rows.iter().map(|row| row.name.as_str()),
+            series
+                .iter()
+                .map(|s| (s.name.as_str(), s.values.as_slice())),
+        );
         Some(Drawn {
             legend: legend_node,
             body,
@@ -1070,14 +1533,53 @@ impl Chart {
             height,
             note,
             interactive: true,
-            #[cfg(feature = "native-preview")]
-            native: crate::native::chart_numbers(
-                rows.iter().map(|row| row.name.as_str()),
-                series
-                    .iter()
-                    .map(|s| (s.name.as_str(), s.values.as_slice())),
-            ),
+            text: false,
+            tip: Some(Tip {
+                big: self.tooltip.big,
+                lines: tip_lines,
+            }),
         })
+    }
+}
+
+/// Ticks for times of day in minutes: on whole hours (or quarter and half hours over a
+/// short span), about `count` of them. The scale widens to the first and last tick
+/// unless it is `exact`, when the ticks outside it are dropped.
+fn clock_ticks(lo: f64, hi: f64, count: usize, exact: bool) -> super::scale::Ticks {
+    const STEPS: [f64; 9] = [15.0, 30.0, 60.0, 120.0, 180.0, 240.0, 360.0, 720.0, 1440.0];
+    let (lo, hi) = if lo.is_finite() && hi.is_finite() && hi > lo {
+        (lo, hi)
+    } else if lo.is_finite() {
+        (lo - 60.0, lo + 60.0)
+    } else {
+        (0.0, 60.0)
+    };
+    let span = hi - lo;
+    let step = STEPS
+        .into_iter()
+        .find(|step| span / step <= count.max(2) as f64)
+        .unwrap_or(1440.0);
+    let (first, last) = ((lo / step).floor() * step, (hi / step).ceil() * step);
+    let scale = if exact {
+        Linear { lo, hi }
+    } else {
+        Linear {
+            lo: first,
+            hi: last,
+        }
+    };
+    let mut values = Vec::new();
+    let mut at = first;
+    while at <= last + 1e-9 && values.len() < 200 {
+        if at >= scale.lo - 1e-9 && at <= scale.hi + 1e-9 {
+            values.push(at);
+        }
+        at += step;
+    }
+    super::scale::Ticks {
+        scale,
+        values,
+        places: 0,
     }
 }
 
@@ -1100,6 +1602,31 @@ struct Plan<'a> {
     tick_text: &'a dyn Fn(f64) -> String,
     height: f64,
     stacked: bool,
+    /// Where bars start: zero, or the chart's baseline.
+    origin: f64,
+    /// Each series' average over all its values.
+    averages: &'a [Option<f64>],
+    /// How a value is written.
+    fmt: &'a dyn Fn(f64) -> String,
+}
+
+/// Where a reference line stands, when the chart has that value.
+fn reference_value(r: &Reference, averages: &[Option<f64>]) -> Option<f64> {
+    match r.at {
+        RefAt::Level(v) => Some(v),
+        RefAt::Average(i) => averages.get(i).copied().flatten(),
+        RefAt::Zero => Some(0.0),
+        RefAt::Identity => None,
+    }
+}
+
+/// The name of category `v`, the nearest one when `v` falls between.
+fn category_name(names: &[String], v: f64) -> String {
+    if names.is_empty() || !v.is_finite() {
+        return String::new();
+    }
+    let at = v.round().clamp(0.0, (names.len() - 1) as f64) as usize;
+    names[at].clone()
 }
 
 impl Plan<'_> {
@@ -1137,72 +1664,18 @@ fn bar_clip(count: usize, slot: usize, round: Option<&str>) -> String {
     out
 }
 
-/// A run of points as a path in the stretched layer (x 0 to 1000), straight or as a
-/// monotone curve.
-fn path_of(out: &mut String, points: &[(f64, f64)], smooth: bool, join: bool) {
-    let x = |v: f64| v * 10.0;
-    for (at, (px, py)) in points.iter().enumerate() {
-        if at == 0 {
-            out.push(if join { 'L' } else { 'M' });
-            num(out, x(*px), 1);
-            out.push(' ');
-            num(out, *py, 1);
-            continue;
-        }
-        if !smooth || points.len() < 3 {
-            out.push('L');
-            num(out, x(*px), 1);
-            out.push(' ');
-            num(out, *py, 1);
-        }
-    }
-    if smooth && points.len() >= 3 {
-        // Fritsch–Carlson tangents: no overshoot between two values.
-        let m = points.len();
-        let slope = |i: usize| {
-            let dx = points[i + 1].0 - points[i].0;
-            if dx.abs() < 1e-12 {
-                0.0
-            } else {
-                (points[i + 1].1 - points[i].1) / dx
-            }
-        };
-        let d: Vec<f64> = (0..m - 1).map(slope).collect();
-        let mut t = vec![0.0; m];
-        t[0] = d[0];
-        t[m - 1] = d[m - 2];
-        for i in 1..m - 1 {
-            t[i] = if d[i - 1] * d[i] <= 0.0 {
-                0.0
-            } else {
-                let h0 = points[i].0 - points[i - 1].0;
-                let h1 = points[i + 1].0 - points[i].0;
-                let w1 = 2.0 * h1 + h0;
-                let w2 = h1 + 2.0 * h0;
-                (w1 + w2) / (w1 / d[i - 1] + w2 / d[i])
-            };
-        }
-        for i in 0..m - 1 {
-            let (x0, y0) = points[i];
-            let (x1, y1) = points[i + 1];
-            let h = (x1 - x0) / 3.0;
-            out.push('C');
-            for (cx, cy) in [
-                (x0 + h, y0 + t[i] * h),
-                (x1 - h, y1 - t[i + 1] * h),
-                (x1, y1),
-            ] {
-                num(out, x(cx), 1);
-                out.push(' ');
-                num(out, cy, 1);
-                out.push(' ');
-            }
-            out.pop();
-        }
-    }
-}
-
 impl Chart {
+    /// The band under the plot: the x labels' room, a tick mark's, or a dot's.
+    fn x_band(&self) -> f64 {
+        if self.x_axis.labels {
+            X_BAND
+        } else if self.x_axis.ticks {
+            8.0
+        } else {
+            4.0
+        }
+    }
+
     /// Bars up from a baseline, or lines and areas, with the value axis at the side.
     fn vertical_body(
         &self,
@@ -1211,10 +1684,14 @@ impl Chart {
         rows_n: usize,
     ) -> (Node, Vec<(&'static str, AttrValue)>, u32) {
         let base = TOP + plan.height;
-        let total = base + X_BAND;
+        let total = base + self.x_band();
         let rows = plan.rows;
         let m = rows.len();
         let bars = self.kind == Kind::Bar;
+        let motion = self.motion;
+        let mut defs = Defs::new(&self.common.id());
+        // The stretched layer's box: x 0 to 1000, y in pixels.
+        let layer_box = [0.0, TOP, 1000.0, plan.height];
 
         // The value axis.
         let mut widest = 0;
@@ -1227,52 +1704,94 @@ impl Chart {
                 (*v, text)
             })
             .collect();
-        let axis_w = (widest as f64 * 6.6 + 10.0).clamp(24.0, 120.0).round();
-        let y_axis = svg()
-            .slot("chart-y-axis")
-            .attr("width", n(axis_w, 0))
-            .attr("height", n(total, 0))
-            .child(
+        let y_axis = self.y_axis.shows().then(|| {
+            let axis_w = if self.y_axis.labels {
+                (widest as f64 * 6.6 + 10.0).clamp(24.0, 120.0).round()
+                    + if self.y_axis.ticks { 4.0 } else { 0.0 }
+            } else {
+                6.0
+            };
+            let edge = if self.rtl { 0.5 } else { axis_w - 0.5 };
+            let texts: Vec<Node> = if self.y_axis.labels {
                 ticks
                     .iter()
                     .map(|(v, text)| {
+                        let gap = if self.y_axis.ticks { 10.0 } else { 6.0 };
                         el("text")
                             .attr(
                                 "x",
                                 if self.rtl {
-                                    "6".to_owned()
+                                    n(gap, 0)
                                 } else {
-                                    n(axis_w - 6.0, 0)
+                                    n(axis_w - gap, 0)
                                 },
                             )
                             .attr("y", n(plan.y(*v), 1))
                             .attr("dy", "0.32em")
                             .attr("text-anchor", if self.rtl { "start" } else { "end" })
                             .child(text.clone())
+                            .into()
                     })
-                    .collect::<Vec<_>>(),
-            );
-
-        let mut plot: Vec<Node> = Vec::new();
-        // Gridlines, the zero line when values cross it.
-        for (v, _) in &ticks {
-            let y = crisp(plan.y(*v));
-            plot.push(
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let marks: Vec<Node> = if self.y_axis.ticks {
+                ticks
+                    .iter()
+                    .map(|(v, _)| {
+                        let y = crisp(plan.y(*v));
+                        el("line")
+                            .slot("chart-tick")
+                            .attr("x1", n(edge, 1))
+                            .attr("x2", n(if self.rtl { 4.5 } else { axis_w - 4.5 }, 1))
+                            .attr("y1", n(y, 1))
+                            .attr("y2", n(y, 1))
+                            .into()
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let line = self.y_axis.line.then(|| {
                 el("line")
-                    .slot(if *v == 0.0 {
-                        "chart-zero"
-                    } else {
-                        "chart-grid"
-                    })
-                    .attr("x1", "0")
-                    .attr("x2", "100%")
-                    .attr("y1", n(y, 1))
-                    .attr("y2", n(y, 1))
-                    .into(),
-            );
+                    .slot("chart-axis-line")
+                    .attr("x1", n(edge, 1))
+                    .attr("x2", n(edge, 1))
+                    .attr("y1", n(TOP, 0))
+                    .attr("y2", n(base, 0))
+            });
+            svg()
+                .slot("chart-y-axis")
+                .attr("width", n(axis_w, 0))
+                .attr("height", n(total, 0))
+                .children((texts, marks, line))
+        });
+
+        let dashed = self.grid.dashed.then_some("");
+        let mut plot: Vec<Node> = Vec::new();
+        // Gridlines across, and the zero line where values cross it.
+        let origin = plan.origin;
+        let crosses =
+            (plan.scale.lo < origin && plan.scale.hi > origin) || (self.baseline.is_some() && bars);
+        if self.grid.across {
+            for (v, _) in &ticks {
+                let y = crisp(plan.y(*v));
+                let zero = *v == origin;
+                plot.push(
+                    el("line")
+                        .slot(if zero { "chart-zero" } else { "chart-grid" })
+                        .attr_opt("data-dashed", (!zero).then_some(dashed).flatten())
+                        .attr("x1", "0")
+                        .attr("x2", "100%")
+                        .attr("y1", n(y, 1))
+                        .attr("y2", n(y, 1))
+                        .into(),
+                );
+            }
         }
-        if !plan.tick_values.contains(&0.0) && plan.scale.lo < 0.0 && plan.scale.hi > 0.0 {
-            let y = crisp(plan.y(0.0));
+        if crosses && (!self.grid.across || !plan.tick_values.contains(&origin)) {
+            let y = crisp(plan.y(origin));
             plot.push(
                 el("line")
                     .slot("chart-zero")
@@ -1280,6 +1799,38 @@ impl Chart {
                     .attr("x2", "100%")
                     .attr("y1", n(y, 1))
                     .attr("y2", n(y, 1))
+                    .into(),
+            );
+        }
+
+        // The x labels, and the gridlines down at them.
+        let x_labels = self.x_label_list(plan, grain, rows_n);
+        if self.grid.down {
+            for (x, _, _) in &x_labels {
+                plot.push(
+                    el("line")
+                        .slot("chart-grid")
+                        .attr_opt("data-dashed", dashed)
+                        .attr("x1", pct(*x))
+                        .attr("x2", pct(*x))
+                        .attr("y1", n(TOP, 0))
+                        .attr("y2", n(base, 0))
+                        .into(),
+                );
+            }
+        }
+
+        // Zones behind the data.
+        for (at, zone) in self.zones.iter().enumerate() {
+            let (top, bottom) = (plan.y(zone.to), plan.y(zone.from));
+            let (top, bottom) = (top.clamp(TOP, base), bottom.clamp(TOP, base));
+            plot.push(
+                motion
+                    .apply(
+                        zone_rect(top, bottom, zone.label.as_deref(), zone.ink, self.rtl),
+                        Effect::Fade,
+                        at,
+                    )
                     .into(),
             );
         }
@@ -1314,8 +1865,8 @@ impl Chart {
             }
         }
 
-        // The x labels.
-        plot.push(self.x_labels(plan, grain, rows_n, total).into());
+        // The x axis: its labels, its line and its tick marks.
+        plot.push(self.x_axis_node(&x_labels, base, total).into());
 
         // The marks.
         let mut dots: Vec<Node> = Vec::new();
@@ -1325,6 +1876,9 @@ impl Chart {
             let links = self.row_links(rows, rows_n);
             let mut marks: Vec<Node> = Vec::with_capacity(m * plan.series.len());
             for (s, ready) in plan.series.iter().enumerate() {
+                // One gradient for each colour the series' bars take.
+                let gradient = ready.fill(true);
+                let mut painted: Vec<(Color, String)> = Vec::new();
                 // In a stack, the outermost segment of each side is the one with the rounded end.
                 for (i, edge) in plan.edges[s].iter().enumerate() {
                     let Some((lo, hi)) = *edge else { continue };
@@ -1351,7 +1905,8 @@ impl Chart {
                     } else {
                         band * i as f64
                     };
-                    let bar = ready.color.on(el("rect")
+                    let color = ready.values[i].map_or(ready.color, |v| ready.color_of(v));
+                    let bar = color.on(el("rect")
                         .slot("chart-bar")
                         .attr("data-i", i as i64)
                         .attr("data-s", s as i64)
@@ -1363,6 +1918,23 @@ impl Chart {
                             "clip-path",
                             bar_clip(k, if plan.stacked { 0 } else { s }, corners),
                         ));
+                    let bar = match &gradient {
+                        Some(g) => {
+                            let url = match painted.iter().find(|(c, _)| *c == color) {
+                                Some((_, url)) => url.clone(),
+                                None => {
+                                    let url = defs.gradient(g, color, Some(layer_box));
+                                    painted.push((color, url.clone()));
+                                    url
+                                }
+                            };
+                            bar.attr("fill", url)
+                        }
+                        None => bar,
+                    };
+                    let bar = if ready.paint.glow { glow(bar) } else { bar };
+                    let bar =
+                        motion.apply(bar, if up { Effect::GrowUp } else { Effect::GrowDown }, i);
                     marks.push(match links.get(i).and_then(Option::as_ref) {
                         Some(href) => el("a")
                             .slot("chart-drill")
@@ -1378,8 +1950,14 @@ impl Chart {
             plot.push(el("g").slot("chart-bars").child(marks).into());
         } else {
             let area = self.kind == Kind::Area;
+            let wipe = if self.rtl {
+                Effect::WipeBack
+            } else {
+                Effect::Wipe
+            };
             let mut layers: Vec<Node> = Vec::new();
             let mut lines: Vec<Node> = Vec::new();
+            let mut glowing: Vec<Node> = Vec::new();
             for (s, ready) in plan.series.iter().enumerate() {
                 let edges = &plan.edges[s];
                 let mut line_d = String::with_capacity(m * 12);
@@ -1413,73 +1991,128 @@ impl Chart {
                         );
                         continue;
                     }
-                    path_of(&mut line_d, &upper, self.smooth, false);
+                    curve_path(&mut line_d, &upper, self.curve, false, 10.0);
                     if area {
+                        // The lower edge stays in the plot when the scale doesn't hold zero.
                         let lower: Vec<(f64, f64)> = (start..i)
                             .rev()
-                            .filter_map(|j| edges[j].map(|(base, _)| (rows[j].x, plan.y(base))))
+                            .filter_map(|j| {
+                                edges[j]
+                                    .map(|(base_v, _)| (rows[j].x, plan.y(base_v).clamp(TOP, base)))
+                            })
                             .collect();
-                        path_of(&mut area_d, &upper, self.smooth, false);
-                        path_of(&mut area_d, &lower, self.smooth, true);
+                        curve_path(&mut area_d, &upper, self.curve, false, 10.0);
+                        curve_path(&mut area_d, &lower, self.curve, true, 10.0);
                         area_d.push('Z');
                     }
                 }
                 if area && !area_d.is_empty() {
-                    layers.push(
-                        ready
-                            .color
-                            .on(el("path")
-                                .slot("chart-area")
-                                .attr("data-s", s as i64)
-                                .attr("d", area_d))
-                            .into(),
-                    );
+                    let path = ready.color.on(el("path")
+                        .slot("chart-area")
+                        .attr("data-s", s as i64)
+                        .attr("d", area_d));
+                    let path = match ready.fill(false) {
+                        Some(g) => {
+                            path.attr("fill", defs.gradient(&g, ready.color, Some(layer_box)))
+                        }
+                        None => path,
+                    };
+                    layers.push(path.into());
                 }
                 if !line_d.is_empty() {
-                    lines.push(
-                        ready
-                            .color
-                            .on(el("path")
-                                .slot("chart-line")
-                                .attr("data-s", s as i64)
-                                .attr("d", line_d)
-                                .attr("vector-effect", "non-scaling-stroke"))
-                            .into(),
-                    );
+                    let path = ready.color.on(el("path")
+                        .slot("chart-line")
+                        .attr("data-s", s as i64)
+                        .attr("d", line_d)
+                        .attr("vector-effect", "non-scaling-stroke"));
+                    let path = match &ready.paint.stroke {
+                        Some(g) => {
+                            path.attr("stroke", defs.gradient(g, ready.color, Some(layer_box)))
+                        }
+                        None => path,
+                    };
+                    if ready.paint.glow {
+                        // A glow on a layer of its own, so the blur is not stretched.
+                        glowing.push(
+                            motion
+                                .apply(glow(ready.color.on(layer(total))).child(path), wipe, 0)
+                                .into(),
+                        );
+                    } else {
+                        lines.push(path.into());
+                    }
                 }
-                // The end dot: where the series stands now.
-                if self.dots
-                    && let Some(j) = (0..m).rev().find(|j| edges[*j].is_some())
-                    && let Some((_, top)) = edges[j]
-                {
-                    let y = plan.y(top);
-                    dots.push(
-                        ready
-                            .color
-                            .on(el("circle")
-                                .slot("chart-end")
-                                .attr("data-s", s as i64)
-                                .attr("cx", pct(rows[j].x))
-                                .attr("cy", n(y, 1))
-                                .attr("r", "4"))
-                            .into(),
-                    );
+                // The points: every one, or the last, where the series stands now.
+                let points: Vec<usize> = match self.dots {
+                    Dots::None => Vec::new(),
+                    Dots::End => (0..m)
+                        .rev()
+                        .find(|j| edges[*j].is_some())
+                        .into_iter()
+                        .collect(),
+                    Dots::All => (0..m).filter(|j| edges[*j].is_some()).collect(),
+                };
+                let slot = if self.dots == Dots::End {
+                    "chart-end"
+                } else {
+                    "chart-point"
+                };
+                for (at, j) in points.iter().enumerate() {
+                    let Some((_, top)) = edges[*j] else { continue };
+                    let dot = ready.color.on(el("circle")
+                        .slot(slot)
+                        .attr("data-s", s as i64)
+                        .attr("cx", pct(rows[*j].x))
+                        .attr("cy", n(plan.y(top), 1))
+                        .attr("r", "4"));
+                    let dot = if ready.paint.glow { glow(dot) } else { dot };
+                    // Dots come in after the line has drawn to them.
+                    let after = rows[*j].x / 100.0;
+                    let dot =
+                        motion
+                            .after((after * 900.0) as u32)
+                            .stagger(0)
+                            .apply(dot, Effect::Pop, at);
+                    dots.push(dot.into());
                 }
             }
-            layers.extend(lines);
-            plot.push(
-                svg()
-                    .slot("chart-marks")
-                    .attr("x", "0")
-                    .attr("y", "0")
-                    .attr("width", "100%")
-                    .attr("height", n(total, 0))
-                    .attr("viewBox", format!("0 0 1000 {}", n(total, 0)))
-                    .attr("preserveAspectRatio", "none")
-                    .attr("overflow", "visible")
-                    .child(layers)
-                    .into(),
+            if !layers.is_empty() {
+                plot.push(motion.apply(layer(total).child(layers), wipe, 0).into());
+            }
+            if !lines.is_empty() {
+                plot.push(motion.apply(layer(total).child(lines), wipe, 0).into());
+            }
+            plot.extend(glowing);
+        }
+
+        // Reference lines over the data.
+        for (at, r) in self.references.iter().enumerate() {
+            let line = match r.at {
+                RefAt::Identity => self.identity_line(plan, rows_n),
+                _ => reference_value(r, plan.averages)
+                    .filter(|v| *v >= plan.scale.lo && *v <= plan.scale.hi)
+                    .map(|v| {
+                        let y = crisp(plan.y(v));
+                        (("0".to_owned(), y), ("100%".to_owned(), y), Some(v))
+                    }),
+            };
+            let Some((from, to, value)) = line else {
+                continue;
+            };
+            let label = r.label.as_ref().map(|label| match value {
+                Some(v) => fill(label, &[("value", &(plan.fmt)(v))]),
+                None => label.clone(),
+            });
+            let mark = reference_line(
+                from,
+                to,
+                label.as_deref(),
+                r.place,
+                r.ink,
+                r.solid,
+                self.rtl,
             );
+            plot.push(motion.after(400).apply(mark, Effect::Fade, at).into());
         }
 
         // Targets and events over the data.
@@ -1550,6 +2183,11 @@ impl Chart {
                     .attr("visibility", "hidden")
                     .into(),
             );
+            let (r, style) = match self.active_dot {
+                ActiveDot::Large => ("6", None),
+                ActiveDot::Halo => ("5", Some("halo")),
+                _ => ("4", None),
+            };
             for (s, ready) in plan.series.iter().enumerate() {
                 let mut ys = String::with_capacity(m * 6);
                 for edge in &plan.edges[s] {
@@ -1567,9 +2205,10 @@ impl Chart {
                             .slot("chart-dot")
                             .attr("data-s", s as i64)
                             .attr("data-ys", ys)
+                            .attr_opt("data-dot", style)
                             .attr("cx", "0")
                             .attr("cy", "0")
-                            .attr("r", "4")
+                            .attr("r", r)
                             .attr("visibility", "hidden"))
                         .into(),
                 );
@@ -1580,10 +2219,11 @@ impl Chart {
             .attr("width", "100%")
             .attr("height", n(total, 0))
             .attr("overflow", "visible")
-            .child(plot);
+            .children((defs.node(), plot));
         let body = el("div")
             .slot("chart-frame")
             .attr_opt("data-rtl", self.rtl.then_some(""))
+            .attr_opt("data-bare", y_axis.is_none().then_some(""))
             .children((y_axis, el("div").slot("chart-plot-wrap").child(plot)));
         let attrs = vec![
             (
@@ -1594,6 +2234,29 @@ impl Chart {
             ("data-rows", AttrValue::Int(m as i64)),
         ];
         (body.into(), attrs, total as u32)
+    }
+
+    /// The diagonal where x equals y, over what both axes share: its two ends.
+    #[allow(clippy::type_complexity)]
+    fn identity_line(
+        &self,
+        plan: &Plan<'_>,
+        rows_n: usize,
+    ) -> Option<((String, f64), (String, f64), Option<f64>)> {
+        let X::Numbers(values) = &self.x else {
+            return None;
+        };
+        let (x0, x1) = (*values.first()?, *values.get(rows_n.checked_sub(1)?)?);
+        let lo = x0.max(plan.scale.lo);
+        let hi = x1.min(plan.scale.hi);
+        if hi.partial_cmp(&lo) != Some(std::cmp::Ordering::Greater) {
+            return None;
+        }
+        let pos = |v: f64| {
+            let x = linear_x(v, x0, x1);
+            pct(if self.rtl { 100.0 - x } else { x })
+        };
+        Some(((pos(lo), plan.y(lo)), (pos(hi), plan.y(hi)), None))
     }
 
     /// Where an annotation's place is, in percent, when the chart has it.
@@ -1649,40 +2312,78 @@ impl Chart {
         }
     }
 
-    /// The labels under the plot.
-    fn x_labels(&self, plan: &Plan<'_>, grain: Grain, rows_n: usize, total: f64) -> Element {
+    /// The labels under the plot: where each sits (percent), its text, and whether a
+    /// narrow chart drops it (every other one; on a very narrow one, all but every
+    /// other or every third).
+    #[allow(clippy::type_complexity)]
+    fn x_label_list(
+        &self,
+        plan: &Plan<'_>,
+        grain: Grain,
+        rows_n: usize,
+    ) -> Vec<(f64, String, (bool, bool))> {
         let rows = plan.rows;
         let m = rows.len();
-        let y = n_(total - 6.0);
         let mut labels: Vec<(f64, String)> = Vec::new();
         let bars = self.kind == Kind::Bar;
+        let ticks = self.x_ticks;
+        let mirror = |x: f64| if self.rtl { 100.0 - x } else { x };
         match &self.x {
             X::Times(times) if !bars => {
                 let (lo, hi) = (times[0], times[rows_n - 1]);
-                for tick in time_ticks(lo, hi, 7, &self.common.dates, self.week_start) {
-                    let x = linear_x(tick.at as f64, lo as f64, hi as f64);
-                    labels.push((if self.rtl { 100.0 - x } else { x }, tick.label));
+                let found = time_ticks(
+                    lo,
+                    hi,
+                    ticks.most.unwrap_or(7),
+                    &self.common.dates,
+                    self.week_start,
+                );
+                let keep = Ticks::every(ticks.every.unwrap_or(1)).pick(found.len(), 1);
+                for at in keep {
+                    let tick = &found[at];
+                    labels.push((
+                        mirror(linear_x(tick.at as f64, lo as f64, hi as f64)),
+                        tick.label.clone(),
+                    ));
+                }
+                if ticks.ends {
+                    let name = |t: i64| {
+                        time_of(t).map_or_else(String::new, |t| {
+                            time_label(t, grain, &self.common.dates, false)
+                        })
+                    };
+                    labels.retain(|(x, _)| (8.0..=92.0).contains(x));
+                    labels.insert(0, (mirror(0.0), name(lo)));
+                    labels.push((mirror(100.0), name(hi)));
                 }
             }
             X::Numbers(values) if !bars => {
                 let (lo, hi) = (values[0], values[rows_n - 1]);
-                let ticks = nice(lo, hi, 6, false);
-                for v in ticks.values.iter().filter(|v| (lo..=hi).contains(*v)) {
-                    let x = linear_x(*v, lo, hi);
-                    labels.push((
-                        if self.rtl { 100.0 - x } else { x },
-                        NumberFormat::number().format_places(
-                            *v,
-                            &self.common.numbers,
-                            ticks.places,
-                        ),
-                    ));
+                let found = nice(lo, hi, ticks.most.unwrap_or(6), false);
+                let inside: Vec<f64> = found
+                    .values
+                    .iter()
+                    .copied()
+                    .filter(|v| (lo..=hi).contains(v))
+                    .collect();
+                let keep = Ticks::every(ticks.every.unwrap_or(1)).pick(inside.len(), 1);
+                let text = |v: f64, places: u8| {
+                    NumberFormat::number().format_places(v, &self.common.numbers, places)
+                };
+                for at in keep {
+                    let v = inside[at];
+                    labels.push((mirror(linear_x(v, lo, hi)), text(v, found.places)));
+                }
+                if ticks.ends {
+                    labels.retain(|(x, _)| (8.0..=92.0).contains(x));
+                    labels.insert(0, (mirror(0.0), text(lo, found.places)));
+                    labels.push((mirror(100.0), text(hi, found.places)));
                 }
             }
             _ => {
-                let every = m.div_ceil(9).max(1);
                 let mut last_year = None;
-                for row in rows.iter().step_by(every) {
+                for at in ticks.pick(m, m.div_ceil(9).max(1)) {
+                    let row = &rows[at];
                     let text = match &self.x {
                         X::Times(times) => {
                             let at = times.get(row.start).copied().and_then(time_of);
@@ -1712,38 +2413,88 @@ impl Chart {
             }
         }
         // On a narrow chart every other label goes, when there are enough to crowd, and on a
-        // very narrow one (a card of a dashboard) all but every other, or every third.
-        let many = labels.len() > 6;
-        let crowded = labels.len() > 3;
-        let texts: Vec<Node> = labels
+        // very narrow one (a card of a dashboard) all but every other, or every third. Labels
+        // picked by the page stay as picked.
+        let auto = ticks.is_auto();
+        let many = auto && labels.len() > 6;
+        let crowded = auto && labels.len() > 3;
+        labels
             .into_iter()
             .enumerate()
             .map(|(j, (x, text))| {
-                let anchor = if x < 4.0 {
-                    "start"
-                } else if x > 96.0 {
-                    "end"
-                } else {
-                    "middle"
-                };
-                el("text")
-                    .attr("x", pct(x))
-                    .attr("y", y.clone())
-                    .attr("text-anchor", anchor)
-                    .attr_opt("data-minor", (many && j % 2 == 1).then_some(""))
-                    .attr_opt(
-                        "data-tight",
-                        (crowded && if many { j % 3 != 0 } else { j % 2 == 1 }).then_some(""),
-                    )
-                    .child(text)
-                    .into()
+                let minor = many && j % 2 == 1;
+                let tight = crowded && if many { j % 3 != 0 } else { j % 2 == 1 };
+                (x, text, (minor, tight))
             })
-            .collect();
-        el("g").slot("chart-x-axis").child(texts)
+            .collect()
+    }
+
+    /// The x axis: its labels, its line along the plot's foot and a tick mark at each label.
+    #[allow(clippy::type_complexity)]
+    fn x_axis_node(
+        &self,
+        labels: &[(f64, String, (bool, bool))],
+        base: f64,
+        total: f64,
+    ) -> Element {
+        let y = n(total - 6.0, 1);
+        let texts: Vec<Node> = if self.x_axis.labels {
+            labels
+                .iter()
+                .map(|(x, text, (minor, tight))| {
+                    let anchor = if *x < 4.0 {
+                        "start"
+                    } else if *x > 96.0 {
+                        "end"
+                    } else {
+                        "middle"
+                    };
+                    el("text")
+                        .attr("x", pct(*x))
+                        .attr("y", y.clone())
+                        .attr("text-anchor", anchor)
+                        .attr_opt("data-minor", minor.then_some(""))
+                        .attr_opt("data-tight", tight.then_some(""))
+                        .child(text.clone())
+                        .into()
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let foot = crisp(base);
+        let marks: Vec<Node> = if self.x_axis.ticks {
+            labels
+                .iter()
+                .map(|(x, _, (minor, tight))| {
+                    el("line")
+                        .slot("chart-tick")
+                        .attr_opt("data-minor", minor.then_some(""))
+                        .attr_opt("data-tight", tight.then_some(""))
+                        .attr("x1", pct(*x))
+                        .attr("x2", pct(*x))
+                        .attr("y1", n(foot, 1))
+                        .attr("y2", n(foot + 4.0, 1))
+                        .into()
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let line = self.x_axis.line.then(|| {
+            el("line")
+                .slot("chart-axis-line")
+                .attr("x1", "0")
+                .attr("x2", "100%")
+                .attr("y1", n(foot, 1))
+                .attr("y2", n(foot, 1))
+        });
+        el("g").slot("chart-x-axis").children((line, marks, texts))
     }
 
     /// Bars along rows: a label, the bar, and its value, with a value axis under them.
     fn horizontal_body(&self, plan: &Plan<'_>) -> (Node, Vec<(&'static str, AttrValue)>, u32) {
+        let mut defs = Defs::new(&self.common.id());
         let k = if plan.stacked { 1 } else { plan.series.len() };
         let thick = if k == 1 {
             16.0
@@ -1760,12 +2511,25 @@ impl Chart {
         let grid: Vec<f64> = plan.tick_values.iter().map(|v| at(*v)).collect();
         let numbers = &self.common.numbers;
         let single = plan.series.len() == 1 || plan.stacked;
+        // A baseline that is not a tick still has its line.
+        let origin_line = (self.baseline.is_some() && !plan.tick_values.contains(&plan.origin))
+            .then(|| at(plan.origin));
         let lines = |h: f64| -> Vec<Node> {
+            let origin = origin_line.map(|x| {
+                Node::from(
+                    el("line")
+                        .slot("chart-zero")
+                        .attr("x1", pct(x))
+                        .attr("x2", pct(x))
+                        .attr("y1", "0")
+                        .attr("y2", n(h, 0)),
+                )
+            });
             grid.iter()
                 .zip(plan.tick_values)
                 .map(|(x, v)| {
                     el("line")
-                        .slot(if *v == 0.0 {
+                        .slot(if *v == plan.origin {
                             "chart-zero"
                         } else {
                             "chart-grid"
@@ -1776,6 +2540,7 @@ impl Chart {
                         .attr("y2", n(h, 0))
                         .into()
                 })
+                .chain(origin)
                 .collect()
         };
         let mut rows_out: Vec<Node> = Vec::with_capacity(plan.rows.len() + 1);
@@ -1812,20 +2577,33 @@ impl Chart {
                 } else {
                     5.0 + s as f64 * (thick + 2.0)
                 };
-                marks.push(
-                    ready
-                        .color
-                        .on(el("rect")
-                            .slot("chart-bar")
-                            .attr("data-i", i as i64)
-                            .attr("data-s", s as i64)
-                            .attr("x", pct(x))
-                            .attr("width", pct(w.max(0.2)))
-                            .attr("y", n(y, 1))
-                            .attr("height", n(thick, 1))
-                            .attr("clip-path", clip))
-                        .into(),
-                );
+                let color = ready.values[i].map_or(ready.color, |v| ready.color_of(v));
+                let bar = color.on(el("rect")
+                    .slot("chart-bar")
+                    .attr("data-i", i as i64)
+                    .attr("data-s", s as i64)
+                    .attr("x", pct(x))
+                    .attr("width", pct(w.max(0.2)))
+                    .attr("y", n(y, 1))
+                    .attr("height", n(thick, 1))
+                    .attr("clip-path", clip));
+                let bar = match ready.paint.fill.clone().or_else(|| {
+                    ready.paint.fade.then(|| {
+                        Gradient::horizontal()
+                            .stop_with_opacity(0.0, Ink::own(), 0.5)
+                            .stop(1.0, Ink::own())
+                    })
+                }) {
+                    Some(g) => bar.attr("fill", defs.gradient(&g, color, None)),
+                    None => bar,
+                };
+                let bar = if ready.paint.glow { glow(bar) } else { bar };
+                let effect = if ends_right {
+                    Effect::GrowRight
+                } else {
+                    Effect::GrowLeft
+                };
+                marks.push(self.motion.apply(bar, effect, i).into());
             }
             for a in &self.annotations {
                 if let Annotation::Target { value, .. } = a {
@@ -1840,6 +2618,26 @@ impl Chart {
                             .into(),
                     );
                 }
+            }
+            // Reference levels stand across every row; their words are under the axis.
+            for r in &self.references {
+                let Some(v) = reference_value(r, plan.averages) else {
+                    continue;
+                };
+                if v < plan.scale.lo || v > plan.scale.hi {
+                    continue;
+                }
+                let x = pct(at(v));
+                let line = reference_line(
+                    (x.clone(), 0.0),
+                    (x, row_h),
+                    None,
+                    r.place,
+                    r.ink,
+                    r.solid,
+                    self.rtl,
+                );
+                marks.push(line.into());
             }
             let value = if single {
                 let sum: Option<f64> = plan
@@ -1892,7 +2690,7 @@ impl Chart {
                     .into()
             })
             .collect();
-        let target_labels: Vec<Node> = self
+        let mut target_labels: Vec<Node> = self
             .annotations
             .iter()
             .filter_map(|a| match a {
@@ -1907,6 +2705,24 @@ impl Chart {
                 _ => None,
             })
             .collect();
+        for r in &self.references {
+            let (Some(label), Some(v)) = (&r.label, reference_value(r, plan.averages)) else {
+                continue;
+            };
+            if v < plan.scale.lo || v > plan.scale.hi {
+                continue;
+            }
+            let text = fill(label, &[("value", &(plan.fmt)(v))]);
+            let mark = mark_text(&text)
+                .slot("chart-target-label")
+                .attr("x", pct(at(v)))
+                .attr("dx", "4")
+                .attr("y", "30");
+            target_labels.push(match r.ink {
+                Some(ink) => ink.on(mark).into(),
+                None => mark.into(),
+            });
+        }
         let axis_h = if target_labels.is_empty() { 20.0 } else { 36.0 };
         rows_out.push(
             el("div")
@@ -1919,7 +2735,7 @@ impl Chart {
                         .attr("width", "100%")
                         .attr("height", n(axis_h, 0))
                         .attr("overflow", "visible")
-                        .child(nodes((ticks, target_labels))),
+                        .child(nodes((defs.node(), ticks, target_labels))),
                     el("span").slot("chart-row-value"),
                 ))
                 .into(),
@@ -1938,26 +2754,18 @@ impl Chart {
     }
 }
 
-/// An annotation's words on the drawing: cut to 32 characters, the whole as its title.
-fn mark_text(label: &str) -> Element {
-    let cut = short(label, 32);
-    let whole = (cut != label).then(|| el("title").child(label.to_owned()));
-    el("text").children((whole, cut))
-}
-
-/// A number as SVG writes it.
-fn n_(v: f64) -> String {
-    n(v, 1)
-}
-
-/// `text` cut to `most` characters, with an ellipsis.
-fn short(text: &str, most: usize) -> String {
-    if text.chars().count() <= most {
-        return text.to_owned();
-    }
-    let mut out: String = text.chars().take(most.saturating_sub(1)).collect();
-    out.push('…');
-    out
+/// A layer stretched over the plot: x from 0 to 1000 across its width, y in pixels,
+/// strokes that don't scale. Lines and areas are drawn in it.
+fn layer(total: f64) -> Element {
+    svg()
+        .slot("chart-marks")
+        .attr("x", "0")
+        .attr("y", "0")
+        .attr("width", "100%")
+        .attr("height", n(total, 0))
+        .attr("viewBox", format!("0 0 1000 {}", n(total, 0)))
+        .attr("preserveAspectRatio", "none")
+        .attr("overflow", "visible")
 }
 
 #[cfg(test)]
@@ -1975,28 +2783,5 @@ mod tests {
             two,
             "inset(0 calc(50% - min(70%, 50px) * 0 + 1px) 0 calc(50% - min(70%, 50px) * 0.5 + 0px))"
         );
-    }
-
-    #[test]
-    fn smooth_paths_never_overshoot() {
-        let mut d = String::new();
-        path_of(
-            &mut d,
-            &[(0.0, 10.0), (50.0, 0.0), (100.0, 0.0)],
-            true,
-            false,
-        );
-        assert!(d.starts_with("M0 10C"), "{d}");
-        // The flat stretch stays flat: its control points sit on y = 0.
-        assert!(d.ends_with("833.3 0 1000 0"), "{d}");
-    }
-
-    #[test]
-    fn long_names_are_cut_on_the_axis() {
-        assert_eq!(
-            short("Northern Europe and the Baltics", 16),
-            "Northern Europe…"
-        );
-        assert_eq!(short("Short", 16), "Short");
     }
 }

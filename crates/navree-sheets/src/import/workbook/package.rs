@@ -19,6 +19,13 @@ pub(super) const PACKAGE: &str = "_rels/.rels";
 /// resolved, which would list its folders.
 const MAX_TARGET: usize = 65_535;
 
+/// What a relationship takes besides its text, as the worst of the lists it is
+/// in holds it: the list's entry (32 bytes, a list may be left twice as long as
+/// it is full), the table's (33 bytes with its control byte, a table may be
+/// left more than twice as large as it is full), and the allocator's share of
+/// each of the two strings (32 bytes, whatever the string's length).
+const RELATIONSHIP_BYTES: usize = 64 + 80 + 2 * 32;
+
 /// What a relationship's type says its target is, by the type's last word:
 /// the Transitional, Strict and Microsoft types all end the same.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,8 +104,7 @@ impl Relationships {
                         } else {
                             existing(archive, resolve(folder, &target))
                         };
-                        // The list's entry and the table's, besides the text.
-                        budget.hold(id.len() + part.len() + 64)?;
+                        budget.hold(id.len() + part.len() + RELATIONSHIP_BYTES)?;
                         found.by_id.insert(id.to_owned(), found.all.len());
                         found.all.push(Relationship {
                             kind: Kind::of(kind),

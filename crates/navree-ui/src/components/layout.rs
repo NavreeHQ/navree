@@ -2,7 +2,7 @@
 //! set, written as attributes the stylesheet already has rules for.
 
 use super::root_methods;
-use crate::node::{Element, IntoNodes, Node, el, into_node};
+use crate::node::{Element, IntoNodes, Node, Uses, el, into_node};
 
 /// A gap's attribute value: the nearest step of the scale (in units of 4px).
 pub(crate) const fn gap_name(gap: u8) -> &'static str {
@@ -176,7 +176,8 @@ impl Row {
     }
 }
 
-/// A grid of equal columns, one column on phones.
+/// A grid of columns, one column on phones: equal ([`cols`](Self::cols)), as many as fit
+/// ([`fit`](Self::fit)) or in a ratio ([`ratio`](Self::ratio)).
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Grid {
@@ -192,6 +193,69 @@ impl Grid {
                 .attr("data-cols", span_name(columns))
                 .attr("data-gap", "4"),
         }
+    }
+
+    /// A grid of as many columns as fit, each at least `min` rem wide (8, 10, 12, 14, 16, 20
+    /// or 24; another number takes the nearest): a row of figure tiles that wraps by the room
+    /// it has, from one column on a phone to six on a wide screen, with no breakpoint to
+    /// choose. The columns share the width equally.
+    ///
+    /// ```
+    /// use navree_ui::{Grid, Stat, render};
+    ///
+    /// let tiles = Grid::fit(12).gap(3).children((
+    ///     Stat::new("Steps", "9,412"),
+    ///     Stat::new("Sleep", "7 h 20 min"),
+    ///     Stat::new("Resting heart rate", "58 bpm"),
+    /// ));
+    /// assert!(render(&tiles.into()).contains(r#"data-fit="12""#));
+    /// ```
+    pub fn fit(min: u8) -> Self {
+        let nearest = [8_u8, 10, 12, 14, 16, 20, 24]
+            .into_iter()
+            .min_by_key(|step| step.abs_diff(min))
+            .unwrap_or(12);
+        Self {
+            el: el("div")
+                .slot("grid")
+                .attr("data-fit", nearest.to_string())
+                .attr("data-gap", "4")
+                .uses(Uses::APP_BLOCKS),
+        }
+    }
+
+    /// A grid of unequal columns, their widths in the ratio of `parts`: `[7, 5]` for a wide
+    /// column beside a narrower one, `[3, 2]`, `[1, 2, 1]`. Two to four columns, each part 1
+    /// to 12 (others are taken to the nearest). One column under 768 px, in the order given.
+    ///
+    /// ```
+    /// use navree_ui::{Grid, Text, render};
+    ///
+    /// let grid = Grid::ratio([7, 5]).children((Text::new("Trends"), Text::new("Notes")));
+    /// let html = render(&grid.into());
+    /// assert!(html.contains(r#"data-ratio="2" data-c1="7" data-c2="5""#));
+    /// ```
+    pub fn ratio(parts: impl IntoIterator<Item = u8>) -> Self {
+        let parts: Vec<u8> = parts
+            .into_iter()
+            .take(4)
+            .map(|part| part.clamp(1, 12))
+            .collect();
+        let mut el = el("div")
+            .slot("grid")
+            .attr("data-gap", "4")
+            .uses(Uses::APP_BLOCKS);
+        if parts.len() < 2 {
+            return Self {
+                el: el.attr("data-cols", "1"),
+            };
+        }
+        el = el.attr("data-ratio", parts.len().to_string());
+        for (at, part) in parts.iter().enumerate() {
+            let name = ["data-c1", "data-c2", "data-c3", "data-c4"][at];
+            el = el.attr(name, part.to_string());
+        }
+        Self { el }
     }
 
     /// Sets the gap, in units of 4px.
@@ -302,4 +366,41 @@ pub fn only_without_script(content: impl IntoNodes) -> Node {
         .flag("data-noscript-only", true)
         .child(content)
         .into()
+}
+
+#[cfg(test)]
+mod ratio_tests {
+    use super::*;
+    use crate::render::render;
+
+    #[test]
+    fn a_ratio_grid_names_each_part_and_keeps_to_four() {
+        let html = render(&Grid::ratio([7, 5]).into());
+        assert!(
+            html.starts_with(
+                r#"<div data-slot="grid" data-gap="4" data-ratio="2" data-c1="7" data-c2="5">"#
+            ),
+            "{html}"
+        );
+        let html = render(&Grid::ratio([0, 40, 2, 1, 9]).into());
+        assert!(
+            html.contains(r#"data-ratio="4" data-c1="1" data-c2="12" data-c3="2" data-c4="1""#),
+            "{html}"
+        );
+        assert!(!html.contains("data-c5"), "{html}");
+        let one = render(&Grid::ratio([3]).into());
+        assert!(
+            one.contains(r#"data-cols="1""#) && !one.contains("data-ratio"),
+            "{one}"
+        );
+        // Every part a grid can name has its rule, and the columns stack under 768 px.
+        let css = include_str!("../../styles/extra/app-blocks.css");
+        for column in 1..=4 {
+            for part in 1..=12 {
+                let rule = format!(r#"[data-c{column}="{part}"]{{--c{column}:{part}fr}}"#);
+                assert!(css.contains(&rule), "{rule}");
+            }
+        }
+        assert!(css.contains(r#"@media (min-width:768px){[data-slot=grid][data-ratio="2"]"#));
+    }
 }

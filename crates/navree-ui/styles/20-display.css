@@ -29,6 +29,9 @@ h1[data-slot=heading]{font-size:1.5rem}h2[data-slot=heading]{font-size:1.25rem}h
 [data-slot=alert-description]{grid-column:2;color:var(--fg-2);font-size:13px}
 [data-slot=aspect-ratio]{overflow:hidden;border-radius:var(--radius-lg);& > *{width:100%;height:100%;object-fit:cover}
   &[data-ratio=square]{aspect-ratio:1}&[data-ratio=video]{aspect-ratio:16/9}&[data-ratio=photo]{aspect-ratio:4/3}&[data-ratio=wide]{aspect-ratio:21/9}}
+/* A responsive image keeps its own shape from its width and height, so the page keeps its room while it loads; in an aspect ratio it covers the box. */
+[data-slot=picture]{display:block;max-width:100%;& > img{height:auto}&[data-fill] > img{width:100%}}
+[data-slot=aspect-ratio] > [data-slot=picture] > img{width:100%;height:100%;object-fit:cover}
 [data-slot=separator]{flex:none;margin:0;border:0;background:var(--line);height:1px;width:100%;&[aria-orientation=vertical]{height:1rem;width:1px}}
 [data-slot=empty]{display:flex;flex-direction:column;align-items:center;gap:.25rem;padding:2rem 1.5rem;border:1px dashed var(--line-2);border-radius:var(--radius-lg);text-align:center}
 [data-slot=empty-media]{display:flex;align-items:center;justify-content:center;width:2rem;height:2rem;margin-bottom:.5rem;border-radius:var(--radius);background:var(--ink-2);color:var(--fg)}
@@ -108,7 +111,7 @@ h1[data-slot=heading]{font-size:1.5rem}h2[data-slot=heading]{font-size:1.25rem}h
 [data-slot=data-table]{display:flex;flex-direction:column;gap:.75rem}
 [data-slot=table-toolbar]{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;& [data-slot=input]{width:16rem;max-width:100%}& [data-slot=native-select]{width:auto}}
 [data-slot=table-footer]{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;justify-content:space-between;color:var(--fg-2);font-size:13px}
-[data-slot=bars]{display:block;width:100%;height:10rem;& rect{fill:var(--bar)}& rect:hover{fill:var(--fg-2)}}
+[data-slot=bars]{display:block;width:100%;height:10rem;& rect:not([fill]){fill:var(--bar)}&:not([data-painted]) rect:hover{fill:var(--fg-2)}}
 [data-slot=stat]{display:flex;flex-direction:column;gap:.25rem;padding:1rem;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--ink-1)}
 [data-slot=stat-label]{color:var(--fg-2);font-size:13px}
 [data-slot=stat-value]{color:var(--fg);font-size:1.5rem;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2}
