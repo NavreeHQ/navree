@@ -286,6 +286,8 @@ They are revoked at Apple (with `client_id` the bundle id or the Services ID the
 
 Stored Google tokens (`store_tokens`) are revoked the same way, at `https://oauth2.googleapis.com/revoke` (the provider's `url` changes the host). A token the provider no longer knows counts as revoked.
 
+The call to the provider is made before your unit of work reads or writes anything, so no transaction waits on it. Only a provider that can't answer now (no connection, a `5xx`, `408` or `429`) stops the operation: it answers 502 (`provider_unavailable`) and nothing changes. A token the provider refuses for good (any other `4xx`, such as `invalid_client` after the key it was issued under was revoked), or one that can no longer be decrypted, is logged, audited as `social.token_revocation_refused` (with the provider, the status and the provider's error code), and forgotten all the same: the account is disconnected, or the offboarding goes on.
+
 Navree has no account-deletion route of its own. Yours revokes first, then deletes the user (the `social_accounts` rows go with it):
 
 ```rust title="src/modules/account/controller.rs"
@@ -508,7 +510,7 @@ Register it with `.module(SocialModule::for_feature::<Zoho>())` and configure it
 
 All carry `user_id`, `provider` and `provider_user_id`, and are emitted after the change commits, when `EventsModule` is in the app.
 
-With the [audit log](/docs/security/audit-log/), sign-ins are recorded as `auth.login` with `metadata.provider` (`auth.two_factor_challenge` when a second factor is due; `metadata.via = "session"` on the session cookie), new users as `auth.register` with `metadata.provider`, links as `social.linked` and `social.unlinked`, and Apple's notifications as `social.consent_revoked`, `social.account_deleted`, `social.email_disabled` and `social.email_enabled`. Provider tokens, identity tokens, authorization codes and the Apple key are never recorded, logged or put in an error.
+With the [audit log](/docs/security/audit-log/), sign-ins are recorded as `auth.login` with `metadata.provider` (`auth.two_factor_challenge` when a second factor is due; `metadata.via = "session"` on the session cookie), new users as `auth.register` with `metadata.provider`, links as `social.linked` and `social.unlinked`, a stored token the provider would not revoke as `social.token_revocation_refused`, and Apple's notifications as `social.consent_revoked`, `social.account_deleted`, `social.email_disabled` and `social.email_enabled`. Provider tokens, identity tokens, authorization codes and the Apple key are never recorded, logged or put in an error.
 
 ## Testing
 

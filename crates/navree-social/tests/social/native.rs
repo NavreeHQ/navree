@@ -691,6 +691,104 @@ async fn offboarding_and_deletion_revoke_apples_tokens() {
     assert_eq!(native.idp.requests_to("/auth/revoke").await.len(), 1);
 }
 
+// Apple refuses the token for good (the key it was issued under is gone):
+// disconnecting goes on, the refusal is audited, and nothing is kept to
+// try again. Only an Apple that cannot answer now leaves things as they were.
+#[tokio::test]
+async fn a_token_apple_refuses_for_good_does_not_keep_apple_connected() {
+    let sink = RecordingSink::default();
+    let native =
+        Native::start(|b| b.override_value::<dyn AuditSink>(Arc::new(sink.clone()))).await;
+    let body = native.apple_sign_in().await.assert_status(200).json_value();
+    let (nonce, state) = native.nonce("google").await;
+    let token = native.idp.rs256(&native.google_claims(&nonce, RELAY, true));
+    native
+        .post("google", json!({ "id_token": token, "state": state }))
+        .await
+        .assert_status(200);
+
+    // A rate limit is Apple's trouble of the moment, not a refusal.
+    native
+        .idp
+        .mount_post_once("/auth/revoke", 429, json!({}))
+        .await;
+    native
+        .app
+        .client()
+        .delete("/api/auth/social/accounts/apple")
+        .bearer(&bearer(&body).await)
+        .send()
+        .await
+        .assert_error_code(502, "provider_unavailable");
+    assert_eq!(native.accounts().await.len(), 2);
+    assert!(!sink.actions().iter().any(|a| a == "social.token_revocation_refused"));
+
+    native
+        .idp
+        .mount_post("/auth/revoke", 400, json!({ "error": "invalid_client" }))
+        .await;
+    native
+        .app
+        .client()
+        .delete("/api/auth/social/accounts/apple")
+        .bearer(&bearer(&body).await)
+        .send()
+        .await
+        .assert_status(204);
+    let rows = native.accounts().await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].provider, "google");
+    let refused: Vec<_> = sink
+        .entries()
+        .into_iter()
+        .filter(|entry| entry.action == "social.token_revocation_refused")
+        .collect();
+    assert_eq!(refused.len(), 1);
+    assert_eq!(refused[0].metadata["provider"], "apple");
+    assert_eq!(refused[0].metadata["status"], 400);
+    assert_eq!(refused[0].metadata["error"], "invalid_client");
+    assert!(sink.actions().iter().any(|a| a == "social.unlinked"));
+}
+
+#[tokio::test]
+async fn offboarding_forgets_a_token_apple_refuses_and_keeps_one_it_could_not_reach() {
+    let sink = RecordingSink::default();
+    let native =
+        Native::start(|b| b.override_value::<dyn AuditSink>(Arc::new(sink.clone()))).await;
+    let body = native.apple_sign_in().await.assert_status(200).json_value();
+    let user_id: Uuid = serde_json::from_value(body["user"]["id"].clone()).unwrap();
+    let social = native.app.get::<Social>().await;
+
+    // Apple is down: an error, and the tokens are still there to revoke.
+    native
+        .idp
+        .mount_post_once("/auth/revoke", 503, json!({}))
+        .await;
+    assert!(social.revoke_tokens(user_id).await.is_err());
+    assert!(native.accounts().await[0].refresh_token.is_some());
+
+    // Apple refuses for good: forgotten, audited, not counted as revoked.
+    native
+        .idp
+        .mount_post("/auth/revoke", 400, json!({ "error": "unauthorized_client" }))
+        .await;
+    let ended = native
+        .app
+        .get::<AuthService>()
+        .await
+        .revoke_all_credentials(user_id)
+        .await
+        .unwrap();
+    assert_eq!(ended.revoked("social_provider_tokens"), 0);
+    let rows = native.accounts().await;
+    assert_eq!(rows[0].refresh_token, None);
+    assert_eq!(rows[0].access_token, None);
+    assert!(sink.actions().iter().any(|a| a == "social.token_revocation_refused"));
+    // Nothing left to send.
+    assert_eq!(social.revoke_tokens(user_id).await.unwrap(), 0);
+    assert_eq!(native.idp.requests_to("/auth/revoke").await.len(), 2);
+}
+
 /// A notification from Apple about `sub`, signed with the test key.
 fn notification(native: &Native, kind: &str, sub: &str, jti: &str) -> String {
     let events = json!({ "type": kind, "sub": sub, "event_time": native.now() });

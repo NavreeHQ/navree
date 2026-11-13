@@ -38,7 +38,7 @@ use navree_contracts::{AuditEntry, AuditKind, CredentialRevoker, RevokedByKind};
 use navree_crypto::jose::Jws;
 use navree_db::Uow;
 use navree_kernel::{BoxError, BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
-use navree_orm::{Executor, Model as _};
+use navree_orm::Model as _;
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
@@ -164,8 +164,12 @@ impl Social {
     /// provider can revoke (Sign in with Apple's, Google's), then forgets
     /// them; the accounts stay linked. The number of accounts whose tokens
     /// were revoked. A token the provider no longer knows counts as
-    /// revoked; an unreachable provider is
-    /// [`SocialError::ProviderUnavailable`] and the call can be repeated.
+    /// revoked. A token the provider refuses for good (any other `4xx`
+    /// answer) or that can no longer be decrypted is logged, audited as
+    /// `social.token_revocation_refused` and forgotten all the same. An
+    /// unreachable provider (a network failure, a `5xx`, `408` or `429`) is
+    /// [`SocialError::ProviderUnavailable`]: nothing is forgotten, and the
+    /// call can be repeated.
     ///
     /// Call it before deleting a user (Apple requires apps to revoke the
     /// tokens of a deleted account). `AuthService::revoke_all_credentials`
@@ -179,10 +183,11 @@ impl Social {
             .into_models();
         let mut revoked = 0;
         for account in accounts {
-            if !self.revoke_at_provider(rt, &rt.db, &account).await? {
-                continue;
+            match self.revoke_at_provider(rt, &account).await? {
+                Revocation::Nothing => continue,
+                Revocation::Revoked => revoked += 1,
+                Revocation::Refused => {}
             }
-            revoked += 1;
             let id = account.id;
             let now = rt.now();
             self.write(
@@ -195,50 +200,46 @@ impl Social {
         Ok(revoked)
     }
 
-    /// Revokes `account`'s stored tokens at the provider (through `uow`),
-    /// before the account is disconnected.
-    pub(crate) async fn revoke_account(
+    /// Revokes `account`'s stored token at its provider, outside any unit of
+    /// work (the call goes over the network). A refusal for good is logged
+    /// and audited, and reads as [`Revocation::Refused`]; only an
+    /// unreachable provider is an error.
+    pub(crate) async fn revoke_at_provider(
         &self,
         rt: &Runtime,
-        uow: &Uow,
         account: &social_account::Model,
-    ) -> Result<(), SocialError> {
-        self.revoke_at_provider(rt, uow, account).await.map(drop)
-    }
-
-    /// Revokes `account`'s stored token at its provider: whether there was
-    /// one the provider can revoke.
-    async fn revoke_at_provider<E: Executor + ?Sized>(
-        &self,
-        rt: &Runtime,
-        exec: &E,
-        account: &social_account::Model,
-    ) -> Result<bool, SocialError> {
+    ) -> Result<Revocation, SocialError> {
         let Some(entry) = rt.providers.get(&account.provider) else {
-            return Ok(false);
+            return Ok(Revocation::Nothing);
         };
         if !matches!(entry.kind, Kind::Apple | Kind::Google) {
-            return Ok(false);
+            return Ok(Revocation::Nothing);
         }
         let (stored, hint) = match (&account.refresh_token, &account.access_token) {
             (Some(token), _) => (token, "refresh_token"),
             (None, Some(token)) => (token, "access_token"),
-            (None, None) => return Ok(false),
+            (None, None) => return Ok(Revocation::Nothing),
         };
         let endpoints = match &self.backend {
             Backend::Fake(fake) => {
                 fake.revoked(&account.provider, &account.provider_user_id);
-                return Ok(true);
+                return Ok(Revocation::Revoked);
             }
             Backend::Real => oauth::endpoints(rt, entry).await?,
         };
         let Some(url) = endpoints.revoke.clone() else {
-            return Ok(false);
+            return Ok(Revocation::Nothing);
         };
-        let token = rt.encrypter.decrypt_string(stored)?;
+        // A token this app can no longer decrypt (its key changed) can never
+        // be revoked: it is forgotten, not kept to block every try.
+        let Ok(token) = rt.encrypter.decrypt_string(stored) else {
+            self.revocation_refused(rt, entry, account, 0, Some("unreadable_token"))
+                .await;
+            return Ok(Revocation::Refused);
+        };
         let form = vec![("token", token), ("token_type_hint", hint.to_owned())];
         let response = if entry.kind == Kind::Apple {
-            let client = social_account_client::of(exec, account.id)
+            let client = social_account_client::of(&rt.db, account.id)
                 .await?
                 .unwrap_or_else(|| entry.config.client_id.clone());
             oauth::client_request(rt, entry, &endpoints, &url, &client, form).await?
@@ -251,26 +252,66 @@ impl Social {
                 .await
                 .map_err(oauth::unavailable(entry))?
         };
-        let status = response.status();
-        if status.is_success() {
-            return Ok(true);
+        let status = response.status().as_u16();
+        if response.status().is_success() {
+            return Ok(Revocation::Revoked);
         }
-        if status.is_server_error() {
+        if is_unavailable(status) {
             return Err(SocialError::ProviderUnavailable {
                 provider: entry.name.clone(),
-                message: format!("the revocation endpoint answered {}", status.as_u16()),
+                message: format!("the revocation endpoint answered {status}"),
             });
         }
         let body: Value = response.json().unwrap_or(Value::Null);
         match body.get("error").and_then(Value::as_str) {
             // The provider no longer knows the token: it is dead already.
-            Some("invalid_grant" | "invalid_token") => Ok(true),
-            Some(error) => Err(refused(entry, error)),
-            None => Err(refused(
-                entry,
-                format!("the revocation endpoint answered {}", status.as_u16()),
-            )),
+            Some("invalid_grant" | "invalid_token") => Ok(Revocation::Revoked),
+            error => {
+                self.revocation_refused(rt, entry, account, status, error)
+                    .await;
+                Ok(Revocation::Refused)
+            }
         }
+    }
+
+    /// Logs and audits a token the provider would not revoke (`status` 0:
+    /// the token could not be decrypted). The error code is the
+    /// provider's, never the token.
+    async fn revocation_refused(
+        &self,
+        rt: &Runtime,
+        entry: &ProviderEntry,
+        account: &social_account::Model,
+        status: u16,
+        error: Option<&str>,
+    ) {
+        // Only a short code is kept from the provider's answer.
+        let error: Option<String> = error.map(|error| {
+            error
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .take(64)
+                .collect()
+        });
+        tracing::warn!(
+            target: "navree::social",
+            provider = %entry.key,
+            user_id = %account.user_id,
+            status,
+            error = error.as_deref().unwrap_or("-"),
+            "the provider refused to revoke a stored token; it is forgotten"
+        );
+        rt.audit(
+            AuditEntry::new(AuditKind::Security, "social.token_revocation_refused")
+                .actor(account.user_id)
+                .subject("User", account.user_id.to_string())
+                .metadata(json!({
+                    "provider": entry.key,
+                    "status": status,
+                    "error": error,
+                })),
+        )
+        .await;
     }
 
     /// Acts on a server-to-server notification of `provider` (Sign in with
@@ -498,6 +539,25 @@ impl Social {
         .await;
         Ok(SessionSignIn::SignedIn(user))
     }
+}
+
+/// What revoking an account's stored token at its provider came to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Revocation {
+    /// No stored token that the provider can revoke.
+    Nothing,
+    /// Revoked, or the provider no longer knew it.
+    Revoked,
+    /// The provider refused it for good, or it could not be decrypted:
+    /// logged and audited, and forgotten all the same.
+    Refused,
+}
+
+/// Whether a revocation answered `status` may work if tried again: the
+/// provider's own trouble (`5xx`), a timeout (`408`) or a rate limit
+/// (`429`). Any other refusal is for good.
+fn is_unavailable(status: u16) -> bool {
+    status >= 500 || matches!(status, 408 | 429)
 }
 
 /// The audiences a native identity token of `entry` may carry: the bundle
