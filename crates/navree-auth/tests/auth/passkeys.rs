@@ -314,6 +314,115 @@ async fn presence_only_passkeys_keep_the_second_factor() {
     .assert_error(401, "Invalid passkey");
 }
 
+/// The SHA-256 fingerprint of the Android app's signing certificate, and
+/// the passkey origin its assertions carry.
+const ANDROID_FINGERPRINT: &str = "14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5";
+const ANDROID_ORIGIN: &str = "android:apk-key-hash:FG3pg8VzBlDY7rmVLzT8ZBagg0LmHb6oigSWsj_PROU";
+
+/// An app whose Android app (`com.example.orders`) uses its passkeys.
+async fn android_app(listed_in: &str) -> TestApp {
+    let builder = support::builder()
+        .config("auth.passkeys.enabled", true)
+        .config("auth.passkeys.rp_id", RP_ID)
+        .config("auth.passkeys.origins", json!([ORIGIN]));
+    match listed_in {
+        // The app's signature in `auth.apps`: the origin is derived.
+        "apps" => builder
+            .config("auth.apps.android.orders.package", "com.example.orders")
+            .config(
+                "auth.apps.android.orders.fingerprints",
+                json!([ANDROID_FINGERPRINT]),
+            ),
+        // The origin itself in `auth.passkeys.origins`.
+        _ => builder.config("auth.passkeys.origins", json!([ORIGIN, ANDROID_ORIGIN])),
+    }
+    .build()
+    .await
+}
+
+#[tokio::test]
+async fn an_android_app_signs_in_with_its_signature_origin() {
+    for listed_in in ["apps", "origins"] {
+        let app = android_app(listed_in).await;
+        let (_, access, _) = signed_in(&app, "simran@example.com").await;
+        let client = app.client();
+        // Registered in the app, used in the app and on the site (a synced
+        // passkey answers both origins).
+        let phone =
+            VirtualAuthenticator::new(RP_ID, ANDROID_ORIGIN).android_package("com.example.orders");
+        register(&client, &access, &phone).await;
+        let assertion = phone.get(&login_options(&client, None).await).unwrap();
+        let client_data = URL_SAFE_NO_PAD
+            .decode(assertion["response"]["clientDataJSON"].as_str().unwrap())
+            .unwrap();
+        let client_data: Value = serde_json::from_slice(&client_data).unwrap();
+        assert_eq!(client_data["origin"], ANDROID_ORIGIN);
+        assert_eq!(client_data["androidPackageName"], "com.example.orders");
+        post(&client, "/login", None, json!({ "credential": assertion }))
+            .await
+            .assert_status(200)
+            .assert_json_path("user.email", json!("simran@example.com"));
+    }
+}
+
+#[tokio::test]
+async fn the_web_origin_still_works_beside_android() {
+    let app = android_app("apps").await;
+    let (_, access, _) = signed_in(&app, "harpreet@example.com").await;
+    let client = app.client();
+    let browser = VirtualAuthenticator::new(RP_ID, ORIGIN);
+    register(&client, &access, &browser).await;
+    let assertion = browser.get(&login_options(&client, None).await).unwrap();
+    post(&client, "/login", None, json!({ "credential": assertion }))
+        .await
+        .assert_status(200);
+}
+
+#[tokio::test]
+async fn an_unlisted_android_signature_is_refused() {
+    let app = android_app("apps").await;
+    let (_, access, _) = signed_in(&app, "gurpreet@example.com").await;
+    let client = app.client();
+    // A debug build, or a repackaged app signed with another key.
+    let other = "android:apk-key-hash:47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU";
+    for origin in [
+        other,
+        &ANDROID_ORIGIN[..ANDROID_ORIGIN.len() - 1],
+        "android:apk-key-hash:",
+    ] {
+        let options = post(&client, "/register/options", Some(&access), json!({}))
+            .await
+            .json_value();
+        let phone = VirtualAuthenticator::new(RP_ID, origin).android_package("com.example.orders");
+        post(
+            &client,
+            "/register",
+            Some(&access),
+            json!({ "credential": phone.create(&options["publicKey"]) }),
+        )
+        .await
+        .assert_error(401, "Invalid passkey");
+    }
+    // A passkey registered on the site, asserted from the unlisted app.
+    let browser = VirtualAuthenticator::new(RP_ID, ORIGIN);
+    register(&client, &access, &browser).await;
+    let options = login_options(&client, None).await;
+    let assertion = browser.get(&options).unwrap();
+    let mut client_data: Value = serde_json::from_slice(
+        &URL_SAFE_NO_PAD
+            .decode(assertion["response"]["clientDataJSON"].as_str().unwrap())
+            .unwrap(),
+    )
+    .unwrap();
+    client_data["origin"] = json!(other);
+    let mut moved = assertion.clone();
+    moved["response"]["clientDataJSON"] =
+        json!(URL_SAFE_NO_PAD.encode(client_data.to_string().as_bytes()));
+    post(&client, "/login", None, json!({ "credential": moved }))
+        .await
+        .assert_error(401, "Invalid passkey");
+}
+
 #[tokio::test]
 async fn passkeys_are_removed_by_their_owner_only() {
     let app = passkey_app(Arc::new(RecordingSink::default())).await;

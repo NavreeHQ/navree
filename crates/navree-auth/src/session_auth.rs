@@ -368,6 +368,32 @@ impl AuthService {
         Ok(())
     }
 
+    /// Leaves a sign-in of another flow (a social provider, single sign-on)
+    /// waiting for its second factor in the browser's session: the
+    /// [`SignInPolicy`](crate::SignInPolicy)s are asked about `method`, the
+    /// session gets a new id and keeps the challenge (never the browser),
+    /// and [`verify_two_factor_session`](AuthService::verify_two_factor_session)
+    /// (`POST /auth/session/2fa/verify`) finishes the sign-in. The session
+    /// version of handing out
+    /// [`two_factor_challenge`](AuthService::two_factor_challenge).
+    pub async fn await_two_factor_session(
+        &self,
+        session: &Session,
+        user: &User,
+        method: SignInMethod,
+        remember: bool,
+        meta: &ClientMeta,
+    ) -> Result<(), AuthError> {
+        self.check_sign_in(&SignInAttempt::of(user, method.clone()), meta)
+            .await?;
+        let token = self.two_factor_challenge(user, &method)?;
+        session.regenerate();
+        session
+            .insert(SESSION_CHALLENGE_KEY, &Pending { token, remember })
+            .map_err(session_error)?;
+        Ok(())
+    }
+
     /// Binds the browser's session to `user`, whose sign-in was already
     /// checked: starts a server-side session (listed by
     /// [`sessions`](AuthService::sessions), ended by every revocation),
@@ -655,20 +681,27 @@ impl AuthService {
     /// rows were live.
     async fn end_server_session(&self, user: Uuid, sid: Uuid) -> Result<u64, AuthError> {
         let now = self.clock.now();
-        self.write(Some(user), |uow| async move {
-            Ok(RefreshToken::query()
-                .where_(RefreshToken::FAMILY_ID.eq(sid))
-                .where_(RefreshToken::USER_ID.eq(user))
-                .where_null(RefreshToken::REVOKED_AT)
-                .update(&uow, [RefreshToken::REVOKED_AT.set(now)])
-                .await?)
-        })
-        .await
+        let revoked = self
+            .write(Some(user), |uow| async move {
+                Ok(RefreshToken::query()
+                    .where_(RefreshToken::FAMILY_ID.eq(sid))
+                    .where_(RefreshToken::USER_ID.eq(user))
+                    .where_null(RefreshToken::REVOKED_AT)
+                    .update(&uow, [RefreshToken::REVOKED_AT.set(now)])
+                    .await?)
+            })
+            .await?;
+        self.session_ended(user, Some(sid)).await;
+        Ok(revoked)
     }
 
     /// When the server-side session `sid` of `user` ends, if it is live
     /// (not revoked, not expired).
-    async fn live_session(&self, user: Uuid, sid: Uuid) -> Result<Option<i64>, AuthError> {
+    pub(crate) async fn live_session(
+        &self,
+        user: Uuid,
+        sid: Uuid,
+    ) -> Result<Option<i64>, AuthError> {
         let now = self.clock.now();
         Ok(RefreshToken::query()
             .where_(RefreshToken::FAMILY_ID.eq(sid))

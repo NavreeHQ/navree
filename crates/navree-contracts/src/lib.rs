@@ -8,8 +8,9 @@
 //! [`JobMonitor`]), permission checks outside routes ([`PermissionCheck`],
 //! [`permitted`]), [`Clock`], the zone sources ([`ZoneSource`]), and the
 //! conformity checks behind `navree check` ([`ConformityCheck`],
-//! [`ConformityModule`]), and ending a user's tokens and grants
-//! ([`CredentialRevoker`]).
+//! [`ConformityModule`]), ending a user's tokens and grants
+//! ([`CredentialRevoker`]), and the sealed one-time tickets of results a
+//! client posts back ([`CallTickets`]).
 //!
 //! A module that needs, say, auditing resolves `Arc<dyn AuditSink>` (usually
 //! with `AppContext::try_get`) instead of depending on navree-audit.
@@ -30,6 +31,7 @@ mod request_id;
 mod revocation;
 mod secret;
 mod session;
+mod tickets;
 mod zone;
 
 pub use audit::{AuditEntry, AuditKind, AuditSink};
@@ -54,4 +56,8 @@ pub use request_id::RequestId;
 pub use revocation::{CredentialRevoker, ModuleBuilderRevocationExt, RevokedByKind};
 pub use secret::Secret;
 pub use session::{SessionRecord, SessionStore};
+pub use tickets::{
+    CallTickets, IssuedTicket, RedeemedTicket, TicketCheck, TicketError, TicketHolder,
+    TicketRequest,
+};
 pub use zone::{ZoneLevel, ZoneOwner, ZoneRequest, ZoneSource};

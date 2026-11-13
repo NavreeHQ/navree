@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use http::Method;
 use navree_config::ModuleBuilderConfigExt;
+use navree_contracts::CallTickets;
 use navree_crypto::{Encrypter, random_token};
 use navree_db::ModuleBuilderDbExt;
 use navree_http::{Authenticator, HttpOptions, ModuleBuilderHttpExt};
@@ -12,14 +13,16 @@ use navree_kernel::{
 };
 
 use crate::account_controller::AccountController;
+use crate::apps::AppLinksController;
 use crate::controller::AuthController;
 use crate::error::map_auth_error;
 use crate::passkeys::controller::PasskeyController;
 use crate::service::clock_of;
 use crate::session_controller::SessionController;
 use crate::{
-    AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, SignInPolicy, Strategy,
-    StrategyAuthenticator, TwoFactorPolicy, UserResourceExtension, migration,
+    AppsOptions, AuthError, AuthOptions, AuthService, JwtService, JwtStrategy, SealedTickets,
+    SignInPolicy, Strategy, StrategyAuthenticator, TwoFactorPolicy, UserResourceExtension,
+    migration,
 };
 
 /// The purpose the JWT signing key is derived for from the application key.
@@ -107,7 +110,14 @@ fn register(m: &mut ModuleBuilder, options: Option<AuthOptions>) {
         })),
         None => m.config::<AuthOptions>(),
     };
+    // The native apps' section is read here (not by `m.config`), so it is
+    // registered for `config:check` and the reference.
+    m.config_section::<AppsOptions>();
     m.exports::<AuthOptions>()
+        .factory(Factory::<AppsOptions>::new(|r: Resolver| async move {
+            Ok(Arc::new(crate::apps::apps_options(&r).await?))
+        }))
+        .exports::<AppsOptions>()
         .factory(
             Factory::<JwtService>::new(|r: Resolver| async move {
                 let options = r.get::<AuthOptions>().await?;
@@ -125,6 +135,21 @@ fn register(m: &mut ModuleBuilder, options: Option<AuthOptions>) {
         .exports::<JwtService>()
         .provider::<AuthService>()
         .exports::<AuthService>()
+        // Sealed one-time tickets for results clients post back, on the
+        // service's key, cache and clock.
+        .factory(
+            Factory::<dyn CallTickets>::new(|r: Resolver| async move {
+                let service = r.get::<AuthService>().await?;
+                let tickets = SealedTickets::new(
+                    service.encrypter.clone(),
+                    service.cache.clone(),
+                    service.clock.clone(),
+                );
+                Ok(Arc::new(tickets) as Arc<dyn CallTickets>)
+            })
+            .deps(vec![ProviderKey::of::<AuthService>()]),
+        )
+        .exports::<dyn CallTickets>()
         .multi(
             Factory::<dyn Strategy>::new(|r: Resolver| async move {
                 let jwt = r.get::<JwtService>().await?;
@@ -153,8 +178,24 @@ fn register(m: &mut ModuleBuilder, options: Option<AuthOptions>) {
         .controller::<AccountController>()
         .controller::<SessionController>()
         .controller::<PasskeyController>()
+        .controller::<AppLinksController>()
         .migrations(migration::migrations())
         .map_error::<AuthError>(map_auth_error);
+    // The push channel of native apps asks which sign-ins are live, so a
+    // signed-out phone gets nothing.
+    #[cfg(feature = "notify")]
+    m.factory(
+        Factory::<dyn navree_notify::LiveSessions>::new(|r: Resolver| async move {
+            let service = r.get::<AuthService>().await?;
+            Ok(Arc::new(crate::AuthLiveSessions::new(service))
+                as Arc<dyn navree_notify::LiveSessions>)
+        })
+        .deps(vec![ProviderKey::of::<AuthService>()]),
+    )
+    .exports::<dyn navree_notify::LiveSessions>();
+    // Native apps take over a sign-in made in the system's sign-in session.
+    #[cfg(feature = "session")]
+    m.controller::<crate::hand_over::AppSignInController>();
     // Browsers signed in on the session cookie, after the JWT strategy: a
     // request with a bearer token is the token's.
     #[cfg(feature = "session")]

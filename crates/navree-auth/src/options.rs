@@ -332,13 +332,14 @@ impl AuthOptions {
                 );
             }
         }
-        if passkeys
-            .origins
-            .iter()
-            .any(|origin| !is_http_url(origin) || origin.ends_with('/'))
-        {
+        if passkeys.origins.iter().any(|origin| {
+            !crate::apps::is_android_origin(origin)
+                && (!is_http_url(origin) || origin.ends_with('/'))
+        }) {
             errors.push(
-                "auth.passkeys.origins must be http(s) origins without a trailing slash".to_owned(),
+                "auth.passkeys.origins must be http(s) origins without a trailing slash, or \
+                 Android app origins (android:apk-key-hash:<base64url SHA-256>)"
+                    .to_owned(),
             );
         }
         if passkeys.timeout_secs == 0 {
@@ -722,7 +723,11 @@ pub struct PasskeyOptions {
     /// The relying party name shown by the browser.
     pub rp_name: String,
     /// The origins the front end runs on (`https://app.example.com`).
-    /// Required when enabled.
+    /// Required when enabled. An Apple app's passkeys carry the origin
+    /// `https://<rp_id>`; an Android app's carry
+    /// `android:apk-key-hash:<base64url SHA-256 of its signing certificate>`,
+    /// which may be listed here or comes from the app's fingerprints in
+    /// `auth.apps.android`. Compared exactly.
     pub origins: Vec<String>,
     /// How long a registration or sign-in ceremony may take, in seconds.
     pub timeout_secs: u64,
@@ -1014,6 +1019,39 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(error.contains("auth.platform.roles"), "{error}");
+    }
+
+    #[test]
+    fn android_app_signatures_are_passkey_origins() {
+        let android = "android:apk-key-hash:FG3pg8VzBlDY7rmVLzT8ZBagg0LmHb6oigSWsj_PROU";
+        let options = load(
+            ConfigSources::new()
+                .set("auth.passkeys.enabled", true)
+                .set("auth.passkeys.rp_id", "example.com")
+                .set(
+                    "auth.passkeys.origins",
+                    json!(["https://app.example.com", "https://example.com", android]),
+                ),
+        )
+        .unwrap();
+        assert_eq!(options.passkeys.origins.len(), 3);
+        for refused in [
+            format!("{android}="),
+            "android:apk-key-hash:FG3pg8VzBlDY7rmVLzT8ZBagg0LmHb6oigSWsj_PRO".to_owned(),
+            "android:apk-key-hash:FG3pg8VzBlDY7rmVLzT8ZBagg0LmHb6oigSWsj/PROU".to_owned(),
+            "android:apk-key-hash:".to_owned(),
+            "android:com.example.app".to_owned(),
+            "ios:app".to_owned(),
+        ] {
+            let error =
+                load(ConfigSources::new().set("auth.passkeys.origins", json!([refused.clone()])))
+                    .expect_err(&refused)
+                    .to_string();
+            assert!(
+                error.contains("auth.passkeys.origins"),
+                "{refused}: {error}"
+            );
+        }
     }
 
     // How long a browser stays signed in, with and without "remember me".

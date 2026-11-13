@@ -37,6 +37,7 @@ pub struct VirtualAuthenticator {
     origin: String,
     ed25519: bool,
     user_verification: bool,
+    android_package: Option<String>,
     rng: SystemRandom,
     credentials: Mutex<Vec<Credential>>,
 }
@@ -63,6 +64,7 @@ impl VirtualAuthenticator {
             origin: origin.to_owned(),
             ed25519: false,
             user_verification: true,
+            android_package: None,
             rng: SystemRandom::new(),
             credentials: Mutex::new(Vec::new()),
         }
@@ -77,6 +79,15 @@ impl VirtualAuthenticator {
     /// The same authenticator without user verification (presence only).
     pub fn without_user_verification(mut self) -> Self {
         self.user_verification = false;
+        self
+    }
+
+    /// The same authenticator as Android's Credential Manager runs it for
+    /// the app `package`: the client data also names the package
+    /// (`androidPackageName`). Make it with the app's origin,
+    /// `android:apk-key-hash:<base64url SHA-256 of the signing certificate>`.
+    pub fn android_package(mut self, package: &str) -> Self {
+        self.android_package = Some(package.to_owned());
         self
     }
 
@@ -224,13 +235,16 @@ impl VirtualAuthenticator {
     }
 
     fn client_data(&self, kind: &str, options: &Value) -> String {
-        json!({
+        let mut client = json!({
             "type": kind,
             "challenge": options["challenge"].as_str().unwrap_or_default(),
             "origin": self.origin,
             "crossOrigin": false,
-        })
-        .to_string()
+        });
+        if let Some(package) = &self.android_package {
+            client["androidPackageName"] = json!(package);
+        }
+        client.to_string()
     }
 }
 
