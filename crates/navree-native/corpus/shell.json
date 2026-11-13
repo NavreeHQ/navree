@@ -1,7 +1,7 @@
 {
   "navree": 1,
   "build": "3f9a1c07b2de",
-  "stamp": "c3ec6fa78f7194a3",
+  "stamp": "7ae16baddfe0a274",
   "name": "Charkha Supply Co.",
   "context": "Store operations",
   "home": "/",
@@ -102,10 +102,16 @@
       "scan_code"
     ],
     "push": {
-      "register": "/_navree/native/push"
+      "register": "/api/notifications/push-devices"
     },
     "lock": {
       "after_secs": 300
     }
+  },
+  "sign_in": {
+    "start": "/auth/app/sign-in",
+    "exchange": "/api/auth/app/exchange",
+    "callback": "https://charkha.example/app/signed-in",
+    "second_step": "/sign-in/two-factor"
   }
 }

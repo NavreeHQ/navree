@@ -43,8 +43,8 @@ use crate::device::{
     Accuracy, Alt, AppLock, AuthSession, Call, CancelNotification, CodeFormat, Confirm,
     ConfirmMethod, Confirmed, ConfirmedBy, CopyText, DeviceCall, Feature, Haptic, HapticKind,
     HttpsUrl, LocateOnce, Located, Notify, OpenSettings, OpenUrl, OriginPath, Passkey,
-    PasskeyCredential, PasskeyMode, PlatformSignIn, PushEnvironment, PushProvider,
-    PushRegistered, Refusal, RegisterPush, ReplyCall, ScanCode, Scanned, SetBadge, SettingsPage,
+    PasskeyCredential, PasskeyMode, PlatformSignIn, PushDevice, PushEnvironment, PushPlatform,
+    PushProvider, PushRegistered, Refusal, RegisterPush, ReplyCall, ScanCode, Scanned, SetBadge, SettingsPage,
     PersonName, Share, Shared, SignInProvider, SignedIn, SignedInUser, Then, Ticket, When,
 };
 use crate::envelope::{Back, Envelope, Screen, Search, Upgrade, Web};
@@ -64,7 +64,10 @@ use crate::node::{
     ToolbarItem, Trend, WebRegion,
 };
 use crate::op::{Edge, Op, Toast, ToastAction, UrlMode};
-use crate::shell::{Device, Nav, NavGroup, NavItem, Push, Route, Shell, Theme, User};
+use crate::shell::{
+    Device, Nav, NavGroup, NavItem, Push, Route, Shell, SignIn, SignInExchange, SignInPlatform, Theme,
+    User,
+};
 use crate::vocab::{Kind, LATER_FIELDS};
 
 /// A type the schema describes.
@@ -796,7 +799,7 @@ object!(Toast { text } { tone, title, id, action });
 
 // The shell.
 object!(Shell { navree, build, name, home } {
-    stamp, context, theme, nav, user, routes, device
+    stamp, context, theme, nav, user, routes, device, sign_in
 });
 object!(Nav {} { groups });
 object!(NavGroup {} { label, items });
@@ -806,6 +809,9 @@ object!(Route { matches = "match" } { present, chrome: true });
 object!(Theme {} { name, accent, accent_dark });
 object!(Push { register } {});
 object!(Device {} { caps, push, lock });
+object!(SignIn { start, exchange } { callback, second_step });
+names!(SignInPlatform { Apple, Android });
+object!(SignInExchange { platform, app, code, code_verifier } {});
 
 // The descriptor.
 object!(ClientDescriptor { platform, form, vocab, text_percent } {
@@ -860,7 +866,9 @@ object!(OpenUrl { url } { inside });
 object!(AuthSession { start } { ephemeral });
 object!(RegisterPush {} { categories });
 names!(PushProvider { Apns, Fcm, Wns });
-names!(PushEnvironment { Development, Production });
+names!(PushEnvironment { Sandbox, Production });
+names!(PushPlatform { Ios, Android });
+object!(PushDevice { platform, token, app_id } { environment });
 object!(PushRegistered { provider, environment, token, app_id, install_id } { locale });
 union!(When tag "t"
     newtype {}
@@ -914,6 +922,8 @@ const ROOTS: &[&str] = &[
     "Located",
     "Scanned",
     "SignedIn",
+    "SignInExchange",
+    "PushDevice",
 ];
 
 /// Every definition, from the roots.
@@ -931,6 +941,8 @@ pub(crate) fn described() -> Schema {
     schema.of::<Located>();
     schema.of::<Scanned>();
     schema.of::<SignedIn>();
+    schema.of::<SignInExchange>();
+    schema.of::<PushDevice>();
     // A kind's struct and its fields arrived with the kind.
     for kind in Kind::ALL {
         schema.arrived(kind.type_name(), kind.since());

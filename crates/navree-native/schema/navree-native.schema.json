@@ -6479,7 +6479,7 @@
     "Push": {
       "properties": {
         "register": {
-          "type": "string",
+          "$ref": "#/$defs/OriginPath",
           "x-since": 0
         }
       },
@@ -6490,10 +6490,48 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "PushDevice": {
+      "properties": {
+        "app_id": {
+          "type": "string",
+          "x-since": 0
+        },
+        "environment": {
+          "$ref": "#/$defs/PushEnvironment",
+          "default": "production",
+          "x-since": 0
+        },
+        "platform": {
+          "$ref": "#/$defs/PushPlatform",
+          "x-since": 0
+        },
+        "token": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "platform",
+        "token",
+        "app_id"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "PushEnvironment": {
       "enum": [
-        "development",
+        "sandbox",
         "production"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "PushPlatform": {
+      "enum": [
+        "ios",
+        "android"
       ],
       "type": "string",
       "x-kind": "enum",
@@ -7756,6 +7794,18 @@
           "type": "array",
           "x-since": 0
         },
+        "sign_in": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SignIn"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "stamp": {
           "default": "",
           "type": "string",
@@ -7794,6 +7844,87 @@
       ],
       "type": "object",
       "x-kind": "object",
+      "x-since": 0
+    },
+    "SignIn": {
+      "properties": {
+        "callback": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "exchange": {
+          "$ref": "#/$defs/OriginPath",
+          "x-since": 0
+        },
+        "second_step": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OriginPath"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "start": {
+          "$ref": "#/$defs/OriginPath",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "start",
+        "exchange"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "SignInExchange": {
+      "properties": {
+        "app": {
+          "type": "string",
+          "x-since": 0
+        },
+        "code": {
+          "type": "string",
+          "x-since": 0
+        },
+        "code_verifier": {
+          "type": "string",
+          "x-since": 0
+        },
+        "platform": {
+          "$ref": "#/$defs/SignInPlatform",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "platform",
+        "app",
+        "code",
+        "code_verifier"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "SignInPlatform": {
+      "enum": [
+        "apple",
+        "android"
+      ],
+      "type": "string",
+      "x-kind": "enum",
       "x-since": 0
     },
     "SignInProvider": {
@@ -9301,7 +9432,9 @@
     "Confirmed",
     "Located",
     "Scanned",
-    "SignedIn"
+    "SignedIn",
+    "SignInExchange",
+    "PushDevice"
   ],
   "x-symbols": {
     "names": {

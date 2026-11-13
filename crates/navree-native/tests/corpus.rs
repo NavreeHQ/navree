@@ -32,7 +32,9 @@ use navree_native::node::{
     WebRegion,
 };
 use navree_native::op::{Edge, Op, Toast, ToastAction, UrlMode};
-use navree_native::shell::{Device, Nav, NavGroup, NavItem, Push, Route, Shell, Theme, User};
+use navree_native::shell::{
+    Device, Nav, NavGroup, NavItem, Push, Route, Shell, SignIn, Theme, User,
+};
 use navree_native::{Kind, VOCAB};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -1373,9 +1375,15 @@ fn shell() -> Shell {
     shell.device = Some(Device {
         caps: vec![s("confirm"), s("push"), s("share"), s("scan_code")],
         push: Some(Push {
-            register: s("/_navree/native/push"),
+            register: path("/api/notifications/push-devices"),
         }),
         lock: Some(AppLock { after_secs: 300 }),
+    });
+    shell.sign_in = Some(SignIn {
+        start: path("/auth/app/sign-in"),
+        exchange: path("/api/auth/app/exchange"),
+        callback: Some(s("https://charkha.example/app/signed-in")),
+        second_step: Some(path("/sign-in/two-factor")),
     });
     shell
 }

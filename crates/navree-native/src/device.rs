@@ -799,13 +799,75 @@ pub enum PushProvider {
 }
 
 /// Which of the service's environments a token belongs to.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PushEnvironment {
-    /// A build from the developer's machine.
-    Development,
-    /// A build from a store.
+    /// A build from the developer's machine: only an iOS debug build has a
+    /// token the service's sandbox takes.
+    Sandbox,
+    /// A build from a store, and every Android build.
+    #[default]
     Production,
+}
+
+/// The system a push token belongs to, as the push route names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum PushPlatform {
+    /// Apple's systems: the token is one of Apple's push service, as hex.
+    Ios,
+    /// Android: the token is one of Firebase Cloud Messaging.
+    Android,
+}
+
+/// What a client posts to the shell's push route
+/// ([`Push::register`](crate::shell::Push::register)), as JSON, to register
+/// the device: its own token and the app it belongs to. The server trusts
+/// nothing in it but for delivery, and ties the device to the session it is
+/// posted with, so the device ends with that session.
+///
+/// ```
+/// use navree_native::device::{PushDevice, PushEnvironment, PushPlatform};
+///
+/// let device = PushDevice {
+///     platform: PushPlatform::Ios,
+///     token: "9f2c4a7e00b1d35c8e6a1f4b7d0c2e5a".to_owned(),
+///     app_id: "com.charkha.supply".to_owned(),
+///     environment: PushEnvironment::Production,
+/// };
+/// // A store build is the usual one, and is left out.
+/// assert_eq!(
+///     serde_json::to_string(&device).unwrap(),
+///     r#"{"platform":"ios","token":"9f2c4a7e00b1d35c8e6a1f4b7d0c2e5a","app_id":"com.charkha.supply"}"#
+/// );
+/// ```
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PushDevice {
+    /// The system.
+    pub platform: PushPlatform,
+    /// The device's token. Apple's: the device token as hex, even in length, 16
+    /// to 200 characters (`deviceToken.map { String(format: "%02x", $0) }`).
+    /// Firebase's: the registration token, 16 to 4096 characters of
+    /// `A-Za-z0-9_-:.`. It is personal: never logged.
+    pub token: String,
+    /// The app's id with the service: its bundle id or package name. The server
+    /// takes only the ids its configuration names.
+    pub app_id: String,
+    /// The service's environment the token is for.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub environment: PushEnvironment,
+}
+
+impl fmt::Debug for PushDevice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PushDevice")
+            .field("platform", &self.platform)
+            .field("token", &"[redacted]")
+            .field("app_id", &self.app_id)
+            .field("environment", &self.environment)
+            .finish()
+    }
 }
 
 /// What [`RegisterPush`] posts to the framework's push route.
@@ -1785,6 +1847,36 @@ mod tests {
                 "{call}"
             );
         }
+    }
+
+    #[test]
+    fn a_push_device_is_written_as_the_route_reads_it_and_shows_no_token() {
+        let device = PushDevice {
+            platform: PushPlatform::Ios,
+            token: "9f2c4a7e00b1d35c8e6a1f4b7d0c2e5a".to_owned(),
+            app_id: "com.charkha.supply".to_owned(),
+            environment: PushEnvironment::Sandbox,
+        };
+        assert_eq!(
+            serde_json::to_string(&device).unwrap(),
+            concat!(
+                r#"{"platform":"ios","token":"9f2c4a7e00b1d35c8e6a1f4b7d0c2e5a","#,
+                r#""app_id":"com.charkha.supply","environment":"sandbox"}"#
+            )
+        );
+        // A store build is the usual one, and is left out.
+        let store = PushDevice {
+            platform: PushPlatform::Android,
+            environment: PushEnvironment::Production,
+            ..device.clone()
+        };
+        let json = serde_json::to_string(&store).unwrap();
+        assert!(!json.contains("environment"), "{json}");
+        assert_eq!(serde_json::from_str::<PushDevice>(&json).unwrap(), store);
+        let shown = format!("{device:?}");
+        assert!(shown.contains("com.charkha.supply") && !shown.contains("9f2c4a7e"), "{shown}");
+        // The route has no other platform.
+        assert!(serde_json::from_str::<PushDevice>(r#"{"platform":"windows","token":"t","app_id":"a"}"#).is_err());
     }
 
     #[test]
