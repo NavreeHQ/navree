@@ -23,7 +23,7 @@ use navree_native::input::{
     ToggleInput, ToggleKind, Weekday,
 };
 use navree_native::node::{
-    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Chart, ChartKind,
+    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Centre, Chart, ChartKind,
     Code, Colour, Column,
     ColumnRole, Delivery, Dialog, Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Icon, Image, Justify, Link, List, Live, Menu,
@@ -1749,6 +1749,7 @@ fn screen_dashboard() -> Envelope {
             }),
             detail: Some(s("against yesterday")),
             tone: None,
+            ..Figure::default()
         })
     };
     let moment = |title: &str, time: &str, state: RowState, icon_name: &str| Moment {
@@ -2102,6 +2103,90 @@ fn screen_today() -> Envelope {
         summary: Some(s("Activity rings: Move 540 of 600 kcal, 90%. Exercise 38 of 30 min, 127%. Stand 9 of 12 hr, 75%.")),
         ..Rings::default()
     });
+    // The day's figures: what the extended tile carries (an icon in its hue,
+    // a unit, a status, a caption, a small ring beside it, the page it leads to).
+    let small_ring = |value: i64, goal: i64, hue: Hue, summary: &str| {
+        Node::Ring(Ring {
+            value: Some(number(value)),
+            max: number(goal),
+            colour: Some(Colour::new(hue)),
+            centre: Centre::Nothing,
+            prominence: Prominence::Low,
+            summary: Some(s(summary)),
+            ..Ring::default()
+        })
+    };
+    let tile = |label: &str, value: &str, unit: Option<&str>, glyph: Icon, hue: Hue, caption: &str, href: &str| Figure {
+        id: Some(format!("figure-{}", label.to_lowercase().replace(' ', "-"))),
+        label: s(label),
+        value: s(value),
+        unit: unit.map(s),
+        icon: Some(glyph),
+        detail: Some(s(caption)),
+        colour: Some(Colour::new(hue)),
+        action: Some(Action::navigate(href)),
+        ..Figure::default()
+    };
+    let figures = Node::Grid(Grid {
+        id: Some(s("activity-figures")),
+        cols: Some(2),
+        min: Some(150),
+        gap: 3,
+        children: vec![
+            Node::Figure(Figure {
+                aside: Some(Box::new(small_ring(9412, 10_000, Hue::Green, "Steps: 9,412 of 10,000, 94%."))),
+                ..tile(
+                    "Steps",
+                    "9,412",
+                    None,
+                    icon("footprints", "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z"),
+                    Hue::Green,
+                    "94% of 10,000",
+                    "/fitness/steps",
+                )
+            }),
+            Node::Figure(tile(
+                "Active energy",
+                "540",
+                Some("kcal"),
+                icon("flame", "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.3.1-4.4 2-5.5.3 2.4 2 4 3.6 5.4 1.4 1.3 2.4 3 2.4 5.1a6 6 0 0 1-12 0c0-.9.3-1.8.5-2.5"),
+                Hue::Orange,
+                "90% of 600 kcal",
+                "/fitness/energy",
+            )),
+            Node::Figure(tile(
+                "Distance",
+                "6.4",
+                Some("km"),
+                icon("route", "M6 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM9 16h6a3 3 0 0 0 0-6H9"),
+                Hue::Cyan,
+                "Across Ludhiana and back",
+                "/fitness/distance",
+            )),
+            Node::Figure(Figure {
+                status: Some(Badge {
+                    text: s("Goal reached"),
+                    tone: Some(Tone::Success),
+                    ..Badge::default()
+                }),
+                trend: Some(Trend {
+                    direction: Direction::Up,
+                    text: Some(s("8 min")),
+                    tone: Some(Tone::Success),
+                }),
+                ..tile(
+                    "Exercise",
+                    "38",
+                    Some("min"),
+                    icon("timer", "M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"),
+                    Hue::Green,
+                    "against your goal of 30",
+                    "/fitness/exercise",
+                )
+            }),
+        ],
+        ..Grid::default()
+    });
     let body = Node::Stack(Stack {
         gap: 4,
         children: vec![
@@ -2157,7 +2242,13 @@ fn screen_today() -> Envelope {
             Node::Section(Section {
                 title: Some(s("Activity")),
                 style: SectionStyle::Card,
-                children: vec![activity],
+                children: vec![activity, figures],
+                hint: Some(Hint {
+                    about: s("how activity is counted"),
+                    text: s("Move counts the energy your body spent moving, Exercise the minutes of brisk activity and Stand the hours in which you stood and moved for a minute."),
+                    mark: HintMark::Info,
+                    ..Hint::default()
+                }),
                 ..Section::default()
             }),
         ],

@@ -260,6 +260,7 @@ impl Node {
                 .chain(boxed(&node.empty))
                 .collect(),
             Self::Link(node) => node.children.iter().collect(),
+            Self::Figure(node) => boxed(&node.aside).chain(boxed(&node.chart)).collect(),
             Self::Menu(node) => node.items.iter().collect(),
             Self::Form(node) => node.children.iter().collect(),
             Self::Sheet(node) => node.children.iter().chain(&node.actions).collect(),
@@ -287,7 +288,6 @@ impl Node {
             | Self::Field(_)
             | Self::Web(_)
             | Self::Gauge(_)
-            | Self::Figure(_)
             | Self::Ring(_)
             | Self::Rings(_) => Vec::new(),
         }
@@ -341,6 +341,7 @@ impl Node {
                 .chain(boxed(&mut node.empty))
                 .collect(),
             Self::Link(node) => node.children.iter_mut().collect(),
+            Self::Figure(node) => boxed(&mut node.aside).chain(boxed(&mut node.chart)).collect(),
             Self::Menu(node) => node.items.iter_mut().collect(),
             Self::Form(node) => node.children.iter_mut().collect(),
             Self::Sheet(node) => node
@@ -384,7 +385,6 @@ impl Node {
             | Self::Field(_)
             | Self::Web(_)
             | Self::Gauge(_)
-            | Self::Figure(_)
             | Self::Ring(_)
             | Self::Rings(_) => Vec::new(),
         }
@@ -611,6 +611,10 @@ pub struct Section {
     /// What stands under the parts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub footer: Vec<Node>,
+    /// A note about what the section shows, shown when asked: a client puts its
+    /// mark beside the heading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
 }
 
 /// Rows that may go on.
@@ -1152,6 +1156,7 @@ impl Node {
                 .filter_map(|moment| moment.icon.as_mut())
                 .collect(),
             Self::FeedRow(node) => node.icon.iter_mut().collect(),
+            Self::Figure(node) => node.icon.iter_mut().collect(),
             Self::Ring(node) => node.icon.iter_mut().collect(),
             Self::Rings(node) => node.icon.iter_mut().collect(),
             _ => Vec::new(),
@@ -2027,7 +2032,10 @@ pub struct Trend {
 }
 
 /// A key figure: what it is, its value in the page's words, and which way it
-/// is going.
+/// is going. A tile on a dashboard can carry more: an icon, the unit of the
+/// value, a status word, a small graphic beside it or a small chart under it,
+/// and the page it leads to. Every piece is optional, and a figure that has
+/// none is the plain one.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Figure {
     /// The node's id.
@@ -2035,17 +2043,48 @@ pub struct Figure {
     pub id: Option<String>,
     /// What the figure is.
     pub label: String,
-    /// Its value, as the page wrote it: `₹1,24,050`.
+    /// Its value, as the page wrote it: `₹1,24,050`, `58`.
     pub value: String,
+    /// What the value counts, written after it and smaller: `bpm`, `%`, `h`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    /// An icon before the label, in a chip. It is decoration: the label says
+    /// what the figure is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<Icon>,
     /// Which way it is going.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trend: Option<Trend>,
-    /// A line under it: what the trend is measured against.
+    /// A line under it, after the trend: what the trend is measured against
+    /// (`vs last week`). It is the figure's caption.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    /// A word about the figure at the end of its label's line, with its tone:
+    /// `Athletic`, `Fair`. The figure itself stays neutral: only a status or a
+    /// trend says good or bad.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<Badge>,
     /// What its colour means.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
     pub tone: Option<Tone>,
+    /// The hue of its icon, when the thing it is about has a colour of its
+    /// own (sleep is violet) and the colour says nothing good or bad. It is
+    /// the icon's colour first, and never the figure's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+    /// A small graphic beside the figure, at the end of its line: a ring, or a
+    /// few columns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aside: Option<Box<Node>>,
+    /// A small chart under the figure: a sparkline of its last periods.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chart: Option<Box<Node>>,
+    /// What a tap on the figure does: usually the page it is about.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<Action>,
+    /// A note about what the figure means, shown when asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
 }
 
 /// Moments in order: what has happened to something and what is still to
@@ -2346,6 +2385,50 @@ mod tests {
             serde_json::from_str(r#"{"title":"Reminder sent to the carrier","muted":true}"#).unwrap();
         assert!(moment.muted);
         assert_eq!(serde_json::to_string(&Moment::default()).unwrap(), r#"{"title":""}"#);
+    }
+
+    #[test]
+    fn a_figure_may_carry_what_a_dashboard_tile_does() {
+        let node: Node = serde_json::from_str(
+            r#"{"t":"figure","label":"Resting heart rate","value":"58","unit":"bpm",
+                "status":{"text":"Athletic","tone":"success"},"detail":"vs last week",
+                "colour":{"hue":"rose"},
+                "aside":{"t":"ring","id":"rhr-ring","value":58,"max":100,"centre":"nothing","prominence":"low"},
+                "chart":{"t":"chart","id":"rhr-days","kind":"sparkline","series":[{"label":"Resting","values":[61,60,58]}]},
+                "action":{"t":"navigate","href":"/heart"},
+                "hint":{"about":"resting heart rate","text":"Measured while you are still."}}"#,
+        )
+        .unwrap();
+        let Node::Figure(figure) = &node else {
+            panic!("not a figure");
+        };
+        assert_eq!(figure.unit.as_deref(), Some("bpm"));
+        assert_eq!(figure.status.as_ref().map(|status| status.text.as_str()), Some("Athletic"));
+        assert_eq!(figure.colour, Some(Colour::new(Hue::Rose)));
+        assert!(figure.action.is_some() && figure.hint.is_some());
+        // The graphics are parts of the tree: they are found, and walked.
+        assert_eq!(node.children().len(), 2);
+        assert!(matches!(node.find("rhr-ring"), Some(Node::Ring(ring)) if ring.centre == Centre::Nothing));
+        assert!(matches!(node.find("rhr-days"), Some(Node::Chart(_))));
+        // A plain figure writes none of it.
+        assert_eq!(
+            serde_json::to_string(&Figure::default()).unwrap(),
+            r#"{"label":"","value":""}"#
+        );
+    }
+
+    #[test]
+    fn a_section_may_carry_a_hint_beside_its_heading() {
+        let node: Node = serde_json::from_str(
+            r#"{"t":"section","title":"Sleep stages","hint":{"about":"the sleep stages","title":"An estimate","text":"Stages are estimated from movement and heart rate.","mark":"info"}}"#,
+        )
+        .unwrap();
+        let Node::Section(section) = node else {
+            panic!("not a section");
+        };
+        let hint = section.hint.expect("a hint");
+        assert_eq!((hint.about.as_str(), hint.mark), ("the sleep stages", HintMark::Info));
+        assert!(!serde_json::to_string(&Section::default()).unwrap().contains("hint"));
     }
 
     #[test]

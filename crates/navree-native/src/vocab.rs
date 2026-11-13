@@ -435,16 +435,29 @@ impl Node {
                         None => arrow.to_owned(),
                     }
                 });
+                // What it holds besides words (a graphic, a chart) stays with the value.
+                let value = std::iter::once(Node::text(words(
+                    Some(&node.value),
+                    None,
+                    node.unit.as_deref(),
+                )))
+                .chain(node.aside.as_deref().cloned())
+                .chain(node.chart.as_deref().cloned())
+                .collect();
                 Node::Facts(n::Facts {
                     id: node.id.clone(),
                     items: vec![n::Fact {
                         label: node.label.clone(),
-                        value: vec![Node::text(node.value.clone())],
-                        icon: None,
+                        value,
+                        icon: node.icon.clone(),
                         tone: node
                             .tone
                             .or_else(|| node.trend.as_ref().and_then(|trend| trend.tone)),
-                        details: trend.into_iter().chain(node.detail.clone()).collect(),
+                        details: trend
+                            .into_iter()
+                            .chain(node.detail.clone())
+                            .chain(node.status.as_ref().map(|status| status.text.clone()))
+                            .collect(),
                     }],
                 })
             }
@@ -846,6 +859,34 @@ mod tests {
         assert_eq!(figure.value, "–");
         assert_eq!(figure.detail.as_deref(), Some("of 100%"));
         assert_eq!(figure.tone, None);
+    }
+
+    #[test]
+    fn a_figure_that_carries_a_tile_keeps_its_unit_its_status_and_its_graphics() {
+        let tile = Node::Figure(Figure {
+            label: "Resting heart rate".to_owned(),
+            value: "58".to_owned(),
+            unit: Some("bpm".to_owned()),
+            icon: Some(icon()),
+            status: Some(Badge {
+                text: "Athletic".to_owned(),
+                tone: Some(Tone::Success),
+                ..Badge::default()
+            }),
+            detail: Some("vs last week".to_owned()),
+            aside: Some(Box::new(Node::Ring(Ring::default()))),
+            chart: Some(Box::new(Node::Chart(Chart::default()))),
+            ..Figure::default()
+        });
+        let Some(Node::Facts(facts)) = tile.older() else {
+            panic!("a figure becomes facts");
+        };
+        let fact = &facts.items[0];
+        assert_eq!(fact.icon, Some(icon()));
+        assert_eq!(fact.details, ["vs last week", "Athletic"]);
+        let kinds: Vec<Kind> = fact.value.iter().map(Node::kind).collect();
+        assert_eq!(kinds, [Kind::Text, Kind::Ring, Kind::Chart]);
+        assert!(matches!(&fact.value[0], Node::Text(text) if text.value == "58 bpm"));
     }
 
     #[test]

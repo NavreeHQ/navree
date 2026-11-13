@@ -624,7 +624,7 @@ names!(Standard { Share, Delete, Add, Edit, Search, Done, Cancel, More });
 object!(Stack {} { id, axis, gap, align, justify, wrap, hidden, children });
 object!(Grid {} { id, cols, min, gap, children });
 names!(SectionStyle { Plain, Card, Inset });
-object!(Section {} { id, title, subtitle, style, actions, children, footer });
+object!(Section {} { id, title, subtitle, style, actions, children, footer, hint });
 object!(List {} { id, children, more, before, ordered, since, changes, live, reorder });
 object!(Reorder { href } { key, group, limit, fields });
 object!(Row { title } {
@@ -694,7 +694,9 @@ object!(ToolbarItem { title, icon } {
 object!(Gauge { value, min, max } { id, label, shown, tone });
 names!(Direction { Up, Down, Flat });
 object!(Trend { direction } { text, tone });
-object!(Figure { label, value } { id, trend, detail, tone });
+object!(Figure { label, value } {
+    id, unit, icon, trend, detail, status, tone, colour, aside, chart, action, hint
+});
 object!(Timeline {} { id, items });
 object!(Moment { title } { id, subtitle, time, state, icon, tone, detail, muted });
 object!(FeedRow {} { id, actor, icon, runs, time, tone, detail, action, muted });

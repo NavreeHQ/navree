@@ -317,8 +317,125 @@
               "centre": "values",
               "legend": true,
               "summary": "Activity rings: Move 540 of 600 kcal, 90%. Exercise 38 of 30 min, 127%. Stand 9 of 12 hr, 75%."
+            },
+            {
+              "t": "grid",
+              "id": "activity-figures",
+              "cols": 2,
+              "min": 150,
+              "gap": 3,
+              "children": [
+                {
+                  "t": "figure",
+                  "id": "figure-steps",
+                  "label": "Steps",
+                  "value": "9,412",
+                  "icon": {
+                    "name": "footprints",
+                    "paths": [
+                      "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z"
+                    ]
+                  },
+                  "detail": "94% of 10,000",
+                  "colour": {
+                    "hue": "green"
+                  },
+                  "aside": {
+                    "t": "ring",
+                    "value": 9412,
+                    "max": 10000,
+                    "colour": {
+                      "hue": "green"
+                    },
+                    "centre": "nothing",
+                    "prominence": "low",
+                    "summary": "Steps: 9,412 of 10,000, 94%."
+                  },
+                  "action": {
+                    "t": "navigate",
+                    "href": "/fitness/steps"
+                  }
+                },
+                {
+                  "t": "figure",
+                  "id": "figure-active-energy",
+                  "label": "Active energy",
+                  "value": "540",
+                  "unit": "kcal",
+                  "icon": {
+                    "name": "flame",
+                    "paths": [
+                      "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.3.1-4.4 2-5.5.3 2.4 2 4 3.6 5.4 1.4 1.3 2.4 3 2.4 5.1a6 6 0 0 1-12 0c0-.9.3-1.8.5-2.5"
+                    ]
+                  },
+                  "detail": "90% of 600 kcal",
+                  "colour": {
+                    "hue": "orange"
+                  },
+                  "action": {
+                    "t": "navigate",
+                    "href": "/fitness/energy"
+                  }
+                },
+                {
+                  "t": "figure",
+                  "id": "figure-distance",
+                  "label": "Distance",
+                  "value": "6.4",
+                  "unit": "km",
+                  "icon": {
+                    "name": "route",
+                    "paths": [
+                      "M6 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM9 16h6a3 3 0 0 0 0-6H9"
+                    ]
+                  },
+                  "detail": "Across Ludhiana and back",
+                  "colour": {
+                    "hue": "cyan"
+                  },
+                  "action": {
+                    "t": "navigate",
+                    "href": "/fitness/distance"
+                  }
+                },
+                {
+                  "t": "figure",
+                  "id": "figure-exercise",
+                  "label": "Exercise",
+                  "value": "38",
+                  "unit": "min",
+                  "icon": {
+                    "name": "timer",
+                    "paths": [
+                      "M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"
+                    ]
+                  },
+                  "trend": {
+                    "direction": "up",
+                    "text": "8 min",
+                    "tone": "success"
+                  },
+                  "detail": "against your goal of 30",
+                  "status": {
+                    "text": "Goal reached",
+                    "tone": "success"
+                  },
+                  "colour": {
+                    "hue": "green"
+                  },
+                  "action": {
+                    "t": "navigate",
+                    "href": "/fitness/exercise"
+                  }
+                }
+              ]
             }
-          ]
+          ],
+          "hint": {
+            "about": "how activity is counted",
+            "text": "Move counts the energy your body spent moving, Exercise the minutes of brisk activity and Stand the hours in which you stood and moved for a minute.",
+            "mark": "info"
+          }
         }
       ]
     }
