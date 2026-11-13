@@ -1,6 +1,7 @@
 import NavreeDesign
 import NavreeRuntime
 @testable import NavreeShell
+import Foundation
 import Testing
 
 // The window's width as the core is told it, and as the drawing lays out by:
@@ -46,4 +47,19 @@ import Testing
     #else
     #expect(AccountPlacement.inToolbar)
     #endif
+}
+
+@Test func eachOriginKeepsItsCacheApart() {
+    #expect(Session.cacheFolder("https://charkha.example") == "navree-cache-https---charkha-example")
+    #expect(Session.cacheFolder("https://charkha.example") != Session.cacheFolder("https://answers.example"))
+    #expect(Session.cacheFolder("http://127.0.0.1:8095") == "navree-cache-http---127-0-0-1-8095")
+}
+
+@Test func aFolderOfAnswersMayBeNamedByItsManifest() {
+    let named = AnswerFolder.place(URL(fileURLWithPath: "/answers/recorded.tsv"))
+    #expect(named.folder.path == "/answers")
+    #expect(named.manifest == "recorded.tsv")
+    let folder = AnswerFolder.place(URL(fileURLWithPath: "/answers", isDirectory: true))
+    #expect(folder.folder.path == "/answers")
+    #expect(folder.manifest == "manifest.tsv")
 }
