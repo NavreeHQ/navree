@@ -11,7 +11,8 @@ import SwiftUI
 /// `menus.txt`); `menu:<Menu>/<Item>` (chooses that command);
 /// `key:<cmd|opt|shift>-...-<key>` (presses that shortcut on the menu bar,
 /// as the keyboard would); `picture:<name>` (each window as `<name>-<n>.png`);
-/// `quit`.
+/// `views:<name>` (the window's views, their appearance and materials);
+/// `appearance:<dark|light|system>`; `quit`.
 struct DemoPictures: ViewModifier {
     func body(content: Content) -> some View {
         content.task { await WindowPictures.run() }
@@ -72,6 +73,14 @@ enum WindowPictures {
             case "tree":
                 write(tree(), to: out.appendingPathComponent("\(argument).txt"))
                 log.append("tree \(argument).txt")
+            case "views":
+                write(views(), to: out.appendingPathComponent("\(argument).txt"))
+                log.append("views \(argument).txt")
+            case "appearance":
+                // The app's appearance: `dark`, `light`, or `system`.
+                NSApp.appearance = argument == "dark" ? NSAppearance(named: .darkAqua)
+                    : argument == "light" ? NSAppearance(named: .aqua) : nil
+                log.append("appearance \(argument)")
             case "quit":
                 write(log.joined(separator: "\n") + "\n", to: out.appendingPathComponent("steps.txt"))
                 NSApp.terminate(nil)
@@ -133,6 +142,32 @@ enum WindowPictures {
             }
         }
         walk(window, depth: 0)
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// The window in front's views, each with its frame in the window, the
+    /// appearance it draws in and, for a material, which one: what a picture
+    /// taken by the app cannot show of what the window server blends.
+    static func views() -> String {
+        guard let window = windows.first, let root = window.contentView?.superview ?? window.contentView else {
+            return "no window\n"
+        }
+        var lines = ["window appearance \(window.effectiveAppearance.name.rawValue)"]
+        func walk(_ view: NSView, depth: Int) {
+            guard depth < 60 else { return }
+            let frame = view.convert(view.bounds, to: nil)
+            var line = String(repeating: " ", count: depth) + String(describing: type(of: view))
+                + " \(Int(frame.minX)),\(Int(frame.minY)) \(Int(frame.width))x\(Int(frame.height))"
+            if let own = view.appearance { line += " own=\(own.name.rawValue)" }
+            line += " draws=\(view.effectiveAppearance.name.rawValue)"
+            if let effect = view as? NSVisualEffectView {
+                line += " material=\(effect.material.rawValue) blending=\(effect.blendingMode.rawValue) state=\(effect.state.rawValue)"
+            }
+            if view.isHidden { line += " hidden" }
+            lines.append(line)
+            for child in view.subviews { walk(child, depth: depth + 1) }
+        }
+        walk(root, depth: 0)
         return lines.joined(separator: "\n") + "\n"
     }
 

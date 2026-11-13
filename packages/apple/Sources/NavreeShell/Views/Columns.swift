@@ -14,11 +14,15 @@ import SwiftUI
 /// From rows that open screens: the first screen in the leading column, the
 /// screen a row opened in the other, and what is pushed from that over it; a
 /// row chosen in the list takes the place of the one open.
-struct ColumnsStack: View {
+///
+/// With a `sidebar` (the app's destinations, where the window's layout says
+/// so), the sidebar leads as a third column.
+struct ColumnsStack<Sidebar: View>: View {
     let layout: StackLayout
     let stack: [ScreenID]
     let client: NativeClient
     let configuration: ShellConfiguration
+    var sidebar: Sidebar?
 
     var body: some View {
         if let root = stack.first {
@@ -29,7 +33,11 @@ struct ColumnsStack: View {
                     compactColumn: SplitRules.compactColumn(panes),
                     inspectorTitle: panes.inspector?.title,
                     choose: { action, place in client.perform(.act(SplitRules.choice(action), place), on: root) },
-                    list: { ColumnPage(id: root, part: .list, client: client, configuration: configuration) },
+                    sidebar: sidebar,
+                    list: {
+                        ColumnPage(id: root, part: .list, client: client, configuration: configuration)
+                            .environment(\.navreeOpen, client.screen(root)?.url)
+                    },
                     detail: { PageView(id: root, depth: 1, modal: nil, client: client, configuration: configuration, part: .detail) },
                     inspector: panes.inspector == nil ? nil : {
                         ColumnPage(id: root, part: .inspector, client: client, configuration: configuration)
@@ -42,7 +50,11 @@ struct ColumnsStack: View {
                     path: path(StackPath.path(detail), stack: detail),
                     compactColumn: detail.isEmpty ? .list : .detail,
                     choose: { action, place in choose(action, place, root: root, open: detail.first) },
-                    list: { PageView(id: root, depth: 0, modal: nil, client: client, configuration: configuration) },
+                    sidebar: sidebar,
+                    list: {
+                        PageView(id: root, depth: 0, modal: nil, client: client, configuration: configuration)
+                            .environment(\.navreeOpen, detail.first.flatMap { client.screen($0)?.url })
+                    },
                     detail: {
                         if let first = detail.first {
                             PageView(id: first, depth: 1, modal: nil, client: client, configuration: configuration)
@@ -52,6 +64,7 @@ struct ColumnsStack: View {
                                 .navigationTitle(client.screen(root)?.screen?.title ?? client.screen(root)?.title ?? "")
                         }
                     },
+                    inspector: nil as (() -> EmptyView)?,
                     pushed: pushed
                 )
             case .stack:
@@ -97,6 +110,66 @@ struct ColumnsStack: View {
         }
         if open != nil { client.send(.popTo(screen: root)) }
         client.perform(.act(action, place), on: root)
+    }
+}
+
+extension ColumnsStack where Sidebar == EmptyView {
+    /// A list beside its detail inside its destination's tab.
+    init(layout: StackLayout, stack: [ScreenID], client: NativeClient, configuration: ShellConfiguration) {
+        self.init(layout: layout, stack: stack, client: client, configuration: configuration, sidebar: nil)
+    }
+}
+
+/// The app's destinations as a split view's sidebar, as Mail lists its
+/// mailboxes: each with its symbol and count, the shell's groups as sections
+/// where there is more than one, the one shown chosen, and the person's
+/// account at its foot.
+struct DestinationSidebar: View {
+    let client: NativeClient
+
+    var body: some View {
+        let items = client.nav.destinations
+        List(selection: selection) {
+            if NavigationRules.groupsAsSections(Set(items.compactMap(\.group)).count) {
+                ForEach(DestinationGroup.of(items)) { group in
+                    if group.name.isEmpty {
+                        Section { rows(group.members) }
+                    } else {
+                        Section(group.name) { rows(group.members) }
+                    }
+                }
+            } else {
+                rows(items.enumerated().map { DestinationGroup.Member(index: $0.offset, item: $0.element) })
+            }
+        }
+        .listStyle(.sidebar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            #if os(macOS)
+            if let user = client.app?.user {
+                AccountMenu(user: user, client: client)
+                    .menuStyle(.button)
+                    .buttonStyle(.borderless)
+                    .labelStyle(.titleAndIcon)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+            }
+            #endif
+        }
+    }
+
+    private func rows(_ members: [DestinationGroup.Member]) -> some View {
+        ForEach(members) { member in
+            DestinationLabel(label: member.item.label, icon: member.item.icon)
+                .badge(member.item.badge.flatMap { Int($0) } ?? 0)
+                .tag(member.index)
+        }
+    }
+
+    private var selection: Binding<Int?> {
+        Binding(get: { client.nav.selected }, set: { index in
+            if let index, index != client.nav.selected { client.send(.select(destination: index)) }
+        })
     }
 }
 

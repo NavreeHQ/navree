@@ -5,6 +5,20 @@ import SwiftUI
 struct RowView: View {
     let item: RowItem
     @Environment(\.navree) private var context
+    @Environment(\.navreeChoose) private var choose
+    #if os(iOS)
+    @Environment(\.editMode) private var editMode
+    #endif
+
+    /// Whether the list's selection is the row open beside it, which any row
+    /// may be, rather than the rows ticked for an action on many.
+    private var choosesOpen: Bool {
+        #if os(iOS)
+        choose != nil && !(editMode?.wrappedValue.isEditing ?? false)
+        #else
+        choose != nil
+        #endif
+    }
 
     var body: some View {
         switch item {
@@ -13,9 +27,10 @@ struct RowView: View {
         case .record(let row):
             RecordRowView(row: row)
                 .tag(row.id ?? "")
-                .selectionDisabled(!row.choosable)
+                .selectionDisabled(!choosesOpen && !row.choosable)
         case .row(let row):
             TreeRowView(row: row)
+                .tag(row.id ?? "")
         case .button(let button, let form):
             ButtonRow(button: button)
                 .environment(\.navreeForm, form.map(FormRef.init))

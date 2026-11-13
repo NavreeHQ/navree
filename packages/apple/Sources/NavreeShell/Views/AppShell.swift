@@ -281,6 +281,16 @@ public enum WindowRules {
         #endif
     }
 
+    /// Whether the destinations are a sidebar that never turns into a tab
+    /// bar: a window the system gives no size class (a Mac's).
+    static var sidebarOnly: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
+    }
+
     /// The size class the system gives the window: none on a Mac.
     static func system(_ sizeClass: UserInterfaceSizeClass?) -> WidthClass? {
         #if os(macOS)
@@ -369,6 +379,23 @@ struct Chrome: View {
     }
 
     @ViewBuilder private var destinations: some View {
+        let items = client.nav.destinations
+        let shown = items.indices.contains(client.nav.selected) ? items[client.nav.selected].stack : []
+        let stack = SplitRules.layout(
+            shown.first.flatMap { client.screen($0)?.screen?.body }, width: WindowRules.window(client.nav.width)
+        )
+        switch NavigationRules.window(destinations: items.count, sidebarOnly: WindowRules.sidebarOnly, stack: stack) {
+        case .sidebarListDetail:
+            ColumnsStack(
+                layout: stack, stack: shown, client: client, configuration: configuration,
+                sidebar: DestinationSidebar(client: client)
+            )
+        case .tabs:
+            tabs
+        }
+    }
+
+    @ViewBuilder private var tabs: some View {
         let items = client.nav.destinations
         let groups = Set(items.compactMap(\.group)).count
         switch NavigationRules.structure(destinations: items.count, width: WindowRules.window(client.nav.width).widthClass) {

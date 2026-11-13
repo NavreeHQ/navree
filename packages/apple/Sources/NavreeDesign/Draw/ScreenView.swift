@@ -56,11 +56,12 @@ public struct ScreenView: View {
 
     public var body: some View {
         let lifted = lifted
-        let sections = SectionRules.sections(screen.body).map { lifted.confirms.isEmpty ? $0 : OverlayContent.withoutSubmits($0) }
+        let drawn = screen.body
+        let sections = SectionRules.sections(drawn).map { lifted.confirms.isEmpty ? $0 : OverlayContent.withoutSubmits($0) }
         let width = WidthClass(sizeClass)
         let table = sections.compactMap(\.table).first
         let query = QueryForm(screen: screen, table: table, region: sections.first { $0.table != nil }?.region)
-        content(sections: sections, width: width, table: table)
+        content(drawn, sections: sections, width: width, table: table)
             .navigationTitle(NavigationRules.title(screen.title, appName: appName))
             .modifier(Subtitle(text: screen.subtitle))
             .modifier(TitleDisplay(mode: PagerRules.titleMode(depth, pager: screen.pager)))
@@ -102,61 +103,28 @@ public struct ScreenView: View {
             }
     }
 
-    @ViewBuilder private func content(sections: [ListSection], width: WidthClass, table: Navree.Table?) -> some View {
-        let panes = PaneRules.panes(in: screen.body)
-        if let empty = Self.wholeEmpty(screen.body) {
+    @ViewBuilder private func content(_ body: Navree.Node, sections: [ListSection], width: WidthClass, table: Navree.Table?) -> some View {
+        let panes = PaneRules.panes(in: body)
+        if let empty = Self.wholeEmpty(body) {
             EmptyPart(empty: empty)
         } else if !panes.isEmpty {
             PaneScreenBody(panes: panes)
-        } else if CompositionRules.isComposed(screen.body) {
-            ComposedScreenBody(body: screen.body)
+        } else if CompositionRules.isComposed(body) {
+            ComposedScreenBody(body: body)
         } else if let table, sections.count == 1, ContentRules.table(table, width: width) == .columns {
             TableColumnsView(table: table, region: sections[0].region)
         } else {
-            List(selection: selection(table)) {
-                if let notice {
-                    Section { NoticeRow(notice: notice) }
+            SectionsList(
+                tree: body, sections: sections, notice: notice, table: table,
+                key: table.flatMap { $0.id } ?? sections.first { $0.table != nil }?.region ?? "",
+                destructive: actions.filter(Self.isDestructive).compactMap { node -> Navree.Button? in
+                    if case .button(let button) = node { return button }
+                    return nil
                 }
-                ForEach(sections) { section in
-                    SectionView(section: section)
-                }
-                let destructive = actions.filter(Self.isDestructive)
-                if !destructive.isEmpty {
-                    let buttons = destructive.compactMap { node -> Navree.Button? in
-                        if case .button(let button) = node { return button }
-                        return nil
-                    }
-                    Section {
-                        ForEach(Array(buttons.enumerated()), id: \.offset) { _, button in
-                            ButtonRow(button: button, inFootedSection: true)
-                        }
-                    } footer: {
-                        if let footer = ActionRules.footer(buttons) { Text(footer) }
-                    }
-                }
-            }
-            .modifier(ListLook(layout: ContentRules.list(screen.body)))
-            .modifier(Editing(table: table, region: sections.first { $0.table != nil }?.region, tree: screen.body, reorders: sections.contains { $0.list?.reorder != nil }))
+            )
+            .modifier(ListLook(layout: ContentRules.list(body)))
+            .modifier(Editing(table: table, region: sections.first { $0.table != nil }?.region, tree: body, reorders: sections.contains { $0.list?.reorder != nil }))
         }
-    }
-
-    /// The rows chosen of a table whose rows can be chosen: what the list
-    /// shows ticked in edit mode, each change told to the core.
-    private func selection(_ table: Navree.Table?) -> Binding<Set<String>>? {
-        guard let table, table.select != nil else { return nil }
-        let key = table.id ?? sectionsRegion ?? ""
-        return Binding(
-            get: { EditRules.chosen(table) },
-            set: { next in
-                for change in EditRules.changes(table, to: next) {
-                    context.send(.choose(table: key, row: change.row, on: change.on, across: false))
-                }
-            }
-        )
-    }
-
-    private var sectionsRegion: String? {
-        SectionRules.sections(screen.body).first { $0.table != nil }?.region
     }
 
     static func isDestructive(_ node: Navree.Node) -> Bool {
@@ -183,6 +151,72 @@ extension OverlayPresenter {
         case .sheet, .dialog, .popover: true
         default: false
         }
+    }
+}
+
+/// A screen's sections as the system's list. Its selection is the row open
+/// beside it when it is the list of a list beside its detail (as Mail shows
+/// the message open, and no other), and the rows ticked for an action on many
+/// while it is being edited.
+struct SectionsList: View {
+    let tree: Navree.Node
+    let sections: [ListSection]
+    let notice: Notice?
+    let table: Navree.Table?
+    let key: String
+    let destructive: [Navree.Button]
+    @Environment(\.navree) private var context
+    @Environment(\.navreeChoose) private var choose
+    @Environment(\.navreeOpen) private var open
+    #if os(iOS)
+    @Environment(\.editMode) private var editMode
+    #endif
+
+    var body: some View {
+        List(selection: selection) {
+            if let notice {
+                Section { NoticeRow(notice: notice) }
+            }
+            ForEach(sections) { section in
+                SectionView(section: section)
+            }
+            if !destructive.isEmpty {
+                Section {
+                    ForEach(Array(destructive.enumerated()), id: \.offset) { _, button in
+                        ButtonRow(button: button, inFootedSection: true)
+                    }
+                } footer: {
+                    if let footer = ActionRules.footer(destructive) { Text(footer) }
+                }
+            }
+        }
+    }
+
+    private var editing: Bool {
+        #if os(iOS)
+        editMode?.wrappedValue.isEditing ?? false
+        #else
+        false
+        #endif
+    }
+
+    /// The row open beside the list, which only a choice in it changes; or
+    /// the rows of a table ticked while it is edited, each change told to the
+    /// core.
+    private var selection: Binding<Set<String>>? {
+        if choose != nil, !editing {
+            let shown = open.flatMap { SplitRules.openRow(in: tree, opened: $0) }
+            return Binding(get: { shown.map { [$0] } ?? [] }, set: { _ in })
+        }
+        guard let table, table.select != nil else { return nil }
+        return Binding(
+            get: { EditRules.chosen(table) },
+            set: { next in
+                for change in EditRules.changes(table, to: next) {
+                    context.send(.choose(table: key, row: change.row, on: change.on, across: false))
+                }
+            }
+        )
     }
 }
 

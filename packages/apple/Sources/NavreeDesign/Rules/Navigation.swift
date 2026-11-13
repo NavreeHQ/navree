@@ -30,7 +30,33 @@ public enum TitleMode: Sendable, Equatable {
     case inline
 }
 
+/// How a window draws its destinations and the destination it shows.
+public enum WindowLayout: Sendable, Equatable {
+    /// The destinations as the system's tab view (a tab bar, or the sidebar it
+    /// turns into), each destination's stack inside its tab.
+    case tabs
+    /// One split view of three columns, as Mail's mailboxes, messages and
+    /// message: the destinations as its sidebar, the destination's list as
+    /// its content and what was chosen in it as its detail.
+    case sidebarListDetail
+}
+
 public enum NavigationRules {
+    /// Where the destinations are a sidebar that never turns into a tab bar
+    /// (a window the system gives no size class: a Mac's) and the destination
+    /// shown is a list beside its detail, the sidebar, the list and the detail
+    /// are one split view of three columns, as Mail's: a split view inside
+    /// the tab view's sidebar would inset the detail twice. Where the
+    /// destinations are a tab bar, or turn into one, or the destination is one
+    /// stack, they stay the system's tab view.
+    public static func window(destinations: Int, sidebarOnly: Bool, stack: StackLayout) -> WindowLayout {
+        guard sidebarOnly, destinations > 1 else { return .tabs }
+        switch stack {
+        case .stack: return .tabs
+        case .panes, .listBesideDetail: return .sidebarListDetail
+        }
+    }
+
     /// The tab bar on a compact width, the sidebar-adaptable tab view on a
     /// regular one; never chosen from the kind of device.
     /// Whether a wide window shows the shell's groups as sections of the
