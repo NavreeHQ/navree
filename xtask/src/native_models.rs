@@ -914,7 +914,58 @@ const SWIFT_KEYWORDS: &[&str] = &[
     "while",
 ];
 
+/// Names the Swift models use without `Navree.` before them, or write into
+/// the namespace themselves: a definition of one of these names would hide
+/// the type the models mean, inside the namespace, and they would not compile
+/// (or would read the wrong type).
+const SWIFT_RESERVED: &[&str] = &[
+    "Navree",
+    "JSONValue",
+    "Word",
+    "String",
+    "Int",
+    "Double",
+    "Bool",
+    "Optional",
+    "Array",
+    "Dictionary",
+    "Codable",
+    "Decodable",
+    "Encodable",
+    "Hashable",
+    "Sendable",
+    "CaseIterable",
+    "RawRepresentable",
+    "CodingKey",
+    "Decoder",
+    "Encoder",
+    "Error",
+];
+
 impl Swift<'_> {
+    /// Refuses a definition whose Swift name is one the models rely on, and a
+    /// variant's own type named as the union's `Unknown`.
+    fn check_names(&self) -> Result<(), String> {
+        for (name, def) in &self.0.defs {
+            if matches!(def, Def::Text) {
+                // Written as `String`: no type of its own.
+                continue;
+            }
+            let own = last(name);
+            if SWIFT_RESERVED.contains(&own) {
+                return Err(format!(
+                    "{name}: `{own}` would hide the Swift type of that name in the models"
+                ));
+            }
+            if name.contains('.') && own == "Unknown" {
+                return Err(format!(
+                    "{name}: a union's `Unknown` is the variant this build does not know"
+                ));
+            }
+        }
+        Ok(())
+    }
+
     fn name(wire: &str) -> String {
         let name = camel(wire);
         if SWIFT_KEYWORDS.contains(&name.as_str()) {
@@ -989,6 +1040,7 @@ impl Swift<'_> {
     }
 
     fn file(&self) -> Result<String, String> {
+        self.check_names()?;
         let read = self.0;
         let mut out = String::new();
         let _ = writeln!(out, "// {HEADER}\n");
@@ -1010,6 +1062,7 @@ impl Swift<'_> {
             read.vocab
         );
         out.push_str(SWIFT_JSON);
+        out.push_str(SWIFT_WORD);
         for (name, def) in &read.defs {
             match def {
                 Def::Object(fields) => {
@@ -1111,6 +1164,17 @@ impl Swift<'_> {
             let name_here = Self::name(&field.wire);
             let at = format!("{name}.{}", field.wire);
             let line = match (&field.default, &field.ty) {
+                // A list of words of a closed list: the words this build does
+                // not know are left out, as the protocol crate reads them.
+                (None, Ty::List(inner)) if self.0.is_enum(inner) => format!(
+                    "try container.decode([Navree.Word<{}>].self, forKey: .{name_here}).compactMap(\\.value)",
+                    self.ty(inner)
+                ),
+                (Some(default), Ty::List(inner)) if self.0.is_enum(inner) => format!(
+                    "try container.decodeIfPresent([Navree.Word<{}>].self, forKey: .{name_here})?.compactMap(\\.value) ?? {}",
+                    self.ty(inner),
+                    self.default(field, default, &at)?
+                ),
                 (None, ty) => format!(
                     "try container.decode({}.self, forKey: .{name_here})",
                     self.ty(ty)
@@ -1384,6 +1448,23 @@ extension Navree {
 }
 "#;
 
+/// One word of a closed list, in Swift: what a list of words is read through.
+const SWIFT_WORD: &str = r#"
+extension Navree {
+    /// One word of a closed list, read leniently: a word this build does not
+    /// know is read as none, and a list of words leaves it out. A value of
+    /// another shape is still an error.
+    struct Word<Value: RawRepresentable>: Decodable where Value.RawValue == String {
+        var value: Value?
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            self.value = container.decodeNil() ? nil : Value(rawValue: try container.decode(String.self))
+        }
+    }
+}
+"#;
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -1408,7 +1489,8 @@ mod tests {
                         "count": {"type": "integer", "format": "uint32", "default": 0},
                         "href": {"$ref": "#/$defs/Path"},
                         "props": {"x-json": true, "default": null},
-                        "items": {"type": "array", "items": {"$ref": "#/$defs/Node"}, "default": []}
+                        "items": {"type": "array", "items": {"$ref": "#/$defs/Node"}, "default": []},
+                        "tones": {"type": "array", "items": {"$ref": "#/$defs/Tone"}, "default": []}
                     },
                     "required": ["text", "href"]
                 },
@@ -1476,6 +1558,8 @@ mod tests {
             "self.props = try container.decodeIfPresent(Navree.JSONValue.self, forKey: .props)",
             "if self.items != [] { try container.encode(self.items, forKey: .items) }",
             "try container.encodeIfPresent(self.viewBox, forKey: .viewBox)",
+            "self.tones = try container.decodeIfPresent([Navree.Word<Navree.Tone>].self, forKey: .tones)?.compactMap(\\.value) ?? []",
+            "struct Word<Value: RawRepresentable>: Decodable where Value.RawValue == String {",
             "case largeTitle = \"large_title\"",
             "public indirect enum Node: Codable, Hashable, Sendable {",
             "case badge(Navree.Badge)",
@@ -1515,6 +1599,25 @@ mod tests {
             generate(&schema).unwrap_err(),
             "Badge.missing: refers to `Nowhere`, which is not defined"
         );
+    }
+
+    #[test]
+    fn a_swift_name_the_models_rely_on_is_refused() {
+        for name in ["String", "Decoder", "Navree", "Word"] {
+            let mut schema = small();
+            schema["$defs"][name] = json!({"x-kind": "enum", "type": "string", "enum": ["a"]});
+            assert_eq!(
+                generate(&schema).unwrap_err(),
+                format!("{name}: `{name}` would hide the Swift type of that name in the models")
+            );
+        }
+        let mut schema = small();
+        schema["$defs"]["Node.Unknown"] = schema["$defs"]["Node.Gap"].clone();
+        schema["$defs"]["Node"]["x-variants"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"tag": "unknown", "type": "Node.Unknown"}));
+        assert!(generate(&schema).unwrap_err().starts_with("Node.Unknown: "));
     }
 
     #[test]
