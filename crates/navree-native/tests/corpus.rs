@@ -22,7 +22,7 @@ use navree_native::input::{
     ToggleInput, ToggleKind, Weekday,
 };
 use navree_native::node::{
-    Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Chart, ChartKind, Code, Column,
+    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Chart, ChartKind, Code, Column,
     ColumnRole, Delivery, Dialog, Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Icon, Image, Justify, Link, List, Live, Menu,
     Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress, Prominence,
@@ -320,6 +320,12 @@ fn screen_list() -> Envelope {
         select: Some(Selection {
             name: s("ids[]"),
             form: Some(s("orders-bulk")),
+            // The page holds 25 of the 1,204 orders the query matches.
+            across: Some(Across {
+                name: s("all_matching"),
+                value: s("eyJzdGF0dXMiOiJvcGVuIn0"),
+                total: Some(1204),
+            }),
         }),
         more: Some(s("/orders?after=eyJpZCI6MTA0MX0")),
         prev: None,

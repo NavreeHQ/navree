@@ -54,7 +54,7 @@ use crate::input::{
     ToggleInput, ToggleKind, Weekday,
 };
 use crate::node::{
-    Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Chart, ChartKind, Code, Column,
+    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Chart, ChartKind, Code, Column,
     ColumnRole, Delivery, Dialog, Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Icon, IconShape, Image, Justify, Link, List,
     Live, Menu, Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress,
@@ -659,7 +659,8 @@ names!(SortDir { Asc, Desc });
 object!(Sort { href } { dir });
 object!(Column { label } { key, numeric, align, sort, role, secondary });
 object!(TableRow {} { id, cells, action, actions, selected, unchoosable, open, detail });
-object!(Selection { name } { form });
+object!(Selection { name } { form, across });
+object!(Across { name, value } { total });
 object!(Table {} { id, caption, columns, rows, query, select, more, prev, summary, empty });
 names!(ChartKind { Line, Area, Bar, Donut, Sparkline, Funnel });
 object!(Series { label } { values, shown });

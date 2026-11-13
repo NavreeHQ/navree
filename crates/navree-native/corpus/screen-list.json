@@ -343,7 +343,12 @@
           },
           "select": {
             "name": "ids[]",
-            "form": "orders-bulk"
+            "form": "orders-bulk",
+            "across": {
+              "name": "all_matching",
+              "value": "eyJzdGF0dXMiOiJvcGVuIn0",
+              "total": 1204
+            }
           },
           "more": "/orders?after=eyJpZCI6MTA0MX0",
           "summary": "1–25 of 1,204"

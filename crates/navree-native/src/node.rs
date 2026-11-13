@@ -1341,6 +1341,9 @@ impl TableRow {
 /// How the rows of a table are chosen, for the actions that apply to the rows
 /// chosen: the id of each chosen row is sent under `name`, as a box ticked in
 /// a form would be, with the form `form`.
+///
+/// A table with a selection gives every row an `id`: it is what is sent. A row
+/// with none can't be chosen, and a client draws no box for it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Selection {
     /// The name each chosen row's id is sent under.
@@ -1348,6 +1351,38 @@ pub struct Selection {
     /// The form the ids go with: the one whose buttons act on the rows chosen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub form: Option<String>,
+    /// Whether the person may choose every record that matches the table's
+    /// query, and not only the rows loaded: a table loads by cursor, so what a
+    /// page holds is only part of what matches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub across: Option<Across>,
+}
+
+/// Every record that matches a table's query, as an action on the rows chosen
+/// can take them. A client offers it (`Choose all 1,204`) when the person has
+/// chosen the rows it holds, as its system's own lists do.
+///
+/// When the person takes it, the client sends `name` with `value`, as a box
+/// ticked in the form would be, in place of the ids of the rows, which are only
+/// part of what matches. It keeps to it until the person clears a row, or the
+/// table's query changes (the answer then holds the new `across`), and sends the
+/// ids again.
+///
+/// The value is the server's own words for "every record that matches": the
+/// query as it stands, or a token that stands for it. The client sends it as it
+/// came and never makes one, and the server reads the query from it, not from
+/// the rows the client holds.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Across {
+    /// The name the value is sent under: `all_matching`.
+    pub name: String,
+    /// What is sent.
+    pub value: String,
+    /// How many records match, for the words (`Choose all 1,204`): a client
+    /// writes the number as its system and the person's locale do (`1,204`,
+    /// `1,00,000`). Left out when the server does not count them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total: Option<u32>,
 }
 
 /// Records in columns. A wide screen draws a table; a narrow one draws each
@@ -1372,7 +1407,8 @@ pub struct Table {
     /// draws the answer in the table's place.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<Form>,
-    /// Whether the rows can be chosen, and how the chosen ones are sent.
+    /// Whether the rows can be chosen, and how the chosen ones are sent. Every
+    /// row of such a table has an `id`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub select: Option<Selection>,
     /// Where the next records are, by cursor. The answer is a `rows` op for
@@ -2185,6 +2221,27 @@ mod tests {
             ..TableRow::default()
         };
         assert_eq!(serde_json::to_string(&held).unwrap(), r#"{"unchoosable":true}"#);
+    }
+
+    #[test]
+    fn a_selection_may_offer_every_record_that_matches() {
+        let select: Selection = serde_json::from_str(
+            r#"{"name":"ids[]","form":"orders-bulk","across":{"name":"all_matching","value":"eyJzdGF0dXMiOiJvcGVuIn0","total":1204}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            select.across,
+            Some(Across {
+                name: "all_matching".to_owned(),
+                value: "eyJzdGF0dXMiOiJvcGVuIn0".to_owned(),
+                total: Some(1204),
+            })
+        );
+        // The number is only for the words, so it may be left out; the field and its value are not.
+        let bare: Selection = serde_json::from_str(r#"{"name":"ids[]","across":{"name":"all_matching","value":"q"}}"#).unwrap();
+        assert_eq!(bare.across.map(|across| across.total), Some(None));
+        assert!(serde_json::from_str::<Selection>(r#"{"name":"ids[]","across":{"name":"all_matching"}}"#).is_err());
+        assert_eq!(serde_json::from_str::<Selection>(r#"{"name":"ids[]"}"#).unwrap().across, None);
     }
 
     #[test]

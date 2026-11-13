@@ -9,6 +9,40 @@
       "x-kind": "enum",
       "x-since": 0
     },
+    "Across": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "x-since": 0
+        },
+        "total": {
+          "anyOf": [
+            {
+              "format": "uint32",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "type": "string",
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "Action": {
       "oneOf": [
         {
@@ -7532,6 +7566,18 @@
     },
     "Selection": {
       "properties": {
+        "across": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Across"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "form": {
           "anyOf": [
             {
