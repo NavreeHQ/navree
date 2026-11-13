@@ -189,11 +189,15 @@ struct SectionView: View {
 
 /// A line of status at the top of the content, where Apple's apps show one: a
 /// symbol in the tone's colour, the words, and a button to put it away.
-struct NoticeRow: View {
+public struct NoticeRow: View {
     let notice: Notice
     @Environment(\.navree) private var context
 
-    var body: some View {
+    public init(notice: Notice) {
+        self.notice = notice
+    }
+
+    public var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: Tones.symbol(notice.tone))
                 .foregroundStyle(Tones.color(notice.tone))

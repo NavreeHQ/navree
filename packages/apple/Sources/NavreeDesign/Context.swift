@@ -156,6 +156,12 @@ public struct DrawingContext: Sendable {
     /// The popovers of the screen that are open, by id: the core keeps their
     /// state apart from the tree.
     public var opened: Set<String> = []
+    /// The shell's routes, when the core says them: which addresses open as
+    /// something other than a pushed screen.
+    public var routes: [Navree.Route] = []
+    /// Loads a picture's bytes the way the app's requests go: with the
+    /// session's cookies, from the one cookie store.
+    public var picture: @MainActor @Sendable (URL) async -> Data? = { _ in nil }
 
     public init(
         send: @escaping @MainActor @Sendable (Intent) -> Void,

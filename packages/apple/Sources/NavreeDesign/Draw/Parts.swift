@@ -312,12 +312,10 @@ struct ImagePart: View {
     @Environment(\.navree) private var context
 
     var body: some View {
-        AsyncImage(url: URL(string: image.src, relativeTo: context.base)) { loading in
-            if let loaded = loading.image {
-                loaded.resizable().aspectRatio(contentMode: image.fit == .cover ? .fill : .fit)
-            } else {
-                Rectangle().fill(.quaternary)
-            }
+        RemotePicture(url: URL(string: image.src, relativeTo: context.base)) { loaded in
+            loaded.resizable().aspectRatio(contentMode: image.fit == .cover ? .fill : .fit)
+        } placeholder: {
+            Rectangle().fill(.quaternary)
         }
         .frame(width: image.width.map { CGFloat($0) }, height: image.height.map { CGFloat($0) })
         .clipped()
@@ -376,12 +374,13 @@ public struct Glyph: View {
 /// A person's picture, or their initials in a circle.
 struct AvatarPart: View {
     let avatar: Navree.Avatar
+    @Environment(\.navree) private var context
     @ScaledMetric(relativeTo: .body) private var size: CGFloat = 32
 
     var body: some View {
         Group {
-            if let src = avatar.src, let url = URL(string: src) {
-                AsyncImage(url: url) { image in image.resizable().scaledToFill() } placeholder: { initials }
+            if let src = avatar.src, let url = URL(string: src, relativeTo: context.base) {
+                RemotePicture(url: url) { image in image.resizable().scaledToFill() } placeholder: { initials }
             } else {
                 initials
             }

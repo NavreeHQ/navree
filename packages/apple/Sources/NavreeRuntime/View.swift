@@ -45,6 +45,8 @@ public struct AppPart: Sendable {
     public var home: String
     public var theme: Navree.Theme?
     public var user: Navree.User?
+    /// The shell's routes, when the core says them.
+    public var routes: [Navree.Route] = []
 }
 
 /// A top-level destination and the screens stacked in it, the first at the bottom.
@@ -306,6 +308,7 @@ extension AppPart: Decodable {
         home = c.lenient("home", "/")
         theme = c.optional("theme")
         user = try c.decodeIfPresent(Navree.User.self, forKey: JSONKey("user"))
+        routes = c.lenient("routes", [])
     }
 }
 

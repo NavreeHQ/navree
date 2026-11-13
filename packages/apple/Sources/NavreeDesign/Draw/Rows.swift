@@ -61,7 +61,7 @@ struct Opening<Label: View>: View {
     @Environment(\.navree) private var context
 
     var body: some View {
-        if let action, case .navigate(let link) = action, link.present == .auto || link.present == .push {
+        if let action, NavigationRules.pushes(action, routes: context.routes) {
             NavigationLink(value: PathEntry.tap(action, place)) {
                 label()
             }

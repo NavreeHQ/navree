@@ -112,3 +112,16 @@ func modal(_ json: String) throws -> Modal {
     #expect(ModalRules.height(try modal(#"{"present":"task","stack":[4]}"#)) == .full)
     #expect(ModalRules.height(try modal(#"{"present":"sheet","locked":true,"stack":[4]}"#)) == .full)
 }
+
+@Test func aScreenThatShowsSomethingWhileItLoadsAgainHasASpinnerInItsBar() throws {
+    func state(_ json: String) throws -> ScreenState {
+        try JSONDecoder().decode(ScreenState.self, from: Data(json.utf8))
+    }
+    let reloading = try state(#"{"id":2,"url":"/orders","loading":true,"content":{"t":"native","screen":{"title":"Orders","body":{"t":"stack"}}}}"#)
+    let first = try state(#"{"id":2,"url":"/orders","loading":true,"content":{"t":"blank"}}"#)
+    let still = try state(#"{"id":2,"url":"/orders","content":{"t":"native","screen":{"title":"Orders","body":{"t":"stack"}}}}"#)
+    #expect(LoadingRules.progressInBar(reloading))
+    // The first load has the screen's own spinner; a screen at rest has none.
+    #expect(!LoadingRules.progressInBar(first))
+    #expect(!LoadingRules.progressInBar(still))
+}

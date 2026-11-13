@@ -66,4 +66,34 @@ public enum NavigationRules {
     public static func title(_ title: String, appName: String) -> String {
         title == appName ? "" : title
     }
+
+    /// Whether a link pushes a screen, and so shows the system's disclosure
+    /// chevron: one that says `push`, or one that leaves it to the app when no
+    /// route of the shell presents its address otherwise. A sheet, a task, a
+    /// cover, a replacement or another app is no push.
+    public static func pushes(_ action: Navree.Action?, routes: [Navree.Route]) -> Bool {
+        guard case .navigate(let link)? = action else { return false }
+        switch link.present {
+        case .push: return true
+        case .auto:
+            let route = routes.first { matches($0.match, link.href) }
+            return route?.present == nil || route?.present == .auto || route?.present == .push
+        default: return false
+        }
+    }
+
+    /// Whether a route's pattern names an address: segment by segment, `*`
+    /// for any one, the query left out.
+    public static func matches(_ pattern: String, _ address: String) -> Bool {
+        var path = address
+        if let scheme = path.range(of: "://") {
+            let rest = path[scheme.upperBound...]
+            path = rest.firstIndex(of: "/").map { String(rest[$0...]) } ?? "/"
+        }
+        path = String(path.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")
+        path = String(path.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")
+        let wanted = pattern.split(separator: "/")
+        let given = path.split(separator: "/")
+        return wanted.count == given.count && zip(wanted, given).allSatisfy { $0 == "*" || $0 == $1 }
+    }
 }

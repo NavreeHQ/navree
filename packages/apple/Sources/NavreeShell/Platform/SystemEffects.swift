@@ -43,6 +43,9 @@ public final class SystemEffects: EffectRunner {
     /// The cookie store the web view shares.
     public var jar: CookieJar? { transport.jar }
 
+    /// What loads the pictures of a screen, with the session's cookies.
+    public private(set) lazy var pictures = PictureLoader(jar: transport.jar)
+
     public func run(_ effect: CoreEffect, for client: NativeClient) {
         switch effect {
         case .fetch(let request):
