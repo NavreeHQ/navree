@@ -126,7 +126,8 @@ pub enum SocialError {
         retry_after: std::time::Duration,
     },
     /// The provider has no sign-in from native apps: it is neither Apple
-    /// nor Google, or (Apple) no app is configured in `auth.apps.apple`.
+    /// nor Google, or no app of its platform is configured (`auth.apps.apple`
+    /// for Apple, `auth.apps.android` for Google).
     #[error("{provider} sign-in from an app is not set up")]
     NativeUnavailable {
         /// The provider's display name.

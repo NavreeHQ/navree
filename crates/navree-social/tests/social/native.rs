@@ -33,6 +33,15 @@ const SERVICES_ID: &str = "in.navree.dhaba.web";
 const GOOGLE_CLIENT: &str = "4810-server.apps.googleusercontent.com";
 
 const APPLE_SUB: &str = "001234.8c1f0e2a9b7d4e55.0931";
+
+/// The site's Android app (`auth.apps.android.main`): native Sign in with
+/// Google is offered only with one.
+fn android_app() -> Value {
+    json!({
+        "package": BUNDLE,
+        "fingerprints": ["14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5"],
+    })
+}
 const RELAY: &str = "k7p2xq9d4m@privaterelay.appleid.com";
 
 struct Native {
@@ -75,6 +84,7 @@ impl Native {
                 "auth.apps.apple.main",
                 json!({ "team_id": "ABCDE12345", "bundle_id": BUNDLE }),
             )
+            .config("auth.apps.android.main", android_app())
             .module(http_client_module())
             .override_value::<dyn Clock>(clock.clone());
         let app = configure(builder).build().await;
@@ -554,6 +564,58 @@ async fn native_sign_in_needs_a_configured_app() {
         .assert_error_code(404, "unknown_provider");
 }
 
+// Google's web flow alone offers no sign-in from an app: the three native
+// routes answer as Apple's do without an Apple app, until the site lists an
+// Android app.
+#[tokio::test]
+async fn native_sign_in_with_google_needs_an_android_app() {
+    let idp = Idp::start().await;
+    let google = json!({ "client_id": GOOGLE_CLIENT, "client_secret": "s", "url": idp.uri() });
+    let app = builder()
+        .config("social.providers.google", google.clone())
+        // An iPhone app does not make Google native sign-in available.
+        .config(
+            "auth.apps.apple.main",
+            json!({ "team_id": "ABCDE12345", "bundle_id": BUNDLE }),
+        )
+        .module(navree_session::SessionModule::for_root(
+            navree_session::SessionOptions::default(),
+        ))
+        .module(http_client_module())
+        .build()
+        .await;
+    let phone = app.client();
+    phone.csrf_cookie().await;
+    let post = json!({ "id_token": "e.x.y", "state": "nvs1.made-up" });
+    for (path, body) in [
+        ("/api/auth/social/google/native/nonce", None),
+        ("/api/auth/social/google/native", Some(&post)),
+        ("/api/auth/social/google/native/session", Some(&post)),
+    ] {
+        let request = phone.post(path).xsrf();
+        let request = match body {
+            Some(body) => request.json(body),
+            None => request,
+        };
+        request
+            .send()
+            .await
+            .assert_error_code(404, "native_sign_in_unavailable");
+    }
+
+    let app = builder()
+        .config("social.providers.google", google)
+        .config("auth.apps.android.main", android_app())
+        .module(http_client_module())
+        .build()
+        .await;
+    app.client()
+        .post("/api/auth/social/google/native/nonce")
+        .send()
+        .await
+        .assert_status(200);
+}
+
 #[tokio::test]
 async fn the_post_is_validated_and_throttled_and_errors_carry_no_secrets() {
     let native = Native::start(|b| b).await;
@@ -910,8 +972,11 @@ async fn apples_notifications_are_verified() {
 
 #[tokio::test]
 async fn the_fake_answers_native_sign_ins() {
-    let (app, fake) =
-        fake_app(|b| b.config("social.providers.google.client_id", GOOGLE_CLIENT)).await;
+    let (app, fake) = fake_app(|b| {
+        b.config("social.providers.google.client_id", GOOGLE_CLIENT)
+            .config("auth.apps.android.main", android_app())
+    })
+    .await;
     fake.on_id_token(
         "google",
         "token-gurpreet",

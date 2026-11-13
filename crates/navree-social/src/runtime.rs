@@ -51,6 +51,9 @@ pub(crate) struct Runtime {
     /// The bundle ids of the site's Apple apps (`auth.apps.apple`): the
     /// audiences of Sign in with Apple's identity tokens from the apps.
     pub(crate) apple_apps: Vec<String>,
+    /// The package names of the site's Android apps (`auth.apps.android`):
+    /// native Sign in with Google is offered only when there is one.
+    pub(crate) android_apps: Vec<String>,
     pub(crate) app: WeakAppContext,
 }
 
@@ -82,6 +85,7 @@ impl Runtime {
             Some(http) => (*http).clone(),
             None => HttpClient::new(HttpClientOptions::default())?,
         };
+        let apps = app.try_get::<AppsOptions>().await;
         Ok(Runtime {
             providers,
             encrypter: app.get::<Encrypter>().await?,
@@ -97,12 +101,21 @@ impl Runtime {
             clock,
             http,
             jwks: JwksCache::default(),
-            apple_apps: match app.try_get::<AppsOptions>().await {
+            apple_apps: match &apps {
                 Some(apps) => apps
                     .apple
                     .values()
                     .map(|app| app.bundle_id.trim().to_owned())
                     .filter(|bundle| !bundle.is_empty())
+                    .collect(),
+                None => Vec::new(),
+            },
+            android_apps: match &apps {
+                Some(apps) => apps
+                    .android
+                    .values()
+                    .map(|app| app.package.trim().to_owned())
+                    .filter(|package| !package.is_empty())
                     .collect(),
                 None => Vec::new(),
             },
