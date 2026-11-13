@@ -419,6 +419,7 @@ struct SearchModifier: ViewModifier {
             content
                 .searchable(text: binding, placement: Self.placement(placement), prompt: query.searchPrompt ?? "Search")
                 .onSubmit(of: .search) { send(query, name) }
+                .modifier(FindFocus())
                 .task(id: text) {
                     guard text != nil else { return }
                     try? await Task.sleep(for: .milliseconds(400))
