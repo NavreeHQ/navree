@@ -70,6 +70,7 @@ class HuesTest {
         assertEquals(25, Hues.trackTone(dark = true))
         assertTrue(Hues.markTone(dark = false) < Hues.trackTone(dark = false))
         assertTrue(Hues.markTone(dark = true) > Hues.trackTone(dark = true))
+        assertTrue("a track is quieter than its mark", Hues.trackChroma(Navree.Hue.CYAN) < Hues.chroma(Navree.Hue.CYAN))
         assertEquals("four shades, faint to strong", 4, Hues.shadeTones(false).size)
         assertTrue(Hues.shadeTones(false).zipWithNext().all { (a, b) -> a > b })
         assertTrue(Hues.shadeTones(true).zipWithNext().all { (a, b) -> a < b })

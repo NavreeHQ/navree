@@ -86,6 +86,7 @@ import com.navree.client.design.ZoneRules
 import com.navree.client.theme.Hct
 import com.navree.client.theme.Hues
 import com.navree.client.theme.LocalReducedMotion
+import com.navree.client.theme.TonalPalette
 import com.navree.protocol.Navree
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
@@ -136,7 +137,8 @@ internal fun ink(hue: Navree.Hue): Ink {
                 val palette = Hues.palette(hue, Hct.hueChroma(primary.toArgb()).first)!!
                 Ink(
                     mark = Color(palette.tone(Hues.markTone(dark))),
-                    track = Color(palette.tone(Hues.trackTone(dark))),
+                    // A track is the hue at a low chroma, as Material's progress tracks are: present, not loud.
+                    track = Color(TonalPalette(palette.hue, Hues.trackChroma(hue)).tone(Hues.trackTone(dark))),
                     container = Color(palette.tone(Hues.containerTone(dark))),
                     onContainer = Color(palette.tone(Hues.onContainerTone(dark))),
                 )
@@ -239,7 +241,9 @@ private fun DrawScope.ringArc(progress: Float, ink: Ink, to: Color?, strokePx: F
     val first = progress.coerceAtMost(1f) * 360f
     rotate(-90f) {
         val brush = if (to != null) {
-            Brush.sweepGradient(0f to ink.mark, (first / 360f).coerceAtLeast(0.01f) to to, 1f to to, center = center)
+            // The blend runs along the arc; past its end it turns back to the first hue, so the round cap at the start keeps it.
+            val end = (first / 360f).coerceIn(0.01f, 0.98f)
+            Brush.sweepGradient(0f to ink.mark, end to to, (end + 1f) / 2f to to, 1f to ink.mark, center = center)
         } else {
             SolidColor(ink.mark)
         }
@@ -330,7 +334,7 @@ internal fun RingsView(node: Navree.Rings, modifier: Modifier = Modifier) {
                             rings.forEachIndexed { index, ring ->
                                 Text(
                                     "${ring.shown ?: ring.value?.let(::amount) ?: "–"}/${amount(ring.max)}",
-                                    style = MaterialTheme.typography.labelLarge,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = inks[index].mark,
                                     maxLines = 1,
                                 )
@@ -472,7 +476,8 @@ internal fun DayClockView(node: Navree.DayClock, modifier: Modifier = Modifier) 
                         drawLine(if (reach == 0f) quiet else colour, c + dir * inner, c + dir * end, strokeWidth = width, cap = StrokeCap.Round)
                     }
                     if (node.now == hour) {
-                        drawLine(outline, c + dir * (inner - width), c + dir * (outer + width * 0.2f), strokeWidth = width + 3.dp.toPx(), cap = StrokeCap.Round, alpha = 0.18f)
+                        // Now: a short hand just outside the dial, at the hour.
+                        drawLine(outline, c + dir * (outer + 3.dp.toPx()), c + dir * (outer + 9.dp.toPx()), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
                     }
                 }
                 node.moments.forEachIndexed { index, moment ->
@@ -489,10 +494,8 @@ internal fun DayClockView(node: Navree.DayClock, modifier: Modifier = Modifier) 
         Key(node.key.mapIndexed { index, category -> keyInks[index].mark to category.name })
         if (node.moments.isNotEmpty()) {
             Key(
-                node.moments.mapIndexed { index, moment ->
-                    val minutes = (moment.at * 60).toInt().coerceIn(0, 24 * 60 - 1)
-                    momentInks[index].mark to "${moment.name} ${LocalTime.of(minutes / 60, minutes % 60).format(times)}"
-                },
+                // A moment's name is the page's words, its time among them.
+                node.moments.mapIndexed { index, moment -> momentInks[index].mark to moment.name },
             )
         }
     }
@@ -512,19 +515,14 @@ internal fun MeterView(node: Navree.Meter, modifier: Modifier = Modifier) {
     val said = node.summary ?: node.segments.joinToString(", ") { listOfNotNull(it.name, it.shown).joinToString(" ") }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ChartHeading(node.title, node.hint)
-        BoxWithConstraints(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = said }) {
-            val width = maxWidth.value
-            Row(Modifier.fillMaxWidth().height((28f * scale.coerceIn(1f, 1.5f)).dp).clip(RoundedCornerShape(8.dp)), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                node.segments.forEachIndexed { index, _ ->
-                    val share = shares[index] * grownShare
-                    if (share > 0f) {
-                        Box(Modifier.weight(share).fillMaxSize().background(inks[index].mark), contentAlignment = Alignment.Center) {
-                            if (ShareRules.saysInside(shares[index], width, scale)) {
-                                Text("${ShareRules.percent(shares[index])}%", style = MaterialTheme.typography.labelMedium, color = onMark(inks[index].mark), maxLines = 1)
-                            }
-                        }
-                    }
-                }
+        // The bar alone: the amounts are the page's words in the key, never a share worked out here.
+        Row(
+            Modifier.fillMaxWidth().height((20f * scale.coerceIn(1f, 1.5f)).dp).clip(RoundedCornerShape(6.dp)).clearAndSetSemantics { contentDescription = said },
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            node.segments.forEachIndexed { index, _ ->
+                val share = shares[index] * grownShare
+                if (share > 0f) Box(Modifier.weight(share).fillMaxSize().background(inks[index].mark))
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

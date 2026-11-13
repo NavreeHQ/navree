@@ -62,7 +62,7 @@ object RingsRules {
     /** The width of the whole in dp. */
     fun diameterDp(prominence: Navree.Prominence, count: Int, fontScale: Float): Float = when (prominence) {
         Navree.Prominence.LOW -> 36f
-        Navree.Prominence.MEDIUM -> 120f + 8f * (count - 3).coerceAtLeast(0)
+        Navree.Prominence.MEDIUM -> 148f + 8f * (count - 3).coerceAtLeast(0)
         Navree.Prominence.HIGH -> 184f
     } * if (prominence == Navree.Prominence.LOW) 1f else fontScale.coerceIn(1f, 1.4f)
 
@@ -205,7 +205,25 @@ object AxisRules {
         val bars = chart.kind == Navree.ChartKind.BAR
         val low = chart.y?.min ?: if (bars || lowest >= 0 && lowest < highest * 0.5) 0.0 else lowest - (highest - lowest) * 0.1
         val high = chart.y?.max ?: (highest + (highest - low) * 0.08)
-        return Bounds(low, if (high > low) high else low + 1.0)
+        // Ends the page did not give are rounded out to numbers a person reads at a glance.
+        val round = nice(low, if (high > low) high else low + 1.0)
+        return Bounds(chart.y?.min ?: round.low, chart.y?.max ?: round.high)
+    }
+
+    /** Two ends rounded out to a step of 1, 2, 2.5 or 5 times a power of ten, about four steps apart. */
+    fun nice(low: Double, high: Double): Bounds {
+        val span = high - low
+        if (span <= 0) return Bounds(low, low + 1.0)
+        val raw = span / 4.0
+        val power = Math.pow(10.0, Math.floor(Math.log10(raw)))
+        val step = when (val n = raw / power) {
+            in 0.0..1.0 -> 1.0
+            in 1.0..2.0 -> 2.0
+            in 2.0..2.5 -> 2.5
+            in 2.5..5.0 -> 5.0
+            else -> 10.0
+        } * power
+        return Bounds(Math.floor(low / step) * step, Math.ceil(high / step) * step)
     }
 
     /** A scatter's two axes; with equal axes, one range for both and a square plot. */
@@ -215,7 +233,8 @@ object AxisRules {
             val low = values.minOrNull() ?: 0.0
             val high = values.maxOrNull() ?: 1.0
             val pad = (high - low).takeIf { it > 0 }?.times(0.08) ?: 1.0
-            return Bounds(measure?.min ?: (low - pad), measure?.max ?: (high + pad))
+            val round = nice(low - pad, high + pad)
+            return Bounds(measure?.min ?: round.low, measure?.max ?: round.high)
         }
         val x = padded(points.map { it.x }, plot.x)
         val y = padded(points.map { it.y }, plot.y)

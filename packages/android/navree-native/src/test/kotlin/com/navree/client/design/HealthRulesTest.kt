@@ -177,6 +177,13 @@ class AxisRulesTest {
     }
 
     @Test
+    fun ends_the_page_did_not_give_are_round_numbers() {
+        assertEquals(AxisRules.Bounds(200.0, 500.0), AxisRules.nice(267.3, 477.6))
+        assertEquals(AxisRules.Bounds(0.0, 10.0), AxisRules.nice(0.0, 9.72))
+        assertEquals(AxisRules.Bounds(650.0, 900.0), AxisRules.nice(664.6, 858.4))
+    }
+
+    @Test
     fun the_measures_own_bounds_win() {
         val chart = Navree.Chart(series = listOf(Navree.Series(label = "Load", values = listOf(310.0, 462.0))), y = Navree.Measure(min = 200.0, max = 500.0))
         assertEquals(AxisRules.Bounds(200.0, 500.0), AxisRules.values(chart))

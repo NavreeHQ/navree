@@ -1,6 +1,10 @@
 package com.navree.client
 
 import android.os.ParcelFileDescriptor
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.platform.app.InstrumentationRegistry
 
 /**
@@ -18,6 +22,21 @@ object Shots {
 
     /** The device the job runs on: `phone` or `tablet`. */
     val device: String get() = arguments.getString("device") ?: "device"
+
+    /**
+     * The look's layout direction. Setting right to left as the developer
+     * option does (`debug.force_rtl`) did not reach the test's process on the
+     * emulator image, so in the rtl look the composition is laid out right to
+     * left here; the system bars stay as the system draws them.
+     */
+    @Composable
+    fun Looked(content: @Composable () -> Unit) {
+        if (look == "rtl") {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { content() }
+        } else {
+            content()
+        }
+    }
 
     fun take(name: String) {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()

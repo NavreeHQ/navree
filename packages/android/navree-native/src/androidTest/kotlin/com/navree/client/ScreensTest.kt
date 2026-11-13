@@ -46,7 +46,7 @@ class ScreensTest {
             made = NavreeSession(compose.activity.application, config, origin.toHttpUrl())
             made.effects.activity = compose.activity
         }
-        compose.setContent { NavreeApp(made.driver, config, image = made::image) }
+        compose.setContent { Shots.Looked { NavreeApp(made.driver, config, image = made::image) } }
         waitFor("the app is ready", 60_000) { made.driver.nav.stage == Stage.Ready }
         return made
     }

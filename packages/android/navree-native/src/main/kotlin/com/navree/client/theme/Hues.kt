@@ -44,6 +44,9 @@ object Hues {
     /** How colourful a hue's palette is: slate is a grey with a trace of blue; the rest are vivid enough to tell apart. */
     fun chroma(hue: Navree.Hue): Double = if (hue == Navree.Hue.SLATE) 16.0 else 48.0
 
+    /** How colourful a track is: the hue at a low chroma, as Material's own progress tracks are. */
+    fun trackChroma(hue: Navree.Hue): Double = minOf(chroma(hue), 20.0)
+
     /** The tone a mark (an arc, a bar, a point) is drawn at: bright on a light surface, lighter on a dark one. */
     fun markTone(dark: Boolean): Int = if (dark) 70 else 50
 

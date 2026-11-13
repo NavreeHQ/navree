@@ -73,7 +73,7 @@ class LiveDemosTest {
             app = NavreeSession(compose.activity.application, config, origin.toHttpUrl())
             app.effects.activity = compose.activity
         }
-        compose.setContent { NavreeApp(app.driver, config, image = app::image) }
+        compose.setContent { Shots.Looked { NavreeApp(app.driver, config, image = app::image) } }
         waitFor("the app is ready", 60_000) { app.driver.nav.stage == Stage.Ready }
         settled(app)
         return app
