@@ -304,9 +304,32 @@ import Testing
     #expect(AxisRules.ticks(count: 14, most: 3) == [0, 5, 10])
     #expect(AxisRules.ticks(count: 0, most: 5) == [])
     // The first label starts at its mark: a gap holds a label and a half.
-    #expect(AxisRules.most(width: 300, label: 48) == 4)
-    #expect(AxisRules.most(width: 260, label: 39) == 4)
-    #expect(AxisRules.most(width: 10, label: 48) == 2)
+    #expect(AxisRules.most(width: 300, label: 48) == 3)
+    #expect(AxisRules.most(width: 260, label: 39) == 3)
+    #expect(AxisRules.most(width: 10, label: 48) == 1)
+    // A plot not yet laid out names one day, never all of them.
+    #expect(AxisRules.most(width: .infinity, label: 35) == 1)
+    #expect(AxisRules.most(width: 0, label: 35) == 1)
+}
+
+@Test func theDaysAlongAChartsFootNeverRunIntoEachOther() {
+    // The store's day on an iPad: 30 days of "16 Oct" (35 points in the
+    // axis's type) under a plot of 297 points in a carousel's card.
+    let most = AxisRules.most(width: 297, label: 35)
+    #expect(AxisRules.ticks(count: 30, most: most) == [0, 10, 20])
+    // At every plot width and number of days, two marks named stand a label
+    // and a half and a space apart: the first label, set from its mark, never
+    // runs into the next, which stands over its middle.
+    for count in [7, 14, 30, 31, 90, 96] {
+        for width in stride(from: 120.0, through: 1200, by: 37) {
+            for label in [20.0, 35, 48] {
+                let marks = AxisRules.ticks(count: count, most: AxisRules.most(width: width, label: label))
+                guard marks.count > 1 else { continue }
+                let gap = Double(marks[1] - marks[0]) * width / Double(count)
+                #expect(gap >= label * 1.5 + 12, "count \(count), width \(width), label \(label)")
+            }
+        }
+    }
 }
 
 @Test func aGapIsAGapTheLineBreaksThere() {
