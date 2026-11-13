@@ -125,6 +125,9 @@ internal val LocalRoom = compositionLocalOf { 0f }
 /** Whether the part being drawn is one of the parts of a line across, where it must not take the whole width. */
 internal val LocalInLine = compositionLocalOf { false }
 
+/** Whether the part being drawn stands in a card: tabs there are one choice of a few over the card's content, not a second bar. */
+internal val LocalInCard = compositionLocalOf { false }
+
 /** The width of the pane a screen is drawn in, in dp; 0 outside a screen. */
 internal val LocalPane = compositionLocalOf { 0f }
 

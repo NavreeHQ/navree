@@ -89,8 +89,10 @@ import com.navree.client.R
 import com.navree.client.core.Events
 import com.navree.client.design.ContentRules
 import com.navree.client.design.ListRules
+import com.navree.client.design.ProgressRules
 import com.navree.client.design.ToneRole
 import com.navree.client.design.TypeRole
+import com.navree.client.design.expressive.ConnectedChoice
 import com.navree.client.design.expressive.Waiting
 import com.navree.client.theme.toneColours
 import com.navree.client.design.CompositionRules
@@ -371,10 +373,16 @@ internal fun IconView(node: Navree.Icon, modifier: Modifier = Modifier, tint: Co
 private fun ProgressView(node: Navree.Progress, modifier: Modifier) {
     val described = modifier.fillMaxWidth().semantics { node.label?.let { contentDescription = it } }
     val value = node.value
+    // The fill is the colour of the measure it belongs to, else the colour of what it means; with neither, the accent.
+    val fill = when (ProgressRules.fill(node)) {
+        ProgressRules.Fill.Measure -> inkOf(node.colour, Navree.Hue.ACCENT).mark
+        ProgressRules.Fill.Tone -> markColour(node.tone)
+        ProgressRules.Fill.Accent -> MaterialTheme.colorScheme.primary
+    }
     if (value != null) {
-        LinearProgressIndicator(progress = { (value / 1000f).coerceIn(0f, 1f) }, modifier = described)
+        LinearProgressIndicator(progress = { (value / 1000f).coerceIn(0f, 1f) }, modifier = described, color = fill)
     } else {
-        LinearProgressIndicator(modifier = described)
+        LinearProgressIndicator(modifier = described, color = fill)
     }
 }
 
@@ -445,6 +453,10 @@ internal fun EmptyView(node: Navree.Empty, place: Place, modifier: Modifier = Mo
 @Composable
 private fun FactsView(node: Navree.Facts, place: Place, modifier: Modifier) {
     val window = LocalUi.current.window
+    if (ContentRules.factsAsFigures(node)) {
+        FactFigures(node, modifier)
+        return
+    }
     val columns = if (window.width >= com.navree.client.design.WidthClass.Expanded && !window.largeText) 2 else 1
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         for (line in node.items.chunked(columns)) {
@@ -535,8 +547,8 @@ private fun GridView(node: Navree.Grid, place: Place, modifier: Modifier) {
 @Composable
 private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthDp: Float) {
     val gap = ContentRules.gap(node.gap)
-    val columns = ListRules.gridColumns(widthDp.toInt(), node.min, gap, node.cols, LocalUi.current.window.fontScale)
     val shown = node.children.filter { inFlow(it, place.screen) }
+    val columns = ListRules.gridColumns(widthDp.toInt(), node.min, gap, node.cols, LocalUi.current.window.fontScale, shown.size)
     val cell = ContentRules.cardWidthDp(widthDp, columns, gap)
     val stretch = ListRules.stretchesLastLine(shown)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(gap.dp)) {
@@ -691,8 +703,24 @@ private fun TabsView(node: Navree.Tabs, place: Place, modifier: Modifier) {
     val fromServer = node.items.indexOfFirst { it.selected }.coerceAtLeast(0)
     var chosen by rememberSaveable(node.id, fromServer) { mutableIntStateOf(fromServer) }
     if (node.items.isEmpty()) return
+    val inCard = LocalInCard.current && node.items.size <= 4
+    val choose: (Int) -> Unit = { index ->
+        val item = node.items[index]
+        val href = item.href
+        // A tab with an address is another page of the same screen; one without shows its own children.
+        if (href != null && item.children.isEmpty()) {
+            ui.act(place, Navree.Action.Navigate(href, Navree.Present.REPLACE))
+        } else {
+            chosen = index
+            // Tabs with an id are the core's to keep: it fetches what the tab shows, and the tree says which is chosen.
+            node.id?.let { ui.send(Events.tab(place.id, it, index)) }
+        }
+    }
     Column(modifier.fillMaxWidth()) {
-        SecondaryTabRow(selectedTabIndex = chosen.coerceIn(0, node.items.lastIndex)) {
+        if (inCard) {
+            // In a card, tabs are one choice of a few over the card's content: a connected button group, not a second bar.
+            ConnectedChoice(node.items.map { it.label }, chosen.coerceIn(0, node.items.lastIndex), { true }, choose)
+        } else SecondaryTabRow(selectedTabIndex = chosen.coerceIn(0, node.items.lastIndex)) {
             node.items.forEachIndexed { index, item ->
                 Tab(
                     selected = index == chosen,
@@ -918,3 +946,29 @@ private fun deliveryWord(delivery: Navree.Delivery): String = stringResource(
 /** The colours a tone's container is drawn with, for code that has a tone role in hand. */
 @Composable
 internal fun toneRoleColours(role: ToneRole) = toneColours(role)
+
+/**
+ * Facts that are a few short words stand as small figures in columns: each a
+ * label over its value, with only the room between them that a line of text
+ * needs. TalkBack reads a fact as one thing.
+ */
+@Composable
+private fun FactFigures(node: Navree.Facts, modifier: Modifier) {
+    val room = LocalRoom.current
+    val fontScale = LocalUi.current.window.fontScale
+    val columns = if (room > 0f) ContentRules.factColumns(room, node.items.size, fontScale) else minOf(2, node.items.size)
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        for (line in node.items.chunked(columns)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ContentRules.FACT_GAP_DP.dp)) {
+                for (fact in line) {
+                    val value = (fact.value.single() as Navree.Text).value
+                    Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                        Text(fact.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(value, style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+                repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}

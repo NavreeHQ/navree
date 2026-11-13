@@ -131,7 +131,9 @@ object ListRules {
      * at least one. The least width grows with the person's text size, so a
      * number is never broken across lines to keep a column.
      */
-    fun gridColumns(contentWidthDp: Int, minColumnDp: Int?, gapDp: Int, most: Int? = null, fontScale: Float = 1f): Int {
+    fun gridColumns(contentWidthDp: Int, minColumnDp: Int?, gapDp: Int, most: Int? = null, fontScale: Float = 1f, count: Int = Int.MAX_VALUE): Int {
+        // A grid that gives a count and no least width is that many columns: nothing makes it give one up.
+        if (minColumnDp == null && most != null && most > 0) return minOf(most, count.coerceAtLeast(1))
         val least = ((minColumnDp ?: 160) * fontScale.coerceAtLeast(1f)).toInt().coerceAtLeast(48)
         val fit = ((contentWidthDp + gapDp) / (least + gapDp)).coerceAtLeast(1)
         return if (most != null && most > 0) minOf(fit, most) else fit
@@ -389,6 +391,24 @@ object ContentRules {
 
     /** Label and value sit side by side until the text is large; then the value goes under its label. */
     fun factsStacked(window: WindowInfo): Boolean = window.largeText
+
+    /**
+     * Facts a few and short enough to stand as small figures in columns: two
+     * to eight, each a label over one short word or number, none with an
+     * icon or lines of its own. Others keep the list of the system's own.
+     */
+    fun factsAsFigures(facts: Navree.Facts): Boolean =
+        facts.items.size in 2..8 && facts.items.all { item ->
+            item.icon == null && item.details.isEmpty() && (item.value.singleOrNull() as? Navree.Text)?.value?.let { it.length <= 18 } == true
+        }
+
+    /** How many columns facts as figures stand in, in a room this wide: at least 148 dp each, up to four, one at the largest text. */
+    fun factColumns(roomDp: Float, count: Int, fontScale: Float): Int {
+        val least = 148f * fontScale.coerceAtLeast(1f)
+        return ((roomDp + FACT_GAP_DP) / (least + FACT_GAP_DP)).toInt().coerceIn(1, 4).coerceAtMost(count.coerceAtLeast(1))
+    }
+
+    const val FACT_GAP_DP = 16
 
     /**
      * How a status is drawn. In a row it is a word in its tone's colour after

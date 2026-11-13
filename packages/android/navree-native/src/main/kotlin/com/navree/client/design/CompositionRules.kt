@@ -110,8 +110,23 @@ object CompositionRules {
      */
     fun roomLeftDp(roomDp: Float, shown: List<Navree.Node>, gapDp: Float, fontScale: Float): Float {
         val kept = shown.filter { !grows(it) }.sumOf { leastAcrossDp(it, fontScale).toDouble() }.toFloat()
-        return (roomDp - kept - gapDp * (shown.size - 1).coerceAtLeast(0)).coerceAtLeast(1f)
+        val growing = shown.count { grows(it) }.coerceAtLeast(1)
+        return ((roomDp - kept - gapDp * (shown.size - 1).coerceAtLeast(0)) / growing).coerceAtLeast(1f)
     }
+
+    /**
+     * Whether a vertical stack is taken apart into the blocks of its screen,
+     * each part drawn as the screen's own line. A stack that says more than
+     * "one under the other from the start" is drawn whole, so what it says
+     * holds: one that centres or ends its parts, one that turns along the
+     * line in a wide room, one with padding. In a pane too narrow to turn it,
+     * a stack that turns is a plain column and is taken apart like any.
+     */
+    fun splitsIntoBlocks(stack: Navree.Stack, paneDp: Float): Boolean =
+        stack.axis == Navree.Axis.VERTICAL &&
+            (stack.align == null || stack.align == Navree.Align.START) &&
+            (stack.wide == null || stack.wide == stack.axis || !wide(paneDp - 2 * 24)) &&
+            stack.pad == 0
 
     /** An icon as large as a text style, in dp. Icons do not grow with the text, as Google's guidance has it. */
     fun iconDp(scale: Navree.TextStyle?): Int = when (scale) {
