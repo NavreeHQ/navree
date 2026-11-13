@@ -26,10 +26,13 @@ use crate::op::ToastTone;
 use crate::theme::{Appearance, Density, Theme, ThemeMenu, ThemeSetting};
 use crate::view::View;
 
+mod contribute;
+pub use contribute::{NativeClient, NativeFamily, NativeShellPart, NativeShellParts, NativeSignIn};
+
 #[cfg(feature = "native-preview")]
 mod native;
 #[cfg(feature = "native-preview")]
-pub(crate) use native::{PageNote, routes as native_routes};
+pub(crate) use native::{PageNote, contributed as native_contributed, routes as native_routes};
 
 /// The cookie holding a toast for the next page.
 pub(crate) const FLASH_COOKIE: &str = "navree_ui_flash";

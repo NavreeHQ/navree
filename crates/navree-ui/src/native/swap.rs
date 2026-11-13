@@ -710,7 +710,7 @@ fn native(mut view: View, request: &Arc<scope::Request>) -> Response {
     // The stamp of the shell the page stands in, so the client knows its own is current.
     let shell = view
         .note()
-        .map(|note| note.shell_stamp(request.sign_in.as_deref()))
+        .map(|note| note.shell_stamp(request.sign_in.as_deref(), &request.shell_parts))
         .unwrap_or_default();
     let parts = view.native_parts();
     let (envelope, answered) = match rows_after(&page, request) {
@@ -975,14 +975,40 @@ async fn stamped(
         .try_get::<crate::pages::PagesOptions>()
         .await
         .map(|options| options.sign_in.clone());
+    let parts = shell_parts(ctx, &native.client).await;
     match Arc::try_unwrap(native) {
         Ok(mut request) => {
             request.stamp = (*stamp).clone();
             request.sign_in = sign_in;
+            request.shell_parts = parts;
             Arc::new(request)
         }
         Err(native) => native,
     }
+}
+
+/// What the app's modules say of the shell document for `client`.
+pub(crate) async fn shell_parts(
+    ctx: &navree_kernel::AppContext,
+    client: &navree_native::Client,
+) -> crate::NativeShellParts {
+    use navree_native::Platform as P;
+    let who = crate::NativeClient::new(match client.platform {
+        P::Ios | P::Ipados | P::Macos | P::Watchos | P::Tvos | P::Visionos => {
+            crate::NativeFamily::Apple
+        }
+        P::Android | P::Wearos => crate::NativeFamily::Android,
+        _ => crate::NativeFamily::Other,
+    });
+    let mut parts = crate::NativeShellParts::default();
+    for part in ctx
+        .get_all::<dyn crate::NativeShellPart>()
+        .await
+        .unwrap_or_default()
+    {
+        part.contribute(&mut parts, &who);
+    }
+    parts
 }
 
 /// The layer in the context slot, innermost, that makes current again who
@@ -1054,7 +1080,15 @@ async fn answer(native: Arc<scope::Request>, mut request: Request, next: Next) -
         // they can't, or there are none (a handler that keeps its ops for the
         // browser's runtime), the fallback stands: a redirect the client
         // follows to a screen, or a page that was answered as a screen already.
-        if let Some(ops) = native_ops(&envelope.ops).filter(|ops| !ops.is_empty()) {
+        let signed_out = envelope.signed_out;
+        let said = native_ops(&envelope.ops).map(|mut ops| {
+            // The person signed out: before the rest, which still applies.
+            if signed_out {
+                ops.insert(0, navree_native::Op::SignedOut);
+            }
+            ops
+        });
+        if let Some(ops) = said.filter(|ops| !ops.is_empty()) {
             let (parts, _) = crate::module::to_ops(response, envelope, status).into_parts();
             let mut native = respond(
                 parts.status,

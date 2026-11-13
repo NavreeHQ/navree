@@ -61,6 +61,28 @@ pub fn graded(screen: &Screen) -> (Grade, Vec<String>) {
             missing.push(format!("the action “{}” has no role", button.label));
         }
     }
+    // A screen is for one thing: two actions that both claim to be it are one too many.
+    let main: Vec<&str> = screen
+        .actions
+        .iter()
+        .filter_map(|action| match action {
+            N::Button(button) if matches!(button.role, n::Role::Primary | n::Role::Create) => {
+                Some(button.label.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+    if main.len() > 1 {
+        missing.push(format!(
+            "the screen has {} main actions: {}",
+            match main.len() {
+                2 => "two".to_owned(),
+                3 => "three".to_owned(),
+                count => count.to_string(),
+            },
+            sentence(&main)
+        ));
+    }
     let mut stack: Vec<&N> = vec![&screen.body];
     // The id of the region a table stands in names the table.
     let mut named: Vec<(&N, Option<&str>)> = Vec::new();
@@ -89,6 +111,16 @@ pub fn graded(screen: &Screen) -> (Grade, Vec<String>) {
         Grade::Layout
     };
     (grade, missing)
+}
+
+/// The labels as a sentence names them: “A” and “B”, or “A”, “B” and “C”.
+fn sentence(labels: &[&str]) -> String {
+    let quoted: Vec<String> = labels.iter().map(|label| format!("“{label}”")).collect();
+    match quoted.split_last() {
+        None => String::new(),
+        Some((only, [])) => only.clone(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+    }
 }
 
 /// Whether `body` is what a searched choice is answered with: a choice, and
@@ -305,6 +337,50 @@ mod tests {
             coverage
                 .to_string()
                 .ends_with("1 of 2 native: 1 idiom, 0 layout, 1 web")
+        );
+    }
+
+    #[test]
+    fn a_screen_with_more_than_one_main_action_is_a_layout() {
+        let action = |label: &str, role| {
+            N::Button(n::Button {
+                label: label.to_owned(),
+                role,
+                ..n::Button::default()
+            })
+        };
+        let screen = |actions: Vec<N>| Screen {
+            actions,
+            ..Screen::new("Order CS-20481", N::text("x"))
+        };
+        // One main action and the others that are not: as it should be.
+        let one = screen(vec![
+            action("Mark as packed", n::Role::Primary),
+            action("Print label", n::Role::Secondary),
+        ]);
+        assert_eq!(graded(&one), (Grade::Idiom, Vec::new()));
+        let two = screen(vec![
+            action("Mark as packed", n::Role::Primary),
+            action("Print label", n::Role::Create),
+        ]);
+        assert_eq!(
+            graded(&two),
+            (
+                Grade::Layout,
+                vec![
+                    "the screen has two main actions: “Mark as packed” and “Print label”"
+                        .to_owned()
+                ]
+            )
+        );
+        let three = screen(vec![
+            action("A", n::Role::Primary),
+            action("B", n::Role::Primary),
+            action("C", n::Role::Primary),
+        ]);
+        assert_eq!(
+            graded(&three).1,
+            ["the screen has three main actions: “A”, “B” and “C”"]
         );
     }
 

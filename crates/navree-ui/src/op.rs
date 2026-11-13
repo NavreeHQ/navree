@@ -286,6 +286,9 @@ pub struct Envelope {
     pub modules: Vec<&'static str>,
     /// The ops, applied in order.
     pub ops: Vec<Op>,
+    /// Whether the reply says the person signed out: said to a native client only.
+    #[serde(skip)]
+    pub(crate) signed_out: bool,
 }
 
 impl Envelope {
@@ -295,6 +298,7 @@ impl Envelope {
             build: assets::BUILD,
             modules: Vec::new(),
             ops,
+            signed_out: false,
         }
     }
 }
@@ -349,6 +353,7 @@ pub struct Reply {
     fallback: Fallback,
     flash: Option<(ToastTone, String)>,
     uses: crate::node::Uses,
+    signed_out: bool,
 }
 
 impl Reply {
@@ -365,6 +370,7 @@ impl Reply {
             fallback: Fallback::Redirect(href),
             flash: None,
             uses: crate::node::Uses::NONE,
+            signed_out: false,
         }
     }
 
@@ -376,6 +382,7 @@ impl Reply {
             fallback: Fallback::Redirect(href.into()),
             flash: None,
             uses: crate::node::Uses::NONE,
+            signed_out: false,
         }
     }
 
@@ -391,6 +398,7 @@ impl Reply {
             fallback: Fallback::Redirect(href),
             flash: None,
             uses: crate::node::Uses::NONE,
+            signed_out: false,
         }
     }
 
@@ -402,6 +410,7 @@ impl Reply {
             fallback: Fallback::View(Box::new(view)),
             flash: None,
             uses: crate::node::Uses::NONE,
+            signed_out: false,
         }
     }
 
@@ -413,6 +422,7 @@ impl Reply {
             fallback: Fallback::Empty,
             flash: None,
             uses: crate::node::Uses::NONE,
+            signed_out: false,
         }
     }
 
@@ -448,6 +458,22 @@ impl Reply {
         self
     }
 
+    /// Says the person signed out with this reply, for a native client: it takes its push
+    /// device off the server, forgets its cookies and what it kept, and fetches the shell
+    /// again; the reply's other ops (the way to the sign-in page) still apply. A browser's
+    /// reply is what it was: its session is the cookie the server ended.
+    ///
+    /// ```
+    /// use navree_ui::{LocalHref, Reply};
+    ///
+    /// let reply = Reply::redirect(LocalHref::from("/sign-in?status=signed-out")).signed_out();
+    /// # let _ = reply;
+    /// ```
+    pub fn signed_out(mut self) -> Self {
+        self.signed_out = true;
+        self
+    }
+
     /// Sets the status of the ops response.
     pub fn status(mut self, status: StatusCode) -> Self {
         self.status = status;
@@ -458,6 +484,7 @@ impl Reply {
     fn fallback_response(self) -> (Response, Envelope, StatusCode) {
         let mut envelope = Envelope::new(self.ops);
         envelope.modules = assets::scripts(self.uses).collect();
+        envelope.signed_out = self.signed_out;
         let mut response = match self.fallback {
             Fallback::Redirect(href) => {
                 let mut response = StatusCode::SEE_OTHER.into_response();

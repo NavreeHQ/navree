@@ -156,7 +156,11 @@ impl AppShell {
     /// the theme's accent for a light and a dark ground, and how screens are
     /// presented. `build` is the app's stamp; `sign_in` is where a guest goes,
     /// which a client presents over everything, with no chrome.
-    pub(crate) fn native_document(&self, sign_in: Option<&str>) -> navree_native::Shell {
+    pub(crate) fn native_document(
+        &self,
+        sign_in: Option<&str>,
+        parts: &crate::NativeShellParts,
+    ) -> navree_native::Shell {
         let mut document = document(
             &self.shell,
             self.user_menu.as_ref(),
@@ -164,6 +168,7 @@ impl AppShell {
             &self.appearance(),
         );
         document.routes = routes(sign_in);
+        contributed(&mut document, parts);
         document.stamped()
     }
 }
@@ -172,7 +177,7 @@ impl PageNote {
     /// The stamp of the shell the page is drawn in: the stamp the shell's own
     /// document has for the same person, so a client that sees another
     /// fetches the shell again.
-    pub(crate) fn shell_stamp(&self, sign_in: Option<&str>) -> String {
+    pub(crate) fn shell_stamp(&self, sign_in: Option<&str>, parts: &crate::NativeShellParts) -> String {
         let page = &self.page;
         let mut document = document(
             &page.shell,
@@ -181,7 +186,38 @@ impl PageNote {
             &page.appearance,
         );
         document.routes = routes(sign_in);
+        contributed(&mut document, parts);
         document.stamped().stamp
+    }
+}
+
+/// What the app's modules said of the document: where it signs a person in and where a
+/// device's push token goes. A path the protocol would refuse (another origin, a control
+/// character) is left out, whole: a hand-over missing one of its routes can't be made.
+pub(crate) fn contributed(document: &mut navree_native::Shell, parts: &crate::NativeShellParts) {
+    use navree_native::device::OriginPath;
+    if let Some(routes) = &parts.sign_in
+        && let (Ok(start), Ok(exchange)) = (
+            OriginPath::parse(&routes.start),
+            OriginPath::parse(&routes.exchange),
+        )
+    {
+        document.sign_in = Some(s::SignIn {
+            start,
+            exchange,
+            callback: routes.callback.clone(),
+            second_step: routes
+                .second_step
+                .as_deref()
+                .and_then(|path| OriginPath::parse(path).ok()),
+        });
+    }
+    if let Some(register) = parts
+        .push_register
+        .as_deref()
+        .and_then(|path| OriginPath::parse(path).ok())
+    {
+        document.device.get_or_insert_with(s::Device::default).push = Some(s::Push { register });
     }
 }
 

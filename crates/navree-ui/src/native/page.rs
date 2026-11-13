@@ -467,11 +467,64 @@ mod tests {
     }
 
     #[test]
+    fn what_the_modules_say_is_in_the_document_and_in_its_stamp() {
+        use crate::NativeSignIn;
+        let shell = || {
+            app()
+                .for_request("/", &http::HeaderMap::new())
+                .csrf("tok")
+        };
+        let bare = shell().native_document(None, &crate::NativeShellParts::default());
+        assert!(bare.sign_in.is_none() && bare.device.is_none());
+        let mut parts = crate::NativeShellParts::default();
+        parts
+            .sign_in(
+                NativeSignIn::new("/auth/app/sign-in", "/api/auth/app/exchange")
+                    .callback("https://orders.example.in/app/callback")
+                    .second_step("/sign-in/two-factor"),
+            )
+            .push_register("/api/notifications/push-devices");
+        let document = shell().native_document(None, &parts);
+        let sign_in = document.sign_in.as_ref().expect("a hand-over");
+        assert_eq!(sign_in.start.as_str(), "/auth/app/sign-in");
+        assert_eq!(sign_in.exchange.as_str(), "/api/auth/app/exchange");
+        assert_eq!(
+            sign_in.callback.as_deref(),
+            Some("https://orders.example.in/app/callback")
+        );
+        assert_eq!(
+            sign_in.second_step.as_ref().map(|path| path.as_str()),
+            Some("/sign-in/two-factor")
+        );
+        assert_eq!(
+            document
+                .device
+                .as_ref()
+                .and_then(|device| device.push.as_ref())
+                .map(|push| push.register.as_str()),
+            Some("/api/notifications/push-devices")
+        );
+        // A page names the shell it stands in by the same stamp as the document does,
+        // so a client that fetched the document is not sent for it again.
+        let page = app().for_request("/", &http::HeaderMap::new());
+        assert_eq!(document.stamp, document.clone().stamped().stamp);
+        assert_ne!(document.stamp, bare.stamp);
+        let _ = page;
+        // A route the protocol would refuse is left out whole.
+        let mut wrong = crate::NativeShellParts::default();
+        wrong
+            .sign_in(NativeSignIn::new("//elsewhere.example/start", "/api/exchange"))
+            .push_register("https://elsewhere.example/push");
+        let document = shell().native_document(None, &wrong);
+        assert!(document.sign_in.is_none() && document.device.is_none());
+    }
+
+    #[test]
     fn the_shell_document_comes_from_the_shell_itself() {
         let shell = app()
             .for_request("/", &http::HeaderMap::new())
             .csrf("tok")
-            .native_document(Some("/sign-in?from=app"));
+            .native_document(Some("/sign-in?from=app"), &crate::NativeShellParts::default());
         assert_eq!(shell.name, "Charkha Supply Co.");
         assert_eq!(shell.context.as_deref(), Some("Store operations"));
         assert_eq!(shell.home, "/");

@@ -513,6 +513,14 @@ impl Controller for Pages {
                 },
             )
             .public(),
+            RouteDef::on(Method::POST, "!/sign-out", || async {
+                Reply::redirect(navree_ui::html::LocalHref::from(
+                    "/sign-in?status=signed-out",
+                ))
+                .signed_out()
+                .into_response()
+            })
+            .public(),
             RouteDef::on(Method::GET, "!/feed/rows", || async {
                 navree_ui::ActivityFeed::answer(
                     [navree_ui::ActivityItem::new("Manpreet Gill", "packed").id("event-9")],
@@ -1467,6 +1475,32 @@ async fn an_option_query_is_a_choice_for_a_native_client() {
     assert_eq!(choice.more.as_deref(), Some("/agents/options?page=2"));
     let web = app.client().get("/agents/options?q=kaur").send().await;
     assert!(web.text().contains(r#"data-slot="option-page""#));
+}
+
+#[tokio::test]
+async fn signing_out_is_said_to_a_native_client_and_to_no_one_else() {
+    let app = app().await;
+    let (_, answer) = ask_native(&app, Method::POST, "/sign-out", &[], "").await;
+    // The person signed out first; the way to the sign-in page still applies.
+    assert!(
+        matches!(
+            answer.ops.as_slice(),
+            [NativeOp::SignedOut, NativeOp::Navigate { href, .. }]
+                if href == "/sign-in?status=signed-out"
+        ),
+        "{:?}",
+        answer.ops
+    );
+    // The runtime's ops are what they always were.
+    let web = app
+        .client()
+        .post("/sign-out")
+        .header("x-navree-ui", "1")
+        .send()
+        .await
+        .text();
+    assert!(!web.contains("signed_out") && !web.contains("signedout"), "{web}");
+    assert!(web.contains(r#""op":"navigate""#), "{web}");
 }
 
 #[tokio::test]

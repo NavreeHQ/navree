@@ -153,7 +153,10 @@ pub use select::{
     Choice, ChoiceList, Combobox, Command, CommandGroup, CommandItem, MultiSelect, OptionQuery,
     Select, SelectLabels,
 };
-pub use shell::{AppPage, AppShell, Collapse, NavGroup, NavItem, Shell, ShellLayout, UserMenu};
+pub use shell::{
+    AppPage, AppShell, Collapse, NativeClient, NativeFamily, NativeShellPart, NativeShellParts,
+    NativeSignIn, NavGroup, NavItem, Shell, ShellLayout, UserMenu,
+};
 pub use sortable::{
     Landing, ListState, Move, MoveError, MoveRejected, Placement, RankedLists, Refusal, SortItem,
     SortLabels, SortLayout, SortList, Sortable, Spot,

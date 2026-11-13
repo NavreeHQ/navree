@@ -122,11 +122,23 @@ async fn document(ctx: &AppContext, parts: &Parts) -> Response {
         .try_get::<PagesOptions>()
         .await
         .map(|options| options.sign_in.clone());
+    // The client the document is for: what the app's modules say of it depends on its system.
+    let client = match super::scope::read(&parts.headers, "") {
+        super::scope::Reading::Asked(super::scope::Asked::Native(request)) => {
+            Some(request.client.clone())
+        }
+        _ => None,
+    };
+    let contributed = match &client {
+        Some(client) => super::swap::shell_parts(ctx, client).await,
+        None => crate::NativeShellParts::default(),
+    };
     let document = match shell_of(ctx, parts).await {
-        Some(shell) => shell.native_document(sign_in.as_deref()),
+        Some(shell) => shell.native_document(sign_in.as_deref(), &contributed),
         None => {
             let mut document = navree_native::Shell::new(crate::assets::BUILD, "");
             document.routes = crate::shell::native_routes(sign_in.as_deref());
+            crate::shell::native_contributed(&mut document, &contributed);
             document.stamped()
         }
     };

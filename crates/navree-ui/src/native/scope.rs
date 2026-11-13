@@ -47,6 +47,9 @@ pub(crate) struct Request {
     /// Where a guest signs in: the route a shell document presents over
     /// everything, and so part of the shell's stamp.
     pub(crate) sign_in: Option<String>,
+    /// What the app's modules say of the shell document for this client: where it signs
+    /// a person in and where a device's push token goes. Part of the shell's stamp.
+    pub(crate) shell_parts: crate::NativeShellParts,
     /// What components built during the request wrote for a native client and the
     /// HTML cannot hold: the typed values of each chart, by the id of its figure.
     /// The page's markup carries none of it, so a node built now and written for a
@@ -69,6 +72,7 @@ impl Request {
             region: None,
             stamp: super::Stamp::of(None),
             sign_in: None,
+            shell_parts: crate::NativeShellParts::default(),
             charts: std::sync::Mutex::default(),
             rows: std::sync::Mutex::default(),
             hints: std::sync::Mutex::default(),
@@ -167,6 +171,7 @@ pub(crate) fn read(headers: &HeaderMap, url: &str) -> Reading {
                 .map(str::to_owned),
             stamp: super::Stamp::of(None),
             sign_in: None,
+            shell_parts: crate::NativeShellParts::default(),
             charts: std::sync::Mutex::default(),
             rows: std::sync::Mutex::default(),
             hints: std::sync::Mutex::default(),
