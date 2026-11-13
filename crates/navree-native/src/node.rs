@@ -12,9 +12,10 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::action::Action;
 pub use crate::charts::{
-    Category, Centre, ClockMoment, ColorStrip, Colour, Curve, DayClock, DayPager, DayPick, Hint,
-    HintMark, Hour, Hue, Measure, Meter, MiniColumn, MiniColumns, PagerWords, RangeScale, Reference,
-    ReferenceKind, Ring, RingValue, Rings, RingsCentre, Segment, Stacking, StripCell, Zone,
+    CalendarHeatmap, Category, Centre, ClockMoment, ColorStrip, Colour, Curve, DayClock, DayPager,
+    DayPick, HeatDay, Hint, HintMark, Hour, Hue, Measure, Meter, MiniColumn, MiniColumns,
+    PagerWords, RangeScale, Reference, ReferenceKind, Ring, RingValue, Rings, RingsCentre, Segment,
+    Stacking, StripCell, Zone,
 };
 use crate::input::Input;
 
@@ -134,6 +135,8 @@ pub enum Node {
     Strip(ColorStrip),
     /// Where one value sits on a scale between a low and a high end.
     Range(RangeScale),
+    /// A calendar of days, each shaded by its value.
+    CalendarHeatmap(CalendarHeatmap),
     /// A kind this build has never heard of, from a newer server. A client
     /// draws its `alt`, or shows the page in its web view when it has none.
     Unknown(Unknown),
@@ -237,6 +240,7 @@ impl Node {
             Self::Columns(node) => node.id.as_deref(),
             Self::Strip(node) => node.id.as_deref(),
             Self::Range(node) => node.id.as_deref(),
+            Self::CalendarHeatmap(node) => node.id.as_deref(),
             Self::Unknown(node) => node.id.as_deref(),
         }
     }
@@ -315,7 +319,8 @@ impl Node {
             | Self::Meter(_)
             | Self::Columns(_)
             | Self::Strip(_)
-            | Self::Range(_) => Vec::new(),
+            | Self::Range(_)
+            | Self::CalendarHeatmap(_) => Vec::new(),
         }
     }
 
@@ -418,7 +423,8 @@ impl Node {
             | Self::Meter(_)
             | Self::Columns(_)
             | Self::Strip(_)
-            | Self::Range(_) => Vec::new(),
+            | Self::Range(_)
+            | Self::CalendarHeatmap(_) => Vec::new(),
         }
     }
 

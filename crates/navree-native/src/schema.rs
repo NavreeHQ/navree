@@ -39,9 +39,10 @@ use serde_json::{Map, Value, json};
 
 use crate::action::{Action, Command, Pair, Present, State};
 use crate::charts::{
-    Category, Centre, ClockMoment, ColorStrip, Colour, Curve, DayClock, DayPager, DayPick, Hint,
-    HintMark, Hour, Hue, Measure, Meter, MiniColumn, MiniColumns, PagerWords, RangeScale, Reference,
-    ReferenceKind, Ring, RingValue, Rings, RingsCentre, Segment, Stacking, StripCell, Zone,
+    CalendarHeatmap, Category, Centre, ClockMoment, ColorStrip, Colour, Curve, DayClock, DayPager,
+    DayPick, HeatDay, Hint, HintMark, Hour, Hue, Measure, Meter, MiniColumn, MiniColumns,
+    PagerWords, RangeScale, Reference, ReferenceKind, Ring, RingValue, Rings, RingsCentre, Segment,
+    Stacking, StripCell, Zone,
 };
 use crate::client::{ClientDescriptor, Contrast, FormFactor, Platform, Scheme};
 use crate::device::{
@@ -608,7 +609,7 @@ union!(Node tag "t"
         Text, Rich, Image, Icon, Avatar, Badge, Progress, Banner, Empty, Facts, Table, Chart,
         Code, Button, Link, Menu, Form, Field, Sheet, Dialog, Popover, Native, Web, Toolbar,
         Gauge, Figure, Timeline, FeedRow, Message, Pane, Ring, Rings, DayClock,
-        DayPager, Meter, Columns, Strip, Range,
+        DayPager, Meter, Columns, Strip, Range, CalendarHeatmap,
     }
     structs {}
     units {}
@@ -739,6 +740,10 @@ object!(Segment { name } { value, shown, detail, colour });
 object!(Meter {} { id, title, segments, summary, hint });
 object!(RangeScale { min, max } {
     id, title, value, unit, shown, low, high, zones, summary, hint
+});
+object!(HeatDay { date } { value });
+object!(CalendarHeatmap {} {
+    id, title, days, first, last, colour, steps, label, unit, summary, hint
 });
 object!(StripCell { label } { category, value });
 object!(ColorStrip {} { id, title, key, cells, label, unit, shares, summary, hint });

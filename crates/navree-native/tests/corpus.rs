@@ -23,9 +23,9 @@ use navree_native::input::{
     ToggleInput, ToggleKind, Weekday,
 };
 use navree_native::node::{
-    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Category, Centre, Chart,
-    ChartKind, ClockMoment, Code, ColorStrip, Colour, Column, ColumnRole, DayClock, DayPager,
-    DayPick,
+    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, CalendarHeatmap, Category,
+    Centre, Chart, ChartKind, ClockMoment, Code, ColorStrip, Colour, Column, ColumnRole, DayClock,
+    DayPager, DayPick, HeatDay,
     Delivery, Dialog,
     Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Hour, Icon, Image, Justify, Link, List, Live,
@@ -2776,6 +2776,48 @@ fn screen_fitness() -> Envelope {
         summary: Some(s("Heart rate zones, morning run: 12 minutes. Steady for 5, Hard for 4, Easy for 2; one minute has no reading.")),
         ..ColorStrip::default()
     });
+    // Ten weeks of training, a day a cell: a rest day is a day of nothing, and a
+    // day with no reading is not a day of nothing.
+    let mut loads: Vec<(String, Option<i64>)> = Vec::new();
+    for (month, first, last) in [(9, 5, 30), (10, 1, 31), (11, 1, 13)] {
+        for day in first..=last {
+            let at = loads.len() as i64;
+            let load = at * 37 % 130;
+            let value = if at % 9 == 4 {
+                None
+            } else if load < 20 {
+                Some(0)
+            } else {
+                Some(load)
+            };
+            loads.push((format!("2026-{month:02}-{day:02}"), value));
+        }
+    }
+    let active = loads.iter().filter(|(_, load)| load.is_some_and(|load| load > 0)).count();
+    let missing = loads.iter().filter(|(_, load)| load.is_none()).count();
+    let highest = loads.iter().filter_map(|(_, load)| *load).max().unwrap_or(0);
+    let calendar = Node::CalendarHeatmap(CalendarHeatmap {
+        id: Some(s("training-calendar")),
+        title: Some(s("Training calendar")),
+        days: loads
+            .iter()
+            .map(|(date, load)| HeatDay {
+                date: s(date),
+                value: load.map(number),
+            })
+            .collect(),
+        first: Some(s("2026-09-05")),
+        last: Some(s("2026-11-13")),
+        colour: Some(Colour::new(Hue::Accent)),
+        steps: vec![number(30), number(60), number(90)],
+        label: Some(s("Training load")),
+        unit: Some(s("load")),
+        summary: Some(format!(
+            "Training calendar: {} days from 5 Sep to 13 Nov, {active} with training and {missing} with no reading. Highest load {highest}.",
+            loads.len()
+        )),
+        ..CalendarHeatmap::default()
+    });
     let days = || ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(s).to_vec();
     let minutes = |name: &str, hue: Hue, values: [i64; 7]| Series {
         label: s(name),
@@ -2896,6 +2938,12 @@ fn screen_fitness() -> Envelope {
                 title: Some(s("Morning run")),
                 style: SectionStyle::Card,
                 children: vec![run],
+                ..Section::default()
+            }),
+            Node::Section(Section {
+                title: Some(s("Consistency")),
+                style: SectionStyle::Card,
+                children: vec![calendar],
                 ..Section::default()
             }),
             Node::Section(Section {

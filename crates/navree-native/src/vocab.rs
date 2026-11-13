@@ -272,6 +272,7 @@ kinds! {
     Columns(MiniColumns) => "columns" since 0,
     Strip(ColorStrip) => "strip" since 0,
     Range(RangeScale) => "range" since 0,
+    CalendarHeatmap(CalendarHeatmap) => "calendar_heatmap" since 0,
 }
 
 /// A field that arrived after its type did: the type's name in the schema
@@ -772,11 +773,34 @@ impl Node {
                     ..n::Figure::default()
                 })
             }
+            Self::CalendarHeatmap(node) => {
+                // A bar for each of the latest days, a day with no reading a gap.
+                let days = &node.days[node.days.len().saturating_sub(OLDER_DAYS)..];
+                Node::Chart(n::Chart {
+                    id: node.id.clone(),
+                    kind: n::ChartKind::Bar,
+                    title: node.title.clone(),
+                    labels: days.iter().map(|day| day.date.clone()).collect(),
+                    series: vec![n::Series {
+                        label: node
+                            .label
+                            .clone()
+                            .or_else(|| node.title.clone())
+                            .unwrap_or_default(),
+                        values: days.iter().map(|day| day.value.clone()).collect(),
+                        ..n::Series::default()
+                    }],
+                    ..n::Chart::default()
+                })
+            }
             Self::Unknown(node) => return node.alt.as_deref().cloned(),
             _ => return None,
         })
     }
 }
+
+/// The most days of a calendar an older client is shown, as bars.
+const OLDER_DAYS: usize = 90;
 
 /// A number written without a fraction when it has none.
 fn quantity(value: f64) -> serde_json::Number {
@@ -829,8 +853,8 @@ mod tests {
     use super::*;
     use crate::node::{
         Avatar, Badge, Chart, ClockMoment, Colour, DayClock, DayPager, Direction, FeedRow, Figure,
-        Category, ColorStrip, Gauge, Hour, Hue, Icon, Message, Meter, MiniColumn, MiniColumns,
-        Moment, PagerWords, Pane, PaneRole, RangeScale, Ring, RingValue, Rings, RingsCentre,
+        CalendarHeatmap, Category, ColorStrip, Gauge, HeatDay, Hour, Hue, Icon, Message, Meter,
+        MiniColumn, MiniColumns, Moment, PagerWords, Pane, PaneRole, RangeScale, Ring, RingValue, Rings, RingsCentre,
         RowState, Run, Section, Segment, Stack, Standard, StripCell, Timeline, Tone, Toolbar,
         ToolbarItem, Trend, Unknown, Zone,
     };
@@ -972,6 +996,18 @@ mod tests {
                 caption: Some("Goal reached".to_owned()),
                 colour: Some(Colour::new(Hue::Success)),
                 ..Ring::default()
+            }),
+            Node::CalendarHeatmap(CalendarHeatmap {
+                id: Some("calendar".to_owned()),
+                title: Some("Training calendar".to_owned()),
+                days: (1..=100)
+                    .map(|day| HeatDay {
+                        date: format!("2026-{:02}-{:02}", 1 + (day - 1) / 28, 1 + (day - 1) % 28),
+                        value: (day % 10 != 0).then(|| (day % 7).into()),
+                    })
+                    .collect(),
+                label: Some("Load".to_owned()),
+                ..CalendarHeatmap::default()
             }),
             Node::Range(RangeScale {
                 id: Some("resting".to_owned()),
@@ -1171,7 +1207,8 @@ mod tests {
             | Kind::Meter
             | Kind::Columns
             | Kind::Strip
-            | Kind::Range => 1,
+            | Kind::Range
+            | Kind::CalendarHeatmap => 1,
             kind => kind.since(),
         }
     }
@@ -1286,6 +1323,27 @@ mod tests {
         };
         assert_eq!(progress.label.as_deref(), Some("Load ratio: 1.12 (Overuse)"));
         assert_eq!(progress.value, Some(560));
+    }
+
+    #[test]
+    fn a_calendar_becomes_a_bar_for_each_of_its_latest_days() {
+        let calendar = part(Kind::CalendarHeatmap);
+        let Downgraded::Node(Node::Chart(chart)) =
+            downgrade_by(calendar, 0, only(Kind::CalendarHeatmap))
+        else {
+            panic!("a calendar becomes a chart");
+        };
+        assert_eq!(chart.kind, crate::node::ChartKind::Bar);
+        // 100 days are given and the 90 latest are shown.
+        assert_eq!(chart.labels.len(), 90);
+        assert_eq!(chart.labels.last().map(String::as_str), Some("2026-04-16"));
+        assert_eq!(chart.series[0].label, "Load");
+        assert_eq!(chart.series[0].values.len(), 90);
+        // The 100th day has no reading, the 99th came to 99 % 7 = 1, and the 90th has none either.
+        assert_eq!(chart.series[0].values.last(), Some(&None));
+        assert_eq!(chart.series[0].values[88], Some(1.into()));
+        assert_eq!(chart.series[0].values[0], Some((11 % 7).into()));
+        assert_eq!(chart.series[0].values[79], None);
     }
 
     #[test]

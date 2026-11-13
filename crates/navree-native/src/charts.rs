@@ -850,6 +850,77 @@ pub enum Stacking {
     Shares,
 }
 
+/// One day of a [`CalendarHeatmap`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeatDay {
+    /// The day, as a date: `2026-11-12`.
+    pub date: String,
+    /// What the day came to. None for a day with no reading, which is not a
+    /// day of zero: a client draws it as a day with no data, hollow, and a day
+    /// of zero as the lightest shade.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<serde_json::Number>,
+}
+
+/// The most days a client draws: the latest ones, when it is given more.
+pub const MAX_DAYS: usize = 1_100;
+
+/// A calendar of days, one cell for each, a column for each week and a row for
+/// each day of the week, each cell shaded by its day's value: how hard each
+/// day of training was, how much each day was walked. Months are named above
+/// the weeks and the days of the week beside the rows, in the person's
+/// language and with the first day of the week their system keeps.
+///
+/// A client draws the days as its system draws a calendar of this kind (the
+/// activity calendars of the system's own apps), with the shades of one `colour`
+/// from the lightest to the deepest. `steps` are the three values at which a
+/// day moves from the first shade above nothing to the second, the third and
+/// the fourth. Left out, the four shades are equal parts of the range from zero
+/// to the highest value. A day below the first step but above zero is the first
+/// shade; a day at zero or below is the lightest, as a day of rest.
+///
+/// `days` need not be every day: a day between two that are given is a day with
+/// no data, and `first` and `last` draw the calendar from one date to another
+/// whether or not the days at its ends were given.
+///
+/// The calendar is named by its `summary`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CalendarHeatmap {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What the calendar shows: `Training calendar`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// The days with what each came to, in date order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub days: Vec<HeatDay>,
+    /// The first day drawn, as a date. The first day given when left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first: Option<String>,
+    /// The last day drawn, as a date. The last day given when left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last: Option<String>,
+    /// The colour the shades are made of. The app's accent when left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+    /// Where the second, third and fourth shades begin, three numbers in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<serde_json::Number>,
+    /// What a day's value is called: `Training load`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// What a day's value counts, written after it: `load`, `steps`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    /// One sentence that says the whole calendar to a reader who can't see it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// A note about what the calendar means, shown when asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
+}
+
 /// Where a day the person chooses is asked for.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DayPick {
