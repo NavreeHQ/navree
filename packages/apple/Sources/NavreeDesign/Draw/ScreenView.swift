@@ -220,18 +220,16 @@ struct QueryForm {
         if let query = table?.query {
             form = FormRef(query)
             source = query
-            var filters: [Navree.Field] = []
+            let fields = QueryRules.fields(query)
+            let filters = fields.filters
             var name: String?
             var value = ""
             var prompt: String?
-            query.walkFields { node in
-                guard case .field(let field) = node else { return }
-                if case .text(let text) = field.input, text.kind == .search {
-                    name = field.name
+            if let field = fields.search {
+                name = field.name
+                if case .text(let text) = field.input {
                     value = text.value
                     prompt = text.placeholder
-                } else if !Self.isPageSize(field) {
-                    filters.append(field)
                 }
             }
             self.filters = filters
@@ -253,14 +251,6 @@ struct QueryForm {
         } else {
             return nil
         }
-    }
-
-    /// A choice of how many rows a page holds: lists load by cursor here, so
-    /// it means nothing natively. Read from its shape: a single choice whose
-    /// options are all numbers.
-    static func isPageSize(_ field: Navree.Field) -> Bool {
-        guard case .choice(let choice) = field.input, !choice.options.isEmpty else { return false }
-        return choice.options.allSatisfy { Int($0.value) != nil }
     }
 }
 
