@@ -698,7 +698,7 @@ impl Shell {
         &self.app_fonts
     }
 
-    /// Whether the top bar holds a [`ThemeMenu`](crate::theme::ThemeMenu).
+    /// Whether the top bar holds a [`ThemeMenu`].
     pub fn has_theme_menu(&self) -> bool {
         self.theme_menu
     }
