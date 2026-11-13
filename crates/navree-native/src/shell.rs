@@ -48,7 +48,18 @@ pub struct NavGroup {
     pub items: Vec<NavItem>,
 }
 
-/// The app's destinations.
+/// The app's destinations: the places a person goes between. A client draws
+/// them as its system draws them: the tab bar of a phone, the navigation bar or
+/// rail of Android, a sidebar on a tablet or a desktop, a list on a watch. The
+/// destination a screen belongs to is the one whose `href` is the screen's
+/// [`nav`](crate::Screen::nav), which the client marks as the one chosen.
+///
+/// A floating row of icon links that a page draws for the web (the toolkit's
+/// dock) is not a kind of its own: it is these destinations, which the shell
+/// already carries, so a page that draws one for the web adds nothing to its
+/// native screens. Each destination has its words and its symbol; a dock's
+/// tone and the one it makes larger are the web's way of setting them apart,
+/// and a system draws every destination alike, so neither is carried.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Nav {
     /// The groups, in order.
