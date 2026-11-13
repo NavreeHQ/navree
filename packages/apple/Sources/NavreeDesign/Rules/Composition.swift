@@ -213,15 +213,20 @@ public enum CompositionRules {
 
     // MARK: Carousels
 
-    /// How much of the next part a carousel shows when more parts than fit
-    /// are waiting, in points: enough to say the run goes on.
-    public static let carouselPeek = 20.0
-
     /// How a carousel lays its parts: how many show at once and how wide each
     /// is. With a least width, as many as fit at it (no more than there are
-    /// parts), each the same width; when more are waiting, the room keeps a
-    /// peek of the next one. With none, each part has its own width (`nil`).
-    public static func carousel(room: Double, min least: Int?, gap: Double, parts: Int) -> (shown: Int, width: Double?) {
+    /// parts), each the same width. When more are waiting, the next one shows
+    /// only its surface's edge and never its words (see `carouselPeek`): the
+    /// parts shown take the room, less what that edge needs inside it. With
+    /// no least width, each part has its own width (`nil`).
+    ///
+    /// `margin` is how far the run reaches past the room on each side (the
+    /// screen's margin, when the run stands on the screen's ground and goes to
+    /// the window's edges); `edge` is how far the parts' words stand in from
+    /// their own edges (a card's padding; nothing for a part with no surface).
+    public static func carousel(
+        room: Double, min least: Int?, gap: Double, parts: Int, margin: Double = 0, edge: Double = 0
+    ) -> (shown: Int, width: Double?) {
         guard let least else { return (Swift.max(parts, 1), nil) }
         let column = Double(least)
         let fits = fit(room, column, gap)
@@ -229,9 +234,32 @@ public enum CompositionRules {
             let shown = Swift.max(parts, 1)
             return (shown, columnWidth(width: room, count: shown, gap: gap))
         }
-        let available = room - carouselPeek - gap
+        let peek = carouselPeek(margin: margin, gap: gap, edge: edge)
+        let available = room + margin - gap - peek
         let shown = fit(available, column, gap)
         return (shown, columnWidth(width: available, count: shown, gap: gap))
+    }
+
+    /// How much of the next part a carousel shows when more are waiting, in
+    /// points: no more than its surface's edge, so a card is never cut through
+    /// its words. On the screen's ground the parts shown end with the content
+    /// above them, and the next one starts in the margin past the gap, as much
+    /// of it showing as the margin leaves; a run inside a surface keeps the
+    /// edge inside its room. A part with no surface of its own does not peek:
+    /// its words start at its edge.
+    public static func carouselPeek(margin: Double, gap: Double, edge: Double) -> Double {
+        guard edge > 0 else { return 0 }
+        return margin > gap ? Swift.min(margin - gap, edge) : edge
+    }
+
+    /// How far a carousel's parts keep their words in from their edges: a
+    /// card's padding; nothing when any part has no surface of its own.
+    public static func surfaceEdge(_ parts: [Navree.Node]) -> Double {
+        let edges = parts.map { node -> Double in
+            if case .card(let card) = node { return padding(card) }
+            return 0
+        }
+        return edges.min() ?? 0
     }
 
     /// Whether a carousel scrolls: only when its parts do not all show.

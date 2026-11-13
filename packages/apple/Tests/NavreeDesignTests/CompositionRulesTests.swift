@@ -212,15 +212,33 @@ private let navigate = Navree.Action.navigate(Navree.Action.Navigate(href: "/sle
 // MARK: Carousels
 
 @Test func aCarouselShowsAsManyAsFitEachTheSameWidthAndPeeksAtTheNext() {
-    // Three charts of at least 300 at a phone's width: one shows, the next peeks in.
-    let phone = CompositionRules.carousel(room: 370, min: 300, gap: 12, parts: 3)
+    // Three cards of at least 300 on a phone's ground (margin 16, gap 12, the
+    // cards' words 16 in): one shows across the content, and the next starts
+    // in the margin past the gap, 4 points of its edge showing.
+    let phone = CompositionRules.carousel(room: 370, min: 300, gap: 12, parts: 3, margin: 16, edge: 16)
     #expect(phone.shown == 1)
-    #expect(phone.width == 338)
+    #expect(phone.width == 370)
     #expect(CompositionRules.scrolls(shown: phone.shown, parts: 3))
-    // At a tablet's width two show, and the third peeks in.
-    let tablet = CompositionRules.carousel(room: 794, min: 300, gap: 12, parts: 3)
+    // At a tablet's width two show, ending with the content above them, and
+    // the third shows 8 points of its edge: never its words, which start 16 in.
+    let tablet = CompositionRules.carousel(room: 794, min: 300, gap: 12, parts: 3, margin: 20, edge: 16)
     #expect(tablet.shown == 2)
-    #expect(tablet.width == 375)
+    #expect(tablet.width == 391)
+    #expect(CompositionRules.carouselPeek(margin: 20, gap: 12, edge: 16) == 8)
+    #expect(CompositionRules.carouselPeek(margin: 20, gap: 12, edge: 16) < 16)
+    // Inside a surface (no margin to reach into) the edge peeks inside the room.
+    let inside = CompositionRules.carousel(room: 338, min: 300, gap: 12, parts: 3, edge: 16)
+    #expect(inside.shown == 1)
+    #expect(inside.width == 310)
+    // Wide margins show no more than the edge.
+    #expect(CompositionRules.carouselPeek(margin: 40, gap: 12, edge: 16) == 16)
+    // Parts with no surface do not peek: the next starts at the window's edge.
+    #expect(CompositionRules.carouselPeek(margin: 16, gap: 12, edge: 0) == 0)
+    #expect(CompositionRules.carousel(room: 370, min: 300, gap: 12, parts: 3, margin: 16).width == 374)
+    // A card's padding is its edge; a part with no surface has none.
+    let card = Navree.Node.card(Navree.Card(children: [text("Revenue")]))
+    #expect(CompositionRules.surfaceEdge([card, card]) == 16)
+    #expect(CompositionRules.surfaceEdge([card, text("Orders")]) == 0)
     // When all fit, each takes its share and nothing scrolls.
     let wide = CompositionRules.carousel(room: 1000, min: 300, gap: 12, parts: 3)
     #expect(wide.shown == 3)
