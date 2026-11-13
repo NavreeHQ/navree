@@ -49,13 +49,16 @@ every `@navree/*` package carries the same version.
 - Sign in with Apple and with Google from native apps (`social`): the app posts the identity
   token the system's own sheet gave it (`POST /api/auth/social/{provider}/native/nonce`, then
   `POST /api/auth/social/{provider}/native`), and the server signs the person in by the rules of
-  the web callback. Apple's server-to-server notifications are taken at
+  the web callback. Native Sign in with Apple needs an Apple app under `auth.apps`, and native
+  Sign in with Google an Android app there. Apple's server-to-server notifications are taken at
   `POST /api/auth/social/apple/notifications`. `Social::revoke_tokens` revokes a user's stored
   tokens at the provider, and offboarding a user does it too.
 - Push to native apps (`notify`): a `push` channel through Apple's push service and Firebase
   Cloud Messaging, configured under `notify.push`. An app registers its device with
   `POST /api/notifications/push-devices` and removes it with `DELETE`; a device belongs to the
-  session that registered it and gets nothing more once that session ends.
+  session that registered it and gets nothing more once that session ends. The routes exist only
+  where the app can push (`notify.push.apns` or `notify.push.fcm` configured, or a push driver
+  registered), and a person keeps at most 20 devices.
 - Agent skills for native apps: `navree-native`, `navree-native-design`, `navree-native-apple`
   and `navree-native-android`.
 
@@ -63,8 +66,9 @@ every `@navree/*` package carries the same version.
 
 - Disconnecting a provider (`Social::unlink`, `DELETE /api/auth/social/accounts/{provider}`) now
   revokes the stored tokens at the provider first. A provider that cannot be reached answers 502
-  and leaves the account linked, to try again. An account with no stored tokens is disconnected
-  as before.
+  and leaves the account linked, to try again. A token the provider refuses for good is audited
+  (`social.token_revocation_refused`) and forgotten, and the account is disconnected. An account
+  with no stored tokens is disconnected as before.
 - An app with an Apple app under `auth.apps` keeps Sign in with Apple's tokens (encrypted)
   whatever `social.store_tokens` says, because deleting an account must revoke them at Apple. An
   app with no Apple app there stores what it stored before.
