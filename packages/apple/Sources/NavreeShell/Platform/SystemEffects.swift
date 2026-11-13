@@ -24,7 +24,7 @@ public final class SystemEffects: EffectRunner {
     let cache: KeptFiles
     /// What is kept of a launch the system may end.
     let snapshots: KeptFiles
-    let signIn = SignInSession()
+    let signIn: SignInSession
     let devices: DeviceCalls
     private var timers: [Int: Task<Void, Never>] = [:]
 
@@ -37,6 +37,7 @@ public final class SystemEffects: EffectRunner {
         self.transport = transport
         self.cache = cache
         self.snapshots = snapshots
+        signIn = SignInSession(signedWith: signedWith, origin: origin)
         devices = DeviceCalls(signedWith: signedWith, origin: origin)
     }
 

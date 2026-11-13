@@ -41,7 +41,7 @@ public struct ShellConfiguration: Sendable {
     public init(
         origin: String, loopbackHTTP: Bool = false, appID: String = Bundle.main.bundleIdentifier ?? "",
         appVersion: String, signInScheme: String? = nil, signInPaths: [String] = ["/auth/*/redirect"],
-        signedWith: Set<Entitlement> = [], openAnyLink: Bool = false, keepsSession: Bool = true,
+        signedWith: Set<Entitlement>? = nil, openAnyLink: Bool = false, keepsSession: Bool = true,
         transport: (@MainActor @Sendable () -> any Transport)? = nil, webContent: WebContent = .network,
         launch: Launch = Launch()
     ) {
@@ -51,7 +51,8 @@ public struct ShellConfiguration: Sendable {
         self.appVersion = appVersion
         self.signInScheme = signInScheme
         self.signInPaths = signInPaths
-        self.signedWith = signedWith
+        // Unless the app says otherwise, what its Info.plist says it is signed with.
+        self.signedWith = signedWith ?? Entitlement.declared(origin: origin)
         self.openAnyLink = openAnyLink
         self.keepsSession = keepsSession
         let keeps = keepsSession
