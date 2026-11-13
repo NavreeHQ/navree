@@ -85,7 +85,9 @@ pub mod prelude {
 #[cfg(feature = "access")]
 pub mod ability;
 pub mod app_files;
+mod asked;
 pub mod assets;
+mod hint;
 #[rustfmt::skip]
 mod assets_gen;
 pub mod charts;
@@ -105,6 +107,8 @@ pub mod localize;
 pub mod markdown;
 pub mod marketing;
 mod module;
+#[cfg(feature = "native-preview")]
+pub mod native;
 pub mod node;
 pub mod op;
 pub mod pages;
@@ -136,6 +140,7 @@ pub use flow::{
     TreeSelect, TreeSelection, TreeState, Wizard, WizardOutcome, WizardPage, WizardStep,
 };
 pub use form::{FormView, Money, Submit};
+pub use hint::{Presented, Role, Standard};
 pub use html::{Href, HrefError, LocalHref, SafeHtml};
 pub use island::{Island, IslandScript};
 pub use localize::{Localizer, ReaderWords};
@@ -158,7 +163,10 @@ pub use select::{
     Choice, ChoiceList, Combobox, Command, CommandGroup, CommandItem, MultiSelect, OptionQuery,
     Select, SelectLabels,
 };
-pub use shell::{AppPage, AppShell, Collapse, NavGroup, NavItem, Shell, ShellLayout, UserMenu};
+pub use shell::{
+    AppPage, AppShell, Collapse, NativeClient, NativeFamily, NativeShellPart, NativeShellParts,
+    NativeSignIn, NavGroup, NavItem, Shell, ShellLayout, UserMenu,
+};
 pub use sortable::{
     Landing, ListState, Move, MoveError, MoveRejected, Placement, RankedLists, Refusal, SortItem,
     SortLabels, SortLayout, SortList, Sortable, Spot,

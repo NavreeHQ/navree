@@ -87,6 +87,8 @@ fn sections() -> Vec<SectionRegistration> {
     sections.push(SectionRegistration::of::<navree::audit::AuditOptions>());
     #[cfg(feature = "auth")]
     sections.push(SectionRegistration::of::<navree::auth::AuthOptions>());
+    #[cfg(feature = "auth")]
+    sections.push(SectionRegistration::of::<navree::auth::AppsOptions>());
     #[cfg(feature = "billing")]
     sections.push(SectionRegistration::of::<navree::billing::BillingOptions>());
     #[cfg(feature = "cache")]
@@ -143,6 +145,8 @@ fn sections() -> Vec<SectionRegistration> {
     sections.push(SectionRegistration::of::<navree::micro::MicroOptions>());
     #[cfg(feature = "notify")]
     sections.push(SectionRegistration::of::<navree::notify::NotifyOptions>());
+    #[cfg(feature = "notify")]
+    sections.push(SectionRegistration::of::<navree::notify::PushOptions>());
     #[cfg(feature = "oauth")]
     sections.push(SectionRegistration::of::<navree::oauth::OAuthOptions>());
     #[cfg(feature = "observe")]

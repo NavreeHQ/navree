@@ -36,7 +36,7 @@ use crate::dates::{DateLocale, DatePicker, DateRules, TimePicker, TimeRules};
 use crate::html::Href;
 use crate::localize::ReaderWords;
 use crate::node::{Element, Node, Uses, el};
-use crate::op::{Envelope, Op, UI_HEADER};
+use crate::op::{Envelope, Op};
 use crate::shell::AppShell;
 use crate::view::View;
 
@@ -1494,6 +1494,33 @@ impl<T: Form> FormView<T> {
             .collect()
     }
 
+    /// The form without its buttons: its id, where it posts, what it sends unseen
+    /// and its fields. What a native client's form is read from.
+    #[cfg(feature = "native-preview")]
+    pub(crate) fn without_actions(&self) -> Element {
+        let hidden: Vec<Element> = self
+            .hidden
+            .iter()
+            .map(|(name, value)| {
+                el("input")
+                    .attr("type", "hidden")
+                    .attr("name", name.clone())
+                    .attr("value", value.clone())
+            })
+            .collect();
+        el("form")
+            .slot("form")
+            .attr("id", self.shape.id)
+            .attr("method", self.method)
+            .attr_opt("action", self.action.clone().map(AttrHref))
+            .flag("data-ui-form", true)
+            .children((
+                self.csrf.clone().map(csrf_field),
+                hidden,
+                self.fields_node(),
+            ))
+    }
+
     fn into_node(self) -> Node {
         let fields = self.fields_node();
         // A file goes with the form when no script sent it first.
@@ -1525,8 +1552,9 @@ impl<T: Form> FormView<T> {
                 hidden,
                 fields,
                 el("div").slot("form-actions").children((
-                    self.cancel
-                        .map(|(label, href)| Button::ghost(label).href(href)),
+                    self.cancel.map(|(label, href)| {
+                        Button::ghost(label).href(href).role(crate::Role::Cancel)
+                    }),
                     Button::primary(self.submit).submit(),
                 )),
             ))
@@ -2719,7 +2747,7 @@ impl<T: Form> Rejected<T> {
         Self {
             values: echo::<T>(values),
             errors,
-            from_runtime: parts.headers.contains_key(UI_HEADER),
+            from_runtime: crate::asked::who_asked(&parts.headers).is_runtime(),
             action: parts.uri.path_and_query().map_or_else(
                 || parts.uri.path().to_owned(),
                 |path| path.as_str().to_owned(),
@@ -2848,6 +2876,11 @@ impl<T: Form> Rejected<T> {
             }
             return response;
         }
+        // A native client shows the messages at its own fields, as the runtime does.
+        #[cfg(feature = "native-preview")]
+        if let Some(response) = crate::native::swap::errors(T::ID, &self.errors) {
+            return response;
+        }
         if self.from_runtime {
             let ops = vec![Op::Errors {
                 form: T::ID.to_owned(),
@@ -2919,7 +2952,7 @@ where
 
     async fn from_request(request: Request) -> Result<Self, Self::Rejection> {
         let (parts, body): (Parts, _) = request.into_parts();
-        let from_runtime = parts.headers.contains_key(UI_HEADER);
+        let from_runtime = crate::asked::who_asked(&parts.headers).is_runtime();
         let action = parts.uri.path_and_query().map_or_else(
             || parts.uri.path().to_owned(),
             |path| path.as_str().to_owned(),

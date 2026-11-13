@@ -320,6 +320,8 @@ export const sections: DocsSection[] = [
       "live-hub",
       "drag-and-drop",
       "islands",
+      // Native apps
+      "native",
       // What is next
       "coming-next",
     ],
@@ -328,6 +330,7 @@ export const sections: DocsSection[] = [
       { title: "Pages and layout", from: "layout" },
       { title: "Forms and data", from: "forms" },
       { title: "Interaction", from: "commands-and-ops" },
+      { title: "Native apps", from: "native" },
       { title: "What is next", from: "coming-next" },
     ],
   },

@@ -297,6 +297,16 @@ impl Donut {
             links: Vec::new(),
             note: None,
         };
+        #[cfg(feature = "native-preview")]
+        {
+            let values: Vec<Option<f64>> = parts.iter().map(|(_, value, _)| *value).collect();
+            crate::native::record_chart_numbers(
+                &self.common.id(),
+                parts.iter().map(|(name, ..)| name.as_str()),
+                std::iter::once((&*labels.value, values.as_slice())),
+                None,
+            );
+        }
         Some(Drawn {
             legend: None,
             body: body.into(),

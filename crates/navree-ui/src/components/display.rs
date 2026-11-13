@@ -986,6 +986,14 @@ impl Item {
         self
     }
 
+    /// Says how the screen the row leads to is presented by a native client, when the
+    /// page knows, as [`Button::presented`](crate::Button::presented) does. A browser's
+    /// page does not change.
+    pub fn presented(mut self, how: crate::Presented) -> Self {
+        self.el = self.el.presented(how);
+        self
+    }
+
     /// Adds something small at the end of the title's line: a time, a timer.
     pub fn aside(mut self, aside: impl Into<Node>) -> Self {
         self.aside = Some(aside.into());

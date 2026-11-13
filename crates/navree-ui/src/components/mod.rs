@@ -37,7 +37,7 @@ mod trace;
 mod trend;
 
 pub use actions::{Button, ButtonGroup, ButtonKind, ButtonVariant, Toggle};
-pub use activity::{ActivityFeed, ActivityItem, FeedHeight};
+pub use activity::{ActivityFeed, ActivityItem, ActivityRows, FeedHeight};
 pub use app_blocks::{
     AuthLayout, BreathingGuide, BreathingLabels, ChartSkeleton, CopyField, DayPager, Dock,
     DockItem, InfoMark, InfoTip,

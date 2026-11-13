@@ -445,6 +445,28 @@ impl ActivityFeed {
         )
     }
 
+    /// The new rows of a live feed, as the source of its region answers them: the
+    /// rows as HTML for a browser, with the newest row's cursor in `X-UI-Cursor`, and
+    /// for a native client the rows to merge into the feed's list, at its top, with
+    /// the cursor as the revision the list is at.
+    ///
+    /// ```
+    /// use navree_ui::{ActivityFeed, ActivityItem};
+    ///
+    /// let rows = ActivityFeed::answer([ActivityItem::new("Manpreet Gill", "replied to")], 19_800)
+    ///     .cursor("1793793600-9");
+    /// # let _ = rows;
+    /// ```
+    pub fn answer(
+        items: impl IntoIterator<Item = ActivityItem>,
+        offset_seconds: i32,
+    ) -> ActivityRows {
+        ActivityRows {
+            rows: Self::rows(items, offset_seconds),
+            cursor: None,
+        }
+    }
+
     /// The id of the list that rows are added to: a [`Region`]'s feed target.
     pub fn list_id(&self) -> String {
         format!("{}-list", self.id)
@@ -629,6 +651,53 @@ fn loading_row() -> Element {
             Skeleton::new(SkeletonShape::Short),
         )),
     ))
+}
+
+/// The new rows of a live feed, answered: see [`ActivityFeed::answer`].
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct ActivityRows {
+    rows: Node,
+    cursor: Option<String>,
+}
+
+impl ActivityRows {
+    /// The cursor of the newest row, which the feed asks from next time.
+    pub fn cursor(mut self, cursor: impl Into<String>) -> Self {
+        self.cursor = Some(cursor.into());
+        self
+    }
+}
+
+impl navree_http::response::IntoResponse for ActivityRows {
+    fn into_response(self) -> navree_http::response::Response {
+        #[cfg(feature = "native-preview")]
+        if let Some(response) = crate::native::swap::feed_rows(&self.rows, self.cursor.as_deref()) {
+            return response;
+        }
+        let mut response = (
+            [
+                (
+                    http::header::CONTENT_TYPE,
+                    http::HeaderValue::from_static("text/html; charset=utf-8"),
+                ),
+                (
+                    http::header::CACHE_CONTROL,
+                    http::HeaderValue::from_static("no-store"),
+                ),
+            ],
+            crate::render::render(&self.rows),
+        )
+            .into_response();
+        if let Some(cursor) = self.cursor
+            && let Ok(value) = http::HeaderValue::from_str(&cursor)
+        {
+            response
+                .headers_mut()
+                .insert(http::HeaderName::from_static("x-ui-cursor"), value);
+        }
+        response
+    }
 }
 
 into_node!(ActivityFeed);

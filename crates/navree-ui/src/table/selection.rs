@@ -18,6 +18,11 @@ use crate::op::{Op, Reply, ToastTone};
 /// post is refused whole: cutting it would act on rows the user had excluded.
 pub const MAX_SELECTED_IDS: usize = 10_000;
 
+/// The field a native client posts, in place of the keys, to choose every row that
+/// matches the table's query: its value is how many matched when the table was drawn,
+/// which the server holds the action to as `_expected` is held.
+pub(crate) const ALL_FIELD: &str = "_all";
+
 /// What a bulk action selects.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BulkMode {
@@ -65,6 +70,11 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> BulkRequest<R, F> {
             match name.as_ref() {
                 "action" => action = value.into_owned(),
                 "_mode" if value == "all" => mode = BulkMode::All,
+                // A native client's way of saying the same: all, and how many it was told.
+                ALL_FIELD => {
+                    mode = BulkMode::All;
+                    expected = value.parse().ok();
+                }
                 "ids" | "ex" => {
                     let list = if name == "ids" {
                         &mut ids

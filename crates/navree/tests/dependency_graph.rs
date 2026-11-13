@@ -94,6 +94,16 @@ const HIERARCHY: &[Rule] = &[
     // elements and navree-api as HTML for the descriptions of its reference. It
     // depends on no navree crate.
     rule("navree-markdown", 0, &[]),
+    // Navree Native's protocol: the closed vocabulary of parts, actions and ops
+    // a native client is answered in, and the builders a screen for native
+    // clients is written with. It depends on no navree crate; navree-ui reads
+    // pages into it (optional feature `native-preview`).
+    rule("navree-native", 0, &[]),
+    // The runtime core the native clients link: navigation, forms and live
+    // updates as one function of state and event, behind a C interface. It
+    // reads the protocol and nothing else of the framework, and no crate of
+    // the framework depends on it.
+    rule("navree-native-core", 1, &["navree-native"]),
     // Phone numbers: the parser, matcher and formatter over libphonenumber's
     // numbering plans, compiled into tables. It depends on no navree crate;
     // navree-validation's `Phone`, navree-ui's `PhoneInput` and navree-orm's
@@ -219,7 +229,9 @@ const HIERARCHY: &[Rule] = &[
     // navree-storage's disks and upload rules. Its optional feature `time` reads the
     // reader's zone from navree-time (today's day, the times of a timeline), and its
     // optional feature `access` shows and hides actions by navree-access's abilities.
-    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros", "navree-orm", "navree-db", "navree-phone", "navree-storage", "navree-time", "navree-access", "navree-telemetry", "navree-markdown"]),
+    // Its optional feature `native-preview` answers a native client with the
+    // page as navree-native's tree of parts.
+    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros", "navree-orm", "navree-db", "navree-phone", "navree-storage", "navree-time", "navree-access", "navree-telemetry", "navree-markdown", "navree-native"]),
     // The ORM: models on navree-db's pool and unit of work. Model events go
     // through navree-events, encrypted and hashed casts through
     // navree-crypto, records as API resources (`__type`, field masks)
@@ -246,11 +258,15 @@ const HIERARCHY: &[Rule] = &[
     // The auth tables are navree-orm models; users are navree-access's
     // subject `User`. Browsers sign in on navree-session's session (optional
     // feature `session`), and the sign-in, two-factor and password reset
-    // pages are drawn with navree-ui (optional feature `ui`).
+    // pages are drawn with navree-ui (optional feature `ui`). A native app's
+    // push devices end with the sign-in that registered them, and the push
+    // channel asks which sign-ins are live (optional feature `notify`;
+    // navree-notify never depends on navree-auth).
     rule("navree-auth", 5, &["navree-openapi",
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-db",
         "navree-crypto", "navree-session", "navree-validation", "navree-cache", "navree-mail",
         "navree-access", "navree-http-client", "navree-orm", "navree-ui", "navree-telemetry",
+        "navree-notify",
     ]),
     // Workspaces: user ids come from the request's `Principal`, so the
     // module needs no navree-auth (a sibling at L5). The nightly demo
@@ -290,11 +306,12 @@ const HIERARCHY: &[Rule] = &[
     ]),
     // L6: ecosystem libraries.
     // Social sign-in: links provider accounts to navree-auth users and
-    // issues their tokens. Linked accounts are navree-orm models.
+    // issues their tokens. Linked accounts are navree-orm models. Native
+    // apps may sign in on navree-session's session (feature `session`).
     rule("navree-social", 6, &["navree-openapi", 
         "navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-crypto",
         "navree-cache", "navree-events", "navree-http-client", "navree-db", "navree-audit",
-        "navree-auth", "navree-orm",
+        "navree-auth", "navree-orm", "navree-session",
     ]),
     // Webhooks: signed outgoing deliveries through the queue (a job
     // dispatcher from navree-contracts) and the HTTP client, endpoints in the
@@ -595,6 +612,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-bounded",
     "navree-pdf",
     "navree-markdown",
+    "navree-native",
     "navree-glob",
     "navree-phone",
     "navree-template",

@@ -334,6 +334,28 @@ async fn a_method_the_page_does_not_take_is_a_page() {
     assert!(response.header("allow").is_some(), "the Allow header stays");
 }
 
+/// In a native client's web view the client draws the chrome, so the error
+/// comes on its own, as it does for a guest.
+#[cfg(feature = "native-preview")]
+#[tokio::test]
+async fn a_signed_in_user_in_a_native_client_s_web_view_gets_the_error_without_the_chrome() {
+    let app = app().await;
+    let response = app
+        .acting_as(principal(Uuid::from_u128(7)))
+        .get("/nowhere")
+        .header("accept", BROWSER)
+        .header(
+            "user-agent",
+            "Mozilla/5.0 (Linux; Android 16; wv) Chrome/140 Mobile Safari/537.36 NavreeNative/1 (platform=android; lib=0.1.0)",
+        )
+        .send()
+        .await;
+    assert_eq!(response.status().as_u16(), 404);
+    let text = response.text();
+    assert!(!text.contains(r#"data-slot="sidebar""#), "{text}");
+    assert!(text.contains(r#"data-slot="state-page""#), "{text}");
+}
+
 #[tokio::test]
 async fn a_signed_in_user_gets_the_error_inside_the_shell() {
     let app = app().await;

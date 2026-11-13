@@ -365,6 +365,7 @@ impl TestRequest {
             .expect("the response body is readable")
             .to_bytes();
         TestResponse::from_parts(parts.status, parts.headers, body)
+            .with_extensions(parts.extensions)
     }
 
     /// Sends the request like [`send`](TestRequest::send), storing the

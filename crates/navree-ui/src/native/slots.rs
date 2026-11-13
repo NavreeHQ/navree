@@ -1,0 +1,2212 @@
+//! The slot readers: one per `data-slot`, each reading one component's parts
+//! into the native part it stands for.
+//!
+//! A reader takes the parts it knows by name ([`Parts`]) and ends by checking
+//! that nothing is left. A component that grows a part its reader never heard
+//! of stops being read, and the test beside the reader, which builds the real
+//! component, fails in the same crate.
+
+pub(crate) mod chart;
+mod chat;
+mod date;
+pub(crate) mod feed;
+mod fold;
+mod lazy;
+mod menu;
+mod phone;
+mod select;
+mod sortable;
+mod split;
+mod tabs;
+#[cfg(test)]
+mod testing;
+mod toggle;
+mod upload;
+
+use std::borrow::Cow;
+
+use navree_native::action::{Action, Command, Pair};
+use navree_native::node as n;
+
+use super::lower::{
+    CONTROL_HOOKS, Control, Cx, N, Parts, Read, align_of, attr, elements, fail, fail_on, flat, has,
+    hooks, id, label_of, number, one, slot, text_of, tone, tone_of, with_id,
+};
+use crate::node::{Element, Node};
+
+/// Reads `element` by the reader of `slot`. `None` when the slot has none.
+pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
+    type Reader = fn(&mut Cx, &Element) -> Read;
+    // The hooks each reader answers for, beyond the quiet ones.
+    let (reader, known): (Reader, &[&str]) = match slot {
+        "stack" | "row" => (stack, &[]),
+        "grid" => (grid, &[]),
+        "container" | "item-media" | "form-stack" | "form-grid" | "scroll-area" => (inside, &[]),
+        "text" | "heading" | "code" | "kbd" => (text, &[]),
+        "badge" => (badge, &[]),
+        "button" => (
+            button,
+            &[
+                "data-ui-click",
+                "data-ui-refresh",
+                "data-ui-split-toggle",
+                "data-ui-confirm",
+            ],
+        ),
+        "icon" => (
+            |_, element| icon(element).map(|icon| vec![N::Icon(icon)]),
+            &[],
+        ),
+        "flag" => (flag, &[]),
+        "separator" => (
+            |_, element| Ok(vec![N::Divider(n::Divider { id: id(element) })]),
+            &[],
+        ),
+        "avatar" => (avatar, &[]),
+        "card" => (card, &[]),
+        "empty" => (empty, &[]),
+        "alert" => (alert, &[]),
+        "stat" => (stat, &[]),
+        "item" => (item, &[]),
+        "dialog" => (dialog, &[]),
+        "alert-dialog" => (alert_dialog, &[]),
+        "sheet" | "drawer" => (sheet, &[]),
+        "popover-content" => (popover, &[]),
+        "form" => (form, &["data-ui-form", "data-ui-target"]),
+        "form-actions" => (form_actions, &[]),
+        "field" => (field, &[]),
+        "choice" => (choice, &[]),
+        "radio-group" => (radio_group, &[]),
+        "input" | "checkbox" | "switch" | "native-select" | "textarea" => (control, CONTROL_HOOKS),
+        "input-group" => (input_group, &[]),
+        "phone-input" => (phone::phone, phone::HOOKS),
+        "fact-grid" => (fact_grid, &[]),
+        "fact-card" => (
+            |cx, element| {
+                Ok(vec![N::Facts(n::Facts {
+                    id: id(element),
+                    items: vec![fact_card(cx, element)?],
+                })])
+            },
+            &[],
+        ),
+        "progress" => (|cx, element| cx.generic(element), &[]),
+        "progress-row" => (
+            |cx, element| {
+                // The percentage beside the bar is the bar's own value, said again.
+                match elements(element)?.first() {
+                    Some(bar) if bar.tag() == "progress" => cx.generic(bar),
+                    _ => fail("a row of progress with no bar"),
+                }
+            },
+            &[],
+        ),
+        "timeline" => (timeline, &[]),
+        "meta" => (meta, &[]),
+        "table-container" => (table_container, &[]),
+        "table" => (
+            |cx, element| cx.table(element).map(|table| vec![N::Table(table)]),
+            &[],
+        ),
+        "breadcrumb" => (breadcrumb, &[]),
+        "region" => (
+            region,
+            &[
+                "data-ui-region",
+                "data-ui-src",
+                "data-ui-lazy",
+                "data-ui-live-src",
+                "data-ui-live-event",
+                "data-ui-live-catch-up",
+                // A feed asks only for what is newer than a cursor, instead of the
+                // whole region again; a client asks for the whole region.
+                "data-ui-feed",
+                "data-ui-after",
+                "data-ui-feed-empty",
+                "data-ui-feed-max",
+                "data-ui-feed-say",
+                "data-ui-feed-say-one",
+            ],
+        ),
+        "skeleton" | "spinner" => (
+            |_, element| {
+                Ok(vec![N::Progress(n::Progress {
+                    id: id(element),
+                    value: None,
+                    label: attr(element, "aria-label").map(Cow::into_owned),
+                    ..n::Progress::default()
+                })])
+            },
+            &[],
+        ),
+        // The page's own toasts are sent as ops; the place they are drawn in is the browser's.
+        "toaster" => (|_, _| Ok(Vec::new()), &["data-ui-toaster"]),
+        "data-table" => (super::table::data_table, super::table::HOOKS),
+        "dropdown-menu" => (menu::alone, menu::HOOKS),
+        "select" | "combobox" | "multiselect" => (select::picker, select::HOOKS),
+        "date-picker" | "time-picker" | "date-time-picker" => (date::picker, date::HOOKS),
+        "date-range-picker" => (date::range, date::HOOKS),
+        "tabs" => (tabs::tabs, tabs::HOOKS),
+        "accordion" => (fold::accordion, &[]),
+        "collapsible" => (fold::collapsible, &[]),
+        "split" => (split::split, split::HOOKS),
+        "activity-feed" => (feed::feed, &[]),
+        "message" => (chat::message, &[]),
+        "bubble" => (chat::bubble, &[]),
+        "attachment" => (chat::attachment, &[]),
+        "marker" => (chat::marker, &[]),
+        "chart" => (chart::figure, chart::HOOKS),
+        "lazy-list" => (lazy::lazy_list, lazy::HOOKS),
+        "live-state" => (lazy::live_state, &[]),
+        "toggle-group" => (toggle::toggle_group, toggle::HOOKS),
+        "sortable" => (sortable::sortable, sortable::HOOKS),
+        "upload" => (upload::upload, upload::HOOKS),
+        // Parts of the toolkit's app blocks that have no reader yet: each is named, with what
+        // the protocol has for it, so a page that holds one is answered with the web view
+        // and says which part it is.
+        "dock" | "dock-item" => {
+            return Some(waiting(
+                slot,
+                "the protocol's shell names a dock's destinations",
+            ));
+        }
+        "day-pager" | "day-pager-day" | "day-pager-face" => {
+            return Some(waiting(slot, "the protocol has a `day_pager` for it"));
+        }
+        "info-tip" | "info-tip-content" | "info-tip-title" => {
+            return Some(waiting(slot, "the protocol has a `hint` for it"));
+        }
+        "meter" | "meter-track" | "meter-fill" | "meter-goal" => {
+            return Some(waiting(
+                slot,
+                "a progress bar with a goal, a glow or its own colours: the protocol's `progress` has none of them",
+            ));
+        }
+        "copy-field" | "auth-layout" | "breathing" | "chart-skeleton" => {
+            return Some(waiting(slot, "the protocol has no kind for it"));
+        }
+        _ => return None,
+    };
+    Some(hooks(element, known).and_then(|()| reader(cx, element)))
+}
+
+/// A part with no reader yet, named: a miss, never a guess.
+fn waiting(slot: &str, what: &str) -> Read {
+    fail_on(
+        format!("slot:{slot}"),
+        format!("a part with no reader here yet: {what}"),
+    )
+}
+
+/// A menu's button read together with the popup it opens, when `element` is
+/// the button and the popup is among `rest`, the siblings after it.
+pub(crate) fn menu_of<'a>(
+    cx: &mut Cx,
+    element: &Element,
+    rest: &[&'a Node],
+) -> Option<(&'a Element, Read<N>)> {
+    menu::paired(cx, element, rest)
+}
+
+/// `element` without the attributes in `names`: a control read as the plain
+/// control it is, without the hooks that only mark it for a script.
+pub(crate) fn without(element: &Element, names: &[&str]) -> Element {
+    let mut copy = element.clone();
+    copy.attrs.retain(|attr| !names.contains(&attr.name));
+    copy
+}
+
+/// A component that only wraps what it holds.
+fn inside(cx: &mut Cx, element: &Element) -> Read {
+    let children = cx.of(element);
+    Ok(match (children.len(), id(element)) {
+        (0, None) => Vec::new(),
+        (1, id) => vec![with_id(one(children), id)],
+        (_, id) => vec![N::Stack(n::Stack {
+            id,
+            children,
+            ..n::Stack::default()
+        })],
+    })
+}
+
+/// The room between parts, from `data-gap`.
+fn gap(element: &Element) -> u8 {
+    number(element, "data-gap").unwrap_or(0)
+}
+
+fn justify_of(element: &Element) -> Option<n::Justify> {
+    match attr(element, "data-justify").as_deref() {
+        Some("start") => Some(n::Justify::Start),
+        Some("center") => Some(n::Justify::Center),
+        Some("end") => Some(n::Justify::End),
+        Some("between") => Some(n::Justify::Between),
+        _ => None,
+    }
+}
+
+/// `Stack` and `Row`.
+fn stack(cx: &mut Cx, element: &Element) -> Read {
+    Ok(vec![N::Stack(n::Stack {
+        id: id(element),
+        axis: if slot(element).as_deref() == Some("row") {
+            n::Axis::Horizontal
+        } else {
+            n::Axis::Vertical
+        },
+        gap: gap(element),
+        align: align_of(element),
+        justify: justify_of(element),
+        wrap: has(element, "data-wrap"),
+        hidden: has(element, "hidden"),
+        children: cx.of(element),
+        ..n::Stack::default()
+    })])
+}
+
+/// `Grid`.
+fn grid(cx: &mut Cx, element: &Element) -> Read {
+    Ok(vec![N::Grid(n::Grid {
+        id: id(element),
+        cols: number(element, "data-cols"),
+        min: None,
+        gap: gap(element),
+        children: cx.of(element),
+    })])
+}
+
+/// `Text`, `Heading`, inline code and a key.
+fn text(_: &mut Cx, element: &Element) -> Read {
+    let variant = attr(element, "data-variant");
+    let level = match element.tag() {
+        "h1" => Some(1),
+        "h2" => Some(2),
+        "h3" => Some(3),
+        "h4" => Some(4),
+        "h5" => Some(5),
+        "h6" => Some(6),
+        _ => None,
+    };
+    let style = match (variant.as_deref(), level, element.tag()) {
+        (Some("code"), ..) | (_, _, "code" | "kbd") => n::TextStyle::Mono,
+        (Some("lead"), ..) => n::TextStyle::Callout,
+        (_, Some(1 | 2), _) => n::TextStyle::Title,
+        (_, Some(_), _) => n::TextStyle::Headline,
+        (None | Some("muted"), None, _) => n::TextStyle::Body,
+        (Some(other), None, _) => return fail(format!("text of the `{other}` variant")),
+    };
+    // Text that holds a link or more than words is read as its runs.
+    if !element.child_nodes().iter().all(plain_words) {
+        return fail("text that holds more than words");
+    }
+    Ok(vec![N::Text(n::Text {
+        id: id(element),
+        value: text_of(element),
+        style,
+        tone: tone_of(element),
+        muted: variant.as_deref() == Some("muted"),
+        lines: None,
+        heading: level,
+        ..n::Text::default()
+    })])
+}
+
+/// Whether a node is words alone: text, numbers, and inline elements that
+/// only group them.
+fn plain_words(node: &Node) -> bool {
+    match node {
+        Node::Text(_) | Node::Int(_) | Node::Empty => true,
+        Node::Fragment(nodes) => nodes.iter().all(plain_words),
+        Node::Element(element) => {
+            matches!(
+                element.tag(),
+                "span" | "bdi" | "strong" | "b" | "em" | "i" | "time" | "small"
+            ) && slot(element).is_none()
+                && element.child_nodes().iter().all(plain_words)
+        }
+        Node::Raw(_) | Node::Static(_) => false,
+    }
+}
+
+/// `Badge`: its words, its tone and its dot.
+fn badge(_: &mut Cx, element: &Element) -> Read {
+    let mut parts = Parts::of(element);
+    let dot = parts.slot("badge-dot").is_some();
+    let _icons = parts.slots("icon");
+    if !parts
+        .left()
+        .iter()
+        .all(|node| plain_words(node) || screen_reader_only(node))
+    {
+        return fail("a badge that holds more than words");
+    }
+    Ok(vec![N::Badge(n::Badge {
+        id: id(element),
+        text: text_of(element),
+        tone: tone_of(element),
+        dot,
+    })])
+}
+
+/// Whether a node is words for a screen reader only.
+fn screen_reader_only(node: &Node) -> bool {
+    matches!(node, Node::Element(element) if has(element, "data-ui-sr"))
+}
+
+/// `Button`.
+fn button(cx: &mut Cx, element: &Element) -> Read {
+    // The button that moves between the panes of a split is the client's own
+    // way between them.
+    if has(element, "data-ui-split-toggle") {
+        cx.dropped.push("split-toggle".to_owned());
+        return Ok(Vec::new());
+    }
+    cx.button(element).map(|button| vec![N::Button(button)])
+}
+
+/// An icon: its shapes as path data, its name, and its label when it stands alone.
+pub(crate) fn icon(element: &Element) -> Read<n::Icon> {
+    let [Node::Static(shapes)] = element.child_nodes() else {
+        return fail("an icon whose shapes are not compile-time markup");
+    };
+    let view_box = attr(element, "viewBox").unwrap_or(Cow::Borrowed("0 0 24 24"));
+    match super::icon::icon(shapes, &view_box) {
+        Ok(mut icon) => {
+            icon.id = id(element);
+            icon.label = attr(element, "aria-label").map(Cow::into_owned);
+            icon.tone = tone_of(element);
+            Ok(icon)
+        }
+        Err(why) => fail(why),
+    }
+}
+
+/// `Flag`: the flag of a country as the emoji every system draws for it. A
+/// flag with no emoji is its name, or nothing when it is decoration.
+fn flag(cx: &mut Cx, element: &Element) -> Read {
+    let label = attr(element, "aria-label").map(Cow::into_owned);
+    let emoji = match element.child_nodes() {
+        [Node::Static(shapes)] => super::icon::flag_of(shapes).and_then(super::icon::flag_emoji),
+        _ => None,
+    };
+    Ok(match (emoji, label) {
+        (Some(emoji), _) => vec![N::Text(n::Text {
+            id: id(element),
+            value: emoji,
+            ..n::Text::default()
+        })],
+        (None, Some(label)) => vec![N::text(label)],
+        (None, None) => {
+            cx.dropped.push("flag".to_owned());
+            Vec::new()
+        }
+    })
+}
+
+/// `Avatar`: whose it is, with a picture or initials.
+fn avatar(_: &mut Cx, element: &Element) -> Read {
+    let mut src = None;
+    let mut name = attr(element, "aria-label").map(Cow::into_owned);
+    for child in flat(element.child_nodes()) {
+        if let Node::Element(part) = child {
+            match (part.tag(), slot(part).as_deref()) {
+                ("img", _) => {
+                    src = attr(part, "src").map(Cow::into_owned);
+                    if name.is_none() {
+                        name = attr(part, "alt").map(Cow::into_owned);
+                    }
+                }
+                ("svg", Some("icon")) | ("span", _) => {}
+                (tag, _) => return fail(format!("an avatar that holds a <{tag}>")),
+            }
+        }
+    }
+    let initials = Some(text_of(element)).filter(|text| !text.is_empty());
+    Ok(vec![N::Avatar(n::Avatar {
+        id: id(element),
+        name: name.or_else(|| initials.clone()).unwrap_or_default(),
+        src,
+        initials,
+    })])
+}
+
+/// `Card`: a section drawn as a card.
+fn card(cx: &mut Cx, element: &Element) -> Read {
+    let mut parts = Parts::of(element);
+    let mut section = n::Section {
+        id: id(element),
+        style: n::SectionStyle::Card,
+        ..n::Section::default()
+    };
+    if let Some(header) = parts.slot("card-header") {
+        let mut header = Parts::of(header);
+        section.title = header.slot("card-title").map(text_of);
+        section.subtitle = header.slot("card-description").map(text_of);
+        if let Some(action) = header.slot("card-action") {
+            section.actions = cx.of(action);
+        }
+        header.done()?;
+    }
+    if let Some(content) = parts.slot("card-content") {
+        section.children = cx.of(content);
+    }
+    if let Some(footer) = parts.slot("card-footer") {
+        section.footer = cx.of(footer);
+    }
+    parts.done()?;
+    Ok(vec![N::Section(section)])
+}
+
+/// `Empty`: what a place shows when it holds nothing.
+fn empty(cx: &mut Cx, element: &Element) -> Read {
+    let mut parts = Parts::of(element);
+    let icon = match parts.slot("empty-media") {
+        Some(media) => match elements(media)?.as_slice() {
+            [glyph] if slot(glyph).as_deref() == Some("icon") => Some(icon(glyph)?),
+            _ => return fail("an empty state whose picture is not an icon"),
+        },
+        None => None,
+    };
+    let Some(title) = parts.slot("empty-title") else {
+        return fail("an empty state with no title");
+    };
+    let text = parts.slot("empty-description").map(text_of);
+    let actions = match parts.slot("empty-content") {
+        Some(content) => cx.of(content),
+        None => Vec::new(),
+    };
+    parts.done()?;
+    Ok(vec![N::Empty(n::Empty {
+        id: id(element),
+        icon,
+        title: text_of(title),
+        text,
+        actions,
+    })])
+}
+
+/// `Alert`: a message in place.
+fn alert(cx: &mut Cx, element: &Element) -> Read {
+    let mut parts = Parts::of(element);
+    let icon = match parts.slot("icon") {
+        Some(glyph) => Some(icon(glyph)?),
+        None => None,
+    };
+    let title = parts.slot("alert-title").map(text_of);
+    let text = parts.slot("alert-description").map(text_of);
+    let actions = match parts.slot("alert-actions") {
+        Some(actions) => cx.of(actions),
+        None => Vec::new(),
+    };
+    // Its close button is the browser's way to dismiss it; a client has its own.
+    let _close = parts.slot("alert-close");
+    parts.done()?;
+    Ok(vec![N::Banner(n::Banner {
+        id: id(element),
+        tone: tone_of(element).or_else(|| attr(element, "data-variant").and_then(|v| tone(&v))),
+        title,
+        text,
+        icon,
+        actions,
+    })])
+}
+
+/// `Stat`: a figure under its label, as a small section.
+fn stat(cx: &mut Cx, element: &Element) -> Read {
+    let mut parts = Parts::of(element);
+    // A stat with an icon, a status or a graphic beside it: the protocol's `figure` has a field
+    // for each and this reader reads none of them yet. Named, never guessed.
+    if parts.slot("stat-head").is_some() || parts.slot("stat-body").is_some() {
+        return waiting(
+            "stat",
+            "a stat with an icon, a status or an aside has fields in the protocol's `figure`",
+        );
+    }
+    let Some(label) = parts.slot("stat-label") else {
+        return fail("a figure with no label");
+    };
+    let Some(value) = parts.slot("stat-value") else {
+        return fail("a figure with no value");
+    };
+    let trend = parts.slot("stat-trend");
+    let chart = parts.slot("stat-chart");
+    parts.done()?;
+    let mut figure = n::Figure {
+        id: id(element),
+        label: text_of(label),
+        value: text_of(value),
+        // A stat that links is a tile that opens the page it is about.
+        action: flat(label.child_nodes())
+            .into_iter()
+            .find_map(|part| match part {
+                Node::Element(link) if slot(link).as_deref() == Some("stat-link") => {
+                    attr(link, "href")
+                }
+                _ => None,
+            })
+            .map(|href| Action::navigate(href.into_owned())),
+        ..n::Figure::default()
+    };
+    if let Some(trend) = trend {
+        let words = text_of(trend);
+        // The page says whether the news is good, not which way the figure moved; a
+        // sign in the words does. Without one, the words stand under the figure and
+        // its colour says whether they are good.
+        let tone = match attr(trend, "data-tone").as_deref() {
+            Some("up") => Some(n::Tone::Success),
+            Some("down") => Some(n::Tone::Danger),
+            _ => None,
+        };
+        let direction = match words.chars().next() {
+            Some('+' | '↑' | '▲') => Some(n::Direction::Up),
+            Some('-' | '−' | '↓' | '▼') => Some(n::Direction::Down),
+            _ => None,
+        };
+        match direction {
+            Some(direction) => {
+                figure.trend = Some(n::Trend {
+                    direction,
+                    text: Some(words),
+                    tone,
+                });
+            }
+            None => {
+                figure.detail = Some(words);
+                figure.tone = tone;
+            }
+        }
+    }
+    let figure = N::Figure(figure);
+    let Some(chart) = chart else {
+        return Ok(vec![figure]);
+    };
+    // A small chart under the figure: both stand in one group.
+    hooks(chart, &[])?;
+    let mut children = vec![figure];
+    children.extend(cx.of(chart));
+    Ok(vec![N::Stack(n::Stack {
+        id: None,
+        children,
+        ..n::Stack::default()
+    })])
+}
+
+/// `Item`: a row of a list, as the page built it.
+fn item(cx: &mut Cx, element: &Element) -> Read {
+    let mut parts = Parts::of(element);
+    let leading = match parts.slot("item-media") {
+        Some(media) => Some(cx.of(media)).filter(|read| !read.is_empty()).map(one),
+        None => None,
+    };
+    let mut row = n::Row {
+        id: id(element),
+        leading: leading.map(Box::new),
+        ..n::Row::default()
+    };
+    let Some(content) = parts.slot("item-content") else {
+        return fail("an item with no content");
+    };
+    let mut content = Parts::of(content);
+    let mut title = content.slot("item-title");
+    if let Some(head) = content.slot("item-head") {
+        let mut head = Parts::of(head);
+        title = head.slot("item-title");
+        if let Some(aside) = head.slot("item-aside") {
+            row.trailing = Some(Box::new(one(cx.of(aside))));
+        }
+        head.done()?;
+    }
+    let Some(title) = title else {
+        return fail("an item with no title");
+    };
+    row.title = text_of(title);
+    row.subtitle = content.slot("item-description").map(text_of);
+    if let Some(footer) = content.slot("item-footer") {
+        row.detail = cx.of(footer);
+    }
+    content.done()?;
+    if let Some(actions) = parts.slot("item-actions") {
+        let read = cx.of(actions);
+        if row.trailing.is_none() {
+            row.trailing = Some(Box::new(one(read)));
+        } else {
+            row.menu = read;
+        }
+    }
+    parts.done()?;
+    if element.tag() == "a" {
+        row.action = cx.action_of(element)?;
+    }
+    Ok(vec![N::Row(row)])
+}
+
+/// The header every dialog and sheet starts with: its title and description.
+pub(crate) fn dialog_header(parts: &mut Parts<'_>) -> Read<(Option<String>, Option<String>)> {
+    let Some(header) = parts.slot("dialog-header") else {
+        return Ok((None, None));
+    };
+    let mut header = Parts::of(header);
+    let title = header.slot("dialog-title").map(text_of);
+    let text = header.slot("dialog-description").map(text_of);
+    header.done()?;
+    Ok((title, text))
+}
+
+/// `Dialog`.
+fn dialog(cx: &mut Cx, element: &Element) -> Read {
+    let Some(id) = id(element) else {
+        return fail("a dialog with no id");
+    };
+    let mut parts = Parts::of(element);
+    let (title, text) = dialog_header(&mut parts)?;
+    let children = match parts.slot("dialog-body") {
+        Some(body) => cx.of(body),
+        None => Vec::new(),
+    };
+    let actions = match parts.slot("dialog-footer") {
+        Some(footer) => answers(cx, footer, &id)?,
+        None => Vec::new(),
+    };
+    // Its close button is the browser's; every system has its own way out of a dialog.
+    let _close = parts.slot("dialog-close");
+    parts.done()?;
+    Ok(vec![N::Dialog(n::Dialog {
+        id,
+        title,
+        text,
+        alert: false,
+        open: has(element, "open"),
+        children,
+        actions,
+    })])
+}
+
+/// `AlertDialog`: a question before something that can't be undone.
+fn alert_dialog(cx: &mut Cx, element: &Element) -> Read {
+    let Some(id) = id(element) else {
+        return fail("a dialog with no id");
+    };
+    let mut parts = Parts::of(element);
+    let (title, text) = dialog_header(&mut parts)?;
+    let Some(footer) = parts.slot("dialog-footer") else {
+        return fail("a question with no answers");
+    };
+    let actions = answers(cx, footer, &id)?;
+    parts.done()?;
+    // A system's alert holds buttons and nothing else.
+    if !actions.iter().all(|node| matches!(node, N::Button(_))) {
+        return fail("an answer that is not a button");
+    }
+    Ok(vec![N::Dialog(n::Dialog {
+        id,
+        title,
+        text,
+        alert: true,
+        open: has(element, "open"),
+        children: Vec::new(),
+        actions,
+    })])
+}
+
+/// The answers at the foot of a dialog: a button that closes the dialog it
+/// stands in cancels, and a form that is one button is that button, posting.
+fn answers(cx: &mut Cx, footer: &Element, dialog: &str) -> Read<Vec<N>> {
+    let mut out = Vec::new();
+    for node in cx.of(footer) {
+        out.push(match node {
+            N::Button(mut button) => {
+                if button.action
+                    == Some(Action::command(Command::Close {
+                        id: dialog.to_owned(),
+                    }))
+                {
+                    button.action = Some(Action::Dismiss);
+                    if button.role != n::Role::Destructive {
+                        button.role = n::Role::Cancel;
+                    }
+                }
+                N::Button(button)
+            }
+            N::Form(form) => match button_of(form) {
+                Ok(button) => N::Button(button),
+                Err(form) => N::Form(*form),
+            },
+            other => other,
+        });
+    }
+    Ok(out)
+}
+
+/// A form that is one submit button and nothing a reader fills, as a button
+/// that sends the form's request itself.
+pub(crate) fn button_of(mut form: n::Form) -> Result<n::Button, Box<n::Form>> {
+    let [N::Button(button)] = form.children.as_slice() else {
+        return Err(Box::new(form));
+    };
+    let Some(Action::Submit {
+        form: None,
+        href,
+        with,
+    }) = &button.action
+    else {
+        return Err(Box::new(form));
+    };
+    let mut fields: Vec<Pair> = form
+        .hidden
+        .iter()
+        .map(|hidden| Pair {
+            name: hidden.name.clone(),
+            value: hidden.value.clone(),
+        })
+        .collect();
+    fields.extend(with.clone());
+    let action = Action::Request {
+        method: form.method,
+        href: href.clone().unwrap_or_else(|| form.action.clone()),
+        fields,
+    };
+    let N::Button(mut button) = form.children.remove(0) else {
+        return Err(Box::new(form));
+    };
+    button.action = Some(action);
+    if button.id.is_none() {
+        button.id = form.id;
+    }
+    Ok(button)
+}
+
+/// `Sheet` and `Drawer`.
+fn sheet(cx: &mut Cx, element: &Element) -> Read {
+    let Some(id) = id(element) else {
+        return fail("a sheet with no id");
+    };
+    let mut parts = Parts::of(element);
+    let (title, subtitle) = dialog_header(&mut parts)?;
+    let children = match parts.slot("dialog-body") {
+        Some(body) => cx.of(body),
+        None => Vec::new(),
+    };
+    let actions = match parts.slot("dialog-footer") {
+        Some(footer) => answers(cx, footer, &id)?,
+        None => Vec::new(),
+    };
+    let _close = parts.slot("dialog-close");
+    parts.done()?;
+    // A sheet that holds a form is a task to finish or cancel; any other is a glance.
+    let task = children.iter().any(holds_form);
+    Ok(vec![N::Sheet(n::Sheet {
+        id,
+        title,
+        subtitle,
+        task,
+        size: match attr(element, "data-width").as_deref() {
+            Some("sm" | "md") => n::SheetSize::Medium,
+            Some("full") => n::SheetSize::Full,
+            _ => n::SheetSize::Large,
+        },
+        open: has(element, "open"),
+        children,
+        actions,
+    })])
+}
+
+/// Puts the list `list` at the revision `cursor`, asking `src` what changed since and
+/// following `live`. Whether the list was found. Walked with a list of its own, so a
+/// tree of any depth is searched without using up the stack.
+fn follow(nodes: &mut [N], list: &str, cursor: &str, src: &str, live: n::Live) -> bool {
+    let mut stack: Vec<&mut N> = nodes.iter_mut().collect();
+    while let Some(node) = stack.pop() {
+        match node {
+            N::List(found) if found.id.as_deref() == Some(list) => {
+                found.since = Some(cursor.to_owned());
+                found.changes = Some(src.to_owned());
+                found.live = Some(live);
+                return true;
+            }
+            other => stack.extend(other.children_mut()),
+        }
+    }
+    false
+}
+
+/// Whether a form stands in `node`, at any depth. Walked with a list of its own, so
+/// a tree of any depth is searched without using up the stack.
+fn holds_form(node: &N) -> bool {
+    let mut stack = vec![node];
+    while let Some(node) = stack.pop() {
+        if matches!(node, N::Form(_)) {
+            return true;
+        }
+        stack.extend(node.children());
+    }
+    false
+}
+
+/// `Popover`'s content.
+fn popover(cx: &mut Cx, element: &Element) -> Read {
+    let Some(id) = id(element) else {
+        return fail("a popover with no id");
+    };
+    Ok(vec![N::Popover(n::Popover {
+        id,
+        children: cx.of(element),
+    })])
+}
+
+/// `FormView`'s form.
+fn form(cx: &mut Cx, element: &Element) -> Read {
+    cx.form(element).map(|form| vec![N::Form(form)])
+}
+
+/// The buttons at the foot of a form.
+fn form_actions(cx: &mut Cx, element: &Element) -> Read {
+    Ok(vec![N::Stack(n::Stack {
+        id: id(element),
+        axis: n::Axis::Horizontal,
+        gap: 2,
+        justify: Some(n::Justify::End),
+        children: cx.of(element),
+        ..n::Stack::default()
+    })])
+}
+
+/// A control with a slot of its own.
+fn control(cx: &mut Cx, element: &Element) -> Read {
+    match cx.control(element)? {
+        Control::Field(field) => Ok(vec![N::Field(*field)]),
+        Control::Button(button) => Ok(vec![N::Button(*button)]),
+        Control::Hidden(_) if cx.in_form() => Ok(Vec::new()),
+        Control::Hidden(_) => fail("a hidden value outside any form"),
+    }
+}
+
+/// `Field`: a label, one control, a line of help and what is wrong with it.
+fn field(cx: &mut Cx, element: &Element) -> Read {
+    let mut parts = Parts::of(element);
+    let label = parts.slot("label").map(text_of);
+    let help = parts.slot("field-description").map(text_of);
+    let errors = parts.slots("field-error");
+    let error = Some(
+        errors
+            .into_iter()
+            .map(text_of)
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+    .filter(|text| !text.is_empty());
+    let [Node::Element(inner)] = parts.left() else {
+        return fail("a field that holds more or less than one control");
+    };
+    // A box or a switch carries its own label; a group of radios, its legend.
+    if matches!(slot(inner).as_deref(), Some("choice" | "radio-group")) {
+        let mut read = if slot(inner).as_deref() == Some("choice") {
+            choice(cx, inner)?
+        } else {
+            radio_group(cx, inner)?
+        };
+        if let Some(N::Field(field)) = read.first_mut() {
+            if field.help.is_none() {
+                field.help = help;
+            }
+            field.error = error;
+        }
+        return Ok(read);
+    }
+    if !matches!(inner.tag(), "input" | "select" | "textarea") {
+        let Some(name) = slot(inner) else {
+            return fail(format!("a field around a <{}>", inner.tag()));
+        };
+        return match read(cx, &name, inner) {
+            Some(read) => named(read?, label, help, error),
+            None => fail_on(format!("slot:{name}"), "a control no reader here knows"),
+        };
+    }
+    hooks(inner, CONTROL_HOOKS)?;
+    let Control::Field(mut field) = cx.control(inner)? else {
+        return fail("a field around a control that is not filled");
+    };
+    if label.is_some() {
+        field.label = label.map(|label| label.trim_end_matches('*').trim().to_owned());
+    }
+    field.help = help;
+    field.error = error;
+    Ok(vec![N::Field(*field)])
+}
+
+/// What a field's wrapper says of the control a component read: its label, a
+/// line of help and what is wrong with it.
+fn named(
+    mut read: Vec<N>,
+    label: Option<String>,
+    help: Option<String>,
+    error: Option<String>,
+) -> Read {
+    let label = label.map(|label| label.trim_end_matches('*').trim().to_owned());
+    match read.as_mut_slice() {
+        [N::Field(field)] => {
+            if label.is_some() {
+                field.label = label;
+            }
+            field.help = help.or_else(|| field.help.take());
+            field.error = error;
+        }
+        _ => return fail("a field around a control that is not one field"),
+    }
+    Ok(read)
+}
+
+/// A box or a switch in its label, with a line under the label when there is one.
+fn choice(cx: &mut Cx, element: &Element) -> Read {
+    let mut inner = None;
+    let mut label = None;
+    let mut help = None;
+    for part in elements(element)? {
+        if part.tag() == "input" {
+            if inner.replace(part).is_some() {
+                return fail("a choice with more than one control");
+            }
+        } else if let Some(words) = super::page::find(part.child_nodes(), "choice-label") {
+            label = Some(text_of(words));
+            help = super::page::find(part.child_nodes(), "choice-description").map(text_of);
+        } else {
+            label = Some(text_of(part));
+        }
+    }
+    let Some(inner) = inner else {
+        return fail("a choice with no control");
+    };
+    hooks(inner, CONTROL_HOOKS)?;
+    let Control::Field(mut field) = cx.control(inner)? else {
+        return fail("a choice around a control that is not filled");
+    };
+    field.label = label.or(field.label);
+    field.help = help;
+    Ok(vec![N::Field(*field)])
+}
+
+/// `RadioGroup`: one of several, each a radio button in its label.
+fn radio_group(_: &mut Cx, element: &Element) -> Read {
+    let mut parts = Parts::of(element);
+    let label = parts.slot("field-legend").map(text_of);
+    let mut input = navree_native::input::ChoiceInput {
+        kind: navree_native::input::ChoiceKind::Radio,
+        ..navree_native::input::ChoiceInput::default()
+    };
+    let mut name = String::new();
+    let mut required = false;
+    for option in parts.slots("choice") {
+        let inside = elements(option)?;
+        let [radio, words] = inside.as_slice() else {
+            return fail("a choice of a group that is not a radio button and its words");
+        };
+        if attr(radio, "type").as_deref() != Some("radio") {
+            return fail("a choice of a group that is not a radio button");
+        }
+        name = attr(radio, "name").map(Cow::into_owned).unwrap_or_default();
+        required |= has(radio, "required");
+        let value = attr(radio, "value")
+            .map(Cow::into_owned)
+            .unwrap_or_default();
+        if has(radio, "checked") {
+            input.value = Some(value.clone());
+        }
+        input.options.push(navree_native::input::ChoiceOption {
+            value,
+            label: text_of(words),
+            detail: None,
+            disabled: has(radio, "disabled"),
+        });
+    }
+    parts.done()?;
+    Ok(vec![N::Field(n::Field {
+        id: id(element),
+        name,
+        label,
+        help: None,
+        error: None,
+        required,
+        disabled: has(element, "disabled"),
+        input: navree_native::input::Input::Choice(input),
+        ..n::Field::default()
+    })])
+}
+
+/// `InputGroup`: typed text with something fixed before or after it (`₹`, `kg`), which
+/// stands beside the text in the field and is not sent with it. The button that
+/// clears the field is a script's.
+fn input_group(cx: &mut Cx, element: &Element) -> Read {
+    let mut before = None;
+    let mut after = None;
+    let mut control = None;
+    for part in elements(element)? {
+        if slot(part).as_deref() == Some("input-group-addon") {
+            hooks(part, &[])?;
+            // Words only: an addon that holds a control or a picture is something else.
+            let words = flat(part.child_nodes())
+                .iter()
+                .all(|node| matches!(node, Node::Text(_)));
+            if !words {
+                return fail("an addon on an input that is more than words");
+            }
+            let words = text_of(part);
+            if control.is_none() {
+                before = Some(words);
+            } else {
+                after = Some(words);
+            }
+        } else if has(part, "data-script-only") {
+            // What shows only where a script runs: here, the button that clears the field.
+            for button in elements(part)? {
+                hooks(button, &["data-ui-clear"])?;
+                if !has(button, "data-ui-clear") {
+                    return fail("a part shown only with a script that clears nothing");
+                }
+            }
+            cx.dropped.push("input-clear".to_owned());
+        } else if control.replace(part).is_some() {
+            return fail("a group of inputs with more than one control");
+        }
+    }
+    let Some(control) = control else {
+        return fail("a group of inputs with no control");
+    };
+    let mut read = Vec::new();
+    cx.element(control, &mut read);
+    match read.as_mut_slice() {
+        [N::Field(field)] => match &mut field.input {
+            navree_native::input::Input::Text(text) => {
+                text.prefix = before.filter(|words| !words.is_empty());
+                text.suffix = after.filter(|words| !words.is_empty());
+            }
+            _ if before.is_none() && after.is_none() => {}
+            _ => return fail("an addon on a field that is not typed text"),
+        },
+        _ => return fail("a group around something that is not one field"),
+    }
+    Ok(read)
+}
+
+/// `FactGrid`: cards of a label, a value and lines of detail.
+fn fact_grid(cx: &mut Cx, element: &Element) -> Read {
+    let mut items = Vec::new();
+    for card in elements(element)? {
+        if slot(card).as_deref() != Some("fact-card") {
+            return fail("something that is not a fact in a grid of facts");
+        }
+        items.push(fact_card(cx, card)?);
+    }
+    Ok(vec![N::Facts(n::Facts {
+        id: id(element),
+        items,
+    })])
+}
+
+/// `FactCard`: one fact.
+fn fact_card(cx: &mut Cx, card: &Element) -> Read<n::Fact> {
+    let mut parts = Parts::of(card);
+    let glyph = match parts.slot("fact-icon") {
+        Some(holder) => match elements(holder)?.as_slice() {
+            [glyph] if slot(glyph).as_deref() == Some("icon") => Some(icon(glyph)?),
+            _ => return fail("a fact whose picture is not an icon"),
+        },
+        None => None,
+    };
+    let Some(body) = parts.slot("fact-body") else {
+        return fail("a fact with no body");
+    };
+    parts.done()?;
+    let mut fact = n::Fact {
+        icon: glyph,
+        tone: tone_of(card),
+        ..n::Fact::default()
+    };
+    for group in elements(body)? {
+        for part in elements(group)? {
+            match slot(part).as_deref() {
+                Some("fact-label") => fact.label = text_of(part),
+                Some("fact-value") => fact.value = cx.of(part),
+                Some("fact-detail") => fact.details.push(text_of(part)),
+                _ => return fail("a part of a fact no reader here knows"),
+            }
+        }
+    }
+    Ok(fact)
+}
+
+/// `Timeline`: its days as sections of moments, with the time of each at its end.
+fn timeline(cx: &mut Cx, element: &Element) -> Read {
+    let mut parts = Parts::of(element);
+    let mut children = Vec::new();
+    if let Some(zone) = parts.slot("timeline-zone") {
+        children.push(N::Text(n::Text {
+            value: text_of(zone),
+            style: n::TextStyle::Caption,
+            muted: true,
+            ..n::Text::default()
+        }));
+    }
+    let days = parts.slots("timeline-day");
+    let lists = parts.slots("timeline-list");
+    parts.done()?;
+    for day in days {
+        let mut day_parts = Parts::of(day);
+        let title = day_parts.slot("timeline-day-title").map(text_of);
+        let Some(list) = day_parts.slot("timeline-list") else {
+            return fail("a day with no events");
+        };
+        day_parts.done()?;
+        children.push(N::Section(n::Section {
+            title,
+            children: vec![N::Timeline(n::Timeline {
+                id: None,
+                items: events(cx, list)?,
+            })],
+            ..n::Section::default()
+        }));
+    }
+    for list in lists {
+        children.push(N::Timeline(n::Timeline {
+            id: None,
+            items: events(cx, list)?,
+        }));
+    }
+    // A timeline with nothing around its moments (a day that has no name is not a
+    // section) is the timeline.
+    if let [N::Section(day)] = children.as_mut_slice()
+        && day.title.is_none()
+        && let [N::Timeline(only)] = day.children.as_mut_slice()
+    {
+        only.id = id(element);
+        return Ok(std::mem::take(&mut day.children));
+    }
+    if let [N::Timeline(only)] = children.as_mut_slice() {
+        only.id = id(element);
+        return Ok(children);
+    }
+    Ok(vec![N::Stack(n::Stack {
+        id: id(element),
+        gap: 3,
+        children,
+        ..n::Stack::default()
+    })])
+}
+
+/// The events of one list of a timeline, as its moments.
+fn events(cx: &mut Cx, list: &Element) -> Read<Vec<n::Moment>> {
+    let mut moments = Vec::new();
+    for event in elements(list)? {
+        if slot(event).as_deref() != Some("timeline-event") {
+            return fail("something that is not an event in a timeline");
+        }
+        let mut parts = Parts::of(event);
+        let time = parts.slot("timeline-time").map(text_of);
+        let glyph = match parts.slot("timeline-dot") {
+            Some(dot) => match elements(dot)?.as_slice() {
+                [] => None,
+                [glyph] if slot(glyph).as_deref() == Some("icon") => Some(icon(glyph)?),
+                _ => return fail("an event whose mark is not an icon"),
+            },
+            None => None,
+        };
+        let Some(body) = parts.slot("timeline-body") else {
+            return fail("an event with no body");
+        };
+        parts.done()?;
+        let mut body = Parts::of(body);
+        let Some(head) = body.slot("timeline-head") else {
+            return fail("an event with no title");
+        };
+        let mut head = Parts::of(head);
+        let Some(title) = head.slot("timeline-title") else {
+            return fail("an event with no title");
+        };
+        let gap = head.slot("timeline-gap").map(text_of);
+        head.done()?;
+        let details = body.slots("timeline-detail");
+        let mut detail = Vec::new();
+        if let Some(meta) = body.slot("meta") {
+            detail.extend(self::meta(cx, meta)?);
+        }
+        if let Some(gap) = gap {
+            detail.push(N::Text(n::Text {
+                value: gap,
+                style: n::TextStyle::Caption,
+                muted: true,
+                ..n::Text::default()
+            }));
+        }
+        body.done()?;
+        moments.push(n::Moment {
+            id: id(event),
+            title: text_of(title),
+            subtitle: Some(
+                details
+                    .into_iter()
+                    .map(text_of)
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            )
+            .filter(|text| !text.is_empty()),
+            time,
+            state: match attr(event, "data-state").as_deref() {
+                Some("current") => Some(n::RowState::Current),
+                Some("upcoming") => Some(n::RowState::Upcoming),
+                Some("done") => Some(n::RowState::Done),
+                _ => None,
+            },
+            icon: glyph,
+            tone: tone_of(event),
+            detail,
+            // What was set aside (work a machine did) is drawn quieter.
+            muted: attr(event, "data-state").as_deref() == Some("muted"),
+        });
+    }
+    Ok(moments)
+}
+
+/// `Meta`: small facts in a line, each with what stands before it.
+fn meta(cx: &mut Cx, element: &Element) -> Read {
+    let mut children = Vec::new();
+    for item in elements(element)? {
+        if slot(item).as_deref() != Some("meta-item") {
+            return fail("something that is not an item in a line of facts");
+        }
+        let mut parts = Parts::of(item);
+        let mut pair = Vec::new();
+        if let Some(start) = parts.slot("meta-start") {
+            pair.extend(cx.of(start));
+        }
+        if let Some(words) = parts.slot("meta-text") {
+            pair.push(N::Text(n::Text {
+                value: text_of(words),
+                style: n::TextStyle::Caption,
+                muted: true,
+                ..n::Text::default()
+            }));
+        }
+        parts.done()?;
+        children.push(if pair.len() == 1 {
+            pair.remove(0)
+        } else {
+            N::Stack(n::Stack {
+                axis: n::Axis::Horizontal,
+                gap: 1,
+                align: Some(n::Align::Center),
+                children: pair,
+                ..n::Stack::default()
+            })
+        });
+    }
+    Ok(vec![N::Stack(n::Stack {
+        id: id(element),
+        axis: n::Axis::Horizontal,
+        gap: 3,
+        wrap: true,
+        children,
+        ..n::Stack::default()
+    })])
+}
+
+/// `Table`'s scrolling box: the table inside it.
+fn table_container(cx: &mut Cx, element: &Element) -> Read {
+    let inside = elements(element)?;
+    let [table] = inside.as_slice() else {
+        return fail("a table's box that holds more or less than a table");
+    };
+    if table.tag() != "table" {
+        return fail("a table's box that holds no table");
+    }
+    cx.table(table).map(|table| vec![N::Table(table)])
+}
+
+/// `Breadcrumb` in a page's content: its steps as links in a line.
+fn breadcrumb(_: &mut Cx, element: &Element) -> Read {
+    let trail = trail(element)?;
+    let mut children: Vec<N> = trail
+        .steps
+        .into_iter()
+        .map(|step| {
+            N::Link(n::Link {
+                id: None,
+                label: step.title,
+                action: Action::navigate(step.href),
+                children: Vec::new(),
+            })
+        })
+        .collect();
+    if let Some(current) = trail.current {
+        children.push(N::text(current));
+    }
+    Ok(vec![N::Stack(n::Stack {
+        id: id(element),
+        axis: n::Axis::Horizontal,
+        gap: 2,
+        wrap: true,
+        children,
+        ..n::Stack::default()
+    })])
+}
+
+/// A breadcrumb's steps and the page it ends on.
+pub(crate) struct Trail {
+    pub(crate) steps: Vec<navree_native::Back>,
+    pub(crate) current: Option<String>,
+}
+
+/// Reads a `Breadcrumb`: every step with a link, shown or folded away, in order.
+pub(crate) fn trail(element: &Element) -> Read<Trail> {
+    let mut trail = Trail {
+        steps: Vec::new(),
+        current: None,
+    };
+    fn walk(element: &Element, trail: &mut Trail) {
+        for child in flat(element.child_nodes()) {
+            let Node::Element(child) = child else {
+                continue;
+            };
+            if child.tag() == "a"
+                && let Some(href) = attr(child, "href")
+            {
+                trail.steps.push(navree_native::Back {
+                    title: label_of(child),
+                    href: href.into_owned(),
+                });
+            } else if attr(child, "aria-current").as_deref() == Some("page") {
+                trail.current = Some(text_of(child));
+            } else if !matches!(child.tag(), "svg" | "button") {
+                walk(child, trail);
+            }
+        }
+    }
+    walk(element, &mut trail);
+    Ok(trail)
+}
+
+/// `Region`: a part that fetches itself. What stands in it while it loads, or
+/// when it failed, is the browser's.
+fn region(cx: &mut Cx, element: &Element) -> Read {
+    let Some(id) = id(element) else {
+        return fail("a region with no id");
+    };
+    let Some(src) = attr(element, "data-ui-src") else {
+        return fail("a region with no source");
+    };
+    let mut parts = Parts::of(element);
+    let _waiting = parts.slots("skeleton");
+    let _failed = parts.slots("region-failed");
+    let mut children = cx.flat_sequence(parts.left());
+    // A feed asks only for what is newer than a cursor: its list is at that revision, asks
+    // the region's source for what changed since, and follows the region's stream.
+    if let (Some(list), Some(cursor), Some(live)) = (
+        attr(element, "data-ui-feed"),
+        attr(element, "data-ui-after"),
+        attr(element, "data-ui-live-src"),
+    ) {
+        let live = n::Live {
+            src: live.into_owned(),
+            event: attr(element, "data-ui-live-event").map(Cow::into_owned),
+        };
+        if follow(&mut children, &list, &cursor, &src, live) {
+            return Ok(children);
+        }
+    }
+    Ok(vec![N::Region(n::Region {
+        id,
+        src: src.into_owned(),
+        lazy: has(element, "data-ui-lazy"),
+        live: attr(element, "data-ui-live-src").map(|live| n::Live {
+            src: live.into_owned(),
+            event: attr(element, "data-ui-live-event").map(Cow::into_owned),
+        }),
+        children,
+    })])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::native::lower;
+    use crate::{
+        AlertDialog, Align, Avatar, Badge, Button, ButtonVariant, Card, Dialog,
+        Empty as EmptyState, FactCard, FactGrid, Flag, Grid, Justify, Meta, Region, Row, Separator,
+        Sheet, SheetWidth, Stack, Stat, Table, TableCell, TableHead, TableRowEl, Text, Timeline,
+        TimelineEvent, Tone, el, icons,
+    };
+
+    fn read(node: impl Into<Node>) -> N {
+        let lowered = lower(&node.into());
+        assert!(lowered.is_native(), "{:?}", lowered.misses);
+        lowered.node
+    }
+
+    fn text_node(value: &str) -> N {
+        N::text(value)
+    }
+
+    fn muted(value: &str) -> N {
+        N::Text(n::Text {
+            value: value.to_owned(),
+            muted: true,
+            ..n::Text::default()
+        })
+    }
+
+    #[test]
+    fn a_stack_and_a_row_keep_their_gap_and_where_their_parts_sit() {
+        let node = read(
+            Row::gap(3)
+                .align(Align::Center)
+                .justify(Justify::Between)
+                .wrap()
+                .children((
+                    Stack::gap(0).children((Text::new("a"), Text::muted("b"))),
+                    "c",
+                )),
+        );
+        assert_eq!(
+            node,
+            N::Stack(n::Stack {
+                axis: n::Axis::Horizontal,
+                gap: 3,
+                align: Some(n::Align::Center),
+                justify: Some(n::Justify::Between),
+                wrap: true,
+                children: vec![
+                    N::Stack(n::Stack {
+                        children: vec![text_node("a"), muted("b")],
+                        ..n::Stack::default()
+                    }),
+                    text_node("c"),
+                ],
+                ..n::Stack::default()
+            })
+        );
+        let N::Grid(grid) = read(
+            Grid::cols(4)
+                .gap(3)
+                .children((Text::new("a"), Text::new("b"))),
+        ) else {
+            panic!("not a grid");
+        };
+        assert_eq!((grid.cols, grid.gap, grid.children.len()), (Some(4), 3, 2));
+    }
+
+    #[test]
+    fn a_badge_reads_its_words_tone_and_dot() {
+        assert_eq!(
+            read(Badge::new("Delivered").tone(Tone::Success).dot()),
+            N::Badge(n::Badge {
+                text: "Delivered".into(),
+                tone: Some(n::Tone::Success),
+                dot: true,
+                ..n::Badge::default()
+            })
+        );
+        // A colour with no meaning has no tone.
+        let N::Badge(violet) = read(Badge::new("Beta").tone(Tone::named("violet"))) else {
+            panic!("not a badge");
+        };
+        assert_eq!(violet.tone, None);
+    }
+
+    #[test]
+    fn a_button_reads_its_look_as_a_role_and_what_it_does() {
+        let N::Button(open) = read(
+            Button::destructive("Cancel order")
+                .icon(icons::BAN)
+                .disabled(true)
+                .opens_dialog("cancel"),
+        ) else {
+            panic!("not a button");
+        };
+        assert_eq!(open.label, "Cancel order");
+        assert_eq!(open.role, n::Role::Destructive);
+        assert_eq!(open.prominence, n::Prominence::High);
+        assert!(open.disabled);
+        assert_eq!(open.icon.as_ref().unwrap().name.as_deref(), Some("ban"));
+        assert_eq!(
+            open.action,
+            Some(Action::command(Command::Open {
+                id: "cancel".into()
+            }))
+        );
+
+        let N::Button(only) = read(Button::icon_only(icons::REFRESH_CW, "Refresh now")) else {
+            panic!("not a button");
+        };
+        assert_eq!(only.label, "Refresh now");
+        assert!(only.icon_only);
+        assert_eq!(only.action, None);
+
+        let N::Button(link) = read(
+            Button::new("CS-20481")
+                .variant(ButtonVariant::Link)
+                .href("/orders/1"),
+        ) else {
+            panic!("not a button");
+        };
+        assert_eq!(link.prominence, n::Prominence::Low);
+        assert_eq!(link.action, Some(Action::navigate("/orders/1")));
+
+        let N::Button(save) = read(Button::primary("Save").submit().loading_text("Saving…"))
+        else {
+            panic!("not a button");
+        };
+        assert_eq!(save.label, "Save");
+        assert_eq!(save.action, Some(Action::submit()));
+    }
+
+    #[test]
+    fn a_flag_is_its_emoji_and_an_avatar_names_its_person() {
+        assert_eq!(read(Flag::country("IN").decorative()), text_node("🇮🇳"));
+        let N::Avatar(avatar) = read(Avatar::placeholder("Ravneet Kaur")) else {
+            panic!("not an avatar");
+        };
+        assert_eq!(avatar.name, "Ravneet Kaur");
+        assert_eq!(
+            read(Separator::horizontal()),
+            N::Divider(n::Divider::default())
+        );
+    }
+
+    #[test]
+    fn a_card_is_a_section_with_its_title_and_what_it_holds() {
+        let node = read(
+            Card::titled("Items")
+                .description("2 units, from the Bengaluru warehouse")
+                .action(Button::ghost("See all").href("/items"))
+                .body(Text::new("Pashmina shawl"))
+                .footer(Text::muted("Free shipping")),
+        );
+        let N::Section(section) = node else {
+            panic!("not a section");
+        };
+        assert_eq!(section.style, n::SectionStyle::Card);
+        assert_eq!(section.title.as_deref(), Some("Items"));
+        assert_eq!(
+            section.subtitle.as_deref(),
+            Some("2 units, from the Bengaluru warehouse")
+        );
+        assert!(matches!(section.actions.as_slice(), [N::Button(_)]));
+        assert_eq!(section.children, [text_node("Pashmina shawl")]);
+        assert_eq!(section.footer, [muted("Free shipping")]);
+    }
+
+    #[test]
+    fn an_empty_state_reads_its_icon_words_and_ways_on() {
+        let node = read(
+            EmptyState::new("That order isn't in the shop")
+                .icon(icons::SEARCH_X)
+                .description("Search the orders for its number.")
+                .actions(Button::outline("Back to orders").href("/orders")),
+        );
+        let N::Empty(empty) = node else {
+            panic!("not an empty state");
+        };
+        assert_eq!(empty.title, "That order isn't in the shop");
+        assert_eq!(
+            empty.text.as_deref(),
+            Some("Search the orders for its number.")
+        );
+        assert_eq!(empty.icon.unwrap().name.as_deref(), Some("search-x"));
+        let [N::Button(back)] = empty.actions.as_slice() else {
+            panic!("not one button");
+        };
+        assert_eq!(back.role, n::Role::Secondary);
+        assert_eq!(back.action, Some(Action::navigate("/orders")));
+    }
+
+    #[test]
+    fn a_stat_is_a_figure_with_its_value_and_which_way_it_goes() {
+        let N::Figure(figure) =
+            read(Stat::new("Orders today", "952").trend("+12% on yesterday", true))
+        else {
+            panic!("not a figure");
+        };
+        assert_eq!(figure.label, "Orders today");
+        assert_eq!(figure.value, "952");
+        assert_eq!(
+            figure.trend,
+            Some(n::Trend {
+                direction: n::Direction::Up,
+                text: Some("+12% on yesterday".into()),
+                tone: Some(n::Tone::Success),
+            })
+        );
+        let N::Figure(down) = read(Stat::new("Returns", "7").trend("−3 since Monday", false))
+        else {
+            panic!("not a figure");
+        };
+        assert!(
+            matches!(&down.trend, Some(trend) if trend.direction == n::Direction::Down && trend.tone == Some(n::Tone::Danger))
+        );
+    }
+
+    #[test]
+    fn a_trend_with_no_sign_is_a_line_under_the_figure_in_the_colour_of_its_news() {
+        // The page says whether the news is good, not which way the figure moved.
+        let N::Figure(figure) =
+            read(Stat::new("Orders today", "952").trend("43 in the last hour", true))
+        else {
+            panic!("not a figure");
+        };
+        assert_eq!(figure.trend, None);
+        assert_eq!(figure.detail.as_deref(), Some("43 in the last hour"));
+        assert_eq!(figure.tone, Some(n::Tone::Success));
+        let N::Figure(plain) = read(Stat::new("Customers", "1,204")) else {
+            panic!("not a figure");
+        };
+        assert_eq!((plain.trend, plain.detail, plain.tone), (None, None, None));
+    }
+
+    #[test]
+    fn a_dialog_reads_its_words_and_what_it_holds() {
+        let node = read(
+            Dialog::new("refund", "Refund CS-20481")
+                .description("Up to ₹7,848 can go back.")
+                .body(Text::new("Inside")),
+        );
+        assert_eq!(
+            node,
+            N::Dialog(n::Dialog {
+                id: "refund".into(),
+                title: Some("Refund CS-20481".into()),
+                text: Some("Up to ₹7,848 can go back.".into()),
+                children: vec![text_node("Inside")],
+                ..n::Dialog::default()
+            })
+        );
+    }
+
+    #[test]
+    fn a_question_is_an_alert_whose_answers_are_buttons_by_role() {
+        let node = read(
+            AlertDialog::new("cancel", "Cancel CS-20481?", "This can't be undone.")
+                .cancel("Keep the order")
+                .action(
+                    el("form")
+                        .attr("method", "post")
+                        .attr("action", "/orders/1/cancel")
+                        .flag("data-ui-form", true)
+                        .children((
+                            crate::form::csrf_field("tok".to_owned()),
+                            Button::destructive("Cancel order").submit(),
+                        )),
+                ),
+        );
+        assert_eq!(
+            node,
+            N::Dialog(n::Dialog {
+                id: "cancel".into(),
+                title: Some("Cancel CS-20481?".into()),
+                text: Some("This can't be undone.".into()),
+                alert: true,
+                actions: vec![
+                    N::Button(n::Button {
+                        label: "Keep the order".into(),
+                        role: n::Role::Cancel,
+                        action: Some(Action::Dismiss),
+                        ..n::Button::default()
+                    }),
+                    N::Button(n::Button {
+                        label: "Cancel order".into(),
+                        role: n::Role::Destructive,
+                        prominence: n::Prominence::High,
+                        action: Some(Action::Request {
+                            method: n::Method::Post,
+                            href: "/orders/1/cancel".into(),
+                            fields: vec![Pair {
+                                name: "_csrf".into(),
+                                value: "tok".into()
+                            }],
+                        }),
+                        ..n::Button::default()
+                    }),
+                ],
+                ..n::Dialog::default()
+            })
+        );
+    }
+
+    #[test]
+    fn a_sheet_reads_its_title_size_and_what_it_holds() {
+        let node = read(
+            Sheet::new("order", "Order CS-20481")
+                .width(SheetWidth::Xl)
+                .description("2 units for Tanvi Sharma in Pune, Maharashtra")
+                .body(Text::new("Inside")),
+        );
+        assert_eq!(
+            node,
+            N::Sheet(n::Sheet {
+                id: "order".into(),
+                title: Some("Order CS-20481".into()),
+                subtitle: Some("2 units for Tanvi Sharma in Pune, Maharashtra".into()),
+                size: n::SheetSize::Large,
+                children: vec![text_node("Inside")],
+                ..n::Sheet::default()
+            })
+        );
+    }
+
+    #[test]
+    fn what_a_sheet_and_a_dialog_foot_with_are_their_own_actions_with_their_roles() {
+        let N::Sheet(sheet) = read(
+            Sheet::new("order", "Order CS-20481")
+                .body(Text::new("Inside"))
+                .footer((
+                    Button::primary("Mark as packed").href("/orders/1/pack"),
+                    Button::outline("Close").on_click(crate::Cmd::close("order")),
+                )),
+        ) else {
+            panic!("not a sheet");
+        };
+        // The body holds what the sheet says; the buttons are its actions.
+        assert_eq!(sheet.children, [text_node("Inside")]);
+        let roles: Vec<(&str, n::Role)> = sheet
+            .actions
+            .iter()
+            .map(|node| match node {
+                N::Button(button) => (button.label.as_str(), button.role),
+                other => panic!("not a button: {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            roles,
+            [
+                ("Mark as packed", n::Role::Primary),
+                ("Close", n::Role::Cancel)
+            ]
+        );
+        let N::Dialog(dialog) = read(
+            Dialog::new("refund", "Refund")
+                .body(Text::new("How much?"))
+                .footer(Button::destructive("Refund")),
+        ) else {
+            panic!("not a dialog");
+        };
+        assert_eq!(dialog.children, [text_node("How much?")]);
+        assert!(matches!(
+            dialog.actions.as_slice(),
+            [N::Button(button)] if button.role == n::Role::Destructive
+        ));
+    }
+
+    #[test]
+    fn a_sheet_that_holds_a_form_is_a_task_and_any_other_is_a_glance() {
+        let form = el("form")
+            .slot("form")
+            .attr("method", "post")
+            .attr("action", "/orders/1/refund")
+            .child(Button::new("Refund").submit());
+        let N::Sheet(task) = read(Sheet::new("refund", "Refund").body(form)) else {
+            panic!("not a sheet");
+        };
+        assert!(task.task);
+        let N::Sheet(glance) = read(Sheet::new("order", "Order").body(Text::new("Inside"))) else {
+            panic!("not a sheet");
+        };
+        assert!(!glance.task);
+    }
+
+    #[test]
+    fn a_box_in_its_label_and_a_group_of_radios_are_fields() {
+        use navree_native::input as i;
+        let node = read(
+            crate::Checkbox::new("notify")
+                .checked(true)
+                .label("Tell the customer")
+                .description("By email, once."),
+        );
+        let N::Field(notify) = node else {
+            panic!("not a field");
+        };
+        assert_eq!(notify.name, "notify");
+        assert_eq!(notify.label.as_deref(), Some("Tell the customer"));
+        assert_eq!(notify.help.as_deref(), Some("By email, once."));
+        assert!(matches!(&notify.input, i::Input::Toggle(toggle) if toggle.on));
+
+        let node = read(
+            crate::RadioGroup::new("pays", "Pays by")
+                .options([
+                    crate::OptionItem::new("upi", "UPI"),
+                    crate::OptionItem::new("cod", "Cash on delivery"),
+                ])
+                .selected("cod"),
+        );
+        let N::Field(pays) = node else {
+            panic!("not a field");
+        };
+        assert_eq!(pays.name, "pays");
+        assert_eq!(pays.label.as_deref(), Some("Pays by"));
+        let i::Input::Choice(choice) = &pays.input else {
+            panic!("not a choice");
+        };
+        assert_eq!(choice.kind, i::ChoiceKind::Radio);
+        assert_eq!(choice.value.as_deref(), Some("cod"));
+        assert_eq!(choice.options.len(), 2);
+        assert_eq!(choice.options[1].label, "Cash on delivery");
+    }
+
+    #[test]
+    fn what_a_control_does_when_it_changes_is_the_fields_changed() {
+        use crate::{Cmd, Trigger};
+        use navree_native::action::{Action, Command};
+        // A box that sends its form as it is ticked.
+        let N::Field(ticked) =
+            read(crate::Checkbox::new("done").on(Trigger::Change, Cmd::submit("check-3")))
+        else {
+            panic!("not a field");
+        };
+        assert_eq!(
+            ticked.changed,
+            Some(Action::Submit {
+                form: Some("check-3".into()),
+                href: None,
+                with: None
+            })
+        );
+        // A count of what is typed, with a most.
+        let N::Field(typed) =
+            read(crate::Checkbox::new("x").on(Trigger::Input, Cmd::count("bio-count", 160)))
+        else {
+            panic!("not a field");
+        };
+        assert_eq!(
+            typed.changed,
+            Some(Action::Commands {
+                list: vec![Command::Count {
+                    id: "bio-count".into(),
+                    max: Some(160)
+                }]
+            })
+        );
+        // A control that does nothing more has no `changed`.
+        let N::Field(plain) = read(crate::Checkbox::new("x")) else {
+            panic!("not a field");
+        };
+        assert_eq!(plain.changed, None);
+    }
+
+    #[test]
+    fn what_stands_before_and_after_typed_text_is_its_prefix_and_suffix() {
+        use navree_native::input as i;
+        let N::Field(amount) = read(
+            crate::InputGroup::new(crate::Input::text("amount"))
+                .start("₹")
+                .end("INR"),
+        ) else {
+            panic!("not a field");
+        };
+        assert_eq!(amount.name, "amount");
+        let i::Input::Text(text) = &amount.input else {
+            panic!("not text");
+        };
+        assert_eq!(
+            (text.prefix.as_deref(), text.suffix.as_deref()),
+            (Some("₹"), Some("INR"))
+        );
+        // A button that clears the field is a script's.
+        let node: Node = crate::Input::search("q").clearable("Clear").into();
+        let lowered = lower(&node);
+        assert!(lowered.is_native(), "{:?}", lowered.misses);
+        assert_eq!(lowered.dropped, ["input-clear"]);
+        // An addon that is not words, and one on a field that is not text, are misses.
+        let picture: Node = crate::InputGroup::new(crate::Input::text("q"))
+            .start(crate::components::icon(crate::icons::SEARCH))
+            .into();
+        assert_eq!(lower(&picture).why(), ["slot:input-group"]);
+        let tick: Node = crate::InputGroup::new(crate::Checkbox::new("a"))
+            .end("x")
+            .into();
+        assert_eq!(lower(&tick).why(), ["slot:input-group"]);
+    }
+
+    #[test]
+    fn facts_read_their_label_value_icon_and_lines() {
+        let node = read(
+            FactGrid::new().cols(2).cards([
+                FactCard::new("Customer", "Tanvi Sharma")
+                    .icon(icons::USER)
+                    .tone(Tone::Info)
+                    .detail("tanvi.sharma@example.com")
+                    .detail("+91 98765 36760"),
+                FactCard::new(
+                    "Ships to",
+                    Row::gap(2)
+                        .children((Flag::country("IN").decorative(), Text::new("Pune").inline())),
+                ),
+            ]),
+        );
+        let N::Facts(facts) = node else {
+            panic!("not facts");
+        };
+        let [customer, ships] = facts.items.as_slice() else {
+            panic!("not two facts");
+        };
+        assert_eq!(customer.label, "Customer");
+        assert_eq!(customer.value, [text_node("Tanvi Sharma")]);
+        assert_eq!(customer.tone, Some(n::Tone::Info));
+        assert_eq!(
+            customer.icon.as_ref().unwrap().name.as_deref(),
+            Some("user")
+        );
+        assert_eq!(
+            customer.details,
+            ["tanvi.sharma@example.com", "+91 98765 36760"]
+        );
+        let [N::Stack(place)] = ships.value.as_slice() else {
+            panic!("not a row: {:?}", ships.value);
+        };
+        assert_eq!(place.children, [text_node("🇮🇳"), text_node("Pune")]);
+    }
+
+    #[test]
+    fn a_timeline_is_days_of_rows_with_what_is_still_to_come() {
+        let node = read(
+            Timeline::new("order-steps", "The steps of CS-20481")
+                .time_zone("Asia/Kolkata", 19_800)
+                .events([
+                    TimelineEvent::new("Placed")
+                        .detail("2 units for ₹7,848")
+                        .at(1_793_773_800)
+                        .tone(Tone::Info)
+                        .icon(icons::SHOPPING_BAG),
+                    TimelineEvent::new("Delivered")
+                        .at(1_793_860_200)
+                        .meta(Meta::icon(icons::TRUCK, "KL 6392")),
+                    TimelineEvent::new("Packing")
+                        .detail("Picked and packed at the warehouse")
+                        .time_text("Next")
+                        .current(),
+                    TimelineEvent::new("Shipping").time_text("Later").upcoming(),
+                ]),
+        );
+        let N::Stack(stack) = node else {
+            panic!("not a stack");
+        };
+        assert_eq!(stack.id.as_deref(), Some("order-steps"));
+        // The days are sections, each holding a timeline of its moments.
+        let moments: Vec<&n::Moment> = stack
+            .children
+            .iter()
+            .flat_map(|node| match node {
+                N::Section(day) => day.children.iter().collect::<Vec<_>>(),
+                other => vec![other],
+            })
+            .filter_map(|node| match node {
+                N::Timeline(timeline) => Some(timeline),
+                _ => None,
+            })
+            .flat_map(|timeline| timeline.items.iter())
+            .collect();
+        let titles: Vec<&str> = moments.iter().map(|moment| moment.title.as_str()).collect();
+        assert_eq!(titles, ["Placed", "Delivered", "Packing", "Shipping"]);
+        assert_eq!(moments[0].subtitle.as_deref(), Some("2 units for ₹7,848"));
+        assert_eq!(
+            moments[0]
+                .icon
+                .as_ref()
+                .and_then(|icon| icon.name.as_deref()),
+            Some("shopping-bag")
+        );
+        assert_eq!(moments[0].tone, Some(n::Tone::Info));
+        assert!(moments[0].time.is_some());
+        assert!(
+            !moments[1].detail.is_empty(),
+            "the delivery's line of facts"
+        );
+        assert_eq!(moments[2].state, Some(n::RowState::Current));
+        assert_eq!(moments[2].time.as_deref(), Some("Next"));
+        assert_eq!(moments[3].state, Some(n::RowState::Upcoming));
+    }
+
+    #[test]
+    fn what_the_toolkit_has_beyond_what_is_read_is_a_named_miss_and_never_a_guess() {
+        use crate::charts::{
+            CalendarHeatmap, ColorStrip, DayClock, Gauge, MatrixHeatmap, Meter, MiniColumn,
+            MiniColumns, RangeScale, Ring, RingValue, Rings, Scatter, Segment,
+        };
+        use crate::native::TestNative;
+        use crate::{CopyField, DayPager, Dock, DockItem, InfoTip, View};
+        use navree_native::{Client, FormFactor, Platform};
+        let phone = || Client::new(Platform::Android, FormFactor::Phone);
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 11, 12).expect("a day");
+        let parts: Vec<(Node, &str)> = vec![
+            (Ring::new("Score", 72).into(), "chart:ring"),
+            (
+                Rings::new("Activity")
+                    .ring(RingValue::new("Move", 40))
+                    .into(),
+                "chart:rings",
+            ),
+            (Gauge::new("Heart rate", 64).into(), "chart:gauge"),
+            (DayClock::new("The day").into(), "chart:day-clock"),
+            (
+                Meter::new("Sleep").segment(Segment::new("Deep", 90)).into(),
+                "chart:meter",
+            ),
+            (
+                MiniColumns::new("The week")
+                    .part_auto("Asleep")
+                    .column(MiniColumn::new("Mon", [Some(1.0)]))
+                    .into(),
+                "chart:mini-columns",
+            ),
+            (
+                ColorStrip::new("Readings").cell("Mon", "Fine").into(),
+                "chart:color-strip",
+            ),
+            (RangeScale::new("Resting", 52).into(), "chart:range-scale"),
+            (
+                CalendarHeatmap::new("Steps").day(day, 3).into(),
+                "chart:calendar-heatmap",
+            ),
+            (
+                MatrixHeatmap::new("Relations").into(),
+                "chart:matrix-heatmap",
+            ),
+            (Scatter::new("Pairs").into(), "chart:scatter"),
+            (
+                Dock::new("Main").item(DockItem::new("Home", "/")).into(),
+                "slot:dock",
+            ),
+            (DayPager::new("pager", "Today").into(), "slot:day-pager"),
+            (
+                CopyField::new("key", "Key", "abc").into(),
+                "slot:copy-field",
+            ),
+            (
+                crate::Progress::new(40, 100, "Done").goal(80).into(),
+                "slot:meter",
+            ),
+        ];
+        for (node, named) in parts {
+            let page = TestNative::build(phone(), move || View::new("x").body(node));
+            assert!(!page.is_native(), "{named} was read");
+            assert_eq!(page.why(), [named], "{named}");
+            // It says why, in words, and the page is the web view's, not a crash.
+            assert!(
+                page.page().misses[0].why.contains("no reader here yet"),
+                "{named}"
+            );
+        }
+        // An info tip is two parts, a mark and what it opens.
+        let page = TestNative::build(phone(), || {
+            View::new("x").body(InfoTip::new("tip", "About this"))
+        });
+        assert_eq!(page.why(), ["slot:info-tip", "slot:info-tip-content"]);
+    }
+
+    #[test]
+    fn a_stat_that_links_opens_its_page_and_one_with_more_parts_than_are_read_is_a_named_miss() {
+        use crate::Stat;
+        let N::Figure(linked) = read(Stat::new("Steps", "8,200").href("/steps")) else {
+            panic!("not a figure");
+        };
+        assert_eq!(linked.label, "Steps");
+        assert_eq!(linked.action, Some(Action::navigate("/steps")));
+        for stat in [
+            Stat::new("Steps", "8,200").icon(icons::SHOPPING_BAG),
+            Stat::new("Steps", "8,200").status(Badge::new("ok")),
+            Stat::new("Steps", "8,200").aside(Text::new("graphic")),
+        ] {
+            let node: Node = stat.into();
+            let lowered = lower(&node);
+            assert_eq!(lowered.why(), ["slot:stat"]);
+            assert!(lowered.misses[0].why.contains("no reader here yet"));
+        }
+    }
+
+    #[test]
+    fn work_a_machine_did_is_a_muted_moment() {
+        let node = read(
+            Timeline::new("steps", "Steps").events([
+                TimelineEvent::new("Packed by hand").at(1_793_773_800),
+                TimelineEvent::new("Label printed")
+                    .at(1_793_773_900)
+                    .muted(),
+            ]),
+        );
+        let mut muted: Vec<(&str, bool)> = Vec::new();
+        let mut stack = vec![&node];
+        while let Some(part) = stack.pop() {
+            if let N::Timeline(timeline) = part {
+                muted.extend(
+                    timeline
+                        .items
+                        .iter()
+                        .map(|moment| (moment.title.as_str(), moment.muted)),
+                );
+            }
+            stack.extend(part.children().into_iter().rev());
+        }
+        assert_eq!(muted, [("Packed by hand", false), ("Label printed", true)]);
+    }
+
+    #[test]
+    fn a_timeline_of_one_list_is_the_timeline() {
+        let N::Timeline(timeline) = read(
+            Timeline::new("steps", "Steps")
+                .events([TimelineEvent::new("Placed").time_text("Today")]),
+        ) else {
+            panic!("not a timeline");
+        };
+        assert_eq!(timeline.id.as_deref(), Some("steps"));
+        assert_eq!(timeline.items.len(), 1);
+    }
+
+    #[test]
+    fn a_plain_table_reads_through_its_scrolling_box() {
+        let node = read(
+            Table::new()
+                .head((TableHead::new("Product"), TableHead::new("Qty").numeric()))
+                .rows(vec![
+                    TableRowEl::new((
+                        TableCell::new("Pashmina shawl"),
+                        TableCell::new("1").numeric(),
+                    ))
+                    .key(7_i64),
+                ]),
+        );
+        let N::Table(table) = node else {
+            panic!("not a table");
+        };
+        assert_eq!(table.columns.len(), 2);
+        assert!(table.columns[1].numeric);
+        assert_eq!(table.rows[0].id.as_deref(), Some("7"));
+        assert_eq!(
+            table.rows[0].cells,
+            [text_node("Pashmina shawl"), text_node("1")]
+        );
+    }
+
+    #[test]
+    fn a_region_reads_where_it_fetches_itself_and_leaves_its_placeholder_out() {
+        let node = read(Region::new("order-others").src("/orders/1/others").lazy());
+        assert_eq!(
+            node,
+            N::Region(n::Region {
+                id: "order-others".into(),
+                src: "/orders/1/others".into(),
+                lazy: true,
+                live: None,
+                children: Vec::new(),
+            })
+        );
+    }
+
+    #[test]
+    fn a_component_that_grows_a_part_its_reader_never_heard_of_stops_being_read() {
+        let card: Node = el("div")
+            .slot("card")
+            .children((
+                el("div").slot("card-content").child("x"),
+                el("div").slot("card-ribbon").child("New"),
+            ))
+            .into();
+        let lowered = lower(&card);
+        assert_eq!(lowered.why(), ["slot:card"]);
+        assert_eq!(lowered.misses[0].why, "an unexpected `card-ribbon`");
+    }
+}

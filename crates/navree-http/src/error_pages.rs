@@ -66,8 +66,9 @@ pub struct ErrorContext {
     /// The request's URI, as it arrived.
     pub uri: Uri,
     /// The headers a page can depend on: `Accept`, `Accept-Language`, `Cookie`,
-    /// `Host`, the `Sec-Fetch-*` and `Sec-Purpose` headers, `X-Requested-With`
-    /// and every `X-Navree-*` header. Nothing else is kept: not
+    /// `Host`, `User-Agent` (a native client's web view is known by it), the
+    /// `Sec-Fetch-*` and `Sec-Purpose` headers, `X-Requested-With` and every
+    /// `X-Navree-*` header. Nothing else is kept: not
     /// `Authorization`, not an API key, not the body.
     pub headers: HeaderMap,
     /// The app.
@@ -351,6 +352,7 @@ fn kept_header(name: &HeaderName) -> bool {
         || *name == header::ACCEPT_LANGUAGE
         || *name == header::COOKIE
         || *name == header::HOST
+        || *name == header::USER_AGENT
         || name.as_str().starts_with("sec-fetch-")
         || name.as_str() == "sec-purpose"
         || name.as_str() == "x-requested-with"
@@ -568,6 +570,15 @@ mod tests {
         let kept = capture(&headers);
         let mut names: Vec<&str> = kept.keys().map(HeaderName::as_str).collect();
         names.sort_unstable();
-        assert_eq!(names, ["accept", "cookie", "sec-fetch-dest", "x-navree-ui"]);
+        assert_eq!(
+            names,
+            [
+                "accept",
+                "cookie",
+                "sec-fetch-dest",
+                "user-agent",
+                "x-navree-ui"
+            ]
+        );
     }
 }

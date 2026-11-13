@@ -63,7 +63,9 @@ pub fn derive_options(input: TokenStream) -> TokenStream {
 /// multi | boolean | relation`, `options = PATH`, `source = "companies.name"` (the
 /// column queried when it isn't the field's name), `group = "Address"`, `label =
 /// "..."`, `link = "/deals/{id}"`, `badge = path::to::tone`, `cell = path::to::draw`
-/// (draws the cell from the whole row, into anything that becomes a `Node`).
+/// (draws the cell from the whole row, into anything that becomes a `Node`), `role =
+/// title | subtitle | status | trailing` (what the column is to a record, for a native
+/// client that draws each record as a row of a list; a subtitle may be a hidden column).
 ///
 /// On the struct: `#[table(sort = "-updated_at,title", per = 25, per_pages(10, 25,
 /// 50, 100), cursor, version = "updated_at", no_count, capped = 10000)]`.
