@@ -48,8 +48,9 @@ enum WindowPictures {
                 resize(argument)
                 log.append("size \(argument)")
             case "menus":
-                write(menus(), to: out.appendingPathComponent("menus.txt"))
-                log.append("menus written")
+                let name = argument.isEmpty ? "menus.txt" : "menus-\(argument).txt"
+                write(menus(), to: out.appendingPathComponent(name))
+                log.append("menus written to \(name)")
             case "menu":
                 log.append("menu \(argument): \(choose(argument) ? "chosen" : "not found or disabled")")
             case "key":
