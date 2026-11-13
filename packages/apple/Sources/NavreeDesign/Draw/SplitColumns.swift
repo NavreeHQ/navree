@@ -8,6 +8,9 @@ extension EnvironmentValues {
     /// How many times Find (⌘F) was chosen in the window: each change asks
     /// the search field of the screen in front to take the focus.
     @Entry public var navreeFind: Int = 0
+    /// Set in the list of a list beside its detail: what a row that would push
+    /// does instead, choosing the screen the detail shows.
+    @Entry public var navreeChoose: (@MainActor @Sendable (Navree.Action, Place) -> Void)? = nil
 }
 
 /// The search field takes the focus when Find is chosen from the menu bar.
@@ -36,7 +39,7 @@ public struct SplitColumns<ListColumn: View, DetailRoot: View, Inspector: View, 
     let path: Binding<[PathEntry]>
     let compactColumn: CompactColumn
     let inspectorTitle: String?
-    let choose: @MainActor (Navree.Action, Place) -> Void
+    let choose: @MainActor @Sendable (Navree.Action, Place) -> Void
     let list: ListColumn
     let detail: DetailRoot
     let inspector: Inspector?
@@ -48,7 +51,7 @@ public struct SplitColumns<ListColumn: View, DetailRoot: View, Inspector: View, 
 
     public init(
         path: Binding<[PathEntry]>, compactColumn: CompactColumn, inspectorTitle: String? = nil,
-        choose: @escaping @MainActor (Navree.Action, Place) -> Void,
+        choose: @escaping @MainActor @Sendable (Navree.Action, Place) -> Void,
         @ViewBuilder list: () -> ListColumn, @ViewBuilder detail: () -> DetailRoot,
         inspector: (() -> Inspector)? = nil, @ViewBuilder pushed: @escaping (PathEntry) -> Pushed
     ) {
@@ -65,18 +68,17 @@ public struct SplitColumns<ListColumn: View, DetailRoot: View, Inspector: View, 
 
     public var body: some View {
         NavigationSplitView(preferredCompactColumn: $shown) {
-            // The list's own stack, which never grows: a row it would push is
-            // a choice, asked of the runtime for the detail column.
-            NavigationStack(path: choices) {
-                list
-                    // Registered so the list's links read as links; the
-                    // path never grows, so nothing is pushed here.
-                    .navigationDestination(for: PathEntry.self) { _ in EmptyView() }
-            }
-            // A list narrower than the window draws as a phone's would: rows,
-            // never columns, its search under its title.
-            .environment(\.horizontalSizeClass, .compact)
-            .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 440)
+            list
+                // A row the list would push is a choice, asked of the runtime
+                // for the detail column.
+                .environment(\.navreeChoose, { action, place in
+                    shown = .detail
+                    choose(action, place)
+                })
+                // A list narrower than the window draws as a phone's would:
+                // rows, never columns, its search under its title.
+                .environment(\.horizontalSizeClass, .compact)
+                .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 440)
         } detail: {
             NavigationStack(path: path) {
                 detail
@@ -95,6 +97,7 @@ public struct SplitColumns<ListColumn: View, DetailRoot: View, Inspector: View, 
                     }
             }
             .modifier(InspectorColumn(content: inspector, shown: inspectorBinding))
+            .modifier(DetailMinimum())
         }
         .navigationSplitViewStyle(.balanced)
         .onChange(of: compactColumn) { _, column in shown = column == .detail ? .detail : .sidebar }
@@ -109,26 +112,13 @@ public struct SplitColumns<ListColumn: View, DetailRoot: View, Inspector: View, 
     private var inspectorBinding: Binding<Bool> {
         Binding(get: { inspectorShown }, set: { inspecting = $0 })
     }
-
-    /// The list column's path: empty for ever. A link that would push on it is
-    /// a choice; the detail column shows what it opens.
-    private var choices: Binding<[PathEntry]> {
-        Binding(
-            get: { [] },
-            set: { next in
-                guard case .tap(let action, let place)? = next.last else { return }
-                shown = .detail
-                choose(action, place)
-            }
-        )
-    }
 }
 
 extension SplitColumns where Inspector == EmptyView {
     /// A list beside its detail, with no inspector.
     public init(
         path: Binding<[PathEntry]>, compactColumn: CompactColumn,
-        choose: @escaping @MainActor (Navree.Action, Place) -> Void,
+        choose: @escaping @MainActor @Sendable (Navree.Action, Place) -> Void,
         @ViewBuilder list: () -> ListColumn, @ViewBuilder detail: () -> DetailRoot,
         @ViewBuilder pushed: @escaping (PathEntry) -> Pushed
     ) {
@@ -223,6 +213,18 @@ struct PointerHover: ViewModifier {
         } else {
             content.hoverEffect(.highlight)
         }
+        #else
+        content
+        #endif
+    }
+}
+
+/// A Mac window keeps room for the detail beside its list: the window stops
+/// narrowing before the detail is squeezed (an iPad's split view folds instead).
+struct DetailMinimum: ViewModifier {
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.frame(minWidth: 360)
         #else
         content
         #endif

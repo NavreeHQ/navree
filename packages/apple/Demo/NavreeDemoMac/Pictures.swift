@@ -47,6 +47,12 @@ enum WindowPictures {
             case "size":
                 resize(argument)
                 log.append("size \(argument)")
+            case "move":
+                let numbers = argument.split(separator: ",").compactMap { Double($0) }
+                if numbers.count == 2, let window = windows.first {
+                    window.setFrameOrigin(NSPoint(x: numbers[0], y: numbers[1]))
+                }
+                log.append("move \(argument) pointer \(NSEvent.mouseLocation)")
             case "menus":
                 let name = argument.isEmpty ? "menus.txt" : "menus-\(argument).txt"
                 write(menus(), to: out.appendingPathComponent(name))
