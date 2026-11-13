@@ -314,7 +314,9 @@ async fn push_is_listed_for_switches_and_quiet_hours_only_where_the_app_can_push
     let options = app.get::<Notifier>().await.options().clone();
     assert_eq!(
         names(&options.preferences.channels),
-        ["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"]
+        [
+            "mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"
+        ]
     );
     assert_eq!(
         names(&options.deferred.channels),
@@ -329,7 +331,9 @@ async fn push_is_listed_for_switches_and_quiet_hours_only_where_the_app_can_push
         .json_value();
     assert_eq!(
         body["channels"],
-        json!(["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"])
+        json!([
+            "mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"
+        ])
     );
     // `push` named where nothing can push is just not listed.
     let mut named = NotifyOptions::default();
@@ -390,7 +394,11 @@ async fn a_person_keeps_at_most_twenty_devices_the_oldest_going_first() {
     for n in 0..MAX_DEVICES_PER_NOTIFIABLE {
         clock.advance(std::time::Duration::from_secs(60));
         devices
-            .register(&user, &format!("session-{n}"), device(PushPlatform::Ios, &token(n)))
+            .register(
+                &user,
+                &format!("session-{n}"),
+                device(PushPlatform::Ios, &token(n)),
+            )
             .await
             .unwrap();
     }
@@ -422,7 +430,14 @@ async fn a_person_keeps_at_most_twenty_devices_the_oldest_going_first() {
         .register(&other, "session-x", device(PushPlatform::Ios, &token(500)))
         .await
         .unwrap();
-    assert_eq!(devices.of("user", &user.id.to_string()).await.unwrap().len(), 20);
+    assert_eq!(
+        devices
+            .of("user", &user.id.to_string())
+            .await
+            .unwrap()
+            .len(),
+        20
+    );
 }
 
 #[tokio::test]

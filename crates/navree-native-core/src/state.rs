@@ -510,9 +510,12 @@ impl ViewState {
                 window: self.window,
             }),
             Query::Screen { id } => json(&self.screens.get(id)),
-            Query::Form { screen, form } => {
-                json(&self.screens.get(screen).and_then(|screen| screen.forms.get(form)))
-            }
+            Query::Form { screen, form } => json(
+                &self
+                    .screens
+                    .get(screen)
+                    .and_then(|screen| screen.forms.get(form)),
+            ),
             Query::Rows {
                 screen,
                 id,
@@ -523,7 +526,12 @@ impl ViewState {
                 .get(screen)
                 .and_then(|screen| crate::regions::rows(screen, id, *from, *count))
                 .unwrap_or(serde_json::Value::Null),
-            Query::Redraw { screen, id, rows, gone } => self
+            Query::Redraw {
+                screen,
+                id,
+                rows,
+                gone,
+            } => self
                 .screens
                 .get(screen)
                 .and_then(|screen| crate::regions::redrawn(screen, id, rows, gone))
@@ -560,7 +568,11 @@ impl ViewState {
         self.modals
             .iter_mut()
             .map(|modal| &mut modal.stack)
-            .chain(self.destinations.iter_mut().map(|destination| &mut destination.stack))
+            .chain(
+                self.destinations
+                    .iter_mut()
+                    .map(|destination| &mut destination.stack),
+            )
             .find(|stack| stack.contains(&id))
     }
 }
@@ -611,7 +623,11 @@ pub(crate) enum Pending {
         was: String,
     },
     /// What changed in a list since its revision.
-    Changes { screen: ScreenId, visit: u64, list: String },
+    Changes {
+        screen: ScreenId,
+        visit: u64,
+        list: String,
+    },
     /// A row's move: where it came from, to put it back if the server refuses.
     Move {
         screen: ScreenId,
@@ -640,7 +656,10 @@ pub(crate) enum Pending {
     PushGone,
     /// A platform sign-in's token, posted to the app's own sign-in route, with
     /// the page the call names for a second step.
-    SignIn { screen: ScreenId, second_step: Option<String> },
+    SignIn {
+        screen: ScreenId,
+        second_step: Option<String>,
+    },
 }
 
 impl Pending {
@@ -655,7 +674,12 @@ impl Pending {
             | Self::Changes { screen, .. }
             | Self::Move { screen, .. }
             | Self::Options { screen, .. } => Some(*screen),
-            Self::Shell | Self::BeforeCall { .. } | Self::SignIn { .. } | Self::Exchange | Self::PushPut { .. } | Self::PushGone => None,
+            Self::Shell
+            | Self::BeforeCall { .. }
+            | Self::SignIn { .. }
+            | Self::Exchange
+            | Self::PushPut { .. }
+            | Self::PushGone => None,
         }
     }
 
@@ -698,9 +722,17 @@ pub(crate) enum TimerFor {
     /// A stream spoke for a list: ask what changed once it is quiet.
     Changes { screen: ScreenId, list: String },
     /// A field that sends its form as it changes was typed in: send when the typing pauses.
-    Changed { screen: ScreenId, form: String, action: Box<Action> },
+    Changed {
+        screen: ScreenId,
+        form: String,
+        action: Box<Action>,
+    },
     /// A searched choice was typed in: ask for options when the typing pauses.
-    Options { screen: ScreenId, form: String, field: String },
+    Options {
+        screen: ScreenId,
+        form: String,
+        field: String,
+    },
 }
 
 /// A list that asks what changed in it since its revision.
@@ -869,7 +901,10 @@ pub(crate) enum Goes {
     /// As a form to the call's continuation, with the server's one-time
     /// ticket; without it when the ticket is `spent` (a confirmation's, at
     /// its challenge route).
-    Then { then: navree_native::device::Then, spent: bool },
+    Then {
+        then: navree_native::device::Then,
+        spent: bool,
+    },
     /// As JSON to the app's own sign-in route, with the state the nonce route
     /// gave. `web` is where the web's sign-in starts, for a system with no
     /// sheet for the provider; `second_step` the page that finishes a second
@@ -939,7 +974,12 @@ pub(crate) struct PushState {
 impl std::fmt::Debug for PushState {
     /// Never the token.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "PushState {{ token: {}, registered: {} }}", self.token.is_some(), self.registered.is_some())
+        write!(
+            f,
+            "PushState {{ token: {}, registered: {} }}",
+            self.token.is_some(),
+            self.registered.is_some()
+        )
     }
 }
 

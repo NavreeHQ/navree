@@ -56,11 +56,11 @@ pub mod ui;
 pub mod vocab;
 
 pub use action::{Action, Command, Pair, Present, State};
-pub use device::{DeviceCall, ReplyCall, Ticket};
 pub use client::{
     Client, ClientDescriptor, ClientError, Contrast, DescriptorError, FormFactor, Platform, Scheme,
     WebViewToken,
 };
+pub use device::{DeviceCall, ReplyCall, Ticket};
 pub use envelope::{Back, Envelope, Screen, Search, Upgrade, Web};
 pub use input::Input;
 pub use node::{Node, Prominence, Role, Standard, Tone};

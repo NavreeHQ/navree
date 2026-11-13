@@ -28,12 +28,12 @@ use navree_native::action::Present;
 use navree_native::shell::{SignInExchange, SignInPlatform};
 use sha2::{Digest, Sha256};
 
+use crate::Core;
 use crate::effect::{Change, Effect, Part};
 use crate::event::{Response, TransportError};
 use crate::forms::encode;
 use crate::origin::{Target, path_of};
 use crate::state::{Failure, HandOver, Modal, Notice, Pending, ScreenId};
-use crate::Core;
 
 /// The fewest random bytes a sign-in is made from: 32 for the verifier and
 /// 16 for the `state`.
@@ -45,7 +45,9 @@ const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx
 pub(crate) fn base64url(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
-        let group = u32::from(chunk[0]) << 16 | u32::from(chunk.get(1).copied().unwrap_or(0)) << 8 | u32::from(chunk.get(2).copied().unwrap_or(0));
+        let group = u32::from(chunk[0]) << 16
+            | u32::from(chunk.get(1).copied().unwrap_or(0)) << 8
+            | u32::from(chunk.get(2).copied().unwrap_or(0));
         for at in 0..=chunk.len() {
             let six = (group >> (18 - 6 * at)) & 63;
             out.push(char::from(ALPHABET[six as usize]));
@@ -75,8 +77,14 @@ fn unhex(text: &str) -> Option<Vec<u8>> {
     if !text.len().is_multiple_of(2) {
         return None;
     }
-    let digit = |byte: u8| char::from(byte).to_digit(16).and_then(|digit| u8::try_from(digit).ok());
-    text.chunks(2).map(|pair| Some(digit(pair[0])? << 4 | digit(pair[1])?)).collect()
+    let digit = |byte: u8| {
+        char::from(byte)
+            .to_digit(16)
+            .and_then(|digit| u8::try_from(digit).ok())
+    };
+    text.chunks(2)
+        .map(|pair| Some(digit(pair[0])? << 4 | digit(pair[1])?))
+        .collect()
 }
 
 /// Decodes one value of a query.
@@ -87,7 +95,10 @@ fn decoded(text: &str) -> String {
     while at < bytes.len() {
         match bytes[at] {
             b'+' => out.push(b' '),
-            b'%' if at + 2 < bytes.len() => match std::str::from_utf8(&bytes[at + 1..at + 3]).ok().and_then(unhex) {
+            b'%' if at + 2 < bytes.len() => match std::str::from_utf8(&bytes[at + 1..at + 3])
+                .ok()
+                .and_then(unhex)
+            {
                 Some(byte) => {
                     out.extend(byte);
                     at += 2;
@@ -113,7 +124,11 @@ pub(crate) fn query_value(address: &str, name: &str) -> Option<String> {
 
 /// Whether two texts are the same, in time that does not say where they differ.
 fn same(a: &str, b: &str) -> bool {
-    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0, |differs, (a, b)| differs | (a ^ b)) == 0
+    a.len() == b.len()
+        && a.bytes()
+            .zip(b.bytes())
+            .fold(0, |differs, (a, b)| differs | (a ^ b))
+            == 0
 }
 
 fn text(name: &str, value: &str) -> Part {
@@ -128,7 +143,12 @@ impl Core {
     /// names them.
     fn family(&self) -> Option<SignInPlatform> {
         match self.config.client.platform {
-            Platform::Ios | Platform::Ipados | Platform::Macos | Platform::Watchos | Platform::Tvos | Platform::Visionos => Some(SignInPlatform::Apple),
+            Platform::Ios
+            | Platform::Ipados
+            | Platform::Macos
+            | Platform::Watchos
+            | Platform::Tvos
+            | Platform::Visionos => Some(SignInPlatform::Apple),
             Platform::Android | Platform::Wearos => Some(SignInPlatform::Android),
             _ => None,
         }
@@ -150,7 +170,11 @@ impl Core {
         }
         if self.family().is_none() || self.config.app_id.is_empty() {
             self.notice(Notice::Failed, self.front());
-            return self.report("sign_in", "a sign-in can't be handed over: the app's id or its system is not known".to_owned());
+            return self.report(
+                "sign_in",
+                "a sign-in can't be handed over: the app's id or its system is not known"
+                    .to_owned(),
+            );
         }
         match self.inner.hand_over {
             // The bytes for one are already asked for, or its code is being exchanged.
@@ -170,7 +194,11 @@ impl Core {
 
     /// The random bytes a sign-in waits for came: the session opens.
     pub(crate) fn random(&mut self, request: u64, hex: &str) {
-        let Some(HandOver::Wanted { request: wanted, ephemeral }) = self.inner.hand_over.clone() else {
+        let Some(HandOver::Wanted {
+            request: wanted,
+            ephemeral,
+        }) = self.inner.hand_over.clone()
+        else {
             return;
         };
         if wanted != request {
@@ -183,10 +211,18 @@ impl Core {
         let bytes = unhex(hex).unwrap_or_default();
         // Bytes that are all alike are no secret: a client that has no random
         // generator must not sign anybody in.
-        let alike = bytes.first().is_some_and(|first| bytes.iter().all(|byte| byte == first));
+        let alike = bytes
+            .first()
+            .is_some_and(|first| bytes.iter().all(|byte| byte == first));
         if bytes.len() < RANDOM_BYTES || alike {
             self.notice(Notice::Failed, self.front());
-            return self.report("sign_in", format!("a sign-in needs {RANDOM_BYTES} random bytes; {} came", bytes.len()));
+            return self.report(
+                "sign_in",
+                format!(
+                    "a sign-in needs {RANDOM_BYTES} random bytes; {} came",
+                    bytes.len()
+                ),
+            );
         }
         let verifier = base64url(&bytes[..32]);
         let state = base64url(&bytes[32..RANDOM_BYTES]);
@@ -205,11 +241,17 @@ impl Core {
             said.push(text("redirect_uri", callback));
         }
         let start = self.inner.origin.absolute(routes.start.as_str());
-        let url = format!("{start}{}{}", if start.contains('?') { '&' } else { '?' }, encode(&said));
+        let url = format!(
+            "{start}{}{}",
+            if start.contains('?') { '&' } else { '?' },
+            encode(&said)
+        );
         self.inner.hand_over = Some(HandOver::Open { state, verifier });
         self.effects.push(Effect::SignIn {
             url,
-            callback: routes.callback.or_else(|| self.config.sign_in.callback.clone()),
+            callback: routes
+                .callback
+                .or_else(|| self.config.sign_in.callback.clone()),
             ephemeral,
         });
     }
@@ -219,15 +261,26 @@ impl Core {
         let Some(routes) = &self.inner.sign_in else {
             return false;
         };
-        let place = |address: &str| address.split(['?', '#']).next().unwrap_or("").trim_end_matches('/').to_owned();
+        let place = |address: &str| {
+            address
+                .split(['?', '#'])
+                .next()
+                .unwrap_or("")
+                .trim_end_matches('/')
+                .to_owned()
+        };
         match &routes.callback {
             Some(callback) => place(address) == place(callback),
             // The client knows its own link: a link on the app's own scheme
             // that carries a code and a state is one.
             None => {
                 let scheme = self.config.sign_in.callback.as_deref().unwrap_or("");
-                let own = !scheme.is_empty() && address.strip_prefix(scheme).is_some_and(|rest| rest.starts_with(':'));
-                own && query_value(address, "code").is_some() && query_value(address, "state").is_some()
+                let own = !scheme.is_empty()
+                    && address
+                        .strip_prefix(scheme)
+                        .is_some_and(|rest| rest.starts_with(':'));
+                own && query_value(address, "code").is_some()
+                    && query_value(address, "state").is_some()
             }
         }
     }
@@ -240,7 +293,10 @@ impl Core {
         if matches!(self.inner.hand_over, Some(HandOver::Open { .. })) {
             return self.sign_in_done(Some(address));
         }
-        self.report("sign_in", "a sign-in's return arrived with no sign-in open, and was not used".to_owned());
+        self.report(
+            "sign_in",
+            "a sign-in's return arrived with no sign-in open, and was not used".to_owned(),
+        );
     }
 
     /// The system's sign-in session ended: with the address it came back on,
@@ -252,7 +308,10 @@ impl Core {
         let Some(HandOver::Open { state, verifier }) = self.inner.hand_over.clone() else {
             // No session of the core's own is open: whatever this is, it is not used.
             if url.is_some() {
-                self.report("sign_in", "a sign-in's return arrived with no sign-in open, and was not used".to_owned());
+                self.report(
+                    "sign_in",
+                    "a sign-in's return arrived with no sign-in open, and was not used".to_owned(),
+                );
             }
             return;
         };
@@ -265,9 +324,16 @@ impl Core {
         let returned = query_value(url, "state").unwrap_or_default();
         if !same(&returned, &state) {
             self.notice(Notice::Failed, self.front());
-            return self.report("sign_in", "a sign-in's return carried a state that is not this sign-in's, and was not used".to_owned());
+            return self.report(
+                "sign_in",
+                "a sign-in's return carried a state that is not this sign-in's, and was not used"
+                    .to_owned(),
+            );
         }
-        let (Some(code), Some(family)) = (query_value(url, "code").filter(|code| !code.is_empty()), self.family()) else {
+        let (Some(code), Some(family)) = (
+            query_value(url, "code").filter(|code| !code.is_empty()),
+            self.family(),
+        ) else {
             self.notice(Notice::Failed, self.front());
             return self.report("sign_in", "a sign-in's return carried no code".to_owned());
         };
@@ -300,7 +366,10 @@ impl Core {
         // The code was used, ran out or is another app's; or the server would
         // not hear it. The person starts again.
         self.notice(Notice::Failed, screen);
-        self.report("sign_in", format!("the exchange route answered {}", response.status));
+        self.report(
+            "sign_in",
+            format!("the exchange route answered {}", response.status),
+        );
     }
 
     /// Somebody may be signed in now: the shell says who, and everything on
@@ -326,7 +395,12 @@ impl Core {
     /// it. It goes, with any way in a session's end had put up under it, and
     /// the shell is fetched again: the shell says who is signed in now.
     pub(crate) fn way_in_done(&mut self, id: ScreenId) {
-        match self.view.modals.iter().position(|modal| modal.locked || modal.stack.contains(&id)) {
+        match self
+            .view
+            .modals
+            .iter()
+            .position(|modal| modal.locked || modal.stack.contains(&id))
+        {
             Some(at) => {
                 self.take_modals_from(at);
                 self.touch(Change::Nav);
@@ -360,21 +434,53 @@ impl Core {
     /// opened inside the app, over what is there, with where to go afterwards.
     /// False when neither the call nor the shell names a page for it.
     pub(crate) fn second_step(&mut self, own: Option<&str>) -> bool {
-        let shell = self.inner.sign_in.as_ref().and_then(|routes| routes.second_step.as_ref()).map(|page| page.as_str().to_owned());
+        let shell = self
+            .inner
+            .sign_in
+            .as_ref()
+            .and_then(|routes| routes.second_step.as_ref())
+            .map(|page| page.as_str().to_owned());
         let Some(page) = own.map(str::to_owned).or(shell) else {
             return false;
         };
         // Afterwards: the screen the person was on, under any way in that is up.
-        let locked: Vec<ScreenId> = self.view.modals.iter().filter(|modal| modal.locked).flat_map(|modal| modal.stack.clone()).collect();
-        let under = self.view.modals.iter().rev().filter(|modal| !modal.locked).find_map(|modal| modal.stack.last().copied());
-        let under = under.or_else(|| self.view.destinations.get(self.view.selected).and_then(|destination| destination.stack.last().copied()));
-        let next = under.filter(|id| !locked.contains(id)).and_then(|id| self.view.screens.get(&id)).map_or_else(|| "/".to_owned(), |view| view.url.clone());
-        let address = format!("{page}{}{}", if page.contains('?') { '&' } else { '?' }, encode(&[text("next", &next)]));
+        let locked: Vec<ScreenId> = self
+            .view
+            .modals
+            .iter()
+            .filter(|modal| modal.locked)
+            .flat_map(|modal| modal.stack.clone())
+            .collect();
+        let under = self
+            .view
+            .modals
+            .iter()
+            .rev()
+            .filter(|modal| !modal.locked)
+            .find_map(|modal| modal.stack.last().copied());
+        let under = under.or_else(|| {
+            self.view
+                .destinations
+                .get(self.view.selected)
+                .and_then(|destination| destination.stack.last().copied())
+        });
+        let next = under
+            .filter(|id| !locked.contains(id))
+            .and_then(|id| self.view.screens.get(&id))
+            .map_or_else(|| "/".to_owned(), |view| view.url.clone());
+        let address = format!(
+            "{page}{}{}",
+            if page.contains('?') { '&' } else { '?' },
+            encode(&[text("next", &next)])
+        );
         let Target::Inside(url) = self.inner.origin.resolve(&address, "/") else {
             return false;
         };
         let id = self.open(&url);
-        if let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) {
+        if let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) {
             view.chrome = false;
             // When a write from it leads away from this page, it has done its work.
             inner.cover = Some(path_of(&url));
@@ -397,16 +503,33 @@ mod tests {
     #[test]
     fn the_challenge_of_a_verifier_is_the_one_the_standard_gives() {
         // RFC 7636, appendix B.
-        assert_eq!(challenge_of("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"), "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+        assert_eq!(
+            challenge_of("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        );
         // FIPS 180-4: the hash of nothing, and of "abc".
-        assert_eq!(fingerprint(""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-        assert_eq!(fingerprint("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        assert_eq!(
+            fingerprint(""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            fingerprint("abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
     }
 
     #[test]
     fn bytes_are_written_as_base64_for_an_address_without_padding() {
         // RFC 4648, section 10, with the address-safe alphabet and no padding.
-        for (bytes, written) in [("", ""), ("f", "Zg"), ("fo", "Zm8"), ("foo", "Zm9v"), ("foob", "Zm9vYg"), ("fooba", "Zm9vYmE"), ("foobar", "Zm9vYmFy")] {
+        for (bytes, written) in [
+            ("", ""),
+            ("f", "Zg"),
+            ("fo", "Zm8"),
+            ("foo", "Zm9v"),
+            ("foob", "Zm9vYg"),
+            ("fooba", "Zm9vYmE"),
+            ("foobar", "Zm9vYmFy"),
+        ] {
             assert_eq!(base64url(bytes.as_bytes()), written);
         }
         assert_eq!(base64url(&[0xfb, 0xff, 0xfe]), "-__-");

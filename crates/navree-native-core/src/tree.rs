@@ -90,8 +90,16 @@ pub(crate) fn slots(node: &mut Node) -> Vec<Slot<'_>> {
         Node::Dialog(n) => vec![Slot::Many(&mut n.children), Slot::Many(&mut n.actions)],
         Node::Popover(n) => vec![Slot::Many(&mut n.children)],
         Node::Native(n) => vec![Slot::Maybe(&mut n.alt)],
-        Node::Toolbar(n) => n.items.iter_mut().map(|item| Slot::Many(&mut item.menu)).collect(),
-        Node::Timeline(n) => n.items.iter_mut().map(|item| Slot::Many(&mut item.detail)).collect(),
+        Node::Toolbar(n) => n
+            .items
+            .iter_mut()
+            .map(|item| Slot::Many(&mut item.menu))
+            .collect(),
+        Node::Timeline(n) => n
+            .items
+            .iter_mut()
+            .map(|item| Slot::Many(&mut item.detail))
+            .collect(),
         Node::FeedRow(n) => vec![Slot::Many(&mut n.detail)],
         Node::Message(n) => vec![Slot::Many(&mut n.body)],
         Node::Pane(n) => vec![Slot::Many(&mut n.children)],
@@ -124,14 +132,13 @@ pub(crate) fn find<'a>(node: &'a Node, is: &dyn Fn(&Node) -> bool) -> Option<&'a
     if is(node) {
         return Some(node);
     }
-    node.children().into_iter().find_map(|child| find(child, is))
+    node.children()
+        .into_iter()
+        .find_map(|child| find(child, is))
 }
 
 /// The first node, in document order, that `is` accepts, to change in place.
-pub(crate) fn find_mut<'a>(
-    node: &'a mut Node,
-    is: &dyn Fn(&Node) -> bool,
-) -> Option<&'a mut Node> {
+pub(crate) fn find_mut<'a>(node: &'a mut Node, is: &dyn Fn(&Node) -> bool) -> Option<&'a mut Node> {
     if is(node) {
         return Some(node);
     }
@@ -241,14 +248,28 @@ pub(crate) fn rewrite(
 /// The nodes a screen starts from: its actions, then what the day pager in
 /// its bar holds (the day's scores), then its body.
 pub(crate) fn roots(screen: &Screen) -> impl Iterator<Item = &Node> {
-    let scores = screen.pager.as_ref().and_then(|pager| pager.scores.as_deref());
-    screen.actions.iter().chain(scores).chain(std::iter::once(&screen.body))
+    let scores = screen
+        .pager
+        .as_ref()
+        .and_then(|pager| pager.scores.as_deref());
+    screen
+        .actions
+        .iter()
+        .chain(scores)
+        .chain(std::iter::once(&screen.body))
 }
 
 /// The same nodes, to change in place.
 pub(crate) fn roots_mut(screen: &mut Screen) -> impl Iterator<Item = &mut Node> {
-    let scores = screen.pager.as_mut().and_then(|pager| pager.scores.as_deref_mut());
-    screen.actions.iter_mut().chain(scores).chain(std::iter::once(&mut screen.body))
+    let scores = screen
+        .pager
+        .as_mut()
+        .and_then(|pager| pager.scores.as_deref_mut());
+    screen
+        .actions
+        .iter_mut()
+        .chain(scores)
+        .chain(std::iter::once(&mut screen.body))
 }
 
 /// The day pagers of a screen: the one it carries in its bar, then those
@@ -267,7 +288,10 @@ pub(crate) fn pagers(screen: &Screen) -> Vec<&DayPager> {
 
 /// Whether the day pager in the screen's bar has this id.
 pub(crate) fn pager_has_id(screen: &Screen, id: &str) -> bool {
-    screen.pager.as_ref().is_some_and(|pager| pager.id.as_deref() == Some(id))
+    screen
+        .pager
+        .as_ref()
+        .is_some_and(|pager| pager.id.as_deref() == Some(id))
 }
 
 /// The first node of the screen that `is` accepts.
@@ -325,7 +349,9 @@ pub(crate) fn depth_of(screen: &Screen, is: &dyn Fn(&Node) -> bool) -> Option<us
         if is(node) {
             return Some(at);
         }
-        node.children().into_iter().find_map(|child| seek(child, is, at + 1))
+        node.children()
+            .into_iter()
+            .find_map(|child| seek(child, is, at + 1))
     }
     roots(screen).find_map(|root| seek(root, is, 1))
 }
@@ -483,7 +509,12 @@ impl Names<'_> {
         }
     }
 
-    fn form(&mut self, form: &mut Form, scope: Option<&str>, counts: &BTreeMap<String, usize>) -> String {
+    fn form(
+        &mut self,
+        form: &mut Form,
+        scope: Option<&str>,
+        counts: &BTreeMap<String, usize>,
+    ) -> String {
         let server = form.id.clone();
         let base = base_of(form);
         let repeated = counts.get(&base).copied().unwrap_or(0) > 1 || self.forms.contains(&base);
@@ -677,7 +708,11 @@ impl<'a> Survey<'a> {
                         self.node(child, Some(at), region);
                     }
                 }
-                for cell in table.rows.iter().flat_map(navree_native::node::TableRow::nodes) {
+                for cell in table
+                    .rows
+                    .iter()
+                    .flat_map(navree_native::node::TableRow::nodes)
+                {
                     self.node(cell, form, region);
                 }
                 if let Some(empty) = table.empty.as_deref() {
@@ -722,13 +757,19 @@ pub(crate) fn form_of<'a>(screen: &'a Screen, handle: &str) -> Option<&'a Form> 
         match node {
             Node::Form(form) if form.id.as_deref() == Some(handle) => return Some(form),
             Node::Table(table) => {
-                if let Some(query) = table.query.as_ref().filter(|query| query.id.as_deref() == Some(handle)) {
+                if let Some(query) = table
+                    .query
+                    .as_ref()
+                    .filter(|query| query.id.as_deref() == Some(handle))
+                {
                     return Some(query);
                 }
             }
             _ => {}
         }
-        node.children().into_iter().find_map(|child| seek(child, handle))
+        node.children()
+            .into_iter()
+            .find_map(|child| seek(child, handle))
     }
     roots(screen).find_map(|root| seek(root, handle))
 }
@@ -774,23 +815,31 @@ mod tests {
     /// Places the protocol's own examples leave empty, so the walk of each is
     /// held to something. When the test below names a place no example
     /// fills, an example goes here.
-    const OWN: &[&str] = &[r#"{"t":"table","columns":[{"label":"Order"}],"empty":{"t":"empty","title":"No orders yet"}}"#];
+    const OWN: &[&str] = &[
+        r#"{"t":"table","columns":[{"label":"Order"}],"empty":{"t":"empty","title":"No orders yet"}}"#,
+    ];
 
     /// Every root node of every example of the protocol that holds nodes (a
     /// screen's body and actions, the nodes an op brings), and this file's own.
     fn examples() -> Vec<(String, Node)> {
         let dir = format!("{}/../navree-native/corpus", env!("CARGO_MANIFEST_DIR"));
-        let mut files: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|entry| entry.unwrap().path()).filter(|path| path.extension().is_some_and(|kind| kind == "json")).collect();
+        let mut files: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.extension().is_some_and(|kind| kind == "json"))
+            .collect();
         files.sort();
         let mut roots = Vec::new();
         for path in files {
             let name = path.file_name().unwrap().to_string_lossy().into_owned();
-            let value: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            let value: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
             // The shell and the like are not answers that hold a screen or ops.
             if value.get("screen").is_none() && value.get("ops").is_none() {
                 continue;
             }
-            let envelope: Envelope = serde_json::from_value(value).unwrap_or_else(|error| panic!("{name}: {error}"));
+            let envelope: Envelope =
+                serde_json::from_value(value).unwrap_or_else(|error| panic!("{name}: {error}"));
             let mut nodes = Vec::new();
             if let Some(screen) = envelope.screen {
                 nodes.extend(screen.actions);
@@ -799,23 +848,41 @@ mod tests {
             let of_row = |row: TableRow| row.cells.into_iter().chain(row.actions).chain(row.detail);
             for op in envelope.ops {
                 match op {
-                    navree_native::Op::Morph { node, .. } | navree_native::Op::Replace { node, .. } => nodes.push(node),
-                    navree_native::Op::Append { nodes: more, .. } | navree_native::Op::Prepend { nodes: more, .. } | navree_native::Op::Merge { nodes: more, .. } => nodes.extend(more),
-                    navree_native::Op::Rows { rows, .. } => nodes.extend(rows.into_iter().flat_map(of_row)),
+                    navree_native::Op::Morph { node, .. }
+                    | navree_native::Op::Replace { node, .. } => nodes.push(node),
+                    navree_native::Op::Append { nodes: more, .. }
+                    | navree_native::Op::Prepend { nodes: more, .. }
+                    | navree_native::Op::Merge { nodes: more, .. } => nodes.extend(more),
+                    navree_native::Op::Rows { rows, .. } => {
+                        nodes.extend(rows.into_iter().flat_map(of_row))
+                    }
                     navree_native::Op::Row { row, .. } => nodes.extend(of_row(row)),
                     _ => {}
                 }
             }
             roots.extend(nodes.into_iter().map(|node| (name.clone(), node)));
         }
-        roots.extend(OWN.iter().map(|own| ("this file's own".to_owned(), serde_json::from_str(own).unwrap())));
+        roots.extend(OWN.iter().map(|own| {
+            (
+                "this file's own".to_owned(),
+                serde_json::from_str(own).unwrap(),
+            )
+        }));
         roots
     }
 
     /// The places under a schema that hold nodes, each as the names that lead
     /// to it, with `[]` for "each of a list".
-    fn places(defs: &serde_json::Value, schema: &serde_json::Value, inside: &mut Vec<String>) -> Vec<Vec<String>> {
-        if let Some(name) = schema.get("$ref").and_then(serde_json::Value::as_str).and_then(|path| path.rsplit('/').next()) {
+    fn places(
+        defs: &serde_json::Value,
+        schema: &serde_json::Value,
+        inside: &mut Vec<String>,
+    ) -> Vec<Vec<String>> {
+        if let Some(name) = schema
+            .get("$ref")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|path| path.rsplit('/').next())
+        {
             if name == "Node" {
                 return vec![Vec::new()];
             }
@@ -838,14 +905,24 @@ mod tests {
         };
         let mut out = Vec::new();
         for key in ["anyOf", "oneOf", "allOf"] {
-            for part in schema.get(key).and_then(serde_json::Value::as_array).into_iter().flatten() {
+            for part in schema
+                .get(key)
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+            {
                 out.extend(places(defs, part, inside));
             }
         }
         if let Some(items) = schema.get("items") {
             out.extend(under("[]", places(defs, items, inside)));
         }
-        for (name, part) in schema.get("properties").and_then(serde_json::Value::as_object).into_iter().flatten() {
+        for (name, part) in schema
+            .get("properties")
+            .and_then(serde_json::Value::as_object)
+            .into_iter()
+            .flatten()
+        {
             out.extend(under(name, places(defs, part, inside)));
         }
         out
@@ -855,7 +932,9 @@ mod tests {
     fn filled(value: &serde_json::Value, place: &[String]) -> bool {
         match place.split_first() {
             None => !value.is_null(),
-            Some((each, rest)) if each == "[]" => value.as_array().is_some_and(|list| list.iter().any(|item| filled(item, rest))),
+            Some((each, rest)) if each == "[]" => value
+                .as_array()
+                .is_some_and(|list| list.iter().any(|item| filled(item, rest))),
             Some((name, rest)) => value.get(name).is_some_and(|inner| filled(inner, rest)),
         }
     }
@@ -870,16 +949,28 @@ mod tests {
         let schema = navree_native::schema::document();
         let defs = &schema["$defs"];
         let mut wanted: BTreeMap<String, Vec<Vec<String>>> = BTreeMap::new();
-        for kind in defs["Node"]["oneOf"].as_array().expect("the schema lists the kinds of node") {
-            let name = kind["properties"]["t"]["const"].as_str().expect("a kind has a name");
-            let held = kind["allOf"][0]["$ref"].as_str().and_then(|path| path.rsplit('/').next()).expect("a kind has a shape");
+        for kind in defs["Node"]["oneOf"]
+            .as_array()
+            .expect("the schema lists the kinds of node")
+        {
+            let name = kind["properties"]["t"]["const"]
+                .as_str()
+                .expect("a kind has a name");
+            let held = kind["allOf"][0]["$ref"]
+                .as_str()
+                .and_then(|path| path.rsplit('/').next())
+                .expect("a kind has a shape");
             let mut found = places(defs, &defs[held], &mut vec![held.to_owned()]);
             found.sort();
             found.dedup();
             wanted.insert(name.to_owned(), found);
         }
         for kind in navree_native::Kind::ALL {
-            assert!(wanted.contains_key(kind.as_str()), "the schema does not describe `{}`", kind.as_str());
+            assert!(
+                wanted.contains_key(kind.as_str()),
+                "the schema does not describe `{}`",
+                kind.as_str()
+            );
         }
 
         let mut seen = BTreeSet::new();
@@ -889,7 +980,10 @@ mod tests {
             walk(&root, &mut |node| plain.push(label(node)));
             let mut changing = Vec::new();
             walk_mut(&mut root, &mut changing);
-            assert_eq!(plain, changing, "{name}: the walk that changes a tree misses a child, or finds them in another order");
+            assert_eq!(
+                plain, changing,
+                "{name}: the walk that changes a tree misses a child, or finds them in another order"
+            );
             // The protocol's own walk that changes a tree agrees too.
             let mut protocol = Vec::new();
             let mut stack = vec![&mut root];
@@ -911,17 +1005,27 @@ mod tests {
         }
         // A kind no example holds would be a kind whose children the walk may miss.
         for kind in navree_native::Kind::ALL {
-            assert!(seen.contains(kind.as_str()), "no example of `{}` was walked", kind.as_str());
+            assert!(
+                seen.contains(kind.as_str()),
+                "no example of `{}` was walked",
+                kind.as_str()
+            );
         }
         // And so would a place no example fills.
         for (kind, found) in &wanted {
             for place in found {
                 let place = format!("{kind}.{}", place.join("."));
-                assert!(held.contains(&place), "no example holds a node at `{place}`: add one to OWN, so the walk of that place is held to something");
+                assert!(
+                    held.contains(&place),
+                    "no example holds a node at `{place}`: add one to OWN, so the walk of that place is held to something"
+                );
             }
         }
         // Forty places today; fewer would mean the schema is no longer read as it is written.
-        assert!(wanted.values().map(Vec::len).sum::<usize>() >= 40, "the schema names fewer places than the walk knows");
+        assert!(
+            wanted.values().map(Vec::len).sum::<usize>() >= 40,
+            "the schema names fewer places than the walk knows"
+        );
     }
 
     fn text(id: &str, value: &str) -> Node {
@@ -953,16 +1057,23 @@ mod tests {
             children: vec![form],
             ..Dialog::default()
         });
-        let mut screen = Screen::new("Order", stack(Some("page"), vec![dialog, text("b", "outer")]));
+        let mut screen = Screen::new(
+            "Order",
+            stack(Some("page"), vec![dialog, text("b", "outer")]),
+        );
         let found = find_in(&screen, &|node| has_id(node, "refund")).unwrap();
         assert!(matches!(found, Node::Dialog(_)));
-        let found = find_in(&screen, &|node| has_id(node, "refund") && matches!(node, Node::Form(_)));
+        let found = find_in(&screen, &|node| {
+            has_id(node, "refund") && matches!(node, Node::Form(_))
+        });
         assert!(found.is_some());
         assert!(find_in(&screen, &|node| has_id(node, "gone")).is_none());
         assert_eq!(depth_of(&screen, &|node| has_id(node, "b")), Some(4));
 
         // A rewrite changes the first `b` only: the one inside the form.
-        let changed = rewrite_in(&mut screen, &|node| has_id(node, "b"), &mut |_| Some(text("b", "new")));
+        let changed = rewrite_in(&mut screen, &|node| has_id(node, "b"), &mut |_| {
+            Some(text("b", "new"))
+        });
         assert!(changed);
         let mut values = Vec::new();
         walk(&screen.body, &mut |node| {
@@ -972,11 +1083,27 @@ mod tests {
         });
         assert_eq!(values, ["new", "outer"]);
         // Taking a node out, and a target that is not there.
-        assert!(rewrite_in(&mut screen, &|node| has_id(node, "b"), &mut |_| None));
-        assert!(rewrite_in(&mut screen, &|node| has_id(node, "b"), &mut |_| None));
-        assert!(!rewrite_in(&mut screen, &|node| has_id(node, "b"), &mut |_| None));
+        assert!(rewrite_in(
+            &mut screen,
+            &|node| has_id(node, "b"),
+            &mut |_| None
+        ));
+        assert!(rewrite_in(
+            &mut screen,
+            &|node| has_id(node, "b"),
+            &mut |_| None
+        ));
+        assert!(!rewrite_in(
+            &mut screen,
+            &|node| has_id(node, "b"),
+            &mut |_| None
+        ));
         // The body itself can be the target.
-        assert!(rewrite_in(&mut screen, &|node| has_id(node, "page"), &mut |_| Some(text("page", "all"))));
+        assert!(rewrite_in(
+            &mut screen,
+            &|node| has_id(node, "page"),
+            &mut |_| Some(text("page", "all"))
+        ));
         assert!(matches!(screen.body, Node::Text(_)));
     }
 
@@ -1003,21 +1130,47 @@ mod tests {
         assert_eq!(order, ["rings#day-scores", "stack#today"]);
         assert_eq!(roots_mut(&mut screen).count(), 2);
         assert!(find_in(&screen, &|node| has_id(node, "day-scores")).is_some());
-        assert_eq!(depth_of(&screen, &|node| has_id(node, "day-scores")), Some(1));
+        assert_eq!(
+            depth_of(&screen, &|node| has_id(node, "day-scores")),
+            Some(1)
+        );
         assert!(pager_has_id(&screen, "day") && !pager_has_id(&screen, "today"));
         assert_eq!(pagers(&screen).len(), 1);
         // They are changed in place, put through a change, and taken out.
-        let Some(Node::Rings(found)) = find_in_mut(&mut screen, &|node| has_id(node, "day-scores")) else {
+        let Some(Node::Rings(found)) = find_in_mut(&mut screen, &|node| has_id(node, "day-scores"))
+        else {
             panic!("the scores are found to change");
         };
         found.title = Some("Changed".to_owned());
-        assert!(rewrite_in(&mut screen, &|node| has_id(node, "day-scores"), &mut |_| Some(rings("Today"))));
-        let scores = screen.pager.as_ref().and_then(|pager| pager.scores.as_deref());
-        assert!(matches!(scores, Some(Node::Rings(rings)) if rings.title.as_deref() == Some("Today")));
-        assert!(rewrite_in(&mut screen, &|node| has_id(node, "day-scores"), &mut |_| None));
-        assert!(screen.pager.as_ref().is_some_and(|pager| pager.scores.is_none()));
+        assert!(rewrite_in(
+            &mut screen,
+            &|node| has_id(node, "day-scores"),
+            &mut |_| Some(rings("Today"))
+        ));
+        let scores = screen
+            .pager
+            .as_ref()
+            .and_then(|pager| pager.scores.as_deref());
+        assert!(
+            matches!(scores, Some(Node::Rings(rings)) if rings.title.as_deref() == Some("Today"))
+        );
+        assert!(rewrite_in(
+            &mut screen,
+            &|node| has_id(node, "day-scores"),
+            &mut |_| None
+        ));
+        assert!(
+            screen
+                .pager
+                .as_ref()
+                .is_some_and(|pager| pager.scores.is_none())
+        );
         // The body is still reached past a pager that holds nothing.
-        assert!(rewrite_in(&mut screen, &|node| has_id(node, "b"), &mut |_| None));
+        assert!(rewrite_in(
+            &mut screen,
+            &|node| has_id(node, "b"),
+            &mut |_| None
+        ));
     }
 
     #[test]
@@ -1030,13 +1183,22 @@ mod tests {
         ];
         for node in &mut nodes {
             assert!(holds(node), "{}", node.kind().as_str());
-            main_list(node).expect("it has a list to add to").push(text("new", "added"));
+            main_list(node)
+                .expect("it has a list to add to")
+                .push(text("new", "added"));
             assert_eq!(node.children().len(), 1, "{}", node.kind().as_str());
         }
         // A shape holds nothing, and the two rooms of an adaptive part are
         // not one list: neither is added to.
-        for mut node in [Node::Shape(Shape::default()), Node::Adaptive(Adaptive::default())] {
-            assert!(!holds(&node) && main_list(&mut node).is_none(), "{}", node.kind().as_str());
+        for mut node in [
+            Node::Shape(Shape::default()),
+            Node::Adaptive(Adaptive::default()),
+        ] {
+            assert!(
+                !holds(&node) && main_list(&mut node).is_none(),
+                "{}",
+                node.kind().as_str()
+            );
         }
     }
 
@@ -1063,7 +1225,11 @@ mod tests {
             .forms
             .iter()
             .map(|form| {
-                let fields: Vec<&str> = form.fields.iter().map(|field| field.id.as_deref().unwrap()).collect();
+                let fields: Vec<&str> = form
+                    .fields
+                    .iter()
+                    .map(|field| field.id.as_deref().unwrap())
+                    .collect();
                 format!("{} [{}]", form.handle, fields.join(" "))
             })
             .collect()
@@ -1084,11 +1250,39 @@ mod tests {
                 ..Form::default()
             }),
             rows: vec![
-                row("18", vec![form(None, "/inventory/18/restock", vec![field("quantity", None)])]),
-                row("19", vec![form(None, "/inventory/19/restock", vec![field("quantity", None)])]),
+                row(
+                    "18",
+                    vec![form(
+                        None,
+                        "/inventory/18/restock",
+                        vec![field("quantity", None)],
+                    )],
+                ),
+                row(
+                    "19",
+                    vec![form(
+                        None,
+                        "/inventory/19/restock",
+                        vec![field("quantity", None)],
+                    )],
+                ),
                 // Two rows whose forms go to one address: the row tells them apart.
-                row("20", vec![form(None, "/cart/remove", vec![field("quantity", Some("qty"))])]),
-                row("21", vec![form(None, "/cart/remove", vec![field("quantity", Some("qty"))])]),
+                row(
+                    "20",
+                    vec![form(
+                        None,
+                        "/cart/remove",
+                        vec![field("quantity", Some("qty"))],
+                    )],
+                ),
+                row(
+                    "21",
+                    vec![form(
+                        None,
+                        "/cart/remove",
+                        vec![field("quantity", Some("qty"))],
+                    )],
+                ),
             ],
             ..Table::default()
         });
@@ -1098,7 +1292,8 @@ mod tests {
             children: vec![table],
             ..Region::default()
         })];
-        let (mut forms, mut fields, mut server) = (BTreeSet::new(), BTreeSet::new(), BTreeMap::new());
+        let (mut forms, mut fields, mut server) =
+            (BTreeSet::new(), BTreeSet::new(), BTreeMap::new());
         Names {
             forms: &mut forms,
             fields: &mut fields,
@@ -1122,14 +1317,21 @@ mod tests {
         assert_eq!(survey.regions[0].id, "orders");
 
         // A node that arrives later is named around what the screen already has.
-        let mut later = vec![form(Some("orders-f"), "/x", vec![field("search", Some("qty"))])];
+        let mut later = vec![form(
+            Some("orders-f"),
+            "/x",
+            vec![field("search", Some("qty"))],
+        )];
         Names {
             forms: &mut forms,
             fields: &mut fields,
             server: &mut server,
         }
         .name(&mut later, Some("panel"));
-        assert_eq!(form_ids(&later[0]), ["orders-f~panel [orders-f~panel.search]"]);
+        assert_eq!(
+            form_ids(&later[0]),
+            ["orders-f~panel [orders-f~panel.search]"]
+        );
         assert_eq!(server["orders-f~panel"], Some("orders-f".to_owned()));
     }
 

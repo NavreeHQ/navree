@@ -220,7 +220,9 @@ async fn the_routes_show_and_change_the_signed_in_users_preferences() {
     // No push service here: no switch for native app push.
     assert_eq!(
         body["channels"],
-        json!(["mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"])
+        json!([
+            "mail", "database", "slack", "teams", "sms", "whatsapp", "web_push"
+        ])
     );
     let categories: Vec<&str> = body["categories"]
         .as_array()

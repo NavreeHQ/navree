@@ -99,7 +99,11 @@ pub struct Colour {
     /// violet is `hue` cyan and `to` violet. A blend with more stops than two
     /// is carried by its first and its last. A name this build does not know
     /// leaves the part one colour.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub to: Option<Hue>,
     /// The theme's own colour for `hue` on a light ground, as `#rrggbb`: a
     /// fallback for a client that does not know the hue. A client that does
@@ -175,7 +179,11 @@ pub struct Hint {
     /// The note.
     pub text: String,
     /// The mark that opens it.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub mark: HintMark,
 }
 
@@ -285,14 +293,22 @@ pub struct Ring {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub colour: Option<Colour>,
     /// What stands in its middle.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub centre: Centre,
     /// The icon in its middle, when `centre` is `icon`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<Icon>,
     /// How much the ring matters on the screen: the hero, one of several, a
     /// small one.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub prominence: Prominence,
     /// One sentence that says the whole ring to a reader who can't see it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -404,7 +420,11 @@ pub struct Rings {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rings: Vec<RingValue>,
     /// What stands in the middle.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub centre: RingsCentre,
     /// The icon in the middle, when `centre` is `icon`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -414,7 +434,11 @@ pub struct Rings {
     #[serde(default, skip_serializing_if = "is_false")]
     pub legend: bool,
     /// How much the rings matter on the screen.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub prominence: Prominence,
     /// One sentence that says every ring to a reader who can't see them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -834,7 +858,11 @@ pub enum ReferenceKind {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reference {
     /// What it is.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub kind: ReferenceKind,
     /// The level, in the chart's value units, for a `level`. An average or a
     /// baseline is worked out by the server and sent as a level.
@@ -1203,13 +1231,17 @@ mod tests {
     #[test]
     fn a_colour_is_a_hue_by_name_and_writes_only_what_it_holds() {
         let plain = Colour::new(Hue::Violet);
-        assert_eq!(serde_json::to_string(&plain).unwrap(), r#"{"hue":"violet"}"#);
+        assert_eq!(
+            serde_json::to_string(&plain).unwrap(),
+            r#"{"hue":"violet"}"#
+        );
         let blend = Colour::blend(Hue::Cyan, Hue::Violet);
-        assert_eq!(serde_json::to_string(&blend).unwrap(), r#"{"hue":"cyan","to":"violet"}"#);
-        let themed: Colour = serde_json::from_str(
-            r##"{"hue":"rose","light":"#b3254f","dark":"#ff8aa8"}"##,
-        )
-        .unwrap();
+        assert_eq!(
+            serde_json::to_string(&blend).unwrap(),
+            r#"{"hue":"cyan","to":"violet"}"#
+        );
+        let themed: Colour =
+            serde_json::from_str(r##"{"hue":"rose","light":"#b3254f","dark":"#ff8aa8"}"##).unwrap();
         assert_eq!(themed.hue, Hue::Rose);
         assert_eq!(themed.light.as_deref(), Some("#b3254f"));
         assert_eq!(themed.dark.as_deref(), Some("#ff8aa8"));
@@ -1236,14 +1268,17 @@ mod tests {
         .unwrap();
         assert_eq!(hint.mark, HintMark::Question);
         assert_eq!(hint.title.as_deref(), Some("How it is made"));
-        let info: Hint =
-            serde_json::from_str(r#"{"about":"x","text":"y","mark":"info"}"#).unwrap();
+        let info: Hint = serde_json::from_str(r#"{"about":"x","text":"y","mark":"info"}"#).unwrap();
         assert_eq!(info.mark, HintMark::Info);
         // A mark this build does not know is the usual one; a hint with no words is refused.
         let newer: Hint =
             serde_json::from_str(r#"{"about":"x","text":"y","mark":"star"}"#).unwrap();
         assert_eq!(newer.mark, HintMark::Question);
         assert!(serde_json::from_str::<Hint>(r#"{"about":"x"}"#).is_err());
-        assert!(!serde_json::to_string(&Hint::default()).unwrap().contains("mark"));
+        assert!(
+            !serde_json::to_string(&Hint::default())
+                .unwrap()
+                .contains("mark")
+        );
     }
 }

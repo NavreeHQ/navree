@@ -536,7 +536,10 @@ fn finish_with_attempt(sign_in: &str) -> String {
         .map(|(_, next)| next.into_owned())
         .expect("a next");
     assert!(next.starts_with("/auth/app/finish?attempt="), "{next}");
-    assert!(next.len() > "/auth/app/finish?attempt=".len() + 20, "{next}");
+    assert!(
+        next.len() > "/auth/app/finish?attempt=".len() + 20,
+        "{next}"
+    );
     next
 }
 

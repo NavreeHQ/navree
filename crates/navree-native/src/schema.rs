@@ -41,8 +41,8 @@ use crate::action::{Action, Command, Pair, Present, State};
 use crate::charts::{
     CalendarHeatmap, Category, Centre, ClockMoment, ColorStrip, Colour, Curve, DayClock, DayPager,
     DayPick, HeatDay, Hint, HintMark, Hour, Hue, MatrixHeatmap, Measure, Meter, MiniColumn,
-    MiniColumns, PagerWords, Point, PointSeries, RangeScale, Reference, ReferenceKind, Relation, Ring,
-    RingValue, Rings, RingsCentre, Scatter, Segment, Stacking, StripCell, Zone,
+    MiniColumns, PagerWords, Point, PointSeries, RangeScale, Reference, ReferenceKind, Relation,
+    Ring, RingValue, Rings, RingsCentre, Scatter, Segment, Stacking, StripCell, Zone,
 };
 use crate::client::{ClientDescriptor, Contrast, FormFactor, Platform, Scheme};
 use crate::compose::{
@@ -53,21 +53,21 @@ use crate::device::{
     Accuracy, Alt, AppLock, AuthSession, Call, CancelNotification, CodeFormat, Confirm,
     ConfirmMethod, Confirmed, ConfirmedBy, CopyText, DeviceCall, Feature, Haptic, HapticKind,
     HttpsUrl, LocateOnce, Located, Notify, OpenSettings, OpenUrl, OriginPath, Passkey,
-    PasskeyCredential, PasskeyMode, PlatformSignIn, PushDevice, PushEnvironment, PushPlatform,
-    PushRegistered, Refusal, RegisterPush, ReplyCall, ScanCode, Scanned, SetBadge, SettingsPage,
-    PersonName, Share, Shared, SignInProvider, SignedIn, SignedInUser, Then, Ticket, When,
+    PasskeyCredential, PasskeyMode, PersonName, PlatformSignIn, PushDevice, PushEnvironment,
+    PushPlatform, PushRegistered, Refusal, RegisterPush, ReplyCall, ScanCode, Scanned, SetBadge,
+    SettingsPage, Share, Shared, SignInProvider, SignedIn, SignedInUser, Then, Ticket, When,
 };
 use crate::envelope::{Back, Envelope, Screen, Search, Upgrade, Web};
 use crate::input::{
     ChoiceCreate, ChoiceInput, ChoiceKind, ChoiceOption, ChoiceSearch, ChoicesInput, ColourInput,
-    DateInput, DateKind, FileInput, Input, PhoneCountry, RangeEnd, RangeInput, SliderInput, TextInput, TextKind,
-    ToggleInput, ToggleKind, Weekday,
+    DateInput, DateKind, FileInput, Input, PhoneCountry, RangeEnd, RangeInput, SliderInput,
+    TextInput, TextKind, ToggleInput, ToggleKind, Weekday,
 };
 use crate::node::{
-    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Chart, ChartKind, Code, Column,
-    ColumnRole, Delivery, Dialog, Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
-    Field, Figure, Fit, Form, Gauge, Grid, Hidden, Icon, IconShape, Image, Justify, Link, List,
-    Live, Menu, Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress,
+    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Chart, ChartKind, Code,
+    Column, ColumnRole, Delivery, Dialog, Direction, Disclosure, Divider, Empty, Fact, Facts,
+    FeedRow, Field, Figure, Fit, Form, Gauge, Grid, Hidden, Icon, IconShape, Image, Justify, Link,
+    List, Live, Menu, Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress,
     Prominence, Purpose, Question, Region, Reorder, Rich, Role, Row, RowState, Run, Section,
     SectionStyle, Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack,
     Standard, SystemSymbol, Tab, Table, TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar,
@@ -75,8 +75,8 @@ use crate::node::{
 };
 use crate::op::{Edge, Op, Toast, ToastAction, UrlMode};
 use crate::shell::{
-    Device, Nav, NavGroup, NavItem, Push, Route, Shell, SignIn, SignInExchange, SignInPlatform, Theme,
-    User,
+    Device, Nav, NavGroup, NavItem, Push, Route, Shell, SignIn, SignInExchange, SignInPlatform,
+    Theme, User,
 };
 use crate::vocab::{Kind, LATER_FIELDS};
 
@@ -625,13 +625,52 @@ union!(Node tag "t"
         "alt": schema.of::<Node>(),
     })
 );
-names!(Role { None, Primary, Secondary, Destructive, Cancel, Confirm, Create, Navigation });
-names!(Tone { Neutral, Accent, Success, Warning, Danger, Info });
+names!(Role {
+    None,
+    Primary,
+    Secondary,
+    Destructive,
+    Cancel,
+    Confirm,
+    Create,
+    Navigation
+});
+names!(Tone {
+    Neutral,
+    Accent,
+    Success,
+    Warning,
+    Danger,
+    Info
+});
 names!(Prominence { High, Medium, Low });
-names!(Axis { Vertical, Horizontal });
-names!(Align { Start, Center, End, Stretch, Baseline });
-names!(Justify { Start, Center, End, Between });
-names!(Standard { Share, Delete, Add, Edit, Search, Done, Cancel, More });
+names!(Axis {
+    Vertical,
+    Horizontal
+});
+names!(Align {
+    Start,
+    Center,
+    End,
+    Stretch,
+    Baseline
+});
+names!(Justify {
+    Start,
+    Center,
+    End,
+    Between
+});
+names!(Standard {
+    Share,
+    Delete,
+    Add,
+    Edit,
+    Search,
+    Done,
+    Cancel,
+    More
+});
 object!(Stack {} {
     id, axis, gap, align, justify, wrap, hidden, pad, grow, wide, appear, children
 });
@@ -643,7 +682,11 @@ object!(Reorder { href } { key, group, limit, fields });
 object!(Row { title } {
     id, key, leading, subtitle, detail, trailing, badge, state, action, swipe, menu, muted
 });
-names!(RowState { Done, Current, Upcoming });
+names!(RowState {
+    Done,
+    Current,
+    Upcoming
+});
 object!(Split { primary, detail } { id });
 object!(Tabs {} { id, items });
 object!(Tab { label } { icon, selected, href, children });
@@ -652,13 +695,30 @@ object!(Divider {} { id });
 object!(Spacer {} { id });
 object!(Region { id, src } { lazy, live, children });
 object!(Live { src } { event });
-names!(TextStyle { Display, LargeTitle, Title, Title2, Headline, Body, Callout, Caption, Mono });
+names!(TextStyle {
+    Display,
+    LargeTitle,
+    Title,
+    Title2,
+    Headline,
+    Body,
+    Callout,
+    Caption,
+    Mono
+});
 object!(Text { value } {
     id, style, tone, muted, lines, heading, weight, colour, align, tabular, change
 });
 object!(Rich {} { id, runs, blocks, style, muted });
 object!(Run { text } { bold, italic, code, href });
-names!(BlockKind { Paragraph, Heading, Quote, Bullet, Numbered, Code });
+names!(BlockKind {
+    Paragraph,
+    Heading,
+    Quote,
+    Bullet,
+    Numbered,
+    Code
+});
 object!(Block {} { kind, runs, level });
 names!(Fit { Contain, Cover });
 object!(Image { src } { id, alt, width, height, fit });
@@ -672,7 +732,14 @@ object!(Banner {} { id, tone, title, text, icon, actions });
 object!(Empty { title } { id, icon, text, actions });
 object!(Facts {} { id, items });
 object!(Fact { label } { value, icon, tone, details });
-names!(ColumnRole { Leading, Title, Subtitle, Status, Trailing, Actions });
+names!(ColumnRole {
+    Leading,
+    Title,
+    Subtitle,
+    Status,
+    Trailing,
+    Actions
+});
 names!(SortDir { Asc, Desc });
 object!(Sort { href } { dir });
 object!(Column { label } { key, numeric, align, sort, role, secondary });
@@ -680,10 +747,25 @@ object!(TableRow {} { id, cells, action, actions, selected, unchoosable, open, d
 object!(Selection { name } { form, across });
 object!(Across { name, value } { total });
 object!(Table {} { id, caption, columns, rows, query, select, more, prev, summary, empty });
-names!(ChartKind { Line, Area, Bar, Donut, Sparkline, Funnel });
+names!(ChartKind {
+    Line,
+    Area,
+    Bar,
+    Donut,
+    Sparkline,
+    Funnel
+});
 object!(Series { label } { values, shown, colour, unit });
-names!(Curve { Linear, Smooth, Step });
-names!(Stacking { Apart, Values, Shares });
+names!(Curve {
+    Linear,
+    Smooth,
+    Step
+});
+names!(Stacking {
+    Apart,
+    Values,
+    Shares
+});
 names!(ReferenceKind { Level, Diagonal });
 object!(Measure {} { name, unit, min, max });
 object!(Reference {} { kind, value, label, colour });
@@ -703,8 +785,17 @@ names!(Method { Get, Post });
 object!(Hidden { name } { value, id });
 object!(Form {} { id, method, action, hidden, children });
 object!(Field { name, input } { id, label, help, error, required, disabled, purpose, changed });
-names!(Purpose { Search, Filter, Sort, PageSize });
-names!(SheetSize { Medium, Large, Full });
+names!(Purpose {
+    Search,
+    Filter,
+    Sort,
+    PageSize
+});
+names!(SheetSize {
+    Medium,
+    Large,
+    Full
+});
 object!(Sheet { id } { title, subtitle, size, task, open, children, actions });
 object!(Dialog { id } { title, text, alert, open, children, actions });
 object!(Popover { id } { children });
@@ -725,25 +816,58 @@ object!(Figure { label, value } {
 object!(Timeline {} { id, items });
 object!(Moment { title } { id, subtitle, time, state, icon, tone, detail, muted });
 object!(FeedRow {} { id, actor, icon, runs, time, tone, detail, action, muted });
-names!(Delivery { Sending, Sent, Delivered, Read, Failed });
+names!(Delivery {
+    Sending,
+    Sent,
+    Delivered,
+    Read,
+    Failed
+});
 object!(Message { author } { id, avatar, mine, note, body, time, delivery });
-names!(PaneRole { List, Content, Detail, Supporting, Inspector });
+names!(PaneRole {
+    List,
+    Content,
+    Detail,
+    Supporting,
+    Inspector
+});
 object!(Pane { role } { id, title, current, children });
 
 // The charts of a health screen.
 names!(Hue {
-    Neutral, Accent, Success, Warning, Danger, Info, Blue, Green, Amber, Orange, Red, Rose, Violet,
-    Cyan, Slate
+    Neutral,
+    Accent,
+    Success,
+    Warning,
+    Danger,
+    Info,
+    Blue,
+    Green,
+    Amber,
+    Orange,
+    Red,
+    Rose,
+    Violet,
+    Cyan,
+    Slate
 });
 object!(Colour { hue } { to, light, dark });
 names!(HintMark { Question, Info });
 object!(Hint { about, text } { title, mark });
-names!(Centre { Value, Icon, Nothing });
+names!(Centre {
+    Value,
+    Icon,
+    Nothing
+});
 object!(Ring { max } {
     id, value, unit, shown, label, caption, status, trend, colour, centre, icon, prominence,
     summary, hint
 });
-names!(RingsCentre { Nothing, Values, Icon });
+names!(RingsCentre {
+    Nothing,
+    Values,
+    Icon
+});
 object!(Zone { from, to } { label, colour });
 object!(Category { name } { colour, detail });
 object!(Hour {} { value, level, category });
@@ -782,13 +906,33 @@ object!(Rings {} {
 });
 
 // Free composition.
-names!(Weight { Regular, Medium, Semibold, Bold });
-names!(Place { TopStart, Top, TopEnd, Start, Center, End, BottomStart, Bottom, BottomEnd });
+names!(Weight {
+    Regular,
+    Medium,
+    Semibold,
+    Bold
+});
+names!(Place {
+    TopStart,
+    Top,
+    TopEnd,
+    Start,
+    Center,
+    End,
+    BottomStart,
+    Bottom,
+    BottomEnd
+});
 object!(Size {} { width, height, scaled });
 names!(Appear { Fade, Rise, Scale });
 names!(Change { Count, Fade });
 names!(Transition { Zoom });
-names!(ShapeForm { Rounded, Circle, Capsule, Rect });
+names!(ShapeForm {
+    Rounded,
+    Circle,
+    Capsule,
+    Rect
+});
 object!(Card {} { id, colour, pad, action, label, menu, transition, appear, children });
 object!(Layers {} { id, place, size, pad, grow, children });
 object!(Shape {} { id, form, fill, soft, stroke, size, label });
@@ -803,7 +947,16 @@ union!(Input tag "t"
     unknown Input::Unknown => |_| json!({})
 );
 names!(TextKind {
-    Plain, Email, Password, Number, Decimal, Phone, Url, Search, Multiline, OneTimeCode
+    Plain,
+    Email,
+    Password,
+    Number,
+    Decimal,
+    Phone,
+    Url,
+    Search,
+    Multiline,
+    OneTimeCode
 });
 object!(TextInput {} {
     kind, value, placeholder, max_length, min, max, step, autofill, readonly, prefix, suffix,
@@ -812,14 +965,31 @@ object!(TextInput {} {
 object!(PhoneCountry { name, value } {});
 names!(ToggleKind { Switch, Checkbox });
 object!(ToggleInput {} { kind, on, value });
-names!(ChoiceKind { Menu, Segmented, Radio, List });
+names!(ChoiceKind {
+    Menu,
+    Segmented,
+    Radio,
+    List
+});
 object!(ChoiceOption { value, label } { detail, disabled });
 object!(ChoiceSearch { href, name } { min });
 object!(ChoiceCreate { label } { href });
 object!(ChoiceInput {} { kind, options, value, placeholder, search, create, more });
 object!(ChoicesInput {} { options, values, search, create, more });
-names!(DateKind { Date, Time, Datetime });
-names!(Weekday { Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday });
+names!(DateKind {
+    Date,
+    Time,
+    Datetime
+});
+names!(Weekday {
+    Monday,
+    Tuesday,
+    Wednesday,
+    Thursday,
+    Friday,
+    Saturday,
+    Sunday
+});
 object!(DateInput {} { kind, value, min, max, off_days, off_weekdays });
 object!(RangeInput { from, to } { kind, min, max, off_days, off_weekdays });
 object!(RangeEnd { name } { value });
@@ -839,7 +1009,16 @@ union!(Action tag "t"
     units { Back, Refresh, Dismiss }
     unknown Action::Unknown => |_| json!({})
 );
-names!(Present { Auto, Push, Replace, Root, Sheet, Full, External, Task });
+names!(Present {
+    Auto,
+    Push,
+    Replace,
+    Root,
+    Sheet,
+    Full,
+    External,
+    Task
+});
 object!(Pair { name } { value });
 names!(State { Open, Hidden, Checked, Selected, Disabled, Active, Invalid, Pending }
     never written { Unknown });
@@ -915,17 +1094,59 @@ object!(SignInExchange { platform, app, code, code_verifier } {});
 object!(ClientDescriptor { platform, form, vocab, text_percent } {
     os, app, lib, scheme, contrast, locale, tz, caps
 });
-names!(Platform { Ios, Ipados, Macos, Watchos, Tvos, Visionos, Android, Wearos, Windows, Linux });
-names!(FormFactor { Phone, Tablet, Desktop, Watch, Tv, Spatial, Car });
+names!(Platform {
+    Ios,
+    Ipados,
+    Macos,
+    Watchos,
+    Tvos,
+    Visionos,
+    Android,
+    Wearos,
+    Windows,
+    Linux
+});
+names!(FormFactor {
+    Phone,
+    Tablet,
+    Desktop,
+    Watch,
+    Tv,
+    Spatial,
+    Car
+});
 names!(Scheme { Light, Dark });
 names!(Contrast { Normal, More });
 
 // Device calls and their results.
 names!(Feature {
-    Haptic, Clipboard, Share, Capture, AuthSession, OpenUrl, Push, LocalNotification, Passkey,
-    Confirm, LocationOnce, ScanCode, AppLock, PlatformSignIn, RequestReview, OpenSettings,
+    Haptic,
+    Clipboard,
+    Share,
+    Capture,
+    AuthSession,
+    OpenUrl,
+    Push,
+    LocalNotification,
+    Passkey,
+    Confirm,
+    LocationOnce,
+    ScanCode,
+    AppLock,
+    PlatformSignIn,
+    RequestReview,
+    OpenSettings,
 });
-names!(Refusal { Unsupported, NotBuilt, Denied, Restricted, Unavailable, Cancelled, Busy, Failed });
+names!(Refusal {
+    Unsupported,
+    NotBuilt,
+    Denied,
+    Restricted,
+    Unavailable,
+    Cancelled,
+    Busy,
+    Failed
+});
 text!(OriginPath, "origin-path");
 text!(HttpsUrl, "https-url");
 text!(Ticket, "ticket");
@@ -955,7 +1176,15 @@ union!(ReplyCall tag "f"
     units { RequestReview }
     unknown ReplyCall::Unknown => |_| json!({})
 );
-names!(HapticKind { Success, Warning, Error, Selection, Light, Medium, Heavy });
+names!(HapticKind {
+    Success,
+    Warning,
+    Error,
+    Selection,
+    Light,
+    Medium,
+    Heavy
+});
 object!(Haptic { kind } {});
 object!(CopyText { text } { sensitive });
 object!(Share {} { title, text, href, url, file });
@@ -963,7 +1192,10 @@ object!(Shared { completed } {});
 object!(OpenUrl { url } { inside });
 object!(AuthSession { start } { ephemeral });
 object!(RegisterPush {} { categories });
-names!(PushEnvironment { Sandbox, Production });
+names!(PushEnvironment {
+    Sandbox,
+    Production
+});
 names!(PushPlatform { Ios, Android });
 object!(PushDevice { platform, token, app_id } { environment });
 object!(PushRegistered { granted } {});
@@ -985,15 +1217,33 @@ object!(OpenSettings {} { page });
 names!(PasskeyMode { Register, SignIn });
 object!(Passkey { mode, options } { conditional });
 object!(PasskeyCredential { credential } {});
-names!(ConfirmMethod { Passkey, DeviceKey, Either });
+names!(ConfirmMethod {
+    Passkey,
+    DeviceKey,
+    Either
+});
 object!(Confirm { reason, challenge } { detail, method });
 names!(ConfirmedBy { Passkey, DeviceKey });
 object!(Confirmed {} { credential, method, challenge, key_id, signature });
-names!(Accuracy { Approximate, Precise });
+names!(Accuracy {
+    Approximate,
+    Precise
+});
 object!(LocateOnce {} { accuracy, max_age_secs, timeout_secs });
 object!(Located { lat, lon, accuracy_m, at, precise } {});
 names!(CodeFormat {
-    Qr, Ean13, Ean8, UpcA, UpcE, Code128, Code39, Code93, Itf, Pdf417, Aztec, DataMatrix
+    Qr,
+    Ean13,
+    Ean8,
+    UpcA,
+    UpcE,
+    Code128,
+    Code39,
+    Code93,
+    Itf,
+    Pdf417,
+    Aztec,
+    DataMatrix
 });
 object!(ScanCode {} { formats, prompt });
 object!(Scanned { format, value } {});
@@ -1193,8 +1443,7 @@ mod tests {
                         let takes_a_value = samples(defs, property, 0).into_iter().any(|sample| {
                             let mut with = least.clone();
                             with[field] = sample;
-                            read_fields(with)
-                                .is_ok_and(|read| read[field] != property["default"])
+                            read_fields(with).is_ok_and(|read| read[field] != property["default"])
                         });
                         assert!(
                             takes_a_value,
@@ -1204,7 +1453,11 @@ mod tests {
                 }
                 "enum" => {
                     for value in def["enum"].as_array().unwrap() {
-                        assert_eq!((check.round_trip)(value.clone()).as_ref(), Ok(value), "{name}");
+                        assert_eq!(
+                            (check.round_trip)(value.clone()).as_ref(),
+                            Ok(value),
+                            "{name}"
+                        );
                     }
                     assert!((check.round_trip)(json!("not-a-value")).is_err(), "{name}");
                 }
@@ -1252,10 +1505,16 @@ mod tests {
         for (name, def) in schema.defs() {
             assert!(def["x-since"].is_u64(), "{name} records no vocabulary");
             for (field, property) in def["properties"].as_object().into_iter().flatten() {
-                assert!(property["x-since"].is_u64(), "{name}.{field} records no vocabulary");
+                assert!(
+                    property["x-since"].is_u64(),
+                    "{name}.{field} records no vocabulary"
+                );
             }
             for variant in def["x-variants"].as_array().into_iter().flatten() {
-                assert!(variant["x-since"].is_u64(), "{name}: {variant} records no vocabulary");
+                assert!(
+                    variant["x-since"].is_u64(),
+                    "{name}: {variant} records no vocabulary"
+                );
             }
         }
         for kind in Kind::ALL {

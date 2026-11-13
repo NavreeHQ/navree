@@ -355,8 +355,7 @@ impl ClientDescriptor {
         if major != crate::MAJOR {
             return Err(DescriptorError::UnknownMajor(native.to_owned()));
         }
-        let descriptor =
-            descriptor.ok_or(DescriptorError::Unreadable(ClientError::Missing))?;
+        let descriptor = descriptor.ok_or(DescriptorError::Unreadable(ClientError::Missing))?;
         Self::parse(descriptor).map_err(DescriptorError::Unreadable)
     }
 
@@ -750,13 +749,25 @@ mod tests {
 
         for (native, descriptor, why) in [
             ("1", None, ClientError::Missing),
-            ("1", Some("platform=beos; form=phone"), ClientError::UnknownPlatform("beos".to_owned())),
+            (
+                "1",
+                Some("platform=beos; form=phone"),
+                ClientError::UnknownPlatform("beos".to_owned()),
+            ),
             ("1", Some("form=phone"), ClientError::NoPlatform),
-            ("one", Some(good), ClientError::NotANumber("x-navree-native")),
+            (
+                "one",
+                Some(good),
+                ClientError::NotANumber("x-navree-native"),
+            ),
             ("", Some(good), ClientError::NotANumber("x-navree-native")),
         ] {
             let refused = ClientDescriptor::read(native, descriptor).unwrap_err();
-            assert_eq!(refused, DescriptorError::Unreadable(why), "{native:?} {descriptor:?}");
+            assert_eq!(
+                refused,
+                DescriptorError::Unreadable(why),
+                "{native:?} {descriptor:?}"
+            );
             assert_eq!(refused.status(), 400);
         }
     }
@@ -774,7 +785,10 @@ mod tests {
                 lib: "0.3.0".to_owned(),
             }
         );
-        assert_eq!(token.to_string(), "NavreeNative/1 (platform=ios; lib=0.3.0)");
+        assert_eq!(
+            token.to_string(),
+            "NavreeNative/1 (platform=ios; lib=0.3.0)"
+        );
         assert_eq!(
             WebViewToken::find(&format!("Mozilla/5.0 (Linux; Android 16) {token}")),
             Some(token.clone())
@@ -784,7 +798,10 @@ mod tests {
         assert_eq!(WebViewToken::of(&client), token);
 
         let bare = WebViewToken::find("Mozilla/5.0 NavreeNative/2").unwrap();
-        assert_eq!((bare.major, bare.platform, bare.lib.as_str()), (2, None, ""));
+        assert_eq!(
+            (bare.major, bare.platform, bare.lib.as_str()),
+            (2, None, "")
+        );
         assert_eq!(bare.to_string(), "NavreeNative/2");
         let odd = WebViewToken::find("NavreeNative/1 (platform=beos; lib=<x>; fold=open)").unwrap();
         assert_eq!((odd.platform, odd.lib.as_str()), (None, ""));
@@ -797,9 +814,19 @@ mod tests {
             assert_eq!(WebViewToken::find(none), None, "{none}");
         }
         // Only the tail is read: the token is what a client appends last.
-        let long = format!("{} {}", "Mozilla/5.0 (देवनागरी)".repeat(40), "NavreeNative/1 (platform=android)");
-        assert_eq!(WebViewToken::find(&long).map(|token| token.platform), Some(Some(Platform::Android)));
-        let buried = format!("NavreeNative/1 (platform=ios) {}", "x".repeat(WebViewToken::TAIL));
+        let long = format!(
+            "{} {}",
+            "Mozilla/5.0 (देवनागरी)".repeat(40),
+            "NavreeNative/1 (platform=android)"
+        );
+        assert_eq!(
+            WebViewToken::find(&long).map(|token| token.platform),
+            Some(Some(Platform::Android))
+        );
+        let buried = format!(
+            "NavreeNative/1 (platform=ios) {}",
+            "x".repeat(WebViewToken::TAIL)
+        );
         assert_eq!(WebViewToken::find(&buried), None);
     }
 

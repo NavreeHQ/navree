@@ -18,11 +18,11 @@
 use navree_native::Platform;
 use navree_native::device::{PushDevice, PushPlatform};
 
+use crate::Core;
 use crate::effect::{Body, Change, Effect};
 use crate::event::Response;
 use crate::origin::Target;
 use crate::state::{Asked, Pending, Stage};
-use crate::Core;
 
 /// How long the removal of a token may take, in milliseconds. The server
 /// ends a device with its session whether or not the removal arrives.
@@ -33,14 +33,23 @@ const REGISTER_LIMIT: u32 = 30_000;
 impl Core {
     fn push_platform(&self) -> Option<PushPlatform> {
         match self.config.client.platform {
-            Platform::Ios | Platform::Ipados | Platform::Macos | Platform::Watchos | Platform::Tvos | Platform::Visionos => Some(PushPlatform::Ios),
+            Platform::Ios
+            | Platform::Ipados
+            | Platform::Macos
+            | Platform::Watchos
+            | Platform::Tvos
+            | Platform::Visionos => Some(PushPlatform::Ios),
             Platform::Android | Platform::Wearos => Some(PushPlatform::Android),
             _ => None,
         }
     }
 
     /// The system gave the device a token, or changed it.
-    pub(crate) fn push_token(&mut self, token: String, environment: Option<navree_native::device::PushEnvironment>) {
+    pub(crate) fn push_token(
+        &mut self,
+        token: String,
+        environment: Option<navree_native::device::PushEnvironment>,
+    ) {
         if token.is_empty() {
             return;
         }
@@ -53,11 +62,21 @@ impl Core {
     /// server does not hold it yet.
     pub(crate) fn push_sync(&mut self) {
         let push = &self.inner.push;
-        let (Some(token), Some(route), Some(platform)) = (push.token.clone(), self.inner.push_route.clone(), self.push_platform()) else {
+        let (Some(token), Some(route), Some(platform)) = (
+            push.token.clone(),
+            self.inner.push_route.clone(),
+            self.push_platform(),
+        ) else {
             return;
         };
-        let known = [&push.registered, &push.posting, &push.refused].into_iter().any(|held| held.as_ref() == Some(&token));
-        if known || self.inner.user.is_none() || self.inner.signing_out || self.config.app_id.is_empty() {
+        let known = [&push.registered, &push.posting, &push.refused]
+            .into_iter()
+            .any(|held| held.as_ref() == Some(&token));
+        if known
+            || self.inner.user.is_none()
+            || self.inner.signing_out
+            || self.config.app_id.is_empty()
+        {
             return;
         }
         let device = PushDevice {
@@ -66,7 +85,10 @@ impl Core {
             app_id: self.config.app_id.clone(),
             environment: push.environment,
         };
-        let (Ok(text), Target::Inside(url)) = (serde_json::to_string(&device), self.inner.origin.resolve(&route, "/")) else {
+        let (Ok(text), Target::Inside(url)) = (
+            serde_json::to_string(&device),
+            self.inner.origin.resolve(&route, "/"),
+        ) else {
             return;
         };
         self.inner.push.posting = Some(token.clone());
@@ -99,7 +121,10 @@ impl Core {
             401 | 403 => {}
             _ => {
                 push.refused = Some(token);
-                self.report("push", format!("the push route answered {status}: the device is not registered"));
+                self.report(
+                    "push",
+                    format!("the push route answered {status}: the device is not registered"),
+                );
             }
         }
         // The system changed the token while this one was on its way.
@@ -122,7 +147,12 @@ impl Core {
         if self.inner.signing_out {
             return;
         }
-        let token = self.inner.push.registered.take().or(self.inner.push.posting.take());
+        let token = self
+            .inner
+            .push
+            .registered
+            .take()
+            .or(self.inner.push.posting.take());
         let route = self.inner.push_route.clone();
         // Nothing asked for the person who left is wanted any more.
         self.drop_pending(|_| true);
@@ -139,9 +169,13 @@ impl Core {
         self.view.stage = Stage::Starting;
         self.touch(Change::App);
         self.touch(Change::Nav);
-        let removal = token.zip(route).and_then(|(token, route)| match self.inner.origin.resolve(&route, "/") {
-            Target::Inside(url) => Some((serde_json::json!({ "token": token }).to_string(), url)),
-            _ => None,
+        let removal = token.zip(route).and_then(|(token, route)| {
+            match self.inner.origin.resolve(&route, "/") {
+                Target::Inside(url) => {
+                    Some((serde_json::json!({ "token": token }).to_string(), url))
+                }
+                _ => None,
+            }
         });
         match removal {
             Some((text, url)) => {

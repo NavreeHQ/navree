@@ -51,7 +51,11 @@ pub enum Edge {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Toast {
     /// What it means.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub tone: Tone,
     /// What it says.
     pub text: String,
@@ -129,7 +133,11 @@ pub enum Op {
         /// The revision the list is at now: what its next ask for changes says.
         since: String,
         /// Where new rows join.
-        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+        #[serde(
+            default,
+            skip_serializing_if = "is_default",
+            deserialize_with = "crate::lenient::or_default"
+        )]
         at: Edge,
         /// Whether more changes follow this revision: the client asks again at once.
         #[serde(default, skip_serializing_if = "is_false")]
@@ -142,7 +150,11 @@ pub enum Op {
         /// The records, in the table's order.
         rows: Vec<TableRow>,
         /// Which end they join.
-        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+        #[serde(
+            default,
+            skip_serializing_if = "is_default",
+            deserialize_with = "crate::lenient::or_default"
+        )]
         at: Edge,
         /// For records that join the end: where the records after these are, by
         /// cursor, or none when these are the last: the table's `more` from now
@@ -195,7 +207,11 @@ pub enum Op {
         /// The address.
         href: String,
         /// How it enters history.
-        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+        #[serde(
+            default,
+            skip_serializing_if = "is_default",
+            deserialize_with = "crate::lenient::or_default"
+        )]
         mode: UrlMode,
     },
     /// Goes to a screen of the app.
@@ -204,7 +220,11 @@ pub enum Op {
         href: String,
         /// How the screen is presented. When not said, the client's own rules
         /// for where a post leads decide, then the shell's routes.
-        #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+        #[serde(
+            default,
+            skip_serializing_if = "is_default",
+            deserialize_with = "crate::lenient::or_default"
+        )]
         present: Present,
     },
     /// Leaves for another site, in the system's browser.
@@ -318,7 +338,10 @@ mod tests {
             present: Present::Replace,
         };
         let json = serde_json::to_string(&op).unwrap();
-        assert_eq!(json, r#"{"op":"navigate","href":"/orders/7","present":"replace"}"#);
+        assert_eq!(
+            json,
+            r#"{"op":"navigate","href":"/orders/7","present":"replace"}"#
+        );
         assert_eq!(serde_json::from_str::<Op>(&json).unwrap(), op);
     }
 
@@ -328,10 +351,20 @@ mod tests {
             r#"{"op":"merge","target":"inbox","nodes":[{"t":"row","id":"c-88","title":"Harpreet Sandhu"}],"gone":["c-12"],"since":"0000412","at":"start"}"#,
         )
         .unwrap();
-        let Op::Merge { gone, since, at, more, .. } = &merge else {
+        let Op::Merge {
+            gone,
+            since,
+            at,
+            more,
+            ..
+        } = &merge
+        else {
             panic!("{merge:?}");
         };
-        assert_eq!((gone.as_slice(), since.as_str(), *at, *more), (&["c-12".to_owned()][..], "0000412", Edge::Start, false));
+        assert_eq!(
+            (gone.as_slice(), since.as_str(), *at, *more),
+            (&["c-12".to_owned()][..], "0000412", Edge::Start, false)
+        );
         let rows: Op = serde_json::from_str(
             r#"{"op":"rows","target":"orders","rows":[{"id":"1043","cells":[{"t":"text","value":"CH-1043"}]}],"more":"/orders?after=1043"}"#,
         )
@@ -339,7 +372,10 @@ mod tests {
         let Op::Rows { rows, at, more, .. } = &rows else {
             panic!("{rows:?}");
         };
-        assert_eq!((rows.len(), *at, more.as_deref()), (1, Edge::End, Some("/orders?after=1043")));
+        assert_eq!(
+            (rows.len(), *at, more.as_deref()),
+            (1, Edge::End, Some("/orders?after=1043"))
+        );
         // The cursor before is moved only when the op says so.
         let Op::Rows { prev, .. } = serde_json::from_str::<Op>(
             r#"{"op":"rows","target":"orders","rows":[{"id":"1045"}],"at":"start","prev":"/orders?before=1045"}"#,
@@ -348,19 +384,30 @@ mod tests {
             panic!("not rows");
         };
         assert_eq!(prev.as_deref(), Some("/orders?before=1045"));
-        let Op::Rows { prev, .. } = serde_json::from_str::<Op>(r#"{"op":"rows","target":"orders","rows":[]}"#).unwrap() else {
+        let Op::Rows { prev, .. } =
+            serde_json::from_str::<Op>(r#"{"op":"rows","target":"orders","rows":[]}"#).unwrap()
+        else {
             panic!("not rows");
         };
         assert_eq!(prev, None);
-        assert!(serde_json::from_str::<Op>(r#"{"op":"row","target":"1043","row":{"id":"1043"}}"#).is_ok());
+        assert!(
+            serde_json::from_str::<Op>(r#"{"op":"row","target":"1043","row":{"id":"1043"}}"#)
+                .is_ok()
+        );
         // A revision is needed: without it the next ask could not say where it stands.
         assert!(serde_json::from_str::<Op>(r#"{"op":"merge","target":"inbox"}"#).is_err());
     }
 
     #[test]
     fn signing_out_on_purpose_is_a_word_with_no_fields() {
-        assert_eq!(serde_json::to_string(&Op::SignedOut).unwrap(), r#"{"op":"signed_out"}"#);
-        assert_eq!(serde_json::from_str::<Op>(r#"{"op":"signed_out"}"#).unwrap(), Op::SignedOut);
+        assert_eq!(
+            serde_json::to_string(&Op::SignedOut).unwrap(),
+            r#"{"op":"signed_out"}"#
+        );
+        assert_eq!(
+            serde_json::from_str::<Op>(r#"{"op":"signed_out"}"#).unwrap(),
+            Op::SignedOut
+        );
         // A field a newer server adds to it is passed over.
         assert_eq!(
             serde_json::from_str::<Op>(r#"{"op":"signed_out","everywhere":true}"#).unwrap(),

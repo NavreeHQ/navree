@@ -313,9 +313,8 @@ impl AuthService {
         // A sign-in that did not come back from the hand-over's own sign-in
         // page is not handed to an app another app could stand in for.
         if let Some(expected) = &pending.attempt
-            && !attempt.is_some_and(|attempt| {
-                constant_time_eq(attempt.as_bytes(), expected.as_bytes())
-            })
+            && !attempt
+                .is_some_and(|attempt| constant_time_eq(attempt.as_bytes(), expected.as_bytes()))
         {
             session.remove(PENDING_KEY);
             let error = refused("the sign-in was not made for this app sign-in");
@@ -582,29 +581,28 @@ impl Controller for AppSignInController {
         let service = self.service.clone();
         let keep = self.apps.keep_browser_signed_in;
         let sign_in = self.sign_in.clone();
-        let finish = move |session: Session,
-                           meta: ClientMeta,
-                           Query(request): Query<FinishRequest>| {
-            let service = service.clone();
-            let sign_in = sign_in.clone();
-            async move {
-                let target = match service
-                    .finish_app_sign_in(&session, request.attempt.as_deref(), keep, &meta)
-                    .await
-                    .map_err(AuthError::into_app_error)?
-                {
-                    Finish::SignIn(attempt) => sign_in_href(&sign_in, attempt.as_deref()),
-                    Finish::App(callback) => callback,
-                };
-                // The code is in the address: never cached, never sent on as
-                // a referrer.
-                let mut response = Redirect::to(&target).into_response();
-                let headers = response.headers_mut();
-                headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
-                headers.insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
-                Ok::<_, AppError>(response)
-            }
-        };
+        let finish =
+            move |session: Session, meta: ClientMeta, Query(request): Query<FinishRequest>| {
+                let service = service.clone();
+                let sign_in = sign_in.clone();
+                async move {
+                    let target = match service
+                        .finish_app_sign_in(&session, request.attempt.as_deref(), keep, &meta)
+                        .await
+                        .map_err(AuthError::into_app_error)?
+                    {
+                        Finish::SignIn(attempt) => sign_in_href(&sign_in, attempt.as_deref()),
+                        Finish::App(callback) => callback,
+                    };
+                    // The code is in the address: never cached, never sent on as
+                    // a referrer.
+                    let mut response = Redirect::to(&target).into_response();
+                    let headers = response.headers_mut();
+                    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+                    headers.insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+                    Ok::<_, AppError>(response)
+                }
+            };
         routes.push(
             RouteDef::on(Method::GET, format!("!{APP_SIGN_IN_FINISH_PATH}"), finish)
                 .public()

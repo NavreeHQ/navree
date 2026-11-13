@@ -70,7 +70,10 @@ fn form(tag: &str, name: &str, fields: &[(&str, Value)]) -> Value {
 }
 
 fn forms(tag: &str, each: &[(&str, &[(&str, Value)])]) -> Value {
-    let options: Vec<Value> = each.iter().map(|(name, fields)| form(tag, name, fields)).collect();
+    let options: Vec<Value> = each
+        .iter()
+        .map(|(name, fields)| form(tag, name, fields))
+        .collect();
     json!({"oneOf": options})
 }
 
@@ -79,7 +82,17 @@ fn failure() -> Value {
 }
 
 fn notice() -> Value {
-    words(&["offline", "timeout", "failed", "unsaved", "loading", "copied", "fields_need_attention", "loaded", "second_step"])
+    words(&[
+        "offline",
+        "timeout",
+        "failed",
+        "unsaved",
+        "loading",
+        "copied",
+        "fields_need_attention",
+        "loaded",
+        "second_step",
+    ])
 }
 
 fn headers() -> Value {
@@ -89,7 +102,10 @@ fn headers() -> Value {
 fn message() -> Vec<(&'static str, Value)> {
     vec![
         ("id", integer()),
-        ("tone", words(&["neutral", "accent", "success", "warning", "danger", "info"])),
+        (
+            "tone",
+            words(&["neutral", "accent", "success", "warning", "danger", "info"]),
+        ),
         ("text?", string()),
         ("title?", string()),
         ("notice?", notice()),
@@ -132,24 +148,95 @@ pub fn schema() -> Value {
                 ("from?", string()),
             ],
         ),
-        ("answer", &[("screen", screen()), ("question", integer()), ("yes", boolean())]),
-        ("choose", &[("screen", screen()), ("table", string()), ("row?", string()), ("on", boolean()), ("across?", boolean())]),
-        ("tab", &[("screen", screen()), ("id", string()), ("index", integer())]),
+        (
+            "answer",
+            &[
+                ("screen", screen()),
+                ("question", integer()),
+                ("yes", boolean()),
+            ],
+        ),
+        (
+            "choose",
+            &[
+                ("screen", screen()),
+                ("table", string()),
+                ("row?", string()),
+                ("on", boolean()),
+                ("across?", boolean()),
+            ],
+        ),
+        (
+            "tab",
+            &[("screen", screen()), ("id", string()), ("index", integer())],
+        ),
         ("random", &[("request", integer()), ("bytes", string())]),
-        ("push_token", &[("token", string()), ("environment?", words(&["sandbox", "production"]))]),
+        (
+            "push_token",
+            &[
+                ("token", string()),
+                ("environment?", words(&["sandbox", "production"])),
+            ],
+        ),
         ("restore", &[("snapshot", json!({}))]),
-        ("move", &[("screen", screen()), ("item", string()), ("from", string()), ("to", string()), ("before?", string())]),
-        ("options", &[("screen", screen()), ("form?", string()), ("field", string()), ("text?", string()), ("more?", boolean())]),
-        ("field", &[("screen", screen()), ("form?", string()), ("field", string()), ("value", one("FieldValue"))]),
+        (
+            "move",
+            &[
+                ("screen", screen()),
+                ("item", string()),
+                ("from", string()),
+                ("to", string()),
+                ("before?", string()),
+            ],
+        ),
+        (
+            "options",
+            &[
+                ("screen", screen()),
+                ("form?", string()),
+                ("field", string()),
+                ("text?", string()),
+                ("more?", boolean()),
+            ],
+        ),
+        (
+            "field",
+            &[
+                ("screen", screen()),
+                ("form?", string()),
+                ("field", string()),
+                ("value", one("FieldValue")),
+            ],
+        ),
         ("search", &[("screen", screen()), ("text", string())]),
         ("back", &[]),
         ("pop_to", &[("screen", screen())]),
         ("dismissed", &[("screen", screen())]),
-        ("overlay", &[("screen", screen()), ("id", string()), ("open", boolean())]),
+        (
+            "overlay",
+            &[("screen", screen()), ("id", string()), ("open", boolean())],
+        ),
         ("refresh", &[("screen", screen())]),
-        ("region_retry", &[("screen", screen()), ("region", string())]),
-        ("more", &[("screen", screen()), ("id", string()), ("before?", boolean())]),
-        ("region_go", &[("screen", screen()), ("region", string()), ("href", string())]),
+        (
+            "region_retry",
+            &[("screen", screen()), ("region", string())],
+        ),
+        (
+            "more",
+            &[
+                ("screen", screen()),
+                ("id", string()),
+                ("before?", boolean()),
+            ],
+        ),
+        (
+            "region_go",
+            &[
+                ("screen", screen()),
+                ("region", string()),
+                ("href", string()),
+            ],
+        ),
         ("message_shown", &[("id", integer())]),
         ("message_action", &[("id", integer())]),
         ("web_link", &[("screen", screen()), ("url", string())]),
@@ -180,7 +267,15 @@ pub fn schema() -> Value {
             ],
         ),
         ("cache", &[("key", string()), ("value?", string())]),
-        ("device_result", &[("call", integer()), ("ok", boolean()), ("refusal?", string()), ("fields?", list(protocol("Pair")))]),
+        (
+            "device_result",
+            &[
+                ("call", integer()),
+                ("ok", boolean()),
+                ("refusal?", string()),
+                ("fields?", list(protocol("Pair"))),
+            ],
+        ),
         ("sign_in_done", &[("url?", string())]),
         ("focused", &[("screen", screen()), ("serial", integer())]),
         ("open_upgrade", &[]),
@@ -199,20 +294,49 @@ pub fn schema() -> Value {
         ("fetch", &fetch),
         ("cancel", &[("request", integer())]),
         ("open_url", &[("url", string()), ("inside?", boolean())]),
-        ("sign_in", &[("url", string()), ("callback?", string()), ("ephemeral?", boolean())]),
+        (
+            "sign_in",
+            &[
+                ("url", string()),
+                ("callback?", string()),
+                ("ephemeral?", boolean()),
+            ],
+        ),
         ("message", message.as_slice()),
         ("haptic", &[("kind", string())]),
-        ("device", &[("call", integer()), ("device", protocol("device::Call")), ("posts?", boolean()), ("options?", json!({"type": "object"}))]),
+        (
+            "device",
+            &[
+                ("call", integer()),
+                ("device", protocol("device::Call")),
+                ("posts?", boolean()),
+                ("options?", json!({"type": "object"})),
+            ],
+        ),
         ("random", &[("request", integer()), ("bytes", integer())]),
         ("forget_session", &[]),
         ("cache_read", &[("key", string())]),
         ("cache_write", &[("key", string()), ("value?", string())]),
         ("cache_clear", &[]),
-        ("announce", &[("text?", string()), ("notice?", notice()), ("count?", integer())]),
+        (
+            "announce",
+            &[
+                ("text?", string()),
+                ("notice?", notice()),
+                ("count?", integer()),
+            ],
+        ),
         ("copy", &[("text", string()), ("sensitive?", boolean())]),
         ("timer", &[("timer", integer()), ("ms", integer())]),
         ("cancel_timer", &[("timer", integer())]),
-        ("stream_open", &[("stream", integer()), ("url", string()), ("headers", headers())]),
+        (
+            "stream_open",
+            &[
+                ("stream", integer()),
+                ("url", string()),
+                ("headers", headers()),
+            ],
+        ),
         ("stream_close", &[("stream", integer())]),
         ("exit", &[]),
         ("report", &[("what", string()), ("detail", string())]),
@@ -223,13 +347,39 @@ pub fn schema() -> Value {
         ("nav", &[]),
         ("screen", &[("id", screen())]),
         ("form", &[("screen", screen()), ("form", string())]),
-        ("rows", &[("screen", screen()), ("id", string()), ("from", integer()), ("count", integer())]),
-        ("redraw", &[("screen", screen()), ("id", string()), ("rows", list(string())), ("gone?", list(string()))]),
+        (
+            "rows",
+            &[
+                ("screen", screen()),
+                ("id", string()),
+                ("from", integer()),
+                ("count", integer()),
+            ],
+        ),
+        (
+            "redraw",
+            &[
+                ("screen", screen()),
+                ("id", string()),
+                ("rows", list(string())),
+                ("gone?", list(string())),
+            ],
+        ),
         ("snapshot", &[]),
         ("messages", &[]),
     ];
-    let change: Vec<(&str, &[(&str, Value)])> = part.iter().filter(|(name, _)| !matches!(*name, "all" | "snapshot")).copied().collect();
-    let kept_screen = object(&[("url", string()), ("title?", string()), ("fields?", map(one("FieldValue"))), ("open?", list(string())), ("from?", string())]);
+    let change: Vec<(&str, &[(&str, Value)])> = part
+        .iter()
+        .filter(|(name, _)| !matches!(*name, "all" | "snapshot"))
+        .copied()
+        .collect();
+    let kept_screen = object(&[
+        ("url", string()),
+        ("title?", string()),
+        ("fields?", map(one("FieldValue"))),
+        ("open?", list(string())),
+        ("from?", string()),
+    ]);
     let defs = json!({
         "Config": object(&[
             ("origin", string()),

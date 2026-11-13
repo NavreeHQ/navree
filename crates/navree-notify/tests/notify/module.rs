@@ -6,8 +6,8 @@ use navree_contracts::JobRegistration;
 use navree_db::{DatabaseModule, Db, Executor as _, Statement};
 use navree_kernel::{Factory, Module, ModuleBuilder, ProviderKey};
 use navree_notify::{
-    Channel, DELIVERIES_TABLE, DeliveryLog, NOTIFICATIONS_TABLE, Notifier, NotifyModule, NotifyOptions,
-    OPT_OUTS_TABLE, OptOuts, PUSH_SUBSCRIPTIONS_TABLE, PushSubscriptions,
+    Channel, DELIVERIES_TABLE, DeliveryLog, NOTIFICATIONS_TABLE, Notifier, NotifyModule,
+    NotifyOptions, OPT_OUTS_TABLE, OptOuts, PUSH_SUBSCRIPTIONS_TABLE, PushSubscriptions,
 };
 use navree_testing::TestApp;
 

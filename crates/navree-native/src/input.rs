@@ -71,7 +71,11 @@ pub enum TextKind {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextInput {
     /// What the text is.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub kind: TextKind,
     /// What it holds now.
     ///
@@ -150,7 +154,11 @@ pub enum ToggleKind {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToggleInput {
     /// How it is drawn.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub kind: ToggleKind,
     /// Whether it is on.
     #[serde(default, skip_serializing_if = "is_false")]
@@ -228,7 +236,11 @@ pub struct ChoiceCreate {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChoiceInput {
     /// How it is drawn.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub kind: ChoiceKind,
     /// What can be chosen.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -308,7 +320,11 @@ pub enum Weekday {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DateInput {
     /// What it picks.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub kind: DateKind,
     /// What it holds now.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -323,7 +339,11 @@ pub struct DateInput {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub off_days: Vec<String>,
     /// Days of the week that can't be picked: a shop shut on Sundays.
-    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::lenient::known")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "crate::lenient::known"
+    )]
     pub off_weekdays: Vec<Weekday>,
 }
 
@@ -343,7 +363,11 @@ pub struct RangeEnd {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RangeInput {
     /// What each end picks.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub kind: DateKind,
     /// The start.
     pub from: RangeEnd,
@@ -359,7 +383,11 @@ pub struct RangeInput {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub off_days: Vec<String>,
     /// Days of the week that can't be its ends, as a date control's.
-    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "crate::lenient::known")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "crate::lenient::known"
+    )]
     pub off_weekdays: Vec<Weekday>,
 }
 
@@ -521,10 +549,20 @@ mod tests {
             })
         );
         // Both parts are needed: a name with no country says nothing.
-        assert!(serde_json::from_str::<TextInput>(r#"{"country":{"name":"phone_country"}}"#).is_err());
+        assert!(
+            serde_json::from_str::<TextInput>(r#"{"country":{"name":"phone_country"}}"#).is_err()
+        );
         // A number with no country is read where the server reads it by default.
-        assert_eq!(serde_json::from_str::<TextInput>(r#"{"kind":"phone"}"#).unwrap().country, None);
-        assert_eq!(serde_json::from_str::<Input>(&serde_json::to_string(&input).unwrap()).unwrap(), input);
+        assert_eq!(
+            serde_json::from_str::<TextInput>(r#"{"kind":"phone"}"#)
+                .unwrap()
+                .country,
+            None
+        );
+        assert_eq!(
+            serde_json::from_str::<Input>(&serde_json::to_string(&input).unwrap()).unwrap(),
+            input
+        );
     }
 
     #[test]

@@ -44,17 +44,33 @@ const fn entry(
 const STANDARD: [(Standard, Entry); 8] = [
     (
         Standard::Share,
-        entry(&[], "square.and.arrow.up", Some("square.and.arrow.up.fill"), "share"),
+        entry(
+            &[],
+            "square.and.arrow.up",
+            Some("square.and.arrow.up.fill"),
+            "share",
+        ),
     ),
-    (Standard::Delete, entry(&[], "trash", Some("trash.fill"), "delete")),
+    (
+        Standard::Delete,
+        entry(&[], "trash", Some("trash.fill"), "delete"),
+    ),
     (Standard::Add, entry(&[], "plus", None, "add")),
     (Standard::Edit, entry(&[], "pencil", None, "edit")),
-    (Standard::Search, entry(&[], "magnifyingglass", None, "search")),
+    (
+        Standard::Search,
+        entry(&[], "magnifyingglass", None, "search"),
+    ),
     (Standard::Done, entry(&[], "checkmark", None, "check")),
     (Standard::Cancel, entry(&[], "xmark", None, "close")),
     (
         Standard::More,
-        entry(&[], "ellipsis.circle", Some("ellipsis.circle.fill"), "more_vert"),
+        entry(
+            &[],
+            "ellipsis.circle",
+            Some("ellipsis.circle.fill"),
+            "more_vert",
+        ),
     ),
 ];
 
@@ -68,18 +84,63 @@ const NAMED: &[Entry] = &[
         Some("square.grid.2x2.fill"),
         "dashboard",
     ),
-    entry(&["shopping-cart"], "cart", Some("cart.fill"), "shopping_cart"),
+    entry(
+        &["shopping-cart"],
+        "cart",
+        Some("cart.fill"),
+        "shopping_cart",
+    ),
     entry(&["shopping-bag"], "bag", Some("bag.fill"), "shopping_bag"),
-    entry(&["package", "box"], "shippingbox", Some("shippingbox.fill"), "inventory_2"),
-    entry(&["store"], "storefront", Some("storefront.fill"), "storefront"),
-    entry(&["truck"], "truck.box", Some("truck.box.fill"), "local_shipping"),
-    entry(&["receipt"], "receipt", Some("receipt.fill"), "receipt_long"),
-    entry(&["credit-card"], "creditcard", Some("creditcard.fill"), "credit_card"),
+    entry(
+        &["package", "box"],
+        "shippingbox",
+        Some("shippingbox.fill"),
+        "inventory_2",
+    ),
+    entry(
+        &["store"],
+        "storefront",
+        Some("storefront.fill"),
+        "storefront",
+    ),
+    entry(
+        &["truck"],
+        "truck.box",
+        Some("truck.box.fill"),
+        "local_shipping",
+    ),
+    entry(
+        &["receipt"],
+        "receipt",
+        Some("receipt.fill"),
+        "receipt_long",
+    ),
+    entry(
+        &["credit-card"],
+        "creditcard",
+        Some("creditcard.fill"),
+        "credit_card",
+    ),
     entry(&["tag"], "tag", Some("tag.fill"), "sell"),
-    entry(&["user", "circle-user"], "person", Some("person.fill"), "person"),
+    entry(
+        &["user", "circle-user"],
+        "person",
+        Some("person.fill"),
+        "person",
+    ),
     entry(&["users"], "person.2", Some("person.2.fill"), "group"),
-    entry(&["building-2", "building"], "building.2", Some("building.2.fill"), "apartment"),
-    entry(&["settings", "settings-2"], "gearshape", Some("gearshape.fill"), "settings"),
+    entry(
+        &["building-2", "building"],
+        "building.2",
+        Some("building.2.fill"),
+        "apartment",
+    ),
+    entry(
+        &["settings", "settings-2"],
+        "gearshape",
+        Some("gearshape.fill"),
+        "settings",
+    ),
     entry(&["inbox"], "tray", Some("tray.fill"), "inbox"),
     entry(&["bell"], "bell", Some("bell.fill"), "notifications"),
     entry(&["mail"], "envelope", Some("envelope.fill"), "mail"),
@@ -92,12 +153,27 @@ const NAMED: &[Entry] = &[
     entry(&["send"], "paperplane", Some("paperplane.fill"), "send"),
     entry(&["phone"], "phone", Some("phone.fill"), "call"),
     entry(&["calendar"], "calendar", None, "calendar_today"),
-    entry(&["clock", "clock-4"], "clock", Some("clock.fill"), "schedule"),
+    entry(
+        &["clock", "clock-4"],
+        "clock",
+        Some("clock.fill"),
+        "schedule",
+    ),
     entry(&["map"], "map", Some("map.fill"), "map"),
     entry(&["map-pin"], "mappin", None, "location_on"),
-    entry(&["file-text", "file"], "doc.text", Some("doc.text.fill"), "description"),
+    entry(
+        &["file-text", "file"],
+        "doc.text",
+        Some("doc.text.fill"),
+        "description",
+    ),
     entry(&["folder"], "folder", Some("folder.fill"), "folder"),
-    entry(&["archive"], "archivebox", Some("archivebox.fill"), "archive"),
+    entry(
+        &["archive"],
+        "archivebox",
+        Some("archivebox.fill"),
+        "archive",
+    ),
     entry(&["image"], "photo", Some("photo.fill"), "image"),
     entry(&["camera"], "camera", Some("camera.fill"), "photo_camera"),
     entry(
@@ -106,7 +182,12 @@ const NAMED: &[Entry] = &[
         Some("chart.bar.fill"),
         "bar_chart",
     ),
-    entry(&["trending-up"], "chart.line.uptrend.xyaxis", None, "trending_up"),
+    entry(
+        &["trending-up"],
+        "chart.line.uptrend.xyaxis",
+        None,
+        "trending_up",
+    ),
     entry(&["star"], "star", Some("star.fill"), "star"),
     entry(&["heart"], "heart", Some("heart.fill"), "favorite"),
     entry(&["lock"], "lock", Some("lock.fill"), "lock"),
@@ -126,7 +207,12 @@ const NAMED: &[Entry] = &[
         Some("square.and.arrow.down.fill"),
         "download",
     ),
-    entry(&["log-out"], "rectangle.portrait.and.arrow.right", None, "logout"),
+    entry(
+        &["log-out"],
+        "rectangle.portrait.and.arrow.right",
+        None,
+        "logout",
+    ),
     entry(&["info"], "info.circle", Some("info.circle.fill"), "info"),
     entry(
         &["circle-help"],
@@ -159,7 +245,12 @@ const NAMED: &[Entry] = &[
     entry(&["check"], "checkmark", None, "check"),
     entry(&["x"], "xmark", None, "close"),
     // Health and fitness: the destinations and the figures of a day.
-    entry(&["heart-pulse"], "bolt.heart", Some("bolt.heart.fill"), "monitor_heart"),
+    entry(
+        &["heart-pulse"],
+        "bolt.heart",
+        Some("bolt.heart.fill"),
+        "monitor_heart",
+    ),
     entry(&["activity"], "waveform.path.ecg", None, "vital_signs"),
     entry(&["moon"], "moon", Some("moon.fill"), "bedtime"),
     entry(&["bed"], "bed.double", Some("bed.double.fill"), "bed"),
@@ -167,16 +258,41 @@ const NAMED: &[Entry] = &[
     entry(&["sun"], "sun.max", Some("sun.max.fill"), "light_mode"),
     entry(&["brain"], "brain.head.profile", None, "psychology"),
     entry(&["footprints"], "figure.walk", None, "directions_walk"),
-    entry(&["person-standing"], "figure.stand", None, "accessibility_new"),
-    entry(&["flame"], "flame", Some("flame.fill"), "local_fire_department"),
+    entry(
+        &["person-standing"],
+        "figure.stand",
+        None,
+        "accessibility_new",
+    ),
+    entry(
+        &["flame"],
+        "flame",
+        Some("flame.fill"),
+        "local_fire_department",
+    ),
     entry(&["timer"], "timer", None, "timer"),
     entry(&["hourglass"], "hourglass", None, "hourglass_empty"),
-    entry(&["mountain"], "mountain.2", Some("mountain.2.fill"), "landscape"),
-    entry(&["dumbbell"], "dumbbell", Some("dumbbell.fill"), "fitness_center"),
+    entry(
+        &["mountain"],
+        "mountain.2",
+        Some("mountain.2.fill"),
+        "landscape",
+    ),
+    entry(
+        &["dumbbell"],
+        "dumbbell",
+        Some("dumbbell.fill"),
+        "fitness_center",
+    ),
     entry(&["bike"], "bicycle", None, "directions_bike"),
     entry(&["waves", "waves-horizontal"], "water.waves", None, "waves"),
     entry(&["zap"], "bolt", Some("bolt.fill"), "bolt"),
-    entry(&["droplet", "droplets"], "drop", Some("drop.fill"), "water_drop"),
+    entry(
+        &["droplet", "droplets"],
+        "drop",
+        Some("drop.fill"),
+        "water_drop",
+    ),
     entry(&["thermometer"], "thermometer.medium", None, "thermostat"),
     entry(&["wind"], "wind", None, "air"),
     entry(
@@ -192,7 +308,12 @@ const NAMED: &[Entry] = &[
         "verified_user",
     ),
     entry(&["sparkles"], "sparkles", None, "auto_awesome"),
-    entry(&["radio"], "antenna.radiowaves.left.and.right", None, "sensors"),
+    entry(
+        &["radio"],
+        "antenna.radiowaves.left.and.right",
+        None,
+        "sensors",
+    ),
 ];
 
 fn symbol(entry: &Entry) -> SystemSymbol {
@@ -254,7 +375,12 @@ pub fn table() -> Value {
         .collect();
     let names: Map<String, Value> = NAMED
         .iter()
-        .flat_map(|entry| entry.names.iter().map(move |name| ((*name).to_owned(), one(entry))))
+        .flat_map(|entry| {
+            entry
+                .names
+                .iter()
+                .map(move |name| ((*name).to_owned(), one(entry)))
+        })
         .collect();
     json!({ "standard": standard, "names": names })
 }
@@ -296,7 +422,12 @@ mod tests {
             for name in entry.names {
                 assert!(names.insert(*name), "`{name}` is in the table twice");
             }
-            assert!(entry.material.bytes().all(|b| b.is_ascii_lowercase() || b == b'_' || b.is_ascii_digit()));
+            assert!(
+                entry
+                    .material
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b == b'_' || b.is_ascii_digit())
+            );
         }
         let table = table();
         assert_eq!(table["names"].as_object().unwrap().len(), names.len());
@@ -314,12 +445,17 @@ mod tests {
             ("footprints", "figure.walk", "directions_walk"),
         ] {
             let symbol = for_name(name).unwrap_or_else(|| panic!("no symbol for `{name}`"));
-            assert_eq!((symbol.apple.as_str(), symbol.material.as_str()), (apple, material));
+            assert_eq!(
+                (symbol.apple.as_str(), symbol.material.as_str()),
+                (apple, material)
+            );
         }
         // A destination's symbol is filled when it is the selected one, where
         // the system has a filled form.
         assert_eq!(
-            for_name("moon").and_then(|symbol| symbol.apple_filled).as_deref(),
+            for_name("moon")
+                .and_then(|symbol| symbol.apple_filled)
+                .as_deref(),
             Some("moon.fill")
         );
     }
@@ -331,7 +467,10 @@ mod tests {
             ..Icon::default()
         }
         .with_symbol();
-        assert_eq!(icon.symbol.map(|symbol| symbol.apple), Some("tray".to_owned()));
+        assert_eq!(
+            icon.symbol.map(|symbol| symbol.apple),
+            Some("tray".to_owned())
+        );
         let own = Icon {
             name: Some("brain-circuit".to_owned()),
             ..Icon::default()

@@ -13,22 +13,26 @@
 //!   fetch for a change to one.
 
 use navree_native::action::Present;
-use navree_native::device::{Call, DeviceCall, Feature, HapticKind, OUTCOME_FIELD, OUTCOME_OK, ReplyCall, TICKET_FIELD};
+use navree_native::device::{
+    Call, DeviceCall, Feature, HapticKind, OUTCOME_FIELD, OUTCOME_OK, ReplyCall, TICKET_FIELD,
+};
 use navree_native::node::Method;
 use navree_native::shell::{NavItem, Route, Shell};
-use navree_native::{CLIENT_HEADER, CONTENT_TYPE, MAJOR, NATIVE_HEADER, Op, SHELL_PATH, Screen, Tone};
+use navree_native::{
+    CLIENT_HEADER, CONTENT_TYPE, MAJOR, NATIVE_HEADER, Op, SHELL_PATH, Screen, Tone,
+};
 use serde_json::Value;
 
+use crate::Core;
 use crate::decode::{self, Answer, Read};
 use crate::effect::{Body, Change, Effect, Request, Update, Verb};
 use crate::event::{Event, Response, StreamState, TransportError};
 use crate::origin::{Target, path_of, route_matches};
 use crate::state::{
-    App, Asked, Content, Destination, Failure, Goes, Held, Message, MessageInner, Modal, Notice, Pending, Stage,
-    ScreenId, ScreenInner, ScreenView, TimerFor,
+    App, Asked, Content, Destination, Failure, Goes, Held, Message, MessageInner, Modal, Notice,
+    Pending, ScreenId, ScreenInner, ScreenView, Stage, TimerFor,
 };
 use crate::tree::{Names, Survey, has_id, opens, roots, walk};
-use crate::Core;
 
 /// What the framework's own routes speak.
 const JSON: &str = "application/json";
@@ -98,7 +102,11 @@ impl Core {
                     }
                 }
             }
-            Event::Answer { screen, question, yes } => self.answer(screen, question, yes),
+            Event::Answer {
+                screen,
+                question,
+                yes,
+            } => self.answer(screen, question, yes),
             Event::Choose {
                 screen,
                 table,
@@ -135,16 +143,33 @@ impl Core {
             Event::PopTo { screen } => self.pop_to(screen),
             Event::Dismissed { screen } => {
                 // The sign-in a session's end put up is not the person's to take away.
-                if !self.view.modals.iter().any(|modal| modal.locked && modal.stack.contains(&screen)) {
+                if !self
+                    .view
+                    .modals
+                    .iter()
+                    .any(|modal| modal.locked && modal.stack.contains(&screen))
+                {
                     self.dismissed(screen);
                 }
             }
             Event::Overlay { screen, id, open } => self.set_open(screen, &id, open),
             Event::Refresh { screen } => self.refresh(screen),
             Event::RegionRetry { screen, region } => self.fetch_region(screen, &region, None),
-            Event::More { screen, id, before: false } => self.more(screen, &id),
-            Event::More { screen, id, before: true } => self.rows_before(screen, &id),
-            Event::RegionGo { screen, region, href } => {
+            Event::More {
+                screen,
+                id,
+                before: false,
+            } => self.more(screen, &id),
+            Event::More {
+                screen,
+                id,
+                before: true,
+            } => self.rows_before(screen, &id),
+            Event::RegionGo {
+                screen,
+                region,
+                href,
+            } => {
                 if let Target::Inside(url) = self.resolve(&href, screen) {
                     self.region_go(screen, &region, url);
                 }
@@ -186,7 +211,10 @@ impl Core {
             Event::Background => {
                 self.inner.background = true;
                 // A hidden app holds no stream; what its regions miss is fetched when it is back.
-                if let Some(inner) = self.front().and_then(|front| self.inner.screens.get_mut(&front)) {
+                if let Some(inner) = self
+                    .front()
+                    .and_then(|front| self.inner.screens.get_mut(&front))
+                {
                     inner.missed = true;
                 }
             }
@@ -216,13 +244,21 @@ impl Core {
                 }
                 Some(TimerFor::Live { screen, region }) => self.live_fire(screen, &region),
                 Some(TimerFor::Changes { screen, list }) => self.ask_changes(screen, &list),
-                Some(TimerFor::Changed { screen, form, action }) => {
+                Some(TimerFor::Changed {
+                    screen,
+                    form,
+                    action,
+                }) => {
                     if let Some(inner) = self.inner.screens.get_mut(&screen) {
                         inner.query_timers.remove(&form);
                     }
                     self.changed_fire(screen, &form, *action);
                 }
-                Some(TimerFor::Options { screen, form, field }) => self.options_fire(screen, &form, &field),
+                Some(TimerFor::Options {
+                    screen,
+                    form,
+                    field,
+                }) => self.options_fire(screen, &form, &field),
                 Some(TimerFor::Reopen { stream }) => self.reopen(stream),
                 None => {}
             },
@@ -237,11 +273,19 @@ impl Core {
                 StreamState::Closed => self.stream_closed(stream, status),
             },
             Event::Cache { key, value } => self.cache_loaded(&key, value),
-            Event::DeviceResult { call, ok, refusal, fields } => self.device_result(call, ok, refusal, fields),
+            Event::DeviceResult {
+                call,
+                ok,
+                refusal,
+                fields,
+            } => self.device_result(call, ok, refusal, fields),
             Event::SignInDone { url } => self.sign_in_done(url.as_deref()),
             Event::Focused { screen, serial } => {
                 if let Some(view) = self.view.screens.get_mut(&screen)
-                    && view.focus.as_ref().is_some_and(|focus| focus.serial == serial)
+                    && view
+                        .focus
+                        .as_ref()
+                        .is_some_and(|focus| focus.serial == serial)
                 {
                     view.focus = None;
                     self.touch(Change::Screen { id: screen });
@@ -274,23 +318,40 @@ impl Core {
 
     /// Reads `href` as found on `screen`.
     pub(crate) fn resolve(&self, href: &str, screen: ScreenId) -> Target {
-        let from = self.view.screens.get(&screen).map_or("/", |screen| screen.url.as_str());
+        let from = self
+            .view
+            .screens
+            .get(&screen)
+            .map_or("/", |screen| screen.url.as_str());
         self.inner.origin.resolve(href, from)
     }
 
     /// The first route of the shell that names the address.
     pub(crate) fn route(&self, url: &str) -> Option<&Route> {
-        self.inner.routes.iter().find(|route| route_matches(&route.matches, url))
+        self.inner
+            .routes
+            .iter()
+            .find(|route| route_matches(&route.matches, url))
     }
 
     fn headers(&self, body: Option<&Body>, region: Option<&str>) -> Vec<(String, String)> {
         let client = self.config.client.to_header();
-        let (form, json) = (matches!(body, Some(Body::Form { .. })), matches!(body, Some(Body::Json { .. })));
+        let (form, json) = (
+            matches!(body, Some(Body::Form { .. })),
+            matches!(body, Some(Body::Json { .. })),
+        );
         let mut headers = vec![
             (NATIVE_HEADER.to_owned(), MAJOR.to_string()),
             (CLIENT_HEADER.to_owned(), client),
             // The framework's own routes speak JSON; every page speaks the protocol.
-            ("accept".to_owned(), if json { JSON.to_owned() } else { CONTENT_TYPE.to_owned() }),
+            (
+                "accept".to_owned(),
+                if json {
+                    JSON.to_owned()
+                } else {
+                    CONTENT_TYPE.to_owned()
+                },
+            ),
         ];
         if json {
             headers.push(("content-type".to_owned(), JSON.to_owned()));
@@ -300,7 +361,10 @@ impl Core {
             headers.push((REGION_HEADER.to_owned(), region.to_owned()));
         }
         if form {
-            headers.push(("content-type".to_owned(), "application/x-www-form-urlencoded".to_owned()));
+            headers.push((
+                "content-type".to_owned(),
+                "application/x-www-form-urlencoded".to_owned(),
+            ));
         }
         headers
     }
@@ -322,9 +386,18 @@ impl Core {
 
     /// Asks for `url`, an address inside. A post always says it is a form,
     /// even one with nothing in it: without that the server refuses it.
-    pub(crate) fn fetch(&mut self, purpose: Pending, method: Method, url: &str, body: Option<Body>, limit: u32) {
+    pub(crate) fn fetch(
+        &mut self,
+        purpose: Pending,
+        method: Method,
+        url: &str,
+        body: Option<Body>,
+        limit: u32,
+    ) {
         let body = match body {
-            None if method == Method::Post => Some(Body::Form { text: String::new() }),
+            None if method == Method::Post => Some(Body::Form {
+                text: String::new(),
+            }),
             body => body,
         };
         self.ask(Asked {
@@ -366,7 +439,11 @@ impl Core {
         let headers = self.headers(asked.body.as_ref(), asked.region.as_deref());
         self.effects.push(Effect::Fetch(Request {
             request,
-            method: if asked.delete { Verb::Delete } else { asked.method.into() },
+            method: if asked.delete {
+                Verb::Delete
+            } else {
+                asked.method.into()
+            },
             url: self.inner.origin.absolute(&asked.url),
             headers,
             body: asked.body.clone(),
@@ -381,7 +458,11 @@ impl Core {
     /// the same way with the same body; any other becomes a plain `get`.
     /// Gives back the response to read when there is nothing to follow.
     fn follow(&mut self, asked: &Asked, mut response: Response) -> Option<Response> {
-        let Some(location) = response.location.take().filter(|_| matches!(response.status, 301 | 302 | 303 | 307 | 308)) else {
+        let Some(location) = response
+            .location
+            .take()
+            .filter(|_| matches!(response.status, 301 | 302 | 303 | 307 | 308))
+        else {
             return Some(response);
         };
         match self.inner.origin.resolve(&location, &asked.url) {
@@ -525,7 +606,10 @@ impl Core {
         let Some(action) = about.action else {
             return;
         };
-        let from = about.screen.filter(|screen| self.view.holds(*screen)).or(self.front());
+        let from = about
+            .screen
+            .filter(|screen| self.view.holds(*screen))
+            .or(self.front());
         if !action.post {
             self.navigate(from, &action.href, Present::Auto);
         } else if let Some(screen) = from {
@@ -536,7 +620,11 @@ impl Core {
     // Starting, and the shell.
 
     pub(crate) fn start(&mut self) {
-        let asking = self.inner.pending.values().any(|asked| asked.purpose == Pending::Shell);
+        let asking = self
+            .inner
+            .pending
+            .values()
+            .any(|asked| asked.purpose == Pending::Shell);
         if asking {
             return;
         }
@@ -546,13 +634,19 @@ impl Core {
             self.touch(Change::Nav);
         }
         if self.config.cache.persist && !self.inner.has_shell {
-            self.effects.push(Effect::CacheRead { key: "boot".to_owned() });
+            self.effects.push(Effect::CacheRead {
+                key: "boot".to_owned(),
+            });
         }
         self.fetch(Pending::Shell, Method::Get, SHELL_PATH, None, PAGE_LIMIT);
     }
 
     pub(crate) fn fetch_shell(&mut self) {
-        let asking = self.inner.pending.values().any(|asked| asked.purpose == Pending::Shell);
+        let asking = self
+            .inner
+            .pending
+            .values()
+            .any(|asked| asked.purpose == Pending::Shell);
         if !asking {
             self.fetch(Pending::Shell, Method::Get, SHELL_PATH, None, PAGE_LIMIT);
         }
@@ -580,7 +674,15 @@ impl Core {
         if response.status >= 500 {
             return self.shell_failed(Failure::Server);
         }
-        let media = response.content_type.as_deref().unwrap_or("").split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+        let media = response
+            .content_type
+            .as_deref()
+            .unwrap_or("")
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
         if !(200..300).contains(&response.status) || media != CONTENT_TYPE {
             // A server with no shell still has pages: one destination, its first page.
             if !self.inner.has_shell {
@@ -591,16 +693,26 @@ impl Core {
         let header = decode::shell_stamp_of(&response);
         // Read where there is room for it, like any other answer.
         let body = response.body.as_str();
-        let value: Value = decode::with_room(|| serde_json::from_str(body).ok()).flatten().unwrap_or(Value::Null);
-        if let Some(upgrade) = value.get("upgrade").cloned().and_then(|upgrade| serde_json::from_value(upgrade).ok()) {
+        let value: Value = decode::with_room(|| serde_json::from_str(body).ok())
+            .flatten()
+            .unwrap_or(Value::Null);
+        if let Some(upgrade) = value
+            .get("upgrade")
+            .cloned()
+            .and_then(|upgrade| serde_json::from_value(upgrade).ok())
+        {
             self.view.upgrade = Some(upgrade);
             self.view.stage = Stage::Upgrade;
             return self.touch(Change::Nav);
         }
-        match decode::with_room(move || serde_json::from_value::<Shell>(value)).unwrap_or_else(|| Err(serde::de::Error::custom("the shell could not be read"))) {
+        match decode::with_room(move || serde_json::from_value::<Shell>(value))
+            .unwrap_or_else(|| Err(serde::de::Error::custom("the shell could not be read")))
+        {
             Ok(shell) if shell.navree == MAJOR => {
                 // The stamp of the shell now held: its own, or the one its answer named.
-                let stamp = (!shell.stamp.is_empty()).then(|| shell.stamp.clone()).or(header);
+                let stamp = (!shell.stamp.is_empty())
+                    .then(|| shell.stamp.clone())
+                    .or(header);
                 self.install(shell);
                 self.remember_shell(response.body);
                 self.inner.shell_stamp = stamp;
@@ -634,9 +746,15 @@ impl Core {
     }
 
     fn install(&mut self, shell: Shell) {
-        let user = shell.user.as_ref().map(|user| (user.name.clone(), user.email.clone()));
+        let user = shell
+            .user
+            .as_ref()
+            .map(|user| (user.name.clone(), user.email.clone()));
         self.inner.sign_in = shell.sign_in;
-        self.inner.push_route = shell.device.and_then(|device| device.push).map(|push| push.register.as_str().to_owned());
+        self.inner.push_route = shell
+            .device
+            .and_then(|device| device.push)
+            .map(|push| push.register.as_str().to_owned());
         if self.inner.user != user {
             // What the server held of the device's token was the session's before.
             self.push_forget();
@@ -674,7 +792,10 @@ impl Core {
         let mut items: Vec<(Option<String>, NavItem)> = Vec::new();
         for group in shell.nav.groups {
             for item in group.items {
-                if matches!(self.inner.origin.resolve(&item.href, "/"), Target::Inside(_)) {
+                if matches!(
+                    self.inner.origin.resolve(&item.href, "/"),
+                    Target::Inside(_)
+                ) {
                     items.push((group.label.clone(), item));
                 }
             }
@@ -687,10 +808,16 @@ impl Core {
             };
             items.push((None, home));
         }
-        let was = self.view.destinations.get(self.view.selected).map(|destination| destination.href.clone());
+        let was = self
+            .view
+            .destinations
+            .get(self.view.selected)
+            .map(|destination| destination.href.clone());
         let mut old: Vec<Destination> = std::mem::take(&mut self.view.destinations);
         for (group, item) in items {
-            let kept = old.iter().position(|destination| destination.href == item.href);
+            let kept = old
+                .iter()
+                .position(|destination| destination.href == item.href);
             let stack = kept.map(|at| old.remove(at).stack).unwrap_or_default();
             self.view.destinations.push(Destination {
                 label: item.label,
@@ -747,9 +874,18 @@ impl Core {
             .filter(|modal| modal.locked)
             .flat_map(|modal| modal.stack.iter().copied())
             .collect();
-        let ids: Vec<ScreenId> = self.view.screens.keys().copied().filter(|id| !covers.contains(id)).collect();
+        let ids: Vec<ScreenId> = self
+            .view
+            .screens
+            .keys()
+            .copied()
+            .filter(|id| !covers.contains(id))
+            .collect();
         for id in ids {
-            let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+            let (Some(view), Some(inner)) = (
+                self.view.screens.get_mut(&id),
+                self.inner.screens.get_mut(&id),
+            ) else {
                 continue;
             };
             let fresh = ScreenView::new(id, view.url.clone(), view.chrome);
@@ -814,8 +950,14 @@ impl Core {
         let Some(stamp) = stamp else {
             return;
         };
-        let held = self.inner.shell_stamp.as_ref().or(self.inner.seen_stamp.as_ref());
-        if held.is_some_and(|held| *held != stamp) && self.inner.asked_stamp.as_ref() != Some(&stamp) {
+        let held = self
+            .inner
+            .shell_stamp
+            .as_ref()
+            .or(self.inner.seen_stamp.as_ref());
+        if held.is_some_and(|held| *held != stamp)
+            && self.inner.asked_stamp.as_ref() != Some(&stamp)
+        {
             self.inner.asked_stamp = Some(stamp.clone());
             self.fetch_shell();
         }
@@ -840,7 +982,11 @@ impl Core {
             self.touch(Change::Nav);
             return true;
         }
-        let app = if read.envelope.app.is_empty() { &read.envelope.build } else { &read.envelope.app };
+        let app = if read.envelope.app.is_empty() {
+            &read.envelope.build
+        } else {
+            &read.envelope.app
+        };
         let app = app.clone();
         self.note_app(&app);
         self.note_shell(shell);
@@ -866,10 +1012,15 @@ impl Core {
     pub(crate) fn session_ended(&mut self, under: ScreenId, href: &str) {
         let url = match self.resolve(href, under) {
             Target::Inside(url) => url,
-            Target::Outside(url) => return self.effects.push(Effect::OpenUrl { url, inside: false }),
+            Target::Outside(url) => {
+                return self.effects.push(Effect::OpenUrl { url, inside: false });
+            }
             Target::Refused => return,
         };
-        if let (Some(view), Some(inner)) = (self.view.screens.get_mut(&under), self.inner.screens.get_mut(&under)) {
+        if let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&under),
+            self.inner.screens.get_mut(&under),
+        ) {
             view.loading = false;
             view.refreshing = false;
             inner.stale = true;
@@ -884,13 +1035,20 @@ impl Core {
         let name = route.map_or_else(|| path_of(&url), |route| route.matches.clone());
         // One way in for one session's end, however many requests it failed.
         let up = self.view.modals.iter().any(|modal| {
-            modal.stack.first().and_then(|first| self.inner.screens.get(first)).is_some_and(|inner| inner.cover.as_ref() == Some(&name))
+            modal
+                .stack
+                .first()
+                .and_then(|first| self.inner.screens.get(first))
+                .is_some_and(|inner| inner.cover.as_ref() == Some(&name))
         });
         if up {
             return;
         }
         let id = self.open(&url);
-        if let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) {
+        if let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) {
             view.chrome = chrome;
             inner.cover = Some(name);
         }
@@ -907,13 +1065,20 @@ impl Core {
     fn built_with(&self, feature: Option<Feature>) -> bool {
         match feature {
             Some(Feature::Haptic) => true,
-            Some(feature) => self.config.client.caps.iter().any(|cap| cap == feature.as_str()),
+            Some(feature) => self
+                .config
+                .client
+                .caps
+                .iter()
+                .any(|cap| cap == feature.as_str()),
             None => false,
         }
     }
 
     fn haptic(&mut self, kind: HapticKind) {
-        let kind = serde_json::to_value(kind).ok().and_then(|kind| kind.as_str().map(str::to_owned));
+        let kind = serde_json::to_value(kind)
+            .ok()
+            .and_then(|kind| kind.as_str().map(str::to_owned));
         self.effects.push(Effect::Haptic {
             kind: kind.unwrap_or_else(|| "success".to_owned()),
         });
@@ -928,9 +1093,20 @@ impl Core {
 
     /// Tells the client to run the call numbered `call`, with what the server
     /// gave for it to start with.
-    fn run_as(&mut self, call: u64, device: serde_json::Result<Value>, posts: bool, options: Option<Value>) {
+    fn run_as(
+        &mut self,
+        call: u64,
+        device: serde_json::Result<Value>,
+        posts: bool,
+        options: Option<Value>,
+    ) {
         if let Ok(device) = device {
-            self.effects.push(Effect::Device { call, device, posts, options });
+            self.effects.push(Effect::Device {
+                call,
+                device,
+                posts,
+                options,
+            });
         }
     }
 
@@ -939,7 +1115,10 @@ impl Core {
     pub(crate) fn reply_call(&mut self, call: ReplyCall) {
         match call {
             ReplyCall::Haptic(haptic) => self.haptic(haptic.kind),
-            ReplyCall::Unknown => self.report("device", "a reply started a call this build does not know".to_owned()),
+            ReplyCall::Unknown => self.report(
+                "device",
+                "a reply started a call this build does not know".to_owned(),
+            ),
             call if self.built_with(call.feature()) => {
                 self.run(serde_json::to_value(&call), false);
             }
@@ -960,7 +1139,10 @@ impl Core {
         }
         if !decode::can_start(&self.config, &device.call) {
             // Such a control is not drawn: see `decode`.
-            return self.report("device", "a call this build was not built with was tapped".to_owned());
+            return self.report(
+                "device",
+                "a call this build was not built with was tapped".to_owned(),
+            );
         }
         match device.call {
             Call::Haptic(haptic) => self.haptic(haptic.kind),
@@ -986,7 +1168,10 @@ impl Core {
                 // The ticket is spent at the challenge route, which answers
                 // what the person signs: the core asks, the client only prompts.
                 let Some(then) = device.then else {
-                    return self.report("device", "a confirmation with nowhere to post its result".to_owned());
+                    return self.report(
+                        "device",
+                        "a confirmation with nowhere to post its result".to_owned(),
+                    );
                 };
                 if !self.may_send(id) {
                     return;
@@ -1008,14 +1193,21 @@ impl Core {
                 }
             }
             Call::PlatformSignIn(sign_in) => {
-                let provider = serde_json::to_value(sign_in.provider).ok().and_then(|provider| provider.as_str().map(str::to_owned)).unwrap_or_default();
+                let provider = serde_json::to_value(sign_in.provider)
+                    .ok()
+                    .and_then(|provider| provider.as_str().map(str::to_owned))
+                    .unwrap_or_default();
                 let web = sign_in.web.as_ref().map(|web| web.as_str().to_owned());
-                let sheet = self.built_with(Some(Feature::PlatformSignIn)) && self.config.sign_in.native.contains(&provider);
+                let sheet = self.built_with(Some(Feature::PlatformSignIn))
+                    && self.config.sign_in.native.contains(&provider);
                 if !sheet {
                     // This system has no sheet for the provider: the web's way.
                     return match web {
                         Some(web) => self.sign_in_on_the_web(&web),
-                        None => self.report("device", format!("no way to sign in with `{provider}` on this system")),
+                        None => self.report(
+                            "device",
+                            format!("no way to sign in with `{provider}` on this system"),
+                        ),
                     };
                 }
                 if !self.may_send(id) {
@@ -1023,8 +1215,14 @@ impl Core {
                 }
                 self.inner.next.call += 1;
                 let number = self.inner.next.call;
-                let (nonce, route) = (sign_in.nonce.as_str().to_owned(), sign_in.sign_in.as_str().to_owned());
-                let second_step = sign_in.second_step.as_ref().map(|page| page.as_str().to_owned());
+                let (nonce, route) = (
+                    sign_in.nonce.as_str().to_owned(),
+                    sign_in.sign_in.as_str().to_owned(),
+                );
+                let second_step = sign_in
+                    .second_step
+                    .as_ref()
+                    .map(|page| page.as_str().to_owned());
                 self.inner.calls.insert(
                     number,
                     crate::state::DeviceCall {
@@ -1065,11 +1263,20 @@ impl Core {
 
     /// A device call finished: its result is posted where the call said, with
     /// the server's ticket and how it went.
-    fn device_result(&mut self, call: u64, ok: bool, refusal: Option<String>, mut fields: Vec<navree_native::Pair>) {
+    fn device_result(
+        &mut self,
+        call: u64,
+        ok: bool,
+        refusal: Option<String>,
+        mut fields: Vec<navree_native::Pair>,
+    ) {
         let Some(known) = self.inner.calls.remove(&call) else {
             return;
         };
-        let Some(screen) = Some(known.screen).filter(|screen| self.view.holds(*screen)).or(self.front()) else {
+        let Some(screen) = Some(known.screen)
+            .filter(|screen| self.view.holds(*screen))
+            .or(self.front())
+        else {
             return;
         };
         let pair = |name: &str, value: &str| navree_native::Pair {
@@ -1083,13 +1290,27 @@ impl Core {
                 state,
                 web,
                 second_step,
-            } => return self.signed_with_provider(screen, ok, refusal.as_deref(), &fields, (&sign_in, &state), web.as_deref(), second_step),
+            } => {
+                return self.signed_with_provider(
+                    screen,
+                    ok,
+                    refusal.as_deref(),
+                    &fields,
+                    (&sign_in, &state),
+                    web.as_deref(),
+                    second_step,
+                );
+            }
         };
         if !ok {
             // A refusal has no result to post.
             fields.clear();
         }
-        let outcome = if ok { OUTCOME_OK.to_owned() } else { refusal.unwrap_or_else(|| "failed".to_owned()) };
+        let outcome = if ok {
+            OUTCOME_OK.to_owned()
+        } else {
+            refusal.unwrap_or_else(|| "failed".to_owned())
+        };
         if !spent {
             fields.push(pair(TICKET_FIELD, then.ticket.as_str()));
         }
@@ -1100,7 +1321,10 @@ impl Core {
     /// Starts the web's sign-in with a provider, in the system's sign-in session.
     fn sign_in_on_the_web(&mut self, web: &str) {
         if !self.built_with(Some(Feature::AuthSession)) {
-            return self.report("device", "no sign-in session to sign in on the web with".to_owned());
+            return self.report(
+                "device",
+                "no sign-in session to sign in on the web with".to_owned(),
+            );
         }
         self.sign_in_session(web, false);
     }
@@ -1113,11 +1337,18 @@ impl Core {
             return;
         };
         let screen = known.screen;
-        let good = response.error.is_none() && response.left.is_none() && (200..300).contains(&response.status);
-        let answer: Option<Value> = good.then(|| serde_json::from_str(&response.body).ok()).flatten();
+        let good = response.error.is_none()
+            && response.left.is_none()
+            && (200..300).contains(&response.status);
+        let answer: Option<Value> = good
+            .then(|| serde_json::from_str(&response.body).ok())
+            .flatten();
         let options = match (&mut known.goes, answer) {
             (Goes::Then { .. }, Some(answer)) if answer.get("publicKey").is_some() => Some(answer),
-            (Goes::SignIn { state, .. }, Some(answer)) => match (answer.get("nonce").and_then(Value::as_str), answer.get("state").and_then(Value::as_str)) {
+            (Goes::SignIn { state, .. }, Some(answer)) => match (
+                answer.get("nonce").and_then(Value::as_str),
+                answer.get("state").and_then(Value::as_str),
+            ) {
                 (Some(nonce), Some(sealed)) => {
                     // The state goes back with the token, from here: the client needs only the nonce.
                     sealed.clone_into(state);
@@ -1144,7 +1375,13 @@ impl Core {
             }
             None => {
                 self.notice(Notice::Failed, Some(screen));
-                self.report("device", format!("the server answered {} before a device call could start", response.status));
+                self.report(
+                    "device",
+                    format!(
+                        "the server answered {} before a device call could start",
+                        response.status
+                    ),
+                );
             }
         }
     }
@@ -1153,9 +1390,24 @@ impl Core {
     /// route as JSON, with the state the nonce came with; a system with no
     /// sheet for the provider goes the web's way.
     #[allow(clippy::too_many_arguments)]
-    fn signed_with_provider(&mut self, screen: ScreenId, ok: bool, refusal: Option<&str>, fields: &[navree_native::Pair], route: (&str, &str), web: Option<&str>, second_step: Option<String>) {
+    fn signed_with_provider(
+        &mut self,
+        screen: ScreenId,
+        ok: bool,
+        refusal: Option<&str>,
+        fields: &[navree_native::Pair],
+        route: (&str, &str),
+        web: Option<&str>,
+        second_step: Option<String>,
+    ) {
         let (sign_in, state) = route;
-        let held = |name: &str| fields.iter().find(|pair| pair.name == name).map(|pair| pair.value.as_str()).filter(|value| !value.is_empty());
+        let held = |name: &str| {
+            fields
+                .iter()
+                .find(|pair| pair.name == name)
+                .map(|pair| pair.value.as_str())
+                .filter(|value| !value.is_empty())
+        };
         let Some(token) = held("id_token").filter(|_| ok) else {
             // The person closed the sheet or said no: nothing changed.
             if let (Some("unsupported" | "not_built" | "unavailable"), Some(web)) = (refusal, web) {
@@ -1179,17 +1431,36 @@ impl Core {
             }
             body["user"] = serde_json::json!({ "name": name });
         }
-        self.post_json(Pending::SignIn { screen, second_step }, sign_in, body.to_string());
+        self.post_json(
+            Pending::SignIn {
+                screen,
+                second_step,
+            },
+            sign_in,
+            body.to_string(),
+        );
     }
 
     /// The app's sign-in route answered the provider's token.
-    fn sign_in_answered(&mut self, screen: ScreenId, second_step: Option<&str>, response: &Response) {
-        let screen = Some(screen).filter(|screen| self.view.holds(*screen)).or(self.front());
-        let good = response.error.is_none() && response.left.is_none() && (200..300).contains(&response.status);
+    fn sign_in_answered(
+        &mut self,
+        screen: ScreenId,
+        second_step: Option<&str>,
+        response: &Response,
+    ) {
+        let screen = Some(screen)
+            .filter(|screen| self.view.holds(*screen))
+            .or(self.front());
+        let good = response.error.is_none()
+            && response.left.is_none()
+            && (200..300).contains(&response.status);
         let answer: Option<Value> = serde_json::from_str(&response.body).ok();
         // Anything but a plain yes is not a sign-in. The route says when a
         // second step is still to come, and until it is done nobody is signed in.
-        let second = answer.as_ref().and_then(|answer| answer.get("two_factor_required")).is_some_and(|needed| needed != &Value::Bool(false) && !needed.is_null());
+        let second = answer
+            .as_ref()
+            .and_then(|answer| answer.get("two_factor_required"))
+            .is_some_and(|needed| needed != &Value::Bool(false) && !needed.is_null());
         if good && !second && answer.is_some_and(|answer| answer.is_object()) {
             // Who is signed in changed, and with it everything on screen.
             return self.signed_in();
@@ -1211,7 +1482,10 @@ impl Core {
             }
             None => {
                 self.notice(Notice::Failed, screen);
-                self.report("sign_in", format!("the sign-in route answered {}", response.status));
+                self.report(
+                    "sign_in",
+                    format!("the sign-in route answered {}", response.status),
+                );
             }
         }
     }
@@ -1227,7 +1501,9 @@ impl Core {
         self.inner.next.screen += 1;
         let id = self.inner.next.screen;
         let chrome = self.chrome(url);
-        self.view.screens.insert(id, ScreenView::new(id, url.to_owned(), chrome));
+        self.view
+            .screens
+            .insert(id, ScreenView::new(id, url.to_owned(), chrome));
         self.inner.screens.insert(id, ScreenInner::default());
         self.touch_screen(id);
         id
@@ -1248,7 +1524,10 @@ impl Core {
     /// Fetches the screen's page again. An answer still on its way for it is
     /// no longer wanted.
     pub(crate) fn fetch_page(&mut self, id: ScreenId, by_user: bool) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         inner.visit += 1;
@@ -1263,8 +1542,16 @@ impl Core {
             *serial = self.inner.next.web;
         }
         let url = view.url.clone();
-        self.drop_pending(|purpose| matches!(purpose, Pending::Page { screen, .. } if *screen == id));
-        self.fetch(Pending::Page { screen: id, visit }, Method::Get, &url, None, PAGE_LIMIT);
+        self.drop_pending(
+            |purpose| matches!(purpose, Pending::Page { screen, .. } if *screen == id),
+        );
+        self.fetch(
+            Pending::Page { screen: id, visit },
+            Method::Get,
+            &url,
+            None,
+            PAGE_LIMIT,
+        );
         self.touch_screen(id);
     }
 
@@ -1276,8 +1563,13 @@ impl Core {
     pub(crate) fn close(&mut self, id: ScreenId) {
         self.view.screens.remove(&id);
         if let Some(inner) = self.inner.screens.remove(&id) {
-            let timers = inner.query_timers.into_values().chain(inner.live.into_values().filter_map(|sub| sub.timer));
-            let timers = timers.chain(inner.live_lists.into_values().filter_map(|sub| sub.timer)).chain(inner.options.into_values().filter_map(|ask| ask.timer));
+            let timers = inner
+                .query_timers
+                .into_values()
+                .chain(inner.live.into_values().filter_map(|sub| sub.timer));
+            let timers = timers
+                .chain(inner.live_lists.into_values().filter_map(|sub| sub.timer))
+                .chain(inner.options.into_values().filter_map(|ask| ask.timer));
             for timer in timers {
                 self.cancel_timer(timer);
             }
@@ -1309,8 +1601,18 @@ impl Core {
     /// Puts a tree on a screen. The same page again keeps what is open and
     /// what was typed, and keeps showing what its regions held until they
     /// have fetched themselves again; another page starts afresh.
-    pub(crate) fn show_native(&mut self, id: ScreenId, url: &str, mut screen: Screen, status: u16, kept: bool) {
-        let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
+    pub(crate) fn show_native(
+        &mut self,
+        id: ScreenId,
+        url: &str,
+        mut screen: Screen,
+        status: u16,
+        kept: bool,
+    ) {
+        let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&id),
+            self.inner.screens.get_mut(&id),
+        ) else {
             return;
         };
         let same = path_of(&view.url) == path_of(url) && view.screen().is_some();
@@ -1326,7 +1628,11 @@ impl Core {
             server: &mut inner.server_ids,
         };
         names.name(&mut screen.actions, None);
-        if let Some(scores) = screen.pager.as_mut().and_then(|pager| pager.scores.as_deref_mut()) {
+        if let Some(scores) = screen
+            .pager
+            .as_mut()
+            .and_then(|pager| pager.scores.as_deref_mut())
+        {
             names.name(std::slice::from_mut(scores), None);
         }
         names.name(std::slice::from_mut(&mut screen.body), None);
@@ -1348,10 +1654,14 @@ impl Core {
             for region in wanting {
                 let is = |node: &navree_native::Node| matches!(node, navree_native::Node::Region(inner) if inner.id == region);
                 let held = match crate::tree::find_in_mut(old, &is) {
-                    Some(navree_native::Node::Region(old)) if !old.children.is_empty() => std::mem::take(&mut old.children),
+                    Some(navree_native::Node::Region(old)) if !old.children.is_empty() => {
+                        std::mem::take(&mut old.children)
+                    }
                     _ => continue,
                 };
-                if let Some(navree_native::Node::Region(new)) = crate::tree::find_in_mut(&mut screen, &is) {
+                if let Some(navree_native::Node::Region(new)) =
+                    crate::tree::find_in_mut(&mut screen, &is)
+                {
                     new.children = held;
                     again.push(region);
                 }
@@ -1368,7 +1678,12 @@ impl Core {
         inner.turns.clear();
         if view.url != url {
             view.url = url.to_owned();
-            view.chrome = self.inner.routes.iter().find(|route| route_matches(&route.matches, url)).is_none_or(|route| route.chrome);
+            view.chrome = self
+                .inner
+                .routes
+                .iter()
+                .find(|route| route_matches(&route.matches, url))
+                .is_none_or(|route| route.chrome);
         }
         view.title = Some(screen.title.clone()).filter(|title| !title.is_empty());
         view.content = Content::Native {
@@ -1394,7 +1709,14 @@ impl Core {
     }
 
     /// Puts the page in the web view on a screen.
-    pub(crate) fn show_web(&mut self, id: ScreenId, url: &str, page: &str, title: Option<String>, why: Vec<String>) {
+    pub(crate) fn show_web(
+        &mut self,
+        id: ScreenId,
+        url: &str,
+        page: &str,
+        title: Option<String>,
+        why: Vec<String>,
+    ) {
         let Some(view) = self.view.screens.get_mut(&id) else {
             return;
         };
@@ -1418,23 +1740,42 @@ impl Core {
         view.lists.clear();
         view.overlays.clear();
         view.states.clear();
-        view.chrome = self.inner.routes.iter().find(|route| route_matches(&route.matches, url)).is_none_or(|route| route.chrome);
+        view.chrome = self
+            .inner
+            .routes
+            .iter()
+            .find(|route| route_matches(&route.matches, url))
+            .is_none_or(|route| route.chrome);
         self.drop_pending(|purpose| matches!(purpose, Pending::Region { screen, .. } | Pending::More { screen, .. } if *screen == id));
         self.touch_screen(id);
     }
 
     pub(crate) fn show(&mut self, id: ScreenId, url: &str, shown: Shown) {
         match shown {
-            Shown::Native { screen, status, body } => {
+            Shown::Native {
+                screen,
+                status,
+                body,
+            } => {
                 self.remember(url, status, &body);
                 self.show_native(id, url, *screen, status, false);
             }
-            Shown::Web { url: page, title, why } => self.show_web(id, url, &page, title, why),
+            Shown::Web {
+                url: page,
+                title,
+                why,
+            } => self.show_web(id, url, &page, title, why),
         }
     }
 
     /// What an envelope gives a screen to show, if it gives anything.
-    pub(crate) fn shown(&self, url: &str, status: u16, read: &mut Read, body: String) -> Option<Shown> {
+    pub(crate) fn shown(
+        &self,
+        url: &str,
+        status: u16,
+        read: &mut Read,
+        body: String,
+    ) -> Option<Shown> {
         if let Some(web) = read.envelope.web.take() {
             let page = match self.inner.origin.resolve(&web.url, url) {
                 Target::Inside(page) => page,
@@ -1447,7 +1788,9 @@ impl Core {
             });
         }
         // A page is never drawn with a hole in it: what can't be drawn sends it to the web view.
-        if !read.missing.is_empty() && (read.envelope.screen.is_some() || read.envelope.ops.is_empty()) {
+        if !read.missing.is_empty()
+            && (read.envelope.screen.is_some() || read.envelope.ops.is_empty())
+        {
             read.envelope.screen = None;
             return Some(Shown::Web {
                 url: url.to_owned(),
@@ -1476,7 +1819,10 @@ impl Core {
         match asked.purpose {
             Pending::Shell => return self.shell_answered(response),
             Pending::BeforeCall { call } => return self.before_call_answered(call, &response),
-            Pending::SignIn { screen, second_step } => return self.sign_in_answered(screen, second_step.as_deref(), &response),
+            Pending::SignIn {
+                screen,
+                second_step,
+            } => return self.sign_in_answered(screen, second_step.as_deref(), &response),
             Pending::Exchange => return self.exchange_answered(&response),
             Pending::PushPut { token } => return self.push_put_answered(token, &response),
             Pending::PushGone => return self.push_gone_answered(),
@@ -1484,11 +1830,29 @@ impl Core {
         }
         let answer = decode::read(response, &asked.url, &self.inner.origin, &self.config);
         // A redirect is measured against the address that was asked for first.
-        let Asked { purpose, first: asked, .. } = asked;
+        let Asked {
+            purpose,
+            first: asked,
+            ..
+        } = asked;
         match purpose {
-            Pending::Shell | Pending::BeforeCall { .. } | Pending::SignIn { .. } | Pending::Exchange | Pending::PushPut { .. } | Pending::PushGone => {}
-            Pending::Before { screen, visit, id, was } => self.before_answered(screen, visit, &id, &was, answer),
-            Pending::Changes { screen, visit, list } => self.changes_answered(screen, visit, &list, answer),
+            Pending::Shell
+            | Pending::BeforeCall { .. }
+            | Pending::SignIn { .. }
+            | Pending::Exchange
+            | Pending::PushPut { .. }
+            | Pending::PushGone => {}
+            Pending::Before {
+                screen,
+                visit,
+                id,
+                was,
+            } => self.before_answered(screen, visit, &id, &was, answer),
+            Pending::Changes {
+                screen,
+                visit,
+                list,
+            } => self.changes_answered(screen, visit, &list, answer),
             Pending::Move {
                 screen,
                 visit,
@@ -1521,7 +1885,12 @@ impl Core {
                 go,
                 url,
             } => self.region_answered(screen, visit, &region, turn, epoch, go, &url, answer),
-            Pending::More { screen, visit, id, was } => self.more_answered(screen, visit, &id, &was, answer),
+            Pending::More {
+                screen,
+                visit,
+                id,
+                was,
+            } => self.more_answered(screen, visit, &id, &was, answer),
         }
     }
 
@@ -1536,15 +1905,26 @@ impl Core {
         match route.present {
             // A page that moved to a sheet's address has only moved. A screen
             // with no chrome, presented over the app, is the way in.
-            Some(present @ (Present::Full | Present::Sheet | Present::Task)) if !route.chrome => Some((route.matches.clone(), present)),
+            Some(present @ (Present::Full | Present::Sheet | Present::Task)) if !route.chrome => {
+                Some((route.matches.clone(), present))
+            }
             _ => None,
         }
     }
 
     /// Presents what a redirect led to over the app, and leaves the screen
     /// that asked as it was: the person comes back to it.
-    pub(crate) fn cover(&mut self, under: ScreenId, route: (String, Present), url: &str, shown: Option<Shown>) {
-        if let (Some(view), Some(inner)) = (self.view.screens.get_mut(&under), self.inner.screens.get_mut(&under)) {
+    pub(crate) fn cover(
+        &mut self,
+        under: ScreenId,
+        route: (String, Present),
+        url: &str,
+        shown: Option<Shown>,
+    ) {
+        if let (Some(view), Some(inner)) = (
+            self.view.screens.get_mut(&under),
+            self.inner.screens.get_mut(&under),
+        ) {
             view.loading = false;
             view.refreshing = false;
             inner.stale = true;
@@ -1552,7 +1932,11 @@ impl Core {
         }
         // One cover for one sign-in, however many requests were sent there.
         let up = self.view.modals.iter().any(|modal| {
-            modal.stack.first().and_then(|first| self.inner.screens.get(first)).is_some_and(|inner| inner.cover.as_ref() == Some(&route.0))
+            modal
+                .stack
+                .first()
+                .and_then(|first| self.inner.screens.get(first))
+                .is_some_and(|inner| inner.cover.as_ref() == Some(&route.0))
         });
         if up {
             return;
@@ -1569,7 +1953,9 @@ impl Core {
         self.touch(Change::Nav);
         match shown {
             // The sign-in is nobody's page to come back to: it is shown and not kept.
-            Some(Shown::Native { screen, status, .. }) => self.show_native(id, url, *screen, status, false),
+            Some(Shown::Native { screen, status, .. }) => {
+                self.show_native(id, url, *screen, status, false)
+            }
             Some(shown) => self.show(id, url, shown),
             None => self.fetch_page(id, false),
         }
@@ -1580,7 +1966,11 @@ impl Core {
         if self.inner.screens.get(&id).map(|inner| inner.visit) != Some(visit) {
             return;
         }
-        let blank = self.view.screens.get(&id).is_some_and(|view| matches!(view.content, Content::Blank));
+        let blank = self
+            .view
+            .screens
+            .get(&id)
+            .is_some_and(|view| matches!(view.content, Content::Blank));
         let settle = |core: &mut Core, failure: Option<Failure>| {
             if let Some(view) = core.view.screens.get_mut(&id) {
                 view.loading = false;
@@ -1657,14 +2047,27 @@ impl Core {
         }
         match self.front() {
             Some(front) => {
-                let stale = self.inner.screens.get(&front).is_some_and(|inner| inner.stale);
-                let loading = self.view.screens.get(&front).is_some_and(|view| view.loading);
+                let stale = self
+                    .inner
+                    .screens
+                    .get(&front)
+                    .is_some_and(|inner| inner.stale);
+                let loading = self
+                    .view
+                    .screens
+                    .get(&front)
+                    .is_some_and(|view| view.loading);
                 if stale && !loading {
                     self.fetch_page(front, false);
                 }
             }
             None => {
-                let Some(href) = self.view.destinations.get(self.view.selected).map(|destination| destination.href.clone()) else {
+                let Some(href) = self
+                    .view
+                    .destinations
+                    .get(self.view.selected)
+                    .map(|destination| destination.href.clone())
+                else {
                     return;
                 };
                 let url = self.destination_url(&href);
@@ -1679,11 +2082,17 @@ impl Core {
         self.ensure_front();
         let front = self.front();
         let stacked = self.view.front_stack().len() > 1;
-        let covered = front.and_then(|front| self.view.screens.get(&front)).is_some_and(|view| !view.overlays.is_empty());
+        let covered = front
+            .and_then(|front| self.view.screens.get(&front))
+            .is_some_and(|view| !view.overlays.is_empty());
         let first = self.view.selected == 0 || !self.config.back_to_first;
         let can_go_back = !self.view.modals.is_empty() || stacked || covered || !first;
         if self.view.front != front || self.view.can_go_back != can_go_back {
-            if let Some(inner) = self.view.front.and_then(|was| self.inner.screens.get_mut(&was)) {
+            if let Some(inner) = self
+                .view
+                .front
+                .and_then(|was| self.inner.screens.get_mut(&was))
+            {
                 inner.missed = true;
             }
             self.view.front = front;
@@ -1697,21 +2106,34 @@ impl Core {
         let mut lists: Vec<(ScreenId, &str)> = changed
             .iter()
             .filter_map(|change| match change {
-                Change::Rows { screen, id, count, .. } if *count > 0 => Some((*screen, id.as_str())),
+                Change::Rows {
+                    screen, id, count, ..
+                } if *count > 0 => Some((*screen, id.as_str())),
                 Change::Redraw { screen, id, .. } => Some((*screen, id.as_str())),
                 _ => None,
             })
             .collect();
         lists.sort_unstable();
-        let twice: Vec<ScreenId> = lists.windows(2).filter(|pair| pair[0] == pair[1]).map(|pair| pair[0].0).collect();
+        let twice: Vec<ScreenId> = lists
+            .windows(2)
+            .filter(|pair| pair[0] == pair[1])
+            .map(|pair| pair[0].0)
+            .collect();
         changed.extend(twice.into_iter().map(|id| Change::Screen { id }));
         let whole = |screen: &ScreenId| changed.contains(&Change::Screen { id: *screen });
         // A list whose rows were added says so once: the rows say its state too.
         let grew = |screen: &ScreenId, list: &str| {
             changed.iter().any(|change| match change {
-                Change::Rows { screen: other, id, count, .. } => other == screen && id == list && *count > 0,
+                Change::Rows {
+                    screen: other,
+                    id,
+                    count,
+                    ..
+                } => other == screen && id == list && *count > 0,
                 // Rows drawn again say the list's state with them.
-                Change::Redraw { screen: other, id, .. } => other == screen && id == list,
+                Change::Redraw {
+                    screen: other, id, ..
+                } => other == screen && id == list,
                 _ => false,
             })
         };
@@ -1720,7 +2142,11 @@ impl Core {
             .filter(|change| match change {
                 Change::Screen { id } => self.view.holds(*id),
                 Change::Form { screen, .. } => self.view.holds(*screen) && !whole(screen),
-                Change::Rows { screen, id, count, .. } => self.view.holds(*screen) && !whole(screen) && (*count > 0 || !grew(screen, id)),
+                Change::Rows {
+                    screen, id, count, ..
+                } => {
+                    self.view.holds(*screen) && !whole(screen) && (*count > 0 || !grew(screen, id))
+                }
                 Change::Redraw { screen, .. } => self.view.holds(*screen) && !whole(screen),
                 _ => true,
             })
@@ -1750,10 +2176,24 @@ mod tests {
             panic!("{update:?}");
         };
         assert_eq!(request.method, Verb::Get);
-        assert_eq!(request.headers[0], ("x-navree-native".to_owned(), "1".to_owned()));
-        assert!(request.headers[1].1.starts_with("platform=ios; "), "{:?}", request.headers[1]);
-        assert!(request.headers[1].1.contains("lib=0.1.0"), "{:?}", request.headers[1]);
-        assert_eq!(request.headers[2], ("accept".to_owned(), CONTENT_TYPE.to_owned()));
+        assert_eq!(
+            request.headers[0],
+            ("x-navree-native".to_owned(), "1".to_owned())
+        );
+        assert!(
+            request.headers[1].1.starts_with("platform=ios; "),
+            "{:?}",
+            request.headers[1]
+        );
+        assert!(
+            request.headers[1].1.contains("lib=0.1.0"),
+            "{:?}",
+            request.headers[1]
+        );
+        assert_eq!(
+            request.headers[2],
+            ("accept".to_owned(), CONTENT_TYPE.to_owned())
+        );
         assert_eq!(request.headers.len(), 3);
         assert!(request.body.is_none() && !request.xsrf);
 
@@ -1761,8 +2201,19 @@ mod tests {
         let Some(Effect::Fetch(post)) = core.effects.last() else {
             panic!();
         };
-        assert_eq!(post.body, Some(Body::Form { text: String::new() }));
-        assert_eq!(post.headers[3], ("content-type".to_owned(), "application/x-www-form-urlencoded".to_owned()));
+        assert_eq!(
+            post.body,
+            Some(Body::Form {
+                text: String::new()
+            })
+        );
+        assert_eq!(
+            post.headers[3],
+            (
+                "content-type".to_owned(),
+                "application/x-www-form-urlencoded".to_owned()
+            )
+        );
         assert!(post.xsrf);
     }
 }

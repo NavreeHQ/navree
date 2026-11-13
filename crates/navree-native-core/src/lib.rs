@@ -48,25 +48,26 @@ mod event;
 #[allow(unsafe_code)]
 pub mod ffi;
 mod forms;
-mod navigation;
 mod lists;
+mod navigation;
 mod ops;
-mod push;
 mod origin;
+mod push;
 mod reduce;
 mod regions;
+pub mod schema;
 mod sign_in;
 pub mod snapshot;
-pub mod schema;
 mod state;
 mod tree;
 
 pub use config::{CacheConfig, Config, DeepLinks, SignInConfig};
 pub use effect::{Body, Change, Effect, Part, Request, Update, Verb};
-pub use snapshot::{SNAPSHOT_VERSION, Snapshot};
 pub use event::{Event, FieldValue, FileRef, Response, StreamState, TransportError};
+pub use snapshot::{SNAPSHOT_VERSION, Snapshot};
 pub use state::{
-    App, Content, Destination, Failure, FieldView, Focus, FormView, ListView, Message, Modal, Notice, Query, Question, RegionView, ScreenId, ScreenView, Stage, ViewState, Width, Window,
+    App, Content, Destination, Failure, FieldView, Focus, FormView, ListView, Message, Modal,
+    Notice, Query, Question, RegionView, ScreenId, ScreenView, Stage, ViewState, Width, Window,
 };
 
 /// The runtime core. One per running app.
