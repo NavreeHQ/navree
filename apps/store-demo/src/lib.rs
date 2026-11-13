@@ -22,6 +22,13 @@
 //!   cancel, each confirmed in a dialog and checked again on the server.
 //! - **The inventory** (`/inventory`): every product with its stock, a badge when
 //!   it runs low, and a restock form in its row.
+//! - **The shelves** (`/shelves`): the shelves running low and today's top sellers
+//!   on a page of their own.
+//!
+//! With the `native-preview` feature the same routes answer a native client. The
+//! orders and the inventory are read from their pages. The day, an order and the
+//! shelves are screens written for native clients with Navree Native UI, in
+//! [`screens`], from the data their pages are drawn from.
 //!
 //! The data is SQLite, written afresh at every start (`STORE_DATABASE_URL`,
 //! `sqlite://target/store-demo.db?mode=rwc` by default). While the app runs, a
@@ -44,6 +51,8 @@ use navree::{BoxFuture, ProviderKey};
 pub mod data;
 pub mod live;
 pub mod pages;
+#[cfg(feature = "native-preview")]
+pub mod screens;
 pub mod shop;
 pub mod views;
 

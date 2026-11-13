@@ -13,6 +13,19 @@ pub mod inbox;
 pub mod list;
 pub mod thread;
 
+/// `node` for a browser, and nothing for a native client: a part whose native form is
+/// another part, or that only a keyboard reaches.
+pub fn web_only(node: impl Into<navree::ui::Node>) -> navree::ui::Node {
+    #[cfg(feature = "native-preview")]
+    {
+        navree::ui::native::web_only(node)
+    }
+    #[cfg(not(feature = "native-preview"))]
+    {
+        node.into()
+    }
+}
+
 /// Which conversations the list shows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum View {

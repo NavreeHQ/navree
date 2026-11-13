@@ -1,0 +1,8 @@
+# What `navree native:coverage` needs to ask this desk's pages as a native client (see the
+# CLI chapter of the docs): an example value for each route parameter.
+#
+#   navree native:coverage            (in this directory)
+
+[coverage.params]
+# The first conversation of the demo data.
+id = 1

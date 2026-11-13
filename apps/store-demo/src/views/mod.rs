@@ -13,6 +13,45 @@ pub mod inventory;
 pub mod order;
 pub mod orders;
 
+/// `node` for a native client, and nothing for a browser: a part that only makes
+/// sense where the page is drawn by the system's own toolkit.
+pub fn native_only(node: impl Into<Node>) -> Node {
+    #[cfg(feature = "native-preview")]
+    {
+        navree::ui::native::only(node)
+    }
+    #[cfg(not(feature = "native-preview"))]
+    {
+        let _ = node;
+        Node::Empty
+    }
+}
+
+/// `node` for a browser, and nothing for a native client: a part whose native
+/// form is another part, written beside it.
+pub fn web_only(node: impl Into<Node>) -> Node {
+    #[cfg(feature = "native-preview")]
+    {
+        navree::ui::native::web_only(node)
+    }
+    #[cfg(not(feature = "native-preview"))]
+    {
+        node.into()
+    }
+}
+
+/// Whether a native client is asking.
+pub fn asked_by_native() -> bool {
+    #[cfg(feature = "native-preview")]
+    {
+        navree::ui::native::Client::current().is_native()
+    }
+    #[cfg(not(feature = "native-preview"))]
+    {
+        false
+    }
+}
+
 /// The app's one shell.
 pub fn shell() -> Shell {
     Shell::new(SHOP)

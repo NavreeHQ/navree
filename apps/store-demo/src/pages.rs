@@ -8,15 +8,21 @@
 //! | `GET /orders/{id}/peek` | the same in the drawer, as ops; a redirect to the page with JavaScript off |
 //! | `POST /orders/{id}/refund`, `/cancel`, `/resend` | the actions, each checked on the server |
 //! | `GET /inventory` | the products, with a restock form in each row |
+//! | `GET /shelves` | the shelves running low and today's top sellers |
+//! | `GET /inventory/{id}/peek` | the product in a sheet, as ops, for a screen drawn by the system's own toolkit |
 //! | `POST /inventory/{id}/restock` | adds units to a product |
 //! | `GET /fragments/...` | what the live parts fetch when the stream speaks |
 //! | `GET /broadcasting/stream` | the live hub's stream (`RealtimeModule`): the topics `orders`, `activity`, `stats` and `inventory` |
+//!
+//! With the `native-preview` feature, `/`, `/orders/{id}` and `/shelves` answer a
+//! native client with a screen written for it ([`screens`](crate::screens)), from the
+//! data the page is drawn from, and the fragments those screens fetch answer it with
+//! parts written the same way. A browser gets the pages it always got.
 
 use std::sync::Arc;
 
 use chrono::NaiveDate;
-use http::header::{CACHE_CONTROL, CONTENT_TYPE};
-use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
+use http::{HeaderMap, Method, StatusCode};
 use navree::db::{Db, Uow};
 use navree::http::extract::{Path, Query};
 use navree::http::response::{IntoResponse, Response};
@@ -33,12 +39,16 @@ use crate::data::{
     Customer, Event, Fulfilment, Kind, Level, Line, OFFSET, Order, Product, Status, day_of,
 };
 use crate::live::{Hub, now};
+#[cfg(feature = "native-preview")]
+use crate::screens;
 use crate::shop::{self, Done, Refusal};
 use crate::views::dashboard::{
     Cursor, FeedEntry, Figures, METHODS, Sales, Seller, activity_item, dashboard_body, figures,
     low_stock, sales_charts, sales_report, shelves, top_sellers,
 };
-use crate::views::inventory::{ProductRow, RestockForm, inventory_table};
+use crate::views::inventory::{
+    self, ProductRow, RestockForm, empty_sheet, inventory_table, product_sheet,
+};
 use crate::views::order::{
     ConfirmForm, OrderView, PAGE, Parts, RefundForm, order_drawer, order_page, other_orders,
     refund_dialog, steps,
@@ -307,6 +317,31 @@ fn missing(shell: &AppShell) -> Response {
         .into_response()
 }
 
+/// A label for each day of the sales charts: `6 Oct`.
+#[cfg(feature = "native-preview")]
+fn day_labels(report: &Report) -> Vec<String> {
+    report
+        .buckets()
+        .iter()
+        .map(|day| day.local.format("%-d %b").to_string())
+        .collect()
+}
+
+/// The shelves that need a hand, emptiest first: `most` at most.
+#[cfg(feature = "native-preview")]
+async fn emptiest(uow: &Uow, most: u64) -> Result<Vec<Product>> {
+    Ok(inner(
+        Product::query()
+            .where_(Product::LEVEL.ne(Level::InStock.key()))
+            .order_by("stock")
+            .order_by("id")
+            .limit(most)
+            .get(uow)
+            .await?
+            .into_vec(),
+    ))
+}
+
 /// An HTML fragment for a region.
 fn fragment(title: &'static str, body: impl IntoNodes) -> View {
     View::new(title).body(body)
@@ -314,6 +349,8 @@ fn fragment(title: &'static str, body: impl IntoNodes) -> View {
 
 #[derive(Deserialize, Default)]
 struct AfterQuery {
+    /// What a browser's feed asks from; a native client's list asks `since`.
+    #[serde(alias = "since")]
     after: Option<String>,
 }
 
@@ -324,50 +361,92 @@ struct StepQuery {
 }
 
 impl Pages {
-    /// `GET /`.
-    async fn dashboard(&self, shell: AppShell, uow: Uow) -> Result<AppPage> {
+    /// `GET /`: the dashboard for a browser, and for a native client the day as a
+    /// screen written for it, from the same figures, sales and events.
+    async fn dashboard(&self, shell: AppShell, uow: Uow) -> Result<Response> {
         let counts = count_figures(&uow).await?;
         let today = today();
         let report = sales_report(today);
         let sold = sales(&uow, &report).await?;
         let (entries, total) = feed(&uow, None, 30).await?;
         let (low, sellers) = shelf_lists(&uow).await?;
+        let page = || {
+            shell
+                .page("Dashboard")
+                .actions(
+                    Button::outline("Orders")
+                        .icon(icons::SHOPPING_BAG)
+                        .href("/orders"),
+                )
+                .body(dashboard_body(
+                    &counts, &report, &sold, &entries, total, &low, &sellers, today,
+                ))
+        };
+        #[cfg(feature = "native-preview")]
+        {
+            let day = screens::Today {
+                date: today.format("%A %-d %B").to_string(),
+                counts: &counts,
+                sales: &sold,
+                days: day_labels(&report),
+                entries: &entries,
+                events: total,
+                stream: crate::live::stream().href().as_str().to_owned(),
+                today,
+            };
+            Ok(native::Answer::in_shell(&shell).each(page, || screens::today(&day)))
+        }
+        #[cfg(not(feature = "native-preview"))]
+        {
+            Ok(page().into_response())
+        }
+    }
+
+    /// `GET /shelves`: the shelves running low and today's top sellers. A native
+    /// client gets them as a screen composed for it: the emptiest shelves as a wall
+    /// of tiles.
+    async fn shelves(&self, shell: AppShell, uow: Uow) -> Result<Response> {
+        let (low, sellers) = shelf_lists(&uow).await?;
+        #[cfg(feature = "native-preview")]
+        if native::asked() {
+            let level = |level: Level| Product::query().where_(Product::LEVEL.eq(level.key()));
+            let count = |n: u64| i64::try_from(n).unwrap_or(0);
+            let wall = emptiest(&uow, 12).await?;
+            let shown = screens::Shelves {
+                low: &wall,
+                sellers: &sellers,
+                out: count(level(Level::Out).count(&uow).await?),
+                running_low: count(level(Level::Low).count(&uow).await?),
+                stocked: count(level(Level::InStock).count(&uow).await?),
+                now: now(),
+            };
+            return Ok(native::Answer::in_shell(&shell).native(|| screens::shelves(&shown)));
+        }
         Ok(shell
-            .page("Dashboard")
-            .actions(
-                Button::outline("Orders")
-                    .icon(icons::SHOPPING_BAG)
-                    .href("/orders"),
-            )
-            .body(dashboard_body(
-                &counts, &report, &sold, &entries, total, &low, &sellers, today,
-            )))
+            .page("Shelves")
+            .crumb("Dashboard", "/")
+            .body(shelves(&low, &sellers))
+            .into_response())
     }
 
     /// `GET /fragments/activity?after=`: only the rows newer than the cursor, as
     /// HTML, with the newest cursor in `X-UI-Cursor`.
     async fn activity(&self, uow: Uow, query: AfterQuery) -> Result<Response> {
         let (entries, _) = feed(&uow, query.after.as_deref().and_then(Cursor::parse), 100).await?;
-        let html = render(&ActivityFeed::rows(
-            entries.iter().map(activity_item),
-            OFFSET,
-        ));
-        let mut response = (
-            [
-                (CONTENT_TYPE, "text/html; charset=utf-8"),
-                (CACHE_CONTROL, "no-store"),
-            ],
-            html,
-        )
-            .into_response();
-        if let Some(newest) = entries.first()
-            && let Ok(value) = HeaderValue::from_str(&Cursor::of(&newest.event).to_string())
-        {
-            response
-                .headers_mut()
-                .insert(HeaderName::from_static("x-ui-cursor"), value);
+        // A native client's list is given the same events as rows written for it.
+        #[cfg(feature = "native-preview")]
+        if native::asked() {
+            let asked = query.after.clone().unwrap_or_default();
+            return Ok(
+                native::Answer::new().native(|| screens::activity_since(&entries, &asked, today()))
+            );
         }
-        Ok(response)
+        let rows = ActivityFeed::answer(entries.iter().map(activity_item), OFFSET);
+        Ok(match entries.first() {
+            Some(newest) => rows.cursor(Cursor::of(&newest.event).to_string()),
+            None => rows,
+        }
+        .into_response())
     }
 
     /// `GET /orders`.
@@ -396,16 +475,33 @@ impl Pages {
         };
         let history = history(&uow, id).await?;
         let others = others(&uow, &view.order).await?;
-        let parts = Parts::Inline {
-            history: &history,
-            others: &others,
+        let page = || {
+            let parts = Parts::Inline {
+                history: &history,
+                others: &others,
+            };
+            shell
+                .page(format!("Order {}", view.order.number))
+                .crumb("Dashboard", "/")
+                .crumb("Orders", "/orders")
+                .body(order_page(&view, today(), parts))
         };
-        Ok(shell
-            .page(format!("Order {}", view.order.number))
-            .crumb("Dashboard", "/")
-            .crumb("Orders", "/orders")
-            .body(order_page(&view, today(), parts))
-            .into_response())
+        // A native client gets the order as a record written for it, its actions the
+        // screen's own, each with its role.
+        #[cfg(feature = "native-preview")]
+        {
+            let shown = screens::OrderScreen {
+                view: &view,
+                history: &history,
+                others: &others,
+                today: today(),
+            };
+            Ok(native::Answer::in_shell(&shell).each(page, || screens::order(&shown)))
+        }
+        #[cfg(not(feature = "native-preview"))]
+        {
+            Ok(page().into_response())
+        }
     }
 
     /// `GET /orders/{id}/peek`: the order in the drawer, opened.
@@ -447,6 +543,7 @@ impl Pages {
             }
         };
         let done = status == StatusCode::OK;
+        // What every client is told: the dialog closes, and a toast says what happened.
         let mut reply = Reply::ops_or_redirect(format!("/orders/{id}")).op(Op::Close {
             target: dialog.to_owned(),
         });
@@ -454,23 +551,55 @@ impl Pages {
             let today = today();
             let history = history(uow, id).await?;
             let others = others(uow, &view.order).await?;
-            reply = reply
-                .morph(DRAWER, order_drawer(&view, today, Parts::Lazy))
-                .morph(
-                    PAGE,
-                    order_page(
-                        &view,
+            // A browser's drawer and page are morphed into the order as it is now.
+            let web = |reply: Reply| {
+                let reply = reply
+                    .morph(DRAWER, order_drawer(&view, today, Parts::Lazy))
+                    .morph(
+                        PAGE,
+                        order_page(
+                            &view,
+                            today,
+                            Parts::Inline {
+                                history: &history,
+                                others: &others,
+                            },
+                        ),
+                    );
+                // A morph keeps what was typed; after a refund, the form starts again
+                // from what is left.
+                if done {
+                    reply.op(Op::replace("refund", &refund_dialog(&view).into()))
+                } else {
+                    reply
+                }
+            };
+            // A native client's screen is drawn again with the parts it is written
+            // with: its content, each of its actions as the order allows it now, and
+            // the refund form from what is left.
+            #[cfg(feature = "native-preview")]
+            {
+                reply = reply.each(web, |mut reply| {
+                    let shown = screens::OrderScreen {
+                        view: &view,
+                        history: &history,
+                        others: &others,
                         today,
-                        Parts::Inline {
-                            history: &history,
-                            others: &others,
-                        },
-                    ),
-                );
-            // A morph keeps what was typed; after a refund, the form starts again
-            // from what is left.
-            if done {
-                reply = reply.op(Op::replace("refund", &refund_dialog(&view).into()));
+                    };
+                    reply = reply.op(native::morph(PAGE, screens::order_body(&shown)));
+                    for action in screens::order_actions(&view) {
+                        let target = action.id.clone().unwrap_or_default();
+                        reply = reply.op(native::replace(target, action));
+                    }
+                    if done {
+                        reply = reply.op(native::replace("refund", screens::refund_dialog(&view)));
+                    }
+                    reply
+                });
+            }
+            #[cfg(not(feature = "native-preview"))]
+            {
+                reply = web(reply);
             }
         }
         Ok(reply
@@ -529,10 +658,27 @@ impl Pages {
                 ProductRow::from(record.into_inner())
             })
             .await?;
-        Ok(shell
-            .page("Inventory")
-            .crumb("Dashboard", "/")
-            .body(inventory_table(&query, &page)))
+        Ok(shell.page("Inventory").crumb("Dashboard", "/").body((
+            inventory_table(&query, &page),
+            // Where a native client's tap on a row opens the product.
+            crate::views::native_only(empty_sheet()),
+        )))
+    }
+
+    /// `GET /inventory/{id}/peek`: the product in a sheet, opened. With
+    /// JavaScript off, the inventory.
+    async fn product_peek(&self, uow: Uow, id: i64) -> Result<Reply> {
+        let Some(product) = Product::query().find(&uow, id).await? else {
+            return Ok(Reply::ops_or_redirect("/inventory").toast(
+                ToastTone::Warning,
+                "That product isn't on the shelves any more.",
+            ));
+        };
+        Ok(Reply::ops_or_redirect("/inventory")
+            .morph(inventory::SHEET, product_sheet(product.into_inner()))
+            .op(Op::Open {
+                target: inventory::SHEET.to_owned(),
+            }))
     }
 
     /// `POST /inventory/{id}/restock`.
@@ -578,10 +724,35 @@ impl Pages {
                 .into_response());
         };
         self.hub.nudge().await;
-        let stock = Product::query()
+        let product = Product::query()
             .find(&uow, id)
             .await?
-            .map_or(0, |product| product.into_inner().stock);
+            .map(|product| product.into_inner());
+        let stock = product.as_ref().map_or(0, |product| product.stock);
+        let reply = if crate::views::asked_by_native() {
+            // The sheet the form was sent from has done its work, and the record it changed
+            // is drawn again with the stock it has now.
+            let reply = reply
+                .op(Op::Close {
+                    target: inventory::SHEET.to_owned(),
+                })
+                .op(Op::Invalidate {
+                    target: inventory::TABLE.to_owned(),
+                });
+            // On the shelves' screen the record is a tile, written for native clients:
+            // the same function draws it again.
+            #[cfg(feature = "native-preview")]
+            let reply = match &product {
+                Some(product) => reply.op(native::replace(
+                    format!("shelf-{id}"),
+                    screens::shelf_tile(product),
+                )),
+                None => reply,
+            };
+            reply
+        } else {
+            reply
+        };
         Ok(reply
             .toast_with(
                 Toast::new(
@@ -624,13 +795,28 @@ impl Controller for Pages {
             })
             .public(),
             RouteDef::on(Method::GET, "!/fragments/figures", |uow: Uow| async move {
-                Ok::<_, AppError>(fragment("Figures", figures(&count_figures(&uow).await?)))
+                let counts = count_figures(&uow).await?;
+                // The day's screen for native clients fetches its figures here too.
+                #[cfg(feature = "native-preview")]
+                if native::asked() {
+                    let sold = sales(&uow, &sales_report(today())).await?;
+                    return Ok::<_, AppError>(native::Answer::new().native(|| {
+                        native::ui::Node::from(screens::figures(&counts, &sold.revenue))
+                    }));
+                }
+                Ok::<_, AppError>(fragment("Figures", figures(&counts)).into_response())
             })
             .public(),
             RouteDef::on(Method::GET, "!/fragments/sales", |uow: Uow| async move {
                 let report = sales_report(today());
                 let sold = sales(&uow, &report).await?;
-                Ok::<_, AppError>(fragment("Sales", sales_charts(&report, &sold)))
+                #[cfg(feature = "native-preview")]
+                if native::asked() {
+                    return Ok::<_, AppError>(native::Answer::new().native(|| {
+                        native::ui::Node::from(screens::charts(&day_labels(&report), &sold))
+                    }));
+                }
+                Ok::<_, AppError>(fragment("Sales", sales_charts(&report, &sold)).into_response())
             })
             .public(),
             RouteDef::on(Method::GET, "!/fragments/shelves", |uow: Uow| async move {
@@ -716,11 +902,27 @@ impl Controller for Pages {
                 }
             })
             .public(),
+            RouteDef::on(Method::GET, "!/shelves", {
+                let me = me.clone();
+                move |shell: AppShell, uow: Uow| {
+                    let me = me.clone();
+                    async move { me.shelves(shell, uow).await }
+                }
+            })
+            .public(),
             RouteDef::on(Method::GET, "!/inventory", {
                 let me = me.clone();
                 move |shell: AppShell, uow: Uow, query: TableQuery<ProductRow>| {
                     let me = me.clone();
                     async move { me.inventory(shell, uow, query).await }
+                }
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/inventory/{id}/peek", {
+                let me = me.clone();
+                move |uow: Uow, Path(id): Path<i64>| {
+                    let me = me.clone();
+                    async move { me.product_peek(uow, id).await }
                 }
             })
             .public(),

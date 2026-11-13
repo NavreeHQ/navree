@@ -778,9 +778,21 @@ impl Hub {
     }
 }
 
+/// The time the clock is held at, in unix seconds; 0 when it runs.
+static HELD: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+/// Holds the clock at `at` (unix seconds) for every page and everything the
+/// app writes: for a test that compares two runs of the app.
+pub fn hold_clock(at: i64) {
+    HELD.store(at, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Now, in unix seconds.
 pub fn now() -> i64 {
-    chrono::Utc::now().timestamp()
+    match HELD.load(std::sync::atomic::Ordering::Relaxed) {
+        0 => chrono::Utc::now().timestamp(),
+        held => held,
+    }
 }
 
 #[cfg(test)]

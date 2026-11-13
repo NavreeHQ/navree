@@ -1,0 +1,15 @@
+# What `navree native:coverage` needs to ask this board's pages as a native client (see the
+# CLI chapter of the docs): an example value for each route parameter, and the addresses with
+# a query the tests also ask.
+#
+#   navree native:coverage            (in this directory)
+
+[coverage]
+also = [
+    "/cards/search?q=a",
+]
+
+[coverage.params]
+# The first card of the demo data, and a column that has cards.
+id = 1
+column = "doing"

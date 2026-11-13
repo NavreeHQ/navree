@@ -58,6 +58,7 @@ use crate::views::thread::{
     ActForm, AssignForm, COMPOSER, COMPOSER_BODY, HEAD, MESSAGES, Open, ReplyForm, SNOOZE_DAYS,
     SnoozeForm, composer, message_item,
 };
+use crate::views::web_only;
 use crate::views::{Filters, View, ViewCounts, shell, views_src};
 
 /// The cookie that says which agent a visitor works as.
@@ -307,6 +308,18 @@ async fn who(
         .await?
         .map(|record| record.into_inner())
         .unwrap_or_default())
+}
+
+/// The shell of a page of an error (a missing page, a refused request): the one every
+/// page draws, for the agent the visitor works as, so a native client has the app's
+/// destinations to draw its chrome from. `None` leaves the page on its own.
+pub async fn error_shell(request: navree::http::ErrorContext) -> Option<Shell> {
+    let db = request.ctx.get::<Db>().await.ok()?;
+    let signer = request.ctx.get::<UrlSigner>().await.ok()?;
+    let me = who(&*db, &signer, &request.headers).await.ok()?;
+    let team = team(&*db).await.ok()?;
+    let counts = counts(&*db, me.id).await.ok()?;
+    Some(shell(&me, &team, counts, View::All, None))
 }
 
 async fn team(uow: &(impl Executor + ?Sized)) -> Result<Vec<Agent>> {
@@ -569,7 +582,12 @@ impl Pages {
         }
         let view = app_page
             .actions(page_actions(me.single_keys))
-            .body((split, palette(&page), shortcuts(me.single_keys)))
+            // The palette is for a keyboard: a native client has its own way to search and act.
+            .body((
+                split,
+                web_only(palette(&page)),
+                web_only(shortcuts(me.single_keys)),
+            ))
             .to_view();
         Ok(no_store(view.into_response()))
     }
@@ -1338,7 +1356,7 @@ impl Controller for Pages {
                     let (rows, gone, newest, more) = queries::changes(uow, &filters, me.id, since, ask.window(), now).await?;
                     let items: Vec<LazyItem> = rows.iter().map(|row| conversation_item(row, &filters, open, now, None)).collect();
                     let next = Since { rev: newest, at: now }.text();
-                    return Ok::<_, AppError>(LazyPage::changes(items, next, gone).more(more).into_response());
+                    return Ok::<_, AppError>(LazyPage::changes(items, next, gone).joins(navree::ui::LazyEnd::Start).more(more).into_response());
                 }
                 let (rows, more_after, more_before) = queries::list_page(uow, &filters, me.id, ask.ask()).await?;
                 let more = match ask.ask() {

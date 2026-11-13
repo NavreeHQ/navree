@@ -51,7 +51,7 @@ use navree::db::{DatabaseModule, Db};
 use navree::kernel::Lifecycle;
 use navree::prelude::*;
 use navree::realtime::Live;
-use navree::ui::UiModule;
+use navree::ui::{ErrorShell, UiModule};
 use navree::{BoxFuture, ProviderKey};
 
 pub mod data;
@@ -190,6 +190,8 @@ impl Module for InboxModule {
             })
             .deps(vec![ProviderKey::of::<Live>()]),
         );
+        // The shell of a page of an error, for the agent the visitor works as.
+        m.contribute(ErrorShell::new(pages::error_shell));
         m.value(self.settings.clone());
         m.provider::<Seeder>().lifecycle::<Seeder>();
         m.controller::<pages::Pages>();
