@@ -626,7 +626,9 @@ public enum AxisRules {
     /// How many labels fit along an axis `width` points wide, for words about
     /// `label` points wide.
     public static func most(width: Double, label: Double) -> Int {
-        Swift.max(2, Int(width / (label + 12)))
+        // The first label starts at its mark and the others stand over their
+        // middle, so a gap between two marks holds a label and a half.
+        Swift.max(2, Int((width - label / 2) / (label * 1.5 + 12)) + 1)
     }
 
     /// The runs of a series with no gap in them: a gap is a gap, so the line
