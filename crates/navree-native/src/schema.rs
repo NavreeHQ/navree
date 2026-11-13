@@ -39,9 +39,9 @@ use serde_json::{Map, Value, json};
 
 use crate::action::{Action, Command, Pair, Present, State};
 use crate::charts::{
-    Category, Centre, ClockMoment, ColorStrip, Colour, DayClock, DayPager, DayPick, Hint, HintMark,
-    Hour, Hue, Meter, MiniColumn, MiniColumns, PagerWords, Ring, RingValue, Rings, RingsCentre,
-    RangeScale, Segment, StripCell, Zone,
+    Category, Centre, ClockMoment, ColorStrip, Colour, Curve, DayClock, DayPager, DayPick, Hint,
+    HintMark, Hour, Hue, Measure, Meter, MiniColumn, MiniColumns, PagerWords, RangeScale, Reference,
+    ReferenceKind, Ring, RingValue, Rings, RingsCentre, Segment, Stacking, StripCell, Zone,
 };
 use crate::client::{ClientDescriptor, Contrast, FormFactor, Platform, Scheme};
 use crate::device::{
@@ -669,8 +669,16 @@ object!(Selection { name } { form, across });
 object!(Across { name, value } { total });
 object!(Table {} { id, caption, columns, rows, query, select, more, prev, summary, empty });
 names!(ChartKind { Line, Area, Bar, Donut, Sparkline, Funnel });
-object!(Series { label } { values, shown });
-object!(Chart {} { id, kind, title, labels, series });
+object!(Series { label } { values, shown, colour, unit });
+names!(Curve { Linear, Smooth, Step });
+names!(Stacking { Apart, Values, Shares });
+names!(ReferenceKind { Level, Diagonal });
+object!(Measure {} { name, unit, min, max });
+object!(Reference {} { kind, value, label, colour });
+object!(Chart {} {
+    id, kind, title, labels, series, x, y, references, zones, levels, curve, stacking, horizontal,
+    summary, hint
+});
 object!(Code { text } { id, lang });
 object!(Button { label } {
     id, icon, icon_only, role, standard, prominence, undoable, ask, checked, one_of, disabled,

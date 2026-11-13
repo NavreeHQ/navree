@@ -1183,6 +1183,28 @@
     },
     "Chart": {
       "properties": {
+        "curve": {
+          "$ref": "#/$defs/Curve",
+          "default": "linear",
+          "x-since": 0
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "horizontal": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
         "id": {
           "anyOf": [
             {
@@ -1208,12 +1230,45 @@
           "type": "array",
           "x-since": 0
         },
+        "levels": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "references": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Reference"
+          },
+          "type": "array",
+          "x-since": 0
+        },
         "series": {
           "default": [],
           "items": {
             "$ref": "#/$defs/Series"
           },
           "type": "array",
+          "x-since": 0
+        },
+        "stacking": {
+          "$ref": "#/$defs/Stacking",
+          "default": "apart",
+          "x-since": 0
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "x-since": 0
         },
         "title": {
@@ -1226,6 +1281,38 @@
             }
           ],
           "default": null,
+          "x-since": 0
+        },
+        "x": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Measure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "y": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Measure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "zones": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Zone"
+          },
+          "type": "array",
           "x-since": 0
         }
       },
@@ -2588,6 +2675,16 @@
       ],
       "type": "object",
       "x-kind": "object",
+      "x-since": 0
+    },
+    "Curve": {
+      "enum": [
+        "linear",
+        "smooth",
+        "step"
+      ],
+      "type": "string",
+      "x-kind": "enum",
       "x-since": 0
     },
     "DateInput": {
@@ -4958,6 +5055,62 @@
         "at",
         "precise"
       ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Measure": {
+      "properties": {
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
       "type": "object",
       "x-kind": "object",
       "x-since": 0
@@ -8123,6 +8276,64 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "Reference": {
+      "properties": {
+        "colour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/ReferenceKind",
+          "default": "level",
+          "x-since": 0
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ReferenceKind": {
+      "enum": [
+        "level",
+        "diagonal"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
     "Refusal": {
       "enum": [
         "unsupported",
@@ -9334,6 +9545,18 @@
     },
     "Series": {
       "properties": {
+        "colour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "label": {
           "type": "string",
           "x-since": 0
@@ -9344,6 +9567,18 @@
             "type": "string"
           },
           "type": "array",
+          "x-since": 0
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "x-since": 0
         },
         "values": {
@@ -10020,6 +10255,16 @@
       "required": [],
       "type": "object",
       "x-kind": "object",
+      "x-since": 0
+    },
+    "Stacking": {
+      "enum": [
+        "apart",
+        "values",
+        "shares"
+      ],
+      "type": "string",
+      "x-kind": "enum",
       "x-since": 0
     },
     "Standard": {

@@ -356,6 +356,136 @@
               }
             }
           ]
+        },
+        {
+          "t": "section",
+          "title": "The week",
+          "style": "card",
+          "children": [
+            {
+              "t": "chart",
+              "id": "sleep-hypnogram",
+              "kind": "area",
+              "title": "Sleep stages through the night",
+              "labels": [
+                "11:00 pm",
+                "11:30 pm",
+                "12:00 am",
+                "12:30 am",
+                "1:00 am",
+                "1:30 am",
+                "2:00 am",
+                "2:30 am",
+                "3:00 am",
+                "3:30 am",
+                "4:00 am",
+                "4:30 am"
+              ],
+              "series": [
+                {
+                  "label": "Stage",
+                  "values": [
+                    3,
+                    1,
+                    1,
+                    0,
+                    0,
+                    1,
+                    2,
+                    1,
+                    1,
+                    0,
+                    1,
+                    2
+                  ],
+                  "colour": {
+                    "hue": "violet"
+                  }
+                }
+              ],
+              "levels": [
+                "Deep",
+                "Core",
+                "REM",
+                "Awake"
+              ],
+              "curve": "step",
+              "summary": "Sleep stages through the night: awake at 11:00 pm, then Core, Deep from 12:30 am to 1:30 am, and REM at 2:00 am and 4:30 am."
+            },
+            {
+              "t": "chart",
+              "id": "sleep-week",
+              "kind": "bar",
+              "title": "Hours asleep, last 7 nights",
+              "labels": [
+                "Fri",
+                "Sat",
+                "Sun",
+                "Mon",
+                "Tue",
+                "Wed",
+                "Thu"
+              ],
+              "series": [
+                {
+                  "label": "Asleep",
+                  "values": [
+                    6.8,
+                    7.4,
+                    7,
+                    6.2,
+                    7.9,
+                    8.1,
+                    7.2
+                  ],
+                  "shown": [
+                    "6 h 48 min",
+                    "7 h 24 min",
+                    "7 h",
+                    "6 h 12 min",
+                    "7 h 54 min",
+                    "8 h 6 min",
+                    "7 h 12 min"
+                  ],
+                  "colour": {
+                    "hue": "violet"
+                  }
+                }
+              ],
+              "x": {
+                "name": "Night"
+              },
+              "y": {
+                "unit": "h",
+                "min": 0,
+                "max": 10
+              },
+              "references": [
+                {
+                  "value": 8,
+                  "label": "Your need: 8 h",
+                  "colour": {
+                    "hue": "amber"
+                  }
+                }
+              ],
+              "zones": [
+                {
+                  "from": 7,
+                  "to": 9,
+                  "label": "Usual range",
+                  "colour": {
+                    "hue": "green"
+                  }
+                }
+              ],
+              "summary": "Hours asleep, last 7 nights: from 6 h 12 min on Monday to 8 h 6 min on Wednesday. Your need is 8 h.",
+              "hint": {
+                "about": "hours asleep",
+                "text": "Time asleep each night, against the hours you said you need. It describes your own nights and is not advice."
+              }
+            }
+          ]
         }
       ]
     }

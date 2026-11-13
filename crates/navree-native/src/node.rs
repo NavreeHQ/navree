@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::action::Action;
 pub use crate::charts::{
-    Category, Centre, ClockMoment, ColorStrip, Colour, DayClock, DayPager, DayPick, Hint, HintMark,
-    Hour, Hue, Meter, MiniColumn, MiniColumns, PagerWords, Ring, RingValue, Rings, RingsCentre,
-    RangeScale, Segment, StripCell, Zone,
+    Category, Centre, ClockMoment, ColorStrip, Colour, Curve, DayClock, DayPager, DayPick, Hint,
+    HintMark, Hour, Hue, Measure, Meter, MiniColumn, MiniColumns, PagerWords, RangeScale, Reference,
+    ReferenceKind, Ring, RingValue, Rings, RingsCentre, Segment, Stacking, StripCell, Zone,
 };
 use crate::input::Input;
 
@@ -1545,7 +1545,8 @@ pub enum ChartKind {
     Bar,
     /// Shares of a whole.
     Donut,
-    /// A small line with no axes.
+    /// A small line with no axes: only the shape of its series, beside a figure
+    /// or in a row. Its axes, reference lines and zones are left out.
     Sparkline,
     /// Stages that narrow.
     Funnel,
@@ -1563,10 +1564,28 @@ pub struct Series {
     /// formatted them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shown: Vec<String>,
+    /// Its colour. A client takes its colours in turn when there is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+    /// What its values count, when it is not what the value axis counts:
+    /// `bpm`, `ms`. A client writes it after a value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
 }
 
 /// A chart, as the numbers it draws. The client draws it with its system's own
 /// charts.
+///
+/// Lines, areas and bars run over one shared axis: `labels` are the places
+/// along it and each series gives a value at each. `x` and `y` say what the two
+/// axes measure (a name, a unit, bounds); a client takes bounds from the data
+/// when none are said. Reference lines and zones lie across the value axis,
+/// each with its name and colour, so a reader can tell a night from the need or
+/// a rate from its usual range. A value axis can be named in `levels` instead
+/// of numbered: value 0 is the first name, 1 the second; the stages of sleep
+/// are drawn so, as a stepped area.
+///
+/// The chart is named by its `summary`, one sentence that says what it shows.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Chart {
     /// The node's id.
@@ -1584,6 +1603,38 @@ pub struct Chart {
     /// The series.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub series: Vec<Series>,
+    /// What the labels are along the axis they stand on: `Night`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x: Option<Measure>,
+    /// What the value axis measures: its unit and its bounds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y: Option<Measure>,
+    /// Lines across the chart at a level, each with its name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub references: Vec<Reference>,
+    /// Bands of the value axis, each with its name and colour: a target, a
+    /// usual range.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zones: Vec<Zone>,
+    /// The names of the values of the value axis, from value 0.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub levels: Vec<String>,
+    /// How a line or an area runs from one value to the next.
+    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    pub curve: Curve,
+    /// How the series of a bar or area chart sit.
+    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    pub stacking: Stacking,
+    /// Whether bars lie along rows, each with its label: for long names and
+    /// ranked lists.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub horizontal: bool,
+    /// One sentence that says the whole chart to a reader who can't see it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// A note about what the chart means, shown when asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
 }
 
 /// Code, in a fixed-width face.
@@ -2564,6 +2615,32 @@ mod tests {
             r#"{"t":"day_pager","day":"Today","date":"2026-11-13","pick":{"href":"/"}}"#
         )
         .is_err());
+    }
+
+    #[test]
+    fn a_chart_reads_as_it_did_before_axes_and_marks_and_forgives_a_word_it_lacks() {
+        let old: Chart = serde_json::from_str(
+            r#"{"kind":"bar","title":"Orders","labels":["Mon"],"series":[{"label":"UPI","values":[41]}]}"#,
+        )
+        .unwrap();
+        assert!(old.x.is_none() && old.y.is_none() && old.references.is_empty() && old.zones.is_empty());
+        assert_eq!((old.curve, old.stacking, old.horizontal), (Curve::Linear, Stacking::Apart, false));
+        // A newer server's words read as the usual ones, and the chart still draws.
+        let newer: Chart = serde_json::from_str(
+            r#"{"kind":"line","curve":"wiggly","stacking":"layers",
+                "references":[{"kind":"orbit","value":8,"label":"Your need"}],
+                "series":[{"label":"Asleep","colour":{"hue":"teal"}}]}"#,
+        )
+        .unwrap();
+        assert_eq!((newer.curve, newer.stacking), (Curve::Linear, Stacking::Apart));
+        assert_eq!(newer.references[0].kind, ReferenceKind::Level);
+        assert_eq!(newer.series[0].colour, Some(Colour::new(Hue::Neutral)));
+        // The diagonal where x equals y has no level of its own.
+        let diagonal: Reference =
+            serde_json::from_str(r#"{"kind":"diagonal","label":"Equal"}"#).unwrap();
+        assert_eq!((diagonal.kind, diagonal.value), (ReferenceKind::Diagonal, None));
+        // Nothing is written for what a chart does not say.
+        assert_eq!(serde_json::to_string(&Chart::default()).unwrap(), "{}");
     }
 
     #[test]

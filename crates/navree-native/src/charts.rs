@@ -767,6 +767,89 @@ impl Default for RangeScale {
     }
 }
 
+/// What one axis of a chart measures: its name, its unit and its bounds. Each
+/// part is optional; a client takes from the data what is not said.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Measure {
+    /// What the axis is: `Night`, `Interval n`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// What its values count: `h`, `ms`, `bpm`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    /// The least the axis shows. A value below it widens it, so a mark is
+    /// never cut off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min: Option<serde_json::Number>,
+    /// The most the axis shows. A value above it widens it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max: Option<serde_json::Number>,
+}
+
+/// What a reference line is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum ReferenceKind {
+    /// A level across the chart at a value: a target, a limit, an average.
+    #[default]
+    Level,
+    /// The diagonal where x equals y, across what both axes share: for a chart
+    /// with numbers along both, such as one reading against the next.
+    Diagonal,
+}
+
+/// A line drawn for reference across a chart: a level (a target, a resting
+/// rate, the average of a series, a zero baseline) or the diagonal where x
+/// equals y. A client draws it quietly and names it with its label, in its
+/// colour when it has one.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reference {
+    /// What it is.
+    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    pub kind: ReferenceKind,
+    /// The level, in the chart's value units, for a `level`. An average or a
+    /// baseline is worked out by the server and sent as a level.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<serde_json::Number>,
+    /// What the line is, with the value when it helps: `Your need: 8 h`,
+    /// `Average: 612`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// Its colour. A client draws it in the quiet ink when there is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+}
+
+/// How a line or an area runs from one value to the next.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Curve {
+    /// Straight between values.
+    #[default]
+    Linear,
+    /// A smooth curve through them that never overshoots a value.
+    Smooth,
+    /// Each value holds until the next: for states that last, such as the stages
+    /// of sleep.
+    Step,
+}
+
+/// How the series of a bar or area chart sit.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Stacking {
+    /// Apart: bars side by side, areas each from the baseline.
+    #[default]
+    Apart,
+    /// On one another: parts of a total at each place.
+    Values,
+    /// On one another as shares of each place's total, to a whole.
+    Shares,
+}
+
 /// Where a day the person chooses is asked for.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DayPick {

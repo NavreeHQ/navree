@@ -11,6 +11,69 @@
       "gap": 4,
       "children": [
         {
+          "t": "figure",
+          "id": "resting-heart-rate",
+          "label": "Resting heart rate",
+          "value": "58",
+          "unit": "bpm",
+          "icon": {
+            "name": "heart-pulse",
+            "paths": [
+              "M19.5 12.6 12 20l-7.5-7.4a5 5 0 0 1 7.5-6.6 5 5 0 0 1 7.5 6.6zM3 12h4l2-3 3 6 2-3h5"
+            ]
+          },
+          "trend": {
+            "direction": "down",
+            "text": "3.3%",
+            "tone": "success"
+          },
+          "detail": "vs last week",
+          "status": {
+            "text": "Athletic",
+            "tone": "success"
+          },
+          "colour": {
+            "hue": "rose"
+          },
+          "chart": {
+            "t": "chart",
+            "id": "resting-heart-rate-days",
+            "kind": "sparkline",
+            "labels": [
+              "Mon",
+              "Tue",
+              "Wed",
+              "Thu",
+              "Fri",
+              "Sat",
+              "Sun"
+            ],
+            "series": [
+              {
+                "label": "Resting heart rate",
+                "values": [
+                  61,
+                  60,
+                  62,
+                  59,
+                  58,
+                  59,
+                  58
+                ],
+                "colour": {
+                  "hue": "rose"
+                },
+                "unit": "bpm"
+              }
+            ],
+            "summary": "Resting heart rate, 7 days: 61 bpm falling to 58 bpm."
+          },
+          "action": {
+            "t": "navigate",
+            "href": "/heart"
+          }
+        },
+        {
           "t": "section",
           "title": "Training load",
           "style": "card",
@@ -180,6 +243,183 @@
               "label": "Heart rate",
               "unit": "bpm",
               "summary": "Heart rate zones, morning run: 12 minutes. Steady for 5, Hard for 4, Easy for 2; one minute has no reading."
+            }
+          ]
+        },
+        {
+          "t": "section",
+          "title": "The week in minutes",
+          "style": "card",
+          "children": [
+            {
+              "t": "chart",
+              "id": "minutes-by-intensity",
+              "kind": "bar",
+              "title": "Active minutes by intensity, last 7 days",
+              "labels": [
+                "Mon",
+                "Tue",
+                "Wed",
+                "Thu",
+                "Fri",
+                "Sat",
+                "Sun"
+              ],
+              "series": [
+                {
+                  "label": "Easy",
+                  "values": [
+                    22,
+                    30,
+                    18,
+                    25,
+                    20,
+                    41,
+                    35
+                  ],
+                  "colour": {
+                    "hue": "blue"
+                  }
+                },
+                {
+                  "label": "Steady",
+                  "values": [
+                    12,
+                    25,
+                    0,
+                    18,
+                    22,
+                    30,
+                    10
+                  ],
+                  "colour": {
+                    "hue": "green"
+                  }
+                },
+                {
+                  "label": "Hard",
+                  "values": [
+                    0,
+                    8,
+                    0,
+                    12,
+                    0,
+                    15,
+                    0
+                  ],
+                  "colour": {
+                    "hue": "amber"
+                  }
+                }
+              ],
+              "y": {
+                "unit": "min"
+              },
+              "stacking": "values",
+              "summary": "Active minutes by intensity, last 7 days: most on Saturday, 86 minutes."
+            },
+            {
+              "t": "chart",
+              "id": "minutes-shares",
+              "kind": "bar",
+              "title": "What each day was made of",
+              "labels": [
+                "Mon",
+                "Tue",
+                "Wed",
+                "Thu",
+                "Fri",
+                "Sat",
+                "Sun"
+              ],
+              "series": [
+                {
+                  "label": "Easy",
+                  "values": [
+                    22,
+                    30,
+                    18,
+                    25,
+                    20,
+                    41,
+                    35
+                  ],
+                  "colour": {
+                    "hue": "blue"
+                  }
+                },
+                {
+                  "label": "Steady",
+                  "values": [
+                    12,
+                    25,
+                    0,
+                    18,
+                    22,
+                    30,
+                    10
+                  ],
+                  "colour": {
+                    "hue": "green"
+                  }
+                },
+                {
+                  "label": "Hard",
+                  "values": [
+                    0,
+                    8,
+                    0,
+                    12,
+                    0,
+                    15,
+                    0
+                  ],
+                  "colour": {
+                    "hue": "amber"
+                  }
+                }
+              ],
+              "stacking": "shares",
+              "horizontal": true,
+              "summary": "What each day was made of: Thursday had the largest share of Hard minutes, 22%."
+            },
+            {
+              "t": "chart",
+              "id": "load-weeks",
+              "title": "Training load by week",
+              "labels": [
+                "W41",
+                "W42",
+                "W43",
+                "W44",
+                "W45",
+                "W46"
+              ],
+              "series": [
+                {
+                  "label": "Load",
+                  "values": [
+                    310,
+                    355,
+                    402,
+                    388,
+                    441,
+                    462
+                  ],
+                  "colour": {
+                    "hue": "rose"
+                  },
+                  "unit": "load"
+                }
+              ],
+              "references": [
+                {
+                  "value": 393,
+                  "label": "Average: 393"
+                }
+              ],
+              "curve": "smooth",
+              "summary": "Training load by week: from 310 in week 41 to 462 in week 46, above the average of 393."
             }
           ]
         }

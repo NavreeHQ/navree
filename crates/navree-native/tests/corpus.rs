@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use navree_native::action::{Action, Command, Pair, Present, State};
-use navree_native::charts::{Hint, HintMark, Hue};
+use navree_native::charts::{Curve, Hint, HintMark, Hue, Measure, Reference, ReferenceKind, Stacking};
 use navree_native::device::{
     Accuracy, Alt, AppLock, AuthSession, CancelNotification, CodeFormat, Confirm, ConfirmMethod,
     CopyText, DeviceCall, Haptic, HapticKind, HttpsUrl, LocateOnce, Notify, OpenSettings, OpenUrl,
@@ -1013,6 +1013,7 @@ fn screen_kinds() -> Envelope {
                                 label: s("UPI"),
                                 values: vec![Some(41.into()), Some(38.into()), None],
                                 shown: Vec::new(),
+                                ..Series::default()
                             },
                             Series {
                                 label: s("Card"),
@@ -1022,8 +1023,10 @@ fn screen_kinds() -> Envelope {
                                     Some(17.into()),
                                 ],
                                 shown: vec![s("12"), s("9.5"), s("17")],
+                                ..Series::default()
                             },
                         ],
+                        ..Chart::default()
                     }),
                 ],
                 ..Grid::default()
@@ -2573,6 +2576,75 @@ fn screen_sleep() -> Envelope {
         }),
         ..RangeScale::default()
     });
+    // The week's nights as bars, with what the person needs drawn across them
+    // and the usual range behind them.
+    let week = Node::Chart(Chart {
+        id: Some(s("sleep-week")),
+        kind: ChartKind::Bar,
+        title: Some(s("Hours asleep, last 7 nights")),
+        labels: ["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"].map(s).to_vec(),
+        series: vec![Series {
+            label: s("Asleep"),
+            values: [6.8, 7.4, 7.0, 6.2, 7.9, 8.1, 7.2].map(|hours| Some(decimal(hours))).to_vec(),
+            shown: ["6 h 48 min", "7 h 24 min", "7 h", "6 h 12 min", "7 h 54 min", "8 h 6 min", "7 h 12 min"]
+                .map(s)
+                .to_vec(),
+            colour: Some(Colour::new(Hue::Violet)),
+            ..Series::default()
+        }],
+        x: Some(Measure {
+            name: Some(s("Night")),
+            ..Measure::default()
+        }),
+        y: Some(Measure {
+            unit: Some(s("h")),
+            min: Some(number(0)),
+            max: Some(number(10)),
+            ..Measure::default()
+        }),
+        references: vec![Reference {
+            kind: ReferenceKind::Level,
+            value: Some(number(8)),
+            label: Some(s("Your need: 8 h")),
+            colour: Some(Colour::new(Hue::Amber)),
+        }],
+        zones: vec![Zone {
+            from: number(7),
+            to: number(9),
+            label: Some(s("Usual range")),
+            colour: Some(Colour::new(Hue::Green)),
+        }],
+        summary: Some(s("Hours asleep, last 7 nights: from 6 h 12 min on Monday to 8 h 6 min on Wednesday. Your need is 8 h.")),
+        hint: Some(Hint {
+            about: s("hours asleep"),
+            text: s("Time asleep each night, against the hours you said you need. It describes your own nights and is not advice."),
+            ..Hint::default()
+        }),
+        ..Chart::default()
+    });
+    // The night's stages through the hours: each holds until the next, on lanes
+    // named for the stages.
+    let hypnogram = Node::Chart(Chart {
+        id: Some(s("sleep-hypnogram")),
+        kind: ChartKind::Area,
+        title: Some(s("Sleep stages through the night")),
+        labels: [
+            "11:00 pm", "11:30 pm", "12:00 am", "12:30 am", "1:00 am", "1:30 am", "2:00 am",
+            "2:30 am", "3:00 am", "3:30 am", "4:00 am", "4:30 am",
+        ]
+        .map(s)
+        .to_vec(),
+        series: vec![Series {
+            label: s("Stage"),
+            values: [3, 1, 1, 0, 0, 1, 2, 1, 1, 0, 1, 2].map(|stage| Some(number(stage))).to_vec(),
+            colour: Some(Colour::new(Hue::Violet)),
+            ..Series::default()
+        }],
+        levels: ["Deep", "Core", "REM", "Awake"].map(s).to_vec(),
+        curve: Curve::Step,
+        summary: Some(s("Sleep stages through the night: awake at 11:00 pm, then Core, Deep from 12:30 am to 1:30 am, and REM at 2:00 am and 4:30 am.")),
+        ..Chart::default()
+    });
     let body = Node::Stack(Stack {
         gap: 4,
         children: vec![
@@ -2606,6 +2678,12 @@ fn screen_sleep() -> Envelope {
                 title: Some(s("Overnight heart rate")),
                 style: SectionStyle::Card,
                 children: vec![resting],
+                ..Section::default()
+            }),
+            Node::Section(Section {
+                title: Some(s("The week")),
+                style: SectionStyle::Card,
+                children: vec![hypnogram, week],
                 ..Section::default()
             }),
         ],
@@ -2698,9 +2776,110 @@ fn screen_fitness() -> Envelope {
         summary: Some(s("Heart rate zones, morning run: 12 minutes. Steady for 5, Hard for 4, Easy for 2; one minute has no reading.")),
         ..ColorStrip::default()
     });
+    let days = || ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(s).to_vec();
+    let minutes = |name: &str, hue: Hue, values: [i64; 7]| Series {
+        label: s(name),
+        values: values.map(|minutes| Some(number(minutes))).to_vec(),
+        colour: Some(Colour::new(hue)),
+        ..Series::default()
+    };
+    // Active minutes by intensity, one on another.
+    let intensity = Node::Chart(Chart {
+        id: Some(s("minutes-by-intensity")),
+        kind: ChartKind::Bar,
+        title: Some(s("Active minutes by intensity, last 7 days")),
+        labels: days(),
+        series: vec![
+            minutes("Easy", Hue::Blue, [22, 30, 18, 25, 20, 41, 35]),
+            minutes("Steady", Hue::Green, [12, 25, 0, 18, 22, 30, 10]),
+            minutes("Hard", Hue::Amber, [0, 8, 0, 12, 0, 15, 0]),
+        ],
+        y: Some(Measure {
+            unit: Some(s("min")),
+            ..Measure::default()
+        }),
+        stacking: Stacking::Values,
+        summary: Some(s("Active minutes by intensity, last 7 days: most on Saturday, 86 minutes.")),
+        ..Chart::default()
+    });
+    // The same minutes as shares of each day, along rows.
+    let shares = Node::Chart(Chart {
+        id: Some(s("minutes-shares")),
+        kind: ChartKind::Bar,
+        title: Some(s("What each day was made of")),
+        labels: days(),
+        series: vec![
+            minutes("Easy", Hue::Blue, [22, 30, 18, 25, 20, 41, 35]),
+            minutes("Steady", Hue::Green, [12, 25, 0, 18, 22, 30, 10]),
+            minutes("Hard", Hue::Amber, [0, 8, 0, 12, 0, 15, 0]),
+        ],
+        stacking: Stacking::Shares,
+        horizontal: true,
+        summary: Some(s("What each day was made of: Thursday had the largest share of Hard minutes, 22%.")),
+        ..Chart::default()
+    });
+    // The load of six weeks as a smooth line, with its average across it.
+    let weekly = Node::Chart(Chart {
+        id: Some(s("load-weeks")),
+        kind: ChartKind::Line,
+        title: Some(s("Training load by week")),
+        labels: ["W41", "W42", "W43", "W44", "W45", "W46"].map(s).to_vec(),
+        series: vec![Series {
+            label: s("Load"),
+            values: [310, 355, 402, 388, 441, 462].map(|load| Some(number(load))).to_vec(),
+            colour: Some(Colour::new(Hue::Rose)),
+            unit: Some(s("load")),
+            ..Series::default()
+        }],
+        references: vec![Reference {
+            value: Some(number(393)),
+            label: Some(s("Average: 393")),
+            ..Reference::default()
+        }],
+        curve: Curve::Smooth,
+        summary: Some(s("Training load by week: from 310 in week 41 to 462 in week 46, above the average of 393.")),
+        ..Chart::default()
+    });
+    // A tile with its small chart under it: a sparkline of the last week.
+    let resting = Node::Figure(Figure {
+        id: Some(s("resting-heart-rate")),
+        label: s("Resting heart rate"),
+        value: s("58"),
+        unit: Some(s("bpm")),
+        icon: Some(icon("heart-pulse", "M19.5 12.6 12 20l-7.5-7.4a5 5 0 0 1 7.5-6.6 5 5 0 0 1 7.5 6.6zM3 12h4l2-3 3 6 2-3h5")),
+        trend: Some(Trend {
+            direction: Direction::Down,
+            text: Some(s("3.3%")),
+            tone: Some(Tone::Success),
+        }),
+        detail: Some(s("vs last week")),
+        status: Some(Badge {
+            text: s("Athletic"),
+            tone: Some(Tone::Success),
+            ..Badge::default()
+        }),
+        colour: Some(Colour::new(Hue::Rose)),
+        chart: Some(Box::new(Node::Chart(Chart {
+            id: Some(s("resting-heart-rate-days")),
+            kind: ChartKind::Sparkline,
+            labels: days(),
+            series: vec![Series {
+                label: s("Resting heart rate"),
+                values: [61, 60, 62, 59, 58, 59, 58].map(|bpm| Some(number(bpm))).to_vec(),
+                colour: Some(Colour::new(Hue::Rose)),
+                unit: Some(s("bpm")),
+                ..Series::default()
+            }],
+            summary: Some(s("Resting heart rate, 7 days: 61 bpm falling to 58 bpm.")),
+            ..Chart::default()
+        }))),
+        action: Some(Action::navigate("/heart")),
+        ..Figure::default()
+    });
     let body = Node::Stack(Stack {
         gap: 4,
         children: vec![
+            resting,
             Node::Section(Section {
                 title: Some(s("Training load")),
                 style: SectionStyle::Card,
@@ -2717,6 +2896,12 @@ fn screen_fitness() -> Envelope {
                 title: Some(s("Morning run")),
                 style: SectionStyle::Card,
                 children: vec![run],
+                ..Section::default()
+            }),
+            Node::Section(Section {
+                title: Some(s("The week in minutes")),
+                style: SectionStyle::Card,
+                children: vec![intensity, shares, weekly],
                 ..Section::default()
             }),
         ],
