@@ -87,3 +87,21 @@ import UniformTypeIdentifiers
     #expect(NavigationRules.matches("/*/new", "https://shop.example/orders/new#top"))
     #expect(!NavigationRules.matches("/*/new", "/orders/new/items"))
 }
+
+@Test func aChartsValuesAreWrittenAsThePageWritesThemNeverAsAComputerDoes() throws {
+    let rupees = ValueWords.style(of: "₹31,55,138.50")
+    #expect(rupees == ValueStyle(prefix: "₹", indian: true))
+    #expect(ValueWords.text(4_000_000, rupees) == "₹40,00,000")
+    #expect(ValueWords.text(125_000, rupees) == "₹1,25,000")
+    #expect(ValueWords.text(0, rupees) == "₹0")
+    let kcal = ValueWords.style(of: "1,234 kcal")
+    #expect(ValueWords.text(2_500, kcal) == "2,500 kcal")
+    #expect(ValueWords.text(7.5, ValueWords.style(of: "7.2 h")) == "7.5 h")
+    // The store's day: revenue by day, in rupees.
+    var revenue: Navree.Chart?
+    try answer("store-root-day").screen?.body.walk { node in
+        if case .chart(let chart) = node, chart.kind == .area { revenue = chart }
+    }
+    let chart = try #require(revenue)
+    #expect(ValueWords.text(4_000_000, ValueWords.style(chart)) == "₹40,00,000")
+}
