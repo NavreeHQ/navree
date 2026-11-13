@@ -38,7 +38,7 @@ public struct ScreenView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     public init(screen: Navree.Screen, depth: ScreenDepth, appName: String = "", notice: Notice? = nil, failure: Notice? = nil) {
-        self.screen = screen
+        self.screen = PagerRules.lifted(screen)
         self.depth = depth
         self.appName = appName
         self.notice = notice

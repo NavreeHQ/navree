@@ -190,7 +190,8 @@ private struct Marker: Shape {
 /// at the value, and the page's words (or the numbers) under the two ends.
 struct RangePart: View {
     let range: Navree.RangeScale
-    @ScaledMetric(relativeTo: .body) private var height: CGFloat = 8
+    private let scale = TextScale()
+    private var height: CGFloat { 8 * scale.capped(1.5) }
     @Environment(\.colorScheme) private var scheme
 
     private func amount(_ value: Double) -> String {

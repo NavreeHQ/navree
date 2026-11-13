@@ -35,9 +35,11 @@ struct DayClockPart: View {
                         }
                         Text(moment.name)
                         Spacer(minLength: 8)
-                        Text(ClockRules.timeLabel(moment.at, uses24: uses24, locale: locale))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                        if !ClockRules.holdsTime(moment.name) {
+                            Text(ClockRules.timeLabel(moment.at, uses24: uses24, locale: locale))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .font(.subheadline)
                 }
@@ -70,7 +72,7 @@ struct DayClockPart: View {
                 let dial = ClockRules.dial(half: half, label: label, mark: mark)
                 let centre = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
                 ZStack {
-                    bars(dial: dial, centre: centre)
+                    bars(dial: dial, centre: centre, mark: mark)
                     ForEach(ClockRules.quarters, id: \.self) { hour in
                         Text(ClockRules.quarterLabel(hour, uses24: uses24, locale: locale))
                             .font(.system(size: 11 * scale, weight: .medium))
@@ -91,17 +93,19 @@ struct DayClockPart: View {
             return CGPoint(x: centre.x + radius * cos(angle), y: centre.y + radius * sin(angle))
         }
 
-        private func bars(dial: ClockRules.Dial, centre: CGPoint) -> some View {
+        private func bars(dial: ClockRules.Dial, centre: CGPoint, mark: CGFloat) -> some View {
             let most = ClockRules.most(clock)
             let width = ClockRules.barWidth(inner: dial.inner)
             let length = dial.outer - dial.inner - width
             let stub = 0.06
             return Canvas { context, _ in
-                // The dial's face: a faint band where the hours stand.
-                let middle = (dial.inner + dial.outer) / 2
+                // The dial's face: a faint band from the hole to the rim the
+                // moments stand on.
+                let rim = dial.moments + mark / 2 + 3
+                let middle = (dial.inner + rim) / 2
                 var band = Path()
                 band.addEllipse(in: CGRect(x: centre.x - middle, y: centre.y - middle, width: 2 * middle, height: 2 * middle))
-                context.stroke(band, with: .color(.secondary.opacity(scheme == .dark ? 0.14 : 0.08)), lineWidth: dial.outer - dial.inner + 4)
+                context.stroke(band, with: .color(.secondary.opacity(scheme == .dark ? 0.14 : 0.08)), lineWidth: rim - dial.inner)
                 for (index, hour) in clock.hours.prefix(24).enumerated() {
                     let colour = hour.category.flatMap { $0 < clock.key.count ? clock.key[$0].colour : nil }
                     let base = Hues.color(colour ?? clock.colour, fallback: .accentColor, scheme: scheme)
@@ -138,7 +142,7 @@ struct DayClockPart: View {
                 let colour = Hues.color(moment.colour, fallback: .secondary, scheme: scheme)
                 ZStack {
                     Circle().fill(colour)
-                    Circle().stroke(Surfaces.card, lineWidth: 2)
+                    Circle().stroke(Surfaces.card, lineWidth: 1.5)
                     if let icon = moment.icon {
                         Glyph(icon: icon)
                             .font(.system(size: mark * 0.5, weight: .semibold))

@@ -186,6 +186,8 @@ import Testing
     #expect(ClockRules.uses24(Locale(identifier: "de_DE")))
     #expect(ClockRules.momentEntry("Woke up", at: 7.1166, uses24: true, locale: india) == "Woke up, 07:07")
     #expect(ClockRules.momentEntry("Woke up at 7:07 am", at: 7.1166, uses24: true, locale: india) == "Woke up at 7:07 am")
+    #expect(ClockRules.holdsTime("Woke up, 6:30 am"))
+    #expect(!ClockRules.holdsTime("Most active hour, 1,420 steps"))
 }
 
 @Test func momentsTooCloseOnTheDialStandApartAndTheRestStay() {
@@ -364,6 +366,21 @@ import Testing
     #expect(PagerRules.bounds(Navree.DayPager(date: "x", day: "x", first: "2026-11-12", last: "2026-04-17")) == nil)
 }
 
+@Test func aPagerThatLeadsAScreensBodyStandsInTheBarAndOnlyThere() {
+    let pager = Navree.DayPager(date: "2026-11-13", day: "Today")
+    let read = Navree.Screen(body: .stack(Navree.Stack(children: [.dayPager(pager), .text(Navree.Text(value: "Hello"))])), title: "Today")
+    #expect(PagerRules.inBar(read) == pager)
+    let lifted = PagerRules.lifted(read)
+    #expect(lifted.pager == pager)
+    guard case .stack(let stack) = lifted.body else { Issue.record("the body is no longer a stack"); return }
+    #expect(stack.children.count == 1)
+    let written = Navree.Screen(body: .stack(Navree.Stack(children: [.text(Navree.Text(value: "Hello")), .dayPager(pager)])), pager: pager, title: "Home")
+    #expect(PagerRules.lifted(written) == written)
+    let later = Navree.Screen(body: .stack(Navree.Stack(children: [.text(Navree.Text(value: "Hello")), .dayPager(pager)])), title: "Sleep")
+    #expect(PagerRules.inBar(later) == nil)
+    #expect(PagerRules.lifted(later) == later)
+}
+
 @Test func aScreenWithItsDayControlInTheBarHasItsTitleInline() {
     let pager = Navree.DayPager(date: "2026-11-12", day: "Yesterday")
     #expect(PagerRules.titleMode(.root, pager: pager) == .inline)
@@ -408,4 +425,13 @@ import Testing
     #expect(Symbols.symbol(for: icon) == "bolt.heart")
     #expect(Symbols.symbol(for: Navree.Icon(name: "house")) == "house")
     #expect(Symbols.symbol(for: Navree.Icon(name: "route")) == nil)
+}
+
+@Test func aCentredStackInAListIsOneRowSoARingKeepsItsWordsUnderIt() {
+    let ring = Navree.Node.ring(Navree.Ring(max: 100, value: 83))
+    let centred = Navree.Node.stack(Navree.Stack(align: .center, children: [ring, .text(Navree.Text(value: "Excellent"))]))
+    let sections = SectionRules.sections(.section(Navree.Section(children: [centred])))
+    #expect(sections.first?.rows == [.part(centred)])
+    let plain = SectionRules.sections(.section(Navree.Section(children: [.stack(Navree.Stack(children: [ring, .text(Navree.Text(value: "a"))]))])))
+    #expect(plain.first?.rows.count == 2)
 }

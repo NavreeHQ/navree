@@ -114,6 +114,9 @@ public enum SectionRules {
                 }
             case .stack(let stack) where stack.hidden:
                 return
+            case .stack(let stack) where stack.axis == .vertical && stack.align == .center:
+                // Parts set in the middle together (a ring and its words) stay one row.
+                row(.part(node))
             case .stack(let stack) where stack.axis == .vertical:
                 readVertical(stack.children, region: region)
             case .stack(let stack):
@@ -165,9 +168,7 @@ public enum SectionRules {
                 }
             case .unknown(let part):
                 if let alt = part.alt { read(alt, region: region) }
-            case .toolbar, .gauge, .figure, .timeline, .feedRow, .message, .pane, .ring, .rings, .dayClock, .dayPager,
-                .meter, .columns, .strip, .range, .calendarHeatmap, .matrixHeatmap, .scatter, .card, .layers, .shape,
-                .carousel, .adaptive:
+            case .toolbar, .feedRow, .message, .pane:
                 // Kinds this client does not draw yet: no row stands empty for them.
                 return
             default:

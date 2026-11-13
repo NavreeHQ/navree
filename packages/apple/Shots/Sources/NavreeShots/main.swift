@@ -8,7 +8,8 @@
 // the whole screen from its bar to the end of its content. An answer whose
 // file name ends in `-phone` is drawn 402 points wide, one ending in
 // `-tablet` 834 points wide, any other at both. Nothing is sent anywhere:
-// the drawing's intents go nowhere.
+// the drawing's intents go nowhere. A Mac has no Dynamic Type, so the
+// pictures are at the default text size: larger sizes need a simulator.
 import NavreeDesign
 import NavreeProtocol
 import SwiftUI
@@ -133,7 +134,8 @@ final class Shooter {
         print("wrote \(name) \(Int(view.bounds.width))x\(Int(view.bounds.height))")
     }
 
-    /// The scroll view that holds the screen's content: the largest one.
+    /// The scroll view that holds the screen's content: the one with the most
+    /// to scroll through.
     static func scrollView(in view: UIView) -> UIScrollView? {
         var found: [UIScrollView] = []
         var pending: [UIView] = [view]
@@ -141,7 +143,7 @@ final class Shooter {
             if let scroll = next as? UIScrollView, scroll.bounds.width > view.bounds.width * 0.6 { found.append(scroll) }
             pending.append(contentsOf: next.subviews)
         }
-        return found.max { $0.bounds.height < $1.bounds.height }
+        return found.max { $0.contentSize.height < $1.contentSize.height }
     }
 }
 
