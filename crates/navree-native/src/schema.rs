@@ -41,8 +41,8 @@ use crate::action::{Action, Command, Pair, Present, State};
 use crate::charts::{
     CalendarHeatmap, Category, Centre, ClockMoment, ColorStrip, Colour, Curve, DayClock, DayPager,
     DayPick, HeatDay, Hint, HintMark, Hour, Hue, MatrixHeatmap, Measure, Meter, MiniColumn,
-    MiniColumns, PagerWords, RangeScale, Reference, ReferenceKind, Relation, Ring, RingValue, Rings,
-    RingsCentre, Segment, Stacking, StripCell, Zone,
+    MiniColumns, PagerWords, Point, PointSeries, RangeScale, Reference, ReferenceKind, Relation, Ring,
+    RingValue, Rings, RingsCentre, Scatter, Segment, Stacking, StripCell, Zone,
 };
 use crate::client::{ClientDescriptor, Contrast, FormFactor, Platform, Scheme};
 use crate::device::{
@@ -609,7 +609,7 @@ union!(Node tag "t"
         Text, Rich, Image, Icon, Avatar, Badge, Progress, Banner, Empty, Facts, Table, Chart,
         Code, Button, Link, Menu, Form, Field, Sheet, Dialog, Popover, Native, Web, Toolbar,
         Gauge, Figure, Timeline, FeedRow, Message, Pane, Ring, Rings, DayClock,
-        DayPager, Meter, Columns, Strip, Range, CalendarHeatmap, MatrixHeatmap,
+        DayPager, Meter, Columns, Strip, Range, CalendarHeatmap, MatrixHeatmap, Scatter,
     }
     structs {}
     units {}
@@ -741,6 +741,9 @@ object!(Meter {} { id, title, segments, summary, hint });
 object!(RangeScale { min, max } {
     id, title, value, unit, shown, low, high, zones, summary, hint
 });
+object!(Point { x, y } { label });
+object!(PointSeries { name } { points, colour });
+object!(Scatter {} { id, title, series, x, y, equal_axes, references, summary, hint });
 object!(Relation { a, b } { value, significant: true, note });
 object!(MatrixHeatmap {} {
     id, title, measures, relations, lower, positive, negative, peak, label, summary, hint

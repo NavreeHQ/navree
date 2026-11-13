@@ -274,6 +274,7 @@ kinds! {
     Range(RangeScale) => "range" since 0,
     CalendarHeatmap(CalendarHeatmap) => "calendar_heatmap" since 0,
     MatrixHeatmap(MatrixHeatmap) => "matrix_heatmap" since 0,
+    Scatter(Scatter) => "scatter" since 0,
 }
 
 /// A field that arrived after its type did: the type's name in the schema
@@ -827,6 +828,58 @@ impl Node {
                         .collect(),
                 })
             }
+            Self::Scatter(node) => {
+                // Each cloud with how many points it has and where they range.
+                let axis = |measure: &Option<n::Measure>, fallback: &str| {
+                    measure
+                        .as_ref()
+                        .and_then(|measure| measure.name.clone())
+                        .unwrap_or_else(|| fallback.to_owned())
+                };
+                let (x_name, y_name) = (axis(&node.x, "x"), axis(&node.y, "y"));
+                let unit = |measure: &Option<n::Measure>| {
+                    measure.as_ref().and_then(|measure| measure.unit.clone())
+                };
+                let range = |name: &str, values: Vec<f64>, unit: Option<String>| -> Option<String> {
+                    let low = values.iter().copied().reduce(f64::min)?;
+                    let high = values.iter().copied().reduce(f64::max)?;
+                    let unit = unit.as_deref();
+                    Some(format!(
+                        "{name}: {} to {}",
+                        words(None, Some(&quantity(low)), unit),
+                        words(None, Some(&quantity(high)), unit)
+                    ))
+                };
+                Node::Facts(n::Facts {
+                    id: node.id.clone(),
+                    items: node
+                        .series
+                        .iter()
+                        .map(|series| {
+                            let along = |pick: fn(&n::Point) -> &serde_json::Number| {
+                                series
+                                    .points
+                                    .iter()
+                                    .filter_map(|point| pick(point).as_f64())
+                                    .collect::<Vec<f64>>()
+                            };
+                            n::Fact {
+                                label: series.name.clone(),
+                                value: vec![Node::text(format!("{} points", series.points.len()))],
+                                icon: None,
+                                tone: None,
+                                details: [
+                                    range(&x_name, along(|point| &point.x), unit(&node.x)),
+                                    range(&y_name, along(|point| &point.y), unit(&node.y)),
+                                ]
+                                .into_iter()
+                                .flatten()
+                                .collect(),
+                            }
+                        })
+                        .collect(),
+                })
+            }
             Self::Unknown(node) => return node.alt.as_deref().cloned(),
             _ => return None,
         })
@@ -891,9 +944,10 @@ mod tests {
     use crate::node::{
         Avatar, Badge, CalendarHeatmap, Category, Chart, ClockMoment, ColorStrip, Colour, DayClock,
         DayPager, Direction, FeedRow, Figure, Gauge, HeatDay, Hour, Hue, Icon, MatrixHeatmap,
-        Message, Meter, MiniColumn, MiniColumns, Moment, PagerWords, Pane, PaneRole, RangeScale,
-        Relation, Ring, RingValue, Rings, RingsCentre, RowState, Run, Section, Segment, Stack,
-        Standard, StripCell, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown, Zone,
+        Message, Meter, Measure, MiniColumn, MiniColumns, Moment, PagerWords, Pane, PaneRole, Point,
+        PointSeries, RangeScale, Relation, Ring, RingValue, Rings, RingsCentre, RowState, Run,
+        Scatter, Section, Segment, Stack, Standard, StripCell, Timeline, Tone, Toolbar,
+        ToolbarItem, Trend, Unknown, Zone,
     };
 
     #[test]
@@ -1033,6 +1087,37 @@ mod tests {
                 caption: Some("Goal reached".to_owned()),
                 colour: Some(Colour::new(Hue::Success)),
                 ..Ring::default()
+            }),
+            Node::Scatter(Scatter {
+                id: Some("beats".to_owned()),
+                series: vec![
+                    PointSeries {
+                        name: "Resting".to_owned(),
+                        points: vec![
+                            Point {
+                                x: 812.into(),
+                                y: 820.into(),
+                                label: None,
+                            },
+                            Point {
+                                x: 820.into(),
+                                y: 805.into(),
+                                label: None,
+                            },
+                        ],
+                        colour: None,
+                    },
+                    PointSeries {
+                        name: "No points".to_owned(),
+                        ..PointSeries::default()
+                    },
+                ],
+                x: Some(Measure {
+                    name: Some("Interval n".to_owned()),
+                    unit: Some("ms".to_owned()),
+                    ..Measure::default()
+                }),
+                ..Scatter::default()
             }),
             Node::MatrixHeatmap(MatrixHeatmap {
                 id: Some("links".to_owned()),
@@ -1279,7 +1364,8 @@ mod tests {
             | Kind::Strip
             | Kind::Range
             | Kind::CalendarHeatmap
-            | Kind::MatrixHeatmap => 1,
+            | Kind::MatrixHeatmap
+            | Kind::Scatter => 1,
             kind => kind.since(),
         }
     }
@@ -1394,6 +1480,26 @@ mod tests {
         };
         assert_eq!(progress.label.as_deref(), Some("Load ratio: 1.12 (Overuse)"));
         assert_eq!(progress.value, Some(560));
+    }
+
+    #[test]
+    fn a_scatter_becomes_each_cloud_with_its_points_and_where_they_range() {
+        let scatter = part(Kind::Scatter);
+        let Downgraded::Node(Node::Facts(facts)) = downgrade_by(scatter, 0, only(Kind::Scatter))
+        else {
+            panic!("a scatter becomes facts");
+        };
+        assert_eq!(facts.id.as_deref(), Some("beats"));
+        let value = |at: usize| match &facts.items[at].value[..] {
+            [Node::Text(text)] => text.value.clone(),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!((facts.items[0].label.as_str(), value(0)), ("Resting", "2 points".to_owned()));
+        // The axis is named and counted in its unit; the second has no name, so it is y.
+        assert_eq!(facts.items[0].details, ["Interval n: 812 ms to 820 ms", "y: 805 to 820"]);
+        // A cloud with no points has no range to say.
+        assert_eq!((facts.items[1].label.as_str(), value(1)), ("No points", "0 points".to_owned()));
+        assert!(facts.items[1].details.is_empty());
     }
 
     #[test]

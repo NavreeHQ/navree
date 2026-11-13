@@ -306,6 +306,13 @@
                           "colour": {
                             "hue": "cyan"
                           },
+                          "centre": "icon",
+                          "icon": {
+                            "name": "brain",
+                            "paths": [
+                              "M12 5a3 3 0 1 0-5.9 1A4 4 0 0 0 6 14a4 4 0 0 0 6 3zM12 5a3 3 0 1 1 5.9 1A4 4 0 0 1 18 14a4 4 0 0 1-6 3z"
+                            ]
+                          },
                           "summary": "Mind score: no reading."
                         },
                         {

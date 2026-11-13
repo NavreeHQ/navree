@@ -620,6 +620,164 @@
         },
         {
           "t": "section",
+          "title": "Heartbeats",
+          "style": "card",
+          "children": [
+            {
+              "t": "scatter",
+              "id": "beat-intervals",
+              "title": "Successive heartbeat intervals",
+              "series": [
+                {
+                  "name": "Resting",
+                  "points": [
+                    {
+                      "x": 812,
+                      "y": 820,
+                      "label": "Beat 1"
+                    },
+                    {
+                      "x": 820,
+                      "y": 805,
+                      "label": "Beat 2"
+                    },
+                    {
+                      "x": 805,
+                      "y": 830,
+                      "label": "Beat 3"
+                    },
+                    {
+                      "x": 830,
+                      "y": 841,
+                      "label": "Beat 4"
+                    },
+                    {
+                      "x": 841,
+                      "y": 823,
+                      "label": "Beat 5"
+                    },
+                    {
+                      "x": 823,
+                      "y": 818,
+                      "label": "Beat 6"
+                    },
+                    {
+                      "x": 818,
+                      "y": 836,
+                      "label": "Beat 7"
+                    },
+                    {
+                      "x": 836,
+                      "y": 829,
+                      "label": "Beat 8"
+                    },
+                    {
+                      "x": 829,
+                      "y": 811,
+                      "label": "Beat 9"
+                    },
+                    {
+                      "x": 811,
+                      "y": 827,
+                      "label": "Beat 10"
+                    },
+                    {
+                      "x": 827,
+                      "y": 845,
+                      "label": "Beat 11"
+                    },
+                    {
+                      "x": 845,
+                      "y": 838,
+                      "label": "Beat 12"
+                    },
+                    {
+                      "x": 838,
+                      "y": 822,
+                      "label": "Beat 13"
+                    },
+                    {
+                      "x": 822,
+                      "y": 815,
+                      "label": "Beat 14"
+                    },
+                    {
+                      "x": 815,
+                      "y": 833,
+                      "label": "Beat 15"
+                    },
+                    {
+                      "x": 833,
+                      "y": 826,
+                      "label": "Beat 16"
+                    }
+                  ],
+                  "colour": {
+                    "hue": "rose"
+                  }
+                },
+                {
+                  "name": "After the run",
+                  "points": [
+                    {
+                      "x": 684,
+                      "y": 691
+                    },
+                    {
+                      "x": 691,
+                      "y": 678
+                    },
+                    {
+                      "x": 678,
+                      "y": 702
+                    },
+                    {
+                      "x": 702,
+                      "y": 695
+                    },
+                    {
+                      "x": 695,
+                      "y": 688
+                    },
+                    {
+                      "x": 688,
+                      "y": 710
+                    },
+                    {
+                      "x": 710,
+                      "y": 699
+                    },
+                    {
+                      "x": 699,
+                      "y": 693
+                    }
+                  ],
+                  "colour": {
+                    "hue": "slate"
+                  }
+                }
+              ],
+              "x": {
+                "name": "Interval n",
+                "unit": "ms"
+              },
+              "y": {
+                "name": "Interval n+1",
+                "unit": "ms"
+              },
+              "equal_axes": true,
+              "references": [
+                {
+                  "kind": "diagonal",
+                  "label": "No change"
+                }
+              ],
+              "summary": "Successive heartbeat intervals: 24 points in 2 series. Resting: 16 points, from 805 to 845 ms. After the run: 8 points, from 678 to 710 ms."
+            }
+          ]
+        },
+        {
+          "t": "section",
           "title": "The week in minutes",
           "style": "card",
           "children": [
@@ -780,6 +938,21 @@
                   ],
                   "colour": {
                     "hue": "rose"
+                  },
+                  "unit": "load"
+                },
+                {
+                  "label": "The six weeks before",
+                  "values": [
+                    285,
+                    301,
+                    296,
+                    322,
+                    340,
+                    331
+                  ],
+                  "colour": {
+                    "hue": "neutral"
                   },
                   "unit": "load"
                 }

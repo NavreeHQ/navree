@@ -43,29 +43,54 @@
           }
         },
         {
-          "t": "figure",
-          "id": "asleep",
-          "label": "Time asleep",
-          "value": "7 h 12 min",
-          "icon": {
-            "name": "moon",
-            "paths": [
-              "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"
-            ]
-          },
-          "trend": {
-            "direction": "up",
-            "text": "18 min",
-            "tone": "success"
-          },
-          "detail": "against the week before",
-          "colour": {
-            "hue": "violet"
-          },
-          "action": {
-            "t": "navigate",
-            "href": "/sleep/week"
-          }
+          "t": "grid",
+          "cols": 2,
+          "min": 150,
+          "gap": 3,
+          "children": [
+            {
+              "t": "figure",
+              "id": "asleep",
+              "label": "Time asleep",
+              "value": "7 h 12 min",
+              "icon": {
+                "name": "moon",
+                "paths": [
+                  "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"
+                ]
+              },
+              "trend": {
+                "direction": "up",
+                "text": "18 min",
+                "tone": "success"
+              },
+              "detail": "against the week before",
+              "colour": {
+                "hue": "violet"
+              },
+              "action": {
+                "t": "navigate",
+                "href": "/sleep/week"
+              }
+            },
+            {
+              "t": "figure",
+              "id": "oxygen",
+              "label": "Blood oxygen",
+              "value": "96",
+              "unit": "%",
+              "icon": {
+                "name": "droplet",
+                "paths": [
+                  "M12 22a7 7 0 0 0 7-7c0-4-7-13-7-13S5 11 5 15a7 7 0 0 0 7 7z"
+                ]
+              },
+              "detail": "overnight average",
+              "colour": {
+                "hue": "info"
+              }
+            }
+          ]
         },
         {
           "t": "section",
@@ -328,7 +353,7 @@
                   "to": 70,
                   "label": "Usual",
                   "colour": {
-                    "hue": "green"
+                    "hue": "success"
                   }
                 },
                 {
@@ -336,7 +361,7 @@
                   "to": 90,
                   "label": "Higher",
                   "colour": {
-                    "hue": "amber"
+                    "hue": "warning"
                   }
                 },
                 {
@@ -344,7 +369,7 @@
                   "to": 120,
                   "label": "Much higher",
                   "colour": {
-                    "hue": "red"
+                    "hue": "danger"
                   }
                 }
               ],

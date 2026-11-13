@@ -1013,6 +1013,88 @@ pub struct MatrixHeatmap {
     pub hint: Option<Hint>,
 }
 
+/// One point of a [`Scatter`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Point {
+    /// Where it is along the first axis.
+    pub x: serde_json::Number,
+    /// Where it is along the second axis.
+    pub y: serde_json::Number,
+    /// What it is, shown when it is asked about: `Beat 12`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+}
+
+impl Default for Point {
+    fn default() -> Self {
+        Self {
+            x: 0.into(),
+            y: 0.into(),
+            label: None,
+        }
+    }
+}
+
+/// One cloud of points of a [`Scatter`]: a name, the points and a colour.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PointSeries {
+    /// What the cloud is: `Resting`.
+    pub name: String,
+    /// The points.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub points: Vec<Point>,
+    /// The colour of its points. A client takes its colours in turn when there
+    /// is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+}
+
+/// The most points a client draws; it draws every few when it is given more.
+pub const MAX_POINTS: usize = 2_000;
+
+/// A point for each pair of values, in one cloud or several, on two numeric
+/// axes. A client draws the points translucent, so that where they pile up the
+/// cloud is denser.
+///
+/// With `equal_axes` both axes have one range, from the lowest value of either
+/// to the highest of either, and the plot is square, so the line where x equals
+/// y runs corner to corner: how a reading compares with the next. A reference
+/// of kind `diagonal` draws that line. The summary gives the count, the range,
+/// the average and the correlation, so a long list of points is not the way to
+/// read it.
+///
+/// The plot is named by its `summary`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Scatter {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What the plot shows: `Successive heartbeat intervals`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// The clouds.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub series: Vec<PointSeries>,
+    /// What the first axis measures: its name, its unit and its bounds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x: Option<Measure>,
+    /// What the second axis measures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y: Option<Measure>,
+    /// Whether both axes share one range, so the plot is square.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub equal_axes: bool,
+    /// Lines across the plot: a level of y, or the diagonal where x equals y.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub references: Vec<Reference>,
+    /// One sentence that says the whole plot to a reader who can't see it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// A note about what the plot means, shown when asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
+}
+
 /// Where a day the person chooses is asked for.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DayPick {

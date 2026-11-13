@@ -14,8 +14,8 @@ use crate::action::Action;
 pub use crate::charts::{
     CalendarHeatmap, Category, Centre, ClockMoment, ColorStrip, Colour, Curve, DayClock, DayPager,
     DayPick, HeatDay, Hint, HintMark, Hour, Hue, MatrixHeatmap, Measure, Meter, MiniColumn,
-    MiniColumns, PagerWords, RangeScale, Reference, ReferenceKind, Relation, Ring, RingValue, Rings,
-    RingsCentre, Segment, Stacking, StripCell, Zone,
+    MiniColumns, PagerWords, Point, PointSeries, RangeScale, Reference, ReferenceKind, Relation, Ring,
+    RingValue, Rings, RingsCentre, Scatter, Segment, Stacking, StripCell, Zone,
 };
 use crate::input::Input;
 
@@ -139,6 +139,8 @@ pub enum Node {
     CalendarHeatmap(CalendarHeatmap),
     /// Every measure against every other, each pair shaded by how they relate.
     MatrixHeatmap(MatrixHeatmap),
+    /// A point for each pair of values.
+    Scatter(Scatter),
     /// A kind this build has never heard of, from a newer server. A client
     /// draws its `alt`, or shows the page in its web view when it has none.
     Unknown(Unknown),
@@ -244,6 +246,7 @@ impl Node {
             Self::Range(node) => node.id.as_deref(),
             Self::CalendarHeatmap(node) => node.id.as_deref(),
             Self::MatrixHeatmap(node) => node.id.as_deref(),
+            Self::Scatter(node) => node.id.as_deref(),
             Self::Unknown(node) => node.id.as_deref(),
         }
     }
@@ -324,7 +327,8 @@ impl Node {
             | Self::Strip(_)
             | Self::Range(_)
             | Self::CalendarHeatmap(_)
-            | Self::MatrixHeatmap(_) => Vec::new(),
+            | Self::MatrixHeatmap(_)
+            | Self::Scatter(_) => Vec::new(),
         }
     }
 
@@ -429,7 +433,8 @@ impl Node {
             | Self::Strip(_)
             | Self::Range(_)
             | Self::CalendarHeatmap(_)
-            | Self::MatrixHeatmap(_) => Vec::new(),
+            | Self::MatrixHeatmap(_)
+            | Self::Scatter(_) => Vec::new(),
         }
     }
 

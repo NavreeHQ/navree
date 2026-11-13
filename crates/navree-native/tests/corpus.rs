@@ -30,9 +30,10 @@ use navree_native::node::{
     Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Hour, Icon, Image, Justify, Link, List, Live,
     MatrixHeatmap, Menu, Message, Meter, Method, MiniColumn, MiniColumns, Moment, NativeView,
-    Node, Pane, PaneRole, Popover, Progress, Prominence,
+    Node, Pane, PaneRole, Point, PointSeries, Popover, Progress, Prominence,
     PagerWords, Purpose, Question, Region, Reorder, Rich, Ring, RingValue, Rings, RingsCentre,
-    RangeScale, Relation, Role, Row, RowState, Run, Section, SectionStyle, Segment, StripCell,
+    RangeScale, Relation, Role, Row, RowState, Run, Scatter, Section, SectionStyle, Segment,
+    StripCell,
     Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table,
     TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown,
     WebRegion, Zone,
@@ -2065,6 +2066,11 @@ fn screen_today() -> Envelope {
                         max: number(100),
                         shown: score.map(|score| score.to_string()),
                         colour: Some(Colour::new(hue)),
+                        // A day with no reading is an empty ring with a mark in its middle.
+                        centre: if score.is_some() { Centre::Value } else { Centre::Icon },
+                        icon: score.is_none().then(|| {
+                            icon("brain", "M12 5a3 3 0 1 0-5.9 1A4 4 0 0 0 6 14a4 4 0 0 0 6 3zM12 5a3 3 0 1 1 5.9 1A4 4 0 0 1 18 14a4 4 0 0 1-6 3z")
+                        }),
                         summary: Some(summary),
                         ..Ring::default()
                     }),
@@ -2563,9 +2569,9 @@ fn screen_sleep() -> Envelope {
         high: Some(s("Faster")),
         zones: vec![
             rate_zone(40, 50, "Lower", Hue::Cyan),
-            rate_zone(50, 70, "Usual", Hue::Green),
-            rate_zone(70, 90, "Higher", Hue::Amber),
-            rate_zone(90, 120, "Much higher", Hue::Red),
+            rate_zone(50, 70, "Usual", Hue::Success),
+            rate_zone(70, 90, "Higher", Hue::Warning),
+            rate_zone(90, 120, "Much higher", Hue::Danger),
         ],
         summary: Some(s("Resting heart rate overnight: 54 bpm, on a scale from 40 to 120 bpm. Usual: 50 to 70 bpm.")),
         hint: Some(Hint {
@@ -2645,11 +2651,27 @@ fn screen_sleep() -> Envelope {
         summary: Some(s("Sleep stages through the night: awake at 11:00 pm, then Core, Deep from 12:30 am to 1:30 am, and REM at 2:00 am and 4:30 am.")),
         ..Chart::default()
     });
+    let oxygen = Node::Figure(Figure {
+        id: Some(s("oxygen")),
+        label: s("Blood oxygen"),
+        value: s("96"),
+        unit: Some(s("%")),
+        icon: Some(icon("droplet", "M12 22a7 7 0 0 0 7-7c0-4-7-13-7-13S5 11 5 15a7 7 0 0 0 7 7z")),
+        detail: Some(s("overnight average")),
+        colour: Some(Colour::new(Hue::Info)),
+        ..Figure::default()
+    });
     let body = Node::Stack(Stack {
         gap: 4,
         children: vec![
             pager,
-            asleep,
+            Node::Grid(Grid {
+                cols: Some(2),
+                min: Some(150),
+                gap: 3,
+                children: vec![asleep, oxygen],
+                ..Grid::default()
+            }),
             Node::Section(Section {
                 title: Some(s("Stages")),
                 style: SectionStyle::Card,
@@ -2860,6 +2882,65 @@ fn screen_fitness() -> Envelope {
         }),
         ..MatrixHeatmap::default()
     });
+    // The time between one heartbeat and the next, each against the one before:
+    // a cloud of points, on axes of one range so that the diagonal is "no
+    // change". One cloud is the resting beats and one the beats after a run.
+    let beats = [812, 820, 805, 830, 841, 823, 818, 836, 829, 811, 827, 845, 838, 822, 815, 833, 826];
+    let after = [684, 691, 678, 702, 695, 688, 710, 699, 693];
+    let cloud = |intervals: &[i64]| -> Vec<(i64, i64)> {
+        intervals.windows(2).map(|pair| (pair[0], pair[1])).collect()
+    };
+    let resting_beats = cloud(&beats);
+    let run_beats = cloud(&after);
+    let poincare = Node::Scatter(Scatter {
+        id: Some(s("beat-intervals")),
+        title: Some(s("Successive heartbeat intervals")),
+        series: vec![
+            PointSeries {
+                name: s("Resting"),
+                points: resting_beats
+                    .iter()
+                    .enumerate()
+                    .map(|(at, (x, y))| Point {
+                        x: number(*x),
+                        y: number(*y),
+                        label: Some(format!("Beat {}", at + 1)),
+                    })
+                    .collect(),
+                colour: Some(Colour::new(Hue::Rose)),
+            },
+            PointSeries {
+                name: s("After the run"),
+                points: run_beats
+                    .iter()
+                    .map(|(x, y)| Point {
+                        x: number(*x),
+                        y: number(*y),
+                        label: None,
+                    })
+                    .collect(),
+                colour: Some(Colour::new(Hue::Slate)),
+            },
+        ],
+        x: Some(Measure {
+            name: Some(s("Interval n")),
+            unit: Some(s("ms")),
+            ..Measure::default()
+        }),
+        y: Some(Measure {
+            name: Some(s("Interval n+1")),
+            unit: Some(s("ms")),
+            ..Measure::default()
+        }),
+        equal_axes: true,
+        references: vec![Reference {
+            kind: ReferenceKind::Diagonal,
+            label: Some(s("No change")),
+            ..Reference::default()
+        }],
+        summary: Some(s("Successive heartbeat intervals: 24 points in 2 series. Resting: 16 points, from 805 to 845 ms. After the run: 8 points, from 678 to 710 ms.")),
+        ..Scatter::default()
+    });
     let days = || ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(s).to_vec();
     let minutes = |name: &str, hue: Hue, values: [i64; 7]| Series {
         label: s(name),
@@ -2912,6 +2993,14 @@ fn screen_fitness() -> Envelope {
             label: s("Load"),
             values: [310, 355, 402, 388, 441, 462].map(|load| Some(number(load))).to_vec(),
             colour: Some(Colour::new(Hue::Rose)),
+            unit: Some(s("load")),
+            ..Series::default()
+        },
+        // The six weeks before, in the quiet colour: not the subject.
+        Series {
+            label: s("The six weeks before"),
+            values: [285, 301, 296, 322, 340, 331].map(|load| Some(number(load))).to_vec(),
+            colour: Some(Colour::new(Hue::Neutral)),
             unit: Some(s("load")),
             ..Series::default()
         }],
@@ -2992,6 +3081,12 @@ fn screen_fitness() -> Envelope {
                 title: Some(s("Patterns")),
                 style: SectionStyle::Card,
                 children: vec![links],
+                ..Section::default()
+            }),
+            Node::Section(Section {
+                title: Some(s("Heartbeats")),
+                style: SectionStyle::Card,
+                children: vec![poincare],
                 ..Section::default()
             }),
             Node::Section(Section {
@@ -3877,6 +3972,69 @@ fn the_corpus_holds_nothing_the_tests_do_not_write() {
 /// The values of the closed lists a node holds, by list, as `Debug` names them.
 type Values = BTreeMap<&'static str, BTreeSet<String>>;
 
+/// The words of the closed lists of the charts that the JSON of an example
+/// holds, by list. A word left at its default is left out of the JSON, so the
+/// default is counted where the part that holds it is.
+fn words_in(value: &serde_json::Value, found: &mut BTreeMap<&'static str, BTreeSet<String>>) {
+    match value {
+        serde_json::Value::Object(map) => {
+            let word = |key: &str, default: &str| {
+                map.get(key)
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or(default)
+                    .to_owned()
+            };
+            let mut see = |list: &'static str, word: String| {
+                found.entry(list).or_default().insert(word);
+            };
+            match map.get("t").and_then(serde_json::Value::as_str) {
+                Some("ring") => {
+                    see("centre", word("centre", "value"));
+                    see("prominence", word("prominence", "medium"));
+                }
+                Some("rings") => {
+                    see("rings_centre", word("centre", "nothing"));
+                    see("prominence", word("prominence", "medium"));
+                }
+                Some("chart") => {
+                    see("curve", word("curve", "linear"));
+                    see("stacking", word("stacking", "apart"));
+                }
+                _ => {}
+            }
+            // A hint says what it is about, in words.
+            if map.contains_key("about") && map.contains_key("text") {
+                see("hint", word("mark", "question"));
+            }
+            // A colour names its hue, and the hue it blends into.
+            if let Some(hue) = map.get("hue").and_then(serde_json::Value::as_str) {
+                see("hue", hue.to_owned());
+                if let Some(to) = map.get("to").and_then(serde_json::Value::as_str) {
+                    see("hue", to.to_owned());
+                }
+            }
+            if let Some(serde_json::Value::Array(lines)) = map.get("references") {
+                for line in lines {
+                    let kind = line
+                        .get("kind")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("level");
+                    found.entry("reference").or_default().insert(kind.to_owned());
+                }
+            }
+            for inner in map.values() {
+                words_in(inner, found);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                words_in(item, found);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn kinds_in(
     node: &Node,
     kinds: &mut BTreeSet<&'static str>,
@@ -3989,6 +4147,37 @@ fn the_corpus_holds_every_kind_of_node_and_every_control() {
     }
     for kind in Kind::ALL {
         assert!(kinds.contains(kind.as_str()), "no example holds a {kind:?}");
+    }
+    // The closed lists of the charts: every hue of the protocol, and every word
+    // of the others that an example can hold.
+    let mut found = BTreeMap::new();
+    for (_, envelope) in envelopes() {
+        words_in(&serde_json::to_value(&envelope).unwrap(), &mut found);
+    }
+    let hues: Vec<String> = navree_native::schema::document()["$defs"]["Hue"]["enum"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|hue| hue.as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(hues.len(), 15, "a hue was added or taken away: {hues:?}");
+    let owned = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect::<Vec<_>>();
+    for (list, names) in [
+        ("hue", hues),
+        ("centre", owned(&["value", "icon", "nothing"])),
+        ("rings_centre", owned(&["nothing", "values"])),
+        ("prominence", owned(&["high", "medium", "low"])),
+        ("hint", owned(&["question", "info"])),
+        ("curve", owned(&["linear", "smooth", "step"])),
+        ("stacking", owned(&["apart", "values", "shares"])),
+        ("reference", owned(&["level", "diagonal"])),
+    ] {
+        for name in names {
+            assert!(
+                found.get(list).is_some_and(|seen| seen.contains(&name)),
+                "no example holds the {list} {name}"
+            );
+        }
     }
     for (list, names) in [
         (
