@@ -12,7 +12,9 @@ use navree::ui::{
 use serde::Serialize;
 
 use crate::api::TypeDoc;
-use crate::catalog::{COMPONENTS, Cells, Component, Entry, Example, GROUPS, Kind, Layout};
+use crate::catalog::{
+    COMPONENTS, Cells, Component, Entry, Example, GROUPS, GUIDE_TYPES, Kind, Layout,
+};
 
 /// Where the preview documents are served from, under the site's root.
 pub const PREVIEW_ROOT: &str = "/ui-preview";
@@ -692,6 +694,7 @@ pub fn files(examples: &[Example], api: &BTreeMap<String, TypeDoc>) -> BTreeMap<
     let wanted: BTreeMap<&str, &TypeDoc> = COMPONENTS
         .iter()
         .flat_map(|component| component.types.iter())
+        .chain(GUIDE_TYPES)
         .map(|name| {
             (
                 *name,
