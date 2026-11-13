@@ -50,4 +50,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 codesign --sign - --force "$app" >/dev/null
+# After a run that crashed, the system would ask whether to reopen its windows
+# and wait for an answer: the tool keeps no windows worth reopening.
+defaults write dev.navree.shots ApplePersistenceIgnoreState -bool YES
 "$app/Contents/MacOS/NavreeShots" "$out" "${files[@]}"
