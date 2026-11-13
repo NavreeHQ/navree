@@ -52,6 +52,9 @@ struct PanePart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if let title = pane.title, !title.isEmpty {
+                Text(title).font(.headline).accessibilityAddTraits(.isHeader)
+            }
             ForEach(Array(pane.children.enumerated()), id: \.offset) { _, child in NodeView(child) }
         }
     }

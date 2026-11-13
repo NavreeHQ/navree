@@ -190,3 +190,25 @@ private func go(_ href: String, _ present: Navree.Present = .auto) -> Navree.Act
     #expect(WindowClass.medium.widthClass == .regular)
     #expect(WindowClass.expanded.widthClass == .regular)
 }
+
+@Test func aScreenWithPanesAmongItsOtherPartsIsDrawnWhole() throws {
+    // The dashboard's sales beside its filters stand among its figures and
+    // its feed: the screen is drawn whole, its split in place.
+    let dashboard = try corpusScreen("screen-dashboard.json")
+    #expect(PaneRules.panes(in: dashboard.body).isEmpty)
+    // A screen made of panes alone is still drawn as its panes.
+    let inbox = try corpusScreen("screen-inbox.json")
+    #expect(PaneRules.panes(in: inbox.body).map(\.id) == ["conversations", "thread", "customer"])
+}
+
+@Test func aSplitInPlaceStandsSideBySideWhereThereIsRoomAndTheCurrentPaneFirstWhereNot() throws {
+    let content = pane(.content, "Sales")
+    let supporting = pane(.supporting, "Filters", current: true)
+    let split = Navree.Split(detail: supporting, primary: content)
+    let wide = SplitRules.inPlace(split, width: .medium)
+    #expect(wide.sideBySide)
+    #expect(wide.panes == [content, supporting])
+    let narrow = SplitRules.inPlace(split, width: .compact)
+    #expect(!narrow.sideBySide)
+    #expect(narrow.panes == [supporting, content])
+}

@@ -10,9 +10,13 @@ public struct PaneLayout: Sendable, Equatable {
 
 public enum PaneRules {
     /// The panes a screen's body is made of, through the splits and wrappers
-    /// that hold them; none when it holds no pane.
+    /// that hold them; none when it holds no pane, and none when it holds
+    /// anything else beside its panes (its sheets, dialogs and popovers, and
+    /// a toolbar placed in its bars, aside): such a screen is drawn whole,
+    /// with its panes in place among its other parts.
     public static func panes(in body: Navree.Node) -> [Navree.Pane] {
         var found: [Navree.Pane] = []
+        var whole = true
         func visit(_ node: Navree.Node) {
             switch node {
             case .pane(let pane): found.append(pane)
@@ -21,11 +25,12 @@ public enum PaneRules {
                 visit(split.detail)
             case .stack(let stack) where !stack.hidden: stack.children.forEach(visit)
             case .region(let region): region.children.forEach(visit)
-            default: break
+            case .stack, .sheet, .dialog, .popover, .toolbar: break
+            default: whole = false
             }
         }
         visit(body)
-        return found
+        return whole ? found : []
     }
 
     /// Whether a pane shows only that it is empty.
