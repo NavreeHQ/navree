@@ -260,7 +260,7 @@ struct ScreenPage: View {
                 .ignoresSafeArea(.container, edges: .bottom)
                 .navigationTitle(webTitle ?? title ?? state.title ?? "")
                 .modifier(InlineTitle(mode: NavigationRules.webTitleMode(screenDepth)))
-                .modifier(MessageAlert(message: message, client: client))
+                .modifier(WebMessage(message: message, client: client))
             }
         case .blank:
             if state.failure != nil, !state.loading {
@@ -285,6 +285,13 @@ struct ScreenPage: View {
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        if LoadingRules.progressInBar(state) {
+            ToolbarItem(placement: .primaryAction) {
+                ProgressView()
+                    .accessibilityLabel(Text("Loading"))
+            }
+            .sharedBackgroundVisibility(.hidden)
+        }
         if depth == 0, modal == nil, state.chrome, let user = client.app?.user {
             ToolbarItem(placement: .primaryAction) {
                 AccountMenu(user: user, client: client)
@@ -326,7 +333,44 @@ struct ScreenPage: View {
     }
 }
 
-/// A message over a page the web view shows: the system's alert, with the
+/// A message over a page the web view shows, as over any screen: a failure
+/// is the system's alert; anything else a line of status at the top of the
+/// content, which the person puts away. Never a floating toast.
+struct WebMessage: ViewModifier {
+    let message: Message?
+    let client: NativeClient
+
+    func body(content: Content) -> some View {
+        let shown = Drawable.notice(message)
+        content
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let notice = shown.notice {
+                    VStack(spacing: 0) {
+                        NoticeRow(notice: notice)
+                            .padding(.horizontal)
+                            .padding(.vertical, 10)
+                        Divider()
+                    }
+                    .background(.background)
+                }
+            }
+            .modifier(MessageAlert(message: shown.failure == nil ? nil : message, client: client))
+    }
+}
+
+/// When a screen that already shows something is being loaded again: a
+/// spinner in its bar, so the person knows the content will change.
+public enum LoadingRules {
+    public static func progressInBar(_ state: ScreenState) -> Bool {
+        guard state.loading || state.refreshing else { return false }
+        switch state.content {
+        case .blank: return false
+        case .native, .web: return true
+        }
+    }
+}
+
+/// A failure over a page the web view shows: the system's alert, with the
 /// message's own button when it has one.
 struct MessageAlert: ViewModifier {
     let message: Message?

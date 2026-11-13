@@ -70,3 +70,20 @@ import UniformTypeIdentifiers
     #expect(FileRules.types(nil) == [.item])
     #expect(FileRules.types("x-unknown/thing") == [.item])
 }
+
+@Test func onlyALinkThatPushesShowsTheDisclosureChevron() throws {
+    let routes = [Navree.Route(match: "/*/new", present: .sheet), Navree.Route(match: "/sign-in", present: .full)]
+    func link(_ href: String, _ present: Navree.Present = .auto) -> Navree.Action {
+        .navigate(Navree.Action.Navigate(href: href, present: present))
+    }
+    #expect(NavigationRules.pushes(link("/orders/1"), routes: routes))
+    #expect(NavigationRules.pushes(link("/orders/1", .push), routes: routes))
+    // The shell's routes present this address as a sheet: no chevron.
+    #expect(!NavigationRules.pushes(link("/orders/new?from=today"), routes: routes))
+    #expect(NavigationRules.pushes(link("/orders/new", .push), routes: routes))
+    #expect(!NavigationRules.pushes(link("/orders/1", .sheet), routes: routes))
+    #expect(!NavigationRules.pushes(link("/orders/1", .task), routes: routes))
+    #expect(!NavigationRules.pushes(.request(Navree.Action.Request(href: "/orders/1/peek")), routes: routes))
+    #expect(NavigationRules.matches("/*/new", "https://shop.example/orders/new#top"))
+    #expect(!NavigationRules.matches("/*/new", "/orders/new/items"))
+}

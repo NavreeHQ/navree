@@ -155,6 +155,19 @@ struct HTTPTests {
         #expect(body.hasSuffix("--b--\r\n"))
     }
 
+    @Test func aPictureIsAskedForWithTheSessionsCookiesFromTheOneJar() async throws {
+        let host = "pictures.shop.example"
+        StubOrigin.answer(host, .init(status: 200, headers: ["Content-Type": "image/png"], body: "png-bytes"))
+        let jar = CookieJar(origin: "https://\(host)", persistent: false)
+        jar.merge([CookieRecord(name: "session", value: "s3cret", domain: host)])
+        let pictures = PictureLoader(jar: jar, configuration: StubOrigin.configuration)
+        let data = await pictures.load(URL(string: "https://\(host)/storage/products/18.png")!)
+        #expect(data == Data("png-bytes".utf8))
+        #expect(StubOrigin.seen(host).last?.value(forHTTPHeaderField: "Cookie") == "session=s3cret")
+        // Another site's picture goes without them.
+        #expect(pictures.request(URL(string: "https://cdn.elsewhere.example/a.png")!).value(forHTTPHeaderField: "Cookie") == nil)
+    }
+
     @Test func aPickedFileIsSentWithItsBytes() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("navree-files-test-\(UUID().uuidString)")
         let store = FileStore(folder: folder.appendingPathComponent("kept"))

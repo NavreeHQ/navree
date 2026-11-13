@@ -33,6 +33,9 @@ extension NativeClient {
             depth: depth
         )
         context.opened = Set((state?.states ?? [:]).filter { $0.value.contains(.open) }.keys)
+        context.routes = app?.routes ?? []
+        let pictures = (effects as? SystemEffects)?.pictures
+        context.picture = { url in await pictures?.load(url) }
         return context
     }
 
