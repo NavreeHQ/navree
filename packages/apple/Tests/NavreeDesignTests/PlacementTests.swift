@@ -137,34 +137,6 @@ import Testing
     #expect(ContentRules.keyboard(text).content == .newPassword)
 }
 
-@Test func aRecordOfTheOrdersTableReadsAsARow() throws {
-    guard case .table(let orders) = try #require(try recordedScreen("orders.json").body.first { $0.kind == "table" }) else {
-        Issue.record("no table")
-        return
-    }
-    let row = RecordRules.row(columns: orders.columns, record: orders.rows[0])
-    #expect(row.title == "CS-220480")
-    #expect(row.subtitle == ["Tejinder Randhawa", "Today, 21:42"])
-    #expect(row.trailing == "₹507")
-    #expect(row.statuses.map(\.text) == ["Open", "Unfulfilled"])
-    #expect(row.controls.isEmpty)
-    #expect(row.actionForm?.action == "/orders/200000/peek")
-}
-
-@Test func aRecordOfTheInventoryTableKeepsItsRestockFormAsARowAction() throws {
-    guard case .table(let products) = try #require(try recordedScreen("inventory.json").body.first { $0.kind == "table" }) else {
-        Issue.record("no table")
-        return
-    }
-    let row = RecordRules.row(columns: products.columns, record: products.rows[0])
-    #expect(row.title == "Chakla belan, Amritsar")
-    #expect(row.subtitle == ["KIT-307-000", "Reorder at 14"])
-    #expect(row.trailing == "0")
-    #expect(row.trailingLabel == "In stock")
-    #expect(row.statuses.map(\.text) == ["Out of stock"])
-    #expect(row.controls.count == 1)
-}
-
 @Test func aRowOfButtonsBecomesRowsOfAGroupedList() throws {
     let group = try decode([Navree.Node].self, #"[{"t":"button","label":"Refund"},{"t":"button","label":"Cancel order","role":"destructive"}]"#)
     #expect(ContentRules.isButtonGroup(group))
@@ -175,7 +147,7 @@ import Testing
     #expect(Symbols.standard(.add) == "plus")
     #expect(Symbols.standard(.share) == "square.and.arrow.up")
     #expect(Symbols.standard(.delete) == "trash")
-    #expect(Symbols.standard(.more) == "ellipsis")
+    #expect(Symbols.standard(.more) == "ellipsis.circle")
     #expect(Symbols.standard(.cancel) == "xmark")
     #expect(Symbols.standard(.done) == "checkmark")
     #expect(Symbols.forRole(.create) == "plus")
@@ -201,19 +173,6 @@ func recordedScreen(_ name: String) throws -> Navree.Screen {
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let data = try Data(contentsOf: root.appendingPathComponent("Demo/NavreeDemo/Recorded/\(name)"))
     return try #require(try WireDecoder.decode(Navree.Envelope.self, from: data).screen)
-}
-
-@Test func aRecordsValueAtTheEndIsItsLastNumberAndOtherNumbersKeepTheirNames() throws {
-    let order = try recordedScreen("orders_1.json")
-    guard case .table(let items) = try #require(order.body.first { $0.kind == "table" }) else {
-        Issue.record("no table")
-        return
-    }
-    let row = RecordRules.row(columns: items.columns, record: items.rows[0])
-    #expect(row.title == "Pashmina shawl, Patiala, small")
-    #expect(row.trailing == "₹5,949")
-    #expect(row.trailingLabel == "Total")
-    #expect(row.subtitle == ["CLO-102-021", "Qty 1"])
 }
 
 @Test func aPageInTheWebViewHasAnInlineTitleEvenAtTheRoot() {

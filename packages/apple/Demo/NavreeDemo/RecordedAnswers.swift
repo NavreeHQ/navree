@@ -53,6 +53,7 @@ final class RecordedStore: Transport {
         case ["_navree", "native", "shell"]: return (200, "shell")
         case []: return (200, "index")
         case ["orders"]:
+            if query.contains("cursor=") { return (200, "orders_more") }
             return (200, query.contains("open") || query.contains("sort=total") ? "orders_open_by_total" : "orders")
         case ["orders", "999999"]: return (404, "orders_999999")
         case let parts where parts.count == 3 && parts[0] == "orders" && parts[2] == "peek": return (200, "orders_1_peek")
@@ -60,6 +61,7 @@ final class RecordedStore: Transport {
         case let parts where parts.count == 3 && parts[0] == "orders" && parts[2] == "others": return (200, "orders_1_others")
         case let parts where parts.count == 2 && parts[0] == "orders": return (200, "orders_1")
         case ["inventory"]: return (200, query.contains("page=2") ? "inventory_page_2" : "inventory")
+        case let parts where parts.count == 3 && parts[0] == "inventory" && parts[2] == "peek": return (200, "inventory_peek")
         case let parts where parts.count == 2 && parts[0] == "fragments": return (200, "fragments_\(parts[1])")
         default: return (404, nil)
         }

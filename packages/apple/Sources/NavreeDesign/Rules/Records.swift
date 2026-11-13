@@ -3,6 +3,8 @@ import NavreeProtocol
 /// A table's record, read as one row of a list: what a narrow window shows
 /// instead of columns.
 public struct RecordRow: Sendable, Equatable {
+    /// What leads the row: a picture, an avatar, an icon.
+    public var leading: Navree.Node?
     /// The record's name: the title column's first words.
     public var title: String
     /// Lines of words under the name, from the title cell and from the other
@@ -14,64 +16,98 @@ public struct RecordRow: Sendable, Equatable {
     public var trailingLabel: String?
     /// Its states, as the table's badges.
     public var statuses: [Navree.Badge]
-    /// What a tap on the row does, and the form it sends when it is a submit.
+    /// What a tap on the row does, as the server says.
     public var action: Navree.Action?
     public var actionForm: Navree.Form?
-    /// Forms and buttons in the record's cells: they become the row's swipe
-    /// and context menu actions.
+    /// The record's actions and its inline edits (a form in a cell): they
+    /// become the row's swipe actions and the items of its context menu.
     public var controls: [Navree.Node]
+
+    public init(
+        leading: Navree.Node? = nil, title: String, subtitle: [String], trailing: String? = nil,
+        trailingLabel: String? = nil, statuses: [Navree.Badge] = [], action: Navree.Action? = nil,
+        actionForm: Navree.Form? = nil, controls: [Navree.Node] = []
+    ) {
+        self.leading = leading
+        self.title = title
+        self.subtitle = subtitle
+        self.trailing = trailing
+        self.trailingLabel = trailingLabel
+        self.statuses = statuses
+        self.action = action
+        self.actionForm = actionForm
+        self.controls = controls
+    }
 }
 
 public enum RecordRules {
-    /// Reads a record of `columns` as a row. The title column (by role, or the
-    /// first) names it; a column with the trailing role, or the first column of
-    /// numbers, stands at the end; badges are its states; forms and buttons in
-    /// the other cells are its actions; the words of the other columns a narrow
-    /// window keeps go under the name. Columns marked secondary are left out.
+    /// Reads a record of `columns` as a row, by what the server says each
+    /// column is, never by what a cell looks like. The `title` column (else
+    /// the first) names it; the `subtitle` column is the line under the name
+    /// (in its place, the title cell's other words); `leading` leads it;
+    /// `status` and any badge are its states; `trailing` stands at its end;
+    /// `actions`, the record's own actions and a form in any cell (the
+    /// record's inline edit) are what it can do. A column with no role adds
+    /// its words to the line under the name, unless a narrow window may leave
+    /// it out (`secondary`). A tap on the row does what the record says.
     public static func row(columns: [Navree.Column], record: Navree.TableRow) -> RecordRow {
         let cells = record.cells
         let titleIndex = columns.firstIndex { $0.role == .title } ?? 0
-        let trailingIndex = columns.firstIndex { $0.role == .trailing }
-            ?? columns.indices.last { $0 != titleIndex && columns[$0].numeric && !columns[$0].secondary }
-
-        var row = RecordRow(
-            title: "", subtitle: [], trailing: nil, trailingLabel: nil, statuses: [], action: record.action,
-            actionForm: nil, controls: []
-        )
-        if titleIndex < cells.count {
-            let texts = words(in: cells[titleIndex])
-            row.title = texts.first ?? ""
-            row.subtitle.append(contentsOf: texts.dropFirst())
-            if row.action == nil, let found = firstAction(in: cells[titleIndex], form: nil) {
-                row.action = found.0
-                row.actionForm = found.1
-            }
-        }
-        for (index, cell) in cells.enumerated() where index != titleIndex {
+        let hasSubtitle = columns.contains { $0.role == .subtitle }
+        var row = RecordRow(title: "", subtitle: [], action: record.action, controls: record.actions)
+        var subtitle: [String] = []
+        var others: [String] = []
+        for (index, cell) in cells.enumerated() {
             let column = index < columns.count ? columns[index] : nil
-            if column?.secondary == true && column?.role == nil { continue }
-            if column?.role == .actions || holdsControls(cell) {
+            let role = index == titleIndex ? .title : column?.role
+            if role == .actions || (role != .title && holdsForm(cell)) {
                 row.controls.append(cell)
                 continue
             }
-            let badges = badges(in: cell)
-            if column?.role == .status || (!badges.isEmpty && words(in: cell).count == badges.count) {
-                row.statuses.append(contentsOf: badges)
-                continue
-            }
             let texts = words(in: cell)
-            if index == trailingIndex {
+            switch role {
+            case .title?:
+                row.title = texts.first ?? ""
+                if !hasSubtitle { subtitle.append(contentsOf: texts.dropFirst()) }
+            case .subtitle?:
+                subtitle.append(contentsOf: texts)
+            case .leading?:
+                row.leading = cell
+            case .status?:
+                let found = badges(in: cell)
+                row.statuses.append(contentsOf: found.isEmpty ? texts.map { Navree.Badge(text: $0) } : found)
+            case .trailing?:
                 row.trailing = texts.first
                 row.trailingLabel = column?.label
-                row.subtitle.append(contentsOf: texts.dropFirst())
-            } else if column?.numeric == true, let value = texts.first, let label = column?.label, !label.isEmpty {
-                // A number away from the row's end keeps its column's name: `Qty 1`.
-                row.subtitle.append("\(label) \(value)")
-            } else {
-                row.subtitle.append(contentsOf: texts.prefix(1))
+                others.append(contentsOf: texts.dropFirst())
+            case .actions?:
+                break
+            case nil:
+                if column?.secondary == true { continue }
+                // A badge is a state wherever it stands.
+                let found = badges(in: cell)
+                row.statuses.append(contentsOf: found)
+                let rest = texts.filter { text in !found.contains { $0.text == text } }
+                if column?.numeric == true, let value = rest.first, let label = column?.label, !label.isEmpty {
+                    // A number away from the row's end keeps its column's name: `Qty 1`.
+                    others.append("\(label) \(value)")
+                } else {
+                    others.append(contentsOf: rest.prefix(1))
+                }
             }
         }
+        row.subtitle = subtitle + others
         return row
+    }
+
+    /// Whether a cell holds a form that posts: the protocol's word for the
+    /// record's inline edit, which a client offers as an action that opens
+    /// the form as a task.
+    static func holdsForm(_ node: Navree.Node) -> Bool {
+        node.first { part in
+            if case .form(let form) = part { return form.method == .post }
+            return false
+        } != nil
     }
 
     /// The words a cell shows, one entry per text, a flag kept with its place.
@@ -95,18 +131,6 @@ public enum RecordRules {
     static func badges(in node: Navree.Node) -> [Navree.Badge] {
         if case .badge(let badge) = node { return [badge] }
         return node.children.flatMap(badges)
-    }
-
-    /// Whether a cell holds something to do rather than something to read: a
-    /// form that posts, or a button.
-    static func holdsControls(_ node: Navree.Node) -> Bool {
-        node.first { part in
-            switch part {
-            case .form(let form): form.method == .post
-            case .button, .menu: true
-            default: false
-            }
-        } != nil
     }
 
     /// The first button or link in `node`, and the form it stands in.
