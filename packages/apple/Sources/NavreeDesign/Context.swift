@@ -140,6 +140,9 @@ public struct DrawingContext: Sendable {
     public var region: @MainActor @Sendable (String) -> RegionStatus
     /// The field the screen asks to take the focus.
     public var focus: FocusRequest?
+    /// The id of the part on the screen under this one that this screen was
+    /// opened from: the card it grows out of, for a zoom.
+    public var from: String?
     /// Icon shapes by name, from the envelope's table.
     public var icons: [String: Navree.IconShape]
     /// The address of the screen, for sharing.
@@ -156,6 +159,7 @@ public struct DrawingContext: Sendable {
         list: @escaping @MainActor @Sendable (String) -> ListStatus = { _ in ListStatus() },
         region: @escaping @MainActor @Sendable (String) -> RegionStatus = { _ in RegionStatus() },
         focus: FocusRequest? = nil,
+        from: String? = nil,
         icons: [String: Navree.IconShape] = [:],
         address: String = "/",
         base: URL? = nil,
@@ -167,6 +171,7 @@ public struct DrawingContext: Sendable {
         self.list = list
         self.region = region
         self.focus = focus
+        self.from = from
         self.icons = icons
         self.address = address
         self.base = base

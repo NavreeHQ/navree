@@ -16,7 +16,7 @@ struct FigurePart: View {
     var body: some View {
         if let action = figure.action, !inControl {
             Button {
-                context.send(.act(action, Place(overlay: overlay)))
+                context.send(.act(action, Place(overlay: overlay, from: figure.id)))
             } label: {
                 content.contentShape(Rectangle())
             }

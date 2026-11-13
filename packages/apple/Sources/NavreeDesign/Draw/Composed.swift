@@ -56,7 +56,7 @@ struct CardPart: View {
     var body: some View {
         if let action = card.action, !inControl {
             Button {
-                context.send(.act(action, Place()))
+                context.send(.act(action, Place(from: card.id)))
             } label: {
                 surface.contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
