@@ -5,7 +5,9 @@ import SwiftUI
 /// The store demo as a native app, on the runtime core. Its origin is
 /// configuration: the Info.plist key `NavreeOrigin` (a store demo running on
 /// this Mac by default); or the store's answers kept in the app, when launched
-/// with `-NavreeRecorded YES`, so it runs with no server at all.
+/// with `-NavreeRecorded YES`; or the answers in a folder outside the app,
+/// when launched with `-NavreeAnswers <folder>` (or `NAVREE_ANSWERS` in the
+/// environment), so it runs with no server at all.
 @main
 struct DemoApp: App {
     private let configuration = DemoConfiguration.make()
@@ -24,6 +26,17 @@ enum DemoConfiguration {
         let defaults = UserDefaults.standard
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
         let launch = Self.launch(defaults)
+        if let folder = defaults.string(forKey: "NavreeAnswers") ?? ProcessInfo.processInfo.environment["NAVREE_ANSWERS"],
+            !folder.isEmpty
+        {
+            let url = URL(fileURLWithPath: (folder as NSString).expandingTildeInPath, isDirectory: true)
+            return ShellConfiguration(
+                origin: AnswerFolder.origin(of: url) ?? "https://answers.example", appVersion: version,
+                keepsSession: false,
+                transport: { AnswerFolder(folder: url) ?? AnswerFolder.empty() },
+                launch: launch
+            )
+        }
         if defaults.bool(forKey: "NavreeRecorded") {
             return ShellConfiguration(
                 origin: recordedOrigin, appVersion: version, signInScheme: "charkha", keepsSession: false,
