@@ -1,6 +1,7 @@
 import Foundation
 import Security
 import WebKit
+import os
 
 /// A cookie of the app's origin, as the jar keeps it.
 public struct CookieRecord: Sendable, Equatable, Codable {
@@ -212,12 +213,20 @@ struct KeychainSlot: Sendable {
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
-        if SecItemUpdate(query as CFDictionary, attributes as CFDictionary) == errSecItemNotFound {
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
             var item = query
             item.merge(attributes) { _, new in new }
-            SecItemAdd(item as CFDictionary, nil)
+            status = SecItemAdd(item as CFDictionary, nil)
+        }
+        // A build with no signature at all has no Keychain: the session then
+        // lasts only as long as the app runs.
+        if status != errSecSuccess {
+            Self.log.error("the session could not be kept in the Keychain: \(status, privacy: .public)")
         }
     }
+
+    static let log = Logger(subsystem: "com.navree.native", category: "session")
 
     func delete() {
         SecItemDelete(query as CFDictionary)
