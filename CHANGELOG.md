@@ -7,6 +7,8 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-13
+
 ### Added
 
 - Radial charts in `navree::ui::charts`: `Ring` (one value from twelve o'clock, with a second lap
@@ -226,7 +228,8 @@ every `@navree/*` package carries the same version.
 
 First release. Read what it includes in the [release notes](https://navree.com/docs/prologue/release-notes/).
 
-[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.1.0
 [1.0.2]: https://github.com/NavreeHQ/navree/releases/tag/v1.0.2
 [1.0.1]: https://github.com/NavreeHQ/navree/releases/tag/v1.0.1
 [1.0.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.0.0

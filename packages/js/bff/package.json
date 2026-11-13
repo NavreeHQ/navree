@@ -1,6 +1,6 @@
 {
   "name": "@navree/bff",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "The backend-for-frontend for Navree APIs on web-standard Request and Response: httpOnly token cookies, single-flight refresh, two-factor sign-in, CSRF origin checks and a streaming proxy. Used by @navree/next and @navree/nuxt.",
   "license": "MIT OR Apache-2.0",
   "author": "Amritpal Singh",

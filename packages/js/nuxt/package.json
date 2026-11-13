@@ -1,6 +1,6 @@
 {
   "name": "@navree/nuxt",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Nuxt on a Navree API: a module with the backend-for-frontend as Nitro routes (httpOnly token cookies, refresh rotation, CSRF, channel authorization), a session gate, and composables for auth, workspaces, abilities, real-time channels, operations, list queries and a DataTable.",
   "license": "MIT OR Apache-2.0",
   "author": "Amritpal Singh",
