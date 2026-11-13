@@ -11,6 +11,7 @@ use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize, Serializer};
 
 use crate::action::Action;
+pub use crate::charts::{Centre, Colour, Hint, HintMark, Hue, Ring};
 use crate::input::Input;
 
 pub(crate) fn is_false(value: &bool) -> bool {
@@ -113,6 +114,8 @@ pub enum Node {
     Message(Message),
     /// A pane of a split screen, with the part it plays.
     Pane(Pane),
+    /// One value against its whole, as a ring.
+    Ring(Ring),
     /// A kind this build has never heard of, from a newer server. A client
     /// draws its `alt`, or shows the page in its web view when it has none.
     Unknown(Unknown),
@@ -208,6 +211,7 @@ impl Node {
             Self::FeedRow(node) => node.id.as_deref(),
             Self::Message(node) => node.id.as_deref(),
             Self::Pane(node) => node.id.as_deref(),
+            Self::Ring(node) => node.id.as_deref(),
             Self::Unknown(node) => node.id.as_deref(),
         }
     }
@@ -278,7 +282,8 @@ impl Node {
             | Self::Field(_)
             | Self::Web(_)
             | Self::Gauge(_)
-            | Self::Figure(_) => Vec::new(),
+            | Self::Figure(_)
+            | Self::Ring(_) => Vec::new(),
         }
     }
 
@@ -373,7 +378,8 @@ impl Node {
             | Self::Field(_)
             | Self::Web(_)
             | Self::Gauge(_)
-            | Self::Figure(_) => Vec::new(),
+            | Self::Figure(_)
+            | Self::Ring(_) => Vec::new(),
         }
     }
 
@@ -458,7 +464,7 @@ pub enum Tone {
     Info,
 }
 
-/// How loud a control is among its neighbours.
+/// How loud a control, or a chart, is among its neighbours.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Prominence {
@@ -1139,6 +1145,7 @@ impl Node {
                 .filter_map(|moment| moment.icon.as_mut())
                 .collect(),
             Self::FeedRow(node) => node.icon.iter_mut().collect(),
+            Self::Ring(node) => node.icon.iter_mut().collect(),
             _ => Vec::new(),
         }
     }

@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use navree_native::action::{Action, Command, Pair, Present, State};
+use navree_native::charts::{Hint, HintMark, Hue};
 use navree_native::device::{
     Accuracy, Alt, AppLock, AuthSession, CancelNotification, CodeFormat, Confirm, ConfirmMethod,
     CopyText, DeviceCall, Haptic, HapticKind, HttpsUrl, LocateOnce, Notify, OpenSettings, OpenUrl,
@@ -22,11 +23,12 @@ use navree_native::input::{
     ToggleInput, ToggleKind, Weekday,
 };
 use navree_native::node::{
-    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Chart, ChartKind, Code, Column,
+    Across, Align, Avatar, Axis, Badge, Banner, Block, BlockKind, Button, Chart, ChartKind,
+    Code, Colour, Column,
     ColumnRole, Delivery, Dialog, Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Icon, Image, Justify, Link, List, Live, Menu,
     Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress, Prominence,
-    Purpose, Question, Region, Reorder, Rich, Role, Row, RowState, Run, Section, SectionStyle,
+    Purpose, Question, Region, Reorder, Rich, Ring, Role, Row, RowState, Run, Section, SectionStyle,
     Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table,
     TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown,
     WebRegion,
@@ -2023,6 +2025,120 @@ fn screen_dashboard() -> Envelope {
     envelope
 }
 
+/// A person's day, read at a glance: the health score and the five pillars it
+/// is made of.
+fn screen_today() -> Envelope {
+    let pillar = |name: &str, key: &str, score: Option<i64>, hue: Hue, weight: &str| {
+        let summary = match score {
+            Some(score) => format!("{name} score: {score} of 100, {score}%."),
+            None => format!("{name} score: no reading."),
+        };
+        Node::Link(Link {
+            id: Some(format!("pillar-{key}")),
+            label: format!("{name}, {weight}"),
+            action: Action::navigate(format!("/{key}")),
+            children: vec![Node::Stack(Stack {
+                gap: 1,
+                align: Some(Align::Center),
+                children: vec![
+                    Node::Ring(Ring {
+                        id: Some(format!("{key}-score")),
+                        value: score.map(number),
+                        max: number(100),
+                        shown: score.map(|score| score.to_string()),
+                        colour: Some(Colour::new(hue)),
+                        summary: Some(summary),
+                        ..Ring::default()
+                    }),
+                    Node::Text(Text {
+                        value: s(name),
+                        style: TextStyle::Headline,
+                        ..Text::default()
+                    }),
+                    muted(weight),
+                ],
+                ..Stack::default()
+            })],
+        })
+    };
+    let score = Node::Ring(Ring {
+        id: Some(s("health-score")),
+        value: Some(number(83)),
+        max: number(100),
+        shown: Some(s("83")),
+        label: Some(s("Health score")),
+        colour: Some(Colour::blend(Hue::Cyan, Hue::Violet)),
+        prominence: Prominence::High,
+        summary: Some(s("Health score: 83 of 100, 83%.")),
+        hint: Some(Hint {
+            about: s("the health score"),
+            title: Some(s("How the score is made")),
+            text: s("Your health score blends five pillars, each scored from 0 to 100 from your own readings. A pillar with no data that day is left out and the rest are weighed up. It describes a pattern in your readings; it is not advice."),
+            mark: HintMark::Question,
+        }),
+        ..Ring::default()
+    });
+    let body = Node::Stack(Stack {
+        gap: 4,
+        children: vec![
+            Node::Text(Text {
+                value: s("Good evening, Amandeep"),
+                style: TextStyle::LargeTitle,
+                heading: Some(1),
+                ..Text::default()
+            }),
+            muted("Your Thursday, 12 November, from your own readings."),
+            Node::Section(Section {
+                style: SectionStyle::Card,
+                children: vec![
+                    Node::Stack(Stack {
+                        gap: 3,
+                        align: Some(Align::Center),
+                        children: vec![
+                            score,
+                            Node::Stack(Stack {
+                                axis: Axis::Horizontal,
+                                gap: 2,
+                                align: Some(Align::Center),
+                                children: vec![
+                                    Node::Badge(Badge {
+                                        text: s("Excellent"),
+                                        tone: Some(Tone::Success),
+                                        ..Badge::default()
+                                    }),
+                                    muted("2.4% lower than your last 7 days"),
+                                ],
+                                ..Stack::default()
+                            }),
+                        ],
+                        ..Stack::default()
+                    }),
+                    Node::Grid(Grid {
+                        id: Some(s("pillars")),
+                        cols: Some(3),
+                        min: Some(96),
+                        gap: 3,
+                        children: vec![
+                            pillar("Sleep", "sleep", Some(87), Hue::Violet, "25% of score"),
+                            pillar("Heart", "heart", Some(90), Hue::Rose, "20% of score"),
+                            pillar("Recovery", "recovery", Some(60), Hue::Green, "20% of score"),
+                            pillar("Movement", "fitness", Some(78), Hue::Orange, "20% of score"),
+                            pillar("Mind", "mind", None, Hue::Cyan, "No data"),
+                        ],
+                        ..Grid::default()
+                    }),
+                ],
+                ..Section::default()
+            }),
+        ],
+        ..Stack::default()
+    });
+    let mut screen = Screen::new("Today", body);
+    screen.nav = Some(s("/"));
+    screen.refresh = true;
+    Envelope::screen(BUILD, screen)
+}
+
 /// A support inbox: a list of conversations beside the one open, its
 /// messages, the customer in an inspector, a reply form with searched
 /// choices and a follow-up date, and the customer's orders with row actions.
@@ -2681,6 +2797,7 @@ fn envelopes() -> Vec<(&'static str, Envelope)> {
         ("screen-kinds", screen_kinds()),
         ("screen-dashboard", screen_dashboard()),
         ("screen-inbox", screen_inbox()),
+        ("screen-today", screen_today()),
         ("screen-device", screen_device()),
         ("ops-device", ops_device()),
         ("screen-with-toast", screen_with_toast()),

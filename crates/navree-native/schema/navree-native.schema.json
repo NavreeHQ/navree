@@ -1145,6 +1145,16 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "Centre": {
+      "enum": [
+        "value",
+        "icon",
+        "nothing"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
     "Chart": {
       "properties": {
         "id": {
@@ -1585,6 +1595,56 @@
       ],
       "type": "string",
       "x-kind": "enum",
+      "x-since": 0
+    },
+    "Colour": {
+      "properties": {
+        "dark": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "hue": {
+          "$ref": "#/$defs/Hue",
+          "x-since": 0
+        },
+        "light": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "to": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "hue"
+      ],
+      "type": "object",
+      "x-kind": "object",
       "x-since": 0
     },
     "ColourInput": {
@@ -3492,10 +3552,77 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "Hint": {
+      "properties": {
+        "about": {
+          "type": "string",
+          "x-since": 0
+        },
+        "mark": {
+          "$ref": "#/$defs/HintMark",
+          "default": "question",
+          "x-since": 0
+        },
+        "text": {
+          "type": "string",
+          "x-since": 0
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "about",
+        "text"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "HintMark": {
+      "enum": [
+        "question",
+        "info"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
     "HttpsUrl": {
       "format": "https-url",
       "type": "string",
       "x-kind": "string",
+      "x-since": 0
+    },
+    "Hue": {
+      "enum": [
+        "neutral",
+        "accent",
+        "success",
+        "warning",
+        "danger",
+        "info",
+        "blue",
+        "green",
+        "amber",
+        "orange",
+        "red",
+        "rose",
+        "violet",
+        "cyan",
+        "slate"
+      ],
+      "type": "string",
+      "x-kind": "enum",
       "x-since": 0
     },
     "Icon": {
@@ -5129,6 +5256,21 @@
           "required": [
             "t"
           ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Ring"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "ring"
+            }
+          },
+          "required": [
+            "t"
+          ]
         }
       ],
       "x-kind": "union",
@@ -5346,6 +5488,11 @@
         {
           "tag": "pane",
           "type": "Pane",
+          "x-since": 0
+        },
+        {
+          "tag": "ring",
+          "type": "Ring",
           "x-since": 0
         }
       ]
@@ -7053,6 +7200,150 @@
         }
       },
       "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Ring": {
+      "properties": {
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "centre": {
+          "$ref": "#/$defs/Centre",
+          "default": "value",
+          "x-since": 0
+        },
+        "colour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "max": {
+          "type": "number",
+          "x-since": 0
+        },
+        "prominence": {
+          "$ref": "#/$defs/Prominence",
+          "default": "medium",
+          "x-since": 0
+        },
+        "shown": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "max"
+      ],
       "type": "object",
       "x-kind": "object",
       "x-since": 0

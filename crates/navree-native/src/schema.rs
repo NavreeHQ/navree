@@ -38,6 +38,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Map, Value, json};
 
 use crate::action::{Action, Command, Pair, Present, State};
+use crate::charts::{Centre, Colour, Hint, HintMark, Hue, Ring};
 use crate::client::{ClientDescriptor, Contrast, FormFactor, Platform, Scheme};
 use crate::device::{
     Accuracy, Alt, AppLock, AuthSession, Call, CancelNotification, CodeFormat, Confirm,
@@ -602,7 +603,7 @@ union!(Node tag "t"
         Stack, Grid, Section, List, Row, Split, Tabs, Disclosure, Divider, Spacer, Region,
         Text, Rich, Image, Icon, Avatar, Badge, Progress, Banner, Empty, Facts, Table, Chart,
         Code, Button, Link, Menu, Form, Field, Sheet, Dialog, Popover, Native, Web, Toolbar,
-        Gauge, Figure, Timeline, FeedRow, Message, Pane,
+        Gauge, Figure, Timeline, FeedRow, Message, Pane, Ring,
     }
     structs {}
     units {}
@@ -699,6 +700,19 @@ names!(Delivery { Sending, Sent, Delivered, Read, Failed });
 object!(Message { author } { id, avatar, mine, note, body, time, delivery });
 names!(PaneRole { List, Content, Detail, Supporting, Inspector });
 object!(Pane { role } { id, title, current, children });
+
+// The charts of a health screen.
+names!(Hue {
+    Neutral, Accent, Success, Warning, Danger, Info, Blue, Green, Amber, Orange, Red, Rose, Violet,
+    Cyan, Slate
+});
+object!(Colour { hue } { to, light, dark });
+names!(HintMark { Question, Info });
+object!(Hint { about, text } { title, mark });
+names!(Centre { Value, Icon, Nothing });
+object!(Ring { max } {
+    id, value, unit, shown, label, caption, colour, centre, icon, prominence, summary, hint
+});
 
 // The controls of fields.
 union!(Input tag "t"

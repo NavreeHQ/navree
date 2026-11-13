@@ -264,6 +264,7 @@ kinds! {
     FeedRow(FeedRow) => "feed_row" since 0,
     Message(Message) => "message" since 0,
     Pane(Pane) => "pane" since 0,
+    Ring(Ring) => "ring" since 0,
 }
 
 /// A field that arrived after its type did: the type's name in the schema
@@ -498,9 +499,39 @@ impl Node {
                 children: node.children.clone(),
                 ..n::Section::default()
             }),
+            Self::Ring(node) => {
+                let goal = format!("of {}", words(None, Some(&node.max), node.unit.as_deref()));
+                Node::Figure(n::Figure {
+                    id: node.id.clone(),
+                    label: node.label.clone().unwrap_or_default(),
+                    value: words(node.shown.as_deref(), node.value.as_ref(), node.unit.as_deref()),
+                    detail: Some(match &node.caption {
+                        Some(caption) => format!("{caption} · {goal}"),
+                        None => goal,
+                    }),
+                    tone: node.colour.as_ref().and_then(|colour| colour.hue.tone()),
+                    ..n::Figure::default()
+                })
+            }
             Self::Unknown(node) => return node.alt.as_deref().cloned(),
             _ => return None,
         })
+    }
+}
+
+/// A value in words, for an older form: the page's own words when it gave
+/// them, else the number, then its unit. A value that is not there is a dash.
+fn words(shown: Option<&str>, value: Option<&serde_json::Number>, unit: Option<&str>) -> String {
+    let number = match (shown, value) {
+        (Some(shown), _) => shown.to_owned(),
+        (None, Some(value)) => value.to_string(),
+        (None, None) => return "–".to_owned(),
+    };
+    match unit {
+        // A word keeps a space before it; a sign (`%`, `°C`) does not.
+        Some(unit) if unit.starts_with(char::is_alphanumeric) => format!("{number} {unit}"),
+        Some(unit) => format!("{number}{unit}"),
+        None => number,
     }
 }
 
@@ -529,9 +560,9 @@ pub fn newer_than(node: &Node, vocab: u32) -> Option<Kind> {
 mod tests {
     use super::*;
     use crate::node::{
-        Avatar, Badge, Chart, Direction, FeedRow, Figure, Gauge, Icon, Message, Moment, Pane,
-        PaneRole, RowState, Run, Section, Stack, Standard, Timeline, Tone, Toolbar, ToolbarItem,
-        Trend, Unknown,
+        Avatar, Badge, Chart, Colour, Direction, FeedRow, Figure, Gauge, Hue, Icon, Message,
+        Moment, Pane, PaneRole, Ring, RowState, Run, Section, Stack, Standard, Timeline, Tone,
+        Toolbar, ToolbarItem, Trend, Unknown,
     };
 
     #[test]
@@ -661,6 +692,17 @@ mod tests {
                 children: vec![Node::text("CH-1042")],
                 ..Pane::default()
             }),
+            Node::Ring(Ring {
+                id: Some("steps".to_owned()),
+                value: Some(12_450.into()),
+                max: 10_000.into(),
+                unit: Some("steps".to_owned()),
+                shown: Some("12,450".to_owned()),
+                label: Some("Steps".to_owned()),
+                caption: Some("Goal reached".to_owned()),
+                colour: Some(Colour::new(Hue::Success)),
+                ..Ring::default()
+            }),
         ]
     }
 
@@ -672,9 +714,17 @@ mod tests {
             | Kind::Timeline
             | Kind::FeedRow
             | Kind::Message
-            | Kind::Pane => 1,
+            | Kind::Pane
+            | Kind::Ring => 1,
             kind => kind.since(),
         }
+    }
+
+    /// A vocabulary in which only `newer` has yet to arrive, so the older form
+    /// of a kind is seen as it is written, not as the kinds it is written in
+    /// would be rewritten in turn.
+    fn only(newer: Kind) -> impl Fn(Kind) -> u32 {
+        move |kind| u32::from(kind == newer)
     }
 
     fn kinds_in(node: &Node) -> Vec<Kind> {
@@ -716,6 +766,31 @@ mod tests {
         };
         assert_eq!(progress.value, Some(250));
         assert_eq!(progress.label.as_deref(), Some("Space: 25%"));
+    }
+
+    #[test]
+    fn a_ring_becomes_a_figure_with_its_words_and_its_goal() {
+        let ring = newer_parts().pop().unwrap();
+        let Downgraded::Node(Node::Figure(figure)) = downgrade_by(ring, 0, only(Kind::Ring)) else {
+            panic!("a ring becomes a figure");
+        };
+        assert_eq!(figure.id.as_deref(), Some("steps"));
+        assert_eq!(figure.label, "Steps");
+        assert_eq!(figure.value, "12,450 steps");
+        assert_eq!(figure.detail.as_deref(), Some("Goal reached · of 10000 steps"));
+        assert_eq!(figure.tone, Some(Tone::Success));
+        // A day with no reading is a dash, and a unit that is a sign keeps no space.
+        let empty = Node::Ring(Ring {
+            label: Some("Recovery".to_owned()),
+            unit: Some("%".to_owned()),
+            ..Ring::default()
+        });
+        let Downgraded::Node(Node::Figure(figure)) = downgrade_by(empty, 0, only(Kind::Ring)) else {
+            panic!("a ring becomes a figure");
+        };
+        assert_eq!(figure.value, "–");
+        assert_eq!(figure.detail.as_deref(), Some("of 100%"));
+        assert_eq!(figure.tone, None);
     }
 
     #[test]

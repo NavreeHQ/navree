@@ -21,7 +21,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::node::is_default;
+use crate::node::{Icon, Prominence, Tone, is_default};
 
 /// A colour of data by name. A client draws each as its own system's colour of
 /// that name, so a pillar that is violet is the system's violet on iPhone and
@@ -67,6 +67,22 @@ pub enum Hue {
     Cyan,
     /// Slate: a grey that leans to blue.
     Slate,
+}
+
+impl Hue {
+    /// The tone this hue is the colour of: the status tones and the accent are
+    /// their own, and a plain colour has none. An older form of a part that
+    /// has a tone and no hue takes it from here.
+    pub const fn tone(self) -> Option<Tone> {
+        match self {
+            Self::Accent => Some(Tone::Accent),
+            Self::Success => Some(Tone::Success),
+            Self::Warning => Some(Tone::Warning),
+            Self::Danger => Some(Tone::Danger),
+            Self::Info => Some(Tone::Info),
+            _ => None,
+        }
+    }
 }
 
 /// The colour of one part of a chart: a hue by name, and where it helps, the
@@ -161,6 +177,103 @@ pub struct Hint {
     /// The mark that opens it.
     #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
     pub mark: HintMark,
+}
+
+/// What stands in the middle of a ring.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Centre {
+    /// The value, with its unit, and the label and the caption beside or under
+    /// it where the ring has room: the usual. A ring with no value says so in
+    /// its middle, with a dash.
+    #[default]
+    Value,
+    /// The ring's icon, in place of the value.
+    Icon,
+    /// Nothing: the ring alone.
+    Nothing,
+}
+
+/// One value against its whole, drawn as a ring: a score out of 100, steps
+/// toward a goal, a share. It starts at the top and runs clockwise, as the
+/// system's own rings do; a value above `max` is past its goal, which a client
+/// shows as its system does (a second lap).
+///
+/// The numbers are numbers. `shown` is the value in the page's words, without
+/// its `unit`, which follows it: `12,450` and `steps`. A ring with no `value`
+/// is a day with no reading; the client draws the empty ring and a dash.
+///
+/// How big the ring is says something: `prominence` is `high` for the ring a
+/// screen is about (the health score), `medium` for one among its neighbours
+/// (a pillar of the score) and `low` for a small one beside words or in a row
+/// (the day's scores in a date control). A client sizes each by its system's
+/// rules and puts the label and the caption inside the ring where there is room
+/// and beside it where there is not.
+///
+/// A ring on a screen is named by its `summary`, one sentence that says the
+/// whole ring (`Sleep score: 87 of 100, 87%.`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Ring {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The value, in the same units as `max`. None when there is no reading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<serde_json::Number>,
+    /// The whole: the goal the value is measured against. 100 for a score.
+    pub max: serde_json::Number,
+    /// What the value counts, written after it: `steps`, `kcal`, `%`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    /// The value as the page wrote it, without its unit: `12,450`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shown: Option<String>,
+    /// What it measures: `Health score`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// A quieter line after the label: `Great recovery`, `25% of the score`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caption: Option<String>,
+    /// Its colour. A client takes its colours in turn when there is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+    /// What stands in its middle.
+    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    pub centre: Centre,
+    /// The icon in its middle, when `centre` is `icon`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<Icon>,
+    /// How much the ring matters on the screen: the hero, one of several, a
+    /// small one.
+    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    pub prominence: Prominence,
+    /// One sentence that says the whole ring to a reader who can't see it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// A note about what the ring means, shown when asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
+}
+
+impl Default for Ring {
+    fn default() -> Self {
+        Self {
+            id: None,
+            value: None,
+            max: 100.into(),
+            unit: None,
+            shown: None,
+            label: None,
+            caption: None,
+            colour: None,
+            centre: Centre::Value,
+            icon: None,
+            prominence: Prominence::Medium,
+            summary: None,
+            hint: None,
+        }
+    }
 }
 
 #[cfg(test)]

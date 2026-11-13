@@ -1,0 +1,279 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "screen": {
+    "title": "Today",
+    "nav": "/",
+    "refresh": true,
+    "body": {
+      "t": "stack",
+      "gap": 4,
+      "children": [
+        {
+          "t": "text",
+          "value": "Good evening, Amandeep",
+          "style": "large_title",
+          "heading": 1
+        },
+        {
+          "t": "text",
+          "value": "Your Thursday, 12 November, from your own readings.",
+          "muted": true
+        },
+        {
+          "t": "section",
+          "style": "card",
+          "children": [
+            {
+              "t": "stack",
+              "gap": 3,
+              "align": "center",
+              "children": [
+                {
+                  "t": "ring",
+                  "id": "health-score",
+                  "value": 83,
+                  "max": 100,
+                  "shown": "83",
+                  "label": "Health score",
+                  "colour": {
+                    "hue": "cyan",
+                    "to": "violet"
+                  },
+                  "prominence": "high",
+                  "summary": "Health score: 83 of 100, 83%.",
+                  "hint": {
+                    "about": "the health score",
+                    "title": "How the score is made",
+                    "text": "Your health score blends five pillars, each scored from 0 to 100 from your own readings. A pillar with no data that day is left out and the rest are weighed up. It describes a pattern in your readings; it is not advice."
+                  }
+                },
+                {
+                  "t": "stack",
+                  "axis": "horizontal",
+                  "gap": 2,
+                  "align": "center",
+                  "children": [
+                    {
+                      "t": "badge",
+                      "text": "Excellent",
+                      "tone": "success"
+                    },
+                    {
+                      "t": "text",
+                      "value": "2.4% lower than your last 7 days",
+                      "muted": true
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "t": "grid",
+              "id": "pillars",
+              "cols": 3,
+              "min": 96,
+              "gap": 3,
+              "children": [
+                {
+                  "t": "link",
+                  "id": "pillar-sleep",
+                  "label": "Sleep, 25% of score",
+                  "action": {
+                    "t": "navigate",
+                    "href": "/sleep"
+                  },
+                  "children": [
+                    {
+                      "t": "stack",
+                      "gap": 1,
+                      "align": "center",
+                      "children": [
+                        {
+                          "t": "ring",
+                          "id": "sleep-score",
+                          "value": 87,
+                          "max": 100,
+                          "shown": "87",
+                          "colour": {
+                            "hue": "violet"
+                          },
+                          "summary": "Sleep score: 87 of 100, 87%."
+                        },
+                        {
+                          "t": "text",
+                          "value": "Sleep",
+                          "style": "headline"
+                        },
+                        {
+                          "t": "text",
+                          "value": "25% of score",
+                          "muted": true
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "t": "link",
+                  "id": "pillar-heart",
+                  "label": "Heart, 20% of score",
+                  "action": {
+                    "t": "navigate",
+                    "href": "/heart"
+                  },
+                  "children": [
+                    {
+                      "t": "stack",
+                      "gap": 1,
+                      "align": "center",
+                      "children": [
+                        {
+                          "t": "ring",
+                          "id": "heart-score",
+                          "value": 90,
+                          "max": 100,
+                          "shown": "90",
+                          "colour": {
+                            "hue": "rose"
+                          },
+                          "summary": "Heart score: 90 of 100, 90%."
+                        },
+                        {
+                          "t": "text",
+                          "value": "Heart",
+                          "style": "headline"
+                        },
+                        {
+                          "t": "text",
+                          "value": "20% of score",
+                          "muted": true
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "t": "link",
+                  "id": "pillar-recovery",
+                  "label": "Recovery, 20% of score",
+                  "action": {
+                    "t": "navigate",
+                    "href": "/recovery"
+                  },
+                  "children": [
+                    {
+                      "t": "stack",
+                      "gap": 1,
+                      "align": "center",
+                      "children": [
+                        {
+                          "t": "ring",
+                          "id": "recovery-score",
+                          "value": 60,
+                          "max": 100,
+                          "shown": "60",
+                          "colour": {
+                            "hue": "green"
+                          },
+                          "summary": "Recovery score: 60 of 100, 60%."
+                        },
+                        {
+                          "t": "text",
+                          "value": "Recovery",
+                          "style": "headline"
+                        },
+                        {
+                          "t": "text",
+                          "value": "20% of score",
+                          "muted": true
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "t": "link",
+                  "id": "pillar-fitness",
+                  "label": "Movement, 20% of score",
+                  "action": {
+                    "t": "navigate",
+                    "href": "/fitness"
+                  },
+                  "children": [
+                    {
+                      "t": "stack",
+                      "gap": 1,
+                      "align": "center",
+                      "children": [
+                        {
+                          "t": "ring",
+                          "id": "fitness-score",
+                          "value": 78,
+                          "max": 100,
+                          "shown": "78",
+                          "colour": {
+                            "hue": "orange"
+                          },
+                          "summary": "Movement score: 78 of 100, 78%."
+                        },
+                        {
+                          "t": "text",
+                          "value": "Movement",
+                          "style": "headline"
+                        },
+                        {
+                          "t": "text",
+                          "value": "20% of score",
+                          "muted": true
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "t": "link",
+                  "id": "pillar-mind",
+                  "label": "Mind, No data",
+                  "action": {
+                    "t": "navigate",
+                    "href": "/mind"
+                  },
+                  "children": [
+                    {
+                      "t": "stack",
+                      "gap": 1,
+                      "align": "center",
+                      "children": [
+                        {
+                          "t": "ring",
+                          "id": "mind-score",
+                          "max": 100,
+                          "colour": {
+                            "hue": "cyan"
+                          },
+                          "summary": "Mind score: no reading."
+                        },
+                        {
+                          "t": "text",
+                          "value": "Mind",
+                          "style": "headline"
+                        },
+                        {
+                          "t": "text",
+                          "value": "No data",
+                          "muted": true
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
