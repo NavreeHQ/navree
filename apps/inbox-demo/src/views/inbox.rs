@@ -443,12 +443,13 @@ pub fn page_actions(keys: bool) -> Node {
         .opens_dialog("shortcuts");
     Row::gap(2)
         .children((
-            Command::trigger("palette", "Actions"),
-            if keys {
+            super::web_only(Command::trigger("palette", "Actions")),
+            // The keys are for a keyboard: a native client has its own.
+            super::web_only(if keys {
                 shortcuts.hotkey("?")
             } else {
                 shortcuts
-            },
+            }),
         ))
         .into()
 }
@@ -495,7 +496,9 @@ pub fn assign_page(conversation: &Conversation, team: &[Agent], q: &str, back: &
                             .value(q.to_owned())
                             .placeholder("Search the team")
                             .attr("aria-label", "Search the team"),
-                        Button::outline("Search").submit(),
+                        Button::outline("Search")
+                            .submit()
+                            .standard(Standard::Search),
                     )),
                 ),
             if rows.is_empty() {

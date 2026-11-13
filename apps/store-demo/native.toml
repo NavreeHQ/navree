@@ -1,0 +1,15 @@
+# What `navree native:coverage` needs to ask this shop's pages as a native
+# client (see the CLI chapter of the docs): an example value for each route
+# parameter, and the addresses with a query the tests also ask.
+#
+#   navree native:coverage            (in this directory)
+
+[coverage]
+also = [
+    "/orders?filter[status][in]=open&sort=total",
+    "/inventory?page=2",
+]
+
+[coverage.params]
+# The first order and the first product of the demo data.
+id = 1

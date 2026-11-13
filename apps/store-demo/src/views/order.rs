@@ -13,7 +13,10 @@ use crate::data::{
 use crate::shop;
 use crate::views::dashboard::{method_icon, method_words};
 use crate::views::orders::{DRAWER, fulfilment_badge, payment_badge, status_badge};
-use crate::views::{city, country_name, money, place_of, thousands, units, when};
+use crate::views::{
+    asked_by_native, city, country_name, money, native_only, place_of, thousands, units, web_only,
+    when,
+};
 
 /// The id of the element that holds an order on its own page.
 pub const PAGE: &str = "order-page";
@@ -139,6 +142,29 @@ pub fn product_with(icon: &str, name: &str, under: impl Into<Node>) -> Row {
     ))
 }
 
+/// The lines as a system draws a list of records: each product with its
+/// picture, its SKU, how many at what price, and what that comes to.
+fn native_lines(view: &OrderView) -> Element {
+    let items: Vec<Element> = view
+        .lines
+        .iter()
+        .map(|line| {
+            el("li").child(
+                Item::new(line.name.clone())
+                    .media(thumbnail(&line.icon))
+                    .description(format!(
+                        "{} · {} × {}",
+                        line.sku,
+                        thousands(line.quantity),
+                        money(line.price)
+                    ))
+                    .aside(money(line.price * line.quantity)),
+            )
+        })
+        .collect();
+    el("ul").children(items)
+}
+
 /// The lines, and what they add up to.
 fn lines_card(view: &OrderView, level: u8) -> Card {
     let order = &view.order;
@@ -174,14 +200,17 @@ fn lines_card(view: &OrderView, level: u8) -> Card {
         ))
         .body(
             Stack::gap(3).children((
-                Table::new()
-                    .head((
-                        TableHead::new("Product"),
-                        TableHead::new("Qty").numeric(),
-                        TableHead::new("Price").numeric().hide_on_mobile(),
-                        TableHead::new("Total").numeric(),
-                    ))
-                    .rows(rows.collect::<Vec<_>>()),
+                web_only(
+                    Table::new()
+                        .head((
+                            TableHead::new("Product"),
+                            TableHead::new("Qty").numeric(),
+                            TableHead::new("Price").numeric().hide_on_mobile(),
+                            TableHead::new("Total").numeric(),
+                        ))
+                        .rows(rows.collect::<Vec<_>>()),
+                ),
+                native_only(native_lines(view)),
                 Separator::horizontal(),
                 Stack::gap(1).children((
                     sum("Subtotal", money(order.subtotal), false),
@@ -388,8 +417,54 @@ pub fn actions(view: &OrderView) -> Row {
     ))
 }
 
+/// The actions as a native client has them, which are the sheet's or the page's own and not
+/// buttons in what it shows: each with its role, and, when it can't be taken now, the reason
+/// in the words the page says it in. `open_as_page` adds the way from the sheet to the
+/// order's page.
+pub fn native_actions(view: &OrderView, open_as_page: bool) -> Vec<Button> {
+    let order = &view.order;
+    let why = |held: Result<(), shop::Refusal>| match held {
+        Ok(()) => None,
+        Err(refusal) => Some(refusal.message(&order.number)),
+    };
+    let held = |button: Button, held: Option<String>| match held {
+        Some(reason) => button.disabled(true).reason(reason),
+        None => button,
+    };
+    let mut out = vec![
+        held(
+            Button::outline("Resend confirmation")
+                .icon(icons::SEND)
+                .opens_dialog("resend"),
+            why(shop::check_resend(order, view.now)),
+        ),
+        held(
+            Button::outline("Refund")
+                .icon(icons::UNDO_2)
+                .opens_dialog("refund"),
+            why(shop::refundable(order).map(|_| ())),
+        ),
+        held(
+            Button::destructive("Cancel order")
+                .icon(icons::BAN)
+                .opens_dialog("cancel"),
+            why(shop::check_cancel(order)),
+        ),
+    ];
+    if open_as_page {
+        out.push(
+            Button::ghost("Open as a page")
+                .icon(icons::EXTERNAL_LINK)
+                .href(format!("/orders/{}", order.id))
+                .presented(Presented::Push)
+                .role(Role::Navigation),
+        );
+    }
+    out
+}
+
 /// Where a refund goes back to, in words.
-fn back_to(order: &Order) -> String {
+pub(crate) fn back_to(order: &Order) -> String {
     match order.method.as_str() {
         "card" => format!("{} ending {}", order.card_brand, order.card_last4),
         "upi" => "the customer's UPI account".to_owned(),
@@ -398,7 +473,7 @@ fn back_to(order: &Order) -> String {
 }
 
 /// How an order is paid, in words: `UPI`, `RuPay ending 4821`, `Cash on delivery`.
-fn paid_with(order: &Order) -> String {
+pub(crate) fn paid_with(order: &Order) -> String {
     match order.method.as_str() {
         "card" => format!("{} ending {}", order.card_brand, order.card_last4),
         method => method_words(method).to_owned(),
@@ -415,16 +490,22 @@ pub fn refund_dialog(view: &OrderView) -> Dialog {
             money(left),
             back_to(order)
         ))
-        .body(
-            FormView::new()
-                .of(&RefundForm {
-                    amount: Money(left),
-                    reason: Reason::default(),
-                })
-                .post(format!("/orders/{}/refund", order.id))
-                .one_column()
-                .submit("Refund"),
-        )
+        .body(refund_form(view))
+}
+
+/// The refund's form: what is left to refund, and where it is sent. The page
+/// draws it, and a native client's screen says the same form.
+pub fn refund_form(view: &OrderView) -> FormView<RefundForm> {
+    let order = &view.order;
+    let left = shop::refundable(order).unwrap_or(0);
+    FormView::new()
+        .of(&RefundForm {
+            amount: Money(left),
+            reason: Reason::default(),
+        })
+        .post(format!("/orders/{}/refund", order.id))
+        .one_column()
+        .submit("Refund")
 }
 
 /// The dialogs the actions open. Each posts to the server, which checks again.
@@ -524,24 +605,27 @@ impl LowerFirst for String {
 /// The three actions with the ways to see the order, and under them why any
 /// action is held back. At the top, so a drawer that opens takes the focus at its
 /// top and starts where a reader reads.
-fn toolbar(view: &OrderView, open_as_page: bool) -> Stack {
+fn toolbar(view: &OrderView, open_as_page: bool) -> Node {
     let mut reasons = held_back(view);
     reasons.dedup();
-    Stack::gap(2).children((
-        Row::gap(2)
-            .align(Align::Center)
-            .justify(Justify::Between)
-            .wrap()
-            .children((
-                actions(view),
-                open_as_page.then(|| {
-                    Button::ghost("Open as a page")
-                        .icon(icons::EXTERNAL_LINK)
-                        .href(format!("/orders/{}", view.order.id))
-                }),
-            )),
-        reasons.into_iter().map(Text::muted).collect::<Vec<_>>(),
-    ))
+    // A native client has the actions as the sheet's or the page's own, each with its reason.
+    web_only(
+        Stack::gap(2).children((
+            Row::gap(2)
+                .align(Align::Center)
+                .justify(Justify::Between)
+                .wrap()
+                .children((
+                    actions(view),
+                    open_as_page.then(|| {
+                        Button::ghost("Open as a page")
+                            .icon(icons::EXTERNAL_LINK)
+                            .href(format!("/orders/{}", view.order.id))
+                    }),
+                )),
+            reasons.into_iter().map(Text::muted).collect::<Vec<_>>(),
+        )),
+    )
 }
 
 /// How an order's slower parts are drawn: its history, and the customer's other
@@ -661,7 +745,7 @@ pub fn order_detail(
 /// 60% of the screen wide.
 pub fn order_drawer(view: &OrderView, today: NaiveDate, parts: Parts<'_>) -> Sheet {
     let order = &view.order;
-    Sheet::new(DRAWER, format!("Order {}", order.number))
+    let sheet = Sheet::new(DRAWER, format!("Order {}", order.number))
         .width(SheetWidth::Xl)
         .description(format!(
             "{} for {} in {}",
@@ -669,7 +753,13 @@ pub fn order_drawer(view: &OrderView, today: NaiveDate, parts: Parts<'_>) -> She
             order.customer,
             place_of(&order.city, &order.state, &order.country)
         ))
-        .body((order_detail(view, 3, today, true, parts), dialogs(view)))
+        .body((order_detail(view, 3, today, true, parts), dialogs(view)));
+    // The sheet's own actions, at its foot, for a native client; a browser's are in what it shows.
+    if asked_by_native() {
+        sheet.footer(native_actions(view, true))
+    } else {
+        sheet
+    }
 }
 
 /// The order on a page of its own: the same detail and the same dialogs.

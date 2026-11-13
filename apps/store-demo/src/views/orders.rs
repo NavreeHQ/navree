@@ -39,20 +39,20 @@ pub const PAYMENTS: &[(&str, &str)] = &[
 pub struct OrderRow {
     #[col(skip)]
     pub id: i64,
-    #[col(sortable, search, sticky, label = "Order")]
+    #[col(sortable, search, sticky, label = "Order", role = title)]
     pub number: String,
-    #[col(search, hidden)]
+    #[col(search, hidden, role = subtitle)]
     pub customer: String,
     #[col(search, hidden)]
     pub email: String,
     // A relation's choices come from the page: each status with how many hold it.
-    #[col(sortable, filter = relation)]
+    #[col(sortable, filter = relation, role = status)]
     pub status: String,
     #[col(filter = multi, options = FULFILMENTS)]
     pub fulfilment: String,
     #[col(filter = multi, options = PAYMENTS, hide_on_mobile)]
     pub payment: String,
-    #[col(sortable, numeric)]
+    #[col(sortable, numeric, role = trailing)]
     pub total: i64,
     #[col(skip)]
     pub refunded: i64,
@@ -171,6 +171,8 @@ pub fn orders_table<'a>(
         .cell("placed_on", move |row| {
             Text::new(when(row.placed_at, today)).inline()
         })
+        // A tap on a row opens the order where the reader is, as its number does.
+        .row_opens(|row| format!("/orders/{}/peek", row.id))
         .filter_bar()
         .sticky_header()
         .live_on(crate::live::stream().on("orders"))

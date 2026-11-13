@@ -8,7 +8,7 @@ use chrono::NaiveDate;
 use navree::ui::*;
 
 use crate::data::{Card, Column, Label, PROJECT, Person, labels_of};
-use crate::views::{due_label, person};
+use crate::views::{due_label, person, web_only};
 
 /// The region the board is drawn in: filters redraw it, and the stream refreshes it.
 pub const REGION: &str = "board";
@@ -380,7 +380,7 @@ pub fn board_page(
     today: NaiveDate,
 ) -> AppPage {
     page.actions((
-        Command::trigger("jump", "Find a card"),
+        web_only(Command::trigger("jump", "Find a card")),
         viewer_menu(&data.people, viewer),
     ))
     .body((
@@ -389,6 +389,6 @@ pub fn board_page(
             board(data, viewer, filters, today),
         )),
         empty_drawer(),
-        palette(),
+        web_only(palette()),
     ))
 }

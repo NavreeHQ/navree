@@ -23,9 +23,9 @@ pub const LEVELS: &[(&str, &str)] = &[
 pub struct ProductRow {
     #[col(skip)]
     pub id: i64,
-    #[col(sortable, search, sticky, label = "Product")]
+    #[col(sortable, search, sticky, label = "Product", role = title)]
     pub name: String,
-    #[col(search, hidden, label = "SKU")]
+    #[col(search, hidden, label = "SKU", role = subtitle)]
     pub sku: String,
     #[col(skip)]
     pub icon: String,
@@ -33,9 +33,9 @@ pub struct ProductRow {
     pub category: String,
     #[col(sortable, numeric, hide_on_mobile)]
     pub price: i64,
-    #[col(sortable, numeric, label = "In stock")]
+    #[col(sortable, numeric, label = "In stock", role = trailing)]
     pub stock: i64,
-    #[col(filter = multi, options = LEVELS, label = "Level")]
+    #[col(filter = multi, options = LEVELS, label = "Level", role = status)]
     pub level: String,
     #[col(skip)]
     pub reorder_at: i64,
@@ -93,9 +93,14 @@ fn stock_cell(row: &ProductRow) -> Node {
 /// A number of units and a button, in a form of the row's own: the server adds
 /// them and the stream redraws the row.
 fn restock_cell(row: &ProductRow) -> Node {
+    restock_form(row.id, row.restock, &row.name)
+}
+
+/// The restock form of product `id`: `units` to begin with.
+fn restock_form(id: i64, units: i64, name: &str) -> Node {
     el("form")
         .attr("method", "post")
-        .attr("action", format!("/inventory/{}/restock", row.id))
+        .attr("action", format!("/inventory/{id}/restock"))
         .flag("data-ui-form", true)
         .uses(Uses::CORE)
         .child(
@@ -104,10 +109,10 @@ fn restock_cell(row: &ProductRow) -> Node {
                 .justify(Justify::End)
                 .children((
                     Input::number("quantity")
-                        .value(row.restock.to_string())
+                        .value(units.to_string())
                         .attr("min", 1_i64)
                         .attr("max", RESTOCK_MAX)
-                        .attr("aria-label", format!("Units of {} to add", row.name))
+                        .attr("aria-label", format!("Units of {name} to add"))
                         .required(),
                     Button::outline("Restock")
                         .icon(icons::PACKAGE_PLUS)
@@ -118,18 +123,51 @@ fn restock_cell(row: &ProductRow) -> Node {
         .into()
 }
 
+/// The id of the inventory table, which a restock draws again.
+pub const TABLE: &str = "products";
+
+/// The id of the sheet a row opens on a screen drawn by the system's own toolkit.
+pub const SHEET: &str = "product";
+
+/// The sheet a row opens, before it is filled.
+pub fn empty_sheet() -> Sheet {
+    Sheet::new(SHEET, "Product")
+}
+
+/// The sheet filled for one product: what is on the shelf, and the form that
+/// adds to it.
+pub fn product_sheet(product: Product) -> Sheet {
+    let row = ProductRow::from(product);
+    Sheet::new(SHEET, row.name.clone())
+        .width(SheetWidth::Md)
+        .description(format!("{} · {}", row.sku, row.category))
+        .body(
+            Stack::gap(4).children((
+                FactGrid::new().cols(2).cards([
+                    FactCard::new("In stock", row.stock.to_string())
+                        .detail(format!("Reorder at {}", row.reorder_at)),
+                    FactCard::new("Price", money(row.price)),
+                    FactCard::new("Level", level_badge(&row.level)),
+                ]),
+                restock_form(row.id, row.restock, &row.name),
+            )),
+        )
+}
+
 /// The inventory table.
 pub fn inventory_table<'a>(
     query: &'a TableQuery<ProductRow>,
     page: &'a TablePage<ProductRow>,
 ) -> DataTable<'a, ProductRow> {
-    DataTable::new("products", query, page)
+    DataTable::new(TABLE, query, page)
         .caption("Inventory")
         .cell("name", |row| product(&row.icon, &row.name, &row.sku))
         .cell("price", |row| Text::new(money(row.price)).inline())
         .cell("stock", stock_cell)
         .cell("level", |row| level_badge(&row.level))
         .cell("restock", restock_cell)
+        // A tap on a row opens the product, with its restock form, where the reader is.
+        .row_opens(|row| format!("/inventory/{}/peek", row.id))
         .filter_bar()
         .sticky_header()
         .live_on(crate::live::stream().on("inventory"))

@@ -10,6 +10,19 @@ use crate::data::{PROJECT, Person, TEAM, person_icon};
 pub mod board;
 pub mod card;
 
+/// `node` for a browser, and nothing for a native client: a part whose native form is
+/// another part, or that only a keyboard reaches.
+pub fn web_only(node: impl Into<Node>) -> Node {
+    #[cfg(feature = "native-preview")]
+    {
+        navree::ui::native::web_only(node)
+    }
+    #[cfg(not(feature = "native-preview"))]
+    {
+        node.into()
+    }
+}
+
 /// The app's one shell.
 pub fn shell() -> Shell {
     Shell::new(TEAM)
