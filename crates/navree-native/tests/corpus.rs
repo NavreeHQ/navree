@@ -1616,6 +1616,9 @@ fn screen_device() -> Envelope {
                 detail: Some(s("₹1,00,000 to Gurpreet Kaur, HDFC ••4821")),
                 method: ConfirmMethod::Either,
             })
+            // Two requests: the ticket goes to `challenge`, which spends it and
+            // answers the passkey request's options; the signature then goes to
+            // the continuation, with no ticket.
             .then(then("/payments/42/approve", "tk-confirm"))
             .alt(Alt::Navigate {
                 href: path("/payments/42/approve-with-code"),
