@@ -286,9 +286,6 @@ pub struct Envelope {
     pub modules: Vec<&'static str>,
     /// The ops, applied in order.
     pub ops: Vec<Op>,
-    /// Whether the reply says the person signed out: said to a native client only.
-    #[serde(skip)]
-    pub(crate) signed_out: bool,
 }
 
 impl Envelope {
@@ -298,7 +295,6 @@ impl Envelope {
             build: assets::BUILD,
             modules: Vec::new(),
             ops,
-            signed_out: false,
         }
     }
 }
@@ -512,7 +508,7 @@ impl Reply {
     fn fallback_response(self) -> (Response, Envelope, StatusCode) {
         let mut envelope = Envelope::new(self.ops);
         envelope.modules = assets::scripts(self.uses).collect();
-        envelope.signed_out = self.signed_out;
+        let signed_out = self.signed_out;
         let mut response = match self.fallback {
             Fallback::Redirect(href) => {
                 let mut response = StatusCode::SEE_OTHER.into_response();
@@ -528,6 +524,9 @@ impl Reply {
             && let Ok(cookie) = crate::shell::flash_cookie_toned(tone, &text)
         {
             response.headers_mut().append(header::SET_COOKIE, cookie);
+        }
+        if signed_out {
+            response.extensions_mut().insert(SignedOut);
         }
         (response, envelope, self.status)
     }
@@ -553,6 +552,12 @@ fn location_of(url: &str) -> String {
 /// module's layer.
 #[derive(Clone, Debug)]
 pub(crate) struct PendingOps(pub(crate) Envelope, pub(crate) StatusCode);
+
+/// Left on a reply's response when the reply says the person signed out
+/// ([`Reply::signed_out`]): said to a native client only, so it is no part of
+/// what the browser's runtime receives.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SignedOut;
 
 impl IntoResponse for Reply {
     fn into_response(self) -> Response {
