@@ -543,37 +543,7 @@ impl Pages {
             }
         };
         let done = status == StatusCode::OK;
-        // A native client's screen is drawn again with the parts it is written with:
-        // its content, each of its actions as the order allows it now, and the refund
-        // form from what is left.
-        #[cfg(feature = "native-preview")]
-        if native::asked() {
-            let mut reply = Reply::ops_or_redirect(format!("/orders/{id}")).op(Op::Close {
-                target: dialog.to_owned(),
-            });
-            if let Some(view) = order_view(uow, id).await? {
-                let history = history(uow, id).await?;
-                let others = others(uow, &view.order).await?;
-                let shown = screens::OrderScreen {
-                    view: &view,
-                    history: &history,
-                    others: &others,
-                    today: today(),
-                };
-                reply = reply.op(native::morph(PAGE, screens::order_body(&shown)));
-                for action in screens::order_actions(&view) {
-                    let target = action.id.clone().unwrap_or_default();
-                    reply = reply.op(native::replace(target, action));
-                }
-                if done {
-                    reply = reply.op(native::replace("refund", screens::refund_dialog(&view)));
-                }
-            }
-            return Ok(reply
-                .toast_with(Toast::new(tone, text).title(title))
-                .status(status)
-                .into_response());
-        }
+        // What every client is told: the dialog closes, and a toast says what happened.
         let mut reply = Reply::ops_or_redirect(format!("/orders/{id}")).op(Op::Close {
             target: dialog.to_owned(),
         });
@@ -581,23 +551,55 @@ impl Pages {
             let today = today();
             let history = history(uow, id).await?;
             let others = others(uow, &view.order).await?;
-            reply = reply
-                .morph(DRAWER, order_drawer(&view, today, Parts::Lazy))
-                .morph(
-                    PAGE,
-                    order_page(
-                        &view,
+            // A browser's drawer and page are morphed into the order as it is now.
+            let web = |reply: Reply| {
+                let reply = reply
+                    .morph(DRAWER, order_drawer(&view, today, Parts::Lazy))
+                    .morph(
+                        PAGE,
+                        order_page(
+                            &view,
+                            today,
+                            Parts::Inline {
+                                history: &history,
+                                others: &others,
+                            },
+                        ),
+                    );
+                // A morph keeps what was typed; after a refund, the form starts again
+                // from what is left.
+                if done {
+                    reply.op(Op::replace("refund", &refund_dialog(&view).into()))
+                } else {
+                    reply
+                }
+            };
+            // A native client's screen is drawn again with the parts it is written
+            // with: its content, each of its actions as the order allows it now, and
+            // the refund form from what is left.
+            #[cfg(feature = "native-preview")]
+            {
+                reply = reply.each(web, |mut reply| {
+                    let shown = screens::OrderScreen {
+                        view: &view,
+                        history: &history,
+                        others: &others,
                         today,
-                        Parts::Inline {
-                            history: &history,
-                            others: &others,
-                        },
-                    ),
-                );
-            // A morph keeps what was typed; after a refund, the form starts again
-            // from what is left.
-            if done {
-                reply = reply.op(Op::replace("refund", &refund_dialog(&view).into()));
+                    };
+                    reply = reply.op(native::morph(PAGE, screens::order_body(&shown)));
+                    for action in screens::order_actions(&view) {
+                        let target = action.id.clone().unwrap_or_default();
+                        reply = reply.op(native::replace(target, action));
+                    }
+                    if done {
+                        reply = reply.op(native::replace("refund", screens::refund_dialog(&view)));
+                    }
+                    reply
+                });
+            }
+            #[cfg(not(feature = "native-preview"))]
+            {
+                reply = web(reply);
             }
         }
         Ok(reply

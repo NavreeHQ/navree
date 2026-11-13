@@ -117,8 +117,8 @@ fn count(id: &str, shown: &str, label: &str, hue: Hue, weight: Weight) -> Card {
     )
 }
 
-/// One shelf: a tile that opens the product where the reader is, grows into
-/// it, and offers a restock on a long press.
+/// One shelf: a tile that opens the product where the reader is and offers a
+/// restock on a long press.
 fn tile(shelf: &Shelf) -> Card {
     let (hue, tone, word) = level(shelf);
     let left = match shelf.stock {
@@ -132,7 +132,6 @@ fn tile(shelf: &Shelf) -> Card {
             format!("{}, {}", shelf.name, word.to_lowercase()),
             Action::request(format!("/inventory/{}/peek", shelf.id)),
         )
-        .zoom()
         .appear(Appear::Scale)
         .menu((
             Button::new("Restock 24").post(

@@ -356,7 +356,6 @@
                           }
                         }
                       ],
-                      "transition": "zoom",
                       "appear": "scale",
                       "children": [
                         {
@@ -470,7 +469,6 @@
                           }
                         }
                       ],
-                      "transition": "zoom",
                       "appear": "scale",
                       "children": [
                         {
@@ -584,7 +582,6 @@
                           }
                         }
                       ],
-                      "transition": "zoom",
                       "appear": "scale",
                       "children": [
                         {
@@ -698,7 +695,6 @@
                           }
                         }
                       ],
-                      "transition": "zoom",
                       "appear": "scale",
                       "children": [
                         {
@@ -812,7 +808,6 @@
                           }
                         }
                       ],
-                      "transition": "zoom",
                       "appear": "scale",
                       "children": [
                         {
@@ -926,7 +921,6 @@
                           }
                         }
                       ],
-                      "transition": "zoom",
                       "appear": "scale",
                       "children": [
                         {

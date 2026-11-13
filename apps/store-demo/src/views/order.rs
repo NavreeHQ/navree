@@ -490,16 +490,22 @@ pub fn refund_dialog(view: &OrderView) -> Dialog {
             money(left),
             back_to(order)
         ))
-        .body(
-            FormView::new()
-                .of(&RefundForm {
-                    amount: Money(left),
-                    reason: Reason::default(),
-                })
-                .post(format!("/orders/{}/refund", order.id))
-                .one_column()
-                .submit("Refund"),
-        )
+        .body(refund_form(view))
+}
+
+/// The refund's form: what is left to refund, and where it is sent. The page
+/// draws it, and a native client's screen says the same form.
+pub fn refund_form(view: &OrderView) -> FormView<RefundForm> {
+    let order = &view.order;
+    let left = shop::refundable(order).unwrap_or(0);
+    FormView::new()
+        .of(&RefundForm {
+            amount: Money(left),
+            reason: Reason::default(),
+        })
+        .post(format!("/orders/{}/refund", order.id))
+        .one_column()
+        .submit("Refund")
 }
 
 /// The dialogs the actions open. Each posts to the server, which checks again.

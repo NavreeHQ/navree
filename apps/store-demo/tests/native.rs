@@ -444,15 +444,35 @@ async fn an_order_is_a_record_written_for_native_clients_and_an_action_answers_p
         (form.id.as_deref(), form.method, form.action.as_str()),
         (Some("refund"), n::Method::Post, "/orders/1/refund")
     );
-    let fields: Vec<&str> = form
-        .children
-        .iter()
-        .filter_map(|node| match node {
-            N::Field(field) => Some(field.name.as_str()),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(fields, ["amount", "reason"]);
+    // Its fields are the ones the page's form has, said from the same form: the
+    // amount with what is left and the page's help, and the reasons the page offers.
+    let [N::Field(amount), N::Field(reason)] = form.children.as_slice() else {
+        panic!("not the form's two fields alone: {:?}", form.children);
+    };
+    assert_eq!(
+        (amount.name.as_str(), amount.label.as_deref()),
+        ("amount", Some("Amount"))
+    );
+    assert_eq!(
+        amount.help.as_deref(),
+        Some("Up to what is left to refund. All of it refunds the order in full.")
+    );
+    assert!(
+        matches!(&amount.input, Input::Text(typed)
+            if typed.kind == TextKind::Decimal && !typed.value.is_empty()),
+        "{:?}",
+        amount.input
+    );
+    assert_eq!(
+        (reason.name.as_str(), reason.label.as_deref()),
+        ("reason", Some("Reason"))
+    );
+    assert!(
+        matches!(&reason.input, Input::Choice(choice)
+            if choice.options.iter().any(|option| option.label == "Returned by the customer")),
+        "{:?}",
+        reason.input
+    );
     let [N::Button(keep), N::Button(go)] = refund.actions.as_slice() else {
         panic!("not two answers: {:?}", refund.actions);
     };
@@ -854,14 +874,14 @@ async fn the_shelves_are_composed_for_native_clients_and_a_tile_opens_restocks_a
             .as_deref()
             .expect("a tile has a name an answer finds it by");
         let product = id.strip_prefix("shelf-").expect("named after its product");
-        // One control with a name: a tap opens the product where the reader is, and the
-        // tile grows into it.
+        // One control with a name: a tap opens the product where the reader is, in a
+        // sheet of this screen. It opens no screen, so it does not grow into one.
         assert!(tile.label.as_deref().is_some_and(|label| !label.is_empty()));
         assert!(matches!(
             &tile.action,
             Some(Action::Request { method: n::Method::Get, href, .. }) if *href == format!("/inventory/{product}/peek")
         ));
-        assert_eq!(tile.transition, Some(n::Transition::Zoom));
+        assert_eq!(tile.transition, None);
         // A long press offers the restock, which posts where the page's form posts.
         assert!(matches!(
             tile.menu.as_slice(),

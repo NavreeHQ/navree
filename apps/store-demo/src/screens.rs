@@ -9,7 +9,6 @@
 //! a screen does goes to the handlers the pages use.
 
 use chrono::NaiveDate;
-use navree::native::op::Edge;
 use navree::native::ui::*;
 
 use crate::data::{
@@ -19,7 +18,7 @@ use crate::data::{
 use crate::shop;
 use crate::views::dashboard::{Cursor, FeedEntry, Figures, Sales, Seller, method_words};
 use crate::views::inventory;
-use crate::views::order::{OrderView, PAGE, back_to, paid_with};
+use crate::views::order::{OrderView, PAGE, back_to, paid_with, refund_form};
 use crate::views::{clock, money, place_of, thousands, units, when};
 
 /// The name of a product's icon in the toolkit's set, by its key.
@@ -456,17 +455,13 @@ pub fn activity_since(entries: &[FeedEntry], asked: &str, today: NaiveDate) -> V
         || asked.to_owned(),
         |entry| Cursor::of(&entry.event).to_string(),
     );
-    vec![Op::Merge {
-        target: ACTIVITY.to_owned(),
-        nodes: entries
-            .iter()
-            .map(|entry| activity_row(entry, today).into())
-            .collect(),
-        gone: Vec::new(),
+    vec![Op::merge(
+        ACTIVITY,
         since,
-        at: Edge::Start,
-        more: false,
-    }]
+        Edge::Start,
+        entries.iter().map(|entry| activity_row(entry, today)),
+        [],
+    )]
 }
 
 // ---------------------------------------------------------------------------
@@ -720,10 +715,7 @@ fn customer(view: &OrderView) -> Section {
         .parts(
             List::new().parts((
                 Row::new(order.customer.clone())
-                    .leading(Avatar {
-                        name: order.customer.clone(),
-                        ..Avatar::default()
-                    })
+                    .leading(Avatar::new(order.customer.clone()))
                     .subtitle(known),
                 (!view.phone.is_empty()).then(|| {
                     reach(
@@ -860,12 +852,16 @@ fn steps(order: &Order, history: &[Event], today: NaiveDate) -> Timeline {
     Timeline::new().id("order-steps").moments(moments)
 }
 
-/// The refund: an amount, which starts at what is left, and a reason. It is
-/// sent to the handler the page's form is sent to, and what is wrong with a
-/// field comes back at the field.
+/// The refund: an amount, which starts at what is left, and a reason. The
+/// form is the page's own, said to a native client: its id, its fields, their
+/// labels and what each holds come from `RefundForm`, so it is sent to the
+/// handler the page's form is sent to, and what is wrong with a field comes
+/// back at the field.
 pub fn refund_dialog(view: &OrderView) -> Dialog {
     let order = &view.order;
     let left = shop::refundable(order).unwrap_or(0);
+    let form = navree::ui::native::form(&refund_form(view));
+    let sends = form.id.clone().unwrap_or_default();
     Dialog::new("refund")
         .title(format!("Refund {}", order.number))
         .text(format!(
@@ -873,38 +869,12 @@ pub fn refund_dialog(view: &OrderView) -> Dialog {
             money(left),
             back_to(order)
         ))
-        .parts(
-            Form::post(format!("/orders/{}/refund", order.id))
-                .id("refund")
-                .parts((
-                    Field::amount("amount", "₹")
-                        .label("Amount")
-                        .help("Up to what is left to refund. All of it refunds the order in full.")
-                        .required()
-                        .value(format!("{}.{:02}", left / 100, left % 100)),
-                    Field::choice(
-                        "reason",
-                        ChoiceKind::Menu,
-                        [
-                            ("returned", "Returned by the customer"),
-                            ("damaged", "Arrived damaged"),
-                            ("late", "Arrived late"),
-                            ("goodwill", "A goodwill gesture"),
-                        ],
-                    )
-                    .label("Reason")
-                    .value("returned"),
-                )),
-        )
+        .parts(form)
         .action((
             Button::new("Keep").role(Role::Cancel).dismisses(),
             Button::new("Refund")
                 .role(Role::Confirm)
-                .action(Action::Submit {
-                    form: Some("refund".to_owned()),
-                    href: None,
-                    with: None,
-                }),
+                .submits_form(sends),
         ))
 }
 
@@ -1067,9 +1037,8 @@ pub fn shelves(shown: &Shelves<'_>) -> Screen {
         )
 }
 
-/// One shelf: a tile that opens the product where the reader is and grows
-/// into it, with a restock on a long press. An answer to a restock draws it
-/// again.
+/// One shelf: a tile that opens the product where the reader is, with a
+/// restock on a long press. An answer to a restock draws it again.
 pub fn shelf_tile(product: &Product) -> Card {
     let (hue, tone, words) = level(product);
     let left = match product.stock {
@@ -1086,7 +1055,6 @@ pub fn shelf_tile(product: &Product) -> Card {
             format!("{}, {}", product.name, words.to_lowercase()),
             Action::request(format!("/inventory/{}/peek", product.id)),
         )
-        .zoom()
         .appear(Appear::Scale)
         .menu(
             Button::new("Restock 24")
