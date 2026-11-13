@@ -20,7 +20,9 @@
 //! With `--trusted-publishing` (in GitHub Actions, for crates that exist on
 //! crates.io already) every 25 crates get a fresh token from crates.io's
 //! trusted publishing, which lasts 30 minutes, and each token is revoked
-//! when its crates are done.
+//! when its crates are done. A crate the registry has no version of cannot
+//! be published that way: it is published with the API token in
+//! `NAVREE_FIRST_PUBLISH_TOKEN`, and the run stops at it when there is none.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -32,6 +34,10 @@ use crate::order;
 use crate::process::{Stdin, curl, git};
 use crate::stage;
 use crate::time::{format_utc, parse_http_date};
+
+/// The environment variable that holds the API token for a crate's first
+/// publish, read with `--trusted-publishing`.
+pub const FIRST_PUBLISH_TOKEN: &str = "NAVREE_FIRST_PUBLISH_TOKEN";
 
 /// The output of one `cargo publish`.
 #[derive(Debug, Clone)]
@@ -139,6 +145,9 @@ pub struct Options {
     pub rate_limit_fallback: Duration,
     /// Added to the time a 429 gives, for clocks that differ.
     pub rate_limit_margin: Duration,
+    /// With a token provider: the API token for a crate the registry has no
+    /// version of. Trusted publishing only publishes crates that exist.
+    pub first_publish_token: Option<String>,
 }
 
 impl Options {
@@ -153,6 +162,7 @@ impl Options {
             retries: 5,
             rate_limit_fallback: Duration::from_secs(600),
             rate_limit_margin: Duration::from_secs(10),
+            first_publish_token: None,
         }
     }
 }
@@ -241,7 +251,50 @@ pub fn publish_all(
             report.remaining = order[at..].to_vec();
             break;
         }
-        if tokens.is_some() && (token.is_none() || with_token >= options.per_token) {
+        // A crate the registry has never had cannot be published with a token from
+        // trusted publishing: it takes the API token given for first publishes.
+        let mut first: Option<&str> = None;
+        if tokens.is_some() {
+            match index.known(name) {
+                Ok(true) => {}
+                Ok(false) => match options.first_publish_token.as_deref() {
+                    Some(own) => {
+                        log(&format!(
+                            "{name}: the registry has no version of it; publishing with the first-publish token"
+                        ));
+                        first = Some(own);
+                    }
+                    None => {
+                        let message = format!(
+                            "{name} has never been published, and trusted publishing only publishes a crate that exists: give an API token for its first publish in {FIRST_PUBLISH_TOKEN} (scopes publish-new and publish-update, this crate only), run the same command again, then remove the token and add the crate's trusted publisher"
+                        );
+                        return Err(stopped(
+                            order,
+                            at,
+                            &report,
+                            message,
+                            &mut tokens,
+                            &mut token,
+                        ));
+                    }
+                },
+                Err(error) => {
+                    let message = format!("reading the index for {name}: {error}");
+                    return Err(stopped(
+                        order,
+                        at,
+                        &report,
+                        message,
+                        &mut tokens,
+                        &mut token,
+                    ));
+                }
+            }
+        }
+        if first.is_none()
+            && tokens.is_some()
+            && (token.is_none() || with_token >= options.per_token)
+        {
             if let Err(message) = refresh(&mut tokens, &mut token) {
                 return Err(stopped(
                     order,
@@ -259,7 +312,7 @@ pub fn publish_all(
         let mut refreshed = false;
         loop {
             log(&format!("publishing {name} {version}"));
-            let attempt = publisher.publish(name, token.as_deref());
+            let attempt = publisher.publish(name, first.or(token.as_deref()));
             if attempt.success {
                 break;
             }
@@ -283,7 +336,7 @@ pub fn publish_all(
                     ));
                     clock.sleep(wait);
                     // A long wait outlives a short-lived token.
-                    if tokens.is_some() {
+                    if tokens.is_some() && first.is_none() {
                         if let Err(message) = refresh(&mut tokens, &mut token) {
                             return Err(stopped(
                                 order,
@@ -297,7 +350,7 @@ pub fn publish_all(
                         with_token = 0;
                     }
                 }
-                Failure::Unauthorized if tokens.is_some() && !refreshed => {
+                Failure::Unauthorized if tokens.is_some() && first.is_none() && !refreshed => {
                     refreshed = true;
                     log(&format!(
                         "{name}: the token was refused; getting a fresh one"
@@ -363,7 +416,9 @@ pub fn publish_all(
         }
         log(&format!("{name} {version}: published"));
         report.published.push(name.clone());
-        with_token += 1;
+        if first.is_none() {
+            with_token += 1;
+        }
     }
 
     if let (Some(provider), Some(old)) = (tokens.as_mut(), token.take()) {
@@ -712,6 +767,11 @@ pub fn run(root: &Path, flags: &Flags) -> Result<Outcome, String> {
 
     let mut options = Options::new(&version);
     options.limit = flags.limit;
+    if flags.trusted_publishing {
+        options.first_publish_token = std::env::var(FIRST_PUBLISH_TOKEN)
+            .ok()
+            .filter(|token| !token.trim().is_empty());
+    }
     if let Some(count) = flags.per_token {
         options.per_token = count.max(1);
     }
