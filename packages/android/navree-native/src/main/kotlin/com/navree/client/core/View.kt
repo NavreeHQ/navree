@@ -287,6 +287,8 @@ data class ListView(
     val failed: Boolean = false,
     @SerialName("loading_before") val loadingBefore: Boolean = false,
     @SerialName("failed_before") val failedBefore: Boolean = false,
+    /** Every row of a table is chosen, also those not loaded. */
+    val across: Boolean = false,
 )
 
 /** The confirmation the core asks the person for, in the server's words. Every way out is an `answer`. */

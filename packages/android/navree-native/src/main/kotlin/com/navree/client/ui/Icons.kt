@@ -60,6 +60,17 @@ internal object Glyphs {
     val ArrowDown get() = symbolVector("arrow_downward")!!
     val CloudOff get() = symbolVector("cloud_off")!!
     val History get() = symbolVector("history")!!
+    val DragHandle get() = symbolVector("drag_indicator")!!
+    val CheckBox get() = symbolVector("check_box", filled = true)!!
+    val CheckBoxOff get() = symbolVector("check_box_outline_blank")!!
+    val RadioOn get() = symbolVector("radio_button_checked")!!
+    val RadioOff get() = symbolVector("radio_button_unchecked")!!
+    val DateRange get() = symbolVector("date_range")!!
+    val Help get() = symbolVector("help")!!
+    val Info get() = symbolVector("info")!!
+    val ChevronLeft get() = symbolVector("chevron_left")!!
+    val ChevronRight get() = symbolVector("chevron_right")!!
+    val Today get() = symbolVector("today")!!
 }
 
 /**

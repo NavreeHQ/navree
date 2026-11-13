@@ -43,7 +43,7 @@ class NavreeSession(
     val config: NavreeConfig,
     origin: HttpUrl,
     /** The system ended the app and now brings its task back: the stored snapshot is offered to the core. */
-    restoring: Boolean,
+    restoring: Boolean = false,
 ) : AndroidViewModel(application) {
     private val engine = CoreEngine()
     val driver = Driver(engine)

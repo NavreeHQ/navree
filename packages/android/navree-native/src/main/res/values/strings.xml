@@ -62,6 +62,18 @@
         <item quantity="one">%d more loaded</item>
         <item quantity="other">%d more loaded</item>
     </plurals>
+    <plurals name="navree_chosen">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+    <string name="navree_all_chosen">All %1$s selected</string>
+    <string name="navree_choose_across">Select all %1$s</string>
+    <string name="navree_choose_all_shown">Select all rows</string>
+    <string name="navree_clear_choice">Clear selection</string>
+    <string name="navree_drag_handle">Reorder</string>
+    <string name="navree_move_up">Move up</string>
+    <string name="navree_move_down">Move down</string>
+    <string name="navree_move_to">Move to %1$s</string>
 
     <!-- What an app sets. -->
     <string name="navree_origin" translatable="false">https://example.invalid</string>

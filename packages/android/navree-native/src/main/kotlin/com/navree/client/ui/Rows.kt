@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +21,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,6 +40,8 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -43,16 +49,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -60,7 +73,9 @@ import com.navree.client.R
 import com.navree.client.core.Events
 import com.navree.client.design.ContentRules
 import com.navree.client.design.ListRules
+import com.navree.client.design.ReorderRules
 import com.navree.client.design.ScreenRules
+import com.navree.client.design.SelectionRules
 import com.navree.client.design.childNodes
 import com.navree.client.design.walk
 import com.navree.protocol.Navree
@@ -155,7 +170,16 @@ private fun rowActions(items: List<Navree.Node>, place: Place): List<CustomAcces
  * neither is squeezed.
  */
 @Composable
-internal fun RowView(row: Navree.Row, place: Place, group: Group, modifier: Modifier = Modifier) {
+internal fun RowView(
+    row: Navree.Row,
+    place: Place,
+    group: Group,
+    modifier: Modifier = Modifier,
+    /** A drag handle at the row's end, when the row can be moved. */
+    handle: (@Composable () -> Unit)? = null,
+    /** The moves of a row that can be moved, offered to TalkBack. */
+    moves: List<CustomAccessibilityAction> = emptyList(),
+) {
     val ui = LocalUi.current
     val window = ui.window
     val action = row.action
@@ -166,7 +190,7 @@ internal fun RowView(row: Navree.Row, place: Place, group: Group, modifier: Modi
     val below = ListRules.trailingBelow(window)
     val selected = isSelected(row.action, place) || place.screen.has(row.id, Navree.State.SELECTED)
     val state = row.state
-    val extra = (if (swipe != null) listOf(CustomAccessibilityAction(swipe.label) { ui.press(place, swipe); true }) else emptyList()) + rowActions(menu, place)
+    val extra = (if (swipe != null) listOf(CustomAccessibilityAction(swipe.label) { ui.press(place, swipe); true }) else emptyList()) + rowActions(menu, place) + moves
     val under = row.subtitle != null || row.detail.isNotEmpty() || (below && (badge != null || row.trailing != null))
 
     val item: @Composable () -> Unit = {
@@ -195,7 +219,7 @@ internal fun RowView(row: Navree.Row, place: Place, group: Group, modifier: Modi
                 }
                 else -> null
             },
-            trailingContent = if ((!below && (row.trailing != null || badge != null)) || menu.isNotEmpty()) {
+            trailingContent = if ((!below && (row.trailing != null || badge != null)) || menu.isNotEmpty() || handle != null) {
                 {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (!below) {
@@ -207,6 +231,7 @@ internal fun RowView(row: Navree.Row, place: Place, group: Group, modifier: Modi
                             }
                         }
                         if (menu.isNotEmpty()) RowMenu(menu, place, menuOpen) { menuOpen = it }
+                        handle?.invoke()
                     }
                 }
             } else {
@@ -234,6 +259,117 @@ internal fun RowView(row: Navree.Row, place: Place, group: Group, modifier: Modi
 
     Grouped(group) {
         if (swipe != null) Swipeable(swipe, place, item) else item()
+    }
+}
+
+/**
+ * A list whose rows the person puts in order or moves to another list. A row
+ * is dragged by its handle: it lifts and follows the finger, and where it is
+ * let go is told to the core as a move; the order then drawn is the one the
+ * core's next screen holds. The handle's menu, and TalkBack's actions, move a
+ * row up, down, or to another list of the same group.
+ */
+@Composable
+internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = Modifier) {
+    val ui = LocalUi.current
+    val listId = node.id
+    val ids = node.children.filterIsInstance<Navree.Row>().mapNotNull { it.id }
+    val targets = remember(place.screen.screen, node) { ReorderRules.targets(place.screen.screen?.body, node) }
+    var dragging by remember { mutableStateOf<String?>(null) }
+    var offset by remember { mutableFloatStateOf(0f) }
+    var rowPx by remember { mutableIntStateOf(1) }
+    val lifted = with(LocalDensity.current) { 6.dp.toPx() }
+    val upWords = stringResource(R.string.navree_move_up)
+    val downWords = stringResource(R.string.navree_move_down)
+    val toWords = targets.map { (_, name) -> stringResource(R.string.navree_move_to, name) }
+
+    fun move(item: String, to: Navree.List, before: String?) {
+        val from = listId ?: return
+        val target = to.id ?: return
+        ui.send(Events.move(place.id, item, from, target, before))
+    }
+
+    fun step(item: String, steps: Int) {
+        val landing = ReorderRules.landing(ids, ids.indexOf(item), steps) ?: return
+        move(item, node, landing.before)
+    }
+
+    Column(modifier) {
+        for (child in node.children) {
+            if (child !is Navree.Row || !ReorderRules.draggable(node, child)) {
+                if (child is Navree.Row) RowView(child, place, Group.None) else NodeView(child, place)
+                continue
+            }
+            val id = child.id ?: continue
+            val index = ids.indexOf(id)
+            val up = index > 0
+            val down = index in 0 until ids.lastIndex
+            val moves = buildList {
+                if (up) add(CustomAccessibilityAction(upWords) { step(id, -1); true })
+                if (down) add(CustomAccessibilityAction(downWords) { step(id, 1); true })
+                targets.forEachIndexed { at, (list, _) -> add(CustomAccessibilityAction(toWords[at]) { move(id, list, null); true }) }
+            }
+            val held = dragging == id
+            Box(
+                Modifier
+                    .zIndex(if (held) 1f else 0f)
+                    .onSizeChanged { rowPx = it.height }
+                    .graphicsLayer {
+                        translationY = if (held) offset else 0f
+                        shadowElevation = if (held) lifted else 0f
+                    },
+            ) {
+                RowView(
+                    child,
+                    place,
+                    Group.None,
+                    modifier = if (held) Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh) else Modifier,
+                    moves = moves,
+                    handle = {
+                        var open by remember { mutableStateOf(false) }
+                        Box {
+                            Icon(
+                                Glyphs.DragHandle,
+                                contentDescription = stringResource(R.string.navree_drag_handle),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .pointerInput(id, ids) {
+                                        detectDragGestures(
+                                            onDragStart = {
+                                                dragging = id
+                                                offset = 0f
+                                            },
+                                            onDrag = { change, amount ->
+                                                change.consume()
+                                                offset += amount.y
+                                            },
+                                            onDragEnd = {
+                                                step(id, ReorderRules.steps(offset, rowPx))
+                                                dragging = null
+                                                offset = 0f
+                                            },
+                                            onDragCancel = {
+                                                dragging = null
+                                                offset = 0f
+                                            },
+                                        )
+                                    }
+                                    .clickable(role = Role.Button) { open = true }
+                                    .padding(12.dp),
+                            )
+                            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                                if (up) DropdownMenuItem(text = { Text(upWords) }, onClick = { open = false; step(id, -1) })
+                                if (down) DropdownMenuItem(text = { Text(downWords) }, onClick = { open = false; step(id, 1) })
+                                targets.forEachIndexed { at, (list, _) ->
+                                    DropdownMenuItem(text = { Text(toWords[at]) }, onClick = { open = false; move(id, list, null) })
+                                }
+                            }
+                        }
+                    },
+                )
+            }
+        }
     }
 }
 
@@ -293,6 +429,11 @@ internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Pla
     var menuOpen by remember { mutableStateOf(false) }
     val extra = rowActions(folded.menu, place)
     val selected = isSelected(action, place)
+    val choosing = Choosing.of(table, place)
+    val choosable = SelectionRules.choosable(table, row)
+    val ticked = SelectionRules.ticked(table, row, choosing.across)
+    val tick: (Boolean) -> Unit = { on -> choosing.tick(ui, place, row, on) }
+    val tapTicks = SelectionRules.tapTicks(table, row, choosing.any)
     ListItem(
         headlineContent = { Text(folded.headline ?: "", maxLines = 2, overflow = TextOverflow.Ellipsis) },
         supportingContent = if (words.isNotEmpty() || parts.isNotEmpty() || folded.statuses.isNotEmpty() || (below && folded.trailing != null)) {
@@ -313,7 +454,17 @@ internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Pla
         } else {
             null
         },
-        leadingContent = folded.leading?.let { leading -> { Leading(leading, place) } },
+        leadingContent = when {
+            table.select != null -> {
+                {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = ticked, onCheckedChange = if (choosable) tick else null, enabled = choosable)
+                        folded.leading?.let { leading -> Leading(leading, place) }
+                    }
+                }
+            }
+            else -> folded.leading?.let { leading -> { Leading(leading, place) } }
+        },
         trailingContent = if ((!below && folded.trailing != null) || folded.menu.isNotEmpty()) {
             {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -328,10 +479,17 @@ internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Pla
         } else {
             null
         },
-        colors = ListItemDefaults.colors(containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent),
+        colors = ListItemDefaults.colors(containerColor = if (selected || ticked) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent),
         modifier = Modifier
             .then(
                 when {
+                    // While rows are chosen a tap ticks; a long press starts choosing.
+                    tapTicks -> Modifier.clickable(role = Role.Checkbox) { tick(!ticked) }
+                    choosable -> Modifier.combinedClickable(
+                        role = Role.Button,
+                        onLongClick = { tick(true) },
+                        onClick = { if (action != null) ui.act(place, action) else tick(true) },
+                    )
                     action != null && folded.menu.isNotEmpty() -> Modifier.combinedClickable(role = Role.Button, onLongClick = { menuOpen = true }) { ui.act(place, action) }
                     action != null -> Modifier.clickable(role = Role.Button) { ui.act(place, action) }
                     else -> Modifier
@@ -356,8 +514,24 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
     }
     // A table's sort goes to another address of the table's own region.
     val region = place.screen.screen?.body?.let { body -> regionOf(body, node) }
+    val choosing = Choosing.of(node, place)
+    val choosable = node.rows.filter { SelectionRules.choosable(node, it) }
+    val tickedCount = choosable.count { SelectionRules.ticked(node, it, choosing.across) }
+    val chooseAll = stringResource(R.string.navree_choose_all_shown)
     Column(modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (node.select != null) {
+                TriStateCheckbox(
+                    state = when {
+                        tickedCount == 0 -> ToggleableState.Off
+                        tickedCount == choosable.size -> ToggleableState.On
+                        else -> ToggleableState.Indeterminate
+                    },
+                    onClick = { choosing.tickAll(ui, place, on = tickedCount < choosable.size) },
+                    enabled = choosable.isNotEmpty(),
+                    modifier = Modifier.semantics { contentDescription = chooseAll },
+                )
+            }
             node.columns.forEachIndexed { index, column ->
                 if (ListRules.columnWeight(column) == 0f) return@forEachIndexed
                 val sort = column.sort
@@ -402,14 +576,30 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
         HorizontalDivider()
         for (row in node.rows) {
             val action = row.action
+            val canTick = SelectionRules.choosable(node, row)
+            val ticked = SelectionRules.ticked(node, row, choosing.across)
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .then(if (action != null) Modifier.clickable(role = Role.Button) { ui.act(place, action) } else Modifier)
+                    .then(if (ticked) Modifier.background(MaterialTheme.colorScheme.secondaryContainer) else Modifier)
+                    .then(
+                        when {
+                            SelectionRules.tapTicks(node, row, choosing.any) -> Modifier.clickable(role = Role.Checkbox) { choosing.tick(ui, place, row, !ticked) }
+                            action != null -> Modifier.clickable(role = Role.Button) { ui.act(place, action) }
+                            else -> Modifier
+                        },
+                    )
                     .heightIn(min = 52.dp)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (node.select != null) {
+                    Checkbox(
+                        checked = ticked,
+                        onCheckedChange = if (canTick) ({ on: Boolean -> choosing.tick(ui, place, row, on) }) else null,
+                        enabled = canTick,
+                    )
+                }
                 val titleAt = node.columns.indexOfFirst { it.role == Navree.ColumnRole.TITLE }.takeIf { it >= 0 } ?: 0
                 row.cells.forEachIndexed { index, cell ->
                     val end = atEnd(index)
@@ -437,6 +627,27 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
         node.summary?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
         }
+    }
+}
+
+/** Which rows of a table are chosen now, and how a box tells the core. */
+internal class Choosing(private val table: Navree.Table, val across: Boolean) {
+    /** Whether any row is chosen: the table is in selection mode. */
+    val any: Boolean get() = across || table.rows.any { it.selected && SelectionRules.choosable(table, it) }
+
+    fun tick(ui: Ui, place: Place, row: Navree.TableRow, on: Boolean) {
+        val id = table.id ?: return
+        val rowId = row.id ?: return
+        ui.send(Events.choose(place.id, id, rowId, on))
+    }
+
+    fun tickAll(ui: Ui, place: Place, on: Boolean, across: Boolean = false) {
+        val id = table.id ?: return
+        ui.send(Events.choose(place.id, id, null, on, across))
+    }
+
+    companion object {
+        fun of(table: Navree.Table, place: Place) = Choosing(table, table.id?.let { place.screen.lists[it]?.across } == true)
     }
 }
 

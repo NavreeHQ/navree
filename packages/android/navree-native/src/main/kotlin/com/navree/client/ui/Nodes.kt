@@ -167,7 +167,7 @@ internal fun NodeView(node: Navree.Node, place: Place, modifier: Modifier = Modi
         is Navree.Grid -> GridView(node, place, modifier)
         is Navree.Stack -> StackView(node, place, modifier)
         is Navree.Region -> RegionView(node, place, modifier)
-        is Navree.List -> Column(modifier) {
+        is Navree.List -> if (node.reorder != null) ReorderList(node, place, modifier) else Column(modifier) {
             for (child in node.children) {
                 when (child) {
                     is Navree.Row -> RowView(child, place, Group.None)

@@ -57,12 +57,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -84,6 +88,7 @@ import com.navree.client.design.Presentation
 import com.navree.client.design.ScreenContext
 import com.navree.client.design.ScreenPlan
 import com.navree.client.design.ScreenRules
+import com.navree.client.design.SelectionRules
 import com.navree.client.design.SearchPlace
 import com.navree.client.design.SubmitPlace
 import com.navree.client.design.expressive.FloatingActions
@@ -467,6 +472,16 @@ private fun ScreenBar(
 ) {
     val navigationIcon: @Composable () -> Unit = { NavigationIconView(plan.navigationIcon, view, screen.back) }
     val actions: @Composable RowScope.() -> Unit = { BarActions(screen, plan, place, info, setSearching) }
+    // While rows are chosen the app bar is about them.
+    val table = remember(screen) { SelectionRules.selectable(screen.body) }
+    if (table != null) {
+        val across = table.id?.let { view.lists[it]?.across } == true
+        val count = SelectionRules.chosen(table, across).size
+        if (count > 0 || across) {
+            ContextualBar(screen, table, count, across, place)
+            return
+        }
+    }
     when {
         plan.bar == BarKind.None -> Unit
         plan.bar == BarKind.Search || (searching && plan.search != SearchPlace.None) ->
@@ -488,6 +503,54 @@ private fun ScreenBar(
             scrollBehavior = behaviour,
         )
     }
+}
+
+/**
+ * Material's contextual app bar while rows are chosen: how many, a way to
+ * clear them (also the system's back), the offer to choose every row when all
+ * those held are, and the actions of the form the rows go with.
+ */
+@Composable
+private fun ContextualBar(screen: Navree.Screen, table: Navree.Table, count: Int, across: Boolean, place: Place) {
+    val ui = LocalUi.current
+    val choosing = Choosing(table, across)
+    val form = remember(screen, table) { SelectionRules.bulkForm(screen.body, table) }
+    val total = table.select?.across?.total
+    val numbers = remember { java.text.NumberFormat.getIntegerInstance() }
+    BackHandler { choosing.tickAll(ui, place, on = false) }
+    TopAppBar(
+        title = {
+            Text(
+                if (across && total != null) stringResource(R.string.navree_all_chosen, numbers.format(total)) else pluralStringResource(R.plurals.navree_chosen, count, count),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        },
+        navigationIcon = { TipIconButton(stringResource(R.string.navree_clear_choice), Glyphs.Close, { choosing.tickAll(ui, place, on = false) }) },
+        actions = {
+            if (SelectionRules.offerAcross(table, across) && total != null) {
+                TextButton(onClick = { choosing.tickAll(ui, place, on = true, across = true) }) {
+                    Text(stringResource(R.string.navree_choose_across, numbers.format(total)), maxLines = 1)
+                }
+            }
+            if (form != null) {
+                val inForm = place.copy(form = form.id)
+                for (button in form.children.filterIsInstance<Navree.Button>()) {
+                    val icon = rememberIcon(button.icon, button.standard)
+                    val danger = ScreenRules.destructive(button)
+                    if (icon != null) {
+                        TipIconButton(button.label, icon, { ui.press(inForm, button) }, enabled = usable(button, inForm), tint = if (danger) MaterialTheme.colorScheme.error else Color.Unspecified)
+                    } else {
+                        TextButton(onClick = { ui.press(inForm, button) }, enabled = usable(button, inForm)) {
+                            Text(button.label, color = if (danger) MaterialTheme.colorScheme.error else Color.Unspecified, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    )
 }
 
 @Composable

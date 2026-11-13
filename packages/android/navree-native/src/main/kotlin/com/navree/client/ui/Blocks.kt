@@ -3,6 +3,7 @@ package com.navree.client.ui
 import com.navree.client.core.ScreenView
 import com.navree.client.design.ContentRules
 import com.navree.client.design.ListRules
+import com.navree.client.design.SelectionRules
 import com.navree.client.design.childNodes
 import com.navree.client.design.nodeId
 import com.navree.protocol.Navree
@@ -49,7 +50,20 @@ internal fun inFlow(node: Navree.Node, screen: ScreenView): Boolean = when {
     screen.hidden(node.nodeId) -> false
     node is Navree.Sheet || node is Navree.Dialog || node is Navree.Popover -> false
     node is Navree.Toolbar -> false
+    // The buttons for chosen rows are the contextual app bar's.
+    node is Navree.Form && node.id != null && node.id == bulkFormId(screen) -> false
     else -> true
+}
+
+private val bulkForms = java.util.WeakHashMap<Navree.Screen, String>()
+
+/** The id of the form whose buttons the contextual app bar holds while rows are chosen, or null. */
+internal fun bulkFormId(screen: ScreenView): String? {
+    val tree = screen.screen ?: return null
+    val known = bulkForms.getOrPut(tree) {
+        SelectionRules.selectable(tree.body)?.let { SelectionRules.bulkForm(tree.body, it)?.id }.orEmpty()
+    }
+    return known.ifEmpty { null }
 }
 
 /**
@@ -114,7 +128,10 @@ internal fun blocks(
                 if (node.title != null) out += Block.Header(key("$path/header", null), node.title!!)
                 node.children.forEachIndexed { index, child -> add(child, "$path/$index", form, region, top = top) }
             }
-            is Navree.List -> {
+            // A list whose rows are moved is drawn whole, so a row can be dragged past the others.
+            is Navree.List -> if (node.reorder != null) {
+                out += Block.Single(key(path, node.id), node, form)
+            } else {
                 node.children.forEachIndexed { index, child ->
                     if (inFlow(child, screen)) {
                         if (child is Navree.Row || child is Navree.FeedRow) {
@@ -137,7 +154,7 @@ internal fun blocks(
                 }
                 // A list inside a section gives the section its rows.
                 val items = node.children.filter { inFlow(it, screen) }
-                    .flatMap { child -> if (child is Navree.List && child.more == null) child.children.filter { inFlow(it, screen) } else listOf(child) }
+                    .flatMap { child -> if (child is Navree.List && child.more == null && child.reorder == null) child.children.filter { inFlow(it, screen) } else listOf(child) }
                 if (node.style == Navree.SectionStyle.INSET && items.isNotEmpty() && items.all(::groupable)) {
                     items.forEachIndexed { index, item ->
                         val group = when {

@@ -42,8 +42,13 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import com.navree.client.design.ScreenRules
 import com.navree.protocol.Navree
@@ -179,6 +184,13 @@ internal fun ColumnScope.MenuItems(items: List<Navree.Node>, place: Place, close
             is Navree.Button -> {
                 val destructive = ScreenRules.destructive(item)
                 val vector = rememberIcon(item.icon, item.standard)
+                val checked = item.checked
+                // A ticked item: a check box, or a radio button among the items of one `one_of`.
+                val mark: ImageVector? = when {
+                    checked == null -> null
+                    item.oneOf != null -> if (checked) Glyphs.RadioOn else Glyphs.RadioOff
+                    else -> if (checked) Glyphs.CheckBox else Glyphs.CheckBoxOff
+                }
                 DropdownMenuItem(
                     text = { Text(item.label) },
                     onClick = {
@@ -186,10 +198,22 @@ internal fun ColumnScope.MenuItems(items: List<Navree.Node>, place: Place, close
                         ui.press(place, item)
                     },
                     enabled = usable(item, place),
-                    leadingIcon = if (vector != null) {
-                        { Icon(vector, contentDescription = null) }
+                    modifier = if (checked != null) {
+                        Modifier.semantics {
+                            role = if (item.oneOf != null) Role.RadioButton else Role.Checkbox
+                            if (item.oneOf != null) selected = checked else toggleableState = ToggleableState(checked)
+                        }
                     } else {
-                        null
+                        Modifier
+                    },
+                    leadingIcon = when {
+                        mark != null -> {
+                            { Icon(mark, contentDescription = null, tint = if (checked == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
+                        }
+                        vector != null -> {
+                            { Icon(vector, contentDescription = null) }
+                        }
+                        else -> null
                     },
                     colors = if (destructive) {
                         MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.error, leadingIconColor = MaterialTheme.colorScheme.error)
