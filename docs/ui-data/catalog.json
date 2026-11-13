@@ -15526,7 +15526,7 @@
       "show": false,
       "open": false,
       "live": false,
-      "width": 520,
+      "width": 360,
       "fit": true,
       "scripts": [],
       "captions": [],
@@ -15818,7 +15818,7 @@
       "show": false,
       "open": false,
       "live": false,
-      "width": 520,
+      "width": 360,
       "fit": true,
       "scripts": [],
       "captions": [],
@@ -22987,7 +22987,7 @@
       "show": false,
       "open": false,
       "live": false,
-      "width": null,
+      "width": 600,
       "fit": true,
       "scripts": [
         "split-7b3fb3271fc2.js"
@@ -43710,7 +43710,7 @@
       "slug": "thumb",
       "title": "A donut",
       "kind": "single",
-      "code": "Donut::new(\"Payments\")\n    .id(\"donut-chart-thumb\")\n    .hide_title()\n    .size(96)\n    .table(TableMode::ScreenReader)\n    .part(\"Succeeded\", 9_412)\n    .part_tone(\"Failed\", 188, Tone::Danger)",
+      "code": "Donut::new(\"Payments\")\n    .id(\"donut-chart-thumb\")\n    .hide_title()\n    .size(112)\n    .table(TableMode::ScreenReader)\n    .part(\"Succeeded\", 9_412)\n    .part_tone(\"Failed\", 188, Tone::Danger)",
       "src": "/ui-preview/donut-chart/thumb.html",
       "height": 160,
       "layout": "start",
@@ -49630,9 +49630,9 @@
       "slug": "thumb",
       "title": "A day round the clock",
       "kind": "single",
-      "code": "DayClock::new(\"Steps by hour\")\n    .id(\"clock-thumb\")\n    .values(STEPS)\n    .unit(\"steps\")\n    .locale(\"en-IN\")\n    .size(280)",
+      "code": "DayClock::new(\"Steps by hour\")\n    .id(\"clock-thumb\")\n    .hide_title()\n    .table(TableMode::ScreenReader)\n    .values(STEPS)\n    .unit(\"steps\")\n    .locale(\"en-IN\")\n    .size(220)",
       "src": "/ui-preview/day-clock/thumb.html",
-      "height": 360,
+      "height": 280,
       "layout": "start",
       "cells": "narrow",
       "show": false,
@@ -49803,25 +49803,6 @@
               "tag": "div",
               "count": 1,
               "children": [
-                {
-                  "slot": "chart-table-switch",
-                  "tag": "input",
-                  "count": 1,
-                  "children": []
-                },
-                {
-                  "slot": "chart-table-label",
-                  "tag": "label",
-                  "count": 1,
-                  "children": [
-                    {
-                      "slot": "icon",
-                      "tag": "svg",
-                      "count": 1,
-                      "children": []
-                    }
-                  ]
-                },
                 {
                   "slot": "chart-table",
                   "tag": "div",

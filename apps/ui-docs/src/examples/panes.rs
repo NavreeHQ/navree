@@ -8,7 +8,10 @@ const SOURCE: &str = include_str!("panes.rs");
 
 pub fn all() -> Vec<Example> {
     vec![
-        single!("split-pane", "thumb", "Three panes", split_pane_thumb).start(),
+        // Wider than a card: three panes at a card's width leave no room for a row's words.
+        single!("split-pane", "thumb", "Three panes", split_pane_thumb)
+            .start()
+            .width(600),
         single!(
             "split-pane",
             "default",

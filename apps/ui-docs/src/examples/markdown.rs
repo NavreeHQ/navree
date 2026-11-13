@@ -10,7 +10,7 @@ pub fn all() -> Vec<Example> {
     vec![
         single!("markdown", "thumb", "Markdown", markdown_thumb)
             .start()
-            .width(520)
+            .width(360)
             .height(150),
         single!(
             "markdown",
@@ -61,7 +61,7 @@ pub fn all() -> Vec<Example> {
             .height(150),
         single!("code-block", "thumb", "A code block", code_block_thumb)
             .start()
-            .width(520)
+            .width(360)
             .height(150),
         single!(
             "code-block",

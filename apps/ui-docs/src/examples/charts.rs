@@ -796,7 +796,7 @@ fn donut_chart_thumb() -> Donut {
     Donut::new("Payments")
         .id("donut-chart-thumb")
         .hide_title()
-        .size(96)
+        .size(112)
         .table(TableMode::ScreenReader)
         .part("Succeeded", 9_412)
         .part_tone("Failed", 188, Tone::Danger)

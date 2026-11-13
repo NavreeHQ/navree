@@ -104,7 +104,7 @@ pub fn all() -> Vec<Example> {
         )
         .start()
         .width(420)
-        .height(360),
+        .height(280),
         single!(
             "day-clock",
             "default",
@@ -558,10 +558,12 @@ const STEPS: [u32; 24] = [
 fn day_clock_thumb() -> DayClock {
     DayClock::new("Steps by hour")
         .id("clock-thumb")
+        .hide_title()
+        .table(TableMode::ScreenReader)
         .values(STEPS)
         .unit("steps")
         .locale("en-IN")
-        .size(280)
+        .size(220)
 }
 
 fn day_clock_default() -> Card {
