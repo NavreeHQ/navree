@@ -146,6 +146,29 @@ object ClockRules {
     fun momentEntry(name: String, at: Double, is24: Boolean, locale: Locale): String =
         if (Regex("\\d:\\d\\d").containsMatchIn(name)) name else name + ", " + timeLabel(at, is24, locale)
 
+    /**
+     * Where the day's moments stand on the dial's line: at their hour, but no
+     * two closer than `gapHours` of the dial, so marks that would sit on one
+     * another stand side by side. Neighbours that are too close move apart
+     * about their middle; the order stays, and moments far apart do not move.
+     */
+    fun spread(ats: List<Double>, gapHours: Double): List<Double> {
+        val order = ats.indices.sortedBy { ats[it] }
+        val placed = order.map { ats[it] }.toMutableList()
+        repeat(40) {
+            for (i in 1 until placed.size) {
+                if (placed[i] - placed[i - 1] < gapHours) {
+                    val middle = (placed[i] + placed[i - 1]) / 2.0
+                    placed[i - 1] = middle - gapHours / 2.0
+                    placed[i] = middle + gapHours / 2.0
+                }
+            }
+        }
+        val out = MutableList(ats.size) { 0.0 }
+        order.forEachIndexed { rank, index -> out[index] = placed[rank] }
+        return out
+    }
+
     /** The radii of the dial, in dp, for one that is `halfDp` from its middle to its edge. */
     data class Dial(
         /** Where the hours' bars end at their longest. */

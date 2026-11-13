@@ -957,17 +957,18 @@ private fun FactFigures(node: Navree.Facts, modifier: Modifier) {
     val room = LocalRoom.current
     val fontScale = LocalUi.current.window.fontScale
     val columns = if (room > 0f) ContentRules.factColumns(room, node.items.size, fontScale) else minOf(2, node.items.size)
+    val cell = if (room > 0f) ContentRules.factCellDp(room, columns).dp else null
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         for (line in node.items.chunked(columns)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ContentRules.FACT_GAP_DP.dp)) {
                 for (fact in line) {
                     val value = (fact.value.single() as Navree.Text).value
-                    Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                    Column((if (cell != null) Modifier.width(cell) else Modifier.weight(1f)).semantics(mergeDescendants = true) {}) {
                         Text(fact.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(value, style = MaterialTheme.typography.titleMedium)
                     }
                 }
-                repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
+                if (cell == null) repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }

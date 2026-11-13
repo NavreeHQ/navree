@@ -549,8 +549,11 @@ internal fun DayClockView(node: Navree.DayClock, modifier: Modifier = Modifier) 
                     }
                     if (node.now == hour) drawCircle(now, 3.5.dp.toPx(), c + dir * (inner - width * 0.9f))
                 }
+                // Moments that would sit on one another stand side by side along the line.
+                val gapHours = 24.0 * 11.dp.toPx() / (2.0 * Math.PI * line)
+                val placed = ClockRules.spread(node.moments.map { it.at }, gapHours)
                 node.moments.forEachIndexed { index, moment ->
-                    val at = c + direction(moment.at) * line
+                    val at = c + direction(placed[index]) * line
                     drawCircle(card, 8.dp.toPx(), at)
                     drawCircle(momentInks[index].mark, 5.dp.toPx(), at)
                 }

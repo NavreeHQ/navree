@@ -190,7 +190,10 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
                     reference.label?.let { word ->
                         val text = measurer.measure(word, small.copy(color = referenceInks[index].mark))
                         val left = if (rtl) plot.left + 4.dp.toPx() else plot.right - text.size.width - 4.dp.toPx()
-                        drawText(text, topLeft = Offset(left, at - text.size.height - 2.dp.toPx()))
+                        val top = at - text.size.height - 2.dp.toPx()
+                        // The name stands on the card's own colour, so bars behind it do not run through its letters.
+                        drawRoundRect(scheme.surfaceContainerLow.copy(alpha = 0.85f), Offset(left - 3.dp.toPx(), top - 1.dp.toPx()), Size(text.size.width + 6.dp.toPx(), text.size.height + 2.dp.toPx()), CornerRadius(3.dp.toPx()))
+                        drawText(text, topLeft = Offset(left, top))
                     }
                 }
                 // The labels under: every one when there are few, else the first, middle and last.
