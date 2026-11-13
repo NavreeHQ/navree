@@ -489,6 +489,9 @@ const REQUIRED: &[&str] = &[
     "snapshot",
     "snapshot-refused",
     "health-charts",
+    "bar-pager",
+    "composed-ops",
+    "opened-from",
 ];
 
 #[test]

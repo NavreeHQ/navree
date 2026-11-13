@@ -482,7 +482,7 @@ impl Core {
         let held = inner.held.take();
         self.touch_screen(id);
         if let (true, Some(held)) = (yes, held) {
-            self.act(id, held.action, held.form, held.overlay, held.text, held.now);
+            self.act(id, held.action, held.form, held.overlay, held.text, held.now, held.from);
         }
     }
 
@@ -733,20 +733,27 @@ impl Core {
                 }
             }
         }
-        for action in &mut screen.actions {
-            mark(action, busy, &mut changed);
+        for root in crate::tree::roots_mut(screen) {
+            mark(root, busy, &mut changed);
         }
-        mark(&mut screen.body, busy, &mut changed);
         if changed {
             self.touch_screen(id);
         }
     }
 
-    /// The action of something the person tapped.
-    pub(crate) fn act(&mut self, id: ScreenId, action: Action, form: Option<String>, overlay: Option<String>, text: Option<String>, now: Option<i64>) {
+    /// The action of something the person tapped. `from` is the id of the
+    /// part they tapped, when it has one: a screen the action opens keeps it.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn act(&mut self, id: ScreenId, action: Action, form: Option<String>, overlay: Option<String>, text: Option<String>, now: Option<i64>, from: Option<String>) {
         if !self.view.holds(id) {
             return;
         }
+        self.inner.acting = from;
+        self.perform(id, action, form, overlay, text, now);
+        self.inner.acting = None;
+    }
+
+    fn perform(&mut self, id: ScreenId, action: Action, form: Option<String>, overlay: Option<String>, text: Option<String>, now: Option<i64>) {
         match action {
             // A step of a day pager takes the day's place on the screen: the
             // person stays where they are in the stack.
@@ -793,39 +800,32 @@ impl Core {
     /// days the pager says can be chosen. `None` when no pager names `href`.
     fn day_step(&self, id: ScreenId, href: &str, day: Option<&str>) -> Option<Option<String>> {
         let screen = self.view.screens.get(&id)?.screen()?;
-        let mut found = None;
-        for root in crate::tree::roots(screen) {
-            crate::tree::walk(root, &mut |node| {
-                let Node::DayPager(pager) = node else {
-                    return;
-                };
-                if found.is_some() {
-                    return;
-                }
-                let picks = pager.pick.as_ref().filter(|pick| pick.href == href);
-                if let (Some(pick), Some(day)) = (picks, day) {
-                    let bytes = day.as_bytes();
-                    let date = bytes.len() == 10 && bytes.iter().enumerate().all(|(at, byte)| if at == 4 || at == 7 { *byte == b'-' } else { byte.is_ascii_digit() });
-                    // Dates written this way sort as days do.
-                    let early = pager.first.as_deref().is_some_and(|first| day < first);
-                    let late = pager.last.as_deref().is_some_and(|last| day > last);
-                    found = Some((date && !early && !late).then(|| {
-                        // The day takes the place of one the address already names.
-                        let (path, query) = href.split_once('?').unwrap_or((href, ""));
-                        let mut address = format!("{path}?");
-                        for pair in query.split('&').filter(|pair| !pair.is_empty() && pair.split('=').next() != Some(pick.name.as_str())) {
-                            address.push_str(pair);
-                            address.push('&');
-                        }
-                        address.push_str(&encode(&[text(&pick.name, day)]));
-                        address
-                    }));
-                } else if [&pager.previous, &pager.next, &pager.today].into_iter().any(|step| step.as_deref() == Some(href)) {
-                    found = Some(Some(href.to_owned()));
-                }
-            });
-        }
-        found
+        // The pager in the screen's bar first, then those among its parts.
+        crate::tree::pagers(screen).into_iter().find_map(|pager| {
+            let picks = pager.pick.as_ref().filter(|pick| pick.href == href);
+            if let (Some(pick), Some(day)) = (picks, day) {
+                let bytes = day.as_bytes();
+                let date = bytes.len() == 10 && bytes.iter().enumerate().all(|(at, byte)| if at == 4 || at == 7 { *byte == b'-' } else { byte.is_ascii_digit() });
+                // Dates written this way sort as days do.
+                let early = pager.first.as_deref().is_some_and(|first| day < first);
+                let late = pager.last.as_deref().is_some_and(|last| day > last);
+                Some((date && !early && !late).then(|| {
+                    // The day takes the place of one the address already names.
+                    let (path, query) = href.split_once('?').unwrap_or((href, ""));
+                    let mut address = format!("{path}?");
+                    for pair in query.split('&').filter(|pair| !pair.is_empty() && pair.split('=').next() != Some(pick.name.as_str())) {
+                        address.push_str(pair);
+                        address.push('&');
+                    }
+                    address.push_str(&encode(&[text(&pick.name, day)]));
+                    address
+                }))
+            } else if [&pager.previous, &pager.next, &pager.today].into_iter().any(|step| step.as_deref() == Some(href)) {
+                Some(Some(href.to_owned()))
+            } else {
+                None
+            }
+        })
     }
 
     /// Closes the alert a tapped button stands in.

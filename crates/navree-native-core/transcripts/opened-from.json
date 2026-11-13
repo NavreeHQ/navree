@@ -1,0 +1,204 @@
+{
+  "about": "A client names the part the person tapped (`from`), and a screen the action opens keeps it: a screen that is pushed, one that is presented, and one opened after a question. A client that grows a screen out of a card shrinks it back into the same card, and after the system ended the app too: the snapshot keeps it. A step that changes a screen in place opens nothing and keeps nothing.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives, and the first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-health.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "Today: each pillar is a card that opens its screen and grows into it.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "../../../navree-native/corpus/screen-designed-health.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/3/children/0/id","is":"pillar-sleep"},
+        {"at":"/screens/1/content/screen/body/children/3/children/0/transition","is":"zoom"}
+      ]
+    },
+    {
+      "note": "A step of the pager changes the screen in place: no screen is opened, and the screen is from nowhere.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/?date=2026-11-12"},"from":"day"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/?date=2026-11-12","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/screens/1/from","is":null}
+      ]
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/designed-day-before.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person taps the Sleep card, and the client says which part it was. The screen that is pushed keeps it.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/sleep?date=2026-11-12"},"from":"pillar-sleep"},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/sleep?date=2026-11-12","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1,2]},
+        {"at":"/screens/2/from","is":"pillar-sleep"},
+        {"at":"/screens/1/from","is":null}
+      ]
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/designed-sleep.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/2/title","is":"Sleep"},
+        {"at":"/screens/2/from","is":"pillar-sleep"}
+      ]
+    },
+    {
+      "note": "A row that asks first: what it does waits for the answer, and so does where it came from.",
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/sleep/history"},"ask":{"title":"Open the history?","confirm":"Open"},"from":"history"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/2/question/title","is":"Open the history?"},
+        {"at":"/destinations/0/stack","is":[1,2]}
+      ]
+    },
+    {
+      "note": "The person goes ahead: the screen that is pushed is from the row.",
+      "send": {"t":"answer","screen":2,"question":1,"yes":true},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/sleep/history","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1,2,3]},
+        {"at":"/screens/3/from","is":"history"}
+      ]
+    },
+    {
+      "note": "Back: the history goes.",
+      "send": {"t":"back"},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": [
+          {"t":"cancel","request":5}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1,2]}
+      ]
+    },
+    {
+      "note": "The night's card opens a sheet: the presented screen is from the card. The client stores the snapshot, which keeps where each screen came from.",
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/sleep/night","present":"sheet"},"from":"night-card"},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/sleep/night","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/modals/0/stack","is":[4]},
+        {"at":"/screens/4/from","is":"night-card"}
+      ],
+      "snapshot": {"destinations":[{"href":"/","stack":[{"title":"Thursday","url":"/?date=2026-11-12"},{"from":"pillar-sleep","title":"Sleep","url":"/sleep?date=2026-11-12"}]}],"modals":[{"present":"sheet","stack":[{"from":"night-card","url":"/sleep/night"}]}],"origin":"https://shop.example","person":"3cf923612bb089c4437bcb4de035c0d8d14445dbf4a046908f3bf61885b9272d","selected":"/","version":1}
+    },
+    {
+      "note": "The system ended the app. It starts again from the snapshot: the shell is asked for first.",
+      "restart": true,
+      "last": true,
+      "send": {"t":"restore","snapshot":{"destinations":[{"href":"/","stack":[{"title":"Thursday","url":"/?date=2026-11-12"},{"from":"pillar-sleep","title":"Sleep","url":"/sleep?date=2026-11-12"}]}],"modals":[{"present":"sheet","stack":[{"from":"night-card","url":"/sleep/night"}]}],"origin":"https://shop.example","person":"3cf923612bb089c4437bcb4de035c0d8d14445dbf4a046908f3bf61885b9272d","selected":"/","version":1}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The stacks are put back, and each screen is from the part it was opened from: the client can shrink the sheet into the night's card and the Sleep screen into its pillar.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-health.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1},
+          {"t":"screen","id":2},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/sleep/night","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1,2]},
+        {"at":"/modals/0/stack","is":[3]},
+        {"at":"/screens/1/from","is":null},
+        {"at":"/screens/2/from","is":"pillar-sleep"},
+        {"at":"/screens/3/from","is":"night-card"}
+      ]
+    }
+  ]
+}

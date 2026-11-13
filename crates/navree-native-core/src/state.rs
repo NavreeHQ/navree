@@ -313,6 +313,13 @@ pub struct ScreenView {
     /// confirmation. An `answer` event takes it away.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub question: Option<Question>,
+    /// The id of the part whose action opened this screen, on the screen it
+    /// was opened from: the card the person tapped, as the `act` event named
+    /// it. A client that grows the screen out of that part (a card whose
+    /// `transition` is `zoom`) shrinks it back into the same part when the
+    /// person leaves. None for a screen no action with a `from` opened.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
 }
 
 impl ScreenView {
@@ -335,6 +342,7 @@ impl ScreenView {
             lists: BTreeMap::new(),
             focus: None,
             question: None,
+            from: None,
         }
     }
 
@@ -733,6 +741,7 @@ pub(crate) struct Held {
     pub overlay: Option<String>,
     pub text: Option<String>,
     pub now: Option<i64>,
+    pub from: Option<String>,
 }
 
 /// A stream of server-sent events the core has asked for.
@@ -992,4 +1001,7 @@ pub(crate) struct Inner {
     pub land: Option<String>,
     /// A snapshot to start from, once the shell says who is signed in.
     pub restore: Option<crate::snapshot::Snapshot>,
+    /// The id of the part whose action is being carried out now: a screen
+    /// that action opens keeps it.
+    pub acting: Option<String>,
 }

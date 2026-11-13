@@ -188,6 +188,12 @@ pub enum Event {
         /// its system's guidelines say so) leaves it out.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ask: Option<Box<navree_native::node::Question>>,
+        /// The id of the part the person tapped, when it has one: a card, a
+        /// row, a button. A screen the action opens keeps it as its `from`,
+        /// so a client that grows the screen out of the part can shrink it
+        /// back into the same part, after a restore too.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from: Option<String>,
     },
     /// The person answered the question a screen holds.
     Answer {

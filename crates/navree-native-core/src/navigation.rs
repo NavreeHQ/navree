@@ -121,6 +121,7 @@ impl Core {
             }
             Present::Sheet | Present::Full | Present::Task => {
                 let id = self.open(url);
+                self.opened_from(id);
                 self.view.modals.push(Modal {
                     present: how,
                     locked: false,
@@ -139,6 +140,7 @@ impl Core {
                     }
                 }
                 let id = self.open(url);
+                self.opened_from(id);
                 let selected = self.view.selected;
                 match anchor.and_then(|anchor| self.view.stack_of(anchor)) {
                     Some(stack) => stack.push(id),
@@ -147,6 +149,14 @@ impl Core {
                 self.touch(Change::Nav);
                 Some(id)
             }
+        }
+    }
+
+    /// A screen an action pushed or presented keeps the id of the part the
+    /// person tapped, when the client named one.
+    fn opened_from(&mut self, id: ScreenId) {
+        if let (Some(from), Some(view)) = (self.inner.acting.clone(), self.view.screens.get_mut(&id)) {
+            view.from = Some(from);
         }
     }
 

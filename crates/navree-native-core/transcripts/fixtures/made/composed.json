@@ -1,0 +1,104 @@
+{
+ "navree": 1,
+ "build": "3f9a1c07b2de",
+ "vocab": 0,
+ "screen": {
+  "title": "Offers",
+  "id": "offers",
+  "body": {
+   "t": "stack",
+   "id": "offers",
+   "gap": 4,
+   "children": [
+    {
+     "t": "card",
+     "id": "offer",
+     "colour": {
+      "hue": "amber"
+     },
+     "children": [
+      {
+       "t": "text",
+       "id": "offer-title",
+       "value": "Diwali week",
+       "style": "title2"
+      }
+     ]
+    },
+    {
+     "t": "layers",
+     "id": "badge",
+     "place": "bottom_end",
+     "size": {
+      "width": 40,
+      "height": 40,
+      "scaled": true
+     },
+     "children": [
+      {
+       "t": "shape",
+       "id": "dot",
+       "form": "circle",
+       "fill": {
+        "hue": "amber"
+       },
+       "soft": true
+      },
+      {
+       "t": "icon",
+       "id": "badge-icon",
+       "name": "package"
+      }
+     ]
+    },
+    {
+     "t": "carousel",
+     "id": "picks",
+     "min": 160,
+     "gap": 3,
+     "label": "Picked for you",
+     "children": [
+      {
+       "t": "card",
+       "id": "pick-1",
+       "children": [
+        {
+         "t": "text",
+         "id": "pick-1-name",
+         "value": "Brass lota",
+         "style": "headline"
+        },
+        {
+         "t": "text",
+         "id": "pick-1-price",
+         "value": "₹1,250",
+         "style": "caption",
+         "muted": true
+        }
+       ]
+      },
+      {
+       "t": "card",
+       "id": "pick-2",
+       "children": [
+        {
+         "t": "text",
+         "id": "pick-2-name",
+         "value": "Khadi kurta",
+         "style": "headline"
+        },
+        {
+         "t": "text",
+         "id": "pick-2-price",
+         "value": "₹2,450",
+         "style": "caption",
+         "muted": true
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

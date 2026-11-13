@@ -225,10 +225,9 @@ fn check_row(row: &mut TableRow, config: &Config, missing: &mut Vec<String>) {
 }
 
 fn check_screen(screen: &mut Screen, config: &Config, missing: &mut Vec<String>) {
-    for action in &mut screen.actions {
-        check(action, config, missing);
+    for root in crate::tree::roots_mut(screen) {
+        check(root, config, missing);
     }
-    check(&mut screen.body, config, missing);
 }
 
 fn blank() -> Envelope {

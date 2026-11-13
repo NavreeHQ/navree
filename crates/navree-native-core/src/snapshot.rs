@@ -3,8 +3,9 @@
 //!
 //! A snapshot holds where the person was and what only they knew: the stacks
 //! of each destination and what was presented over them, the address and the
-//! title of every screen, what they had typed into forms and not sent, and
-//! which sheets were open. It holds nothing the server gives again: no tree,
+//! title of every screen, the part each was opened from, what they had typed
+//! into forms and not sent, and which sheets were open. It holds nothing the
+//! server gives again: no tree,
 //! no page, no message. And nothing secret: no cookie, no token of a form or
 //! of a push service, no ticket, no verifier of a sign-in, nothing typed into
 //! a password field, and no file.
@@ -50,6 +51,10 @@ pub struct KeptScreen {
     /// The sheets and dialogs of the page that were open.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub open: Vec<String>,
+    /// The id of the part whose action opened the screen, on the screen
+    /// under it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
 }
 
 /// The stack of one destination, named by the destination's address.
@@ -128,6 +133,7 @@ fn kept(view: &ScreenView) -> KeptScreen {
         title: view.title.clone(),
         fields,
         open: view.overlays.clone(),
+        from: view.from.clone(),
     }
 }
 
@@ -216,6 +222,7 @@ impl Core {
                 let id = core.new_screen(&url);
                 if let (Some(view), Some(inner)) = (core.view.screens.get_mut(&id), core.inner.screens.get_mut(&id)) {
                     view.title = screen.title;
+                    view.from = screen.from;
                     // Fetched when it comes to the front.
                     inner.stale = true;
                     inner.restored = Some(Restored {

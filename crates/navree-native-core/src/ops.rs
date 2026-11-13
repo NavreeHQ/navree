@@ -2,8 +2,12 @@
 //!
 //! - An op finds its target by id among the kinds it can mean: `open` and
 //!   `close` a sheet, a dialog, a popover or a disclosure; `errors` a form;
-//!   `invalidate` a region; `append` and `prepend` a node that holds others.
+//!   `invalidate` a region; `append` and `prepend` a node that holds others
+//!   in one list (a stack, a list, a card, a carousel and the like).
 //!   Among several the first in document order wins.
+//! - The day pager in a screen's bar is named as a part is: a `morph` or a
+//!   `replace` that brings a pager for its id takes its place, a `remove`
+//!   takes it away, and the scores it holds are found by their own id.
 //! - An op whose target is not on the screen is skipped, and the ops after it
 //!   still apply: an action written for two pages names nodes of both.
 //! - `morph` keeps what the person did to the nodes that are in both: what
@@ -23,7 +27,7 @@ use crate::origin::Target;
 use crate::state::{Content, Focus, FormMeta, FormView, Message, MessageInner, Notice, RegionMeta, ScreenId, ScreenView};
 use crate::tree::{
     MAX_DEPTH, Names, Slot, Survey, depth, depth_of, fields_of, find_in, find_in_mut, find_mut, fits, form_of, has_id,
-    holds, main_list, opens, rewrite_in, roots, slots, walk,
+    holds, main_list, opens, pager_has_id, rewrite_in, roots, roots_mut, slots, walk,
 };
 use crate::Core;
 
@@ -210,6 +214,22 @@ impl Core {
         let Content::Native { screen } = content else {
             return;
         };
+        // The day pager in the screen's bar is named as a part is: a pager
+        // that arrives for its id takes its place.
+        if matches!(node, Node::DayPager(_)) && pager_has_id(screen, target) {
+            let old = screen.pager.as_ref().and_then(|pager| pager.scores.as_deref());
+            let mut ids = Vec::new();
+            if let Some(old) = old {
+                walk(old, &mut |other| ids.extend(other.id().map(str::to_owned)));
+            }
+            for id in &ids {
+                states.remove(id);
+            }
+            if let Node::DayPager(pager) = node {
+                screen.pager = Some(pager);
+            }
+            return self.touch_screen(id);
+        }
         // A dialog and the form in it may share an id: the node of the arriving
         // node's own kind is meant, when there is one.
         let kind = node.kind();
@@ -409,6 +429,18 @@ impl Core {
             return;
         };
         let is = |other: &Node| has_id(other, target);
+        // The day pager in the screen's bar goes as a part does, with what it holds.
+        if pager_has_id(screen, target) {
+            let old = screen.pager.take().and_then(|pager| pager.scores);
+            if let Some(old) = old.as_deref() {
+                let mut ids = Vec::new();
+                walk(old, &mut |other| ids.extend(other.id().map(str::to_owned)));
+                for id in &ids {
+                    states.remove(id);
+                }
+            }
+            return self.touch_screen(id);
+        }
         // A row of a list or a table that leaves is named, so the rest is not drawn again.
         let list = crate::lists::list_holding(screen, target);
         let table = crate::lists::table_holding(screen, target);
@@ -429,7 +461,7 @@ impl Core {
                 }
                 rewrite_in(screen, &is, &mut |_| None)
             }
-            None => screen.actions.iter_mut().chain(std::iter::once(&mut screen.body)).any(|root| remove_row(root, target)),
+            None => roots_mut(screen).any(|root| remove_row(root, target)),
         };
         if found {
             // A list's row is named only when the list really lost it: of two

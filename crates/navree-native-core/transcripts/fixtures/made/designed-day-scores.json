@@ -1,0 +1,46 @@
+{
+ "navree": 1,
+ "build": "3f9a1c07b2de",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "morph",
+   "target": "day-scores",
+   "node": {
+    "t": "rings",
+    "id": "day-scores",
+    "rings": [
+     {
+      "name": "Movement",
+      "value": 41,
+      "max": 100,
+      "shown": "41",
+      "colour": {
+       "hue": "orange"
+      }
+     },
+     {
+      "name": "Recovery",
+      "value": 72,
+      "max": 100,
+      "shown": "72",
+      "colour": {
+       "hue": "green"
+      }
+     },
+     {
+      "name": "Sleep",
+      "value": 78,
+      "max": 100,
+      "shown": "78",
+      "colour": {
+       "hue": "violet"
+      }
+     }
+    ],
+    "prominence": "low",
+    "summary": "The day's scores: Movement 41, Recovery 72, Sleep 78."
+   }
+  }
+ ]
+}

@@ -99,6 +99,7 @@ fn through_the_core(body: String, native: bool) {
         text: None,
         now: None,
         ask: None,
+        from: None,
     });
     let ops = r#"{"navree":1,"build":"b1","vocab":0,"ops":[{"op":"morph","target":"leaf","node":{"t":"text","id":"leaf","value":"changed"}},{"op":"replace","target":"leaf","node":{"t":"text","id":"leaf","value":"again"}}]}"#;
     answer(&mut core, request_of(&post), ops.to_owned());
@@ -110,6 +111,7 @@ fn through_the_core(body: String, native: bool) {
         text: None,
         now: None,
         ask: None,
+        from: None,
     });
     // Written out whole, as a client reads it.
     let all = serde_json::to_string(&core.view().part(&Query::All)).unwrap();

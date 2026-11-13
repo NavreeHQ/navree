@@ -1,0 +1,78 @@
+{
+  "about": "An answer adds to the parts of a composed screen: an append and a prepend reach a card, layers and a carousel as they reach a stack or a list. A part whose id the target already holds is passed over, as a row of a list is, and a part that holds nothing (a shape) takes nothing.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives, and the first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-health.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "A composed screen: a card, layers that hold a shape and an icon, and a carousel of cards.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/composed.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/0/children/0/id","is":"offer-title"},
+        {"at":"/screens/1/content/screen/body/children/1/children/1/id","is":"badge-icon"},
+        {"at":"/screens/1/content/screen/body/children/2/children/0/id","is":"pick-1"}
+      ]
+    },
+    {
+      "note": "The screen asks for what is new.",
+      "send": {"t":"act","screen":1,"action":{"t":"request","method":"post","href":"/offers/refresh"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":3,"method":"post","url":"https://shop.example/offers/refresh","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "A line joins the end of the card. A card joins the start of the carousel and one its end; the one it already holds is passed over. A count joins the layers, over the icon. The shape takes nothing.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/composed-ops.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/0/children/1/id","is":"offer-note"},
+        {"at":"/screens/1/content/screen/body/children/0/children/2","is":null},
+        {"at":"/screens/1/content/screen/body/children/2/children/0/id","is":"pick-0"},
+        {"at":"/screens/1/content/screen/body/children/2/children/1/id","is":"pick-1"},
+        {"at":"/screens/1/content/screen/body/children/2/children/2/id","is":"pick-2"},
+        {"at":"/screens/1/content/screen/body/children/2/children/3/id","is":"pick-3"},
+        {"at":"/screens/1/content/screen/body/children/2/children/4","is":null},
+        {"at":"/screens/1/content/screen/body/children/1/children/2/id","is":"badge-count"},
+        {"at":"/screens/1/content/screen/body/children/1/children/0/children","is":null}
+      ]
+    }
+  ]
+}

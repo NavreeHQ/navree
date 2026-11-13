@@ -129,6 +129,7 @@ pub fn schema() -> Value {
                 ("text?", string()),
                 ("now?", integer()),
                 ("ask?", protocol("Question")),
+                ("from?", string()),
             ],
         ),
         ("answer", &[("screen", screen()), ("question", integer()), ("yes", boolean())]),
@@ -228,7 +229,7 @@ pub fn schema() -> Value {
         ("messages", &[]),
     ];
     let change: Vec<(&str, &[(&str, Value)])> = part.iter().filter(|(name, _)| !matches!(*name, "all" | "snapshot")).copied().collect();
-    let kept_screen = object(&[("url", string()), ("title?", string()), ("fields?", map(one("FieldValue"))), ("open?", list(string()))]);
+    let kept_screen = object(&[("url", string()), ("title?", string()), ("fields?", map(one("FieldValue"))), ("open?", list(string())), ("from?", string())]);
     let defs = json!({
         "Config": object(&[
             ("origin", string()),
@@ -330,6 +331,7 @@ pub fn schema() -> Value {
             ("lists", map(object(&[("loading", boolean()), ("failed", boolean()), ("loading_before?", boolean()), ("failed_before?", boolean()), ("across?", boolean())]))),
             ("focus?", object(&[("target", string()), ("serial", integer())])),
             ("question?", object(&[("id", integer()), ("title", string()), ("text?", string()), ("confirm", string()), ("cancel?", string())])),
+            ("from?", string()),
         ]),
         "Form": object(&[
             ("pending", boolean()),

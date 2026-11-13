@@ -1,0 +1,55 @@
+{
+ "navree": 1,
+ "build": "3f9a1c07b2de",
+ "vocab": 0,
+ "screen": {
+  "title": "Sleep",
+  "id": "sleep",
+  "back": {
+   "title": "Today",
+   "href": "/"
+  },
+  "body": {
+   "t": "stack",
+   "id": "sleep",
+   "gap": 4,
+   "children": [
+    {
+     "t": "card",
+     "id": "night-card",
+     "action": {
+      "t": "navigate",
+      "href": "/sleep/night",
+      "present": "sheet"
+     },
+     "label": "Last night, 7 h 12 min",
+     "transition": "zoom",
+     "children": [
+      {
+       "t": "text",
+       "id": "night-time",
+       "value": "7 h 12 min",
+       "style": "title2",
+       "tabular": true
+      }
+     ]
+    },
+    {
+     "t": "list",
+     "id": "sleep-more",
+     "children": [
+      {
+       "t": "row",
+       "id": "history",
+       "title": "History",
+       "action": {
+        "t": "navigate",
+        "href": "/sleep/history"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

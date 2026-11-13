@@ -1,0 +1,50 @@
+{
+ "navree": 1,
+ "build": "3f9a1c07b2de",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "remove",
+   "target": "day"
+  },
+  {
+   "op": "morph",
+   "target": "day-scores",
+   "node": {
+    "t": "rings",
+    "id": "day-scores",
+    "rings": [
+     {
+      "name": "Movement",
+      "value": 1,
+      "max": 100,
+      "shown": "1",
+      "colour": {
+       "hue": "orange"
+      }
+     },
+     {
+      "name": "Recovery",
+      "value": 1,
+      "max": 100,
+      "shown": "1",
+      "colour": {
+       "hue": "green"
+      }
+     },
+     {
+      "name": "Sleep",
+      "value": 1,
+      "max": 100,
+      "shown": "1",
+      "colour": {
+       "hue": "violet"
+      }
+     }
+    ],
+    "prominence": "low",
+    "summary": "The day's scores: Movement 1, Recovery 1, Sleep 1."
+   }
+  }
+ ]
+}

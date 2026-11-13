@@ -13,6 +13,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use navree_native::Screen;
+use navree_native::charts::DayPager;
 use navree_native::input::Input;
 use navree_native::node::{Field, Form, Live, Method, Node};
 
@@ -237,9 +238,36 @@ pub(crate) fn rewrite(
     false
 }
 
-/// The nodes a screen starts from: its actions, then its body.
+/// The nodes a screen starts from: its actions, then what the day pager in
+/// its bar holds (the day's scores), then its body.
 pub(crate) fn roots(screen: &Screen) -> impl Iterator<Item = &Node> {
-    screen.actions.iter().chain(std::iter::once(&screen.body))
+    let scores = screen.pager.as_ref().and_then(|pager| pager.scores.as_deref());
+    screen.actions.iter().chain(scores).chain(std::iter::once(&screen.body))
+}
+
+/// The same nodes, to change in place.
+pub(crate) fn roots_mut(screen: &mut Screen) -> impl Iterator<Item = &mut Node> {
+    let scores = screen.pager.as_mut().and_then(|pager| pager.scores.as_deref_mut());
+    screen.actions.iter_mut().chain(scores).chain(std::iter::once(&mut screen.body))
+}
+
+/// The day pagers of a screen: the one it carries in its bar, then those
+/// among its parts, in document order.
+pub(crate) fn pagers(screen: &Screen) -> Vec<&DayPager> {
+    let mut found: Vec<&DayPager> = screen.pager.iter().collect();
+    for root in roots(screen) {
+        walk(root, &mut |node| {
+            if let Node::DayPager(pager) = node {
+                found.push(pager);
+            }
+        });
+    }
+    found
+}
+
+/// Whether the day pager in the screen's bar has this id.
+pub(crate) fn pager_has_id(screen: &Screen, id: &str) -> bool {
+    screen.pager.as_ref().is_some_and(|pager| pager.id.as_deref() == Some(id))
 }
 
 /// The first node of the screen that `is` accepts.
@@ -252,12 +280,7 @@ pub(crate) fn find_in_mut<'a>(
     screen: &'a mut Screen,
     is: &dyn Fn(&Node) -> bool,
 ) -> Option<&'a mut Node> {
-    for action in &mut screen.actions {
-        if let Some(found) = find_mut(action, is) {
-            return Some(found);
-        }
-    }
-    find_mut(&mut screen.body, is)
+    roots_mut(screen).find_map(|root| find_mut(root, is))
 }
 
 /// [`rewrite`] over a whole screen. A body that is taken out leaves an empty stack.
@@ -276,6 +299,18 @@ pub(crate) fn rewrite_in(
             return true;
         }
         at += 1;
+    }
+    // What the day pager in the bar holds stands between the actions and the body.
+    if let Some(pager) = &mut screen.pager {
+        if pager.scores.as_deref().is_some_and(is) {
+            change_in_place(&mut pager.scores, change);
+            return true;
+        }
+        if let Some(scores) = pager.scores.as_deref_mut()
+            && rewrite(scores, is, change)
+        {
+            return true;
+        }
     }
     if is(&screen.body) {
         change_where_one_must_be(&mut screen.body, change);
@@ -324,6 +359,9 @@ pub(crate) fn main_list(node: &mut Node) -> Option<&mut Vec<Node>> {
         Node::Popover(n) => Some(&mut n.children),
         Node::Menu(n) => Some(&mut n.items),
         Node::Pane(n) => Some(&mut n.children),
+        Node::Card(n) => Some(&mut n.children),
+        Node::Layers(n) => Some(&mut n.children),
+        Node::Carousel(n) => Some(&mut n.children),
         _ => None,
     }
 }
@@ -344,6 +382,9 @@ pub(crate) fn holds(node: &Node) -> bool {
             | Node::Popover(_)
             | Node::Menu(_)
             | Node::Pane(_)
+            | Node::Card(_)
+            | Node::Layers(_)
+            | Node::Carousel(_)
     )
 }
 
@@ -937,6 +978,66 @@ mod tests {
         // The body itself can be the target.
         assert!(rewrite_in(&mut screen, &|node| has_id(node, "page"), &mut |_| Some(text("page", "all"))));
         assert!(matches!(screen.body, Node::Text(_)));
+    }
+
+    #[test]
+    fn what_the_pager_in_the_bar_holds_is_found_and_changed_as_a_part_is() {
+        use navree_native::charts::{DayPager, Rings};
+        let rings = |title: &str| {
+            Node::Rings(Rings {
+                id: Some("day-scores".to_owned()),
+                title: Some(title.to_owned()),
+                ..Rings::default()
+            })
+        };
+        let mut screen = Screen::new("Today", stack(Some("today"), vec![text("b", "body")]));
+        screen.pager = Some(DayPager {
+            id: Some("day".to_owned()),
+            day: "Today".to_owned(),
+            date: "2026-11-13".to_owned(),
+            scores: Some(Box::new(rings("Yesterday"))),
+            ..DayPager::default()
+        });
+        // The scores stand between the screen's actions and its body.
+        let order: Vec<String> = roots(&screen).map(label).collect();
+        assert_eq!(order, ["rings#day-scores", "stack#today"]);
+        assert_eq!(roots_mut(&mut screen).count(), 2);
+        assert!(find_in(&screen, &|node| has_id(node, "day-scores")).is_some());
+        assert_eq!(depth_of(&screen, &|node| has_id(node, "day-scores")), Some(1));
+        assert!(pager_has_id(&screen, "day") && !pager_has_id(&screen, "today"));
+        assert_eq!(pagers(&screen).len(), 1);
+        // They are changed in place, put through a change, and taken out.
+        let Some(Node::Rings(found)) = find_in_mut(&mut screen, &|node| has_id(node, "day-scores")) else {
+            panic!("the scores are found to change");
+        };
+        found.title = Some("Changed".to_owned());
+        assert!(rewrite_in(&mut screen, &|node| has_id(node, "day-scores"), &mut |_| Some(rings("Today"))));
+        let scores = screen.pager.as_ref().and_then(|pager| pager.scores.as_deref());
+        assert!(matches!(scores, Some(Node::Rings(rings)) if rings.title.as_deref() == Some("Today")));
+        assert!(rewrite_in(&mut screen, &|node| has_id(node, "day-scores"), &mut |_| None));
+        assert!(screen.pager.as_ref().is_some_and(|pager| pager.scores.is_none()));
+        // The body is still reached past a pager that holds nothing.
+        assert!(rewrite_in(&mut screen, &|node| has_id(node, "b"), &mut |_| None));
+    }
+
+    #[test]
+    fn nodes_are_added_to_a_card_layers_and_a_carousel() {
+        use navree_native::compose::{Adaptive, Card, Carousel, Layers, Shape};
+        let mut nodes = [
+            Node::Card(Card::default()),
+            Node::Layers(Layers::default()),
+            Node::Carousel(Carousel::default()),
+        ];
+        for node in &mut nodes {
+            assert!(holds(node), "{}", node.kind().as_str());
+            main_list(node).expect("it has a list to add to").push(text("new", "added"));
+            assert_eq!(node.children().len(), 1, "{}", node.kind().as_str());
+        }
+        // A shape holds nothing, and the two rooms of an adaptive part are
+        // not one list: neither is added to.
+        for mut node in [Node::Shape(Shape::default()), Node::Adaptive(Adaptive::default())] {
+            assert!(!holds(&node) && main_list(&mut node).is_none(), "{}", node.kind().as_str());
+        }
     }
 
     fn field(name: &str, id: Option<&str>) -> Node {

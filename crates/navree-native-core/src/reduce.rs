@@ -76,6 +76,7 @@ impl Core {
                 text,
                 now,
                 ask,
+                from,
             } => {
                 if let Some(screen) = screen.or(self.front()) {
                     match ask {
@@ -90,9 +91,10 @@ impl Core {
                                 overlay,
                                 text,
                                 now,
+                                from,
                             },
                         ),
-                        None => self.act(screen, action, form, overlay, text, now),
+                        None => self.act(screen, action, form, overlay, text, now, from),
                     }
                 }
             }
@@ -1324,6 +1326,9 @@ impl Core {
             server: &mut inner.server_ids,
         };
         names.name(&mut screen.actions, None);
+        if let Some(scores) = screen.pager.as_mut().and_then(|pager| pager.scores.as_deref_mut()) {
+            names.name(std::slice::from_mut(scores), None);
+        }
         names.name(std::slice::from_mut(&mut screen.body), None);
         let mut again: Vec<String> = Vec::new();
         if let (true, Some(old)) = (same, view.screen_mut()) {
