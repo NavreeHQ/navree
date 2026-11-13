@@ -71,6 +71,27 @@ pub struct NodeOp {
     pub misses: Vec<Miss>,
 }
 
+/// Whether a post to `target` stays on this site: a path, a query or a
+/// fragment, never another host or a scheme. Only such a post is given the
+/// session's token.
+pub(crate) fn on_this_site(target: &str) -> bool {
+    crate::html::LocalHref::parse(target).is_ok()
+}
+
+/// What a native envelope varies on: who asked, and what the client said of
+/// itself (its system, form and vocabulary).
+const ENVELOPE_VARY: &str = "x-navree-native, x-navree-client";
+
+/// Adds each header of `vary` (a page's own, such as `Cookie`) to the `Vary`
+/// of `response`.
+pub(crate) fn vary_also(response: &mut Response, vary: &[&'static str]) {
+    for header in vary {
+        if let Ok(value) = HeaderValue::from_str(header) {
+            response.headers_mut().append(VARY, value);
+        }
+    }
+}
+
 /// The node op for `node`, when a native client asked: what the ops'
 /// constructors call before they render.
 #[inline]
@@ -153,11 +174,13 @@ pub(crate) fn native_ops(ops: &[Op]) -> Option<Vec<navree_native::Op>> {
                 let mut said: navree_native::op::Toast = serde_json::to_value(toast)
                     .ok()
                     .and_then(|value| serde_json::from_value(value).ok())?;
-                // A client posts a toast's action itself: with the page's token, when it was given.
+                // A client posts a toast's action itself: with the page's token, when it was
+                // given and the post stays on this site.
                 if let (Some(action), Some(token)) = (
                     said.action.as_mut(),
                     toast.offered().and_then(crate::ToastAction::token),
                 ) && action.post
+                    && on_this_site(&action.href)
                 {
                     action.fields.push(navree_native::action::Pair {
                         name: crate::form::CSRF_FIELD.to_owned(),
@@ -308,7 +331,7 @@ pub(crate) fn respond(
         [
             (CONTENT_TYPE, HeaderValue::from_static(NATIVE_TYPE)),
             (CACHE_CONTROL, HeaderValue::from_static(cache)),
-            (VARY, HeaderValue::from_static(NATIVE_HEADER)),
+            (VARY, HeaderValue::from_static(ENVELOPE_VARY)),
         ],
         body,
     )
@@ -755,6 +778,7 @@ fn native(mut view: View, request: &Arc<scope::Request>) -> Response {
     for cookie in parts.cookies.iter() {
         response.headers_mut().append(SET_COOKIE, cookie.clone());
     }
+    vary_also(&mut response, parts.vary);
     response.extensions_mut().insert(answered);
     response
 }
@@ -880,6 +904,7 @@ fn embed(mut view: View) -> Response {
     for cookie in parts.cookies.iter() {
         response.headers_mut().append(SET_COOKIE, cookie.clone());
     }
+    vary_also(&mut response, parts.vary);
     response
 }
 
@@ -987,11 +1012,34 @@ pub(crate) fn vary_on_native(response: &mut Response) {
         let value = value.as_bytes();
         value.starts_with(b"text/html") || value.starts_with(OPS_CONTENT_TYPE.as_bytes())
     });
-    if differs {
+    if !differs {
+        return;
+    }
+    response
+        .headers_mut()
+        .append(VARY, HeaderValue::from_static(NATIVE_HEADER));
+    // A page a shared cache may keep is not what a native client's web view
+    // gets for the address either (it is drawn without the app's chrome),
+    // and the web view is known by its user agent.
+    if shared_cache_may_keep(response) {
         response
             .headers_mut()
-            .append(VARY, HeaderValue::from_static(NATIVE_HEADER));
+            .append(VARY, HeaderValue::from_static("x-navree-embed, user-agent"));
     }
+}
+
+/// Whether a shared cache may keep `response`: its `Cache-Control` says
+/// neither `no-store` nor `private` (or there is none, and a cache may
+/// decide for itself).
+fn shared_cache_may_keep(response: &Response) -> bool {
+    let Some(value) = response.headers().get(CACHE_CONTROL) else {
+        return true;
+    };
+    let value = value.to_str().unwrap_or("no-store").to_ascii_lowercase();
+    !value
+        .split(',')
+        .map(str::trim)
+        .any(|directive| directive == "no-store" || directive.starts_with("private"))
 }
 
 /// `native`, with the stamp of the app `ctx` answers for.
