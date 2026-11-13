@@ -1,10 +1,7 @@
-import AuthenticationServices
-import CryptoKit
 import Foundation
 import NavreeProtocol
 import NavreeRuntime
 import StoreKit
-import UserNotifications
 
 #if canImport(UIKit)
 import UIKit
@@ -21,13 +18,16 @@ import UIKit
 ///   with `granted`; the token comes later, as an event of its own.
 /// - `platform_sign_in`: Sign in with Apple, with the hash of the core's nonce.
 /// - `confirm`: a passkey's signature over the challenge the core asked the server for.
+/// - `passkey`: a passkey made or used, with the options of its ceremony when
+///   the core hands them over.
 ///
-/// The last two need a build signed by a developer team with their
-/// entitlements (Sign in with Apple; the origin's associated domain): until
-/// the app says it has them, they are not among its capabilities, the server
-/// never offers them, and a call that comes anyway is refused as not built.
+/// The last four need a build signed by a developer team with their
+/// entitlements (push; Sign in with Apple; the origin as an associated domain
+/// for passkeys): until the app says it has them, they are not among its
+/// capabilities, the server never offers them, and a call that comes anyway
+/// is refused as not built.
 @MainActor
-final class DeviceCalls: NSObject {
+final class DeviceCalls {
     /// What the build is signed with.
     let signedWith: Set<Entitlement>
     /// Where answers go.
@@ -36,8 +36,13 @@ final class DeviceCalls: NSObject {
     var allowed: () -> Void = {}
     /// The origin, which a shared address inside the app is read against.
     let origin: URL?
+    /// What shows the system's sign-in sheets.
+    var sheet: any AuthorizationSheet = SystemAuthorizationSheet()
+    /// What asks the person to allow notifications.
+    var permission: any NotificationPermission = SystemNotificationPermission()
 
-    private var authorizing: [ObjectIdentifier: (call: Int, controller: ASAuthorizationController)] = [:]
+    /// The call whose sheet is showing: one at a time.
+    private var showing: Int?
 
     init(signedWith: Set<Entitlement>, origin: URL?) {
         self.signedWith = signedWith
@@ -53,16 +58,46 @@ final class DeviceCalls: NSObject {
             if posts { answer(call, .done([])) }
         case .reply(.requestReview):
             requestReview()
-        case .call(.registerPush) where posts:
+        case .call(.registerPush) where posts && signedWith.contains(.pushNotifications):
             allowNotifications(call)
         case .call(.platformSignIn(let signIn)) where posts && signedWith.contains(.signInWithApple):
-            signInWithApple(call, provider: signIn.provider, nonce: options?["nonce"]?.text)
-        case .call(.confirm) where posts && signedWith.contains(.associatedDomains):
-            confirm(call, options: options?["publicKey"])
+            // Apple's own sheet signs in with Apple only; the core goes the web's way for any other.
+            guard signIn.provider == .apple else { return answer(call, .refused(.unsupported)) }
+            ask(call, SheetRequest.appleID(options: options))
+        case .call(.confirm(let confirm)) where posts && signedWith.contains(.associatedDomains):
+            ask(call, SheetRequest.confirm(confirm, options: options))
+        case .call(.passkey(let passkey)) where posts && signedWith.contains(.associatedDomains):
+            ask(call, SheetRequest.passkey(passkey, options: options))
         default:
             // Not carried out by this build: it cannot be asked for when the
             // capabilities are honest, and is answered when it posts.
             if posts { answer(call, .refused(.notBuilt)) }
+        }
+    }
+
+    /// Whether a call is carried out with one of the system's sign-in sheets.
+    static func usesSheet(_ device: DeviceRequest) -> Bool {
+        switch device {
+        case .call(.platformSignIn), .call(.confirm), .call(.passkey): true
+        default: false
+        }
+    }
+
+    // MARK: - The system's sign-in sheets
+
+    private func ask(_ call: Int, _ ask: SheetAsk) {
+        switch ask {
+        case .refused(let refusal):
+            answer(call, .refused(refusal))
+        case .sheet(let request):
+            // The system shows one such sheet at a time.
+            guard showing == nil else { return answer(call, .refused(.busy)) }
+            showing = call
+            sheet.present(request) { [weak self] outcome in
+                guard let self else { return }
+                if self.showing == call { self.showing = nil }
+                self.answer(call, outcome.device)
+            }
         }
     }
 
@@ -111,163 +146,13 @@ final class DeviceCalls: NSObject {
 
     // MARK: - Notifications
 
-    /// The system's prompt; a no, now or before, is an answer too.
+    /// The system's prompt; a no, now or before, is an answer too. Once
+    /// allowed, the system is asked for this install's token.
     private func allowNotifications(_ call: Int) {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { [weak self] granted, _ in
-            Task { @MainActor in
-                guard let self else { return }
-                if granted && self.signedWith.contains(.pushNotifications) { self.allowed() }
-                self.answer(call, .done([Navree.Pair(name: "granted", value: granted ? "true" : "false")]))
-            }
+        permission.ask { [weak self] granted in
+            guard let self else { return }
+            if granted { self.allowed() }
+            self.answer(call, .done([Navree.Pair(name: "granted", value: granted ? "true" : "false")]))
         }
-    }
-
-    // MARK: - Sign in with Apple
-
-    /// Apple's own sheet, with the lower-case hex SHA-256 of the core's nonce;
-    /// the identity token and code go back as text.
-    private func signInWithApple(_ call: Int, provider: Navree.SignInProvider, nonce: String?) {
-        guard provider == .apple else { return answer(call, .refused(.unsupported)) }
-        guard let nonce else { return answer(call, .refused(.unavailable)) }
-        let request = ASAuthorizationAppleIDProvider().createRequest()
-        request.requestedScopes = [.fullName, .email]
-        request.nonce = Self.hashed(nonce)
-        authorize(call, [request])
-    }
-
-    /// The nonce as Apple's request takes it: SHA-256, lower-case hex.
-    static func hashed(_ nonce: String) -> String {
-        SHA256.hash(data: Data(nonce.utf8)).map { String(format: "%02x", $0) }.joined()
-    }
-
-    // MARK: - Confirm with a passkey
-
-    /// Signs the server's challenge with a passkey of the person's, with user
-    /// verification required, as WebAuthn's request asked.
-    private func confirm(_ call: Int, options publicKey: Navree.JSONValue?) {
-        guard let publicKey, let rp = publicKey["rpId"]?.text,
-            let challenge = publicKey["challenge"]?.text.flatMap(Base64URL.decode)
-        else { return answer(call, .refused(.failed)) }
-        let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(relyingPartyIdentifier: rp)
-        let request = provider.createCredentialAssertionRequest(challenge: challenge)
-        request.userVerificationPreference = .required
-        if case .array(let allowed)? = publicKey["allowCredentials"] {
-            request.allowedCredentials = allowed.compactMap { entry in
-                entry["id"]?.text.flatMap(Base64URL.decode).map { ASAuthorizationPlatformPublicKeyCredentialDescriptor(credentialID: $0) }
-            }
-        }
-        authorize(call, [request])
-    }
-
-    // MARK: - The system's sheet
-
-    private func authorize(_ call: Int, _ requests: [ASAuthorizationRequest]) {
-        let controller = ASAuthorizationController(authorizationRequests: requests)
-        controller.delegate = self
-        controller.presentationContextProvider = self
-        authorizing[ObjectIdentifier(controller)] = (call, controller)
-        controller.performRequests()
-    }
-
-    private func finish(_ controller: ObjectIdentifier, _ outcome: CoreEvent.DeviceOutcome) {
-        guard let (call, _) = authorizing.removeValue(forKey: controller) else { return }
-        answer(call, outcome)
-    }
-
-    /// The fields an authorization answers with, in the protocol's names.
-    nonisolated static func fields(_ credential: ASAuthorizationCredential) -> [Navree.Pair]? {
-        if let apple = credential as? ASAuthorizationAppleIDCredential {
-            guard let token = apple.identityToken.flatMap({ String(data: $0, encoding: .utf8) }) else { return nil }
-            var fields = [Navree.Pair(name: "id_token", value: token)]
-            if let code = apple.authorizationCode.flatMap({ String(data: $0, encoding: .utf8) }) {
-                fields.append(Navree.Pair(name: "authorization_code", value: code))
-            }
-            if let given = apple.fullName?.givenName { fields.append(Navree.Pair(name: "first_name", value: given)) }
-            if let family = apple.fullName?.familyName { fields.append(Navree.Pair(name: "last_name", value: family)) }
-            return fields
-        }
-        if let assertion = credential as? ASAuthorizationPlatformPublicKeyCredentialAssertion {
-            return [Navree.Pair(name: "credential", value: WebAuthn.assertion(assertion))]
-        }
-        return nil
-    }
-
-    /// The refusal an authorization's error means.
-    nonisolated static func refusal(_ error: any Error) -> Navree.Refusal {
-        switch (error as? ASAuthorizationError)?.code {
-        case .canceled?: .cancelled
-        case .notHandled?, .unknown?: .unavailable
-        default: .failed
-        }
-    }
-}
-
-extension DeviceCalls: ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
-    nonisolated func authorizationController(
-        controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization
-    ) {
-        let key = ObjectIdentifier(controller)
-        let outcome = Self.fields(authorization.credential).map(CoreEvent.DeviceOutcome.done) ?? .refused(.failed)
-        MainActor.assumeIsolated {
-            finish(key, outcome)
-        }
-    }
-
-    nonisolated func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: any Error) {
-        let key = ObjectIdentifier(controller)
-        let refusal = Self.refusal(error)
-        MainActor.assumeIsolated {
-            finish(key, .refused(refusal))
-        }
-    }
-
-    nonisolated func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        MainActor.assumeIsolated { Windows.key ?? ASPresentationAnchor() }
-    }
-}
-
-/// A passkey's assertion as WebAuthn's `toJSON()` writes it: what the server's
-/// confirmation route reads.
-enum WebAuthn {
-    nonisolated static func assertion(_ assertion: ASAuthorizationPlatformPublicKeyCredentialAssertion) -> String {
-        var response: [String: String] = [
-            "clientDataJSON": Base64URL.encode(assertion.rawClientDataJSON),
-            "authenticatorData": Base64URL.encode(assertion.rawAuthenticatorData),
-            "signature": Base64URL.encode(assertion.signature),
-        ]
-        if let user = assertion.userID, !user.isEmpty { response["userHandle"] = Base64URL.encode(user) }
-        let id = Base64URL.encode(assertion.credentialID)
-        let object: [String: Any] = [
-            "id": id, "rawId": id, "type": "public-key", "authenticatorAttachment": "platform",
-            "response": response, "clientExtensionResults": [String: Any](),
-        ]
-        let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
-        return String(decoding: data, as: UTF8.self)
-    }
-}
-
-/// Base64 for addresses, with no padding, as WebAuthn writes its bytes.
-enum Base64URL {
-    static func encode(_ data: Data) -> String {
-        data.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
-
-    static func decode(_ text: String) -> Data? {
-        var base64 = text.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
-        return Data(base64Encoded: base64)
-    }
-}
-
-extension Navree.JSONValue {
-    subscript(_ key: String) -> Navree.JSONValue? {
-        if case .object(let object) = self { return object[key] }
-        return nil
-    }
-
-    var text: String? {
-        if case .string(let text) = self { return text }
-        return nil
     }
 }

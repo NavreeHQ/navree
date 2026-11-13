@@ -106,7 +106,7 @@ struct EffectTests {
 
     @Test func applesSignInTakesTheHashOfTheCoresNonce() {
         // SHA-256, lower-case hex: the test vector of FIPS 180-2.
-        #expect(DeviceCalls.hashed("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        #expect(SheetRequest.hashed("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     }
 
     @Test func webAuthnBytesAreBase64ForAddresses() {
