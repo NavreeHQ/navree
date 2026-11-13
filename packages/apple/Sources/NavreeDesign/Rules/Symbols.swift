@@ -37,7 +37,8 @@ public enum Symbols {
     /// The symbol to draw for `icon`: its system symbol, or `nil` when its
     /// shape must be drawn.
     public static func symbol(for icon: Navree.Icon) -> String? {
-        icon.name.flatMap(system(for:))
+        if let named = icon.symbol?.apple, !named.isEmpty { return named }
+        return icon.name.flatMap(system(for:))
     }
 
     static let table: [String: String] = [
