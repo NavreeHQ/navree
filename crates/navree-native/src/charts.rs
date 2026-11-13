@@ -21,7 +21,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::node::{Icon, Prominence, Tone, is_default};
+use crate::node::{Icon, Prominence, Tone, is_default, is_false};
 
 /// A colour of data by name. A client draws each as its own system's colour of
 /// that name, so a pillar that is violet is the system's violet on iPhone and
@@ -274,6 +274,106 @@ impl Default for Ring {
             hint: None,
         }
     }
+}
+
+/// What stands in the middle of rings inside each other.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RingsCentre {
+    /// Nothing: the rings alone.
+    #[default]
+    Nothing,
+    /// Each ring's value over its goal, in the ring's colour, one under the
+    /// other in the order of the rings.
+    Values,
+    /// The `icon` of the rings.
+    Icon,
+}
+
+/// One ring of [`Rings`]: a name, a value and the goal it is measured against.
+/// The numbers and the words are a [`Ring`]'s, and a value above the goal is
+/// past it in the same way.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RingValue {
+    /// What it measures: `Move`.
+    pub name: String,
+    /// The value, in the same units as `max`. None when there is no reading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<serde_json::Number>,
+    /// The goal: the whole ring.
+    pub max: serde_json::Number,
+    /// What the value counts, written after it: `kcal`, `min`, `hr`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    /// The value as the page wrote it, without its unit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shown: Option<String>,
+    /// Its colour. The rings take the client's colours in turn when none says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+}
+
+impl Default for RingValue {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            value: None,
+            max: 100.into(),
+            unit: None,
+            shown: None,
+            colour: None,
+        }
+    }
+}
+
+/// The most rings a client draws inside each other. A client draws the first
+/// ones and the legend lists every one.
+pub const MAX_RINGS: usize = 6;
+
+/// Two to six values on rings inside each other, the first outside: the day's
+/// movement, exercise and standing; the two halves of a nervous system; five
+/// scores of a day. Each ring has its own goal, colour and words, and a ring
+/// past its goal is shown as the system's own rings show it.
+///
+/// A client draws them as its system draws rings of this kind (the activity
+/// rings on Apple systems), puts each ring's value over its goal in the middle
+/// when `centre` says so, and lists each beside the drawing with its value and
+/// its share when `legend` is set. More than [`MAX_RINGS`] are listed in the
+/// legend and not drawn. How big they are says something: `prominence` is as a
+/// [`Ring`]'s.
+///
+/// The set is named by its `summary`, one sentence that says every ring.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Rings {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What the rings show together: `Activity rings`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// The rings, the outside one first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rings: Vec<RingValue>,
+    /// What stands in the middle.
+    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    pub centre: RingsCentre,
+    /// The icon in the middle, when `centre` is `icon`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<Icon>,
+    /// Whether each ring is named beside the drawing, with its value and its
+    /// share.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub legend: bool,
+    /// How much the rings matter on the screen.
+    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    pub prominence: Prominence,
+    /// One sentence that says every ring to a reader who can't see them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// A note about what the rings mean, shown when asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
 }
 
 #[cfg(test)]

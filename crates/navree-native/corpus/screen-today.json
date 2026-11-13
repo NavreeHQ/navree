@@ -272,6 +272,53 @@
               ]
             }
           ]
+        },
+        {
+          "t": "section",
+          "title": "Activity",
+          "style": "card",
+          "children": [
+            {
+              "t": "rings",
+              "id": "activity-rings",
+              "title": "Activity rings",
+              "rings": [
+                {
+                  "name": "Move",
+                  "value": 540,
+                  "max": 600,
+                  "unit": "kcal",
+                  "shown": "540",
+                  "colour": {
+                    "hue": "red"
+                  }
+                },
+                {
+                  "name": "Exercise",
+                  "value": 38,
+                  "max": 30,
+                  "unit": "min",
+                  "shown": "38",
+                  "colour": {
+                    "hue": "green"
+                  }
+                },
+                {
+                  "name": "Stand",
+                  "value": 9,
+                  "max": 12,
+                  "unit": "hr",
+                  "shown": "9",
+                  "colour": {
+                    "hue": "cyan"
+                  }
+                }
+              ],
+              "centre": "values",
+              "legend": true,
+              "summary": "Activity rings: Move 540 of 600 kcal, 90%. Exercise 38 of 30 min, 127%. Stand 9 of 12 hr, 75%."
+            }
+          ]
         }
       ]
     }

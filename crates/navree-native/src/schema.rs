@@ -38,7 +38,9 @@ use serde::de::DeserializeOwned;
 use serde_json::{Map, Value, json};
 
 use crate::action::{Action, Command, Pair, Present, State};
-use crate::charts::{Centre, Colour, Hint, HintMark, Hue, Ring};
+use crate::charts::{
+    Centre, Colour, Hint, HintMark, Hue, Ring, RingValue, Rings, RingsCentre,
+};
 use crate::client::{ClientDescriptor, Contrast, FormFactor, Platform, Scheme};
 use crate::device::{
     Accuracy, Alt, AppLock, AuthSession, Call, CancelNotification, CodeFormat, Confirm,
@@ -603,7 +605,7 @@ union!(Node tag "t"
         Stack, Grid, Section, List, Row, Split, Tabs, Disclosure, Divider, Spacer, Region,
         Text, Rich, Image, Icon, Avatar, Badge, Progress, Banner, Empty, Facts, Table, Chart,
         Code, Button, Link, Menu, Form, Field, Sheet, Dialog, Popover, Native, Web, Toolbar,
-        Gauge, Figure, Timeline, FeedRow, Message, Pane, Ring,
+        Gauge, Figure, Timeline, FeedRow, Message, Pane, Ring, Rings,
     }
     structs {}
     units {}
@@ -712,6 +714,11 @@ object!(Hint { about, text } { title, mark });
 names!(Centre { Value, Icon, Nothing });
 object!(Ring { max } {
     id, value, unit, shown, label, caption, colour, centre, icon, prominence, summary, hint
+});
+names!(RingsCentre { Nothing, Values, Icon });
+object!(RingValue { name, max } { value, unit, shown, colour });
+object!(Rings {} {
+    id, title, rings, centre, icon, legend, prominence, summary, hint
 });
 
 // The controls of fields.

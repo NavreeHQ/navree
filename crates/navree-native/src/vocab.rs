@@ -265,6 +265,7 @@ kinds! {
     Message(Message) => "message" since 0,
     Pane(Pane) => "pane" since 0,
     Ring(Ring) => "ring" since 0,
+    Rings(Rings) => "rings" since 0,
 }
 
 /// A field that arrived after its type did: the type's name in the schema
@@ -513,6 +514,29 @@ impl Node {
                     ..n::Figure::default()
                 })
             }
+            Self::Rings(node) => Node::Facts(n::Facts {
+                id: node.id.clone(),
+                items: node
+                    .rings
+                    .iter()
+                    .map(|ring| {
+                        let goal = words(None, Some(&ring.max), ring.unit.as_deref());
+                        n::Fact {
+                            label: ring.name.clone(),
+                            value: vec![Node::text(match (&ring.shown, &ring.value) {
+                                (None, None) => format!("– of {goal}"),
+                                (shown, value) => {
+                                    let value = words(shown.as_deref(), value.as_ref(), None);
+                                    format!("{value} of {goal}")
+                                }
+                            })],
+                            icon: None,
+                            tone: ring.colour.as_ref().and_then(|colour| colour.hue.tone()),
+                            details: Vec::new(),
+                        }
+                    })
+                    .collect(),
+            }),
             Self::Unknown(node) => return node.alt.as_deref().cloned(),
             _ => return None,
         })
@@ -561,8 +585,8 @@ mod tests {
     use super::*;
     use crate::node::{
         Avatar, Badge, Chart, Colour, Direction, FeedRow, Figure, Gauge, Hue, Icon, Message,
-        Moment, Pane, PaneRole, Ring, RowState, Run, Section, Stack, Standard, Timeline, Tone,
-        Toolbar, ToolbarItem, Trend, Unknown,
+        Moment, Pane, PaneRole, Ring, RingValue, Rings, RingsCentre, RowState, Run, Section,
+        Stack, Standard, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown,
     };
 
     #[test]
@@ -703,6 +727,28 @@ mod tests {
                 colour: Some(Colour::new(Hue::Success)),
                 ..Ring::default()
             }),
+            Node::Rings(Rings {
+                id: Some("activity".to_owned()),
+                rings: vec![
+                    RingValue {
+                        name: "Move".to_owned(),
+                        value: Some(540.into()),
+                        max: 600.into(),
+                        unit: Some("kcal".to_owned()),
+                        shown: Some("540".to_owned()),
+                        colour: Some(Colour::new(Hue::Red)),
+                    },
+                    RingValue {
+                        name: "Exercise".to_owned(),
+                        value: None,
+                        max: 30.into(),
+                        unit: Some("min".to_owned()),
+                        ..RingValue::default()
+                    },
+                ],
+                centre: RingsCentre::Values,
+                ..Rings::default()
+            }),
         ]
     }
 
@@ -715,7 +761,8 @@ mod tests {
             | Kind::FeedRow
             | Kind::Message
             | Kind::Pane
-            | Kind::Ring => 1,
+            | Kind::Ring
+            | Kind::Rings => 1,
             kind => kind.since(),
         }
     }
@@ -725,6 +772,14 @@ mod tests {
     /// would be rewritten in turn.
     fn only(newer: Kind) -> impl Fn(Kind) -> u32 {
         move |kind| u32::from(kind == newer)
+    }
+
+    /// The part of `kind` among the newer parts.
+    fn part(kind: Kind) -> Node {
+        newer_parts()
+            .into_iter()
+            .find(|part| part.kind() == kind)
+            .unwrap_or_else(|| panic!("no example of {kind:?}"))
     }
 
     fn kinds_in(node: &Node) -> Vec<Kind> {
@@ -770,7 +825,7 @@ mod tests {
 
     #[test]
     fn a_ring_becomes_a_figure_with_its_words_and_its_goal() {
-        let ring = newer_parts().pop().unwrap();
+        let ring = part(Kind::Ring);
         let Downgraded::Node(Node::Figure(figure)) = downgrade_by(ring, 0, only(Kind::Ring)) else {
             panic!("a ring becomes a figure");
         };
@@ -791,6 +846,24 @@ mod tests {
         assert_eq!(figure.value, "–");
         assert_eq!(figure.detail.as_deref(), Some("of 100%"));
         assert_eq!(figure.tone, None);
+    }
+
+    #[test]
+    fn rings_become_a_list_of_facts_one_for_each_ring() {
+        let rings = part(Kind::Rings);
+        let Downgraded::Node(Node::Facts(facts)) = downgrade_by(rings, 0, only(Kind::Rings)) else {
+            panic!("rings become facts");
+        };
+        assert_eq!(facts.id.as_deref(), Some("activity"));
+        let value = |at: usize| match &facts.items[at].value[..] {
+            [Node::Text(text)] => text.value.clone(),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(facts.items[0].label, "Move");
+        assert_eq!(value(0), "540 of 600 kcal");
+        assert_eq!(facts.items[0].tone, None);
+        assert_eq!(facts.items[1].label, "Exercise");
+        assert_eq!(value(1), "– of 30 min");
     }
 
     #[test]

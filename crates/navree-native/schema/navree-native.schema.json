@@ -5271,6 +5271,21 @@
           "required": [
             "t"
           ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Rings"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "rings"
+            }
+          },
+          "required": [
+            "t"
+          ]
         }
       ],
       "x-kind": "union",
@@ -5493,6 +5508,11 @@
         {
           "tag": "ring",
           "type": "Ring",
+          "x-since": 0
+        },
+        {
+          "tag": "rings",
+          "type": "Rings",
           "x-since": 0
         }
       ]
@@ -7346,6 +7366,174 @@
       ],
       "type": "object",
       "x-kind": "object",
+      "x-since": 0
+    },
+    "RingValue": {
+      "properties": {
+        "colour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "max": {
+          "type": "number",
+          "x-since": 0
+        },
+        "name": {
+          "type": "string",
+          "x-since": 0
+        },
+        "shown": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [
+        "name",
+        "max"
+      ],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Rings": {
+      "properties": {
+        "centre": {
+          "$ref": "#/$defs/RingsCentre",
+          "default": "nothing",
+          "x-since": 0
+        },
+        "hint": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Icon"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "legend": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "prominence": {
+          "$ref": "#/$defs/Prominence",
+          "default": "medium",
+          "x-since": 0
+        },
+        "rings": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RingValue"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "RingsCentre": {
+      "enum": [
+        "nothing",
+        "values",
+        "icon"
+      ],
+      "type": "string",
+      "x-kind": "enum",
       "x-since": 0
     },
     "Role": {

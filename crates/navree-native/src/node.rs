@@ -11,7 +11,9 @@ use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize, Serializer};
 
 use crate::action::Action;
-pub use crate::charts::{Centre, Colour, Hint, HintMark, Hue, Ring};
+pub use crate::charts::{
+    Centre, Colour, Hint, HintMark, Hue, Ring, RingValue, Rings, RingsCentre,
+};
 use crate::input::Input;
 
 pub(crate) fn is_false(value: &bool) -> bool {
@@ -116,6 +118,8 @@ pub enum Node {
     Pane(Pane),
     /// One value against its whole, as a ring.
     Ring(Ring),
+    /// Several values on rings inside each other.
+    Rings(Rings),
     /// A kind this build has never heard of, from a newer server. A client
     /// draws its `alt`, or shows the page in its web view when it has none.
     Unknown(Unknown),
@@ -212,6 +216,7 @@ impl Node {
             Self::Message(node) => node.id.as_deref(),
             Self::Pane(node) => node.id.as_deref(),
             Self::Ring(node) => node.id.as_deref(),
+            Self::Rings(node) => node.id.as_deref(),
             Self::Unknown(node) => node.id.as_deref(),
         }
     }
@@ -283,7 +288,8 @@ impl Node {
             | Self::Web(_)
             | Self::Gauge(_)
             | Self::Figure(_)
-            | Self::Ring(_) => Vec::new(),
+            | Self::Ring(_)
+            | Self::Rings(_) => Vec::new(),
         }
     }
 
@@ -379,7 +385,8 @@ impl Node {
             | Self::Web(_)
             | Self::Gauge(_)
             | Self::Figure(_)
-            | Self::Ring(_) => Vec::new(),
+            | Self::Ring(_)
+            | Self::Rings(_) => Vec::new(),
         }
     }
 
@@ -1146,6 +1153,7 @@ impl Node {
                 .collect(),
             Self::FeedRow(node) => node.icon.iter_mut().collect(),
             Self::Ring(node) => node.icon.iter_mut().collect(),
+            Self::Rings(node) => node.icon.iter_mut().collect(),
             _ => Vec::new(),
         }
     }

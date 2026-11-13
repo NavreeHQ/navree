@@ -28,7 +28,8 @@ use navree_native::node::{
     ColumnRole, Delivery, Dialog, Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Icon, Image, Justify, Link, List, Live, Menu,
     Message, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress, Prominence,
-    Purpose, Question, Region, Reorder, Rich, Ring, Role, Row, RowState, Run, Section, SectionStyle,
+    Purpose, Question, Region, Reorder, Rich, Ring, RingValue, Rings, RingsCentre, Role, Row,
+    RowState, Run, Section, SectionStyle,
     Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table,
     TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown,
     WebRegion,
@@ -2078,6 +2079,29 @@ fn screen_today() -> Envelope {
         }),
         ..Ring::default()
     });
+    // Three values on rings inside each other, the first outside. The second
+    // is past its goal.
+    let move_ring = |name: &str, value: i64, goal: i64, unit: &str, hue: Hue| RingValue {
+        name: s(name),
+        value: Some(number(value)),
+        max: number(goal),
+        unit: Some(s(unit)),
+        shown: Some(value.to_string()),
+        colour: Some(Colour::new(hue)),
+    };
+    let activity = Node::Rings(Rings {
+        id: Some(s("activity-rings")),
+        title: Some(s("Activity rings")),
+        rings: vec![
+            move_ring("Move", 540, 600, "kcal", Hue::Red),
+            move_ring("Exercise", 38, 30, "min", Hue::Green),
+            move_ring("Stand", 9, 12, "hr", Hue::Cyan),
+        ],
+        centre: RingsCentre::Values,
+        legend: true,
+        summary: Some(s("Activity rings: Move 540 of 600 kcal, 90%. Exercise 38 of 30 min, 127%. Stand 9 of 12 hr, 75%.")),
+        ..Rings::default()
+    });
     let body = Node::Stack(Stack {
         gap: 4,
         children: vec![
@@ -2128,6 +2152,12 @@ fn screen_today() -> Envelope {
                         ..Grid::default()
                     }),
                 ],
+                ..Section::default()
+            }),
+            Node::Section(Section {
+                title: Some(s("Activity")),
+                style: SectionStyle::Card,
+                children: vec![activity],
                 ..Section::default()
             }),
         ],
