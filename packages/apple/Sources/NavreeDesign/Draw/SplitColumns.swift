@@ -224,7 +224,7 @@ struct PointerHover: ViewModifier {
 struct DetailMinimum: ViewModifier {
     func body(content: Content) -> some View {
         #if os(macOS)
-        content.frame(minWidth: 360)
+        content.frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
         #else
         content
         #endif
