@@ -248,7 +248,10 @@ enum LaunchSteps {
                 if let front = client.front, !front.loading, let screen = front.screen,
                     let tap = LaunchTaps.find(label, in: screen, open: Set(front.states.filter { $0.value.contains(.open) }.keys))
                 {
-                    client.perform(.act(tap.action, tap.place), on: front.id)
+                    // On a screen of panes a link is a choice, as a row tapped
+                    // in its list is: the screen for it takes this one's place.
+                    let action = SplitRules.panes(screen.body) == nil ? tap.action : SplitRules.choice(tap.action)
+                    client.perform(.act(action, tap.place), on: front.id)
                     break
                 }
                 try? await Task.sleep(for: .milliseconds(250))
