@@ -1162,7 +1162,10 @@ async fn answer(native: Arc<scope::Request>, mut request: Request, next: Next) -
         // they can't, or there are none (a handler that keeps its ops for the
         // browser's runtime), the fallback stands: a redirect the client
         // follows to a screen, or a page that was answered as a screen already.
-        let signed_out = response.extensions().get::<crate::op::SignedOut>().is_some();
+        let signed_out = response
+            .extensions()
+            .get::<crate::op::SignedOut>()
+            .is_some();
         let said = native_ops(&envelope.ops).map(|mut ops| {
             // The person signed out: before the rest, which still applies.
             if signed_out {
