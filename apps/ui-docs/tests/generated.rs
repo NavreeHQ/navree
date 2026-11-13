@@ -348,3 +348,44 @@ fn the_phone_shell_is_drawn_with_its_sidebar_closed_and_open() {
     // Both show the same page.
     assert!(closed.contains("Sutlej CRM") && open.contains("Sutlej CRM"));
 }
+
+/// A docs page asks for a props table by the type's name, and the website stops building
+/// when the generated tables hold no such type: every name a page asks for is written.
+#[test]
+fn every_props_table_a_docs_page_asks_for_is_written() {
+    let files = ui_docs::generate();
+    let api: serde_json::Value =
+        serde_json::from_str(&files["api.json"]).expect("api.json is JSON");
+    let mut pages = Vec::new();
+    mdx_pages(&ui_docs::repo().join("docs"), &mut pages);
+    let mut asked = 0;
+    for page in pages {
+        let text = std::fs::read_to_string(&page).expect("a docs page is text");
+        for tag in text.split("<UiProps ").skip(1) {
+            let name = tag
+                .split_once("type=\"")
+                .and_then(|(_, rest)| rest.split_once('"'))
+                .map(|(name, _)| name)
+                .unwrap_or_else(|| panic!("{}: a props table with no type", page.display()));
+            asked += 1;
+            assert!(
+                api.get(name).is_some(),
+                "{} asks for the props of {name}, which no component or guide in the catalog lists",
+                page.display()
+            );
+        }
+    }
+    assert!(asked > 300, "{asked} props tables");
+}
+
+/// Every `.mdx` file under `dir`, at any depth.
+fn mdx_pages(dir: &std::path::Path, pages: &mut Vec<std::path::PathBuf>) {
+    for entry in std::fs::read_dir(dir).expect("the docs folder is readable") {
+        let path = entry.expect("a docs entry").path();
+        if path.is_dir() {
+            mdx_pages(&path, pages);
+        } else if path.extension().is_some_and(|ext| ext == "mdx") {
+            pages.push(path);
+        }
+    }
+}

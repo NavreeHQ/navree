@@ -288,6 +288,23 @@ impl Component {
     }
 }
 
+/// The types a guide shows a props table for that belong to no component below:
+/// they draw nothing, so they have no previews.
+pub const GUIDE_TYPES: &[&str] = &[
+    // /docs/ui/seo/
+    "Seo",
+    "Robots",
+    "SocialImage",
+    "OgType",
+    "TwitterCard",
+    "JsonLd",
+    "Thing",
+    "PageKind",
+    "Sitemap",
+    "SitemapUrl",
+    "RobotsTxt",
+];
+
 /// Every component and toolkit area with previews.
 pub const COMPONENTS: &[Component] = &[
     // Actions
