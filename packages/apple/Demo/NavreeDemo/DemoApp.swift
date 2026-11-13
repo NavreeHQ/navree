@@ -13,11 +13,27 @@ struct DemoApp: App {
     private let configuration = DemoConfiguration.make()
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             AppShell(configuration: configuration)
+                .modifier(DemoPictures())
         }
+        .commands { NavreeCommands(window: "main") }
+        #if os(macOS)
+        // The person's settings, from the App menu (⌘,), in a window of their own.
+        Settings {
+            SettingsShell(configuration: configuration)
+        }
+        #endif
     }
 }
+
+#if !os(macOS)
+/// Pictures of the app's windows are taken on a Mac only; the iPhone and iPad
+/// screens are pictured by the UI tests.
+struct DemoPictures: ViewModifier {
+    func body(content: Content) -> some View { content }
+}
+#endif
 
 enum DemoConfiguration {
     nonisolated static let recordedOrigin = "https://charkha.example"
