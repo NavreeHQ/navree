@@ -529,8 +529,9 @@ private fun GridView(node: Navree.Grid, place: Place, modifier: Modifier) {
         val shown = node.children.filter { inFlow(it, place.screen) }
         Column(verticalArrangement = Arrangement.spacedBy(gap.dp)) {
             for (line in shown.chunked(columns)) {
-                // The parts of a line are as tall as the tallest of them.
-                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(gap.dp)) {
+                // The parts of a line are as tall as the tallest of them, where they can say how tall that is.
+                val even = line.all(::measuresAhead)
+                Row(if (even) Modifier.height(IntrinsicSize.Min) else Modifier, horizontalArrangement = Arrangement.spacedBy(gap.dp)) {
                     for (child in line) {
                         Box(Modifier.weight(1f).fillMaxHeight()) { NodeView(child, place, Modifier.fillMaxHeight()) }
                     }

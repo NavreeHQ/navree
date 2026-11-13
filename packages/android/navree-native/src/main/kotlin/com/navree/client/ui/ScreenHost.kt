@@ -408,7 +408,8 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
             }
         }
         is Block.Cards -> Row(
-            Modifier.readable(ContentRules.TABLE_MOST_DP).padding(horizontal = margin).height(IntrinsicSize.Min),
+            Modifier.readable(ContentRules.TABLE_MOST_DP).padding(horizontal = margin)
+                .then(if (block.nodes.all(::measuresAhead)) Modifier.height(IntrinsicSize.Min) else Modifier),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             val inner = place.copy(form = block.form ?: place.form)

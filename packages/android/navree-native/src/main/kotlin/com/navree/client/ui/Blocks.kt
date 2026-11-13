@@ -7,6 +7,7 @@ import com.navree.client.design.PagerRules
 import com.navree.client.design.SelectionRules
 import com.navree.client.design.childNodes
 import com.navree.client.design.nodeId
+import com.navree.client.design.walk
 import com.navree.protocol.Navree
 
 /** Where an item sits in a group that shares one container. */
@@ -49,6 +50,18 @@ internal sealed interface Block {
 
     /** Cards side by side on a wide window, a line of the dashboard's grid. */
     data class Cards(override val key: String, val nodes: List<Navree.Node>, val columns: Int, val form: String?) : Block
+}
+
+/**
+ * Whether a part can say how tall it would be before it is laid out, so the
+ * parts of a line can be made as tall as the tallest. A part that lays itself
+ * out by the room it is given (a grid, a carousel, a meter, tabs, a stack
+ * that turns in a wide room) cannot: its line keeps each part's own height.
+ */
+internal fun measuresAhead(node: Navree.Node): Boolean = node.walk().none {
+    it is Navree.Grid || it is Navree.Carousel || it is Navree.Adaptive || it is Navree.Meter ||
+        it is Navree.CalendarHeatmap || it is Navree.MatrixHeatmap || it is Navree.Tabs || it is Navree.Table ||
+        it is Navree.List || (it is Navree.Stack && it.wide != null && it.wide != it.axis)
 }
 
 /** Whether the node draws anything where it stands. Overlays are drawn over the screen, not in it. */
