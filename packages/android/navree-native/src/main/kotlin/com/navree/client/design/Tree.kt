@@ -62,6 +62,11 @@ val Navree.Node.nodeId: String?
         is Navree.CalendarHeatmap -> id
         is Navree.MatrixHeatmap -> id
         is Navree.Scatter -> id
+        is Navree.Card -> id
+        is Navree.Layers -> id
+        is Navree.Shape -> id
+        is Navree.Carousel -> id
+        is Navree.Adaptive -> id
         is Navree.Node.Unknown -> id
         else -> null
     }
@@ -93,6 +98,10 @@ fun Navree.Node.childNodes(): List<Navree.Node> = when (this) {
     is Navree.Message -> body
     is Navree.Pane -> children
     is Navree.Figure -> listOfNotNull(aside, chart)
+    is Navree.Card -> children + menu
+    is Navree.Layers -> children
+    is Navree.Carousel -> children
+    is Navree.Adaptive -> compact + wide
     is Navree.DayPager -> listOfNotNull(scores)
     is Navree.NativeView -> listOfNotNull(alt)
     is Navree.Node.Unknown -> listOfNotNull(alt)

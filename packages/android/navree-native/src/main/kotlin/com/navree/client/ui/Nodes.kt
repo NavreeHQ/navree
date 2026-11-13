@@ -2,6 +2,13 @@
 
 package com.navree.client.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -85,12 +92,15 @@ import com.navree.client.design.ToneRole
 import com.navree.client.design.TypeRole
 import com.navree.client.design.expressive.Waiting
 import com.navree.client.theme.toneColours
+import com.navree.client.design.CompositionRules
 import com.navree.protocol.Navree
 
 /** The Material type style a text style is set in. */
 @Composable
 internal fun typeOf(style: Navree.TextStyle): TextStyle = when (ContentRules.type(style)) {
+    TypeRole.DisplayMedium -> MaterialTheme.typography.displayMedium
     TypeRole.HeadlineMedium -> MaterialTheme.typography.headlineMedium
+    TypeRole.HeadlineSmall -> MaterialTheme.typography.headlineSmall
     TypeRole.TitleLarge -> MaterialTheme.typography.titleLarge
     TypeRole.TitleMedium -> MaterialTheme.typography.titleMedium
     TypeRole.BodyLarge -> MaterialTheme.typography.bodyLarge
@@ -120,23 +130,63 @@ internal fun markColour(tone: Navree.Tone?): Color = when (tone) {
     else -> textColour(tone, Navree.TextStyle.BODY)
 }
 
+/**
+ * Words in the type scale: the page's style, its weight, its hue (over its
+ * tone), its alignment, figures of one width where the page asks, and a
+ * count that rolls when an op changes it.
+ */
+@Composable
+private fun TextView(node: Navree.Text, modifier: Modifier) {
+    val base = typeOf(node.style)
+    val style = base
+        .let { s -> node.weight?.let { s.copy(fontWeight = fontWeight(it)) } ?: s }
+        .let { s -> if (node.tabular) s.copy(fontFeatureSettings = "tnum") else s }
+    val hue = node.colour?.let { inkOf(it, Navree.Hue.ACCENT).mark }
+    val colour = hue ?: textColour(node.tone, node.style, node.muted)
+    val align = when (node.align) {
+        Navree.Align.CENTER -> TextAlign.Center
+        Navree.Align.END -> TextAlign.End
+        Navree.Align.START -> TextAlign.Start
+        else -> null
+    }
+    val heading = node.heading != null || node.style == Navree.TextStyle.LARGE_TITLE || node.style == Navree.TextStyle.TITLE || node.style == Navree.TextStyle.DISPLAY
+    val shaped = (if (align != null) modifier.fillMaxWidth() else modifier).then(if (heading) Modifier.semantics { heading() } else Modifier)
+    val draw: @Composable (String) -> Unit = { words ->
+        Text(
+            text = words,
+            modifier = shaped,
+            style = style,
+            color = colour,
+            textAlign = align,
+            maxLines = node.lines ?: Int.MAX_VALUE,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+    when (node.change) {
+        null -> draw(node.value)
+        // A number that changes rolls to its new value, as the animation guide's counter does.
+        Navree.Change.COUNT -> AnimatedContent(
+            targetState = node.value,
+            transitionSpec = { (slideInVertically { it } + fadeIn()) togetherWith (slideOutVertically { -it } + fadeOut()) using SizeTransform(clip = false) },
+            label = "count",
+        ) { draw(it) }
+        Navree.Change.FADE -> AnimatedContent(targetState = node.value, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "fade") { draw(it) }
+    }
+}
+
+private fun fontWeight(weight: Navree.Weight): FontWeight = when (weight) {
+    Navree.Weight.REGULAR -> FontWeight.Normal
+    Navree.Weight.MEDIUM -> FontWeight.Medium
+    Navree.Weight.SEMIBOLD -> FontWeight.SemiBold
+    Navree.Weight.BOLD -> FontWeight.Bold
+}
+
 /** Draws any node. What has its own place on the screen's frame (sheets, dialogs, toolbars) draws nothing here. */
 @Composable
 internal fun NodeView(node: Navree.Node, place: Place, modifier: Modifier = Modifier) {
     if (node === place.omit || !inFlow(node, place.screen)) return
     when (node) {
-        is Navree.Text -> Text(
-            text = node.value,
-            modifier = if (node.heading != null || node.style == Navree.TextStyle.LARGE_TITLE || node.style == Navree.TextStyle.TITLE) {
-                modifier.semantics { heading() }
-            } else {
-                modifier
-            },
-            style = typeOf(node.style),
-            color = textColour(node.tone, node.style, node.muted),
-            maxLines = node.lines ?: Int.MAX_VALUE,
-            overflow = TextOverflow.Ellipsis,
-        )
+        is Navree.Text -> TextView(node, modifier)
         is Navree.Rich -> RichView(node, place, modifier)
         is Navree.Image -> {
             val width = node.width
@@ -196,6 +246,11 @@ internal fun NodeView(node: Navree.Node, place: Place, modifier: Modifier = Modi
         is Navree.CalendarHeatmap -> CalendarHeatmapView(node, modifier)
         is Navree.MatrixHeatmap -> MatrixHeatmapView(node, modifier)
         is Navree.Scatter -> ScatterView(node, modifier)
+        is Navree.Card -> CardView(node, place, modifier)
+        is Navree.Layers -> LayersView(node, place, modifier)
+        is Navree.Shape -> ShapeView(node, modifier)
+        is Navree.Carousel -> CarouselView(node, place, modifier)
+        is Navree.Adaptive -> AdaptiveView(node, place, modifier)
         is Navree.Timeline -> TimelineView(node, place, modifier)
         is Navree.FeedRow -> FeedRowView(node, place, modifier)
         is Navree.Message -> MessageView(node, place, modifier)
@@ -305,7 +360,10 @@ private fun RichView(node: Navree.Rich, place: Place, modifier: Modifier) {
 @Composable
 internal fun IconView(node: Navree.Icon, modifier: Modifier = Modifier, tint: Color = LocalContentColor.current) {
     val vector = rememberIcon(node) ?: return
-    Icon(imageVector = vector, contentDescription = node.label, modifier = modifier, tint = tint)
+    // As large as the text style the page names; in the page's hue when it gives one.
+    val sized = node.scale?.let { modifier.size(CompositionRules.iconDp(it).dp) } ?: modifier
+    val colour = node.colour?.let { inkOf(it, Navree.Hue.ACCENT).mark } ?: tint
+    Icon(imageVector = vector, contentDescription = node.label, modifier = sized, tint = colour)
 }
 
 @Composable
@@ -487,13 +545,28 @@ private fun GridView(node: Navree.Grid, place: Place, modifier: Modifier) {
 /**
  * A stack inside other content. Across, its parts wrap when the page lets
  * them, and "between" puts the first at the start and the last at the end.
+ * A stack with a wide axis turns in a wide room, its parts keeping their
+ * state; a part that grows takes the room left; `pad` is steps all round.
  */
 @Composable
 private fun StackView(node: Navree.Stack, place: Place, modifier: Modifier) {
-    val gap = ContentRules.gap(node.gap).dp
     val shown = node.children.filter { it !== place.omit && inFlow(it, place.screen) }
     if (shown.isEmpty()) return
-    if (node.axis == Navree.Axis.HORIZONTAL) {
+    val padded = if (node.pad > 0) modifier.padding((node.pad * CompositionRules.STEP_DP).dp) else modifier
+    if (node.wide == null || node.wide == node.axis) {
+        StackLaid(node, node.axis, shown, place, padded)
+        return
+    }
+    BoxWithConstraints(padded) {
+        val axis = CompositionRules.axis(node, maxWidth.value)
+        StackLaid(node, axis, shown, place, Modifier)
+    }
+}
+
+@Composable
+private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.Node>, place: Place, modifier: Modifier) {
+    val gap = ContentRules.gap(node.gap).dp
+    if (axis == Navree.Axis.HORIZONTAL) {
         val across = when (node.justify) {
             Navree.Justify.BETWEEN -> if (shown.size > 1) Arrangement.SpaceBetween else Arrangement.Start
             Navree.Justify.CENTER -> Arrangement.spacedBy(gap, Alignment.CenterHorizontally)
@@ -505,7 +578,8 @@ private fun StackView(node: Navree.Stack, place: Place, modifier: Modifier) {
             Navree.Align.END -> Alignment.Bottom
             else -> Alignment.CenterVertically
         }
-        val wide = node.justify == Navree.Justify.BETWEEN || node.justify == Navree.Justify.END
+        val growing = shown.any(CompositionRules::grows)
+        val wide = node.justify == Navree.Justify.BETWEEN || node.justify == Navree.Justify.END || growing
         if (node.wrap) {
             FlowRow(
                 modifier = if (wide) modifier.fillMaxWidth() else modifier,
@@ -517,7 +591,7 @@ private fun StackView(node: Navree.Stack, place: Place, modifier: Modifier) {
             }
         } else {
             Row(modifier = if (wide) modifier.fillMaxWidth() else modifier, horizontalArrangement = across, verticalAlignment = upright) {
-                for (child in shown) NodeView(child, place)
+                for (child in shown) NodeView(child, place, if (CompositionRules.grows(child)) Modifier.weight(1f) else Modifier)
             }
         }
     } else {

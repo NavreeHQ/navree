@@ -486,6 +486,9 @@ class ContentRulesTest {
         assertEquals(TypeRole.HeadlineMedium, ContentRules.type(Navree.TextStyle.LARGE_TITLE))
         assertEquals(TypeRole.BodyLarge, ContentRules.type(Navree.TextStyle.BODY))
         assertEquals(TypeRole.BodySmall, ContentRules.type(Navree.TextStyle.CAPTION))
+        assertEquals("the one figure a screen is about", TypeRole.DisplayMedium, ContentRules.type(Navree.TextStyle.DISPLAY))
+        assertEquals("a title and the second title are two steps apart", TypeRole.HeadlineSmall, ContentRules.type(Navree.TextStyle.TITLE))
+        assertEquals(TypeRole.TitleLarge, ContentRules.type(Navree.TextStyle.TITLE2))
     }
 
     @Test

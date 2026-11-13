@@ -240,8 +240,12 @@ object AxisRules {
 
 /** The day pager: the day a screen is about, stepped in place. */
 object PagerRules {
-    /** A pager that leads the screen's body stands in the app bar, as a date does in Material's own day views. */
+    /**
+     * The day control in the app bar, as a date is in Material's own day
+     * views: the screen's own pager, or a pager that leads its body.
+     */
     fun inBar(screen: Navree.Screen): Navree.DayPager? {
+        screen.pager?.let { return it }
         val body = screen.body
         if (body is Navree.DayPager) return body
         val first = (body as? Navree.Stack)?.children?.firstOrNull { !(it is Navree.Stack && it.hidden) }

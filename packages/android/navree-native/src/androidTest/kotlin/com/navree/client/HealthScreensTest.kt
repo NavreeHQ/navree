@@ -47,6 +47,8 @@ class HealthScreensTest {
                 "/" to "screen-today",
                 "/sleep" to "screen-sleep",
                 "/fitness" to "screen-fitness",
+                "/designed" to "screen-designed-health",
+                "/shelves" to "screen-designed-store",
             ),
         )
         server.start()
@@ -109,6 +111,15 @@ class HealthScreensTest {
         send(app, Events.openLink("${server.url("/fitness")}"))
         front(app, "Fitness")
         scrolled("health-fitness", 7)
+
+        // The same day written for native clients: cards, a pager of the screen's own, rooms.
+        send(app, Events.openLink("${server.url("/designed")}"))
+        front(app, "Today")
+        scrolled("designed-health", 4)
+
+        send(app, Events.openLink("${server.url("/shelves")}"))
+        front(app, "Shelves")
+        scrolled("designed-shelves", 4)
     }
 
     @Test

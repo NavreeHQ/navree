@@ -292,7 +292,7 @@ object OverlayRules {
 }
 
 /** The Material type role a text style is set in. */
-enum class TypeRole { HeadlineMedium, TitleLarge, TitleMedium, BodyLarge, BodyMedium, BodySmall, Mono }
+enum class TypeRole { DisplayMedium, HeadlineMedium, HeadlineSmall, TitleLarge, TitleMedium, BodyLarge, BodyMedium, BodySmall, Mono }
 
 /** The pair of colour roles a tone is drawn with: a container and what sits on it. */
 enum class ToneRole { Surface, Primary, Success, Warning, Error, Info }
@@ -300,8 +300,12 @@ enum class ToneRole { Surface, Primary, Success, Warning, Error, Info }
 /** Type, colour roles and spacing: the system's own scales, chosen by what the tree says a thing is. */
 object ContentRules {
     fun type(style: Navree.TextStyle): TypeRole = when (style) {
+        // The one figure a screen is about.
+        Navree.TextStyle.DISPLAY -> TypeRole.DisplayMedium
         Navree.TextStyle.LARGE_TITLE -> TypeRole.HeadlineMedium
-        Navree.TextStyle.TITLE -> TypeRole.TitleLarge
+        // A title and the smaller second title are two steps of the scale, not one.
+        Navree.TextStyle.TITLE -> TypeRole.HeadlineSmall
+        Navree.TextStyle.TITLE2 -> TypeRole.TitleLarge
         Navree.TextStyle.HEADLINE -> TypeRole.TitleMedium
         Navree.TextStyle.BODY -> TypeRole.BodyLarge
         Navree.TextStyle.CALLOUT -> TypeRole.BodyMedium

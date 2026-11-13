@@ -93,7 +93,7 @@ internal fun blocks(
 ): List<Block> {
     val out = ArrayList<Block>()
     val cardColumns = ContentRules.cardColumns(widthDp, fontScale)
-    fun card(node: Navree.Node) = node is Navree.Section && node.style == Navree.SectionStyle.CARD
+    fun card(node: Navree.Node) = (node is Navree.Section && node.style == Navree.SectionStyle.CARD) || node is Navree.Card
     val used = HashSet<String>()
 
     fun key(path: String, id: String?): String {
