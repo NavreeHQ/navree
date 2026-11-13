@@ -32,7 +32,7 @@ use navree_native::node::{
     Menu, Message, Meter, Method, MiniColumn, MiniColumns, Moment, NativeView, Node, Pane,
     PaneRole, Popover, Progress, Prominence,
     PagerWords, Purpose, Question, Region, Reorder, Rich, Ring, RingValue, Rings, RingsCentre,
-    Role, Row, RowState, Run, Section, SectionStyle, Segment, StripCell,
+    RangeScale, Role, Row, RowState, Run, Section, SectionStyle, Segment, StripCell,
     Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table,
     TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown,
     WebRegion, Zone,
@@ -2540,6 +2540,39 @@ fn screen_sleep() -> Envelope {
         summary: Some(s("The night in half hours: 15 cells from 11:00 pm to 6:00 am. Core was the most common stage, 7 of 15.")),
         ..ColorStrip::default()
     });
+    // Where one value sits between a low and a high end, on its zones: the heart
+    // rate while asleep.
+    let rate_zone = |from: i64, to: i64, label: &str, hue: Hue| Zone {
+        from: number(from),
+        to: number(to),
+        label: Some(s(label)),
+        colour: Some(Colour::new(hue)),
+    };
+    let resting = Node::Range(RangeScale {
+        id: Some(s("resting-rate")),
+        title: Some(s("Resting heart rate overnight")),
+        value: Some(number(54)),
+        min: number(40),
+        max: number(120),
+        unit: Some(s("bpm")),
+        shown: Some(s("54")),
+        low: Some(s("Slower")),
+        high: Some(s("Faster")),
+        zones: vec![
+            rate_zone(40, 50, "Lower", Hue::Cyan),
+            rate_zone(50, 70, "Usual", Hue::Green),
+            rate_zone(70, 90, "Higher", Hue::Amber),
+            rate_zone(90, 120, "Much higher", Hue::Red),
+        ],
+        summary: Some(s("Resting heart rate overnight: 54 bpm, on a scale from 40 to 120 bpm. Usual: 50 to 70 bpm.")),
+        hint: Some(Hint {
+            about: s("the resting heart rate"),
+            text: s("The lowest heart rate you held while still. It describes your own nights and moves with sleep, training and the weather; it is not advice."),
+            mark: HintMark::Info,
+            ..Hint::default()
+        }),
+        ..RangeScale::default()
+    });
     let body = Node::Stack(Stack {
         gap: 4,
         children: vec![
@@ -2567,6 +2600,12 @@ fn screen_sleep() -> Envelope {
                 title: Some(s("Through the night")),
                 style: SectionStyle::Card,
                 children: vec![strip],
+                ..Section::default()
+            }),
+            Node::Section(Section {
+                title: Some(s("Overnight heart rate")),
+                style: SectionStyle::Card,
+                children: vec![resting],
                 ..Section::default()
             }),
         ],

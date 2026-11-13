@@ -14,7 +14,7 @@ use crate::action::Action;
 pub use crate::charts::{
     Category, Centre, ClockMoment, ColorStrip, Colour, DayClock, DayPager, DayPick, Hint, HintMark,
     Hour, Hue, Meter, MiniColumn, MiniColumns, PagerWords, Ring, RingValue, Rings, RingsCentre,
-    Segment, StripCell, Zone,
+    RangeScale, Segment, StripCell, Zone,
 };
 use crate::input::Input;
 
@@ -132,6 +132,8 @@ pub enum Node {
     Columns(MiniColumns),
     /// A row of cells, each in the colour of its category.
     Strip(ColorStrip),
+    /// Where one value sits on a scale between a low and a high end.
+    Range(RangeScale),
     /// A kind this build has never heard of, from a newer server. A client
     /// draws its `alt`, or shows the page in its web view when it has none.
     Unknown(Unknown),
@@ -234,6 +236,7 @@ impl Node {
             Self::Meter(node) => node.id.as_deref(),
             Self::Columns(node) => node.id.as_deref(),
             Self::Strip(node) => node.id.as_deref(),
+            Self::Range(node) => node.id.as_deref(),
             Self::Unknown(node) => node.id.as_deref(),
         }
     }
@@ -311,7 +314,8 @@ impl Node {
             | Self::DayClock(_)
             | Self::Meter(_)
             | Self::Columns(_)
-            | Self::Strip(_) => Vec::new(),
+            | Self::Strip(_)
+            | Self::Range(_) => Vec::new(),
         }
     }
 
@@ -413,7 +417,8 @@ impl Node {
             | Self::DayClock(_)
             | Self::Meter(_)
             | Self::Columns(_)
-            | Self::Strip(_) => Vec::new(),
+            | Self::Strip(_)
+            | Self::Range(_) => Vec::new(),
         }
     }
 

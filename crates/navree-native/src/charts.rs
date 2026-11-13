@@ -698,6 +698,75 @@ pub struct ColorStrip {
     pub hint: Option<Hint>,
 }
 
+/// Where one value sits on a scale between a low end and a high end: a resting
+/// heart rate between 40 and 120, a blood pressure reading, a price between its
+/// day's low and high. The scale may be divided into named zones, each in its
+/// own colour, so the ends can read as good and bad; the zones, the words under
+/// the ends and the summary give the numbers, so the colours are never alone.
+///
+/// A value outside the scale sits at the nearer end, and the summary says it is
+/// below or above. `shown` is the value in the page's words, without its `unit`,
+/// which follows it. A client draws the scale as its system draws a gauge on a
+/// line, with a marker where the value is.
+///
+/// The scale is named by its `summary`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RangeScale {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What the scale measures: `Resting heart rate`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// The value. None when there is no reading, which leaves the scale empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<serde_json::Number>,
+    /// The low end of the scale.
+    pub min: serde_json::Number,
+    /// The high end of the scale.
+    pub max: serde_json::Number,
+    /// What the value counts, written after it: `bpm`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    /// The value as the page wrote it, without its unit: `54`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shown: Option<String>,
+    /// Words under the low end, in place of its number: `Slower`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub low: Option<String>,
+    /// Words under the high end, in place of its number: `Faster`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub high: Option<String>,
+    /// The zones of the scale, with their names and bounds.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub zones: Vec<Zone>,
+    /// One sentence that says the whole scale to a reader who can't see it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// A note about what the scale means, shown when asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
+}
+
+impl Default for RangeScale {
+    fn default() -> Self {
+        Self {
+            id: None,
+            title: None,
+            value: None,
+            min: 0.into(),
+            max: 100.into(),
+            unit: None,
+            shown: None,
+            low: None,
+            high: None,
+            zones: Vec::new(),
+            summary: None,
+            hint: None,
+        }
+    }
+}
+
 /// Where a day the person chooses is asked for.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DayPick {

@@ -297,6 +297,65 @@
               "summary": "The night in half hours: 15 cells from 11:00 pm to 6:00 am. Core was the most common stage, 7 of 15."
             }
           ]
+        },
+        {
+          "t": "section",
+          "title": "Overnight heart rate",
+          "style": "card",
+          "children": [
+            {
+              "t": "range",
+              "id": "resting-rate",
+              "title": "Resting heart rate overnight",
+              "value": 54,
+              "min": 40,
+              "max": 120,
+              "unit": "bpm",
+              "shown": "54",
+              "low": "Slower",
+              "high": "Faster",
+              "zones": [
+                {
+                  "from": 40,
+                  "to": 50,
+                  "label": "Lower",
+                  "colour": {
+                    "hue": "cyan"
+                  }
+                },
+                {
+                  "from": 50,
+                  "to": 70,
+                  "label": "Usual",
+                  "colour": {
+                    "hue": "green"
+                  }
+                },
+                {
+                  "from": 70,
+                  "to": 90,
+                  "label": "Higher",
+                  "colour": {
+                    "hue": "amber"
+                  }
+                },
+                {
+                  "from": 90,
+                  "to": 120,
+                  "label": "Much higher",
+                  "colour": {
+                    "hue": "red"
+                  }
+                }
+              ],
+              "summary": "Resting heart rate overnight: 54 bpm, on a scale from 40 to 120 bpm. Usual: 50 to 70 bpm.",
+              "hint": {
+                "about": "the resting heart rate",
+                "text": "The lowest heart rate you held while still. It describes your own nights and moves with sleep, training and the weather; it is not advice.",
+                "mark": "info"
+              }
+            }
+          ]
         }
       ]
     }

@@ -41,7 +41,7 @@ use crate::action::{Action, Command, Pair, Present, State};
 use crate::charts::{
     Category, Centre, ClockMoment, ColorStrip, Colour, DayClock, DayPager, DayPick, Hint, HintMark,
     Hour, Hue, Meter, MiniColumn, MiniColumns, PagerWords, Ring, RingValue, Rings, RingsCentre,
-    Segment, StripCell, Zone,
+    RangeScale, Segment, StripCell, Zone,
 };
 use crate::client::{ClientDescriptor, Contrast, FormFactor, Platform, Scheme};
 use crate::device::{
@@ -608,7 +608,7 @@ union!(Node tag "t"
         Text, Rich, Image, Icon, Avatar, Badge, Progress, Banner, Empty, Facts, Table, Chart,
         Code, Button, Link, Menu, Form, Field, Sheet, Dialog, Popover, Native, Web, Toolbar,
         Gauge, Figure, Timeline, FeedRow, Message, Pane, Ring, Rings, DayClock,
-        DayPager, Meter, Columns, Strip,
+        DayPager, Meter, Columns, Strip, Range,
     }
     structs {}
     units {}
@@ -729,6 +729,9 @@ object!(Hour {} { value, level, category });
 object!(ClockMoment { at, name } { icon, colour });
 object!(Segment { name } { value, shown, detail, colour });
 object!(Meter {} { id, title, segments, summary, hint });
+object!(RangeScale { min, max } {
+    id, title, value, unit, shown, low, high, zones, summary, hint
+});
 object!(StripCell { label } { category, value });
 object!(ColorStrip {} { id, title, key, cells, label, unit, shares, summary, hint });
 object!(MiniColumn { label } { values, shown });

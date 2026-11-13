@@ -271,6 +271,7 @@ kinds! {
     Meter(Meter) => "meter" since 0,
     Columns(MiniColumns) => "columns" since 0,
     Strip(ColorStrip) => "strip" since 0,
+    Range(RangeScale) => "range" since 0,
 }
 
 /// A field that arrived after its type did: the type's name in the schema
@@ -739,6 +740,38 @@ impl Node {
                     })
                     .collect(),
             }),
+            Self::Range(node) => {
+                // The zone the value is in, then the scale in words.
+                let value = node.value.as_ref().and_then(serde_json::Number::as_f64);
+                let zone = value.and_then(|value| {
+                    node.zones
+                        .iter()
+                        .rev()
+                        .find(|zone| {
+                            let (from, to) = (zone.from.as_f64(), zone.to.as_f64());
+                            from.is_some_and(|from| from <= value) && to.is_some_and(|to| value <= to)
+                        })
+                        .and_then(|zone| zone.label.clone())
+                });
+                let scale = match (&node.low, &node.high) {
+                    (Some(low), Some(high)) => format!("from {low} to {high}"),
+                    _ => format!(
+                        "on a scale from {} to {}",
+                        words(None, Some(&node.min), node.unit.as_deref()),
+                        words(None, Some(&node.max), node.unit.as_deref())
+                    ),
+                };
+                Node::Figure(n::Figure {
+                    id: node.id.clone(),
+                    label: node.title.clone().unwrap_or_default(),
+                    value: words(node.shown.as_deref(), node.value.as_ref(), node.unit.as_deref()),
+                    detail: Some(match zone {
+                        Some(zone) => format!("{zone} · {scale}"),
+                        None => scale,
+                    }),
+                    ..n::Figure::default()
+                })
+            }
             Self::Unknown(node) => return node.alt.as_deref().cloned(),
             _ => return None,
         })
@@ -797,9 +830,9 @@ mod tests {
     use crate::node::{
         Avatar, Badge, Chart, ClockMoment, Colour, DayClock, DayPager, Direction, FeedRow, Figure,
         Category, ColorStrip, Gauge, Hour, Hue, Icon, Message, Meter, MiniColumn, MiniColumns,
-        Moment, PagerWords, Pane, PaneRole, Ring, RingValue, Rings, RingsCentre, RowState, Run,
-        Section, Segment, Stack, Standard, StripCell, Timeline, Tone, Toolbar, ToolbarItem, Trend,
-        Unknown, Zone,
+        Moment, PagerWords, Pane, PaneRole, RangeScale, Ring, RingValue, Rings, RingsCentre,
+        RowState, Run, Section, Segment, Stack, Standard, StripCell, Timeline, Tone, Toolbar,
+        ToolbarItem, Trend, Unknown, Zone,
     };
 
     #[test]
@@ -939,6 +972,29 @@ mod tests {
                 caption: Some("Goal reached".to_owned()),
                 colour: Some(Colour::new(Hue::Success)),
                 ..Ring::default()
+            }),
+            Node::Range(RangeScale {
+                id: Some("resting".to_owned()),
+                title: Some("Resting heart rate".to_owned()),
+                value: Some(54.into()),
+                min: 40.into(),
+                max: 120.into(),
+                unit: Some("bpm".to_owned()),
+                zones: vec![
+                    Zone {
+                        from: 40.into(),
+                        to: 50.into(),
+                        label: Some("Lower".to_owned()),
+                        colour: None,
+                    },
+                    Zone {
+                        from: 50.into(),
+                        to: 70.into(),
+                        label: Some("Usual".to_owned()),
+                        colour: Some(Colour::new(Hue::Green)),
+                    },
+                ],
+                ..RangeScale::default()
             }),
             Node::Strip(ColorStrip {
                 id: Some("night".to_owned()),
@@ -1114,7 +1170,8 @@ mod tests {
             | Kind::DayPager
             | Kind::Meter
             | Kind::Columns
-            | Kind::Strip => 1,
+            | Kind::Strip
+            | Kind::Range => 1,
             kind => kind.since(),
         }
     }
@@ -1229,6 +1286,31 @@ mod tests {
         };
         assert_eq!(progress.label.as_deref(), Some("Load ratio: 1.12 (Overuse)"));
         assert_eq!(progress.value, Some(560));
+    }
+
+    #[test]
+    fn a_range_becomes_a_figure_that_says_the_zone_and_the_scale() {
+        let range = part(Kind::Range);
+        let Downgraded::Node(Node::Figure(figure)) = downgrade_by(range, 0, only(Kind::Range))
+        else {
+            panic!("a range becomes a figure");
+        };
+        assert_eq!(figure.label, "Resting heart rate");
+        assert_eq!(figure.value, "54 bpm");
+        assert_eq!(
+            figure.detail.as_deref(),
+            Some("Usual · on a scale from 40 bpm to 120 bpm")
+        );
+        // Words under the ends take the place of their numbers; with no reading there is a dash.
+        let described = Node::Range(RangeScale {
+            low: Some("Slower".to_owned()),
+            high: Some("Faster".to_owned()),
+            ..RangeScale::default()
+        });
+        let Some(Node::Figure(figure)) = described.older() else {
+            panic!("a range becomes a figure");
+        };
+        assert_eq!((figure.value.as_str(), figure.detail.as_deref()), ("–", Some("from Slower to Faster")));
     }
 
     #[test]
