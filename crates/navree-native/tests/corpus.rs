@@ -1254,6 +1254,26 @@ fn ops_navigate() -> Envelope {
     )
 }
 
+/// What the reply to a sign-out post says: the person is signed out, a line
+/// about it, and where they land.
+fn ops_sign_out() -> Envelope {
+    Envelope::ops(
+        BUILD,
+        vec![
+            Op::SignedOut,
+            Op::Toast(Toast {
+                tone: Tone::Info,
+                text: s("You have signed out of Charkha Supply Co."),
+                ..Toast::default()
+            }),
+            Op::Navigate {
+                href: s("/sign-in"),
+                present: Present::Root,
+            },
+        ],
+    )
+}
+
 fn web_fallback() -> Envelope {
     Envelope::web(
         BUILD,
@@ -2550,6 +2570,7 @@ fn envelopes() -> Vec<(&'static str, Envelope)> {
         ("ops-reply", ops_reply()),
         ("ops-errors", ops_errors()),
         ("ops-navigate", ops_navigate()),
+        ("ops-sign-out", ops_sign_out()),
         ("web-fallback", web_fallback()),
         ("upgrade", upgrade()),
     ]
@@ -2829,6 +2850,11 @@ fn the_corpus_holds_every_kind_of_node_and_every_control() {
             roots.extend(&screen.actions);
         }
         for op in &envelope.ops {
+            let tag = serde_json::to_value(op).unwrap()["op"].clone();
+            values
+                .entry("op")
+                .or_default()
+                .insert(format!("{:?}", tag.as_str().unwrap()));
             match op {
                 Op::Morph { node, .. } | Op::Replace { node, .. } => roots.push(node),
                 Op::Append { nodes, .. } | Op::Prepend { nodes, .. } => roots.extend(nodes),
@@ -2900,6 +2926,31 @@ fn the_corpus_holds_every_kind_of_node_and_every_control() {
                 "\"locate_once\"",
                 "\"scan_code\"",
                 "\"platform_sign_in\"",
+            ],
+        ),
+        (
+            "op",
+            &[
+                "\"morph\"",
+                "\"replace\"",
+                "\"append\"",
+                "\"prepend\"",
+                "\"remove\"",
+                "\"merge\"",
+                "\"rows\"",
+                "\"row\"",
+                "\"errors\"",
+                "\"toast\"",
+                "\"open\"",
+                "\"close\"",
+                "\"focus\"",
+                "\"url\"",
+                "\"navigate\"",
+                "\"navigate_external\"",
+                "\"reload\"",
+                "\"invalidate\"",
+                "\"device\"",
+                "\"signed_out\"",
             ],
         ),
         (

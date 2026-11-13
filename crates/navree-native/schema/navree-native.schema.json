@@ -5634,6 +5634,16 @@
           "required": [
             "op"
           ]
+        },
+        {
+          "properties": {
+            "op": {
+              "const": "signed_out"
+            }
+          },
+          "required": [
+            "op"
+          ]
         }
       ],
       "x-kind": "union",
@@ -5733,6 +5743,10 @@
         },
         {
           "tag": "reload",
+          "x-since": 0
+        },
+        {
+          "tag": "signed_out",
           "x-since": 0
         }
       ]

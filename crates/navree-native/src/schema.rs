@@ -789,7 +789,7 @@ union!(Op tag "op"
         Invalidate { target } {},
         Device { call } {},
     }
-    units { Reload }
+    units { Reload, SignedOut }
     unknown Op::Unknown => |_| json!({})
 );
 names!(UrlMode { Push, Replace });

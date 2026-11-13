@@ -210,6 +210,18 @@ pub enum Op {
         /// The region's id.
         target: String,
     },
+    /// The person signed out, on purpose: the reply to a sign-out post. The
+    /// client takes the device off the push service (the shell's push route,
+    /// `DELETE`, before the session's cookies go), forgets the session's
+    /// cookies and everything it kept for the person (the screens it holds, its
+    /// cache), and fetches the shell again, which now describes a person who is
+    /// signed out. The ops after it are applied as they come: a `navigate`
+    /// there is where the person lands.
+    ///
+    /// A session that ended by itself is not this: it stays what it was, a
+    /// `401` answer that carries a `navigate` to the sign-in page, and the
+    /// client keeps the work under it so the person can sign in and carry on.
+    SignedOut,
     /// Starts a device call that needs no tap: a haptic, the app's badge, a
     /// cancelled notification, the store's review prompt. The type has no
     /// other calls, so a reply can't open the camera or ask for a location.
@@ -322,6 +334,17 @@ mod tests {
         assert!(serde_json::from_str::<Op>(r#"{"op":"row","target":"1043","row":{"id":"1043"}}"#).is_ok());
         // A revision is needed: without it the next ask could not say where it stands.
         assert!(serde_json::from_str::<Op>(r#"{"op":"merge","target":"inbox"}"#).is_err());
+    }
+
+    #[test]
+    fn signing_out_on_purpose_is_a_word_with_no_fields() {
+        assert_eq!(serde_json::to_string(&Op::SignedOut).unwrap(), r#"{"op":"signed_out"}"#);
+        assert_eq!(serde_json::from_str::<Op>(r#"{"op":"signed_out"}"#).unwrap(), Op::SignedOut);
+        // A field a newer server adds to it is passed over.
+        assert_eq!(
+            serde_json::from_str::<Op>(r#"{"op":"signed_out","everywhere":true}"#).unwrap(),
+            Op::SignedOut
+        );
     }
 
     #[test]
