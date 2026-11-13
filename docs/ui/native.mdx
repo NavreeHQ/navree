@@ -128,8 +128,9 @@ The theme on the wire is its name and its accent for a light and a dark ground. 
 | `idiom` | The page's parts say what they are, so the client lays the screen out as its own system does. |
 | `layout` | Native parts, laid out as the web page is. It works and looks like a web page drawn with the system's controls. An action with no role, or a screen with two main actions, also gives this grade, and the report says which. |
 | `web` | The client shows the page in its web view, because a part of it has no native meaning yet. |
+| `designed` | A screen written for native clients, not read from a page (see [Write a screen for native clients](#write-a-screen-for-native-clients)). The report lists beside it what such a screen should fix. |
 
-Only `idiom` belongs to its system. The command, its options, the `native.toml` file of example values and `navree native:doctor` are on the [CLI page](/docs/digging-deeper/cli/#native-apps).
+`idiom` belongs to its system, and so does a `designed` screen with nothing to fix. The command, its options, the `native.toml` file of example values and `navree native:doctor` are on the [CLI page](/docs/digging-deeper/cli/#native-apps).
 
 ## Test a page as a native client
 
@@ -157,3 +158,112 @@ fn the_orders_page_belongs_to_its_system() {
 ## When a part cannot be read
 
 A page with a part that has no native meaning yet (hand-written HTML, a canvas) is shown whole in the system's web view, inside the native bars. The app keeps working while coverage grows, and the report names the part. The web view has no bridge to the device: it gets what a browser tab on the same site gets.
+
+## Write a screen for native clients
+
+Reading a page is the free path, and it is the right one for lists, records and forms. A screen that deserves a design of its own (a day at a glance, a wall of tiles) is written for native clients with **Navree Native UI**: the protocol's own parts, with builders, at `navree::native::ui`. You write the screen once, in Rust, and SwiftUI and Jetpack Compose both draw it. Each step up is more work and more control, and an app mixes them screen by screen:
+
+1. Let the page be read.
+2. Say what the page's parts are (the sections above).
+3. Write the screen for native clients.
+
+A screen is a plain function of its data. It knows no request, no database and no HTML, and a component of your own is a function that returns a part. There are three levels of parts:
+
+| Level | Parts | Who decides how it looks |
+|---|---|---|
+| Structure | `Screen` (title, way back, actions by role, the day pager), `Section`, `List`, `Row`, `Form`, `Field`, `Sheet`, `Dialog`, `Region` | The system places them. |
+| Content | `Figure`, `Ring`, `Rings`, `Chart`, `DayClock`, `Timeline`, `FeedRow`, `Badge`, `Progress`, `Facts` | The system styles them from their data. |
+| Composition | `Stack`, `Grid`, `Card`, `Layers`, `Shape`, `Carousel`, `Adaptive`, `Text`, `Icon` | You lay them out, with the system's own text styles, colours by name and spacing. |
+
+```rust
+use navree::native::ui::{
+    Button, Card, Change, Grid, Hue, Role, Screen, Stack, Text, TextStyle, Weight,
+};
+
+/// What the day's screen is drawn from.
+pub struct Day {
+    pub revenue: String,
+    pub to_pack: u32,
+    pub to_ship: u32,
+}
+
+/// A tile: a component of your own is a function that returns a part.
+fn tile(name: &str, count: u32, hue: Hue) -> Card {
+    Card::new().tint(hue).parts((
+        Text::new(name).style(TextStyle::Caption).weight(Weight::Semibold).muted(),
+        Text::new(count.to_string()).style(TextStyle::Title2).change(Change::Count),
+    ))
+}
+
+pub fn today(day: &Day) -> Screen {
+    Screen::titled("Today")
+        .refresh()
+        .action(Button::new("Orders").role(Role::Secondary).to("/orders"))
+        .body(Stack::down().gap(4).parts((
+            // The one figure the screen is about, in the system's largest type.
+            Text::new(day.revenue.as_str()).style(TextStyle::Display).change(Change::Count),
+            // As many tiles beside each other as fit: two on a phone, more on a tablet.
+            Grid::fit(150).gap(3).parts((
+                tile("To pack", day.to_pack, Hue::Amber),
+                tile("To ship", day.to_ship, Hue::Blue),
+            )),
+        )))
+}
+```
+
+What a composition can say is small on purpose, so a composed screen still belongs to its system. Room is in steps of the system's spacing scale. A size (`Size`, in points) is only for what has none of its own, such as the box a symbol stands in, and can follow the reader's text size. Colour is a name (`Hue`), type is a text style with a weight, a corner is the system's, and motion is a word (`Appear`, `Change`, a card's `zoom`) whose timing is the system's. What depends on the room a screen has is chosen on the device, with no request: a `Grid` and a `Carousel` show as many parts as fit, a `Stack` names the axis it takes in a wide room, and `Adaptive` holds the parts for a compact room beside the parts for a wide one. There are no offsets, no colours or corner radii as numbers, no fonts, no shadows and no blur, and bars stay the system's.
+
+### One route, each client in its own way
+
+The handler loads its data once. `native::Answer` runs the side that is asked for: the page for a browser and for the web view inside a native client, the screen for a native client.
+
+```rust
+use navree::http::response::Response;
+use navree::ui::native::Answer;
+use navree::ui::{AppShell, Text as Words};
+
+async fn dashboard(shell: AppShell) -> Response {
+    let day = Day { revenue: "₹1,24,050".to_owned(), to_pack: 12, to_ship: 7 };
+    Answer::in_shell(&shell).each(
+        // A browser, and the web view inside a native client.
+        || shell.page("Dashboard").body(Words::new(day.revenue.clone())),
+        // A native client.
+        || today(&day),
+    )
+}
+```
+
+The layer adds what a screen function must not know: the destination the screen belongs to and a toast left for it, from the shell; the shell's stamp; the session's token in every post; and the shapes of the icons the screen names (`Icon::named("package")`). What a screen does goes to the same handlers the page uses. A `Form::post(..)` with the id the handler's form has gets its errors back at its fields, and a region or a list of the screen fetches from a route that answers a part or ops the same way: the native side may return a `Screen`, a part (`Node`), or `Vec<Op>`.
+
+A reply carries native parts built with the same functions. Build them when a native client asked:
+
+```rust
+use navree::ui::native;
+use navree::ui::Reply;
+
+fn restocked(day: &Day) -> Reply {
+    let reply = Reply::ops_or_redirect("/");
+    if native::asked() {
+        reply.op(native::replace("to-pack", tile("To pack", day.to_pack, Hue::Amber).id("to-pack")))
+    } else {
+        reply
+    }
+}
+```
+
+A route with only a native side uses `Answer::in_shell(&shell).native(|| ..)`. A browser that asks it gets `406` and a line of text.
+
+### Test it, and what the grade means
+
+A screen function needs no client and no server to test: call it and look at the tree. `native::designed` lists what a screen written this way should fix, and `navree native:coverage` grades the route `designed` and prints the same list.
+
+```rust
+#[test]
+fn the_day_sets_its_revenue_large_and_has_nothing_to_fix() {
+    let screen = today(&Day { revenue: "₹1,24,050".to_owned(), to_pack: 12, to_ship: 7 });
+    assert_eq!(screen.title, "Today");
+    assert!(navree::ui::native::designed(&screen).is_empty());
+}
+```
+
+A designed screen is held to what every screen is held to (a title, a role on each action, one main action) and to a few rules of composition: a card that is tapped has a name, a card does not stand in a card nor a carousel in a carousel, one figure is set in the display style, and a part with an id stands in one room of an `Adaptive` part only.
