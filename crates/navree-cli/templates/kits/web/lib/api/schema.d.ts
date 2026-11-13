@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/_navree/ui/app/{file}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A stylesheet, font or picture of the app
+         * @description A file one of the app's modules contributed, by its name and content hash; under an older hash it is still served, uncached. A picture is served under a content security policy that runs nothing.
+         */
+        get: operations["ui.app-files"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/_navree/ui/appearance": {
         parameters: {
             query?: never;
@@ -15,7 +35,7 @@ export interface paths {
         put?: never;
         /**
          * Sets the reader's theme and mode
-         * @description The theme menu's form (`theme`, `mode`, `back`): sets the appearance cookie and goes back to `back`, so it works with JavaScript off. A post from another site is refused.
+         * @description The theme menu's form (`theme`, `mode`, `back`): sets the appearance cookie and goes back to `back` (a path of this site, else `/`), so it works with JavaScript off. A post from another site is refused; the session layer checks its origin in place of the CSRF token.
          */
         post: operations["ui.appearance"];
         delete?: never;
@@ -987,6 +1007,86 @@ export interface paths {
         put?: never;
         /** Connect a provider to the signed-in user */
         post: operations["social.link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/social/{provider}/native": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign in with an identity token from an app
+         * @description Answers like `POST /auth/login` (the user and tokens, or a two-factor challenge). Sign in with Apple also takes `authorization_code` (kept to revoke the person's tokens later) and, on the first sign-in, `user` with the name (display only).
+         */
+        post: operations["social.native"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/social/{provider}/native/nonce": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A one-time nonce for a sign-in from an app
+         * @description For the system's sign-in sheet of an app (`apple`, `google`): pass `nonce` to the request (Google as is, Apple as its lower-case hex SHA-256), then post the identity token with `state` to `POST .../native` within `expires_in` seconds.
+         */
+        post: operations["social.native.nonce"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/social/{provider}/native/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign an app in on its session with an identity token
+         * @description Like `POST .../native`, but the app is signed in on its session cookie (no token is issued): the answer is the user, or `{"two_factor_required": true}`; finish with `POST /auth/session/2fa/verify`. The request carries the CSRF token of the session as `X-XSRF-TOKEN`.
+         */
+        post: operations["social.native.session"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/social/{provider}/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receive the provider's notifications
+         * @description Sign in with Apple's server-to-server notifications (`{payload}`, a JWS signed by Apple): consent revoked, account deleted, email forwarding changed. Register this URL with Apple.
+         */
+        post: operations["social.notifications"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2627,7 +2727,7 @@ export interface paths {
         put?: never;
         /**
          * Signs out
-         * @description Ends the browser's sign-in, then goes to the sign-in page.
+         * @description Ends the browser's sign-in, then goes to the sign-in page (or the page the app chose).
          */
         post: operations["auth.pages.sign_out"];
         delete?: never;
@@ -3077,6 +3177,63 @@ export interface components {
              */
             workspace_id: string;
         };
+        /**
+         * @description The one-time nonce of a sign-in from a native app (`POST
+         *     /api/auth/social/{provider}/native/nonce`): the app passes `nonce` to
+         *     the system's sheet (Google: as is; Apple: its SHA-256 in lower-case
+         *     hex) and posts `state` back with the identity token, within
+         *     `expires_in` seconds, once.
+         */
+        NativeNonce: {
+            /**
+             * Format: int64
+             * @description Seconds until the attempt expires.
+             */
+            expires_in: number;
+            /** @description The nonce for the provider's request. */
+            nonce: string;
+            /** @description The sealed attempt, to post back with the identity token. */
+            state: string;
+        };
+        /**
+         * @description What a native app posts after the system's sign-in sheet (`POST
+         *     /api/auth/social/{provider}/native`): the identity token, the sealed
+         *     attempt of [`NativeNonce`], and for Sign in with Apple the
+         *     authorization code and the name Apple hands the app on the first
+         *     sign-in only.
+         *
+         *     ```
+         *     use navree_social::NativeSignIn;
+         *
+         *     let post = NativeSignIn::new("eyJraWQiOi...", "nvs1.AbC")
+         *         .authorization_code("c3b1f2...")
+         *         .user(serde_json::json!({ "name": { "firstName": "Simran", "lastName": "Gill" } }));
+         *     assert!(post.authorization_code.is_some());
+         *     ```
+         */
+        NativeSignIn: {
+            /**
+             * @description Sign in with Apple's authorization code: exchanged for a refresh
+             *     token the server keeps (encrypted) to revoke when the account is
+             *     deleted or Apple disconnected.
+             */
+            authorization_code?: string | null;
+            /** @description The identity token (a JWT) the provider gave the app. */
+            id_token: string;
+            /**
+             * @description On the session cookie (`POST .../native/session`): keep the app
+             *     signed in for `auth.session.remember_days`.
+             */
+            remember?: boolean;
+            /** @description The `state` of the attempt's [`NativeNonce`]. */
+            state: string;
+            /**
+             * @description Sign in with Apple's name, sent by the app on the first sign-in
+             *     (`{"name": {"firstName", "lastName"}}`). Unverified: used only as a
+             *     display name, never to find or link an account.
+             */
+            user?: Record<string, never> | null;
+        };
         /** @description A browser push subscription, as `PushSubscription.toJSON()` gives it. */
         NewPushSubscription: {
             /** Format: uri */
@@ -3132,7 +3289,7 @@ export interface components {
             data: {
                 categories?: {
                     [key: string]: {
-                        /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push). */
+                        /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push, push). */
                         channels?: {
                             [key: string]: boolean;
                         };
@@ -3140,7 +3297,7 @@ export interface components {
                         digest?: "off" | "hourly" | "daily" | "weekly";
                     };
                 };
-                /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push). */
+                /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push, push). */
                 channels?: {
                     [key: string]: boolean;
                 };
@@ -3158,7 +3315,7 @@ export interface components {
             workspace: {
                 categories?: {
                     [key: string]: {
-                        /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push). */
+                        /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push, push). */
                         channels?: {
                             [key: string]: boolean;
                         };
@@ -3166,7 +3323,7 @@ export interface components {
                         digest?: "off" | "hourly" | "daily" | "weekly";
                     };
                 };
-                /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push). */
+                /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push, push). */
                 channels?: {
                     [key: string]: boolean;
                 };
@@ -3184,7 +3341,7 @@ export interface components {
         NotificationPreferencesPatch: {
             categories?: {
                 [key: string]: {
-                    /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push). */
+                    /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push, push). */
                     channels?: {
                         [key: string]: boolean;
                     };
@@ -3192,7 +3349,7 @@ export interface components {
                     digest?: "off" | "hourly" | "daily" | "weekly";
                 };
             };
-            /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push). */
+            /** @description Channel switches (mail, database, slack, teams, sms, whatsapp, web_push, push). */
             channels?: {
                 [key: string]: boolean;
             };
@@ -3390,6 +3547,11 @@ export interface components {
         ProviderList: {
             /** @description The configured providers, by key. */
             data: components["schemas"]["ProviderResource"][];
+        };
+        /** @description `POST .../notifications`: a provider's server-to-server notification. */
+        ProviderNotification: {
+            /** @description The signed notification (a JWS). */
+            payload: string;
         };
         /** @description A social sign-in provider with a button on the sign-in page. */
         ProviderResource: {
@@ -3919,6 +4081,42 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "ui.app-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
     "ui.appearance": {
         parameters: {
             query?: never;
@@ -6342,6 +6540,15 @@ export interface operations {
                     "application/json": components["schemas"]["HttpError"];
                 };
             };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
         };
     };
     "auth.password.reset": {
@@ -6789,6 +6996,237 @@ export interface operations {
             };
             /** @description Bad Gateway */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "social.native": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeSignIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "social.native.nonce": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeNonce"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "social.native.session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeSignIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+        };
+    };
+    "social.notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderNotification"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HttpError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
