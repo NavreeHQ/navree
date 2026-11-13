@@ -86,8 +86,8 @@ pub mod prelude {
 pub mod ability;
 pub mod app_files;
 mod asked;
-mod hint;
 pub mod assets;
+mod hint;
 #[rustfmt::skip]
 mod assets_gen;
 pub mod charts;

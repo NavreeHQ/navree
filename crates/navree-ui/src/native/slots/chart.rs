@@ -144,13 +144,7 @@ pub(crate) fn figure(cx: &mut Cx, element: &Element) -> Read {
                 values,
                 shown: words,
                 unit: extras.units.get(at).cloned().flatten(),
-                colour: extras
-                    .hues
-                    .get(at)
-                    .copied()
-                    .flatten()
-                    .map(n::Colour::new),
-                ..n::Series::default()
+                colour: extras.hues.get(at).copied().flatten().map(n::Colour::new),
             }
         })
         .collect();
@@ -432,31 +426,53 @@ mod tests {
         assert_eq!(chart.curve, nn::Curve::Smooth);
         assert_eq!(chart.stacking, nn::Stacking::Apart);
         assert!(!chart.horizontal);
-        assert_eq!(chart.x.as_ref().and_then(|x| x.name.as_deref()), Some("Night"));
+        assert_eq!(
+            chart.x.as_ref().and_then(|x| x.name.as_deref()),
+            Some("Night")
+        );
         let y = chart.y.as_ref().expect("a value axis");
         // Both series count the same, so the axis does too; its bounds are the page's.
         assert_eq!(y.unit.as_deref(), Some("bpm"));
         assert_eq!(
-            (y.min.as_ref().map(ToString::to_string), y.max.as_ref().map(ToString::to_string)),
+            (
+                y.min.as_ref().map(ToString::to_string),
+                y.max.as_ref().map(ToString::to_string)
+            ),
             (Some("40".into()), Some("80".into()))
         );
         let levels: Vec<(Option<String>, Option<&str>)> = chart
             .references
             .iter()
-            .map(|r| (r.value.as_ref().map(ToString::to_string), r.label.as_deref()))
+            .map(|r| {
+                (
+                    r.value.as_ref().map(ToString::to_string),
+                    r.label.as_deref(),
+                )
+            })
             .collect();
         // A level, the average worked out into a level, and a target.
         assert_eq!(levels.len(), 3, "{levels:?}");
         assert_eq!(levels[0], (Some("60".into()), Some("Limit")));
         assert!(levels[1].0.is_some());
         assert_eq!(levels[2], (Some("55".into()), Some("Target")));
-        assert!(chart.references.iter().all(|r| r.kind == nn::ReferenceKind::Level));
+        assert!(
+            chart
+                .references
+                .iter()
+                .all(|r| r.kind == nn::ReferenceKind::Level)
+        );
         let [zone] = chart.zones.as_slice() else {
             panic!("not one zone: {:?}", chart.zones);
         };
-        assert_eq!((zone.from.to_string(), zone.to.to_string()), ("50".into(), "60".into()));
+        assert_eq!(
+            (zone.from.to_string(), zone.to.to_string()),
+            ("50".into(), "60".into())
+        );
         assert_eq!(zone.label.as_deref(), Some("Optimal"));
-        assert_eq!(chart.summary.as_deref(), Some("Heart rate over three nights"));
+        assert_eq!(
+            chart.summary.as_deref(),
+            Some("Heart rate over three nights")
+        );
         let [first, second] = chart.series.as_slice() else {
             panic!("not two series");
         };
@@ -494,7 +510,10 @@ mod tests {
                 .into()
         });
         assert!(plain.x.is_none() && plain.references.is_empty() && plain.zones.is_empty());
-        assert_eq!((plain.curve, plain.stacking), (nn::Curve::Linear, nn::Stacking::Apart));
+        assert_eq!(
+            (plain.curve, plain.stacking),
+            (nn::Curve::Linear, nn::Stacking::Apart)
+        );
     }
 
     #[test]

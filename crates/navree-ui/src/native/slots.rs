@@ -164,7 +164,10 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
         // the protocol has for it, so a page that holds one is answered with the web view
         // and says which part it is.
         "dock" | "dock-item" => {
-            return Some(waiting(slot, "the protocol's shell names a dock's destinations"));
+            return Some(waiting(
+                slot,
+                "the protocol's shell names a dock's destinations",
+            ));
         }
         "day-pager" | "day-pager-day" | "day-pager-face" => {
             return Some(waiting(slot, "the protocol has a `day_pager` for it"));
@@ -2029,7 +2032,9 @@ mod tests {
         let parts: Vec<(Node, &str)> = vec![
             (Ring::new("Score", 72).into(), "chart:ring"),
             (
-                Rings::new("Activity").ring(RingValue::new("Move", 40)).into(),
+                Rings::new("Activity")
+                    .ring(RingValue::new("Move", 40))
+                    .into(),
                 "chart:rings",
             ),
             (Gauge::new("Heart rate", 64).into(), "chart:gauge"),
@@ -2054,15 +2059,24 @@ mod tests {
                 CalendarHeatmap::new("Steps").day(day, 3).into(),
                 "chart:calendar-heatmap",
             ),
-            (MatrixHeatmap::new("Relations").into(), "chart:matrix-heatmap"),
+            (
+                MatrixHeatmap::new("Relations").into(),
+                "chart:matrix-heatmap",
+            ),
             (Scatter::new("Pairs").into(), "chart:scatter"),
             (
                 Dock::new("Main").item(DockItem::new("Home", "/")).into(),
                 "slot:dock",
             ),
             (DayPager::new("pager", "Today").into(), "slot:day-pager"),
-            (CopyField::new("key", "Key", "abc").into(), "slot:copy-field"),
-            (crate::Progress::new(40, 100, "Done").goal(80).into(), "slot:meter"),
+            (
+                CopyField::new("key", "Key", "abc").into(),
+                "slot:copy-field",
+            ),
+            (
+                crate::Progress::new(40, 100, "Done").goal(80).into(),
+                "slot:meter",
+            ),
         ];
         for (node, named) in parts {
             let page = TestNative::build(phone(), move || View::new("x").body(node));

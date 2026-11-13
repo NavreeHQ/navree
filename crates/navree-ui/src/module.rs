@@ -197,9 +197,9 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     {
         m.controller::<crate::native::Routes>();
         // What a native client keeps its screens under.
-        m.factory(Factory::<crate::native::Stamp>::new(|r: Resolver| async move {
-            Ok(Arc::new(crate::native::app_stamp(&r.app()).await))
-        }));
+        m.factory(Factory::<crate::native::Stamp>::new(
+            |r: Resolver| async move { Ok(Arc::new(crate::native::app_stamp(&r.app()).await)) },
+        ));
     }
     // The appearance route sets only the reader's theme cookie and refuses posts from other
     // sites itself: the session layer checks its origin in place of the token, so a theme

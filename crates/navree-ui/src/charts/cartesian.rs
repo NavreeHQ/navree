@@ -1523,13 +1523,19 @@ impl Chart {
             series
                 .iter()
                 .map(|s| (s.name.as_str(), s.values.as_slice())),
-            Some(self.native_extras(
-                &series,
-                &averages,
-                bars && self.horizontal,
-                stacked,
-                &self.common.summary.clone().unwrap_or_else(|| summary.join(" ")),
-            )),
+            Some(
+                self.native_extras(
+                    &series,
+                    &averages,
+                    bars && self.horizontal,
+                    stacked,
+                    &self
+                        .common
+                        .summary
+                        .clone()
+                        .unwrap_or_else(|| summary.join(" ")),
+                ),
+            ),
         );
         Some(Drawn {
             legend: legend_node,
@@ -1602,7 +1608,8 @@ impl Chart {
                 RefAt::Identity => references.push(json!({"kind": "diagonal", "label": label})),
                 _ => {
                     if let Some(value) = reference_value(reference, averages) {
-                        references.push(json!({"kind": "level", "value": number(value), "label": label}));
+                        references
+                            .push(json!({"kind": "level", "value": number(value), "label": label}));
                     }
                 }
             }
@@ -1635,7 +1642,7 @@ impl Chart {
             .collect();
         json!({
             "x": self.x_label.as_ref().map(|name| json!({"name": name})),
-            "y": (!y.is_empty()).then(|| serde_json::Value::Object(y)),
+            "y": (!y.is_empty()).then_some(serde_json::Value::Object(y)),
             "references": references,
             "zones": zones,
             "levels": self.y_categories.clone().unwrap_or_default(),
