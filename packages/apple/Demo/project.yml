@@ -5,6 +5,7 @@ options:
   bundleIdPrefix: com.navree
   deploymentTarget:
     iOS: "26.0"
+    macOS: "26.0"
   createIntermediateGroups: true
 settings:
   base:
@@ -62,6 +63,42 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: YES
+  # The same demo as a Mac app of its own (not the iPad app on a Mac): the
+  # sidebar, the menu bar's commands, a Settings window, windows that restore.
+  NavreeDemoMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: NavreeDemo
+      - path: NavreeDemoMac
+      - path: ../../../crates/navree-ui/dist/navree-ui.css
+        buildPhase: resources
+      - path: ../../../crates/navree-ui/dist/charts-styles.css
+        buildPhase: resources
+    dependencies:
+      - package: NavreeNative
+        product: NavreeNative
+    info:
+      path: Generated/NavreeDemoMac-Info.plist
+      properties:
+        CFBundleDisplayName: Charkha
+        CFBundleName: Charkha
+        NavreeOrigin: http://127.0.0.1:8095
+        LSApplicationCategoryType: public.app-category.business
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.navree.demo
+            CFBundleURLSchemes: [charkha]
+    # Not sandboxed: the demo reads answers from a folder named at launch.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.navree.demo.mac
+        PRODUCT_NAME: Charkha
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_IDENTITY: "-"
   NavreeDemoUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -75,6 +112,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.navree.demo.uitests
         TARGETED_DEVICE_FAMILY: "1,2"
 schemes:
+  NavreeDemoMac:
+    build:
+      targets:
+        NavreeDemoMac: all
   NavreeDemo:
     build:
       targets:
