@@ -33,13 +33,13 @@ public struct PageRef: Hashable, Sendable {
 public enum PageContent: Sendable, Equatable {
     case loading
     /// Parts to draw natively.
-    case screen(Screen)
+    case screen(Navree.Screen)
     /// The page shown whole in the web view, inside native chrome.
     case web(URL, title: String?)
     /// It could not be loaded: the words say why.
     case failed(String)
     /// The app is too old for the server.
-    case upgrade(Upgrade)
+    case upgrade(Navree.Upgrade)
 }
 
 /// One screen of a stack.
@@ -47,7 +47,7 @@ public struct PageState: Sendable, Equatable {
     public var address: String
     public var content: PageContent
     /// Icon shapes by name, from the envelope.
-    public var icons: [String: IconShape] = [:]
+    public var icons: [String: Navree.IconShape] = [:]
     /// What the forms of the screen hold, by form then field.
     public var values: [String: [String: [String]]] = [:]
     /// A line of status the screen shows (what the web shows as a toast).
@@ -76,7 +76,7 @@ public struct PageState: Sendable, Equatable {
 
 /// Everything the drawing needs, and nothing it does not.
 public struct ViewState: Sendable, Equatable {
-    public var shell: ShellDocument?
+    public var shell: Navree.Shell?
     /// The destination shown, by its address.
     public var selected: String = "/"
     public var stacks: [Container: [PageState]] = [:]
@@ -91,7 +91,7 @@ public struct ViewState: Sendable, Equatable {
     }
 
     /// The app's destinations, or one standing for its home when the shell has none.
-    public var destinations: [NavItem] {
+    public var destinations: [Navree.NavItem] {
         shell?.destinations ?? []
     }
 

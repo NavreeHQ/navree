@@ -22,19 +22,19 @@ public enum Slot: Sendable, Equatable {
 
 /// What placement needs to know of an action.
 public struct ActionTraits: Sendable, Equatable {
-    public var role: Role
-    public var prominence: ButtonProminence
-    public var standard: StandardAction?
+    public var role: Navree.Role
+    public var prominence: Navree.Prominence
+    public var standard: Navree.Standard?
     public var isMenu: Bool
 
-    public init(role: Role, prominence: ButtonProminence = .medium, standard: StandardAction? = nil, isMenu: Bool = false) {
+    public init(role: Navree.Role, prominence: Navree.Prominence = .medium, standard: Navree.Standard? = nil, isMenu: Bool = false) {
         self.role = role
         self.prominence = prominence
         self.standard = standard
         self.isMenu = isMenu
     }
 
-    public init?(_ node: Node) {
+    public init?(_ node: Navree.Node) {
         switch node {
         case .button(let button):
             self.init(role: button.role, prominence: button.prominence, standard: button.standard)

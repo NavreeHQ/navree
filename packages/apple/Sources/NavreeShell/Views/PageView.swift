@@ -111,7 +111,7 @@ struct InlineTitle: ViewModifier {
 /// The person signed in, at the trailing end of a destination's first
 /// screen: their name and what their menu offers (profile, sign out).
 struct AccountMenu: View {
-    let user: User
+    let user: Navree.User
     @Environment(\.navree) private var context
 
     var body: some View {

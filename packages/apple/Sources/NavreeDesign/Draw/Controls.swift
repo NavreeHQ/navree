@@ -2,7 +2,7 @@ import NavreeProtocol
 import SwiftUI
 
 /// The SwiftUI role of a button's role.
-func buttonRole(_ role: Role) -> ButtonRole? {
+func buttonRole(_ role: Navree.Role) -> ButtonRole? {
     switch role {
     case .destructive: .destructive
     case .cancel: .cancel
@@ -25,7 +25,7 @@ enum LabelMode {
 /// A button's label: the system's symbol for a standard action or the
 /// symbol of its icon, and its words.
 struct ButtonLabel: View {
-    let button: Node.Button
+    let button: Navree.Button
     var mode: LabelMode = .automatic
     @Environment(\.navree) private var context
 
@@ -71,7 +71,7 @@ struct ButtonLabel: View {
 /// A button in the content: bordered by how loud it is, with a spinner in it
 /// while it waits.
 struct ButtonPart: View {
-    let button: Node.Button
+    let button: Navree.Button
     var prominent = false
     @Environment(\.navree) private var context
     @Environment(\.navreeForm) private var form
@@ -107,7 +107,7 @@ struct ButtonPart: View {
 
 /// A link: words that lead somewhere, in the app's tint.
 struct LinkPart: View {
-    let link: Node.Link
+    let link: Navree.Link
     @Environment(\.navree) private var context
     @Environment(\.navreeOverlay) private var overlay
 
@@ -131,7 +131,7 @@ struct LinkPart: View {
 
 /// A pull-down menu of actions.
 struct MenuPart: View {
-    let menu: Node.Menu
+    let menu: Navree.Menu
     @Environment(\.navree) private var context
 
     var body: some View {
@@ -150,7 +150,7 @@ struct MenuPart: View {
 /// The items of a menu or a context menu: buttons, links, groups and dividers,
 /// the destructive ones last, as the guidelines ask.
 struct MenuItems: View {
-    let items: [Node]
+    let items: [Navree.Node]
     @Environment(\.navree) private var context
     @Environment(\.navreeOverlay) private var overlay
 
@@ -164,12 +164,12 @@ struct MenuItems: View {
         }
     }
 
-    private func isDestructive(_ node: Node) -> Bool {
+    private func isDestructive(_ node: Navree.Node) -> Bool {
         if case .button(let button) = node { return button.role == .destructive }
         return false
     }
 
-    @ViewBuilder private func entry(_ item: Node) -> some View {
+    @ViewBuilder private func entry(_ item: Navree.Node) -> some View {
         switch item {
         case .button(let button):
             Button(role: buttonRole(button.role)) {

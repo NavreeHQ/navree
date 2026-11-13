@@ -7,18 +7,18 @@ import SwiftUI
 public struct FormRef: Sendable, Equatable, Hashable {
     /// The form's id, or `@` and its address when it has none.
     public let key: String
-    public let method: HTTPMethod
+    public let method: Navree.Method
     public let action: String
-    public let hidden: [Pair]
+    public let hidden: [Navree.Pair]
 
-    public init(_ form: Node.Form) {
+    public init(_ form: Navree.Form) {
         key = form.id ?? "@" + form.action
         method = form.method
         action = form.action
-        hidden = form.hidden.map { Pair(name: $0.name, value: $0.value) }
+        hidden = form.hidden.map { Navree.Pair(name: $0.name, value: $0.value) }
     }
 
-    public init(key: String, method: HTTPMethod = .get, action: String = "", hidden: [Pair] = []) {
+    public init(key: String, method: Navree.Method = .get, action: String = "", hidden: [Navree.Pair] = []) {
         self.key = key
         self.method = method
         self.action = action
@@ -57,7 +57,7 @@ public struct Place: Sendable, Equatable {
 /// next: it hands each of these to one handler, which the runtime answers.
 public enum Intent: Sendable, Equatable {
     /// A control's action: a tap on a button, a link, a row, a menu item.
-    case act(Action, Place)
+    case act(Navree.Action, Place)
     /// A field's values changed.
     case change(form: FormRef, name: String, values: [String])
     /// A region that came empty is on screen: fetch it.
@@ -83,23 +83,23 @@ public struct DrawingContext: Sendable {
     /// The values a form's field holds now, or `nil` for those it came with.
     public var values: @MainActor @Sendable (FormRef, String) -> [String]?
     /// Icon shapes by name, from the envelope's table.
-    public var icons: [String: IconShape]
+    public var icons: [String: Navree.IconShape]
     /// The address of the screen, for sharing.
     public var address: String
     /// The origin, which relative addresses of pictures are read against.
     public var base: URL?
     /// How a link to an address is presented, by the shell's route rules.
-    public var presentation: @MainActor @Sendable (String) -> Present
+    public var presentation: @MainActor @Sendable (String) -> Navree.Present
     /// How deep the screen being drawn is in its stack: the root is 0.
     public var depth: Int
 
     public init(
         send: @escaping @MainActor @Sendable (Intent) -> Void,
         values: @escaping @MainActor @Sendable (FormRef, String) -> [String]? = { _, _ in nil },
-        icons: [String: IconShape] = [:],
+        icons: [String: Navree.IconShape] = [:],
         address: String = "/",
         base: URL? = nil,
-        presentation: @escaping @MainActor @Sendable (String) -> Present = { _ in .push },
+        presentation: @escaping @MainActor @Sendable (String) -> Navree.Present = { _ in .push },
         depth: Int = 0
     ) {
         self.send = send

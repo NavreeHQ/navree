@@ -13,13 +13,13 @@ public struct RecordRow: Sendable, Equatable {
     /// The column the trailing value comes from, for assistive technology.
     public var trailingLabel: String?
     /// Its states, as the table's badges.
-    public var statuses: [Node.Badge]
+    public var statuses: [Navree.Badge]
     /// What a tap on the row does, and the form it sends when it is a submit.
-    public var action: Action?
-    public var actionForm: Node.Form?
+    public var action: Navree.Action?
+    public var actionForm: Navree.Form?
     /// Forms and buttons in the record's cells: they become the row's swipe
     /// and context menu actions.
-    public var controls: [Node]
+    public var controls: [Navree.Node]
 }
 
 public enum RecordRules {
@@ -28,7 +28,7 @@ public enum RecordRules {
     /// numbers, stands at the end; badges are its states; forms and buttons in
     /// the other cells are its actions; the words of the other columns a narrow
     /// window keeps go under the name. Columns marked secondary are left out.
-    public static func row(columns: [Node.Column], record: Node.TableRow) -> RecordRow {
+    public static func row(columns: [Navree.Column], record: Navree.TableRow) -> RecordRow {
         let cells = record.cells
         let titleIndex = columns.firstIndex { $0.role == .title } ?? 0
         let trailingIndex = columns.firstIndex { $0.role == .trailing }
@@ -75,7 +75,7 @@ public enum RecordRules {
     }
 
     /// The words a cell shows, one entry per text, a flag kept with its place.
-    public static func words(in node: Node) -> [String] {
+    public static func words(in node: Navree.Node) -> [String] {
         switch node {
         case .text(let text): return text.value.isEmpty ? [] : [text.value]
         case .badge(let badge): return [badge.text]
@@ -92,14 +92,14 @@ public enum RecordRules {
         }
     }
 
-    static func badges(in node: Node) -> [Node.Badge] {
+    static func badges(in node: Navree.Node) -> [Navree.Badge] {
         if case .badge(let badge) = node { return [badge] }
         return node.children.flatMap(badges)
     }
 
     /// Whether a cell holds something to do rather than something to read: a
     /// form that posts, or a button.
-    static func holdsControls(_ node: Node) -> Bool {
+    static func holdsControls(_ node: Navree.Node) -> Bool {
         node.first { part in
             switch part {
             case .form(let form): form.method == .post
@@ -110,7 +110,7 @@ public enum RecordRules {
     }
 
     /// The first button or link in `node`, and the form it stands in.
-    static func firstAction(in node: Node, form: Node.Form?) -> (Action, Node.Form?)? {
+    static func firstAction(in node: Navree.Node, form: Navree.Form?) -> (Navree.Action, Navree.Form?)? {
         switch node {
         case .button(let button):
             return button.action.map { ($0, form) }

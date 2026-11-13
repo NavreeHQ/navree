@@ -4,13 +4,13 @@ import SwiftUI
 /// A table on a wide window: the system's `Table`, a column for each of the
 /// server's, the record's own action on a tap of its first cell.
 struct TableColumnsView: View {
-    let table: Node.Table
+    let table: Navree.Table
     let region: String?
 
     struct Record: Identifiable {
         let id: Int
-        let cells: [Node]
-        let action: Action?
+        let cells: [Navree.Node]
+        let action: Navree.Action?
     }
 
     struct Column: Identifiable, Hashable {

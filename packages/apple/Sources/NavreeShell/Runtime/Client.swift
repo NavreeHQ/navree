@@ -55,7 +55,7 @@ public final class NativeClient {
         state.page(ref)?.values[form.key]?[name]
     }
 
-    public func presentation(of address: String) -> Present {
+    public func presentation(of address: String) -> Navree.Present {
         runtime.presentation(of: address)
     }
 

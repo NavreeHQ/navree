@@ -62,7 +62,7 @@ public struct Keyboard: Sendable, Equatable {
 public enum ContentRules {
     /// A screen that is mostly one list of records gets plain rows; anything
     /// else (a record's facts, sections, forms) gets inset groups.
-    public static func list(_ body: Node) -> ListLayout {
+    public static func list(_ body: Navree.Node) -> ListLayout {
         switch body {
         case .table, .list: return .plain
         case .region(let region) where region.children.count == 1:
@@ -83,13 +83,13 @@ public enum ContentRules {
 
     /// Records as rows on a compact width; columns on a regular one when there
     /// are more than two to show.
-    public static func table(_ table: Node.Table, width: WidthClass) -> TableLayout {
+    public static func table(_ table: Navree.Table, width: WidthClass) -> TableLayout {
         guard width == .regular else { return .rows }
         return table.columns.count > 2 ? .columns : .rows
     }
 
     /// The control a field's input becomes on iPhone and iPad.
-    public static func control(_ input: Input) -> ControlKind {
+    public static func control(_ input: Navree.Input) -> ControlKind {
         switch input {
         case .text(let text):
             switch text.kind {
@@ -110,12 +110,13 @@ public enum ContentRules {
         case .slider: return .slider
         case .colour: return .colorPicker
         case .file: return .filePicker
-        case .unrecognized: return .none
+        // A range of two ends has no control drawn for it yet.
+        case .range, .unknown: return .none
         }
     }
 
     /// The keyboard a text field brings up, and what the system may fill it with.
-    public static func keyboard(_ input: TextInput) -> Keyboard {
+    public static func keyboard(_ input: Navree.TextInput) -> Keyboard {
         var keyboard = Keyboard(layout: .standard, content: .none, autocapitalizes: true, autocorrects: true)
         switch input.kind {
         case .email: keyboard = Keyboard(layout: .email, content: .email, autocapitalizes: false, autocorrects: false)
@@ -147,7 +148,7 @@ public enum ContentRules {
     /// Whether a group of parts is a row of buttons and nothing else: on iOS it
     /// becomes rows of a grouped list, the destructive ones in a group of their
     /// own after the rest.
-    public static func isButtonGroup(_ nodes: [Node]) -> Bool {
+    public static func isButtonGroup(_ nodes: [Navree.Node]) -> Bool {
         nodes.count > 1 && nodes.allSatisfy { node in
             switch node {
             case .button, .menu, .link: true

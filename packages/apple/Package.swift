@@ -18,8 +18,7 @@ let package = Package(
         )
     ],
     targets: [
-        // The generated models are read from the next commit on.
-        .target(name: "NavreeProtocol", exclude: ["Models.swift"]),
+        .target(name: "NavreeProtocol"),
         .target(name: "NavreeDesign", dependencies: ["NavreeProtocol"]),
         .target(name: "NavreeShell", dependencies: ["NavreeProtocol", "NavreeDesign"]),
         .testTarget(name: "NavreeProtocolTests", dependencies: ["NavreeProtocol"]),

@@ -4,9 +4,9 @@ import SwiftUI
 /// Draws any part as free content, with the system's own views. Rows of lists
 /// are drawn by ``RowView``; this is what goes inside them and anywhere else.
 public struct NodeView: View {
-    let node: Node
+    let node: Navree.Node
 
-    public init(_ node: Node) {
+    public init(_ node: Navree.Node) {
         self.node = node
     }
 
@@ -68,6 +68,11 @@ public struct NodeView: View {
                 .foregroundStyle(.secondary)
         case .unknown(let part):
             if let alt = part.alt { NodeView(alt) }
+        case .toolbar, .gauge, .figure, .timeline, .feedRow, .message, .pane, .ring, .rings, .dayClock, .dayPager,
+            .meter, .columns, .strip, .range, .calendarHeatmap, .matrixHeatmap, .scatter, .card, .layers, .shape,
+            .carousel, .adaptive:
+            // Kinds this client does not draw yet.
+            EmptyView()
         }
     }
 }
@@ -75,7 +80,7 @@ public struct NodeView: View {
 /// Parts one after another. Across: they wrap onto lines of their own when
 /// the text is large or the room runs out, rather than squeezing.
 struct StackPart: View {
-    let stack: Node.Stack
+    let stack: Navree.Stack
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
@@ -135,7 +140,7 @@ struct StackPart: View {
 
 /// Parts in as many columns as fit.
 struct GridPart: View {
-    let grid: Node.Grid
+    let grid: Navree.Grid
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: CGFloat(grid.min ?? 160)), spacing: 12)], alignment: .leading, spacing: 12) {
@@ -147,7 +152,7 @@ struct GridPart: View {
 /// A section drawn as free content: a heading in the headline style and its
 /// parts under it. In a screen's list, sections become the list's own.
 struct SectionPart: View {
-    let section: Node.Section
+    let section: Navree.Section
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -167,7 +172,7 @@ struct SectionPart: View {
 /// Text, in the system's text style for what it is for, so it follows the
 /// reader's text size.
 struct TextPart: View {
-    let text: Node.Text
+    let text: Navree.Text
 
     var body: some View {
         Text(text.value)
@@ -181,7 +186,7 @@ struct TextPart: View {
 
 /// Text in runs, with links the reader can follow.
 struct RichPart: View {
-    let rich: Node.Rich
+    let rich: Navree.Rich
     @Environment(\.navree) private var context
 
     var body: some View {
@@ -189,7 +194,7 @@ struct RichPart: View {
             .font(Typography.font(rich.style))
             .foregroundStyle(rich.muted ? Color.secondary : Color.primary)
             .environment(\.openURL, OpenURLAction { url in
-                context.send(.act(.navigate(href: url.absoluteString, present: .push), Place()))
+                context.send(.act(.navigate(Navree.Action.Navigate(href: url.absoluteString, present: .push)), Place()))
                 return .handled
             })
     }
@@ -213,7 +218,7 @@ struct RichPart: View {
 /// A picture, with its words for VoiceOver, or hidden from it when it is
 /// decoration.
 struct ImagePart: View {
-    let image: Node.Image
+    let image: Navree.Image
     @Environment(\.navree) private var context
 
     var body: some View {
@@ -234,7 +239,7 @@ struct ImagePart: View {
 /// An icon: the system symbol that means the same, or the app's own shape
 /// drawn like one.
 struct IconPart: View {
-    let icon: Node.Icon
+    let icon: Navree.Icon
     @Environment(\.navree) private var context
 
     var body: some View {
@@ -247,10 +252,10 @@ struct IconPart: View {
 
 /// A symbol for an icon, or its shape when no symbol means the same.
 public struct Glyph: View {
-    let icon: Node.Icon
-    let icons: [String: IconShape]
+    let icon: Navree.Icon
+    let icons: [String: Navree.IconShape]
 
-    public init(icon: Node.Icon, icons: [String: IconShape] = [:]) {
+    public init(icon: Navree.Icon, icons: [String: Navree.IconShape] = [:]) {
         self.icon = icon
         self.icons = icons
     }
@@ -271,7 +276,7 @@ public struct Glyph: View {
 
 /// A person's picture, or their initials in a circle.
 struct AvatarPart: View {
-    let avatar: Node.Avatar
+    let avatar: Navree.Avatar
     @ScaledMetric(relativeTo: .body) private var size: CGFloat = 32
 
     var body: some View {
@@ -302,9 +307,9 @@ struct AvatarPart: View {
 /// A state, as Apple's apps show one: words in the tone's colour beside a
 /// symbol (a dot for a plain state), never a coloured pill.
 public struct StatusLabel: View {
-    let badge: Node.Badge
+    let badge: Navree.Badge
 
-    public init(badge: Node.Badge) {
+    public init(badge: Navree.Badge) {
         self.badge = badge
     }
 
@@ -325,7 +330,7 @@ public struct StatusLabel: View {
 
 /// How far something has got: a bar when it is known, a spinner when not.
 struct ProgressPart: View {
-    let progress: Node.Progress
+    let progress: Navree.Progress
 
     var body: some View {
         if let value = progress.value {
@@ -340,7 +345,7 @@ struct ProgressPart: View {
 
 /// Code in the fixed-width face, scrolled across and selectable.
 struct CodePart: View {
-    let code: Node.Code
+    let code: Navree.Code
 
     var body: some View {
         ScrollView(.horizontal) {
@@ -352,7 +357,7 @@ struct CodePart: View {
 /// Views a reader switches between inside a screen: a segmented control (a
 /// tab view is for the app's top level only).
 struct TabsPart: View {
-    let tabs: Node.Tabs
+    let tabs: Navree.Tabs
     @Environment(\.navree) private var context
     @State private var chosen: Int?
 
@@ -362,7 +367,7 @@ struct TabsPart: View {
             Picker("", selection: Binding(get: { selected }, set: { index in
                 chosen = index
                 if let href = tabs.items[index].href {
-                    context.send(.act(.navigate(href: href, present: .replace), Place()))
+                    context.send(.act(.navigate(Navree.Action.Navigate(href: href, present: .replace)), Place()))
                 }
             })) {
                 ForEach(Array(tabs.items.enumerated()), id: \.offset) { index, tab in Text(tab.label).tag(index) }
@@ -378,7 +383,7 @@ struct TabsPart: View {
 
 /// A part that opens under its label.
 struct DisclosurePart: View {
-    let disclosure: Node.Disclosure
+    let disclosure: Navree.Disclosure
     @State private var open: Bool?
 
     var body: some View {
@@ -390,7 +395,7 @@ struct DisclosurePart: View {
 
 /// A region drawn as free content: a spinner until it is fetched.
 struct RegionPart: View {
-    let region: Node.Region
+    let region: Navree.Region
     @Environment(\.navree) private var context
 
     var body: some View {
@@ -408,7 +413,7 @@ struct RegionPart: View {
 
 /// A message in place: a symbol in its tone, its words, and what can be done.
 struct BannerPart: View {
-    let banner: Node.Banner
+    let banner: Navree.Banner
 
     var body: some View {
         Label {
@@ -426,7 +431,7 @@ struct BannerPart: View {
 
 /// What a place shows when it holds nothing: the system's own layout.
 struct EmptyPart: View {
-    let empty: Node.Empty
+    let empty: Navree.Empty
 
     var body: some View {
         ContentUnavailableView {
@@ -452,10 +457,10 @@ struct EmptyPart: View {
 /// The type the system has for each text style. Fixed sizes are never used,
 /// so every text follows the reader's size.
 public enum Typography {
-    public static func font(_ style: TextStyle) -> Font {
+    public static func font(_ style: Navree.TextStyle) -> Font {
         switch style {
-        case .largeTitle: .largeTitle
-        case .title: .title2
+        case .display, .largeTitle: .largeTitle
+        case .title, .title2: .title2
         case .headline: .headline
         case .body: .body
         case .callout: .callout

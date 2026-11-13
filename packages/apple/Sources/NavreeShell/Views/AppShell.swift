@@ -93,7 +93,7 @@ public struct AppShell: View {
 /// A destination's label in the tab bar or the sidebar: its name and the
 /// system symbol that means the same, or its own icon drawn as a template.
 struct DestinationLabel: View {
-    let item: NavItem
+    let item: Navree.NavItem
 
     var body: some View {
         if let icon = item.icon, let symbol = Symbols.symbol(for: icon) {
@@ -154,7 +154,7 @@ struct StackView: View {
 /// The brand's accent as the app's tint, in its light and dark forms. Bars,
 /// materials and type stay the system's.
 enum ThemeColor {
-    static func accent(_ theme: Theme?) -> Color? {
+    static func accent(_ theme: Navree.Theme?) -> Color? {
         guard let light = theme?.accent.flatMap(rgb) else { return nil }
         let dark = theme?.accentDark.flatMap(rgb) ?? light
         #if canImport(UIKit)

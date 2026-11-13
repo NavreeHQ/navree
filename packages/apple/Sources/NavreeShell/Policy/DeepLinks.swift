@@ -21,7 +21,7 @@ public struct DeepLinks: Sendable {
     /// The path and query to open for `url`, or `nil` when the link is refused
     /// (the app then shows its home). A path opens when the shell's routes or
     /// its destinations name it.
-    public func address(for url: URL, shell: ShellDocument?) -> String? {
+    public func address(for url: URL, shell: Navree.Shell?) -> String? {
         let candidate: String
         if origin.contains(url) {
             candidate = Origin.pathAndQuery(of: url)
@@ -60,7 +60,7 @@ public struct DeepLinks: Sendable {
     }
 
     /// Whether the shell names `address`: a route's pattern or a destination.
-    static func isNamed(_ address: String, by shell: ShellDocument) -> Bool {
+    static func isNamed(_ address: String, by shell: Navree.Shell) -> Bool {
         let path = String(address.split(separator: "?", maxSplits: 1).first ?? "")
         if RouteRules(shell.routes).rule(for: path) != nil {
             return true

@@ -48,7 +48,7 @@ public enum PresentationRules {
     /// Medium sheets rest at half height and can be pulled up (iPhone's
     /// detents; a regular width shows a form sheet); large ones take the full
     /// height; full ones cover the screen.
-    public static func sheet(_ size: SheetSize) -> SheetPresentation {
+    public static func sheet(_ size: Navree.SheetSize) -> SheetPresentation {
         switch size {
         case .medium: .resizable
         case .large: .large
@@ -59,7 +59,7 @@ public enum PresentationRules {
     /// A dialog that holds parts (a form) is a sheet; one that only asks, with
     /// a destructive answer, is a confirmation dialog from its source; any
     /// other that only asks is an alert.
-    public static func dialog(_ dialog: Node.Dialog) -> DialogPresentation {
+    public static func dialog(_ dialog: Navree.Dialog) -> DialogPresentation {
         if !dialog.children.isEmpty {
             return .sheet
         }
@@ -72,19 +72,19 @@ public enum PresentationRules {
 
     /// Whether a destructive action asks first. One that can be undone never
     /// does: the person undoes it instead. One that can't, asks.
-    public static func asksFirst(_ button: Node.Button) -> Bool {
+    public static func asksFirst(_ button: Navree.Button) -> Bool {
         guard button.role == .destructive || button.standard == .delete else { return false }
         return !button.undoable
     }
 
     /// A failure interrupts with an alert; anything else is a line of status
     /// in the screen. Never a floating toast.
-    public static func message(_ tone: Tone) -> MessagePresentation {
+    public static func message(_ tone: Navree.Tone) -> MessagePresentation {
         tone == .danger ? .alert : .inlineStatus
     }
 
     /// What the person feels as a message of this tone arrives.
-    public static func haptic(_ tone: Tone) -> Haptic? {
+    public static func haptic(_ tone: Navree.Tone) -> Haptic? {
         switch tone {
         case .success: .success
         case .warning: .warning

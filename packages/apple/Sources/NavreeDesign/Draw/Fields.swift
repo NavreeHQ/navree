@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 /// with a symbol, never as a red border alone; the field's help stands there
 /// when there is no message.
 struct FieldControl: View {
-    let field: Node.Field
+    let field: Navree.Field
     @Environment(\.navree) private var context
     @Environment(\.navreeForm) private var form
 
@@ -81,12 +81,12 @@ struct FieldControl: View {
             ))
         case .file(let input):
             FileControl(label: label, input: input, chosen: values.first) { name in set([name]) }
-        case .unrecognized:
+        case .range, .unknown:
             EmptyView()
         }
     }
 
-    private func summary(_ input: ChoicesInput) -> String {
+    private func summary(_ input: Navree.ChoicesInput) -> String {
         let chosen = input.options.filter { values.contains($0.value) }.map(\.label)
         return chosen.isEmpty ? "Any" : chosen.joined(separator: ", ")
     }
@@ -100,7 +100,7 @@ struct FieldControl: View {
 /// label, the label leads and the field follows, as in Settings.
 struct TextControl: View {
     let label: String
-    let input: TextInput
+    let input: Navree.TextInput
     let text: Binding<String>
     let invalid: Bool
     let id: String?
@@ -183,7 +183,7 @@ extension View {
 /// with a checkmark (iOS has no radio buttons).
 struct ChoiceControl: View {
     let label: String
-    let input: ChoiceInput
+    let input: Navree.ChoiceInput
     let value: Binding<String>
 
     var body: some View {
@@ -210,7 +210,7 @@ struct ChoiceControl: View {
 /// until the reader sets one.
 struct DateControl: View {
     let label: String
-    let input: DateInput
+    let input: Navree.DateInput
     let value: Binding<String>
 
     var body: some View {
@@ -251,7 +251,7 @@ struct DateControl: View {
 /// it is the runtime's.
 struct FileControl: View {
     let label: String
-    let input: FileInput
+    let input: Navree.FileInput
     let chosen: String?
     let choose: (String) -> Void
     @State private var importing = false
@@ -272,7 +272,7 @@ struct FileControl: View {
 /// Dates as the web's own fields send them: `2026-11-12`, `09:41`,
 /// `2026-11-12T09:41`, in the device's time zone.
 public enum WebDate {
-    static func formatter(_ kind: DateKind) -> DateFormatter {
+    static func formatter(_ kind: Navree.DateKind) -> DateFormatter {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = Calendar(identifier: .gregorian)
@@ -284,11 +284,11 @@ public enum WebDate {
         return formatter
     }
 
-    public static func date(_ text: String, kind: DateKind) -> Date? {
+    public static func date(_ text: String, kind: Navree.DateKind) -> Date? {
         formatter(kind).date(from: text)
     }
 
-    public static func text(_ date: Date, kind: DateKind) -> String {
+    public static func text(_ date: Date, kind: Navree.DateKind) -> String {
         formatter(kind).string(from: date)
     }
 }

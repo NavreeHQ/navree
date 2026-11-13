@@ -5,7 +5,7 @@ import SwiftUI
 /// A chart drawn with Swift Charts from the numbers the server sent: its marks
 /// are read by VoiceOver and Audio Graphs come with them.
 struct ChartPart: View {
-    let chart: Node.Chart
+    let chart: Navree.Chart
 
     struct Point: Identifiable {
         let id: String
@@ -61,7 +61,7 @@ struct ChartPart: View {
             }
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
-        case .line, .unrecognized:
+        case .line:
             Chart(points) { point in
                 LineMark(x: .value("Label", point.label), y: .value("Value", point.value))
                     .foregroundStyle(by: .value("Series", many ? point.series : ""))

@@ -3,13 +3,13 @@ import NavreeProtocol
 
 /// A request the app makes to its origin.
 public struct OriginRequest: Sendable, Equatable {
-    public var method: HTTPMethod
+    public var method: Navree.Method
     /// The path and query on the origin: `/orders?sort=total`.
     public var address: String
     /// The values a post sends, in order.
-    public var form: [Pair]
+    public var form: [Navree.Pair]
 
-    public init(method: HTTPMethod = .get, address: String, form: [Pair] = []) {
+    public init(method: Navree.Method = .get, address: String, form: [Navree.Pair] = []) {
         self.method = method
         self.address = address
         self.form = form
@@ -30,15 +30,15 @@ public enum OriginReply: Sendable, Equatable {
     case failed(String)
 
     /// The envelope in the body, when it is one.
-    public var envelope: Envelope? {
+    public var envelope: Navree.Envelope? {
         guard case .body(_, let contentType, let data) = self, Self.isNative(contentType) else { return nil }
-        return try? WireDecoder.decode(Envelope.self, from: data)
+        return try? WireDecoder.decode(Navree.Envelope.self, from: data)
     }
 
     /// The shell document in the body, when it is one.
-    public var shell: ShellDocument? {
+    public var shell: Navree.Shell? {
         guard case .body(_, let contentType, let data) = self, Self.isNative(contentType) else { return nil }
-        return try? WireDecoder.decode(ShellDocument.self, from: data)
+        return try? WireDecoder.decode(Navree.Shell.self, from: data)
     }
 
     public var status: Int? {
@@ -156,7 +156,7 @@ final class RedirectRefuser: NSObject, URLSessionTaskDelegate, Sendable {
 
 /// `application/x-www-form-urlencoded`, exactly as a browser writes it.
 public enum FormEncoding {
-    public static func encode(_ pairs: [Pair]) -> String {
+    public static func encode(_ pairs: [Navree.Pair]) -> String {
         pairs.map { escape($0.name) + "=" + escape($0.value) }.joined(separator: "&")
     }
 
