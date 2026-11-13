@@ -267,10 +267,7 @@ impl ChartImage {
     ///
     /// As [`svg`](Self::svg).
     pub fn svg_node(&self, node: &Node) -> Result<Node, ImageError> {
-        let tag = self.etag(node)?;
-        let prefix: String = std::iter::once('i')
-            .chain(tag.chars().filter(char::is_ascii_hexdigit).take(10))
-            .collect();
+        let prefix = self.ids_of(&self.svg(node)?);
         let inks = self.inks();
         let background = match self.backdrop {
             Backdrop::Clear => None,
@@ -287,6 +284,24 @@ impl ChartImage {
             r#"width="100%" "#,
             1,
         ))))
+    }
+
+    /// What every id of a drawing put in a page starts with: `i` and ten hex digits of a
+    /// hash of the drawing and its size. Two drawings that differ share no id. The
+    /// renderer is no part of it, as it is of the picture's tag: that changes with every
+    /// release of the toolkit, and the HTML of a page that draws the same thing must not.
+    fn ids_of(&self, svg: &str) -> String {
+        let (pw, ph) = self.pixels();
+        let mut hash = Sha256::new();
+        hash.update(format!("{pw}x{ph}|").as_bytes());
+        hash.update(svg.as_bytes());
+        let digest = hash.finalize();
+        let mut out = String::with_capacity(11);
+        out.push('i');
+        for byte in &digest[..5] {
+            out.push_str(&format!("{byte:02x}"));
+        }
+        out
     }
 
     /// The tag of the picture of `node`: a hash of the resolved drawing, the size and

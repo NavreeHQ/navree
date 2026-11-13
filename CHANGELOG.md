@@ -7,6 +7,13 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Fixed
+
+- A chart picture put in a page with `ChartImage::svg_node` marked the ids of its drawing with the
+  picture's tag, which holds the toolkit's version: the same drawing got other ids, and the page
+  other HTML, with every release. The ids now come from the drawing and its size alone. A picture's
+  `ETag` still changes with a release, since its pixels may.
+
 ## [1.2.0] - 2026-11-13
 
 ### Added
