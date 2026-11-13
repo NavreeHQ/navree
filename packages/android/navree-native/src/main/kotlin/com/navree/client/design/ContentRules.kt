@@ -335,6 +335,38 @@ object ContentRules {
     const val TABLE_MOST_DP = 1440
 
     /**
+     * The most a screen's one column spans when cards stand side by side in
+     * it: wide enough for three, no wider, so a very wide window keeps the
+     * content in one place and not stretched.
+     */
+    const val CARDS_MOST_DP = 1240
+
+    /**
+     * The widest the one column of a screen is. Everything in the screen
+     * (words, grids, cards, rows) stands in this column, so they share their
+     * start edge and their end edge; it is as wide as cards need only where
+     * some cards stand side by side.
+     */
+    fun columnMostDp(cardsSideBySide: Boolean): Int = if (cardsSideBySide) CARDS_MOST_DP else CONTENT_MOST_DP
+
+    /** The width of what a column holds, between its margins, in a pane this wide. */
+    fun contentDp(paneDp: Float, mostDp: Int, marginDp: Int): Float = (minOf(paneDp, mostDp.toFloat()) - 2 * marginDp).coerceAtLeast(0f)
+
+    /** The space between cards in a line, in dp. */
+    const val CARD_GAP_DP = 16
+
+    /** The width of each of `columns` cards in a line of content this wide. */
+    fun cardWidthDp(contentDp: Float, columns: Int, gapDp: Int = CARD_GAP_DP): Float = (contentDp - gapDp * (columns - 1)) / columns
+
+    /**
+     * How many columns a line of `count` cards takes in a room of `columns`:
+     * a line with fewer cards than columns (the last of a run, or a card
+     * alone) stretches its cards across the whole line, so no cell stands
+     * empty beside them.
+     */
+    fun lineColumns(count: Int, columns: Int): Int = count.coerceIn(1, columns.coerceAtLeast(1))
+
+    /**
      * How many cards stand side by side in a pane this wide: one on a phone
      * and a medium window, two on an expanded one, three where it is very
      * wide. Larger text keeps fewer, so a card is never too narrow to read.

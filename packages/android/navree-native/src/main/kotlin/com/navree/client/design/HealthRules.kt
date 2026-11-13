@@ -5,6 +5,8 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
+import java.text.DateFormatSymbols
+import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
 
@@ -106,6 +108,82 @@ object ClockRules {
 
     /** The most an hour holds: the clock's own `max`, else the busiest hour. */
     fun most(clock: Navree.DayClock): Double? = clock.max ?: clock.hours.mapNotNull { it.value }.maxOrNull()
+
+    /** The hours that are named round the dial: the four quarters, midnight at the top. */
+    val QUARTERS = listOf(0, 6, 12, 18)
+
+    /**
+     * An hour as the person's clock writes it round the dial: "12 AM", "6 PM"
+     * on a 12 hour clock (the locale's own words for the halves of the day),
+     * "00" and "18" on a 24 hour one.
+     */
+    fun quarterLabel(hour: Int, is24: Boolean, locale: Locale): String {
+        if (is24) return "%02d".format(locale, hour % 24)
+        val halves = DateFormatSymbols.getInstance(locale).amPmStrings
+        val twelve = if (hour % 12 == 0) 12 else hour % 12
+        return "%d %s".format(locale, twelve, halves[if (hour % 24 < 12) 0 else 1])
+    }
+
+    /** The radii of the dial, in dp, for one that is `halfDp` from its middle to its edge. */
+    data class Dial(
+        /** Where the hours' bars end at their longest. */
+        val outer: Float,
+        /** Where they start. */
+        val inner: Float,
+        /** The line the day's moments stand on, outside the bars. */
+        val moments: Float,
+        /** Where the names of the quarters begin: their edge nearest the dial. */
+        val labelEdge: Float,
+    )
+
+    /**
+     * The radii of a dial: the hours' bars inside, the one line of the day's
+     * moments round them, the quarters' names outside that, in a band that
+     * grows with the text (to a limit; the names are a help, the summary says it all).
+     */
+    fun dial(halfDp: Float, fontScale: Float): Dial {
+        val s = fontScale.coerceIn(1f, LABEL_CAP)
+        val moments = (halfDp - (10f + 34f * s)).coerceAtLeast(48f)
+        val outer = moments - 10f
+        return Dial(outer = outer, inner = outer * 0.58f, moments = moments, labelEdge = moments + 9f)
+    }
+
+    /** How far the names round a dial grow with the person's text. */
+    const val LABEL_CAP = 1.3f
+
+    /**
+     * A size in sp that, once the person's text size is applied, is as large
+     * as `baseSp` grown by the text size up to `cap` and no further.
+     */
+    fun cappedSp(baseSp: Float, fontScale: Float, cap: Float = LABEL_CAP): Float =
+        baseSp * minOf(fontScale.coerceAtLeast(1f), cap) / fontScale.coerceAtLeast(1f)
+
+    /**
+     * The size in sp for words in the middle of a dial: as large as `wantSp`
+     * grown by the text size, but never wider than the hole they stand in,
+     * which is `holeDp` across, for a text of `chars` characters.
+     */
+    fun centreSp(holeDp: Float, chars: Int, wantSp: Float, fontScale: Float): Float {
+        val scale = fontScale.coerceAtLeast(1f)
+        val fits = holeDp * 0.9f / (chars.coerceAtLeast(1) * 0.56f)
+        return minOf(wantSp * scale, fits) / scale
+    }
+
+    /** The width of one hour's bar at the dial's start, in dp: most of the gap between neighbours. */
+    fun barDp(innerDp: Float): Float = (2f * Math.PI.toFloat() * innerDp / 24f) * 0.62f
+}
+
+/** Numbers and their units in the right to left languages. */
+object BidiRules {
+    private const val ISOLATE_LTR = '\u2066'
+    private const val POP_ISOLATE = '\u2069'
+
+    /**
+     * Text that is read as one run left to right, whatever the language
+     * around it: an amount with its unit ("540/600 kcal"), which would
+     * otherwise read "kcal 540/600" in a right to left line.
+     */
+    fun amount(text: String): String = "$ISOLATE_LTR$text$POP_ISOLATE"
 }
 
 /** Parts of a whole: a meter's segments, a column's parts, a strip's cells. */

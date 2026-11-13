@@ -48,21 +48,29 @@ internal sealed interface Block {
     /** A node that fills the window: an empty state that is the whole screen. */
     data class Fill(override val key: String, val node: Navree.Node) : Block
 
-    /** Cards side by side on a wide window, a line of the dashboard's grid. */
+    /**
+     * Cards side by side on a wide window, a line of the dashboard's grid. A
+     * line with fewer cards than the window has columns stretches them across
+     * the line (`columns` is how many it has), so a card alone spans it.
+     */
     data class Cards(override val key: String, val nodes: List<Navree.Node>, val columns: Int, val form: String?) : Block
 }
 
 /**
  * Whether a part can say how tall it would be before it is laid out, so the
- * parts of a line can be made as tall as the tallest. A part that lays itself
- * out by the room it is given (a grid, a carousel, a meter, tabs, a stack
- * that turns in a wide room) cannot: its line keeps each part's own height.
+ * parts of a line can be made as tall as the tallest. A grid, a meter and a
+ * stack that turns know the width they have from the room the line gives them
+ * and measure nothing, so they can. A part that measures what it is given
+ * while it lays itself out (a carousel, an adaptive part, the heat maps, tabs,
+ * a table, a list, two panes) cannot: its line keeps each part's own height.
  */
 internal fun measuresAhead(node: Navree.Node): Boolean = node.walk().none {
-    it is Navree.Grid || it is Navree.Carousel || it is Navree.Adaptive || it is Navree.Meter ||
-        it is Navree.CalendarHeatmap || it is Navree.MatrixHeatmap || it is Navree.Tabs || it is Navree.Table ||
-        it is Navree.List || (it is Navree.Stack && it.wide != null && it.wide != it.axis)
+    it is Navree.Carousel || it is Navree.Adaptive || it is Navree.CalendarHeatmap || it is Navree.MatrixHeatmap ||
+        it is Navree.Tabs || it is Navree.Table || it is Navree.List || it is Navree.Split
 }
+
+/** Whether some cards in these blocks stand side by side: the screen's one column is then as wide as cards need. */
+internal fun cardsSideBySide(blocks: List<Block>): Boolean = blocks.any { it is Block.Cards && it.nodes.size > 1 }
 
 /** Whether the node draws anything where it stands. Overlays are drawn over the screen, not in it. */
 internal fun inFlow(node: Navree.Node, screen: ScreenView): Boolean = when {
@@ -127,7 +135,7 @@ internal fun blocks(
                 fun flush() {
                     for (line in run.chunked(cardColumns)) {
                         if (any && gap > 0) out += Block.Space(key("$path/${line.first().first}/gap", null), gap)
-                        out += Block.Cards(key("$path/${line.first().first}/cards", null), line.map { it.second }, cardColumns, form)
+                        out += Block.Cards(key("$path/${line.first().first}/cards", null), line.map { it.second }, ContentRules.lineColumns(line.size, cardColumns), form)
                         any = true
                     }
                     run = ArrayList()

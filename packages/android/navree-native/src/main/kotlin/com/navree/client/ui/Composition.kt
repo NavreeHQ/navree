@@ -128,13 +128,23 @@ internal fun CardView(node: Navree.Card, place: Place, modifier: Modifier = Modi
         if (menuActions.isNotEmpty()) customActions = menuActions
     }
     val pad = CompositionRules.cardPadDp(node.pad).dp
+    val room = LocalRoom.current
     val content: @Composable () -> Unit = {
         Column(Modifier.fillMaxWidth().padding(pad), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (child in node.children) NodeView(child, place)
+            // What the card holds has the card's width less its padding.
+            Roomed(if (room > 0f) (room - 2 * pad.value).coerceAtLeast(1f) else 0f) {
+                for (child in node.children) NodeView(child, place)
+            }
         }
     }
+    // A card that zooms into what it opens shares its bounds with that screen.
+    val zoom = LocalZoom.current
+    val cardId = node.id
+    val zooms = node.transition == Navree.Transition.ZOOM && cardId != null && zoom != null
+    if (zooms) SideEffect { ui.zoomCards.add(cardId!!) }
+    val bounds = if (zooms) zoomBounds(zoom!!, cardId!!) else Modifier
     Appearing(node.id, node.appear) {
-    Box(modifier.fillMaxWidth()) {
+    Box(modifier.then(bounds).fillMaxWidth()) {
         when {
             node.menu.isNotEmpty() -> Card(
                 modifier = Modifier
@@ -192,12 +202,15 @@ private fun Modifier.sized(size: Navree.Size?): Modifier {
 @Composable
 internal fun LayersView(node: Navree.Layers, place: Place, modifier: Modifier = Modifier) {
     val pad = (node.pad * CompositionRules.STEP_DP).dp
+    val room = LocalRoom.current
     Box(modifier.sized(node.size).padding(pad), contentAlignment = alignment(node.place)) {
-        for (child in node.children) {
-            if (child is Navree.Shape && child.size == null) {
-                ShapeFill(child)
-            } else {
-                NodeView(child, place)
+        Roomed(if (room > 0f) (room - 2 * pad.value).coerceAtLeast(1f) else 0f) {
+            for (child in node.children) {
+                if (child is Navree.Shape && child.size == null) {
+                    ShapeFill(child)
+                } else {
+                    NodeView(child, place)
+                }
             }
         }
     }
@@ -278,7 +291,9 @@ internal fun CarouselView(node: Navree.Carousel, place: Place, modifier: Modifie
             items(node.children.size) { index ->
                 val width = count?.let { CompositionRules.carouselItemDp(room, it, node.gap).dp }
                 Box(if (width != null) Modifier.width(width) else Modifier) {
-                    NodeView(node.children[index], place, if (width != null) Modifier.fillMaxWidth() else Modifier)
+                    Roomed(width?.value ?: 0f) {
+                        NodeView(node.children[index], place, if (width != null) Modifier.fillMaxWidth() else Modifier)
+                    }
                 }
             }
         }
@@ -291,7 +306,7 @@ internal fun AdaptiveView(node: Navree.Adaptive, place: Place, modifier: Modifie
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val room = CompositionRules.room(node, maxWidth.value)
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            for (child in room) NodeView(child, place)
+            Roomed(maxWidth.value) { for (child in room) NodeView(child, place) }
         }
     }
 }

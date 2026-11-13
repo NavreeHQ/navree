@@ -16,12 +16,14 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -65,17 +67,22 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.navree.client.R
+import com.navree.client.design.BidiRules
 import com.navree.client.core.Events
 import com.navree.client.design.ClockRules
 import com.navree.client.design.PagerRules
@@ -96,6 +103,7 @@ import java.time.LocalTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.sin
@@ -204,15 +212,19 @@ internal fun HintMark(hint: Navree.Hint, modifier: Modifier = Modifier) {
     }
 }
 
-/** A chart's heading: its title in the type scale's title, and its hint beside it. */
+/**
+ * A chart's heading: its title in the type scale's title, and its hint beside
+ * it. It takes the width of its chart, or, where the chart stands beside
+ * other parts and has no width to spare, only the width of its words.
+ */
 @Composable
-internal fun ChartHeading(title: String?, hint: Navree.Hint?) {
+internal fun ChartHeading(title: String?, hint: Navree.Hint?, fill: Boolean = true) {
     if (title == null && hint == null) return
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(if (fill) Modifier.fillMaxWidth() else Modifier, verticalAlignment = Alignment.CenterVertically) {
         Text(
             title ?: "",
             style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.weight(1f).semantics { heading() },
+            modifier = Modifier.weight(1f, fill = fill).semantics { heading() },
         )
         hint?.let { HintMark(it) }
     }
@@ -319,7 +331,8 @@ internal fun RingsView(node: Navree.Rings, modifier: Modifier = Modifier) {
     val said = node.summary ?: rings.joinToString(". ") { "${it.name} ${it.shown ?: it.value?.let(::amount) ?: "–"}" }
     val low = node.prominence == Navree.Prominence.LOW
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (!low) ChartHeading(node.title, node.hint)
+        // The rings keep to the width of their words, so what stands beside them keeps the rest of the line.
+        if (!low) ChartHeading(node.title, node.hint, fill = false)
         val dial: @Composable () -> Unit = {
             Box(Modifier.size(diameter.dp).clearAndSetSemantics { contentDescription = said }, contentAlignment = Alignment.Center) {
                 Canvas(Modifier.fillMaxSize()) {
@@ -349,12 +362,13 @@ internal fun RingsView(node: Navree.Rings, modifier: Modifier = Modifier) {
         if (node.legend && !low) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 dial()
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // The legend is as wide as its words, so what stands beside the rings keeps the rest of the line.
+                Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     rings.forEachIndexed { index, ring ->
                         Column {
                             Text(ring.name, style = MaterialTheme.typography.labelLarge, color = inks[index].mark)
                             Text(
-                                listOfNotNull("${ring.shown ?: ring.value?.let(::amount) ?: "–"}/${amount(ring.max)}", ring.unit).joinToString(" "),
+                                BidiRules.amount(listOfNotNull("${ring.shown ?: ring.value?.let(::amount) ?: "–"}/${amount(ring.max)}", ring.unit).joinToString(" ")),
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             ring.value?.let { value ->
@@ -438,9 +452,11 @@ internal fun HealthGaugeView(node: Navree.Gauge, modifier: Modifier = Modifier) 
 
 /**
  * The day clock: 24 hours round a dial, midnight at the top, each hour a
- * bar outwards as long as how much happened in it, in its category's hue;
- * the hour that is now outlined, the moments of the day marked outside, the
- * day's total in the middle.
+ * bar outwards as long as how much happened in it, in its category's hue.
+ * The four quarters are named outside the dial in the person's way of
+ * writing the hour, the day's moments stand on one line round the bars at
+ * their hour, and the hour that is now is the bar with a rim and a dot
+ * inside the dial. The day's total is in the middle.
  */
 @Composable
 internal fun DayClockView(node: Navree.DayClock, modifier: Modifier = Modifier) {
@@ -449,55 +465,87 @@ internal fun DayClockView(node: Navree.DayClock, modifier: Modifier = Modifier) 
     val base = inkOf(node.colour, Navree.Hue.ACCENT)
     val keyInks = node.key.mapIndexed { index, category -> inkOf(category.colour, SLOTS[index % SLOTS.size]) }
     val momentInks = node.moments.map { inkOf(it.colour, Navree.Hue.NEUTRAL) }
-    val quiet = MaterialTheme.colorScheme.outlineVariant
-    val ring = MaterialTheme.colorScheme.surfaceContainerHighest
-    val outline = MaterialTheme.colorScheme.onSurface
+    val scheme = MaterialTheme.colorScheme
+    val quiet = scheme.outlineVariant
+    val ring = scheme.surfaceContainerHighest
+    val now = scheme.onSurface
+    val words = scheme.onSurfaceVariant
+    val card = scheme.surfaceContainerLow
     val growth = grown(1f)
     val said = node.summary ?: listOfNotNull(node.title, node.shown?.let { listOfNotNull(it, node.unit).joinToString(" ") }).joinToString(": ")
-    val times = remember { DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT) }
+    val context = LocalContext.current
+    val is24 = remember(context) { android.text.format.DateFormat.is24HourFormat(context) }
+    val locale = remember { Locale.getDefault() }
+    val measurer = rememberTextMeasurer()
+    val quarterStyle = MaterialTheme.typography.labelSmall
+    val valueStyle = MaterialTheme.typography.headlineMedium
+    val unitStyle = MaterialTheme.typography.labelMedium
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         ChartHeading(node.title, node.hint)
-        Box(Modifier.size((232f * scale.coerceIn(1f, 1.4f)).dp).clearAndSetSemantics { contentDescription = said }, contentAlignment = Alignment.Center) {
+        Box(Modifier.widthIn(max = 300.dp).fillMaxWidth().aspectRatio(1f).clearAndSetSemantics { contentDescription = said }) {
             Canvas(Modifier.fillMaxSize()) {
-                val outer = size.minDimension / 2f - 10.dp.toPx()
-                val inner = outer * 0.58f
+                val dial = ClockRules.dial(size.minDimension / 2f / density, scale)
+                val outer = dial.outer.dp.toPx()
+                val inner = dial.inner.dp.toPx()
+                val line = dial.moments.dp.toPx()
                 val c = center
-                val width = (2f * Math.PI.toFloat() * inner / 24f) * 0.62f
+                val width = ClockRules.barDp(dial.inner).dp.toPx()
+                fun direction(hours: Double): Offset {
+                    val angle = Math.toRadians(ClockRules.angle(hours).toDouble())
+                    return Offset(cos(angle).toFloat(), sin(angle).toFloat())
+                }
                 drawCircle(ring, inner - width * 0.9f, c, style = Stroke(1.dp.toPx()))
+                // The one line the day's moments stand on.
+                if (node.moments.isNotEmpty()) drawCircle(quiet, line, c, style = Stroke(1.dp.toPx()))
                 node.hours.take(24).forEachIndexed { hour, h ->
-                    val angle = Math.toRadians(ClockRules.angle(hour + 0.5).toDouble())
-                    val dir = Offset(cos(angle).toFloat(), sin(angle).toFloat())
+                    val dir = direction(hour + 0.5)
                     val reach = ClockRules.reach(h, most)
                     val colour = h.category?.toInt()?.let { keyInks.getOrNull(it)?.mark } ?: base.mark
                     if (reach == null || h.value == null && h.level == null) {
                         drawCircle(quiet, width * 0.22f, c + dir * inner)
                     } else {
                         val end = inner + (outer - inner) * (reach * growth).coerceAtLeast(0.04f)
+                        if (node.now == hour) {
+                            // Now: the bar with a rim of the text's own colour, and a dot inside the dial at its hour.
+                            drawLine(now, c + dir * inner, c + dir * end, strokeWidth = width + 4.dp.toPx(), cap = StrokeCap.Round)
+                        }
                         drawLine(if (reach == 0f) quiet else colour, c + dir * inner, c + dir * end, strokeWidth = width, cap = StrokeCap.Round)
                     }
-                    if (node.now == hour) {
-                        // Now: a short hand just outside the dial, at the hour.
-                        drawLine(outline, c + dir * (outer + 3.dp.toPx()), c + dir * (outer + 9.dp.toPx()), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
-                    }
+                    if (node.now == hour) drawCircle(now, 3.dp.toPx(), c + dir * (inner - width * 0.9f - 8.dp.toPx()))
                 }
                 node.moments.forEachIndexed { index, moment ->
-                    val angle = Math.toRadians(ClockRules.angle(moment.at).toDouble())
-                    val dir = Offset(cos(angle).toFloat(), sin(angle).toFloat())
-                    drawCircle(momentInks[index].mark, 4.dp.toPx(), c + dir * (outer + 6.dp.toPx()))
+                    val at = c + direction(moment.at) * line
+                    drawCircle(card, 8.dp.toPx(), at)
+                    drawCircle(momentInks[index].mark, 5.dp.toPx(), at)
                 }
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                node.shown?.let { Text(it, style = MaterialTheme.typography.headlineMedium, maxLines = 1) }
-                (node.unit ?: node.label)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                // The quarters, named outside the moments' line, each with its near edge at the same distance.
+                val labelStyle = quarterStyle.copy(color = words, fontSize = ClockRules.cappedSp(quarterStyle.fontSize.value, scale).sp)
+                for (quarter in ClockRules.QUARTERS) {
+                    val text = measurer.measure(ClockRules.quarterLabel(quarter, is24, locale), labelStyle)
+                    val dir = direction(quarter.toDouble())
+                    val middle = c + dir * dial.labelEdge.dp.toPx() + Offset(dir.x * text.size.width / 2f, dir.y * text.size.height / 2f)
+                    drawText(text, topLeft = Offset(middle.x - text.size.width / 2f, middle.y - text.size.height / 2f))
+                }
+                // The day's total in the hole, as large as it can be without touching the bars.
+                node.shown?.let { shown ->
+                    val hole = 2f * (inner - width * 0.9f) / density
+                    val value = measurer.measure(shown, valueStyle.copy(color = scheme.onSurface, fontSize = ClockRules.centreSp(hole, shown.length, valueStyle.fontSize.value, scale).sp))
+                    val unit = (node.unit ?: node.label)?.let {
+                        measurer.measure(it, unitStyle.copy(color = words, fontSize = ClockRules.centreSp(hole, it.length + 2, unitStyle.fontSize.value, scale).sp))
+                    }
+                    val total = value.size.height + (unit?.size?.height ?: 0)
+                    var top = c.y - total / 2f
+                    drawText(value, topLeft = Offset(c.x - value.size.width / 2f, top))
+                    top += value.size.height
+                    unit?.let { drawText(it, topLeft = Offset(c.x - it.size.width / 2f, top)) }
+                }
             }
         }
         Key(node.key.mapIndexed { index, category -> keyInks[index].mark to category.name })
-        if (node.moments.isNotEmpty()) {
-            Key(
-                // A moment's name is the page's words, its time among them.
-                node.moments.mapIndexed { index, moment -> momentInks[index].mark to moment.name },
-            )
-        }
+        val moments = node.moments.mapIndexed { index, moment -> momentInks[index].mark to moment.name }
+        // Now is told in the key too: the dot inside the dial.
+        val marked = if (node.now != null) moments + (now to stringResource(R.string.navree_now)) else moments
+        if (marked.isNotEmpty()) Key(marked)
     }
 }
 

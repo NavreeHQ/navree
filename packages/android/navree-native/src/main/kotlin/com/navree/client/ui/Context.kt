@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -33,6 +35,9 @@ internal class Ui(
     val image: suspend (String) -> ByteArray?,
     val snackbars: SnackbarHostState,
 ) {
+    /** The cards on screens that zoom into what they open: a screen opened from one of them is drawn growing out of it. */
+    val zoomCards = HashSet<String>()
+
     /** A destructive action waiting for its answer: the client's one question, in the action's own words. */
     val asking = mutableStateOf<Pair<Place, Navree.Button>?>(null)
 
@@ -106,6 +111,27 @@ internal fun rememberWindow(): WindowInfo {
     val size = LocalWindowInfo.current.containerDpSize
     val scale = LocalDensity.current.fontScale
     return WindowInfo(size.width.value.roundToInt(), size.height.value.roundToInt(), scale)
+}
+
+/**
+ * The width in dp the content being drawn has between its edges, as far as it
+ * is known before the content is laid out; 0 where it is not known. Parts
+ * that lay themselves out by their width (a grid, a stack that turns) read it
+ * instead of measuring, so the line they stand in can be made as tall as its
+ * tallest part.
+ */
+internal val LocalRoom = compositionLocalOf { 0f }
+
+/** The width of the pane a screen is drawn in, in dp; 0 outside a screen. */
+internal val LocalPane = compositionLocalOf { 0f }
+
+/** The widest the one column of the screen is, in dp. */
+internal val LocalColumn = compositionLocalOf { ContentRules.CONTENT_MOST_DP }
+
+/** Says how wide the content under it is, when that is known. */
+@Composable
+internal fun Roomed(roomDp: Float, content: @Composable () -> Unit) {
+    if (roomDp > 0f) CompositionLocalProvider(LocalRoom provides roomDp) { content() } else content()
 }
 
 /**

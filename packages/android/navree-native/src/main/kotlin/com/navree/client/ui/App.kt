@@ -513,32 +513,47 @@ private fun Moving(
 
     Box(Modifier.fillMaxSize()) {
         if (pulled > 0f && screens.size > 1) host(screens[screens.size - 2], screens.size - 2)
-        AnimatedContent(
-            targetState = Front(group, top.id),
-            transitionSpec = { transition(initialState, targetState, rtl) },
-            modifier = Modifier.fillMaxSize().graphicsLayer {
-                // The screen in front shrinks a little under the finger, as the system's own screens do.
-                val scale = 1f - 0.1f * pulled
-                scaleX = scale
-                scaleY = scale
-                shape = RoundedCornerShape((28f * pulled).dp)
-                clip = pulled > 0f
-            },
-            label = "screens",
-        ) { shown ->
-            val (screen, index) = known[shown.id]?.let { (old, at) -> (ui.driver.screens[old.id] ?: old) to at } ?: (top to screens.lastIndex)
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) { host(screen, index) }
+        ZoomLayout { zoomScope ->
+            AnimatedContent(
+                targetState = Front(group, top.id),
+                transitionSpec = { transition(initialState, targetState, rtl, zooms = { id -> opensByZoom(ui, id) }) },
+                modifier = Modifier.fillMaxSize().graphicsLayer {
+                    // The screen in front shrinks a little under the finger, as the system's own screens do.
+                    val scale = 1f - 0.1f * pulled
+                    scaleX = scale
+                    scaleY = scale
+                    shape = RoundedCornerShape((28f * pulled).dp)
+                    clip = pulled > 0f
+                },
+                label = "screens",
+            ) { shown ->
+                val (screen, index) = known[shown.id]?.let { (old, at) -> (ui.driver.screens[old.id] ?: old) to at } ?: (top to screens.lastIndex)
+                val zoom = Zoom(zoomScope, this)
+                // A screen opened from a card that zooms grows out of that card.
+                val from = screen.from?.takeIf { it in ui.zoomCards }
+                CompositionLocalProvider(LocalZoom provides zoom) {
+                    Surface(
+                        (if (from != null) zoomBounds(zoom, from) else Modifier).fillMaxSize(),
+                        color = MaterialTheme.colorScheme.surface,
+                    ) { host(screen, index) }
+                }
+            }
         }
     }
 }
 
-private fun transition(from: Front, to: Front, rtl: Boolean): ContentTransform {
+/** Whether the screen with this id was opened from a card that zooms into it. */
+private fun opensByZoom(ui: Ui, id: Long): Boolean = ui.driver.screens[id]?.from?.let { it in ui.zoomCards } == true
+
+private fun transition(from: Front, to: Front, rtl: Boolean, zooms: (Long) -> Boolean = { false }): ContentTransform {
     val fade = tween<Float>(durationMillis = 250)
     // "The end" is the right edge, or the left one where text runs right to left.
     val end = if (rtl) -1 else 1
     return when {
         // Another destination: one fades out, the next fades in.
         from.group != to.group -> fadeIn(tween(200, delayMillis = 90)) togetherWith fadeOut(tween(90))
+        // A screen that grows out of its card, or goes back into it: the shared bounds move, the rest fades.
+        (to.id > from.id && zooms(to.id)) || (to.id < from.id && zooms(from.id)) -> fadeIn(tween(200)) togetherWith fadeOut(tween(200))
         // Deeper: the new screen comes from the end.
         to.id > from.id -> (slideInHorizontally(tween(300)) { end * it / 8 } + fadeIn(fade)) togetherWith fadeOut(tween(120))
         // Back: the old screen leaves to the end.

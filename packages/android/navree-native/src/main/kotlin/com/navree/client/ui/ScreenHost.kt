@@ -294,8 +294,13 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
                 }
                 val floating = (fab != null && plan.fabPlace == FabPlace.BottomEnd) || bars.isNotEmpty()
                 val bottom = padding.calculateBottomPadding() + if (floating) 88.dp else 16.dp
+                // The screen's content stands in one column: the same start edge and the same widest width for everything in it.
+                val column = ContentRules.columnMostDp(cardsSideBySide(items))
+                val pane = maxWidth.value
                 val body: @Composable () -> Unit = {
-                    Body(items, place.copy(omit = barSubmit), list, PaddingValues(top = 8.dp, bottom = bottom))
+                    CompositionLocalProvider(LocalPane provides pane, LocalColumn provides column) {
+                        Body(items, place.copy(omit = barSubmit), list, PaddingValues(top = 8.dp, bottom = bottom))
+                    }
                 }
                 if (plan.pullToRefresh) {
                     PullToRefreshBox(isRefreshing = view.refreshing, onRefresh = { ui.send(Events.refresh(view.id)) }, modifier = Modifier.fillMaxSize()) { body() }
@@ -340,7 +345,10 @@ internal fun Body(blocks: List<Block>, place: Place, state: LazyListState, paddi
 @Composable
 private fun LazyItemScope.BlockView(block: Block, place: Place) {
     val ui = LocalUi.current
-    val margin = ContentRules.marginDp(ui.window).dp
+    val marginDp = ContentRules.marginDp(ui.window)
+    val margin = marginDp.dp
+    val column = LocalColumn.current
+    val pane = LocalPane.current
     when (block) {
         is Block.Single -> {
             val inner = place.copy(form = block.form ?: place.form)
@@ -349,22 +357,24 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
             val most = when {
                 node is Navree.Table -> ContentRules.TABLE_MOST_DP
                 block.form != null -> FormRules.FORM_MOST_DP
-                else -> ContentRules.CONTENT_MOST_DP
+                else -> column
             }
-            Box(Modifier.readable(most).padding(horizontal = margin, vertical = if (node is Navree.Field) 8.dp else 0.dp)) {
-                // A form's own button under its fields sits at the form's end, as wide as its words.
-                if (node is Navree.Button && block.form != null) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { NodeView(node, inner) }
-                } else {
-                    NodeView(node, inner)
+            Roomed(ContentRules.contentDp(pane, most, marginDp)) {
+                Box(Modifier.readable(most).padding(horizontal = margin, vertical = if (node is Navree.Field) 8.dp else 0.dp)) {
+                    // A form's own button under its fields sits at the form's end, as wide as its words.
+                    if (node is Navree.Button && block.form != null) {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { NodeView(node, inner) }
+                    } else {
+                        NodeView(node, inner)
+                    }
                 }
             }
         }
         is Block.Item -> {
             val inner = place.copy(form = block.form ?: place.form)
             when (val node = block.node) {
-                is Navree.Row -> Box(if (block.group == Group.None) Modifier.readable() else Modifier) { RowView(node, inner, block.group) }
-                is Navree.FeedRow -> Box(Modifier.readable()) { FeedRowView(node, inner) }
+                is Navree.Row -> Box(if (block.group == Group.None) Modifier.readable(column) else Modifier) { RowView(node, inner, block.group) }
+                is Navree.FeedRow -> Box(Modifier.readable(column)) { FeedRowView(node, inner) }
                 is Navree.Field -> if (block.group == Group.None) {
                     Box(Modifier.readable(FormRules.FORM_MOST_DP)) { FieldView(node, inner, asItem = true) }
                 } else {
@@ -373,8 +383,8 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
                 else -> NodeView(node, inner)
             }
         }
-        is Block.TableItem -> Box(Modifier.readable()) { TableItemView(block.table, block.row, place.copy(form = block.form ?: place.form)) }
-        is Block.Header -> Column(Modifier.readable().padding(horizontal = margin).padding(top = 16.dp, bottom = 8.dp)) {
+        is Block.TableItem -> Box(Modifier.readable(column)) { TableItemView(block.table, block.row, place.copy(form = block.form ?: place.form)) }
+        is Block.Header -> Column(Modifier.readable(column).padding(horizontal = margin).padding(top = 16.dp, bottom = 8.dp)) {
             Text(block.text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.semantics { heading() })
             block.subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
@@ -407,14 +417,19 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
                 }
             }
         }
-        is Block.Cards -> Row(
-            Modifier.readable(ContentRules.TABLE_MOST_DP).padding(horizontal = margin)
-                .then(if (block.nodes.all(::measuresAhead)) Modifier.height(IntrinsicSize.Min) else Modifier),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            val inner = place.copy(form = block.form ?: place.form)
-            for (node in block.nodes) Box(Modifier.weight(1f).fillMaxHeight()) { NodeView(node, inner, Modifier.fillMaxHeight()) }
-            repeat(block.columns - block.nodes.size) { Spacer(Modifier.weight(1f)) }
+        is Block.Cards -> {
+            val content = ContentRules.contentDp(pane, column, marginDp)
+            // Where the room is known, the cards of a line are as tall as the tallest of them.
+            val even = content > 0f && block.nodes.all(::measuresAhead)
+            Row(
+                Modifier.readable(column).padding(horizontal = margin).then(if (even) Modifier.height(IntrinsicSize.Min) else Modifier),
+                horizontalArrangement = Arrangement.spacedBy(ContentRules.CARD_GAP_DP.dp),
+            ) {
+                val inner = place.copy(form = block.form ?: place.form)
+                val width = if (content > 0f) ContentRules.cardWidthDp(content, block.columns) else 0f
+                for (node in block.nodes) Box(Modifier.weight(1f).fillMaxHeight()) { Roomed(width) { NodeView(node, inner, Modifier.fillMaxHeight()) } }
+                repeat(block.columns - block.nodes.size) { Spacer(Modifier.weight(1f)) }
+            }
         }
     }
 }

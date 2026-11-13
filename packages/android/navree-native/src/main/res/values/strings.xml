@@ -76,6 +76,7 @@
     <string name="navree_next_day">Next day</string>
     <string name="navree_choose_day">Choose a day</string>
     <string name="navree_today">Today</string>
+    <string name="navree_now">Now</string>
     <string name="navree_drag_handle">Reorder</string>
     <string name="navree_move_up">Move up</string>
     <string name="navree_move_down">Move down</string>

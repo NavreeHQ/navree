@@ -232,7 +232,29 @@ With nothing opened, the list has the window.
   Material makes its own, from fixed hues turned towards the seed.
 - A step of the page's spacing scale is 4 dp, Material's grid. A screen's side margin is 16 dp on a compact
   window and 24 dp on wider ones.
-- A single column of content is at most 840 dp wide.
+- A screen's content stands in one column, in the middle of its pane, and
+  everything in it (words, grids, cards, rows) shares the column's start
+  edge and its widest width. The column is at most 840 dp wide, and 1,240 dp
+  where some cards stand side by side. Forms are 560 dp, tables 1,440 dp.
+- Cards stand side by side from 840 dp of pane (two; three from 1,200 dp, fewer
+  at larger text). A line with fewer cards than columns (a card alone, the
+  last of a run) stretches its cards across the line: no cell stands empty.
+  The cards of a line are as tall as the tallest wherever every part of them
+  can say its height before it is laid out.
+- A line of parts across (a horizontal stack) is a column when its parts
+  would be squeezed below the least width each keeps: a ring its diameter,
+  rings with a legend their dial and legend, a grid one column, a chart 160 dp.
+  Parts that grow share what the others leave.
+- A grid of equal cards (five pillars in three columns) leaves its last line
+  start-aligned, as Material's own grids do; a screen that wants all five at
+  once says so with a carousel, with fewer columns, or by naming the number
+  of columns (`cols`).
+- Amounts joined to their unit in one string of the client's own are one run
+  read left to right, so "540/600 kcal" does not turn into "kcal 540/600" in a
+  right to left line.
+- A card that asks for `transition: zoom` shares its bounds with the screen it
+  opens (Material's container transform, drawn by shared bounds); that screen
+  says it was opened from the card, and goes back into it.
 
 ## Theme (`../theme`)
 

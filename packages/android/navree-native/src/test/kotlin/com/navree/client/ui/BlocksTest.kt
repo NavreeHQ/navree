@@ -17,6 +17,27 @@ class BlocksTest {
     private val orders = Fixtures.screen("store-demo/orders.json")
 
     @Test
+    fun cards_side_by_side_on_a_wide_window_stand_in_a_wider_column_and_a_card_alone_spans_it() {
+        val designed = Fixtures.screen("screen-designed-health.json")
+        val wide = blocks(designed.body, view(designed), widthDp = 1060)
+        // The score card has no partner, so it spans the line; the day and the activity share one.
+        assertEquals(listOf(1, 2), wide.filterIsInstance<Block.Cards>().map { it.columns })
+        assertTrue(cardsSideBySide(wide))
+        val phone = blocks(designed.body, view(designed), widthDp = 412)
+        assertTrue("one column on a phone: no line of cards", phone.none { it is Block.Cards })
+        assertFalse(cardsSideBySide(phone))
+    }
+
+    @Test
+    fun a_line_can_be_made_as_tall_as_its_tallest_unless_a_part_measures_while_it_lays_out() {
+        assertTrue("a grid knows its width from the room it is given", measuresAhead(Navree.Card(children = listOf(Navree.Grid(children = listOf(Navree.Text(value = "a")))))))
+        assertTrue(measuresAhead(Navree.Card(children = listOf(Navree.Meter()))))
+        assertTrue(measuresAhead(Navree.Card(children = listOf(Navree.Stack(wide = Navree.Axis.HORIZONTAL)))))
+        assertFalse(measuresAhead(Navree.Card(children = listOf(Navree.Carousel()))))
+        assertFalse(measuresAhead(Navree.Card(children = listOf(Navree.Tabs()))))
+    }
+
+    @Test
     fun the_real_orders_table_is_its_filters_then_a_row_a_record_then_the_next_page() {
         val flat = blocks(orders.body, view(orders), widthDp = 412)
         assertTrue(flat.first { it !is Block.Space } is Block.Filters)

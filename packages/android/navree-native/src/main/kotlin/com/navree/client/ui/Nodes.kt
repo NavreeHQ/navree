@@ -515,7 +515,7 @@ private fun SectionView(node: Navree.Section, place: Place, modifier: Modifier) 
         Card(
             modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        ) { Box(Modifier.padding(16.dp)) { content() } }
+        ) { Box(Modifier.padding(16.dp)) { Roomed((LocalRoom.current - 32f).takeIf { LocalRoom.current > 0f } ?: 0f) { content() } } }
     } else {
         Box(modifier.fillMaxWidth()) { content() }
     }
@@ -523,21 +523,30 @@ private fun SectionView(node: Navree.Section, place: Place, modifier: Modifier) 
 
 @Composable
 private fun GridView(node: Navree.Grid, place: Place, modifier: Modifier) {
+    val room = LocalRoom.current
+    if (room > 0f) {
+        GridLaid(node, place, modifier.fillMaxWidth(), room)
+    } else {
+        BoxWithConstraints(modifier.fillMaxWidth()) { GridLaid(node, place, Modifier, maxWidth.value) }
+    }
+}
+
+@Composable
+private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthDp: Float) {
     val gap = ContentRules.gap(node.gap)
-    BoxWithConstraints(modifier.fillMaxWidth()) {
-        val columns = ListRules.gridColumns(maxWidth.value.toInt(), node.min, gap, node.cols, LocalUi.current.window.fontScale)
-        val shown = node.children.filter { inFlow(it, place.screen) }
-        Column(verticalArrangement = Arrangement.spacedBy(gap.dp)) {
-            for (line in shown.chunked(columns)) {
-                // The parts of a line are as tall as the tallest of them, where they can say how tall that is.
-                val even = line.all(::measuresAhead)
-                Row(if (even) Modifier.height(IntrinsicSize.Min) else Modifier, horizontalArrangement = Arrangement.spacedBy(gap.dp)) {
-                    for (child in line) {
-                        Box(Modifier.weight(1f).fillMaxHeight()) { NodeView(child, place, Modifier.fillMaxHeight()) }
-                    }
-                    // An unfinished last line keeps its columns the width of the others.
-                    repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
+    val columns = ListRules.gridColumns(widthDp.toInt(), node.min, gap, node.cols, LocalUi.current.window.fontScale)
+    val shown = node.children.filter { inFlow(it, place.screen) }
+    val cell = ContentRules.cardWidthDp(widthDp, columns, gap)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(gap.dp)) {
+        for (line in shown.chunked(columns)) {
+            // The parts of a line are as tall as the tallest of them, where they can say how tall that is.
+            val even = line.all(::measuresAhead)
+            Row(if (even) Modifier.height(IntrinsicSize.Min) else Modifier, horizontalArrangement = Arrangement.spacedBy(gap.dp)) {
+                for (child in line) {
+                    Box(Modifier.weight(1f).fillMaxHeight()) { Roomed(cell) { NodeView(child, place, Modifier.fillMaxHeight()) } }
                 }
+                // An unfinished last line keeps its columns the width of the others.
+                repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
@@ -547,26 +556,37 @@ private fun GridView(node: Navree.Grid, place: Place, modifier: Modifier) {
  * A stack inside other content. Across, its parts wrap when the page lets
  * them, and "between" puts the first at the start and the last at the end.
  * A stack with a wide axis turns in a wide room, its parts keeping their
- * state; a part that grows takes the room left; `pad` is steps all round.
+ * state; a line whose parts would be squeezed below their least width is
+ * laid as a column; a part that grows takes the room left; `pad` is steps
+ * all round.
  */
 @Composable
 private fun StackView(node: Navree.Stack, place: Place, modifier: Modifier) {
     val shown = node.children.filter { it !== place.omit && inFlow(it, place.screen) }
     if (shown.isEmpty()) return
     val padded = if (node.pad > 0) modifier.padding((node.pad * CompositionRules.STEP_DP).dp) else modifier
-    if (node.wide == null || node.wide == node.axis) {
-        StackLaid(node, node.axis, shown, place, padded)
+    val fontScale = LocalUi.current.window.fontScale
+    val room = LocalRoom.current
+    val inside = (room - 2 * node.pad * CompositionRules.STEP_DP).coerceAtLeast(0f)
+    if (!CompositionRules.turns(node, fontScale)) {
+        StackLaid(node, node.axis, shown, place, padded, inside)
         return
     }
-    BoxWithConstraints(padded) {
-        val axis = CompositionRules.axis(node, maxWidth.value)
-        StackLaid(node, axis, shown, place, Modifier)
+    val gap = ContentRules.gap(node.gap).toFloat()
+    if (room > 0f) {
+        StackLaid(node, CompositionRules.laidAxis(node, shown, inside, gap, fontScale), shown, place, padded, inside)
+    } else {
+        BoxWithConstraints(padded) {
+            StackLaid(node, CompositionRules.laidAxis(node, shown, maxWidth.value, gap, fontScale), shown, place, Modifier, maxWidth.value)
+        }
     }
 }
 
+/** The stack laid along `axis`; `room` is the width it has in dp, 0 when that is not known. */
 @Composable
-private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.Node>, place: Place, modifier: Modifier) {
+private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.Node>, place: Place, modifier: Modifier, room: Float) {
     val gap = ContentRules.gap(node.gap).dp
+    val fontScale = LocalUi.current.window.fontScale
     if (axis == Navree.Axis.HORIZONTAL) {
         val across = when (node.justify) {
             Navree.Justify.BETWEEN -> if (shown.size > 1) Arrangement.SpaceBetween else Arrangement.Start
@@ -588,11 +608,20 @@ private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.
                 verticalArrangement = Arrangement.spacedBy(gap),
                 itemVerticalAlignment = upright,
             ) {
-                for (child in shown) NodeView(child, place)
+                Roomed(room) { for (child in shown) NodeView(child, place) }
             }
         } else {
             Row(modifier = if (wide) modifier.fillMaxWidth() else modifier, horizontalArrangement = across, verticalAlignment = upright) {
-                for (child in shown) NodeView(child, place, if (CompositionRules.grows(child)) Modifier.weight(1f) else Modifier)
+                for (child in shown) {
+                    val grows = CompositionRules.grows(child)
+                    // A part that grows has what is left of the line; one that keeps its size has that size.
+                    val own = when {
+                        room <= 0f -> 0f
+                        grows -> CompositionRules.roomLeftDp(room, shown, gap.value, fontScale)
+                        else -> CompositionRules.leastAcrossDp(child, fontScale).takeIf { it > 0f } ?: room
+                    }
+                    Roomed(own) { NodeView(child, place, if (grows) Modifier.weight(1f) else Modifier) }
+                }
             }
         }
     } else {
@@ -605,7 +634,7 @@ private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.
                 else -> Alignment.Start
             },
         ) {
-            for (child in shown) NodeView(child, place)
+            Roomed(room) { for (child in shown) NodeView(child, place) }
         }
     }
 }
@@ -620,13 +649,13 @@ private fun SplitView(node: Navree.Split, place: Place, modifier: Modifier) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
         if (maxWidth >= 840.dp) {
             Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                Box(Modifier.width(360.dp)) { NodeView(node.primary, place) }
+                Box(Modifier.width(360.dp)) { Roomed(360f) { NodeView(node.primary, place) } }
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceContainerLow,
                     shape = MaterialTheme.shapes.extraLarge,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Box(Modifier.padding(24.dp)) { NodeView(node.detail, place) }
+                    Box(Modifier.padding(24.dp)) { Roomed(maxWidth.value - 360f - 24f - 48f) { NodeView(node.detail, place) } }
                 }
             }
         } else {
