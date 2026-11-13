@@ -53,6 +53,18 @@ xcrun simctl bootstatus "$udid" -b >/dev/null
 xcrun simctl status_bar "$udid" override --time "09:41" --dataNetwork wifi --wifiMode active \
     --wifiBars 3 --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100 || true
 
+# A launch before the tests': the first launch of an app newly installed on a
+# simulator is slow (the system prepares its code), slow enough for XCTest's
+# first launch to time out. This one takes that cost, then the app is ended.
+app="$build/DerivedData/Build/Products/Debug-iphonesimulator/NavreeDemo.app"
+warm_up() {
+    xcrun simctl install "$1" "$app" || return 0
+    xcrun simctl launch "$1" com.navree.demo -NavreeRecorded YES >/dev/null || return 0
+    sleep "${WARM_UP_SECONDS:-30}"
+    xcrun simctl terminate "$1" com.navree.demo 2>/dev/null || true
+}
+warm_up "$udid"
+
 status=0
 for pass in $passes; do
     appearance=light
@@ -74,6 +86,7 @@ for pass in $passes; do
             xcrun simctl boot "$device" 2>/dev/null || true
             xcrun simctl bootstatus "$device" -b >/dev/null
             xcrun simctl status_bar "$device" override --time "09:41" --wifiBars 3 --batteryState charged --batteryLevel 100 || true
+            warm_up "$device"
             ;;
         *) echo "Unknown pass $pass" >&2; exit 1 ;;
     esac
