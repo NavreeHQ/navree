@@ -285,7 +285,7 @@ internal fun CalendarHeatmapView(node: Navree.CalendarHeatmap, modifier: Modifie
         val values = days.toMap()
         BoxWithConstraints(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = said }) {
             val gap = 3.dp
-            val side = ((maxWidth - 28.dp - gap * (weeks - 1)) / weeks).coerceIn(8.dp, 22.dp)
+            val side = ((maxWidth - 28.dp - gap * (weeks - 1)) / weeks).coerceIn(8.dp, 28.dp)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 // The months over the weeks they start in.
                 Row(Modifier.padding(start = 28.dp)) {

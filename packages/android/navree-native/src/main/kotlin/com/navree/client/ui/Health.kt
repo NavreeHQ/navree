@@ -514,12 +514,12 @@ internal fun DayClockView(node: Navree.DayClock, modifier: Modifier = Modifier) 
                     } else {
                         val end = inner + (outer - inner) * (reach * growth).coerceAtLeast(0.04f)
                         if (node.now == hour) {
-                            // Now: the bar with a rim of the text's own colour, and a dot inside the dial at its hour.
+                            // Now: the bar with a rim of the text's own colour, and a dot on the dial's inner line at its hour.
                             drawLine(now, c + dir * inner, c + dir * end, strokeWidth = width + 4.dp.toPx(), cap = StrokeCap.Round)
                         }
                         drawLine(if (reach == 0f) quiet else colour, c + dir * inner, c + dir * end, strokeWidth = width, cap = StrokeCap.Round)
                     }
-                    if (node.now == hour) drawCircle(now, 3.dp.toPx(), c + dir * (inner - width * 0.9f - 8.dp.toPx()))
+                    if (node.now == hour) drawCircle(now, 3.5.dp.toPx(), c + dir * (inner - width * 0.9f))
                 }
                 node.moments.forEachIndexed { index, moment ->
                     val at = c + direction(moment.at) * line
