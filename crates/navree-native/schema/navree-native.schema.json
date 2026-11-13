@@ -745,6 +745,18 @@
           "default": "medium",
           "x-since": 0
         },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "role": {
           "$ref": "#/$defs/Role",
           "default": "none",
@@ -9102,6 +9114,18 @@
         "prominence": {
           "$ref": "#/$defs/Prominence",
           "default": "medium",
+          "x-since": 0
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "x-since": 0
         },
         "role": {

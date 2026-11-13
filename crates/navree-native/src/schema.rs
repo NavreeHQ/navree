@@ -667,7 +667,7 @@ object!(Chart {} { id, kind, title, labels, series });
 object!(Code { text } { id, lang });
 object!(Button { label } {
     id, icon, icon_only, role, standard, prominence, undoable, ask, checked, one_of, disabled,
-    pending, action
+    reason, pending, action
 });
 object!(Question { title, confirm } { text, cancel });
 object!(Link { label, action } { id, children });
@@ -685,7 +685,7 @@ object!(NativeView { name } { id, props, alt });
 object!(WebRegion { html } { id });
 object!(Toolbar {} { id, items });
 object!(ToolbarItem { title, icon } {
-    id, standard, role, prominence, undoable, ask, disabled, action, menu
+    id, standard, role, prominence, undoable, ask, disabled, reason, action, menu
 });
 object!(Gauge { value, min, max } { id, label, shown, tone });
 names!(Direction { Up, Down, Flat });

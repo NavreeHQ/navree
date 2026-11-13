@@ -372,6 +372,7 @@ fn screen_detail() -> Envelope {
                         label: s("Resend confirmation"),
                         role: Role::Secondary,
                         disabled: true,
+                        reason: Some(s("It went out at 09:41. It can go again after 09:46.")),
                         ..Button::default()
                     }),
                 ],
@@ -1692,6 +1693,19 @@ fn screen_dashboard() -> Envelope {
                 action: Some(Action::Navigate {
                     href: s("/orders/new"),
                     present: Present::Sheet,
+                }),
+                ..ToolbarItem::default()
+            },
+            ToolbarItem {
+                title: s("Close the day"),
+                icon: icon("lock", "M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3"),
+                role: Role::Secondary,
+                disabled: true,
+                reason: Some(s("3 orders are still to be packed.")),
+                action: Some(Action::Request {
+                    method: Method::Post,
+                    href: s("/day/close"),
+                    fields: vec![pair("_csrf", "tok")],
                 }),
                 ..ToolbarItem::default()
             },

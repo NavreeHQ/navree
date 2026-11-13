@@ -38,6 +38,26 @@
             }
           },
           {
+            "title": "Close the day",
+            "icon": {
+              "name": "lock"
+            },
+            "role": "secondary",
+            "disabled": true,
+            "reason": "3 orders are still to be packed.",
+            "action": {
+              "t": "request",
+              "method": "post",
+              "href": "/day/close",
+              "fields": [
+                {
+                  "name": "_csrf",
+                  "value": "tok"
+                }
+              ]
+            }
+          },
+          {
             "title": "More",
             "icon": {
               "name": "ellipsis"
@@ -404,6 +424,11 @@
     "house": {
       "paths": [
         "M3 7l9-4 9 4v10l-9 4-9-4z"
+      ]
+    },
+    "lock": {
+      "paths": [
+        "M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3"
       ]
     },
     "package": {

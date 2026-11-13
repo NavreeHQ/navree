@@ -94,7 +94,8 @@
               "t": "button",
               "label": "Resend confirmation",
               "role": "secondary",
-              "disabled": true
+              "disabled": true,
+              "reason": "It went out at 09:41. It can go again after 09:46."
             }
           ]
         },

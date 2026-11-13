@@ -1487,6 +1487,13 @@ pub struct Button {
     /// Whether it can't be used now.
     #[serde(default, skip_serializing_if = "is_false")]
     pub disabled: bool,
+    /// Why it can't be used now, in the page's words: `It went out at 09:41. It
+    /// can go again after 09:46.`. Said only of a `disabled` button. A client
+    /// puts it where its system explains a control that does not respond (a
+    /// hint, a tip on long press, the control's description to assistive
+    /// technology), and never in place of the label.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
     /// Whether it is waiting for an answer.
     #[serde(default, skip_serializing_if = "is_false")]
     pub pending: bool,
@@ -1836,6 +1843,9 @@ pub struct ToolbarItem {
     /// Whether it can't be used now.
     #[serde(default, skip_serializing_if = "is_false")]
     pub disabled: bool,
+    /// Why it can't be used now, as a button's `reason`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
     /// What it does. An item with a menu opens the menu instead.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<Action>,
@@ -2114,6 +2124,29 @@ mod tests {
             )
         );
         assert_eq!(serde_json::from_str::<Node>(&json).unwrap(), node);
+    }
+
+    #[test]
+    fn a_disabled_control_may_say_why() {
+        let button: Node = serde_json::from_str(
+            r#"{"t":"button","label":"Resend confirmation","disabled":true,"reason":"It went out at 09:41."}"#,
+        )
+        .unwrap();
+        let Node::Button(button) = button else {
+            panic!("not a button");
+        };
+        assert!(button.disabled);
+        assert_eq!(button.reason.as_deref(), Some("It went out at 09:41."));
+        let item: Node = serde_json::from_str(
+            r#"{"t":"toolbar","items":[{"title":"Close the day","icon":{"name":"lock"},"disabled":true,"reason":"3 orders are still to be packed."}]}"#,
+        )
+        .unwrap();
+        let Node::Toolbar(toolbar) = item else {
+            panic!("not a toolbar");
+        };
+        assert_eq!(toolbar.items[0].reason.as_deref(), Some("3 orders are still to be packed."));
+        // A control that can be used says nothing of why it can't.
+        assert!(!serde_json::to_string(&Button::default()).unwrap().contains("reason"));
     }
 
     #[test]
