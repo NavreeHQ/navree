@@ -52,11 +52,34 @@ object Events {
     }
 
     /** A row of a table that can be chosen was ticked or cleared; without a row, every row. */
-    fun choose(screen: Long, table: String, row: String?, on: Boolean) = event("choose") {
+    fun choose(screen: Long, table: String, row: String?, on: Boolean, across: Boolean = false) = event("choose") {
         put("screen", screen)
         put("table", table)
         row?.let { put("row", it) }
         put("on", on)
+        if (across) put("across", true)
+    }
+
+    /** A tab of a set of tabs that has an id was chosen. */
+    fun tab(screen: Long, id: String, index: Int) = event("tab") {
+        put("screen", screen)
+        put("id", id)
+        put("index", index)
+    }
+
+    /** The answer to a `random` effect: the bytes as hex, two characters a byte. A secret: never logged. */
+    fun random(request: Long, hex: String) = event("random") {
+        put("request", request)
+        put("bytes", hex)
+    }
+
+    /** The system gave or changed this install's push token. The core registers it with the server. */
+    fun pushToken(token: String) = event("push_token") { put("token", token) }
+
+    /** The app starts again after the system ended it, with the snapshot it stored, in place of [start]. */
+    fun restore(snapshot: kotlinx.serialization.json.JsonElement) = buildJsonObject {
+        put("t", "restore")
+        put("snapshot", snapshot)
     }
 
     /** A row was dragged from one list to a place in another (or the same); `before` is the row it now stands before. */

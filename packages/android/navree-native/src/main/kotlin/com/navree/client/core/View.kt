@@ -322,6 +322,8 @@ data class ScreenView(
     val lists: Map<String, ListView> = emptyMap(),
     val focus: Focus? = null,
     val question: Question? = null,
+    /** The title of the page the screen last showed: for the bar while it has nothing to show. */
+    val title: String? = null,
 ) {
     val screen: Navree.Screen? get() = (content as? Content.Native)?.screen
 

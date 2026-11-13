@@ -18,9 +18,10 @@ import javax.crypto.spec.GCMParameterSpec
  * to the client; each is a file named by its SHA-256.
  *
  * The core empties it when the person changes or signs out (`cache_clear`).
+ * The snapshot of a launch is kept the same way, in a folder of its own.
  */
-class SealedCache(context: Context) {
-    private val folder = File(context.noBackupFilesDir, "navree-cache")
+class SealedCache(context: Context, name: String = "navree-cache") {
+    private val folder = File(context.noBackupFilesDir, name)
 
     fun read(key: String): String? = try {
         val file = file(key)

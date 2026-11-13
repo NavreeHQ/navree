@@ -44,6 +44,7 @@
     <string name="navree_notice_loading">Still loading. Try again in a moment.</string>
     <string name="navree_notice_fields">Some fields need your attention</string>
     <string name="navree_notice_loaded">More loaded</string>
+    <string name="navree_notice_second_step">One more step is needed to sign in. Sign in another way to finish.</string>
     <string name="navree_copied">Copied</string>
     <string name="navree_more_failed">Couldn\'t load more</string>
     <!-- The headline of the question a destructive action asks: the action's own words. -->

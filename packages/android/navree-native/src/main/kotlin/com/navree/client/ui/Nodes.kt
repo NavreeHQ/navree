@@ -575,6 +575,8 @@ private fun TabsView(node: Navree.Tabs, place: Place, modifier: Modifier) {
                             ui.act(place, Navree.Action.Navigate(href, Navree.Present.REPLACE))
                         } else {
                             chosen = index
+                            // Tabs with an id are the core's to keep: it fetches what the tab shows, and the tree says which is chosen.
+                            node.id?.let { ui.send(Events.tab(place.id, it, index)) }
                         }
                     },
                     text = { Text(item.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },

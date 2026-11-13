@@ -82,6 +82,12 @@ sealed interface Effect {
 
     data class Report(val what: String, val detail: String) : Effect
 
+    /** Secret bytes from the system's secure generator, answered at once and never logged. */
+    data class Random(val request: Long, val bytes: Int) : Effect
+
+    /** The person signed out: every cookie and all web storage of the app go, and the stored snapshot. */
+    data object ForgetSession : Effect
+
     data class Unknown(val t: String) : Effect
 
     companion object {
@@ -121,6 +127,8 @@ sealed interface Effect {
                 "stream_close" -> StreamClose(l("stream") ?: 0)
                 "exit" -> Exit
                 "report" -> Report(s("what") ?: "", s("detail") ?: "")
+                "random" -> Random(l("request") ?: 0, (l("bytes") ?: 48).toInt())
+                "forget_session" -> ForgetSession
                 else -> Unknown(t ?: "")
             }
         }

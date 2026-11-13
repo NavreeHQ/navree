@@ -147,5 +147,6 @@ internal fun noticeText(notice: Notice): String = stringResource(
         Notice.Copied -> R.string.navree_copied
         Notice.FieldsNeedAttention -> R.string.navree_notice_fields
         Notice.Loaded -> R.string.navree_notice_loaded
+        Notice.SecondStep -> R.string.navree_notice_second_step
     },
 )

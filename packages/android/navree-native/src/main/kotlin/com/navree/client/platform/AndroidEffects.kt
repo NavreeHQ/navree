@@ -13,6 +13,7 @@ import android.os.Looper
 import android.os.PersistableBundle
 import android.util.Log
 import android.view.HapticFeedbackConstants
+import android.webkit.WebStorage
 import androidx.activity.ComponentActivity
 import androidx.browser.customtabs.CustomTabsIntent
 import com.navree.client.BuildConfig
@@ -24,6 +25,7 @@ import com.navree.client.core.Events
 import com.navree.client.core.Notice
 import kotlinx.serialization.json.JsonObject
 import okhttp3.HttpUrl
+import java.security.SecureRandom
 
 /**
  * Carries out the core's effects with Android's own means. Effects that need
@@ -45,8 +47,12 @@ class AndroidEffects(
     private val streams = CoreStreams(http.client) { post(it) }
     private val cache = SealedCache(app)
     private val timers = HashMap<Long, Runnable>()
-    val devices = DeviceCalls(origin, googleClientId) { post(it) }
-    val pushes: PushRegistration? = push?.let { PushRegistration(http.client, origin, app.packageName, it) }
+    private val push = push
+    val devices = DeviceCalls(origin, googleClientId, pushes = push != null, tokenGranted = ::askToken) { post(it) }
+
+    /** What the core keeps for a launch the system ended: sealed, out of backups, gone at sign-out. */
+    val snapshots = SealedCache(app, "navree-snapshot")
+    private val random = SecureRandom()
 
     /** The activity in front, while there is one. */
     var activity: ComponentActivity? = null
@@ -59,7 +65,6 @@ class AndroidEffects(
     val caps: List<String> = buildList {
         addAll(listOf("clipboard", "open_url", "auth_session"))
         addAll(devices.features)
-        if (pushes != null) add("push")
     }
 
     private fun post(event: JsonObject) {
@@ -104,8 +109,37 @@ class AndroidEffects(
             is Effect.StreamClose -> streams.close(effect.stream)
             Effect.Exit -> activity?.finish()
             is Effect.Report -> if (BuildConfig.DEBUG) Log.w(TAG, "${effect.what}: ${effect.detail}")
+            // Answered at once, as the core asks; the bytes are a secret and are never logged.
+            is Effect.Random -> {
+                val bytes = ByteArray(maxOf(effect.bytes, 48))
+                random.nextBytes(bytes)
+                driver.send(Events.random(effect.request, bytes.joinToString("") { "%02x".format(it) }))
+                bytes.fill(0)
+            }
+            Effect.ForgetSession -> forget()
             is Effect.Unknown -> if (BuildConfig.DEBUG) Log.w(TAG, "an effect this build does not know: ${effect.t}")
         }
+    }
+
+    /**
+     * Asks the push service for this install's token and hands it to the
+     * core, which registers it with the server. At every launch, and when the
+     * person allows notifications.
+     */
+    fun askToken() {
+        val push = push ?: return
+        PushTokens.listener = { token -> post(Events.pushToken(token)) }
+        push.token { token -> token?.let { post(Events.pushToken(it)) } }
+    }
+
+    /**
+     * The person signed out: every cookie of the one store the web view
+     * shares, the web view's storage, and the stored snapshot go.
+     */
+    private fun forget() {
+        cookies.clear()
+        WebStorage.getInstance().deleteAllData()
+        Thread { snapshots.clear() }.start()
     }
 
     /** The app left the front: streams close (the core opens them again when it comes back). */
@@ -160,6 +194,8 @@ class AndroidEffects(
      */
     private fun signIn(effect: Effect.SignIn) {
         val context = activity ?: return post(Events.signInDone(null))
+        // The address carries the challenge and the state: opened exactly as it came. A
+        // session already open is replaced by this one.
         val builder = CustomTabsIntent.Builder().setShowTitle(true)
         if (effect.ephemeral) builder.setEphemeralBrowsingEnabled(true)
         try {

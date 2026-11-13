@@ -158,7 +158,13 @@ private fun BlankScreen(screen: ScreenView, info: HostInfo) {
     val ui = LocalUi.current
     Scaffold(
         topBar = {
-            if (info.context.chrome) TopAppBar(title = {}, navigationIcon = { NavigationIconView(wayOut(info), screen) })
+            // A screen brought back after the system ended the app has its title before its page.
+            if (info.context.chrome) {
+                TopAppBar(
+                    title = { screen.title?.let { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
+                    navigationIcon = { NavigationIconView(wayOut(info), screen) },
+                )
+            }
         },
         snackbarHost = { Snackbars(info) },
     ) { padding ->

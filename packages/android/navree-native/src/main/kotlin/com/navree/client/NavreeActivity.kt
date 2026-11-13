@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.navree.client.core.CoreJson
 import com.navree.client.core.Driver
 import com.navree.client.core.Engine
 import com.navree.client.core.Events
@@ -37,7 +38,13 @@ import okhttp3.Request
  * long as the app's task lives: a rotation or a fold makes a new activity,
  * not a new core.
  */
-class NavreeSession(application: Application, val config: NavreeConfig, origin: HttpUrl) : AndroidViewModel(application) {
+class NavreeSession(
+    application: Application,
+    val config: NavreeConfig,
+    origin: HttpUrl,
+    /** The system ended the app and now brings its task back: the stored snapshot is offered to the core. */
+    restoring: Boolean,
+) : AndroidViewModel(application) {
     private val engine = CoreEngine()
     val driver = Driver(engine)
 
@@ -49,9 +56,18 @@ class NavreeSession(application: Application, val config: NavreeConfig, origin: 
         driver.effects = effects
         val device = Device.of(application)
         environment = Triple(device.dark, device.textPercent, device.locale)
-        engine.core = Core(coreConfig(config, device, effects.caps).toString().encodeToByteArray())
-        driver.send(Events.start)
-        effects.pushes?.register()
+        engine.core = Core(coreConfig(config, device, effects.caps, application.packageName).toString().encodeToByteArray())
+        // The core checks the snapshot itself and starts plainly when it is not for this launch.
+        val snapshot = if (restoring) effects.snapshots.read(SNAPSHOT)?.let { runCatching { CoreJson.parseToJsonElement(it) }.getOrNull() } else null
+        if (snapshot == null) Thread { effects.snapshots.clear() }.start()
+        driver.send(if (snapshot != null) Events.restore(snapshot) else Events.start)
+        effects.askToken()
+    }
+
+    /** The app went to the background: what the core keeps for a launch the system may end is stored. */
+    fun keep() {
+        val snapshot = driver.snapshot() ?: return
+        Thread { effects.snapshots.write(SNAPSHOT, snapshot) }.start()
     }
 
     /** Fetches an image from the app's origin, with the session's cookies. */
@@ -78,9 +94,18 @@ class NavreeSession(application: Application, val config: NavreeConfig, origin: 
         override fun view(query: ByteArray): ByteArray = core?.view(query) ?: ByteArray(0)
     }
 
-    class Factory(private val application: Application, private val config: NavreeConfig, private val origin: HttpUrl) : ViewModelProvider.Factory {
+    class Factory(
+        private val application: Application,
+        private val config: NavreeConfig,
+        private val origin: HttpUrl,
+        private val restoring: Boolean,
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
-        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T = NavreeSession(application, config, origin) as T
+        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T = NavreeSession(application, config, origin, restoring) as T
+    }
+
+    private companion object {
+        const val SNAPSHOT = "snapshot"
     }
 }
 
@@ -106,7 +131,7 @@ open class NavreeActivity : ComponentActivity() {
             setContent { Unusable(config.origin) }
             return
         }
-        val session = ViewModelProvider(this, NavreeSession.Factory(application, config, origin))[NavreeSession::class.java]
+        val session = ViewModelProvider(this, NavreeSession.Factory(application, config, origin, restoring = savedInstanceState != null))[NavreeSession::class.java]
         this.session = session
         session.effects.activity = this
         if (savedInstanceState == null) opened(intent)
@@ -134,6 +159,7 @@ open class NavreeActivity : ComponentActivity() {
     override fun onStop() {
         session?.let {
             it.driver.send(Events.background)
+            it.keep()
             it.effects.stopped()
         }
         super.onStop()

@@ -101,6 +101,26 @@ class DriverTest {
     }
 
     @Test
+    fun rows_named_again_read_their_screen_again() {
+        val engine = Scripted(
+            ArrayDeque(listOf("""{"changed":[{"t":"nav"}],"effects":[]}""", """{"changed":[{"t":"redraw","screen":1,"id":"inbox","rows":["c-88"],"gone":[]}],"effects":[]}""")),
+            mapOf("nav" to nav, "screen" to screen),
+        )
+        val driver = Driver(engine)
+        driver.send(Events.start)
+        assertNull(driver.screens[1])
+        driver.send(Events.refresh(1))
+        assertEquals("Orders", driver.screens[1]!!.screen!!.title)
+    }
+
+    @Test
+    fun the_snapshot_is_handed_over_as_the_core_wrote_it() {
+        val driver = Driver(Scripted(ArrayDeque(), mapOf("snapshot" to """{"version":1,"screens":[]}""")))
+        assertEquals("""{"version":1,"screens":[]}""", driver.snapshot())
+        assertNull(Driver(Scripted(ArrayDeque(), emptyMap())).snapshot())
+    }
+
+    @Test
     fun a_form_change_replaces_only_that_form() {
         val form = """{"pending":true,"fields":{"f.q":{"name":"q","value":{"t":"text","text":"lotas"},"errors":["Too long"]}}}"""
         val engine = Scripted(
@@ -117,6 +137,15 @@ class DriverTest {
 }
 
 class EventsTest {
+    @Test
+    fun the_hand_over_push_tabs_and_a_restored_launch_take_the_cores_shapes() {
+        assertEquals("""{"t":"random","request":3,"bytes":"0a1b"}""", Events.random(3, "0a1b").toString())
+        assertEquals("""{"t":"push_token","token":"tok"}""", Events.pushToken("tok").toString())
+        assertEquals("""{"t":"tab","screen":1,"id":"parts","index":1}""", Events.tab(1, "parts", 1).toString())
+        assertEquals("""{"t":"restore","snapshot":{"v":1}}""", Events.restore(Json.parseToJsonElement("""{"v":1}""")).toString())
+        assertEquals("""{"t":"choose","screen":1,"table":"ledger","on":true,"across":true}""", Events.choose(1, "ledger", null, true, across = true).toString())
+    }
+
     @Test
     fun a_tap_carries_the_action_as_it_came_with_its_form_overlay_and_time() {
         val event = Events.act(3, Navree.Action.Submit(form = null), form = "refund", overlay = "refund", now = 1793990000)
@@ -190,9 +219,11 @@ class EffectTest {
         assertEquals(Effect.StreamOpen(1, "https://shop.example/broadcasting/stream?topics=orders", listOf("x-navree-native" to "1")), read("""{"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders","headers":[["x-navree-native","1"]]}"""))
         assertEquals(Effect.Exit, read("""{"t":"exit"}"""))
         assertEquals(Effect.Show(1), read("""{"t":"message","id":1,"tone":"success","text":"Refunded ₹10.00","action":"Undo"}"""))
-        val device = read("""{"t":"device","call":4,"device":{"f":"confirm","reason":"Refund ₹1,00,000"},"posts":true,"ticket":"t.1"}""") as Effect.Device
-        assertEquals("t.1", device.ticket)
+        val device = read("""{"t":"device","call":4,"device":{"f":"confirm","reason":"Refund ₹1,00,000"},"posts":true,"options":{"publicKey":{"challenge":"c1"}}}""") as Effect.Device
+        assertEquals("c1", device.options!!["publicKey"]!!.jsonObject["challenge"]!!.jsonPrimitive.content)
         assertTrue(device.posts)
+        assertEquals(Effect.Random(1, 48), read("""{"t":"random","request":1,"bytes":48}"""))
+        assertEquals(Effect.ForgetSession, read("""{"t":"forget_session"}"""))
         assertEquals(Effect.Unknown("hologram"), read("""{"t":"hologram"}"""))
     }
 }
@@ -214,6 +245,13 @@ class ConfigTest {
         assertEquals("Android's back goes to the first destination before it leaves", "true", config["back_to_first"]!!.jsonPrimitive.content)
         assertNull("a release build takes no plain http", config["loopback_http"])
         assertTrue("a part this build does not draw goes to the web view", config["undrawable"]!!.jsonArray.any { it.jsonPrimitive.content == "input:file" })
+        assertNull("no package name, no hand-over", config["app_id"])
+    }
+
+    @Test
+    fun the_package_name_is_the_apps_id() {
+        val config = coreConfig(NavreeConfig(origin = "https://store.example.in", name = "Store", seed = null), device, emptyList(), "in.example.store")
+        assertEquals("in.example.store", config["app_id"]!!.jsonPrimitive.content)
     }
 
     @Test

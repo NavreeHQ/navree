@@ -14,13 +14,14 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.navree.client.NavreeActivity
 import com.navree.client.platform.PushProvider
+import com.navree.client.platform.PushTokens
 
 /**
  * Push tokens from Firebase Cloud Messaging. The project's values come from
  * the app's resources (`navree_fcm_project_id`, `navree_fcm_application_id`,
  * `navree_fcm_api_key`, `navree_fcm_sender_id`), so no `google-services.json`
  * and no Gradle plugin are needed. With any of them empty there is no token,
- * and the app registers nothing.
+ * and nothing is registered.
  *
  * ```
  * class StoreActivity : NavreeActivity() {
@@ -63,8 +64,8 @@ class FcmPush(context: Context) : PushProvider {
  * Receives the messages the server's push channel sends. A message the
  * system shows by itself (the app is not in front) opens the app with its
  * `href` when tapped; one that arrives while the app is open is shown here,
- * with the same link. The token changing is the app's cue to register again,
- * which [com.navree.client.platform.PushRegistration] does at the next launch.
+ * with the same link. A token that changes goes to the runtime core of the app
+ * while it runs (and is asked for again at every launch); the core registers it.
  *
  * This module's manifest declares it, so an app that adds the module has it.
  */
@@ -95,7 +96,7 @@ class NavreeMessagingService : FirebaseMessagingService() {
     }
 
     override fun onNewToken(token: String) {
-        // Registered with the server at the next launch, with the session that is signed in then.
+        PushTokens.changed(token)
     }
 
     private fun launcher(): Class<*> =

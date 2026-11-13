@@ -112,11 +112,28 @@ const val LIBRARY_VERSION = "0.1.0"
  * The kinds and controls this client does not draw yet. A page that holds one
  * is shown whole in the web view, never with a hole.
  */
-val UNDRAWABLE: List<String> = listOf("web", "input:colour", "input:file")
+val UNDRAWABLE: List<String> = listOf(
+    "web",
+    "input:colour",
+    "input:file",
+    "ring",
+    "rings",
+    "day_clock",
+    "day_pager",
+    "meter",
+    "columns",
+    "strip",
+    "range",
+    "calendar_heatmap",
+    "matrix_heatmap",
+    "scatter",
+)
 
 /** The core's configuration for this app on this device. */
-fun coreConfig(config: NavreeConfig, device: Device, caps: List<String>): JsonObject = buildJsonObject {
+fun coreConfig(config: NavreeConfig, device: Device, caps: List<String>, appId: String? = null): JsonObject = buildJsonObject {
     put("origin", config.origin.trimEnd('/'))
+    // The package name: without it no sign-in is handed over and no push token registered.
+    appId?.let { put("app_id", it) }
     if (config.loopbackHttp) put("loopback_http", true)
     put(
         "client",

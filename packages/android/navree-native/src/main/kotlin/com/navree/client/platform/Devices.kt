@@ -1,11 +1,17 @@
 package com.navree.client.platform
 
+import android.Manifest
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.credentials.CreatePublicKeyCredentialRequest
 import androidx.credentials.CreatePublicKeyCredentialResponse
@@ -37,14 +43,18 @@ import okhttp3.HttpUrl
  * - `platform_sign_in`: Sign in with Google through Credential Manager, with the nonce the core asked for.
  * - `passkey`: creating or using a passkey through Credential Manager.
  * - `confirm`: a passkey over the challenge the core asked the server for.
+ * - `register_push` (when the app has a push service): the system's prompt to allow notifications.
  */
 class DeviceCalls(
     private val origin: HttpUrl,
     private val googleClientId: String?,
+    private val pushes: Boolean = false,
+    /** Notifications were allowed: the token is asked for and handed to the core. */
+    private val tokenGranted: () -> Unit = {},
     private val answer: (JsonObject) -> Unit,
 ) {
     /** The features this build carries out, by the protocol's names. */
-    val features: List<String> = listOf("share", "platform_sign_in", "passkey", "confirm")
+    val features: List<String> = listOf("share", "platform_sign_in", "passkey", "confirm") + if (pushes) listOf("push") else emptyList()
 
     private var sharing: Pair<Long, BroadcastReceiver>? = null
     private var chosen = false
@@ -61,6 +71,7 @@ class DeviceCalls(
             "platform_sign_in" -> signIn(activity, effect.call, call, effect.options)
             "passkey" -> passkey(activity, effect.call, call)
             "confirm" -> confirm(activity, effect.call, effect.options)
+            "register_push" -> if (pushes) allowNotifications(activity, effect.call) else answer(Events.deviceRefused(effect.call, "not_built"))
             else -> if (effect.posts) answer(Events.deviceRefused(effect.call, "not_built"))
         }
     }
@@ -173,6 +184,13 @@ class DeviceCalls(
         }
     }
 
+    private fun allowNotifications(activity: ComponentActivity, call: Long) {
+        allowNotificationsFor(activity) { granted ->
+            if (granted) tokenGranted()
+            answer(Events.deviceDone(call, listOf("granted" to granted.toString())))
+        }
+    }
+
     /**
      * A confirmation: the core has asked the server for the challenge of
      * this action; its answer is `options` (`{"publicKey": {...}}`). A passkey
@@ -181,8 +199,7 @@ class DeviceCalls(
      */
     private fun confirm(activity: ComponentActivity, call: Long, options: JsonObject?) {
         val publicKey = options?.get("publicKey") as? JsonObject
-        val challenge = (publicKey?.get("challenge") as? JsonPrimitive)?.contentOrNull
-        if (publicKey == null || challenge == null) {
+        if (publicKey?.get("challenge") == null) {
             answer(Events.deviceRefused(call, "failed"))
             return
         }
@@ -194,7 +211,7 @@ class DeviceCalls(
                 if (json == null) {
                     Events.deviceRefused(call, "failed")
                 } else {
-                    Events.deviceDone(call, listOf("challenge" to challenge, "method" to "passkey", "credential" to json))
+                    Events.deviceDone(call, listOf("credential" to json))
                 }
             } catch (_: GetCredentialCancellationException) {
                 Events.deviceRefused(call, "cancelled")
@@ -206,6 +223,29 @@ class DeviceCalls(
             answer(event)
         }
     }
+}
+
+/**
+ * The system's prompt to allow notifications, answered with `granted`; a no,
+ * now or earlier, is an answer too. Before Android 13 there is no prompt and
+ * the answer is whether the app's notifications are on.
+ */
+private fun DeviceCalls.allowNotificationsFor(activity: ComponentActivity, done: (Boolean) -> Unit) {
+    if (Build.VERSION.SDK_INT < 33) {
+        done(NotificationManagerCompat.from(activity).areNotificationsEnabled())
+        return
+    }
+    if (ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+        done(true)
+        return
+    }
+    var launcher: ActivityResultLauncher<String>? = null
+    val registered = activity.activityResultRegistry.register("navree.notifications", ActivityResultContracts.RequestPermission()) { granted ->
+        launcher?.unregister()
+        done(granted)
+    }
+    launcher = registered
+    registered.launch(Manifest.permission.POST_NOTIFICATIONS)
 }
 
 /** An address inside the origin, or null when `href` leads elsewhere. */

@@ -123,13 +123,19 @@ class Driver(private val engine: Engine) {
                 val current = screens[screen] ?: return readScreen(screen)
                 screens[screen] = current.copy(forms = if (view == null) current.forms - form else current.forms + (form to view))
             }
-            // New rows: the whole screen read again is always right.
-            "rows" -> l("screen")?.let(::readScreen)
+            // New rows, or rows named again: the whole screen read again is always right.
+            "rows", "redraw" -> l("screen")?.let(::readScreen)
             "messages" -> messages = query(part("messages"))
                 ?.let { decode(kotlinx.serialization.builtins.ListSerializer(Message.serializer()), it) }.orEmpty()
             else -> readAll()
         }
     }
+
+    /**
+     * What the core keeps for a launch after the system ended the app, as
+     * JSON text to store as it is, or null when there is nothing to keep.
+     */
+    fun snapshot(): String? = query(part("snapshot"))?.toString()
 
     private fun readScreen(id: Long) {
         val view = query(
