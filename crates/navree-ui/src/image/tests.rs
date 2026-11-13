@@ -544,3 +544,32 @@ fn two_drawings_in_one_page_share_no_id() {
         "{html}"
     );
 }
+
+// The picture's tag hashes the renderer with its version, so it moves at every release.
+// The ids of a drawing in a page are made from the drawing and its size alone: the
+// page's HTML, and the docs' previews written from it, are the same in every release.
+#[test]
+fn a_drawing_in_a_page_has_the_same_ids_in_every_release() {
+    let image = ChartImage::for_tile(&tile(TileSize::Medium));
+    let node: Node = tile(TileSize::Medium).into();
+    let html = crate::render(&image.svg_node(&node).unwrap());
+
+    let (pw, ph) = image.pixels();
+    let mut hash = Sha256::new();
+    hash.update(format!("{pw}x{ph}|").as_bytes());
+    hash.update(image.svg(&node).unwrap().as_bytes());
+    let own: String = hash.finalize()[..5]
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    assert!(html.contains(&format!(" id=\"i{own}-")), "{html}");
+
+    let from_tag: String = image
+        .etag(&node)
+        .unwrap()
+        .chars()
+        .filter(char::is_ascii_hexdigit)
+        .take(10)
+        .collect();
+    assert!(!html.contains(&from_tag), "{html}");
+}
