@@ -1,8 +1,8 @@
 /**
  * The documentation's navigation: sections in sidebar order, and each
  * section's pages in order. This file is the single source of truth for
- * the sidebar, previous/next links, the search index and the static pages
- * that get built.
+ * the sidebar (with the groups of a long section as a second level),
+ * previous/next links, the search index and the static pages that get built.
  *
  * A page `{ section: "basics", page: "validation" }` lives at
  * `content/docs/basics/validation.mdx` and is served at
@@ -24,8 +24,15 @@ export type DocsSection = {
   /** Page slugs in order: `content/docs/<section>/<page>.mdx`. */
   pages: string[];
   /**
-   * Headings for the section page: each group starts at the page `from` and
-   * runs to the next group. Pages before the first group have no heading.
+   * Groups that cut a long section into parts: each group starts at the page
+   * `from` and runs to the next group, so a group's pages are one run of
+   * `pages` and `from` values follow the order of `pages`. The sidebar shows
+   * each group as a second level (a heading that opens and closes its pages,
+   * the group with the current page open), the section's own page draws them
+   * as headings, and the page's breadcrumb names its group. Pages before the
+   * first group have no heading. Group titles are short, in sentence case,
+   * and unique within the section. A section of about eight pages or fewer
+   * needs no groups; a longer one should have them.
    */
   groups?: { title: string; from: string }[];
 };
@@ -100,20 +107,30 @@ export const sections: DocsSection[] = [
     title: "The basics",
     description: "Routes, requests, validation, list queries, responses, errors, middleware, logging and sessions: the parts every HTTP app uses.",
     pages: [
+      // Routing and requests
       "routing",
       "access-control",
       "middleware",
       "requests",
+      // Input
       "validation",
       "international-input",
-      "list-queries",
       "phone-numbers",
+      "list-queries",
+      // Responses and errors
       "responses",
       "errors",
       "logging",
+      // Protecting requests
       "rate-limiting",
       "cors-and-security-headers",
       "sessions-and-csrf",
+    ],
+    groups: [
+      { title: "Routing and requests", from: "routing" },
+      { title: "Input", from: "validation" },
+      { title: "Responses and errors", from: "responses" },
+      { title: "Protecting requests", from: "rate-limiting" },
     ],
   },
   {
@@ -122,16 +139,24 @@ export const sections: DocsSection[] = [
     description: "Sign-in, sessions, passwordless and single sign-on, authorization, encryption, signatures and the audit log.",
     pages: [
       "secure-by-default",
+      // Signing in
       "authentication",
       "account-flows",
       "sessions",
       "passwordless",
-      "impersonation",
       "single-sign-on",
+      // Access and audit
       "authorization",
+      "impersonation",
+      "audit-log",
+      // Encryption and signing
       "encryption-and-hashing",
       "signatures-and-keys",
-      "audit-log",
+    ],
+    groups: [
+      { title: "Signing in", from: "authentication" },
+      { title: "Access and audit", from: "authorization" },
+      { title: "Encryption and signing", from: "encryption-and-hashing" },
     ],
   },
   {
@@ -140,14 +165,20 @@ export const sections: DocsSection[] = [
     description: "Give each customer, team or organization its own space: how a workspace is found, who can join it and how its data stays apart.",
     pages: [
       "introduction",
+      // Members and access
       "resolution",
       "members-and-roles",
       "invitations",
-      "isolation",
       "organizations",
+      // Data
+      "isolation",
       "partitions",
       "shared-libraries",
       "demo-workspaces",
+    ],
+    groups: [
+      { title: "Members and access", from: "resolution" },
+      { title: "Data", from: "isolation" },
     ],
   },
   {
@@ -156,20 +187,28 @@ export const sections: DocsSection[] = [
     description: "Entities, repositories, migrations, the schema builder, TimescaleDB, seeding and pagination on PostgreSQL, MySQL and SQLite.",
     pages: [
       "getting-started",
+      // Engines
       "postgresql",
       "mysql",
       "sqlite",
+      "timescaledb",
+      // Working with data
       "entities-and-repositories",
       "unit-of-work",
+      "pagination",
+      "seeding-and-factories",
+      // Schema and migrations
       "migrations",
       "running-migrations",
       "schema-builder",
       "columns",
       "indexes-and-foreign-keys",
       "squashing-migrations",
-      "timescaledb",
-      "seeding-and-factories",
-      "pagination",
+    ],
+    groups: [
+      { title: "Engines", from: "postgresql" },
+      { title: "Working with data", from: "entities-and-repositories" },
+      { title: "Schema and migrations", from: "migrations" },
     ],
   },
   {
@@ -178,22 +217,32 @@ export const sections: DocsSection[] = [
     description: "Models, the query builder, relationships, eager loading, events, soft deletes and factories, on SQL databases and MongoDB.",
     pages: [
       "getting-started",
+      // Reading and writing
       "models",
       "query-builder",
       "relationships",
       "eager-loading",
       "collections",
       "pagination-and-streaming",
+      // Shaping records
       "casts-and-accessors",
       "serialization",
       "events-and-observers",
       "scopes-and-soft-deletes",
+      // Connections and your app
       "connections-and-transactions",
+      "mongodb",
       "route-model-binding",
       "workspaces-and-access",
+      // Testing
       "factories",
       "testing",
-      "mongodb",
+    ],
+    groups: [
+      { title: "Reading and writing", from: "models" },
+      { title: "Shaping records", from: "casts-and-accessors" },
+      { title: "Connections and your app", from: "connections-and-transactions" },
+      { title: "Testing", from: "factories" },
     ],
   },
   {
@@ -201,28 +250,42 @@ export const sections: DocsSection[] = [
     title: "Digging deeper",
     description: "Cache, events, queues, scheduling, mail, notifications, storage, real time, OpenAPI, health checks and the command line.",
     pages: [
+      // Cache and Redis
       "cache",
       "redis",
+      // Events and background work
       "events",
       "queues",
       "batches-and-operations",
       "scheduling",
       "time-zones",
+      // Mail
       "mail",
       "mail-delivery",
       "inbound-mail",
+      "views",
+      // Notifications
       "notifications",
       "notification-channels",
       "notification-preferences",
+      // Files, HTTP and real time
       "storage",
       "http-client",
       "broadcasting",
-      "views",
       "openapi",
+      // Running your app
       "health-and-metrics",
       "telemetry",
       "cli",
       "maintenance-mode",
+    ],
+    groups: [
+      { title: "Cache and Redis", from: "cache" },
+      { title: "Events and background work", from: "events" },
+      { title: "Mail", from: "mail" },
+      { title: "Notifications", from: "notifications" },
+      { title: "Files, HTTP and real time", from: "storage" },
+      { title: "Running your app", from: "health-and-metrics" },
     ],
   },
   {
@@ -232,28 +295,40 @@ export const sections: DocsSection[] = [
     pages: [
       "choosing-a-ui",
       "overview",
+      // Foundations
       "foundations",
       "themes",
       "theme-builder",
       "app-styles",
       "icons",
       "flags",
+      // Pages and layout
       "layout",
       "app-shell",
+      "errors-and-states",
+      "marketing-sites",
+      "seo",
+      // Forms and data
       "forms",
       "data-table",
       "described",
       "dates",
       "reports",
+      // Interaction
       "commands-and-ops",
       "regions",
       "live-hub",
-      "errors-and-states",
       "drag-and-drop",
       "islands",
-      "seo",
-      "marketing-sites",
+      // What is next
       "coming-next",
+    ],
+    groups: [
+      { title: "Foundations", from: "foundations" },
+      { title: "Pages and layout", from: "layout" },
+      { title: "Forms and data", from: "forms" },
+      { title: "Interaction", from: "commands-and-ops" },
+      { title: "What is next", from: "coming-next" },
     ],
   },
   {
@@ -420,7 +495,7 @@ export const sections: DocsSection[] = [
       { title: "Feedback", from: "alert" },
       { title: "Overlays", from: "dialog" },
       { title: "Layout", from: "split-pane" },
-      { title: "Navigation", from: "breadcrumb" },
+      { title: "Navigation", from: "tabs" },
       { title: "Steps, ranges and trees", from: "stepper" },
       { title: "Data", from: "table" },
       { title: "Charts", from: "line-chart" },
@@ -456,14 +531,20 @@ export const sections: DocsSection[] = [
     description: "Skills, the Navigator MCP server and Markdown docs for your coding agent, and the SDK, agents, embeddings and MCP servers for your app.",
     pages: [
       "introduction",
+      // For your coding agent
       "agent-skills",
       "navigator",
       "docs-for-agents",
+      // In your app
       "ai-sdk",
       "agents-and-tools",
       "generative-ui",
       "embeddings-and-rag",
       "mcp-servers",
+    ],
+    groups: [
+      { title: "For your coding agent", from: "agent-skills" },
+      { title: "In your app", from: "ai-sdk" },
     ],
   },
   {
@@ -471,25 +552,37 @@ export const sections: DocsSection[] = [
     title: "Packages",
     description: "Add-ons for real products: search, billing, feature flags, settings, OAuth, webhooks, integrations, documents, media, workflows and more.",
     pages: [
+      // Product features
       "search",
       "billing",
       "feature-flags",
       "settings",
+      "localization",
+      // Identity
       "oauth-server",
       "social-sign-in",
-      "webhooks",
-      "integrations",
       "directory-sync",
       "custom-domains",
+      // Integrations and automation
+      "webhooks",
+      "integrations",
+      "workflows",
+      "automations",
+      // Files and documents
       "documents",
       "documents-limits",
       "media",
       "imports-and-exports",
       "imports-and-exports-limits",
-      "workflows",
-      "automations",
-      "localization",
+      // Testing
       "browser-testing",
+    ],
+    groups: [
+      { title: "Product features", from: "search" },
+      { title: "Identity", from: "oauth-server" },
+      { title: "Integrations and automation", from: "webhooks" },
+      { title: "Files and documents", from: "documents" },
+      { title: "Testing", from: "browser-testing" },
     ],
   },
   {
