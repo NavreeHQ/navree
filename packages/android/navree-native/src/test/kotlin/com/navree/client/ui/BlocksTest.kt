@@ -44,7 +44,8 @@ class BlocksTest {
         assertTrue("the lead is drawn whole, so its centred ring stays centred and it can turn", single.any { it === lead })
         assertTrue(single.none { it is Navree.Ring })
         assertTrue(cardsSideBySide(flat))
-        assertFalse(cardsSideBySide(blocks(Navree.Stack(children = listOf(Navree.Text(value = "a"))), view(Navree.Screen(title = "x")), widthDp = 1060)))
+        val plain = Navree.Stack(children = listOf(Navree.Text(value = "a")))
+        assertFalse(cardsSideBySide(blocks(plain, view(Navree.Screen(body = plain, title = "x")), widthDp = 1060)))
     }
 
     @Test
