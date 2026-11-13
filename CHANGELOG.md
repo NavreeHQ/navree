@@ -74,6 +74,9 @@ every `@navree/*` package carries the same version.
   app with no Apple app there stores what it stored before.
 - The `social` and `notify` modules each add a migration (the client a provider's token was issued
   to, and push devices). Run `navree migrate` after upgrading.
+- The Rust library of `navree-cli` (the crate `navree_cli`) is not public API: the commands and
+  options of `navree` stay compatible across 1.x, and the library's items, which the tool and its
+  tests share, may change in any release. The versioning page says so.
 
 ### Fixed
 

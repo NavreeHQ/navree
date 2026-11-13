@@ -39,6 +39,7 @@ These are not public API, and may change in any release:
 - the internals of test kits and fakes, beyond what the [testing docs](/docs/testing/getting-started/) describe;
 - the exact text of log lines, error messages and generated markup, and the pixel layout of Navree UI;
 - the contents of a generated project beyond what [Directory structure](/docs/getting-started/directory-structure/) describes: the starter kits give you code to own and change;
+- the Rust library of `navree-cli` (the crate `navree_cli`). The tool's commands and options are covered above; the library exists so the tool and its tests share one implementation, and its items may change in any release;
 - anything marked as experimental or in development in these docs.
 
 Navree's error enums, and the other public enums that will gain variants, are marked `#[non_exhaustive]`, so a new variant is not a breaking change: end your `match` with a wildcard arm. Configuration and options types that will gain fields are built through their builders, `Default` or deserialisation, for the same reason.

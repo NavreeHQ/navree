@@ -8,6 +8,12 @@
 //! everything it knows about the framework's runtime is in the code it
 //! generates.
 //!
+//! The command line is the stable interface: the commands and options of
+//! `navree` stay compatible across 1.x. This library is the tool's own, so
+//! that the tool and its tests share one implementation; its items are not
+//! covered by the compatibility rules and may change in any release (see
+//! <https://navree.com/docs/prologue/versioning-and-support/>).
+//!
 //! | Command | What it does |
 //! |---|---|
 //! | `navree new <name> [--database timescaledb\|postgres\|mysql\|sqlite] [--ui next\|navree\|none] [--navree-path <path>]` | A new app ([`new_app`]), made a Git repository when it is not inside one (nothing is committed) |
