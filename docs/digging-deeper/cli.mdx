@@ -293,6 +293,8 @@ The tools of the ecosystem add their own commands to the CLI. They run in the CL
 | `navree browser:install` | `--version <version>`, `--force` | Downloads Chrome for Testing into Navree's cache for [browser tests](/docs/packages/browser-testing/). `--version` picks another version than the pinned one. `--force` downloads again. |
 | `navree openapi:client` | `--out <dir>` (default `web/src/lib/api`), `--input <file>` | Exports the OpenAPI document and writes `schema.d.ts` from it, for the [typed client](/docs/frontend/typed-client/#generating-the-schema). The generator is part of the CLI. `--input` reads a JSON document and needs no app; `--out` is then relative to the current directory. |
 | `navree make:resource` | `<module> <Model>`, `--path` | Generates a [Helm](/docs/tools/helm/) admin resource for a model of the module (`models/<model>.rs`), with a field per column a user may see (none for a column the model hides or one named like a secret), and registers it in the module's `wire`. |
+| `navree native:coverage` | `--platform <system>`, `--form <device>`, `--json`, `--fail-on <web\|layout>`, `--features <list>`, `--file <path>` | Asks every page route of the app as a native client and prints its grade (`idiom`, `layout` or `web`) and what is missing, with totals; a gate for a store build or CI. Needs the [native preview](#native-apps) and `native.toml` for route parameters. |
+| `navree native:doctor` | `--platform <ios\|android\|all>`, `--url <site>`, `--json` | Checks what a [native build](#native-apps) needs, without changing anything: the preview feature, `auth.apps`, passkey origins, push keys, sign-in providers, the Android and Apple toolchains. Each item is ready, missing or not applicable, with the next step for what is missing. |
 
 [Harbor](/docs/tools/harbor/) adds the commands that prepare servers, keep their secrets and ship releases. Every one takes `--env <name>`, which uses `harbor.<name>.toml` instead of `harbor.toml` (the default comes from `NAVREE_HARBOR_ENV`):
 
@@ -315,6 +317,145 @@ The tools of the ecosystem add their own commands to the CLI. They run in the CL
 | `navree build:image` | `--tag <tag>`, `--push`, `--platform <platform>`, `--dockerfile` | Builds an OCI image of the app with Docker or Podman. `--dockerfile` writes the Dockerfile and ignore file instead of building. |
 
 [Fleet](/docs/tools/fleet/) has no CLI command of its own: `navree fleet` is forwarded to your app, where `FleetModule` registers it (with `fleet:status`, `fleet:pause`, `fleet:continue`, `fleet:terminate`, `fleet:forget` and `fleet:work`), and it runs queue workers under Fleet's supervisor.
+
+## Native apps
+
+A Navree UI page can also answer a native client (an iPhone or an Android phone) with the parts of the page, which the system draws with its own toolkit. This is a preview: it is behind the facade feature `ui-native-preview`, and what it answers may change in a minor release. Add it to the `navree` dependency, or to a feature of your own app:
+
+```toml title="Cargo.toml"
+[features]
+native-preview = ["navree/ui-native-preview"]
+```
+
+Every route is graded for the client that asks:
+
+| Grade | Means |
+|---|---|
+| `idiom` | The page's parts say what they are, so the client lays the screen out as its own system does: a table's records as rows with a title, rows that open something, actions with a role. |
+| `layout` | Native parts, laid out as the web page is. It works, and it looks like a web page drawn with the system's controls. |
+| `web` | The client shows the page in its web view, because a part of it has no native meaning yet. |
+
+Two commands tell you where the app stands. Both run on your machine, and neither needs a browser or a device.
+
+### navree native:coverage
+
+`navree native:coverage` asks every page route of the app as a native client, in process, and prints the grade of each with what is missing, in words. This is the store demo, asked as an Android phone:
+
+```text
+Native coverage of store-demo, asked as android on phone
+
+ROUTE                                       GRADE   WHAT IS MISSING
+/                                           idiom
+/fragments/figures                          idiom
+/fragments/sales                            idiom
+/fragments/shelves                          idiom
+/orders                                     idiom
+/orders/1                                   idiom
+/orders/1/steps                             idiom
+/orders/1/others                            idiom
+/inventory                                  idiom
+/orders?filter[status][in]=open&sort=total  idiom
+/inventory?page=2                           idiom
+
+11 idiom, 0 layout, 0 web: 11 of 11 pages are native screens
+
+Skipped (4):
+  /app/{key}: needs a value for {key}; add `key = ...` under [coverage.params] in native.toml
+  /fragments/activity: answered operations, not a screen
+  /orders/{id}/peek (/orders/1/peek): answered operations, not a screen
+  /inventory/{id}/peek (/inventory/1/peek): answered operations, not a screen
+
+Not pages, so not asked: the toolkit's and the framework's own files (4); not a GET (7); answers that are not pages (1).
+```
+
+It builds the app with the cargo feature that turns the preview on (the entry of your `[features]` that lists `navree/ui-native-preview`; `--features` names another), runs the app's own `native:coverage` command, which `UiModule` registers, and prints what the app answered. The app is booted, as for any command of its own, so it needs its settings and its database.
+
+| Option | What it does |
+|---|---|
+| `--platform <system>` | The system to ask as: `ios`, `ipados`, `macos`, `watchos`, `tvos`, `visionos`, `android`, `wearos`, `windows` or `linux`. Default `android`. |
+| `--form <device>` | The kind of device: `phone`, `tablet`, `desktop`, `watch` or `tv`. Default `phone`. |
+| `--json` | Prints the report as JSON, for tools: the pages, the skipped routes, the routes that are not pages, the totals per grade, and whether the gate holds. |
+| `--fail-on <grade>` | Exits with status 1 when a page has this grade or a worse one: `web`, or `layout` (layout and web). A store build or a CI job runs `navree native:coverage --fail-on web`. A run that asked no page fails too, because there was nothing to hold the gate to. |
+| `--features <list>` | The cargo features to build the app with, instead of the one found in `Cargo.toml`. |
+| `--file <path>` | The file of example values, instead of `native.toml`. |
+
+**Route parameters.** A route such as `/orders/{id}` needs an example value before it can be asked. The values live in `native.toml` at the app's root, beside `dock.toml` and `harbor.toml`: the files the tools read. (Every file in `config/` is a section of the app's own settings, so this one is not there.)
+
+```toml title="native.toml"
+[coverage]
+# More addresses to ask, with their queries.
+also = ["/orders?filter[status][in]=open&sort=total"]
+# Routes to leave out on purpose; `*` matches any text.
+skip = ["/admin/*"]
+
+# A value for each parameter name, for every route that has it.
+[coverage.params]
+id = 1
+order = "CS-20481"
+
+# A value for one route's parameters; it ranks above `params`.
+[coverage.routes."/orders/{order}/lines/{line}"]
+line = 2
+
+# Headers sent with every request: a person who is signed in.
+# `${NAME}` is replaced by the environment variable NAME.
+[coverage.headers]
+cookie = "navree_session=${COVERAGE_SESSION}"
+```
+
+A value cannot leave its segment (no `/`, `?`, `#` or spaces; a `{*rest}` parameter may hold `/`). A key it does not know is an error that names it, so a typo does not go unnoticed.
+
+**What is not asked.** A route that cannot be read as a page is listed under *Skipped*, with the reason and, where there is one, the line to add: a parameter without a value, a route that answered 404 for the example, a route that sent the request to sign in (give a session under `[coverage.headers]`), a redirect, a route that did not answer in 20 seconds. Routes that are not pages by their nature are counted, not listed: those that are not `GET`, data routes (`json_only`, and everything under `http.api_prefix` unless the route is marked as a page), event streams, files, and the toolkit's own routes.
+
+### navree native:doctor
+
+`navree native:doctor` checks, without changing anything and without building the app, what a native build needs. It says for each item whether it is *ready*, *missing* or *not applicable*, and for anything missing the one next step. It exits with status 1 when something is missing. A secret is only checked for being there; it is never printed.
+
+| Item | What it checks |
+|---|---|
+| Native preview | `Cargo.toml` turns `ui-native-preview` on. |
+| Settings | The app's settings load, as the app reads them: `config/`, `.env` and `APP_*` variables. |
+| `auth.apps` | An Apple app has its Team ID and bundle id, an Android app its package and the SHA-256 fingerprints of its signing certificates; the link paths are paths. |
+| Association files | The settings make the app serve `/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json`. With `--url <site>` the running site is asked, with no redirect followed, and the files must name the apps. |
+| Passkey origins | With `auth.passkeys.enabled`: the relying party, the origins, and `https://<rp_id>` for an Apple app. An Android app's origin comes from its fingerprints. |
+| Push | `notify.push.apns` has a team id, a key and its id, and names the bundle ids of `auth.apps.apple`; `notify.push.fcm` has a service account and names the packages of `auth.apps.android`. Not set up is *not applicable*: push is optional. |
+| Sign in | Providers `apple` and `google` in `social.providers` (by key or `type`) have what native sign-in checks the identity token against, and `social.routes` is on. Not set up is *not applicable*. |
+| Android | A JDK 17 or newer (`JAVA_HOME`, then `java` on `PATH`), the Android SDK (`ANDROID_HOME`, `ANDROID_SDK_ROOT`, then the usual place), an Android platform 36 or newer and the build tools. |
+| Apple | On a Mac, Xcode 26 or newer. On any other system it says that Apple apps are built on a Mac with Xcode, or by a cloud build that runs on one, and that there is nothing to install on this machine. |
+
+These settings pass the checks of the settings. The push key and the service account are secrets, so they come from `.env` as `APP_NOTIFY__PUSH__APNS__KEY` and `APP_NOTIFY__PUSH__FCM__SERVICE_ACCOUNT`:
+
+```toml title="config/app.toml"
+[auth.apps]
+paths = ["/orders/*"]
+
+[auth.apps.apple.main]
+team_id = "ABCDE12345"
+bundle_id = "in.example.orders"
+
+[auth.apps.android.main]
+package = "in.example.orders"
+fingerprints = ["14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5"]
+
+[auth.passkeys]
+enabled = true
+rp_id = "orders.example.in"
+origins = ["https://orders.example.in"]
+
+[notify.push.apns]
+team_id = "ABCDE12345"
+key_id = "FGHIJ67890"
+bundle_ids = ["in.example.orders"]
+
+[notify.push.fcm]
+packages = ["in.example.orders"]
+```
+
+| Option | What it does |
+|---|---|
+| `--platform <system>` | `ios` (the Apple systems), `android` or `all` (the default). What the other system needs is *not applicable*. |
+| `--url <site>` | Also asks the running site (`https://orders.example.com`) for the two association files. |
+| `--json` | Prints the findings as JSON: each item has an `id`, a `group`, a `status` (`ready`, `missing` or `not-applicable`), a `detail` and, for what is missing, a `next`. |
 
 ## Running your app's commands
 

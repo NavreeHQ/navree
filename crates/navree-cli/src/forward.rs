@@ -103,12 +103,20 @@ impl Runner for ProcessRunner {
 /// The invocation running runtime command `command` with `args` in the app
 /// binary: `cargo run --quiet -- <command> <args>`.
 pub fn forward(command: &str, args: &[String]) -> Invocation {
-    let mut all = vec![
-        "run".to_owned(),
-        "--quiet".to_owned(),
-        "--".to_owned(),
-        command.to_owned(),
-    ];
+    forward_with(&[], command, args)
+}
+
+/// [`forward`], with the app built with these cargo `features`: `cargo run
+/// --quiet --features <features> -- <command> <args>`. A command that only
+/// exists when a feature is on (`native:coverage`) is run this way.
+pub fn forward_with(features: &[String], command: &str, args: &[String]) -> Invocation {
+    let mut all = vec!["run".to_owned(), "--quiet".to_owned()];
+    if !features.is_empty() {
+        all.push("--features".to_owned());
+        all.push(features.join(","));
+    }
+    all.push("--".to_owned());
+    all.push(command.to_owned());
     all.extend(args.iter().cloned());
     Invocation::new("cargo", all)
 }
@@ -125,6 +133,20 @@ mod tests {
             invocation.args,
             ["run", "--quiet", "--", "migrate:fresh", "--seed"]
         );
+    }
+
+    #[test]
+    fn features_are_passed_to_cargo_before_the_command() {
+        let invocation = forward_with(
+            &["native-preview".to_owned(), "orm".to_owned()],
+            "native:coverage",
+            &["--json".to_owned()],
+        );
+        assert_eq!(
+            invocation.to_string(),
+            "cargo run --quiet --features native-preview,orm -- native:coverage --json"
+        );
+        assert_eq!(forward_with(&[], "routes", &[]), forward("routes", &[]));
     }
 
     #[test]
