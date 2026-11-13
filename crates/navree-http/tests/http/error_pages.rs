@@ -332,7 +332,13 @@ async fn the_page_sees_only_what_decides_a_page() {
     assert_eq!(seen[0].uri, "/api/plain?x=1");
     assert_eq!(
         seen[0].headers,
-        ["accept", "cookie", "sec-fetch-dest", "x-navree-ui"]
+        [
+            "accept",
+            "cookie",
+            "sec-fetch-dest",
+            "user-agent",
+            "x-navree-ui"
+        ]
     );
     assert!(seen[0].request_id);
 }
