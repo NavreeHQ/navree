@@ -146,9 +146,12 @@ struct ChartPart: View {
     }
 
     private var yAxis: some AxisContent {
-        AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { _ in
+        let style = ValueWords.style(chart)
+        return AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { value in
             AxisGridLine()
-            AxisValueLabel()
+            AxisValueLabel {
+                if let number = value.as(Double.self) { Text(ValueWords.text(number, style)) }
+            }
         }
     }
 
