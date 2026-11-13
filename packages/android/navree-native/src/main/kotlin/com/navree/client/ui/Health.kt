@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -85,6 +86,7 @@ import com.navree.client.R
 import com.navree.client.design.BidiRules
 import com.navree.client.core.Events
 import com.navree.client.design.ClockRules
+import com.navree.client.design.GaugeRules
 import com.navree.client.design.KeyRules
 import com.navree.client.design.PagerRules
 import com.navree.client.design.RingRules
@@ -431,7 +433,14 @@ internal fun HealthGaugeView(node: Navree.Gauge, modifier: Modifier = Modifier) 
     val halo = MaterialTheme.colorScheme.surface
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (node.hint != null) ChartHeading(node.label, node.hint)
-        Box(Modifier.size(diameter).clearAndSetSemantics { contentDescription = said }, contentAlignment = Alignment.Center) {
+        // The arc is open at the foot: the box is only as tall as the arc and its words need.
+        Box(
+            Modifier.layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                layout(placeable.width, (placeable.height * GaugeRules.HEIGHT_SHARE).toInt()) { placeable.place(0, 0) }
+            }.size(diameter).clearAndSetSemantics { contentDescription = said },
+            contentAlignment = Alignment.Center,
+        ) {
             Canvas(Modifier.fillMaxSize()) {
                 val px = 14.dp.toPx()
                 val d = size.minDimension - px

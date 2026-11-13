@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -295,7 +297,8 @@ internal fun CalendarHeatmapView(node: Navree.CalendarHeatmap, modifier: Modifie
                         val month = day.monthValue
                         Box(Modifier.width(side + gap)) {
                             if (month != shownMonth && day.dayOfMonth <= 7 || week == 0) {
-                                Text(day.month.getDisplayName(DateWords.SHORT, locale), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant, maxLines = 1, softWrap = false)
+                                // A month's name runs on over the weeks after the one it starts in; it is never cut to the width of one.
+                                Text(day.month.getDisplayName(DateWords.SHORT, locale), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant, maxLines = 1, softWrap = false, modifier = Modifier.wrapContentWidth(Alignment.Start, unbounded = true))
                             }
                         }
                         shownMonth = month
@@ -305,7 +308,8 @@ internal fun CalendarHeatmapView(node: Navree.CalendarHeatmap, modifier: Modifie
                     Column(Modifier.width(28.dp), verticalArrangement = Arrangement.spacedBy(gap)) {
                         for (row in 0 until 7) {
                             Box(Modifier.height(side), contentAlignment = Alignment.CenterStart) {
-                                if (row % 2 == 0) Text(weekStart.plus(row.toLong()).getDisplayName(DateWords.NARROW, locale), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
+                                // A day's letter is taller than a small day: it stands over the row and is never cut.
+                                if (row % 2 == 0) Text(weekStart.plus(row.toLong()).getDisplayName(DateWords.NARROW, locale), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant, modifier = Modifier.wrapContentHeight(Alignment.CenterVertically, unbounded = true))
                             }
                         }
                     }
