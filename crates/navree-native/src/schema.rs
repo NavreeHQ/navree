@@ -45,6 +45,10 @@ use crate::charts::{
     RingValue, Rings, RingsCentre, Scatter, Segment, Stacking, StripCell, Zone,
 };
 use crate::client::{ClientDescriptor, Contrast, FormFactor, Platform, Scheme};
+use crate::compose::{
+    Adaptive, Appear, Card, Carousel, Change, Layers, Place, Shape, ShapeForm, Size, Transition,
+    Weight,
+};
 use crate::device::{
     Accuracy, Alt, AppLock, AuthSession, Call, CancelNotification, CodeFormat, Confirm,
     ConfirmMethod, Confirmed, ConfirmedBy, CopyText, DeviceCall, Feature, Haptic, HapticKind,
@@ -596,7 +600,9 @@ impl<T: Describe> Describe for BTreeMap<String, T> {
 
 // The envelope and the screen.
 object!(Envelope { navree, build, vocab } { app, shell, screen, ops, web, upgrade, icons });
-object!(Screen { title, body } { subtitle, id, back, trail, nav, actions, search, refresh });
+object!(Screen { title, body } {
+    subtitle, id, back, trail, nav, actions, search, refresh, pager
+});
 object!(Back { title, href } {});
 object!(Search { name } { value, placeholder, action, hidden });
 object!(Web { url } { title, why });
@@ -609,7 +615,8 @@ union!(Node tag "t"
         Text, Rich, Image, Icon, Avatar, Badge, Progress, Banner, Empty, Facts, Table, Chart,
         Code, Button, Link, Menu, Form, Field, Sheet, Dialog, Popover, Native, Web, Toolbar,
         Gauge, Figure, Timeline, FeedRow, Message, Pane, Ring, Rings, DayClock,
-        DayPager, Meter, Columns, Strip, Range, CalendarHeatmap, MatrixHeatmap, Scatter,
+        DayPager, Meter, Columns, Strip, Range, CalendarHeatmap, MatrixHeatmap, Scatter, Card,
+        Layers, Shape, Carousel, Adaptive,
     }
     structs {}
     units {}
@@ -625,7 +632,9 @@ names!(Axis { Vertical, Horizontal });
 names!(Align { Start, Center, End, Stretch, Baseline });
 names!(Justify { Start, Center, End, Between });
 names!(Standard { Share, Delete, Add, Edit, Search, Done, Cancel, More });
-object!(Stack {} { id, axis, gap, align, justify, wrap, hidden, children });
+object!(Stack {} {
+    id, axis, gap, align, justify, wrap, hidden, pad, grow, wide, appear, children
+});
 object!(Grid {} { id, cols, min, gap, children });
 names!(SectionStyle { Plain, Card, Inset });
 object!(Section {} { id, title, subtitle, style, actions, children, footer, hint });
@@ -643,15 +652,17 @@ object!(Divider {} { id });
 object!(Spacer {} { id });
 object!(Region { id, src } { lazy, live, children });
 object!(Live { src } { event });
-names!(TextStyle { LargeTitle, Title, Headline, Body, Callout, Caption, Mono });
-object!(Text { value } { id, style, tone, muted, lines, heading });
+names!(TextStyle { Display, LargeTitle, Title, Title2, Headline, Body, Callout, Caption, Mono });
+object!(Text { value } {
+    id, style, tone, muted, lines, heading, weight, colour, align, tabular, change
+});
 object!(Rich {} { id, runs, blocks, style, muted });
 object!(Run { text } { bold, italic, code, href });
 names!(BlockKind { Paragraph, Heading, Quote, Bullet, Numbered, Code });
 object!(Block {} { kind, runs, level });
 names!(Fit { Contain, Cover });
 object!(Image { src } { id, alt, width, height, fit });
-object!(Icon {} { id, name, paths, fills, view_box, label, tone, symbol });
+object!(Icon {} { id, name, paths, fills, view_box, label, tone, symbol, scale, colour });
 object!(SystemSymbol { apple, material } { apple_filled });
 object!(IconShape {} { paths, fills, view_box });
 object!(Avatar { name } { id, src, initials });
@@ -768,6 +779,20 @@ object!(RingValue { name, max } { value, unit, shown, colour });
 object!(Rings {} {
     id, title, rings, centre, icon, legend, prominence, summary, hint
 });
+
+// Free composition.
+names!(Weight { Regular, Medium, Semibold, Bold });
+names!(Place { TopStart, Top, TopEnd, Start, Center, End, BottomStart, Bottom, BottomEnd });
+object!(Size {} { width, height, scaled });
+names!(Appear { Fade, Rise, Scale });
+names!(Change { Count, Fade });
+names!(Transition { Zoom });
+names!(ShapeForm { Rounded, Circle, Capsule, Rect });
+object!(Card {} { id, colour, pad, action, label, menu, transition, appear, children });
+object!(Layers {} { id, place, size, pad, grow, children });
+object!(Shape {} { id, form, fill, soft, stroke, size, label });
+object!(Carousel {} { id, min, gap, paged, label, children });
+object!(Adaptive {} { id, compact, wide });
 
 // The controls of fields.
 union!(Input tag "t"

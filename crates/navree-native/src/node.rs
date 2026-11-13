@@ -17,6 +17,10 @@ pub use crate::charts::{
     MiniColumns, PagerWords, Point, PointSeries, RangeScale, Reference, ReferenceKind, Relation, Ring,
     RingValue, Rings, RingsCentre, Scatter, Segment, Stacking, StripCell, Zone,
 };
+pub use crate::compose::{
+    Adaptive, Appear, Card, Carousel, Change, Layers, Place, Shape, ShapeForm, Size, Transition,
+    Weight,
+};
 use crate::input::Input;
 
 pub(crate) fn is_false(value: &bool) -> bool {
@@ -141,6 +145,16 @@ pub enum Node {
     MatrixHeatmap(MatrixHeatmap),
     /// A point for each pair of values.
     Scatter(Scatter),
+    /// A surface that holds parts, in the system's card style.
+    Card(Card),
+    /// Parts over each other.
+    Layers(Layers),
+    /// A plain shape in a colour by name.
+    Shape(Shape),
+    /// Parts side by side that scroll across.
+    Carousel(Carousel),
+    /// The parts for a compact room and the parts for a wide one.
+    Adaptive(Adaptive),
     /// A kind this build has never heard of, from a newer server. A client
     /// draws its `alt`, or shows the page in its web view when it has none.
     Unknown(Unknown),
@@ -247,6 +261,11 @@ impl Node {
             Self::CalendarHeatmap(node) => node.id.as_deref(),
             Self::MatrixHeatmap(node) => node.id.as_deref(),
             Self::Scatter(node) => node.id.as_deref(),
+            Self::Card(node) => node.id.as_deref(),
+            Self::Layers(node) => node.id.as_deref(),
+            Self::Shape(node) => node.id.as_deref(),
+            Self::Carousel(node) => node.id.as_deref(),
+            Self::Adaptive(node) => node.id.as_deref(),
             Self::Unknown(node) => node.id.as_deref(),
         }
     }
@@ -303,6 +322,10 @@ impl Node {
             Self::FeedRow(node) => node.detail.iter().collect(),
             Self::Message(node) => node.body.iter().collect(),
             Self::Pane(node) => node.children.iter().collect(),
+            Self::Card(node) => node.children.iter().chain(&node.menu).collect(),
+            Self::Layers(node) => node.children.iter().collect(),
+            Self::Carousel(node) => node.children.iter().collect(),
+            Self::Adaptive(node) => node.compact.iter().chain(&node.wide).collect(),
             Self::Unknown(node) => boxed(&node.alt).collect(),
             Self::Divider(_)
             | Self::Spacer(_)
@@ -328,7 +351,8 @@ impl Node {
             | Self::Range(_)
             | Self::CalendarHeatmap(_)
             | Self::MatrixHeatmap(_)
-            | Self::Scatter(_) => Vec::new(),
+            | Self::Scatter(_)
+            | Self::Shape(_) => Vec::new(),
         }
     }
 
@@ -409,6 +433,10 @@ impl Node {
             Self::FeedRow(node) => node.detail.iter_mut().collect(),
             Self::Message(node) => node.body.iter_mut().collect(),
             Self::Pane(node) => node.children.iter_mut().collect(),
+            Self::Card(node) => node.children.iter_mut().chain(&mut node.menu).collect(),
+            Self::Layers(node) => node.children.iter_mut().collect(),
+            Self::Carousel(node) => node.children.iter_mut().collect(),
+            Self::Adaptive(node) => node.compact.iter_mut().chain(&mut node.wide).collect(),
             Self::Unknown(node) => boxed(&mut node.alt).collect(),
             Self::Divider(_)
             | Self::Spacer(_)
@@ -434,7 +462,8 @@ impl Node {
             | Self::Range(_)
             | Self::CalendarHeatmap(_)
             | Self::MatrixHeatmap(_)
-            | Self::Scatter(_) => Vec::new(),
+            | Self::Scatter(_)
+            | Self::Shape(_) => Vec::new(),
         }
     }
 
@@ -597,6 +626,23 @@ pub struct Stack {
     /// Whether it is not drawn until a command shows it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub hidden: bool,
+    /// The room between its edge and its parts, in steps of the system's
+    /// spacing scale: `0` is none.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub pad: u8,
+    /// Whether it takes the room left along the stack it stands in, so what
+    /// stands beside it keeps its own size: the words between a symbol and a
+    /// value.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub grow: bool,
+    /// The axis it runs along in a wide room, when that is not `axis`: a
+    /// stack that runs down a phone and across a tablet. The client turns it
+    /// as the room changes, with no request, and keeps what its parts hold.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    pub wide: Option<Axis>,
+    /// How it comes in when it joins a screen already drawn.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    pub appear: Option<Appear>,
     /// The parts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<Node>,
@@ -939,10 +985,15 @@ pub struct Live {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum TextStyle {
+    /// The one figure a screen is about, set larger than any heading: the
+    /// day's revenue, a score. A screen has one.
+    Display,
     /// The name of a screen.
     LargeTitle,
     /// The heading of a part of a screen.
     Title,
+    /// A heading a step under a title: the name of a card, a value in a tile.
+    Title2,
     /// A heading inside a part.
     Headline,
     /// Running text.
@@ -979,6 +1030,23 @@ pub struct Text {
     /// The level of the heading it is, from 1, for assistive technology.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub heading: Option<u8>,
+    /// How heavy it is set, when not as its style is.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    pub weight: Option<Weight>,
+    /// Its colour by hue, when the thing it names has a colour of its own.
+    /// It wins over `tone`, and never carries meaning alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
+    /// Where its lines sit in the room it has: `start`, `center` or `end`.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    pub align: Option<Align>,
+    /// Whether its figures are all one width, so a number that changes does
+    /// not shift what stands beside it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub tabular: bool,
+    /// How it shows that its words changed.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    pub change: Option<Change>,
 }
 
 /// Text in runs: one paragraph of them, or several blocks.
@@ -1123,6 +1191,13 @@ pub struct Icon {
     /// [`Icon::with_symbol`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<SystemSymbol>,
+    /// The text style it is as large as, when it is not the size of the text
+    /// beside it: a symbol at the head of a card, as large as a title.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    pub scale: Option<TextStyle>,
+    /// Its colour by hue. It wins over `tone`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub colour: Option<Colour>,
 }
 
 /// The names of one symbol in each system's own set.
@@ -1212,6 +1287,39 @@ impl Node {
                 .iter_mut()
                 .chain(node.moments.iter_mut().filter_map(|moment| moment.icon.as_mut()))
                 .collect(),
+            _ => Vec::new(),
+        }
+    }
+}
+
+impl Node {
+    /// The actions this node holds itself, not those of the nodes inside it:
+    /// what a tap on it, a swipe on it or a change of it does. A server that
+    /// adds what every post carries (the session's token) walks a tree with
+    /// this.
+    pub fn actions_mut(&mut self) -> Vec<&mut Action> {
+        match self {
+            Self::Button(node) => node.action.iter_mut().collect(),
+            Self::Link(node) => vec![&mut node.action],
+            Self::Row(node) => node
+                .action
+                .iter_mut()
+                .chain(node.swipe.iter_mut().filter_map(|button| button.action.as_mut()))
+                .collect(),
+            Self::Table(node) => node
+                .rows
+                .iter_mut()
+                .filter_map(|row| row.action.as_mut())
+                .collect(),
+            Self::Toolbar(node) => node
+                .items
+                .iter_mut()
+                .filter_map(|item| item.action.as_mut())
+                .collect(),
+            Self::Figure(node) => node.action.iter_mut().collect(),
+            Self::FeedRow(node) => node.action.iter_mut().collect(),
+            Self::Field(node) => node.changed.iter_mut().collect(),
+            Self::Card(node) => node.action.iter_mut().collect(),
             _ => Vec::new(),
         }
     }

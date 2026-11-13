@@ -46,6 +46,13 @@ use navree_native::{Kind, VOCAB};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+/// A health app's day, written with the builders of `navree_native::ui`.
+#[path = "../examples/health_today.rs"]
+mod health_today;
+/// A shop's shelves, composed freely with the same builders.
+#[path = "../examples/shop_shelves.rs"]
+mod shop_shelves;
+
 const BUILD: &str = "3f9a1c07b2de";
 
 fn s(text: &str) -> String {
@@ -994,6 +1001,7 @@ fn screen_kinds() -> Envelope {
                                 lines: Some(1),
                                 heading: None,
                                 muted: false,
+                                ..Text::default()
                             }),
                             Node::Progress(Progress {
                                 id: None,
@@ -3761,6 +3769,8 @@ fn envelopes() -> Vec<(&'static str, Envelope)> {
         ("screen-today", screen_today()),
         ("screen-sleep", screen_sleep()),
         ("screen-fitness", screen_fitness()),
+        ("screen-designed-health", health_today::envelope(BUILD)),
+        ("screen-designed-store", shop_shelves::envelope(BUILD)),
         ("screen-device", screen_device()),
         ("ops-device", ops_device()),
         ("screen-with-toast", screen_with_toast()),
@@ -3996,7 +4006,25 @@ fn words_in(value: &serde_json::Value, found: &mut BTreeMap<&'static str, BTreeS
                     see("curve", word("curve", "linear"));
                     see("stacking", word("stacking", "apart"));
                 }
+                Some("text") => {
+                    see("text_style", word("style", "body"));
+                    for list in ["weight", "change"] {
+                        if map.contains_key(list) {
+                            see(list, word(list, ""));
+                        }
+                    }
+                }
+                Some("icon") if map.contains_key("scale") => see("icon_scale", word("scale", "")),
+                Some("shape") => see("form", word("form", "rounded")),
+                Some("layers") => see("place", word("place", "center")),
+                Some("stack") if map.contains_key("wide") => see("stack_wide", word("wide", "")),
                 _ => {}
+            }
+            // A part that arrives, and one that leads into what it opens, say how.
+            for list in ["appear", "transition"] {
+                if let Some(how) = map.get(list).and_then(serde_json::Value::as_str) {
+                    see(list, how.to_owned());
+                }
             }
             // A hint says what it is about, in words.
             if map.contains_key("about") && map.contains_key("text") {
@@ -4167,6 +4195,18 @@ fn the_corpus_holds_every_kind_of_node_and_every_control() {
         ("curve", owned(&["linear", "smooth", "step"])),
         ("stacking", owned(&["apart", "values", "shares"])),
         ("reference", owned(&["level", "diagonal"])),
+        // What a composed screen is laid out with. A text style, a place and a
+        // stack's other axis have more words than these: the examples hold the
+        // ones a composed screen adds, and the places a mark sits at.
+        ("text_style", owned(&["display", "title2", "body", "headline", "caption", "callout"])),
+        ("weight", owned(&["regular", "medium", "semibold", "bold"])),
+        ("change", owned(&["count", "fade"])),
+        ("appear", owned(&["fade", "rise", "scale"])),
+        ("transition", owned(&["zoom"])),
+        ("form", owned(&["rounded", "circle", "capsule", "rect"])),
+        ("place", owned(&["center", "bottom_end"])),
+        ("icon_scale", owned(&["title2"])),
+        ("stack_wide", owned(&["horizontal"])),
     ] {
         for name in names {
             assert!(

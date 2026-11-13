@@ -275,6 +275,11 @@ kinds! {
     CalendarHeatmap(CalendarHeatmap) => "calendar_heatmap" since 0,
     MatrixHeatmap(MatrixHeatmap) => "matrix_heatmap" since 0,
     Scatter(Scatter) => "scatter" since 0,
+    Card(Card) => "card" since 0,
+    Layers(Layers) => "layers" since 0,
+    Shape(Shape) => "shape" since 0,
+    Carousel(Carousel) => "carousel" since 0,
+    Adaptive(Adaptive) => "adaptive" since 0,
 }
 
 /// A field that arrived after its type did: the type's name in the schema
@@ -880,6 +885,67 @@ impl Node {
                         .collect(),
                 })
             }
+            Self::Card(node) => {
+                // A card that is tapped is a link round what it holds; its menu
+                // stands beside its heading, as a section's actions do.
+                let children = match &node.action {
+                    Some(action) => vec![Node::Link(n::Link {
+                        id: None,
+                        label: node.label.clone().unwrap_or_default(),
+                        action: action.clone(),
+                        children: node.children.clone(),
+                    })],
+                    None => node.children.clone(),
+                };
+                Node::Section(n::Section {
+                    id: node.id.clone(),
+                    style: n::SectionStyle::Card,
+                    actions: node.menu.clone(),
+                    children,
+                    ..n::Section::default()
+                })
+            }
+            // Parts over each other are parts one under another, at the side
+            // they were placed at.
+            Self::Layers(node) => Node::Stack(n::Stack {
+                id: node.id.clone(),
+                align: Some(match node.place {
+                    n::Place::TopStart | n::Place::Start | n::Place::BottomStart => n::Align::Start,
+                    n::Place::TopEnd | n::Place::End | n::Place::BottomEnd => n::Align::End,
+                    _ => n::Align::Center,
+                }),
+                children: node.children.clone(),
+                ..n::Stack::default()
+            }),
+            // A shape that says something says it in words, after a dot of its
+            // tone; one that is decoration is nothing.
+            Self::Shape(node) => match &node.label {
+                Some(label) => Node::Badge(n::Badge {
+                    id: node.id.clone(),
+                    text: label.clone(),
+                    tone: node.fill.as_ref().and_then(|colour| colour.hue.tone()),
+                    dot: true,
+                }),
+                None => Node::Stack(n::Stack {
+                    id: node.id.clone(),
+                    ..n::Stack::default()
+                }),
+            },
+            // A run that scrolls across is a row that wraps.
+            Self::Carousel(node) => Node::Stack(n::Stack {
+                id: node.id.clone(),
+                axis: n::Axis::Horizontal,
+                gap: node.gap,
+                wrap: true,
+                children: node.children.clone(),
+                ..n::Stack::default()
+            }),
+            // The parts for a compact room fit every room.
+            Self::Adaptive(node) => Node::Stack(n::Stack {
+                id: node.id.clone(),
+                children: node.compact.clone(),
+                ..n::Stack::default()
+            }),
             Self::Unknown(node) => return node.alt.as_deref().cloned(),
             _ => return None,
         })
@@ -1365,9 +1431,147 @@ mod tests {
             | Kind::Range
             | Kind::CalendarHeatmap
             | Kind::MatrixHeatmap
-            | Kind::Scatter => 1,
+            | Kind::Scatter
+            | Kind::Card
+            | Kind::Layers
+            | Kind::Shape
+            | Kind::Carousel
+            | Kind::Adaptive => 1,
             kind => kind.since(),
         }
+    }
+
+    /// One of each part a composed screen is laid out with.
+    fn composed_parts() -> Vec<Node> {
+        use crate::node::{Adaptive, Card, Carousel, Layers, Place, Shape, ShapeForm, Size};
+        let tile = Node::Card(Card {
+            id: Some("shelf-7".to_owned()),
+            colour: Some(Colour::new(Hue::Amber)),
+            action: Some(crate::Action::navigate("/inventory/7")),
+            label: Some("Brass lota, 3 left".to_owned()),
+            menu: vec![Node::Button(crate::node::Button {
+                label: "Restock".to_owned(),
+                ..crate::node::Button::default()
+            })],
+            children: vec![Node::text("Brass lota")],
+            ..Card::default()
+        });
+        vec![
+            tile.clone(),
+            Node::Layers(Layers {
+                id: Some("chip".to_owned()),
+                place: Place::TopEnd,
+                size: Some(Size {
+                    width: Some(48),
+                    height: Some(48),
+                    scaled: true,
+                }),
+                children: vec![
+                    Node::Shape(Shape {
+                        form: ShapeForm::Circle,
+                        fill: Some(Colour::new(Hue::Warning)),
+                        soft: true,
+                        ..Shape::default()
+                    }),
+                    Node::Icon(icon()),
+                ],
+                ..Layers::default()
+            }),
+            Node::Shape(Shape {
+                id: Some("level".to_owned()),
+                fill: Some(Colour::new(Hue::Danger)),
+                label: Some("Out of stock".to_owned()),
+                ..Shape::default()
+            }),
+            Node::Carousel(Carousel {
+                id: Some("sellers".to_owned()),
+                min: Some(148),
+                gap: 3,
+                children: vec![tile, Node::text("Khadi kurta")],
+                ..Carousel::default()
+            }),
+            Node::Adaptive(Adaptive {
+                id: Some("summary".to_owned()),
+                compact: vec![Node::text("3 shelves are empty")],
+                wide: vec![Node::text("3 shelves are empty"), Node::text("12 are running low")],
+            }),
+        ]
+    }
+
+    #[test]
+    fn a_composed_part_becomes_the_parts_an_older_client_lays_out() {
+        for part in composed_parts() {
+            let kind = part.kind();
+            let Downgraded::Node(older) = downgrade_by(part, 0, arrived_later) else {
+                panic!("{kind:?} has no older form");
+            };
+            assert!(
+                kinds_in(&older).iter().all(|kind| arrived_later(*kind) == 0),
+                "{kind:?} became {older:?}"
+            );
+        }
+        let mut parts = composed_parts();
+        // A card that is tapped is a section holding a link round its parts, its menu beside it.
+        let Downgraded::Node(Node::Section(section)) = downgrade_by(parts.remove(0), 0, only(Kind::Card))
+        else {
+            panic!("a card becomes a section");
+        };
+        assert_eq!(section.id.as_deref(), Some("shelf-7"));
+        assert_eq!(section.style, crate::node::SectionStyle::Card);
+        assert!(matches!(section.actions.as_slice(), [Node::Button(button)] if button.label == "Restock"));
+        let [Node::Link(link)] = section.children.as_slice() else {
+            panic!("its parts are in a link: {:?}", section.children);
+        };
+        assert_eq!(link.label, "Brass lota, 3 left");
+        assert_eq!(link.children, [Node::text("Brass lota")]);
+        // Parts over each other are parts one under another, at the side they were placed at.
+        let Downgraded::Node(Node::Stack(stack)) = downgrade_by(parts.remove(0), 0, only(Kind::Layers))
+        else {
+            panic!("layers become a stack");
+        };
+        assert_eq!((stack.align, stack.children.len()), (Some(crate::node::Align::End), 2));
+        // A shape that says something says it in words.
+        let Downgraded::Node(Node::Badge(badge)) = downgrade_by(parts.remove(0), 0, only(Kind::Shape))
+        else {
+            panic!("a shape with a label becomes a badge");
+        };
+        assert_eq!((badge.text.as_str(), badge.tone, badge.dot), ("Out of stock", Some(Tone::Danger), true));
+        // A run that scrolls across is a row that wraps.
+        let Downgraded::Node(Node::Stack(row)) = downgrade_by(parts.remove(0), 0, only(Kind::Carousel))
+        else {
+            panic!("a carousel becomes a stack");
+        };
+        assert_eq!((row.axis, row.wrap, row.gap), (crate::node::Axis::Horizontal, true, 3));
+        // The parts for a compact room are the ones every client can lay out.
+        let Downgraded::Node(Node::Stack(narrow)) = downgrade_by(parts.remove(0), 0, only(Kind::Adaptive))
+        else {
+            panic!("an adaptive part becomes a stack");
+        };
+        assert_eq!(narrow.children, [Node::text("3 shelves are empty")]);
+    }
+
+    #[test]
+    fn a_walk_reaches_what_a_composed_part_holds() {
+        let parts = composed_parts();
+        // A card's parts and then its menu; both rooms of an adaptive part; a shape holds nothing.
+        assert_eq!(parts[0].children().len(), 2);
+        assert_eq!(parts[1].children().len(), 2);
+        assert!(parts[2].children().is_empty());
+        assert_eq!(parts[4].children().len(), 3);
+        let mut tree = Node::Stack(Stack {
+            children: parts,
+            ..Stack::default()
+        });
+        assert_eq!(tree.find("level").and_then(Node::id), Some("level"));
+        assert_eq!(tree.find("shelf-7").map(Node::kind), Some(Kind::Card));
+        // What a tap on a card does is found, to be given what every post carries.
+        let mut actions = 0;
+        let mut stack = vec![&mut tree];
+        while let Some(node) = stack.pop() {
+            actions += node.actions_mut().len();
+            stack.extend(node.children_mut());
+        }
+        assert_eq!(actions, 2, "the card stands in the tree twice, with one action each time");
     }
 
     /// A vocabulary in which only `newer` has yet to arrive, so the older form

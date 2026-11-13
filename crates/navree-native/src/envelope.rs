@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::charts::DayPager;
 use crate::node::{Icon, IconShape, Node, TableRow, is_false};
 use crate::op::Op;
 
@@ -74,6 +75,14 @@ pub struct Screen {
     /// Whether pulling down fetches the screen again.
     #[serde(default, skip_serializing_if = "is_false")]
     pub refresh: bool,
+    /// The control that steps the screen from day to day, when the screen is
+    /// one day of many. It belongs to the screen and not to its content: a
+    /// client puts it where its system puts what a whole screen turns on, in
+    /// the bar at the title's place on a narrow window. The title still names
+    /// the screen wherever a name is needed: the way back, the app switcher,
+    /// assistive technology.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pager: Option<DayPager>,
     /// The screen's content.
     pub body: Node,
 }
@@ -191,6 +200,9 @@ impl Envelope {
         if let Some(screen) = &mut self.screen {
             stack.push(&mut screen.body);
             stack.extend(&mut screen.actions);
+            // The day's scores a pager carries are parts too.
+            let scores = screen.pager.as_mut().and_then(|pager| pager.scores.as_deref_mut());
+            stack.extend(scores);
         }
         for op in &mut self.ops {
             match op {
@@ -303,6 +315,7 @@ impl Screen {
             actions: Vec::new(),
             search: None,
             refresh: false,
+            pager: None,
             body,
         }
     }

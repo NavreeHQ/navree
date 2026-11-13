@@ -302,6 +302,42 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "Adaptive": {
+      "properties": {
+        "compact": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "wide": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "Align": {
       "enum": [
         "start",
@@ -421,6 +457,16 @@
       ],
       "type": "object",
       "x-kind": "object",
+      "x-since": 0
+    },
+    "Appear": {
+      "enum": [
+        "fade",
+        "rise",
+        "scale"
+      ],
+      "type": "string",
+      "x-kind": "enum",
       "x-since": 0
     },
     "AuthSession": {
@@ -1277,6 +1323,185 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "Card": {
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Action"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "appear": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Appear"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "colour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "menu": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "pad": {
+          "anyOf": [
+            {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "Carousel": {
+      "properties": {
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "gap": {
+          "default": 0,
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "min": {
+          "anyOf": [
+            {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "paged": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "Category": {
       "properties": {
         "colour": {
@@ -1308,6 +1533,15 @@
         "value",
         "icon",
         "nothing"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Change": {
+      "enum": [
+        "count",
+        "fade"
       ],
       "type": "string",
       "x-kind": "enum",
@@ -4576,6 +4810,18 @@
     },
     "Icon": {
       "properties": {
+        "colour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "fills": {
           "default": [],
           "items": {
@@ -4626,6 +4872,18 @@
             "type": "string"
           },
           "type": "array",
+          "x-since": 0
+        },
+        "scale": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextStyle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "x-since": 0
         },
         "symbol": {
@@ -4978,6 +5236,64 @@
       ],
       "type": "string",
       "x-kind": "enum",
+      "x-since": 0
+    },
+    "Layers": {
+      "properties": {
+        "children": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Node"
+          },
+          "type": "array",
+          "x-since": 0
+        },
+        "grow": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "pad": {
+          "default": 0,
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        },
+        "place": {
+          "$ref": "#/$defs/Place",
+          "default": "center",
+          "x-since": 0
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Size"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
       "x-since": 0
     },
     "Link": {
@@ -6743,6 +7059,81 @@
           "required": [
             "t"
           ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Card"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "card"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Layers"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "layers"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Shape"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "shape"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Carousel"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "carousel"
+            }
+          },
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/Adaptive"
+            }
+          ],
+          "properties": {
+            "t": {
+              "const": "adaptive"
+            }
+          },
+          "required": [
+            "t"
+          ]
         }
       ],
       "x-kind": "union",
@@ -7015,6 +7406,31 @@
         {
           "tag": "scatter",
           "type": "Scatter",
+          "x-since": 0
+        },
+        {
+          "tag": "card",
+          "type": "Card",
+          "x-since": 0
+        },
+        {
+          "tag": "layers",
+          "type": "Layers",
+          "x-since": 0
+        },
+        {
+          "tag": "shape",
+          "type": "Shape",
+          "x-since": 0
+        },
+        {
+          "tag": "carousel",
+          "type": "Carousel",
+          "x-since": 0
+        },
+        {
+          "tag": "adaptive",
+          "type": "Adaptive",
           "x-since": 0
         }
       ]
@@ -8099,6 +8515,22 @@
       ],
       "type": "object",
       "x-kind": "object",
+      "x-since": 0
+    },
+    "Place": {
+      "enum": [
+        "top_start",
+        "top",
+        "top_end",
+        "start",
+        "center",
+        "end",
+        "bottom_start",
+        "bottom",
+        "bottom_end"
+      ],
+      "type": "string",
+      "x-kind": "enum",
       "x-since": 0
     },
     "Platform": {
@@ -9817,6 +10249,18 @@
           "default": null,
           "x-since": 0
         },
+        "pager": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DayPager"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "refresh": {
           "default": false,
           "type": "boolean",
@@ -10194,6 +10638,95 @@
       "enum": [
         "app",
         "notifications"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Shape": {
+      "properties": {
+        "fill": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "form": {
+          "$ref": "#/$defs/ShapeForm",
+          "default": "rounded",
+          "x-since": 0
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Size"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "soft": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "stroke": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
+    "ShapeForm": {
+      "enum": [
+        "rounded",
+        "circle",
+        "capsule",
+        "rect"
       ],
       "type": "string",
       "x-kind": "enum",
@@ -10623,6 +11156,49 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "Size": {
+      "properties": {
+        "height": {
+          "anyOf": [
+            {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "scaled": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
+        "width": {
+          "anyOf": [
+            {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        }
+      },
+      "required": [],
+      "type": "object",
+      "x-kind": "object",
+      "x-since": 0
+    },
     "SliderInput": {
       "properties": {
         "max": {
@@ -10759,6 +11335,18 @@
           "default": null,
           "x-since": 0
         },
+        "appear": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Appear"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "axis": {
           "$ref": "#/$defs/Axis",
           "default": "vertical",
@@ -10778,6 +11366,11 @@
           "maximum": 255,
           "minimum": 0,
           "type": "integer",
+          "x-since": 0
+        },
+        "grow": {
+          "default": false,
+          "type": "boolean",
           "x-since": 0
         },
         "hidden": {
@@ -10801,6 +11394,26 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Justify"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "pad": {
+          "default": 0,
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer",
+          "x-since": 0
+        },
+        "wide": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Axis"
             },
             {
               "type": "null"
@@ -11204,6 +11817,42 @@
     },
     "Text": {
       "properties": {
+        "align": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Align"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "change": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Change"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
+        "colour": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Colour"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "x-since": 0
+        },
         "heading": {
           "anyOf": [
             {
@@ -11256,6 +11905,11 @@
           "default": "body",
           "x-since": 0
         },
+        "tabular": {
+          "default": false,
+          "type": "boolean",
+          "x-since": 0
+        },
         "tone": {
           "anyOf": [
             {
@@ -11270,6 +11924,18 @@
         },
         "value": {
           "type": "string",
+          "x-since": 0
+        },
+        "weight": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Weight"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "x-since": 0
         }
       },
@@ -11433,8 +12099,10 @@
     },
     "TextStyle": {
       "enum": [
+        "display",
         "large_title",
         "title",
+        "title2",
         "headline",
         "body",
         "callout",
@@ -11822,6 +12490,14 @@
       "x-kind": "object",
       "x-since": 0
     },
+    "Transition": {
+      "enum": [
+        "zoom"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
     "Trend": {
       "properties": {
         "direction": {
@@ -11991,6 +12667,17 @@
         "friday",
         "saturday",
         "sunday"
+      ],
+      "type": "string",
+      "x-kind": "enum",
+      "x-since": 0
+    },
+    "Weight": {
+      "enum": [
+        "regular",
+        "medium",
+        "semibold",
+        "bold"
       ],
       "type": "string",
       "x-kind": "enum",

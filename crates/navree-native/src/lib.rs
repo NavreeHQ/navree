@@ -19,6 +19,11 @@
 //!   [`Op`]: what the server changes.
 //! - [`charts`]: the parts a chart is made of (a colour by name, a hint) and
 //!   the kinds a health or fitness screen draws, as typed data.
+//! - [`compose`]: the parts a screen with a design of its own is laid out
+//!   with: cards, parts over each other, shapes, a run that scrolls across,
+//!   and what changes with the room a screen has.
+//! - [`ui`]: Navree Native UI, the way a screen is written in Rust for native
+//!   clients: builders on these same parts.
 //! - [`device`]: the device features a tap may start ([`DeviceCall`]), the few
 //!   a reply may start ([`ReplyCall`]), and the sealed one-time [`Ticket`] a
 //!   result is posted back with.
@@ -36,6 +41,7 @@
 pub mod action;
 pub mod charts;
 pub mod client;
+pub mod compose;
 pub mod device;
 pub mod envelope;
 pub mod input;
@@ -45,6 +51,7 @@ pub mod op;
 pub mod schema;
 pub mod shell;
 pub mod symbols;
+pub mod ui;
 pub mod vocab;
 
 pub use action::{Action, Command, Pair, Present, State};
