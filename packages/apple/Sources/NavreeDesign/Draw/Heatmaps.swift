@@ -34,43 +34,33 @@ struct CalendarHeatmapPart: View {
                 let step = min((width - label * 1.6) / CGFloat(weeks), 20)
                 return label + 6 + step * 7
             }) {
-              GeometryReader { proxy in
-                let gutter = labelSize * 1.6
-                let step = min((proxy.size.width - gutter) / CGFloat(weeks), 20)
-                let cell = max(step - 2, 2)
-                let top = labelSize + 6
-                let start = HeatRules.start(first, calendar: calendar)
-                ZStack(alignment: .topLeading) {
-                    ForEach(HeatRules.months(first: first, weeks: weeks, calendar: calendar), id: \.week) { mark in
-                        Text(calendar.shortMonthSymbols[mark.month - 1])
-                            .font(.system(size: labelSize))
-                            .foregroundStyle(.secondary)
-                            .fixedSize()
-                            .offset(x: gutter + CGFloat(mark.week) * step, y: 0)
+                Canvas { context, size in
+                    // The names of the weekdays in a gutter, the months along
+                    // the top, a square a day under them.
+                    let gutter = label * 1.6
+                    let step = min((size.width - gutter) / CGFloat(weeks), 20)
+                    let cell = max(step - 2, 2)
+                    let top = label + 6
+                    let start = HeatRules.start(first, calendar: calendar)
+                    for mark in HeatRules.months(first: first, weeks: weeks, calendar: calendar) {
+                        let name = Text(calendar.shortMonthSymbols[mark.month - 1]).font(.system(size: label)).foregroundStyle(.secondary)
+                        context.draw(name, at: CGPoint(x: gutter + CGFloat(mark.week) * step, y: 0), anchor: .topLeading)
                     }
-                    ForEach([1, 3, 5], id: \.self) { row in
-                        Text(weekday(row))
-                            .font(.system(size: labelSize))
-                            .foregroundStyle(.secondary)
-                            .frame(width: gutter, height: step, alignment: .leading)
-                            .offset(x: 0, y: top + CGFloat(row) * step)
+                    for row in [1, 3, 5] {
+                        let name = Text(weekday(row)).font(.system(size: label)).foregroundStyle(.secondary)
+                        context.draw(name, at: CGPoint(x: 0, y: top + CGFloat(row) * step + cell / 2), anchor: .leading)
                     }
-                    Canvas { context, _ in
-                        for day in days {
-                            let place = HeatRules.cell(day.date, start: start, calendar: calendar)
-                            let rect = CGRect(x: CGFloat(place.week) * step, y: CGFloat(place.day) * step, width: cell, height: cell)
-                            let shape = Path(roundedRect: rect, cornerRadius: cell * 0.22)
-                            if let shade = HeatRules.shade(day.value, steps: heatmap.steps, highest: highest) {
-                                context.fill(shape, with: .color(colour.opacity(HeatRules.opacities[shade])))
-                            } else {
-                                context.stroke(shape.applying(.identity), with: .color(.secondary.opacity(0.3)), lineWidth: 0.75)
-                            }
+                    for day in days {
+                        let place = HeatRules.cell(day.date, start: start, calendar: calendar)
+                        let rect = CGRect(x: gutter + CGFloat(place.week) * step, y: top + CGFloat(place.day) * step, width: cell, height: cell)
+                        let shape = Path(roundedRect: rect, cornerRadius: cell * 0.22)
+                        if let shade = HeatRules.shade(day.value, steps: heatmap.steps, highest: highest) {
+                            context.fill(shape, with: .color(colour.opacity(HeatRules.opacities[shade])))
+                        } else {
+                            context.stroke(shape, with: .color(.secondary.opacity(0.3)), lineWidth: 0.75)
                         }
                     }
-                    .frame(width: step * CGFloat(weeks), height: step * 7)
-                    .offset(x: gutter, y: top)
                 }
-              }
             }
             legend(colour: colour, highest: highest)
         }

@@ -15,7 +15,8 @@ struct GaugePart: View {
         if aside {
             SmallGauge(gauge: gauge)
         } else {
-            ZoneGauge(gauge: gauge)
+            // A gauge that leads its card stands in its middle.
+            ZoneGauge(gauge: gauge).frame(maxWidth: .infinity)
         }
     }
 }
@@ -69,12 +70,20 @@ private struct ZoneGauge: View {
                     .fill(markColour)
                 Marker(position: position, stroke: stroke)
                     .stroke(Surfaces.card, lineWidth: 3)
+                let words = GaugeRules.split(gauge.shown ?? NumberWords.amount(gauge.value))
                 VStack(spacing: 2) {
-                    Text(gauge.shown ?? NumberWords.amount(gauge.value))
+                    Text(words.number)
                         .font(.system(size: diameter * 0.2, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
+                    if let unit = words.unit {
+                        Text(unit)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
                     if let current, let label = gauge.zones[current].label {
                         Text(label)
                             .font(.subheadline.weight(.semibold))
