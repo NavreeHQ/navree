@@ -32,6 +32,7 @@ pub struct TestResponse {
     status: StatusCode,
     headers: HeaderMap,
     body: Bytes,
+    extensions: http::Extensions,
 }
 
 impl TestResponse {
@@ -42,7 +43,39 @@ impl TestResponse {
             status,
             headers,
             body,
+            extensions: http::Extensions::new(),
         }
+    }
+
+    /// The same response, holding what the app left on it beside its
+    /// headers and its body (`http::Response::extensions`).
+    #[must_use]
+    pub fn with_extensions(mut self, extensions: http::Extensions) -> Self {
+        self.extensions = extensions;
+        self
+    }
+
+    /// What a handler or a layer left on the response for the code around
+    /// it, by its type: nothing a client over the network sees, and what a
+    /// test of an app in the same process can read.
+    ///
+    /// ```
+    /// use bytes::Bytes;
+    /// use http::{Extensions, HeaderMap, StatusCode};
+    /// use navree_testing::TestResponse;
+    ///
+    /// #[derive(Clone, Debug, PartialEq)]
+    /// struct Graded(&'static str);
+    ///
+    /// let mut left = Extensions::new();
+    /// left.insert(Graded("designed"));
+    /// let response = TestResponse::from_parts(StatusCode::OK, HeaderMap::new(), Bytes::new())
+    ///     .with_extensions(left);
+    /// assert_eq!(response.extension::<Graded>(), Some(&Graded("designed")));
+    /// assert_eq!(response.extension::<String>(), None);
+    /// ```
+    pub fn extension<T: Send + Sync + 'static>(&self) -> Option<&T> {
+        self.extensions.get::<T>()
     }
 
     /// The status code (compares with a `u16`: `response.status() == 200`).

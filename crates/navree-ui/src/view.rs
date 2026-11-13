@@ -62,6 +62,10 @@ pub struct View {
     app_sheets: Vec<AppSheet>,
     app_fonts: Vec<AppFont>,
     mark_build: bool,
+    /// The page in the app's shell this view was made from while a native
+    /// client asked: its body is then built only if the view is written as HTML.
+    #[cfg(feature = "native-preview")]
+    note: Option<Box<crate::shell::PageNote>>,
     seo: Option<Box<Seo>>,
 }
 
@@ -83,6 +87,8 @@ impl View {
             app_sheets: Vec::new(),
             app_fonts: Vec::new(),
             mark_build: false,
+            #[cfg(feature = "native-preview")]
+            note: None,
             seo: None,
         }
     }
@@ -246,6 +252,10 @@ impl View {
     /// Sets the page's content.
     pub fn body(mut self, body: impl IntoNodes) -> Self {
         self.body = Node::list(body);
+        #[cfg(feature = "native-preview")]
+        {
+            self.note = None;
+        }
         self
     }
 
@@ -320,17 +330,21 @@ impl View {
 
     /// The page's content.
     pub fn body_node(&self) -> &Node {
+        #[cfg(feature = "native-preview")]
+        if let Some(note) = &self.note {
+            return note.chrome();
+        }
         &self.body
     }
 
     /// What this page loads.
     pub fn uses(&self) -> Uses {
-        measure(&self.body).uses
+        measure(self.body_node()).uses
     }
 
     /// The page's HTML.
     pub fn to_html(&self) -> String {
-        let found = measure(&self.body);
+        let found = measure(self.body_node());
         let seo = if self.seo.is_some() { SEO_BYTES } else { 0 };
         let mut out = String::with_capacity(found.bytes + self.title.len() + HEAD_BYTES + seo);
         self.write(&mut out, &found);
@@ -421,7 +435,7 @@ impl View {
         } else {
             "</head><body>"
         });
-        render_into(out, &self.body);
+        render_into(out, self.body_node());
         if found.posts {
             // The one form every post item names: outside any form of the page, so none nests.
             // It is never validated: a field elsewhere that names it, and isn't valid, must not hold
@@ -598,8 +612,70 @@ fn cap_eager_markup(html: &str, left: &mut usize) -> Option<String> {
     Some(out)
 }
 
+/// What a page is made of, for the answer to a client that is not a browser.
+#[cfg(feature = "native-preview")]
+pub(crate) struct NativeParts<'a> {
+    pub(crate) title: &'a str,
+    pub(crate) body: &'a mut Node,
+    pub(crate) status: StatusCode,
+    pub(crate) cache: &'static str,
+    pub(crate) cookies: &'a [HeaderValue],
+}
+
+#[cfg(feature = "native-preview")]
+impl View {
+    /// This view, keeping the page it was made from.
+    pub(crate) fn with_note(mut self, note: crate::shell::PageNote) -> Self {
+        self.note = Some(Box::new(note));
+        self
+    }
+
+    /// The page in the app's shell this view was made from, when a native
+    /// client asked.
+    pub(crate) fn note(&self) -> Option<&crate::shell::PageNote> {
+        self.note.as_deref()
+    }
+
+    /// Takes the view's body out, built when it was kept as a note.
+    pub(crate) fn take_body(mut self) -> Node {
+        match self.note.take() {
+            Some(note) => note.into_chrome(),
+            None => std::mem::take(&mut self.body),
+        }
+    }
+
+    /// The token the page's posts carry.
+    pub(crate) fn csrf_token(&self) -> Option<&str> {
+        self.csrf.as_deref()
+    }
+
+    pub(crate) fn native_parts(&mut self) -> NativeParts<'_> {
+        NativeParts {
+            title: &self.title,
+            body: &mut self.body,
+            status: self.status,
+            cache: self.cache,
+            cookies: &self.cookies,
+        }
+    }
+}
+
 impl IntoResponse for View {
     fn into_response(mut self) -> Response {
+        // A native client, or its web view, gets its own answer; a browser's
+        // request goes on as it always has.
+        #[cfg(feature = "native-preview")]
+        {
+            self = match crate::native::swap::view(self) {
+                Ok(response) => return response,
+                Err(view) => view,
+            };
+            // A view made while a native client asked, given to a browser: the
+            // chrome is built now.
+            if let Some(note) = self.note.take() {
+                self.body = note.into_chrome();
+            }
+        }
         cap_eager(&mut self.body);
         let uses = self.uses();
         let html = self.to_html();

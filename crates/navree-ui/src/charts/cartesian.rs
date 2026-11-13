@@ -1516,6 +1516,27 @@ impl Chart {
         } else {
             self.vertical_body(&plan, grain, n)
         };
+        #[cfg(feature = "native-preview")]
+        crate::native::record_chart_numbers(
+            &self.common.id(),
+            rows.iter().map(|row| row.name.as_str()),
+            series
+                .iter()
+                .map(|s| (s.name.as_str(), s.values.as_slice())),
+            Some(
+                self.native_extras(
+                    &series,
+                    &averages,
+                    bars && self.horizontal,
+                    stacked,
+                    &self
+                        .common
+                        .summary
+                        .clone()
+                        .unwrap_or_else(|| summary.join(" ")),
+                ),
+            ),
+        );
         Some(Drawn {
             legend: legend_node,
             body,
@@ -1530,6 +1551,115 @@ impl Chart {
                 big: self.tooltip.big,
                 lines: tip_lines,
             }),
+        })
+    }
+}
+
+#[cfg(feature = "native-preview")]
+impl Chart {
+    /// What the chart says that the protocol's `chart` carries beside its numbers, in the
+    /// protocol's own words, for a native client: the units and bounds of its axes, its
+    /// reference lines and zones, the names of a value axis made of levels, how its line
+    /// runs, how its series sit, the colour of each series and its summary. Written only
+    /// while a native client asks.
+    fn native_extras(
+        &self,
+        series: &[Ready],
+        averages: &[Option<f64>],
+        horizontal: bool,
+        stacked: bool,
+        summary: &str,
+    ) -> serde_json::Value {
+        use serde_json::json;
+        let number = |value: f64| -> serde_json::Value {
+            if value.fract() == 0.0 && value.abs() < 9.0e15 {
+                json!(value as i64)
+            } else {
+                json!(value)
+            }
+        };
+        let units: Vec<Option<&str>> = series.iter().map(|s| s.paint.unit.as_deref()).collect();
+        // One unit for every series is the value axis's.
+        let shared = units
+            .first()
+            .copied()
+            .flatten()
+            .filter(|first| units.iter().all(|unit| unit == &Some(*first)));
+        let (low, high) = match self.domain.kind {
+            super::axes::DomainKind::Fixed(a, b) => (Some(a), Some(b)),
+            _ => (None, None),
+        };
+        let low = self.y_min.or(low);
+        let high = self.y_max.or(high);
+        let mut y = serde_json::Map::new();
+        if let Some(unit) = shared {
+            y.insert("unit".to_owned(), json!(unit));
+        }
+        if let Some(low) = low {
+            y.insert("min".to_owned(), number(low));
+        }
+        if let Some(high) = high {
+            y.insert("max".to_owned(), number(high));
+        }
+        let mut references: Vec<serde_json::Value> = Vec::new();
+        for reference in &self.references {
+            let label = reference.label.as_deref();
+            match reference.at {
+                RefAt::Identity => references.push(json!({"kind": "diagonal", "label": label})),
+                _ => {
+                    if let Some(value) = reference_value(reference, averages) {
+                        references
+                            .push(json!({"kind": "level", "value": number(value), "label": label}));
+                    }
+                }
+            }
+        }
+        // A target across the chart is a level; a moment and a stretch of the x axis are not.
+        for annotation in &self.annotations {
+            if let Annotation::Target { value, label } = annotation {
+                references.push(json!({"kind": "level", "value": number(*value), "label": label}));
+            }
+        }
+        let zones: Vec<serde_json::Value> = self
+            .zones
+            .iter()
+            .map(|zone| json!({"from": number(zone.from), "to": number(zone.to), "label": zone.label}))
+            .collect();
+        let hues: Vec<&str> = series
+            .iter()
+            .map(|s| match s.color {
+                Color::Slot(1) => "blue",
+                Color::Slot(2) => "orange",
+                Color::Slot(3) | Color::Slot(6) => "green",
+                Color::Slot(4) => "amber",
+                Color::Slot(5) => "rose",
+                Color::Slot(7) => "violet",
+                Color::Slot(_) => "red",
+                Color::Accent => "accent",
+                Color::Other => "neutral",
+                Color::Tone(tone) => tone.value().unwrap_or("neutral"),
+            })
+            .collect();
+        json!({
+            "x": self.x_label.as_ref().map(|name| json!({"name": name})),
+            "y": (!y.is_empty()).then_some(serde_json::Value::Object(y)),
+            "references": references,
+            "zones": zones,
+            "levels": self.y_categories.clone().unwrap_or_default(),
+            "curve": match self.curve {
+                Curve::Linear => "linear",
+                Curve::Monotone => "smooth",
+                Curve::Step => "step",
+            },
+            "stacking": match (stacked, self.stack) {
+                (true, Stack::Percent) => "shares",
+                (true, _) => "values",
+                _ => "apart",
+            },
+            "horizontal": horizontal,
+            "summary": summary,
+            "units": units,
+            "hues": hues,
         })
     }
 }

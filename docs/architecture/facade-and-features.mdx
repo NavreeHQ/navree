@@ -87,6 +87,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::schedule` | navree-schedule | `schedule` | `ScheduleModule`: tasks on cron schedules |
 | `navree::notify` | navree-notify | `notify` | `NotifyModule`: notifications over mail, the database, broadcasts, Slack, Teams, SMS, WhatsApp and web push, with preferences, digests, quiet hours and send windows |
 | `navree::ui` | navree-ui | `ui` | `UiModule`: the UI toolkit: typed components, the app shell, forms and tables, embedded assets |
+| `navree::native` | navree-native | `ui-native-preview` (opt-in, a preview) | Navree Native: a page answered to a native client as a tree of parts (`navree::ui::native`), and Navree Native UI (`navree::native::ui`), the parts and builders a screen for native clients is written with |
 | `navree::auth` | navree-auth | `auth` | `AuthModule`: JWT access and refresh tokens, users, sessions, impersonation, passwordless sign-in and passkeys |
 | `navree::workspace` | navree-workspace | `workspace` | `WorkspaceModule`: workspaces, members, roles, invitations, isolation and demo workspaces |
 | `navree::mongo` | navree-mongo | `mongo` or `mongodb` (opt-in) | `MongoModule`: [MongoDB](/docs/orm/mongodb/) connections, the ORM's document driver, collections and their migrations |

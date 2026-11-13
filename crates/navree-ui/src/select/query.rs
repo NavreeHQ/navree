@@ -226,6 +226,13 @@ impl From<ChoiceList> for Node {
 
 impl IntoResponse for ChoiceList {
     fn into_response(self) -> Response {
+        // A native client gets the options as a choice it draws itself.
+        #[cfg(feature = "native-preview")]
+        if let Some(response) =
+            crate::native::swap::choices(self.entries.choices(), self.more.as_deref())
+        {
+            return response;
+        }
         let mut response = (
             [
                 (

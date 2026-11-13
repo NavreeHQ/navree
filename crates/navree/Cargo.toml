@@ -162,7 +162,8 @@ time = ["dep:navree-time", "http", "db", "navree-validation?/time", "navree-ui?/
 ## L4
 ## With `auth` on too, browsers sign in through `AuthModule` on the session
 ## (`navree::auth::SessionStrategy`: two-factor, throttles, sign-in policies
-## and the audit trail kept); with `workspace`, the `session` workspace
+## and the audit trail kept); with `social`, native apps sign in with Apple
+## and Google on it too; with `workspace`, the `session` workspace
 ## resolver and its switch route.
 session = [
     "dep:navree-session",
@@ -170,6 +171,7 @@ session = [
     "crypto",
     "db",
     "navree-auth?/session",
+    "navree-social?/session",
     "navree-workspace?/session",
 ]
 ## With `orm` on too, also `navree::orm::validation` (`unique` and `exists`
@@ -203,7 +205,8 @@ access = ["dep:navree-access", "http", "db", "navree-orm?/access", "navree-ui?/a
 ## With `webhooks` on too, the providers' status callbacks and STOP replies
 ## (`/api/webhooks/notify/*`); with `integrations`, bot routes send with a
 ## connection's token; with `settings`, the `notification-templates`
-## settings restyle each workspace's notification mail.
+## settings restyle each workspace's notification mail; with `auth`, a
+## native app's push devices end with the sign-in that registered them.
 notify = [
     "dep:navree-notify",
     "http",
@@ -220,6 +223,7 @@ notify = [
     "navree-webhooks?/notify",
     "navree-integrations?/notify",
     "navree-settings?/notify",
+    "navree-auth?/notify",
 ]
 ## The UI toolkit: typed components rendered to HTML on the server, the app
 ## shell, forms and tables from one struct, embedded CSS, JS and fonts.
@@ -244,6 +248,11 @@ ui = [
     "navree-workspace?/ui",
     "navree-ai?/ui",
 ]
+## Native clients of a `ui` app (`navree::ui::native`): a request that says
+## `X-Navree-Native` is answered with the page as a tree of parts the client
+## draws with its system's own toolkit, and a browser's as before. A preview,
+## outside the 1.x promise: what it answers may change in a minor release.
+ui-native-preview = ["ui", "navree-ui/native-preview"]
 ## The ORM: `#[derive(Model)]` models, the query builder, records,
 ## collections and pagination on navree-db's pool and unit of work; model
 ## events and observers, soft deletes, strict modes and pruning (`OrmModule`);

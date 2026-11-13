@@ -253,6 +253,84 @@ impl Button {
         self
     }
 
+    /// Says what the button is for, when its look does not: a native client
+    /// places it as its own system places that kind of action. A browser's
+    /// page does not change.
+    #[cfg_attr(not(feature = "native-preview"), allow(unused_variables, unused_mut))]
+    pub fn role(mut self, role: crate::Role) -> Self {
+        #[cfg(feature = "native-preview")]
+        if crate::native::scope::native().is_some() {
+            self.el = self.el.child(crate::hint::mark(role));
+        }
+        self
+    }
+
+    /// Says how the screen this button leads to is presented by a native client
+    /// when the page knows (a form to fill in is a task, a record to glance at is
+    /// a sheet); the shell's routes decide otherwise. A browser's page does not
+    /// change.
+    pub fn presented(mut self, how: crate::Presented) -> Self {
+        self.el = self.el.presented(how);
+        self
+    }
+
+    /// Says what the button does can be undone: a native client that asks nothing
+    /// first for what can be undone (its system's guidelines say so) does not ask, and
+    /// offers to undo it after. Say it of a destructive action that has an undo (an
+    /// archive that a toast restores); without it, a destructive action that asks first
+    /// is asked first. A browser's page does not change.
+    ///
+    /// ```
+    /// use navree_ui::{Button, render};
+    ///
+    /// let archive = Button::destructive("Archive").undoable();
+    /// assert!(render(&archive.into()).starts_with("<button "));
+    /// ```
+    #[cfg_attr(not(feature = "native-preview"), allow(unused_mut))]
+    pub fn undoable(mut self) -> Self {
+        #[cfg(feature = "native-preview")]
+        self.el.say(|hints| hints.undoable = true);
+        self
+    }
+
+    /// Says which standard action the button is, by its meaning: a native client draws
+    /// its system's own symbol and label for it, whatever icon and words the page gave
+    /// (the page's words still stand for a browser and for assistive technology). A
+    /// browser's page does not change.
+    ///
+    /// ```
+    /// use navree_ui::{Button, Standard, render};
+    ///
+    /// let share = Button::outline("Send the invoice").standard(Standard::Share);
+    /// assert!(render(&share.into()).starts_with("<button "));
+    /// ```
+    #[cfg_attr(not(feature = "native-preview"), allow(unused_variables, unused_mut))]
+    pub fn standard(mut self, standard: crate::Standard) -> Self {
+        #[cfg(feature = "native-preview")]
+        self.el.say(|hints| hints.standard = Some(standard));
+        self
+    }
+
+    /// Says why a disabled button is disabled, in the page's words: a native client puts
+    /// it where its system explains a control that does not respond (a hint, a tip on a
+    /// long press, the description read aloud). A browser's page does not change; say
+    /// it there too, in a `title` or beside the button, if it should be seen.
+    ///
+    /// ```
+    /// use navree_ui::{Button, render};
+    ///
+    /// let resend = Button::new("Resend")
+    ///     .disabled(true)
+    ///     .reason("It went out at 09:41. It can go again after 09:46.");
+    /// assert!(!render(&resend.into()).contains("09:41"));
+    /// ```
+    #[cfg_attr(not(feature = "native-preview"), allow(unused_variables, unused_mut))]
+    pub fn reason(mut self, reason: impl Into<String>) -> Self {
+        #[cfg(feature = "native-preview")]
+        self.el.say(|hints| hints.reason = Some(reason.into()));
+        self
+    }
+
     fn into_node(self) -> Node {
         let mut root = self.el;
         root.tag = if self.href.is_some() { "a" } else { "button" };

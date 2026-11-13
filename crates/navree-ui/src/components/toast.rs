@@ -83,6 +83,9 @@ pub struct ToastAction {
     href: String,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     post: bool,
+    /// The page's token, for a client that posts the action itself.
+    #[serde(skip)]
+    csrf: Option<String>,
 }
 
 impl ToastAction {
@@ -92,6 +95,7 @@ impl ToastAction {
             label: label.into(),
             href: href.into().as_str().to_owned(),
             post: false,
+            csrf: None,
         }
     }
 
@@ -102,7 +106,21 @@ impl ToastAction {
             label: label.into(),
             href: href.into().as_str().to_owned(),
             post: true,
+            csrf: None,
         }
+    }
+
+    /// The page's token. A native client posts the action itself and sends it with the
+    /// post; a browser's page already holds it.
+    pub fn csrf(mut self, token: impl Into<String>) -> Self {
+        self.csrf = Some(token.into());
+        self
+    }
+
+    /// The token a native client posts with.
+    #[cfg(feature = "native-preview")]
+    pub(crate) fn token(&self) -> Option<&str> {
+        self.csrf.as_deref()
     }
 }
 
@@ -185,6 +203,12 @@ impl Toast {
     pub fn closable(mut self, closable: bool) -> Self {
         self.closable = closable;
         self
+    }
+
+    /// Its action.
+    #[cfg(feature = "native-preview")]
+    pub(crate) fn offered(&self) -> Option<&ToastAction> {
+        self.action.as_ref()
     }
 
     /// The tone.

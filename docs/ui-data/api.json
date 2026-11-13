@@ -110,6 +110,12 @@
         "generics": "",
         "args": "items: impl IntoIterator<Item = ActivityItem>, offset_seconds: i32",
         "doc": "Just the rows, with no header and no list: what the source of a live feed answers with, to be added at the top of the feed's list. `offset_seconds` is the feed's own time zone offset, so a clock time reads the same in a row that arrives later."
+      },
+      {
+        "name": "answer",
+        "generics": "",
+        "args": "items: impl IntoIterator<Item = ActivityItem>, offset_seconds: i32",
+        "doc": "The new rows of a live feed, as the source of its region answers them: the rows as HTML for a browser, with the newest row's cursor in `X-UI-Cursor`, and for a native client the rows to merge into the feed's list, at its top, with the cursor as the revision the list is at."
       }
     ],
     "methods": [
@@ -2201,6 +2207,36 @@
         "generics": "",
         "args": "name: impl Into<String>, value: impl Into<String>",
         "doc": "Sets `form`, `name` and the like, on the button itself."
+      },
+      {
+        "name": "role",
+        "generics": "",
+        "args": "role: crate::Role",
+        "doc": "Says what the button is for, when its look does not: a native client places it as its own system places that kind of action. A browser's page does not change."
+      },
+      {
+        "name": "presented",
+        "generics": "",
+        "args": "how: crate::Presented",
+        "doc": "Says how the screen this button leads to is presented by a native client when the page knows (a form to fill in is a task, a record to glance at is a sheet); the shell's routes decide otherwise. A browser's page does not change."
+      },
+      {
+        "name": "undoable",
+        "generics": "",
+        "args": "",
+        "doc": "Says what the button does can be undone: a native client that asks nothing first for what can be undone (its system's guidelines say so) does not ask, and offers to undo it after. Say it of a destructive action that has an undo (an archive that a toast restores); without it, a destructive action that asks first is asked first. A browser's page does not change."
+      },
+      {
+        "name": "standard",
+        "generics": "",
+        "args": "standard: crate::Standard",
+        "doc": "Says which standard action the button is, by its meaning: a native client draws its system's own symbol and label for it, whatever icon and words the page gave (the page's words still stand for a browser and for assistive technology). A browser's page does not change."
+      },
+      {
+        "name": "reason",
+        "generics": "",
+        "args": "reason: impl Into<String>",
+        "doc": "Says why a disabled button is disabled, in the page's words: a native client puts it where its system explains a control that does not respond (a hint, a tip on a long press, the description read aloud). A browser's page does not change; say it there too, in a `title` or beside the button, if it should be seen."
       }
     ],
     "variants": [],
@@ -5459,6 +5495,12 @@
         "generics": "",
         "args": "href: impl Fn(&R) -> String + 'a",
         "doc": "Makes a click anywhere on a row, outside its controls, go here."
+      },
+      {
+        "name": "row_opens",
+        "generics": "",
+        "args": "opens: impl Fn(&R) -> String + 'a",
+        "doc": "What a tap on a row opens where the reader is, by a `GET` to the address that answers ops (a drawer, a sheet): the meaning of the link or form the row's own cell holds for that. A native client opens it from the whole row; a browser's table does not change."
       },
       {
         "name": "sticky_rows",
@@ -10150,6 +10192,12 @@
         "doc": "Makes the whole row a link."
       },
       {
+        "name": "presented",
+        "generics": "",
+        "args": "how: crate::Presented",
+        "doc": "Says how the screen the row leads to is presented by a native client, when the page knows, as `Button::presented` does. A browser's page does not change."
+      },
+      {
         "name": "aside",
         "generics": "",
         "args": "aside: impl Into<Node>",
@@ -10664,6 +10712,12 @@
         "generics": "",
         "args": "more: bool",
         "doc": "Says whether more lies beyond these items: for a page, more in the list that way; for changes, more changes after the revision this answer gives."
+      },
+      {
+        "name": "joins",
+        "generics": "",
+        "args": "end: LazyEnd",
+        "doc": "Which end of the list a new item among changes joins, when the list has none of its key: the end it follows its stream at. A browser's list places a live item by its cursor; a native client's is told here. The end is the bottom unless said."
       },
       {
         "name": "to_html",
@@ -13295,6 +13349,11 @@
         "name": "Invalidate",
         "doc": "Refetches the region `target`.",
         "default": false
+      },
+      {
+        "name": "Native",
+        "doc": "A change whose payload is native parts, not markup: what `Op::morph`, `Op::replace`, `Op::append` and `Op::prepend` build when the request came from a native client.",
+        "default": false
       }
     ],
     "shared": []
@@ -15511,10 +15570,22 @@
         "doc": "Adds a toast with a title, an action, a name or a time of its own. With JavaScript off, the next page shows its tone and text."
       },
       {
+        "name": "signed_out",
+        "generics": "",
+        "args": "",
+        "doc": "Says the person signed out with this reply, for a native client: it takes its push device off the server, forgets its cookies and what it kept, and fetches the shell again; the reply's other ops (the way to the sign-in page) still apply. A browser's reply is what it was: its session is the cookie the server ended."
+      },
+      {
         "name": "status",
         "generics": "",
         "args": "status: StatusCode",
         "doc": "Sets the status of the ops response."
+      },
+      {
+        "name": "each",
+        "generics": "",
+        "args": "web: impl FnOnce(Self) -> Self, native: impl FnOnce(Self) -> Self",
+        "doc": "Goes on with the reply for the client that asked: `web` for a browser, `native` for a native client, each given the reply so far. Only the one that is needed runs. What both are told (a dialog that closes, a toast, the status) is said once, before or after."
       }
     ],
     "variants": [],
@@ -22241,7 +22312,14 @@
         "doc": "A button that posts to `href`, such as \"Undo\". The post answers ops, so it can replace the toast or raise another."
       }
     ],
-    "methods": [],
+    "methods": [
+      {
+        "name": "csrf",
+        "generics": "",
+        "args": "token: impl Into<String>",
+        "doc": "The page's token. A native client posts the action itself and sends it with the post; a browser's page already holds it."
+      }
+    ],
     "variants": [],
     "shared": []
   },

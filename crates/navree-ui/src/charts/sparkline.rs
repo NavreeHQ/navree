@@ -463,6 +463,17 @@ impl Sparkline {
             links: Vec::new(),
             note: None,
         };
+        #[cfg(feature = "native-preview")]
+        {
+            let values: Vec<Option<f64>> = kept.iter().map(|i| self.values[*i]).collect();
+            let names: Vec<String> = kept.iter().map(|i| name(*i)).collect();
+            crate::native::record_chart_numbers(
+                &self.common.id(),
+                names.iter().map(String::as_str),
+                std::iter::once((self.common.title.as_str(), values.as_slice())),
+                None,
+            );
+        }
         Some(Drawn {
             legend: None,
             body: drawing.into(),

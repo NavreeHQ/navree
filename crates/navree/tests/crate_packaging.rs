@@ -24,8 +24,14 @@ const HOMEPAGE: &str = "https://navree.com";
 const DOCS_RS_TARGET: &str = "x86_64-unknown-linux-gnu";
 const OWN_LICENCE: &str = "MIT OR Apache-2.0";
 
-/// Crates in `crates/` that are never published: test and tooling crates.
-const INTERNAL: &[&str] = &["docs-snippets", "navree-template-peak", "skill-snippets"];
+/// Crates in `crates/` that are never published: test and tooling crates, and
+/// the runtime core the native clients link (they take it as a library file).
+const INTERNAL: &[&str] = &[
+    "docs-snippets",
+    "navree-native-core",
+    "navree-template-peak",
+    "skill-snippets",
+];
 
 /// Crates that bundle third-party files: their licence expression and the
 /// notice files the package must carry.

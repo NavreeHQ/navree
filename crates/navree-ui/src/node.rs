@@ -432,6 +432,49 @@ fn is_refused_attr(name: &str) -> bool {
 }
 
 impl Element {
+    /// Says how the screen this link leads to is presented by a native client, when the
+    /// page knows: a form to fill in is a [`Task`](crate::Presented::Task), a record to
+    /// glance at is a [`Sheet`](crate::Presented::Sheet). Without it the shell's routes
+    /// decide. It writes no HTML: a browser's page is the page it was.
+    ///
+    /// ```
+    /// use navree_ui::{Presented, el, render};
+    ///
+    /// let link = el("a").href("/orders/new").child("New order").presented(Presented::Task);
+    /// assert_eq!(render(&link.into()), r#"<a href="/orders/new">New order</a>"#);
+    /// ```
+    #[cfg_attr(not(feature = "native-preview"), allow(unused_variables, unused_mut))]
+    pub fn presented(mut self, how: crate::Presented) -> Self {
+        #[cfg(feature = "native-preview")]
+        self.say(|hints| hints.presented = Some(how));
+        self
+    }
+
+    /// Sets a hint for a native client, when one is asking. What is said is kept with the
+    /// request, and the element carries its key as a child that writes nothing (a
+    /// zero-length slice of a text of the toolkit's own), so an element is no larger and
+    /// the HTML is the HTML of the element without it.
+    #[cfg(feature = "native-preview")]
+    pub(crate) fn say(&mut self, set: impl FnOnce(&mut crate::hint::Hints)) {
+        let Some(request) = crate::native::scope::native() else {
+            return;
+        };
+        let held = self.children.iter().find_map(crate::hint::key_of);
+        let key = request.hint(held.unwrap_or(0), set);
+        if held.is_none()
+            && let Some(mark) = crate::hint::key_mark(key)
+        {
+            self.children.push(mark);
+        }
+    }
+
+    /// What was said of this element to the native client the current request is from.
+    #[cfg(feature = "native-preview")]
+    pub(crate) fn said(&self) -> Option<crate::hint::Hints> {
+        let key = self.children.iter().find_map(crate::hint::key_of)?;
+        crate::native::scope::native()?.hinted(key)
+    }
+
     /// The element's tag name.
     pub fn tag(&self) -> &'static str {
         self.tag

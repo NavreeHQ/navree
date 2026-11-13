@@ -243,6 +243,16 @@ impl Funnel {
             links: Vec::new(),
             note: None,
         };
+        #[cfg(feature = "native-preview")]
+        {
+            let values: Vec<Option<f64>> = self.stages.iter().map(|stage| stage.value).collect();
+            crate::native::record_chart_numbers(
+                &self.common.id(),
+                self.stages.iter().map(|stage| stage.name.as_str()),
+                std::iter::once((&*labels.value, values.as_slice())),
+                None,
+            );
+        }
         Some(Drawn {
             legend: None,
             body: el("ol")

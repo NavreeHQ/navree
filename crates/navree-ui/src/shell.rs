@@ -27,6 +27,14 @@ use crate::op::ToastTone;
 use crate::theme::{Appearance, Density, Theme, ThemeMenu, ThemeSetting};
 use crate::view::View;
 
+mod contribute;
+pub use contribute::{NativeClient, NativeFamily, NativeShellPart, NativeShellParts, NativeSignIn};
+
+#[cfg(feature = "native-preview")]
+mod native;
+#[cfg(feature = "native-preview")]
+pub(crate) use native::{PageNote, contributed as native_contributed, routes as native_routes};
+
 /// The cookie holding a toast for the next page.
 pub(crate) const FLASH_COOKIE: &str = "navree_ui_flash";
 
@@ -1235,7 +1243,17 @@ impl AppPage {
     }
 
     /// The whole document.
-    pub fn to_view(mut self) -> View {
+    pub fn to_view(self) -> View {
+        // A native client draws the chrome itself: its view keeps the page.
+        #[cfg(feature = "native-preview")]
+        if crate::native::scope::native().is_some() {
+            return native::noted(self);
+        }
+        self.in_shell()
+    }
+
+    /// The page in the app's shell.
+    fn in_shell(mut self) -> View {
         let shell = self.shell.clone();
         let crumbs_empty = self.crumbs.is_empty();
         let mut crumbs = Breadcrumb::new();

@@ -165,6 +165,8 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
             Ok(Arc::new(UiGate(slot)))
         }
     }));
+    #[cfg(feature = "native-preview")]
+    let for_context = slot.clone();
     m.http_layer(GlobalLayer::new(
         LayerSlot::Session,
         "ui.reply",
@@ -176,7 +178,29 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
             }
         },
     ));
+    // Who asked, made current where handlers run, as a task-local value of the
+    // request belongs: inside the unit of work.
+    #[cfg(feature = "native-preview")]
+    m.http_layer(GlobalLayer::new(
+        LayerSlot::Context,
+        "ui.native",
+        move |_, router| {
+            if for_context.get().copied().unwrap_or(false) {
+                Ok(router.layer(middleware::from_fn(crate::native::swap::context_layer)))
+            } else {
+                Ok(router)
+            }
+        },
+    ));
     m.controller::<Assets>();
+    #[cfg(feature = "native-preview")]
+    {
+        m.controller::<crate::native::Routes>();
+        // What a native client keeps its screens under.
+        m.factory(Factory::<crate::native::Stamp>::new(
+            |r: Resolver| async move { Ok(Arc::new(crate::native::app_stamp(&r.app()).await)) },
+        ));
+    }
     // The appearance route sets only the reader's theme cookie and refuses posts from other
     // sites itself: the session layer checks its origin in place of the token, so a theme
     // toggle on a page cached for everyone (with no token in it) works for a reader with a
@@ -189,6 +213,16 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
             "ui:render",
             "Draw one page as a guest and print the answer as JSON (<path> --json)",
             render_command,
+        )
+        .stdio(),
+    );
+    // `navree native:coverage` asks the app's page routes as a native client.
+    #[cfg(feature = "native-preview")]
+    m.command(
+        CommandSpec::new(
+            "native:coverage",
+            "Ask every page route as a native client and print each one's grade as JSON ([--platform <p>] [--form <f>] [--plan <json>])",
+            crate::native::survey::command,
         )
         .stdio(),
     );
@@ -259,7 +293,15 @@ pub(crate) async fn render_json(
 /// Swaps a reply's fallback for its ops when the request came from the runtime,
 /// and sends rendered responses in brotli to clients that take it.
 async fn reply_layer(request: Request, next: Next) -> Response {
-    let from_runtime = request.headers().contains_key(UI_HEADER);
+    let asked = crate::asked::who_asked(request.headers());
+    // A native client's request, or its web view's, is answered its own way;
+    // a browser's is handed back untouched.
+    #[cfg(feature = "native-preview")]
+    let (request, next) = match crate::native::swap::layer(asked, request, next).await {
+        Ok(response) => return response,
+        Err(back) => back,
+    };
+    let from_runtime = asked.is_runtime();
     let for_region = request.headers().contains_key(REGION_HEADER);
     let accept = compress::accept_of(request.headers());
     let method = request.method().clone();
@@ -284,6 +326,9 @@ async fn reply_layer(request: Request, next: Next) -> Response {
             .headers_mut()
             .append(header::VARY, HeaderValue::from_static(UI_HEADER));
     }
+    // A native client asking the same URL gets another answer.
+    #[cfg(feature = "native-preview")]
+    crate::native::swap::vary_on_native(&mut response);
     // A page the toolkit drew, answered to a region's own fetch, is that region's fragment
     // even when it loads the runtime (a lazy tab inside it does): never a page elsewhere.
     if for_region
@@ -298,21 +343,32 @@ async fn reply_layer(request: Request, next: Next) -> Response {
             .insert(FRAGMENT_HEADER, HeaderValue::from_static("1"));
     }
     if let Some(kind) = operation {
-        navree_telemetry::Telemetry::current().ui_operation(|| {
-            let name = response
-                .extensions()
-                .get::<Arc<navree_http::RouteMeta>>()
-                .map_or_else(|| "unmatched".to_owned(), |route| route.full_path.clone());
-            navree_telemetry::UiOperation::new(
-                name,
-                kind,
-                response.status().as_u16(),
-                ops,
-                started.elapsed(),
-            )
-        });
+        record_operation(kind, &response, ops, started);
     }
     compress::encode(&method, &accept, response).await
+}
+
+/// Records an operation the runtime or a native client asked for, in the
+/// telemetry of the request.
+pub(crate) fn record_operation(
+    kind: navree_telemetry::UiOperationKind,
+    response: &Response,
+    ops: u32,
+    started: std::time::Instant,
+) {
+    navree_telemetry::Telemetry::current().ui_operation(|| {
+        let name = response
+            .extensions()
+            .get::<Arc<navree_http::RouteMeta>>()
+            .map_or_else(|| "unmatched".to_owned(), |route| route.full_path.clone());
+        navree_telemetry::UiOperation::new(
+            name,
+            kind,
+            response.status().as_u16(),
+            ops,
+            started.elapsed(),
+        )
+    });
 }
 
 /// The header on a region's answer that says it is the region's fragment, not a page.
@@ -320,7 +376,10 @@ pub(crate) const FRAGMENT_HEADER: HeaderName = HeaderName::from_static("x-navree
 
 /// What a request from the runtime is: a region fetched again, a fragment
 /// of a page, a form posted or another action.
-fn operation_kind(method: &Method, headers: &HeaderMap) -> navree_telemetry::UiOperationKind {
+pub(crate) fn operation_kind(
+    method: &Method,
+    headers: &HeaderMap,
+) -> navree_telemetry::UiOperationKind {
     use navree_telemetry::UiOperationKind;
 
     if method == Method::GET || method == Method::HEAD {
@@ -360,7 +419,7 @@ fn fallback_only(name: &HeaderName) -> bool {
 /// The reply's ops, in place of its fallback. Headers set on the fallback stay,
 /// so a cookie survives whichever side of this layer it was set on. A toast is
 /// on its way as an op, so the cookie that would show it on the next page isn't.
-fn to_ops(fallback: Response, envelope: Envelope, status: StatusCode) -> Response {
+pub(crate) fn to_ops(fallback: Response, envelope: Envelope, status: StatusCode) -> Response {
     let (parts, _) = fallback.into_parts();
     let mut response = (status, envelope).into_response();
     let headers = response.headers_mut();
@@ -580,6 +639,13 @@ mod tests {
                 RouteDef::on(Method::GET, "!/deals", || async { View::new("Deals") })
                     .page()
                     .public(),
+                RouteDef::on(
+                    Method::GET,
+                    "!/deals/{id}",
+                    |Path(id): Path<String>| async move { View::new(format!("Deal {id}")) },
+                )
+                .page()
+                .public(),
                 RouteDef::on(Method::GET, "!/old", || async {
                     crate::Reply::redirect("/deals")
                 })
@@ -634,6 +700,59 @@ mod tests {
         assert_eq!(json["status"], 303);
         assert_eq!(json["location"], "/deals");
         assert_eq!(json["html"], serde_json::Value::Null);
+    }
+
+    #[cfg(feature = "native-preview")]
+    #[tokio::test]
+    async fn native_coverage_asks_the_page_routes_of_the_app() {
+        use crate::native::survey::{Plan, survey};
+        use navree_native::{Client, FormFactor, Platform};
+
+        let app = app().await;
+        assert!(
+            app.ctx()
+                .commands()
+                .iter()
+                .any(|c| c.name == "native:coverage" && c.stdio)
+        );
+        let routes = navree_http::route_table(app.ctx()).await.unwrap();
+        let router = navree_http::build_router(app.ctx()).await.unwrap();
+        let mut plan = Plan::default();
+        plan.values.insert("id".to_owned(), "1".to_owned());
+        let client = Client::new(Platform::Android, FormFactor::Phone);
+        let report = survey(&router, &routes, "/api", &plan, &client)
+            .await
+            .unwrap();
+        let pages: Vec<(&str, &str, &str)> = report
+            .pages
+            .iter()
+            .map(|row| (row.route.as_str(), row.path.as_str(), row.grade.as_str()))
+            .collect();
+        assert_eq!(
+            pages,
+            [
+                ("/deals", "/deals", "idiom"),
+                ("/deals/{id}", "/deals/1", "idiom")
+            ]
+        );
+        // The redirect is listed, with the way to a page behind it.
+        assert_eq!(report.skipped.len(), 1, "{:?}", report.skipped);
+        assert_eq!(report.skipped[0].route, "/old");
+        assert!(report.skipped[0].reason.contains("/deals"), "{:?}", report.skipped);
+        // The toolkit's own files are counted, not asked.
+        assert!(report.not_pages.iter().any(|n| n.reason.contains("own files")));
+        // Without a value for `id`, the route is listed as skipped.
+        let report = survey(&router, &routes, "/api", &Plan::default(), &client)
+            .await
+            .unwrap();
+        assert!(
+            report
+                .skipped
+                .iter()
+                .any(|s| s.route == "/deals/{id}" && s.reason == "needs a value for {id}"),
+            "{:?}",
+            report.skipped
+        );
     }
 
     // `navree check` asks every route for its API documentation, the

@@ -181,37 +181,62 @@ pub enum Op {
         /// The region's name.
         target: String,
     },
+    /// A change whose payload is native parts, not markup: what
+    /// [`Op::morph`], [`Op::replace`], [`Op::append`] and [`Op::prepend`] build
+    /// when the request came from a native client.
+    #[cfg(feature = "native-preview")]
+    Native(crate::native::NodeOp),
 }
 
 impl Op {
     /// Morphs element `target` into `node`.
     pub fn morph(target: impl Into<String>, node: &Node) -> Self {
+        let target = target.into();
+        #[cfg(feature = "native-preview")]
+        if let Some(op) = crate::native::swap::node_op(crate::native::How::Morph, &target, node) {
+            return op;
+        }
         Self::Morph {
-            target: target.into(),
+            target,
             html: render(node),
         }
     }
 
     /// Replaces element `target` with `node`.
     pub fn replace(target: impl Into<String>, node: &Node) -> Self {
+        let target = target.into();
+        #[cfg(feature = "native-preview")]
+        if let Some(op) = crate::native::swap::node_op(crate::native::How::Replace, &target, node) {
+            return op;
+        }
         Self::Replace {
-            target: target.into(),
+            target,
             html: render(node),
         }
     }
 
     /// Adds `node` at the end of `target`.
     pub fn append(target: impl Into<String>, node: &Node) -> Self {
+        let target = target.into();
+        #[cfg(feature = "native-preview")]
+        if let Some(op) = crate::native::swap::node_op(crate::native::How::Append, &target, node) {
+            return op;
+        }
         Self::Append {
-            target: target.into(),
+            target,
             html: render(node),
         }
     }
 
     /// Adds `node` at the start of `target`.
     pub fn prepend(target: impl Into<String>, node: &Node) -> Self {
+        let target = target.into();
+        #[cfg(feature = "native-preview")]
+        if let Some(op) = crate::native::swap::node_op(crate::native::How::Prepend, &target, node) {
+            return op;
+        }
         Self::Prepend {
-            target: target.into(),
+            target,
             html: render(node),
         }
     }
@@ -261,6 +286,9 @@ pub struct Envelope {
     pub modules: Vec<&'static str>,
     /// The ops, applied in order.
     pub ops: Vec<Op>,
+    /// Whether the reply says the person signed out: said to a native client only.
+    #[serde(skip)]
+    pub(crate) signed_out: bool,
 }
 
 impl Envelope {
@@ -270,6 +298,7 @@ impl Envelope {
             build: assets::BUILD,
             modules: Vec::new(),
             ops,
+            signed_out: false,
         }
     }
 }
@@ -324,6 +353,7 @@ pub struct Reply {
     fallback: Fallback,
     flash: Option<(ToastTone, String)>,
     uses: crate::node::Uses,
+    signed_out: bool,
 }
 
 impl Reply {
@@ -340,6 +370,7 @@ impl Reply {
             fallback: Fallback::Redirect(href),
             flash: None,
             uses: crate::node::Uses::NONE,
+            signed_out: false,
         }
     }
 
@@ -351,6 +382,7 @@ impl Reply {
             fallback: Fallback::Redirect(href.into()),
             flash: None,
             uses: crate::node::Uses::NONE,
+            signed_out: false,
         }
     }
 
@@ -366,6 +398,7 @@ impl Reply {
             fallback: Fallback::Redirect(href),
             flash: None,
             uses: crate::node::Uses::NONE,
+            signed_out: false,
         }
     }
 
@@ -377,6 +410,7 @@ impl Reply {
             fallback: Fallback::View(Box::new(view)),
             flash: None,
             uses: crate::node::Uses::NONE,
+            signed_out: false,
         }
     }
 
@@ -388,6 +422,7 @@ impl Reply {
             fallback: Fallback::Empty,
             flash: None,
             uses: crate::node::Uses::NONE,
+            signed_out: false,
         }
     }
 
@@ -423,16 +458,61 @@ impl Reply {
         self
     }
 
+    /// Says the person signed out with this reply, for a native client: it takes its push
+    /// device off the server, forgets its cookies and what it kept, and fetches the shell
+    /// again; the reply's other ops (the way to the sign-in page) still apply. A browser's
+    /// reply is what it was: its session is the cookie the server ended.
+    ///
+    /// ```
+    /// use navree_ui::{LocalHref, Reply};
+    ///
+    /// let reply = Reply::redirect(LocalHref::from("/sign-in?status=signed-out")).signed_out();
+    /// # let _ = reply;
+    /// ```
+    pub fn signed_out(mut self) -> Self {
+        self.signed_out = true;
+        self
+    }
+
     /// Sets the status of the ops response.
     pub fn status(mut self, status: StatusCode) -> Self {
         self.status = status;
         self
     }
 
+    /// Goes on with the reply for the client that asked: `web` for a browser, `native`
+    /// for a native client, each given the reply so far. Only the one that is needed
+    /// runs. What both are told (a dialog that closes, a toast, the status) is said
+    /// once, before or after.
+    ///
+    /// ```
+    /// use navree_ui::native::{self, ui};
+    /// use navree_ui::{Op, Reply, ToastTone, el};
+    ///
+    /// let total = "₹1,240";
+    /// let reply = Reply::ops_or_redirect("/orders/1")
+    ///     .op(Op::Close { target: "refund".to_owned() })
+    ///     .each(
+    ///         |reply| reply.morph("order-total", el("span").id("order-total").child(total)),
+    ///         |reply| reply.op(native::morph("order-total", ui::Text::new(total).id("order-total"))),
+    ///     )
+    ///     .toast(ToastTone::Success, "Refunded");
+    /// # let _ = reply;
+    /// ```
+    #[cfg(feature = "native-preview")]
+    pub fn each(self, web: impl FnOnce(Self) -> Self, native: impl FnOnce(Self) -> Self) -> Self {
+        if crate::native::asked() {
+            native(self)
+        } else {
+            web(self)
+        }
+    }
+
     /// Answers with the fallback, with the ops kept for [`crate::UiModule`]'s layer.
     fn fallback_response(self) -> (Response, Envelope, StatusCode) {
         let mut envelope = Envelope::new(self.ops);
         envelope.modules = assets::scripts(self.uses).collect();
+        envelope.signed_out = self.signed_out;
         let mut response = match self.fallback {
             Fallback::Redirect(href) => {
                 let mut response = StatusCode::SEE_OTHER.into_response();
@@ -488,6 +568,60 @@ impl IntoResponse for Reply {
 mod tests {
     use super::*;
     use crate::el;
+
+    #[cfg(feature = "native-preview")]
+    #[test]
+    fn a_reply_goes_on_for_the_client_that_asked() {
+        use crate::native::scope::{self, Asked};
+        use navree_native::ui::Text;
+
+        let reply = || {
+            Reply::ops_or_redirect("/orders/1")
+                .op(Op::Close {
+                    target: "refund".to_owned(),
+                })
+                .each(
+                    |reply| {
+                        reply.morph("order-total", el("span").id("order-total").child("₹1,240"))
+                    },
+                    |reply| {
+                        reply.op(crate::native::morph(
+                            "order-total",
+                            Text::new("₹1,240").id("order-total"),
+                        ))
+                    },
+                )
+                .toast(ToastTone::Success, "Refunded")
+        };
+        let kinds = |reply: Reply| -> Vec<&'static str> {
+            reply
+                .ops
+                .iter()
+                .map(|op| match op {
+                    Op::Close { .. } => "close",
+                    Op::Morph { .. } => "morph",
+                    Op::Native(_) => "native",
+                    Op::Toast(_) => "toast",
+                    _ => "other",
+                })
+                .collect()
+        };
+        // A browser: the markup. What both are told stands round it, once.
+        assert_eq!(kinds(reply()), ["close", "morph", "toast"]);
+        // A native client: the parts.
+        let client = navree_native::Client::new(
+            navree_native::Platform::Ios,
+            navree_native::FormFactor::Phone,
+        );
+        let asked = Asked::Native(std::sync::Arc::new(scope::Request::new(
+            client,
+            "/orders/1",
+        )));
+        assert_eq!(
+            kinds(scope::sync(asked, reply)),
+            ["close", "native", "toast"]
+        );
+    }
 
     #[test]
     fn the_wire_format_is_stable() {
