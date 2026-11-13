@@ -44,8 +44,21 @@ built all come from it.
 - A file that isn't in the manifest is not published (the build prints a
   warning).
 - To add a page, create the file, then add its slug to its section in the
-  manifest. To move or rename a page, change both, and search the docs for
-  links to the old URL.
+  manifest, inside the group it belongs to. To move or rename a page, change
+  both, and search the docs for links to the old URL.
+- **Long sections have groups.** A section of more than about eight pages
+  has `groups`: each group has a `title` and starts at the page named in
+  `from`, and runs to the next group. The sidebar shows a group as a second
+  level under its section: a heading that opens and closes its pages, with
+  the group that holds the current page open. The page's breadcrumb names the
+  group (Docs / UI components / Charts), and the section's own page draws the
+  groups as headings. A group's pages are one run in `pages`, so keep related
+  pages next to each other and move a page to the group it fits; a page's URL
+  never includes its group. Pages before the first group have no heading
+  (use that for an introduction). Titles are short, in sentence case, and
+  unique within the section. `node scripts/check-docs.ts` checks that every
+  `from` is a page of the section and that the groups follow the order of
+  the pages.
 - Every section also has a page of its own, `/docs/<section>/`, that lists
   the section's pages with their descriptions. Give the section a
   `description` of 70 to 160 characters (it is the page's lead and its meta
