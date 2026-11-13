@@ -110,22 +110,39 @@ struct LinkPart: View {
     let link: Navree.Link
     @Environment(\.navree) private var context
     @Environment(\.navreeOverlay) private var overlay
+    @Environment(\.navreeInControl) private var inControl
 
     var body: some View {
-        Button {
-            context.send(.act(link.action, Place(overlay: overlay)))
-        } label: {
-            if link.children.isEmpty {
+        if link.children.isEmpty {
+            Button {
+                context.send(.act(link.action, Place(overlay: overlay)))
+            } label: {
                 Text(link.label)
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(link.children.enumerated()), id: \.offset) { _, child in NodeView(child) }
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(link.label)
             }
+            .buttonStyle(.borderless)
+        } else if inControl {
+            drawn
+        } else {
+            // What is drawn is the children, as one target with the system's
+            // pressed state; the link's label is its name for VoiceOver.
+            Button {
+                context.send(.act(link.action, Place(overlay: overlay)))
+            } label: {
+                drawn.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .environment(\.navreeInControl, true)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(link.label)
+            .accessibilityAddTraits(.isButton)
         }
-        .buttonStyle(.borderless)
+    }
+
+    private var drawn: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(link.children.enumerated()), id: \.offset) { _, child in NodeView(child) }
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 

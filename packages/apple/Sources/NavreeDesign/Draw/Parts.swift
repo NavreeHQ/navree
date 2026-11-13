@@ -14,10 +14,14 @@ public struct NodeView: View {
         switch node {
         case .stack(let stack): StackPart(stack: stack)
         case .grid(let grid): GridPart(grid: grid)
-        case .section(let section): SectionPart(section: section)
+        case .section(let section):
+            if CompositionRules.isGroup(section) { GroupPart(section: section) } else { SectionPart(section: section) }
         case .list(let list):
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(list.children.enumerated()), id: \.offset) { _, child in NodeView(child) }
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(list.children.enumerated()), id: \.offset) { index, child in
+                    if index > 0 { Divider() }
+                    NodeView(child)
+                }
             }
         case .row(let row): RowContent(row: row)
         case .split(let split):
@@ -68,9 +72,26 @@ public struct NodeView: View {
                 .foregroundStyle(.secondary)
         case .unknown(let part):
             if let alt = part.alt { NodeView(alt) }
-        case .toolbar, .gauge, .figure, .timeline, .feedRow, .message, .pane, .ring, .rings, .dayClock, .dayPager,
-            .meter, .columns, .strip, .range, .calendarHeatmap, .matrixHeatmap, .scatter, .card, .layers, .shape,
-            .carousel, .adaptive:
+        case .gauge(let gauge): GaugePart(gauge: gauge)
+        case .figure(let figure): FigurePart(figure: figure)
+        case .timeline(let timeline): TimelinePart(timeline: timeline)
+        case .ring(let ring): RingPart(ring: ring)
+        case .rings(let rings): RingsPart(rings: rings)
+        case .dayClock(let clock): DayClockPart(clock: clock)
+        case .dayPager(let pager): DayPagerView(pager: pager)
+        case .meter(let meter): MeterPart(meter: meter)
+        case .columns(let columns): ColumnsPart(columns: columns)
+        case .strip(let strip): StripPart(strip: strip)
+        case .range(let range): RangePart(range: range)
+        case .calendarHeatmap(let heatmap): CalendarHeatmapPart(heatmap: heatmap)
+        case .matrixHeatmap(let matrix): MatrixHeatmapPart(matrix: matrix)
+        case .scatter(let scatter): ScatterPart(scatter: scatter)
+        case .card(let card): CardPart(card: card)
+        case .layers(let layers): LayersPart(layers: layers)
+        case .shape(let shape): ShapePart(shape: shape)
+        case .carousel(let carousel): CarouselPart(carousel: carousel)
+        case .adaptive(let adaptive): AdaptivePart(adaptive: adaptive)
+        case .toolbar, .feedRow, .message, .pane:
             // Kinds this client does not draw yet.
             EmptyView()
         }
@@ -82,14 +103,44 @@ public struct NodeView: View {
 struct StackPart: View {
     let stack: Navree.Stack
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.navreeParentAxis) private var parentAxis
 
     var body: some View {
         if stack.hidden {
             EmptyView()
-        } else if stack.axis == .vertical {
+        } else {
+            let turned = stack.wide != nil && WidthClass(sizeClass) == .regular
+            laid(turned: turned)
+                .padding(CGFloat(CompositionRules.points(steps: stack.pad)))
+                .frame(maxWidth: fills ? .infinity : nil, alignment: frameAlignment)
+        }
+    }
+
+    /// A stack that grows takes the room left; a vertical stack that centres
+    /// its parts is as wide as its place, so they stand in its middle.
+    private var fills: Bool {
+        stack.grow || (parentAxis == .vertical && stack.align == .center && CompositionRules.axis(stack, width: WidthClass(sizeClass)) == .vertical)
+    }
+
+    private var frameAlignment: Alignment {
+        stack.align == .center ? .center : stack.align == .end ? .trailing : .leading
+    }
+
+    @ViewBuilder private func laid(turned: Bool) -> some View {
+        let axis = CompositionRules.axis(stack, width: WidthClass(sizeClass))
+        if axis == .vertical {
             VStack(alignment: horizontal, spacing: spacing) {
                 children
             }
+            .environment(\.navreeParentAxis, .vertical)
+        } else if turned || (stack.children.contains(where: Self.grows) && !typeSize.isAccessibilitySize) {
+            // Turned across by a wide room, or holding a part that takes the
+            // room left (its words wrap there): no fallback.
+            HStack(alignment: vertical, spacing: spacing) {
+                children
+            }
+            .environment(\.navreeParentAxis, .horizontal)
         } else if typeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: spacing) {
                 children
@@ -109,11 +160,19 @@ struct StackPart: View {
                     children
                 }
             }
+            .environment(\.navreeParentAxis, .horizontal)
         }
     }
 
     @ViewBuilder private var children: some View {
-        ForEach(Array(stack.children.enumerated()), id: \.offset) { _, child in NodeView(child) }
+        ForEach(Array(stack.children.enumerated()), id: \.offset) { index, child in
+            NodeView(child).environment(\.navreeWordsAbove, HeadingRules.wordsAbove(stack.children, index: index))
+        }
+    }
+
+    static func grows(_ node: Navree.Node) -> Bool {
+        if case .stack(let stack) = node { return stack.grow }
+        return false
     }
 
     private var spacing: CGFloat? {
@@ -143,8 +202,21 @@ struct GridPart: View {
     let grid: Navree.Grid
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: CGFloat(grid.min ?? 160)), spacing: 12)], alignment: .leading, spacing: 12) {
-            ForEach(Array(grid.children.enumerated()), id: \.offset) { _, child in NodeView(child) }
+        let gap = grid.gap > 0 ? CGFloat(CompositionRules.points(steps: grid.gap)) : 12
+        LazyVGrid(columns: columns(gap: gap), alignment: .leading, spacing: max(gap, 12)) {
+            ForEach(Array(grid.children.enumerated()), id: \.offset) { _, child in
+                NodeView(child).frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func columns(gap: CGFloat) -> [GridItem] {
+        switch CompositionRules.columns(grid) {
+        case .fixed(let count):
+            Array(repeating: GridItem(.flexible(), spacing: gap, alignment: .top), count: count)
+        case .fitting(let minimum):
+            [GridItem(.adaptive(minimum: CGFloat(minimum)), spacing: gap, alignment: .top)]
         }
     }
 }
@@ -174,13 +246,30 @@ struct SectionPart: View {
 struct TextPart: View {
     let text: Navree.Text
 
+    @ScaledMetric(relativeTo: .largeTitle) private var display: CGFloat = 48
+    @Environment(\.colorScheme) private var scheme
+
     var body: some View {
         Text(text.value)
-            .font(Typography.font(text.style))
-            .foregroundStyle(text.tone.map(Tones.color) ?? (text.muted ? Color.secondary : Color.primary))
+            .font(font)
+            .fontWeight(text.weight.map(Typography.weight))
+            .foregroundStyle(colour)
             .lineLimit(text.lines)
+            .multilineTextAlignment(Typography.alignment(text.align))
+            .frame(maxWidth: text.align == .center || text.align == .end ? .infinity : nil, alignment: Typography.frame(text.align))
+            .fixedSize(horizontal: false, vertical: text.lines == nil)
             .accessibilityAddTraits(text.heading != nil ? .isHeader : [])
             .accessibilityHeading(Typography.heading(text.heading))
+    }
+
+    private var font: Font {
+        let font = text.style == .display ? Font.system(size: display, weight: .bold, design: .rounded) : Typography.font(text.style)
+        return text.tabular ? font.monospacedDigit() : font
+    }
+
+    private var colour: Color {
+        if let colour = text.colour { return Hues.text(colour, scheme: scheme) }
+        return text.tone.map(Tones.color) ?? (text.muted ? Color.secondary : Color.primary)
     }
 }
 
@@ -244,7 +333,8 @@ struct IconPart: View {
 
     var body: some View {
         Glyph(icon: icon, icons: context.icons)
-            .foregroundStyle(icon.tone.map(Tones.color) ?? Color.secondary)
+            .font(icon.scale.map(Typography.font))
+            .foregroundStyle(icon.colour.map { Hues.color($0) } ?? icon.tone.map(Tones.color) ?? Color.secondary)
             .accessibilityLabel(icon.label ?? "")
             .accessibilityHidden(icon.label == nil)
     }
@@ -331,14 +421,26 @@ public struct StatusLabel: View {
 /// How far something has got: a bar when it is known, a spinner when not.
 struct ProgressPart: View {
     let progress: Navree.Progress
+    @Environment(\.navreeInRowDetail) private var inRow
 
     var body: some View {
         if let value = progress.value {
             ProgressView(value: Double(value), total: 1000) {
-                if let label = progress.label { Text(label) }
+                if let label = progress.label, !inRow { Text(label) }
             }
+            .tint(tint)
+            .accessibilityLabel(progress.label ?? "")
         } else {
             ProgressView { if let label = progress.label { Text(label) } }
+        }
+    }
+
+    /// The measure's colour, else the colour of what it means, else the app's tint.
+    private var tint: Color {
+        switch ProgressRules.fill(progress) {
+        case .measure(let colour): Hues.color(colour)
+        case .tone(let tone): Hues.color(tone)
+        case .accent: .accentColor
         }
     }
 }
@@ -460,12 +562,38 @@ public enum Typography {
     public static func font(_ style: Navree.TextStyle) -> Font {
         switch style {
         case .display, .largeTitle: .largeTitle
-        case .title, .title2: .title2
+        case .title: .title
+        case .title2: .title2
         case .headline: .headline
         case .body: .body
         case .callout: .callout
         case .caption: .caption
         case .mono: .body.monospaced()
+        }
+    }
+
+    static func weight(_ weight: Navree.Weight) -> Font.Weight {
+        switch weight {
+        case .regular: .regular
+        case .medium: .medium
+        case .semibold: .semibold
+        case .bold: .bold
+        }
+    }
+
+    static func alignment(_ align: Navree.Align?) -> TextAlignment {
+        switch align {
+        case .center: .center
+        case .end: .trailing
+        default: .leading
+        }
+    }
+
+    static func frame(_ align: Navree.Align?) -> Alignment {
+        switch align {
+        case .center: .center
+        case .end: .trailing
+        default: .leading
         }
     }
 
