@@ -345,9 +345,13 @@ impl Social {
     /// [`SocialError::LastSignInMethod`] (409) when the user has no
     /// password and no other provider. Stored tokens the provider can
     /// revoke (Sign in with Apple's, Google's) are revoked at the provider
-    /// first ([`SocialError::ProviderUnavailable`] leaves the account
-    /// linked). Emits [`SocialAccountUnlinked`] and
-    /// audits `social.unlinked` after the commit.
+    /// first, before `uow` reads or writes anything, so no transaction waits
+    /// on the provider: an unreachable provider
+    /// ([`SocialError::ProviderUnavailable`], 502) leaves the account
+    /// linked; a token the provider refuses for good is logged, audited as
+    /// `social.token_revocation_refused` and the account is disconnected
+    /// all the same. Emits [`SocialAccountUnlinked`] and audits
+    /// `social.unlinked` after the commit.
     pub async fn unlink(
         &self,
         uow: &Uow,
@@ -355,29 +359,25 @@ impl Social {
         provider: &str,
     ) -> Result<(), SocialError> {
         let rt = self.rt()?;
-        let provider_name = rt.provider_name(provider);
-        let account = find_user_account(uow, user_id, provider).await?;
-        let user = User::find(uow, user_id).await?;
-        let others = social_account::Model::query()
-            .where_(social_account::Model::USER_ID.eq(user_id))
-            .where_(social_account::Model::PROVIDER.ne(provider))
-            .count(uow)
-            .await?;
-        let Some(account) = account else {
-            return Err(SocialError::NotLinked {
-                provider: provider_name,
-            });
-        };
-        let has_password = user.is_some_and(|user| has_password(&user.password_hash));
-        if !has_password && others == 0 {
-            return Err(SocialError::LastSignInMethod {
-                provider: provider_name,
-            });
-        }
         // The provider's tokens die with the link (Apple requires it):
-        // revoked first, so a provider that cannot be reached leaves the
-        // account linked for another try.
-        self.revoke_account(rt, uow, &account).await?;
+        // revoked first, outside the unit of work, so a provider that
+        // cannot be reached leaves the account linked for another try.
+        let revoked = match self.unlinkable(rt, &rt.db, user_id, provider).await {
+            Ok(account) => {
+                self.revoke_at_provider(rt, &account).await?;
+                Some(account.id)
+            }
+            // Read again in the unit of work, which may see what the pool
+            // does not yet.
+            Err(SocialError::NotLinked { .. }) => None,
+            Err(error) => return Err(error),
+        };
+        let account = self.unlinkable(rt, uow, user_id, provider).await?;
+        if revoked != Some(account.id) {
+            // Linked in this unit of work and not committed yet: revoked
+            // here, the one case the call cannot come first.
+            self.revoke_at_provider(rt, &account).await?;
+        }
         let event = SocialAccountUnlinked {
             user_id,
             provider: account.provider.clone(),
@@ -394,6 +394,39 @@ impl Social {
         }
         rt.audit_after_commit(uow, audit).await;
         Ok(())
+    }
+
+    /// `user_id`'s account at `provider`, read through `exec`, when it may be
+    /// disconnected: [`SocialError::NotLinked`] when there is none,
+    /// [`SocialError::LastSignInMethod`] when the user would have no way
+    /// left to sign in.
+    async fn unlinkable<E: Executor + ?Sized>(
+        &self,
+        rt: &Runtime,
+        exec: &E,
+        user_id: Uuid,
+        provider: &str,
+    ) -> Result<social_account::Model, SocialError> {
+        let provider_name = rt.provider_name(provider);
+        let account = find_user_account(exec, user_id, provider).await?;
+        let user = User::find(exec, user_id).await?;
+        let others = social_account::Model::query()
+            .where_(social_account::Model::USER_ID.eq(user_id))
+            .where_(social_account::Model::PROVIDER.ne(provider))
+            .count(exec)
+            .await?;
+        let Some(account) = account else {
+            return Err(SocialError::NotLinked {
+                provider: provider_name,
+            });
+        };
+        let has_password = user.is_some_and(|user| has_password(&user.password_hash));
+        if !has_password && others == 0 {
+            return Err(SocialError::LastSignInMethod {
+                provider: provider_name,
+            });
+        }
+        Ok(account)
     }
 
     /// The user's linked accounts, oldest first.
