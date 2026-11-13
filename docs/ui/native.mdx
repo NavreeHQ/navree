@@ -211,7 +211,9 @@ pub fn today(day: &Day) -> Screen {
 }
 ```
 
-What a composition can say is small on purpose, so a composed screen still belongs to its system. Room is in steps of the system's spacing scale. A size (`Size`, in points) is only for what has none of its own, such as the box a symbol stands in, and can follow the reader's text size. Colour is a name (`Hue`), type is a text style with a weight, a corner is the system's, and motion is a word (`Appear`, `Change`, a card's `zoom`) whose timing is the system's. What depends on the room a screen has is chosen on the device, with no request: a `Grid` and a `Carousel` show as many parts as fit, a `Stack` names the axis it takes in a wide room, and `Adaptive` holds the parts for a compact room beside the parts for a wide one. There are no offsets, no colours or corner radii as numbers, no fonts, no shadows and no blur, and bars stay the system's.
+Every part is built this way, tables, tabs, split panes, rich text, messages and every chart among them, and so is every control of a form (`TextInput::email()`, `ToggleInput::switch()`, `ChoiceInput::of(..)`, `DateInput::date()`, `SliderInput::between(0, 10)`, `FileInput::new()`), so a screen is written without a struct literal.
+
+What a composition can say is small on purpose, so a composed screen still belongs to its system. Room is in steps of the system's spacing scale. A size (`Size`, in points) is only for what has none of its own, such as the box a symbol stands in, and can follow the reader's text size. Colour is a name (`Hue`), type is a text style with a weight, a corner is the system's, and motion is a word (`Appear`, `Change`, and `zoom` on a card whose tap opens a screen, which grows into that screen and takes it back) whose timing is the system's. What depends on the room a screen has is chosen on the device, with no request: a `Grid` and a `Carousel` show as many parts as fit, a `Stack` names the axis it takes in a wide room, and `Adaptive` holds the parts for a compact room beside the parts for a wide one. There are no offsets, no colours or corner radii as numbers, no fonts, no shadows and no blur, and bars stay the system's.
 
 ### One route, each client in its own way
 
@@ -233,25 +235,73 @@ async fn dashboard(shell: AppShell) -> Response {
 }
 ```
 
-The layer adds what a screen function must not know: the destination the screen belongs to and a toast left for it, from the shell; the shell's stamp; the session's token in every post; and the shapes of the icons the screen names (`Icon::named("package")`). What a screen does goes to the same handlers the page uses. A `Form::post(..)` with the id the handler's form has gets its errors back at its fields, and a region or a list of the screen fetches from a route that answers a part or ops the same way: the native side may return a `Screen`, a part (`Node`), or `Vec<Op>`.
+The layer adds what a screen function must not know: the destination the screen belongs to and a toast left for it, from the shell; the shell's stamp; the session's token in every post; and the shapes of the icons the screen names (`Icon::named("package")`). What a screen does goes to the same handlers the page uses, and a region or a list of the screen fetches from a route that answers a part or ops the same way: the native side may return a `Screen`, a part (`Node`), or `Vec<Op>`.
 
-A reply carries native parts built with the same functions. Build them when a native client asked:
+A form is not written twice. `#[derive(Form)]` gives a form its id, its fields and their rules, and the `FormView` the page draws says where it posts and what it holds. `native::form(&view)` says that same form to a native client: the id, each field's name, label, help, control, value and message are the page's, so the handler that takes the page's form takes this one and its errors come back at the fields. The form's own buttons are left out, since a screen puts what sends the form where its design has it.
 
 ```rust
+use navree::native::ui::{Button, Dialog, Role};
+use navree::ui::form::{FormView, Money};
 use navree::ui::native;
-use navree::ui::Reply;
+use navree::ui::{Form, Validate};
+use serde::Deserialize;
 
-fn restocked(day: &Day) -> Reply {
-    let reply = Reply::ops_or_redirect("/");
-    if native::asked() {
-        reply.op(native::replace("to-pack", tile("To pack", day.to_pack, Hue::Amber).id("to-pack")))
-    } else {
-        reply
-    }
+/// What a refund says. The page's form and its handler are made from it.
+#[derive(Deserialize, Validate, Form)]
+#[form(id = "refund")]
+pub struct Refund {
+    /// Amount
+    #[validate(skip)]
+    #[form(help = "Up to what is left to refund.")]
+    pub amount: Money,
+    /// Tell the customer
+    #[validate(skip)]
+    pub notify: bool,
+}
+
+/// The form with what it holds and where it posts. The page draws this.
+fn refund_form(order: i64, left: Money) -> FormView<Refund> {
+    FormView::new()
+        .post(format!("/orders/{order}/refund"))
+        .of(&Refund { amount: left, notify: true })
+}
+
+/// The same form in a native dialog. None of it is repeated by hand.
+pub fn refund_dialog(order: i64, left: Money) -> Dialog {
+    Dialog::new("refund-dialog")
+        .title("Refund")
+        .parts(native::form(&refund_form(order, left)))
+        .action((
+            Button::new("Keep").role(Role::Cancel).dismisses(),
+            Button::new("Refund").role(Role::Confirm).submits_form("refund"),
+        ))
 }
 ```
 
-A route with only a native side uses `Answer::in_shell(&shell).native(|| ..)`. A browser that asks it gets `406` and a line of text.
+A reply carries native parts built with the same functions. `Reply::each` goes on with the reply for the client that asked, and only that side runs. What both are told (a dialog that closes, a toast, the status) is said once, before or after:
+
+```rust
+use navree::ui::native;
+use navree::ui::{Reply, ToastTone, el};
+
+fn restocked(day: &Day) -> Reply {
+    Reply::ops_or_redirect("/")
+        .each(
+            // A browser: the page's own markup.
+            |reply| reply.morph("to-pack", el("span").id("to-pack").child(day.to_pack.to_string())),
+            // A native client: the part the screen is written with.
+            |reply| {
+                let part = tile("To pack", day.to_pack, Hue::Amber).id("to-pack");
+                reply.op(native::replace("to-pack", part))
+            },
+        )
+        .toast(ToastTone::Success, "Restocked")
+}
+```
+
+`native::asked()` says whether a native client is asking, for a handler that needs to know before it builds anything.
+
+A route with only a native side uses `Answer::in_shell(&shell).native(|| ..)`. A browser that asks it gets a small page, with the status `406`, that says the screen is in the app, by the app's name, and gives the way to the app's home.
 
 ### Test it, and what the grade means
 
@@ -266,4 +316,4 @@ fn the_day_sets_its_revenue_large_and_has_nothing_to_fix() {
 }
 ```
 
-A designed screen is held to what every screen is held to (a title, a role on each action, one main action) and to a few rules of composition: a card that is tapped has a name, a card does not stand in a card nor a carousel in a carousel, one figure is set in the display style, and a part with an id stands in one room of an `Adaptive` part only.
+A designed screen is held to what every screen is held to (a title, a role on each action, one main action) and to a few rules of composition: a card that is tapped has a name, a card grows (`zoom`) only into a screen its tap opens and has an id for the screen to shrink back into, a card does not stand in a card nor a carousel in a carousel, one figure is set in the display style, a part with an id stands in one room of an `Adaptive` part only, and the screen holds no markup.

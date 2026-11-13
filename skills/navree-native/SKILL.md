@@ -468,6 +468,11 @@ part. Parts come in three levels, and a screen mixes them:
   `Layers`, `Shape`, `Carousel`, `Adaptive`, `Text` (`style`, `weight`,
   `colour`, `tabular`, `change`), `Icon::named`.
 
+Every part has builders (`Table`, `Tabs`, `Split`, `Rich`, `Message`,
+`Gauge`, `Meter`, `ColorStrip`, `CalendarHeatmap` and the rest), and so has
+every control of a form (`TextInput::email()`, `ToggleInput::switch()`,
+`ChoiceInput::of(..)`, `DateInput::date()`): never write a struct literal.
+
 ```rust
 use navree::http::response::Response;
 use navree::native::ui::{Card, Change, Grid, Hue, Screen, Stack, Text, TextStyle};
@@ -509,15 +514,26 @@ What to hold to:
   borrow what the handler loaded. The layer adds the destination, a toast
   left for the screen, the shell's stamp, the session's token in posts and
   the shapes of icons named with `Icon::named(..)`.
-- **Actions go to the page's own handlers.** A `Form::post(href).id("refund")`
-  gets its errors back at its fields when the handler's form has that id. A
-  reply carries native parts with `native::morph`, `replace`, `append` and
-  `prepend`; build them only when `native::asked()`.
+- **Actions go to the page's own handlers, and a form is not written
+  twice.** `native::form(&view)` says the `FormView` the page draws to a
+  native client: the id `#[derive(Form)]` gave it, where it posts, and each
+  field with the page's label, help, control, value and message, without the
+  form's own buttons. Send it with a button inside it (`.submits()`) or one
+  elsewhere (`.submits_form("refund")`). Its errors come back at its fields.
+- **A reply is built per client.** `Reply::each(|reply| .., |reply| ..)` goes
+  on with the reply for the client that asked: markup for a browser, and for
+  a native client parts with `native::morph`, `replace`, `append` and
+  `prepend`. What both are told (a close, a toast, the status) is said once.
 - **A region or a list of the screen** fetches from a route that answers the
   same way: the native closure may return a `Screen`, a part
   (`Node::from(..)`) or `Vec<Op>` (a list's next rows or its changes).
 - **A route with only a native side** is `Answer::in_shell(&shell).native(..)`;
-  a browser gets `406`.
+  a browser gets a small page (status `406`) that says the screen is in the
+  app, by the app's name, with the way home.
+- **A card grows into a screen only when its tap opens one.** `.zoom()` is
+  for a card with an id whose action is a navigation (a push, or a screen
+  presented as a sheet or full). A card whose tap asks the server for
+  changes to this screen opens no screen and does not grow.
 - **Room is in steps, type is a text style, colour is a `Hue`.** A `Size` in
   points is only for what has no size of its own (the box a symbol stands
   in). There are no offsets, no colours or corner radii as numbers, no
@@ -529,9 +545,10 @@ What to hold to:
 - **Lists stay lists.** Records are `List` and `Row`, loaded by cursor, even
   on a designed screen.
 - **Test the function**: call it and assert the tree; `native::designed(&screen)`
-  lists what it should fix (a tapped card with no name, a card in a card, a
-  carousel in a carousel, more than one display figure, an id in both rooms
-  of an adaptive part) and must be empty.
+  lists what it should fix (a tapped card with no name, a card that grows
+  into a screen it does not open or has no id, a card in a card, a carousel
+  in a carousel, more than one display figure, an id in both rooms of an
+  adaptive part, markup no part draws) and must be empty.
 
 The store demo has three such screens beside their pages
 (`apps/store-demo/src/screens.rs`): the day, an order and the shelves.
