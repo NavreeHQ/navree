@@ -96,6 +96,10 @@ pub(crate) fn slots(node: &mut Node) -> Vec<Slot<'_>> {
         Node::Pane(n) => vec![Slot::Many(&mut n.children)],
         Node::Figure(n) => vec![Slot::Maybe(&mut n.aside), Slot::Maybe(&mut n.chart)],
         Node::DayPager(n) => vec![Slot::Maybe(&mut n.scores)],
+        Node::Card(n) => vec![Slot::Many(&mut n.children), Slot::Many(&mut n.menu)],
+        Node::Layers(n) => vec![Slot::Many(&mut n.children)],
+        Node::Carousel(n) => vec![Slot::Many(&mut n.children)],
+        Node::Adaptive(n) => vec![Slot::Many(&mut n.compact), Slot::Many(&mut n.wide)],
         Node::Unknown(n) => vec![Slot::Maybe(&mut n.alt)],
         _ => Vec::new(),
     }
