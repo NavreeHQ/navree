@@ -259,6 +259,7 @@ fn stack(cx: &mut Cx, element: &Element) -> Read {
         wrap: has(element, "data-wrap"),
         hidden: has(element, "hidden"),
         children: cx.of(element),
+        ..n::Stack::default()
     })])
 }
 
@@ -305,6 +306,7 @@ fn text(_: &mut Cx, element: &Element) -> Read {
         muted: variant.as_deref() == Some("muted"),
         lines: None,
         heading: level,
+        ..n::Text::default()
     })])
 }
 

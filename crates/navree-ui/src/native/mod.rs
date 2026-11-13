@@ -13,6 +13,10 @@
 //! - [`Client`] is the extractor for the handler whose screen really differs
 //!   from one system to another, and [`only`] and [`web_only`] keep a part for
 //!   one side.
+//! - [`Answer`] answers one route for each client in its own way: the page
+//!   for a browser, and for a native client a screen written for native
+//!   clients with [`ui`], Navree Native UI, in place of the page read into
+//!   parts.
 //! - [`TestNative`] drives a page as a native client in a plain test, and
 //!   [`Coverage`] lists which pages are native, which fall back and why.
 //! - The app's shell is answered at [`SHELL_PATH`](navree_native::SHELL_PATH).
@@ -44,6 +48,7 @@
 //! );
 //! ```
 
+mod answer;
 mod coverage;
 mod icon;
 mod lower;
@@ -57,9 +62,13 @@ mod table;
 mod test;
 
 pub use crate::asked::{WhoAsked, who_asked};
-pub use coverage::{Coverage, Grade, graded};
+pub use answer::{Answer, Said, append, asked, morph, prepend, replace};
+pub use coverage::{Coverage, Grade, designed, graded};
 pub use lower::{Lowered, Miss, lower, lower_keeping_markup};
 pub use navree_native as protocol;
+/// Navree Native UI: the parts a screen for native clients is written with,
+/// and their builders. The protocol's own, under the name an author uses.
+pub use navree_native::ui;
 pub use page::Page;
 pub use routes::{LOWERING, Stamp};
 pub(crate) use routes::{Routes, app_stamp};

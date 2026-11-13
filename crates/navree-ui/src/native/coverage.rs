@@ -15,6 +15,10 @@ pub enum Grade {
     /// system does: a table's records as rows with a title, rows that open
     /// something, actions with a role.
     Idiom,
+    /// Written for native clients, not read from a page: its author laid it
+    /// out with the system's own styles. What a designed screen says that
+    /// keeps it from belonging is listed beside it, by [`designed`].
+    Designed,
     /// Native parts, laid out as the web page is: it works, and it looks
     /// like a web page drawn with the system's controls.
     Layout,
@@ -27,6 +31,7 @@ impl Grade {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Idiom => "idiom",
+            Self::Designed => "designed",
             Self::Layout => "layout",
             Self::Web => "web",
         }
@@ -111,6 +116,88 @@ pub fn graded(screen: &Screen) -> (Grade, Vec<String>) {
         Grade::Layout
     };
     (grade, missing)
+}
+
+/// What a screen written for native clients says that keeps it from
+/// belonging to its system, in words: nothing, when it is sound.
+///
+/// A designed screen is held to what every screen is held to (a title, a role
+/// on each action, one main action, a table whose rows are records) and to
+/// what a composition may say: a card that is tapped has a name; a card does
+/// not stand in a card, nor a carousel in a carousel; one figure is set in
+/// the display style; and a part with an id stands in one room of an adaptive
+/// part only, since an answer that names an id finds one node.
+///
+/// ```
+/// use navree_ui::native::{designed, ui::*};
+///
+/// let screen = Screen::titled("Shelves").body(
+///     Card::new().opens("", Action::navigate("/inventory/7")).parts(Card::new()),
+/// );
+/// assert_eq!(
+///     designed(&screen),
+///     ["a card that is tapped has no name", "a card stands inside a card"]
+/// );
+/// ```
+pub fn designed(screen: &Screen) -> Vec<String> {
+    let mut gaps = graded(screen).1;
+    let mut say = |gap: String| {
+        if !gaps.contains(&gap) {
+            gaps.push(gap);
+        }
+    };
+    let mut display = 0;
+    // Each node with whether a card, and whether a carousel, stands round it.
+    let mut stack: Vec<(&N, bool, bool)> = std::iter::once(&screen.body)
+        .chain(&screen.actions)
+        .map(|node| (node, false, false))
+        .collect();
+    while let Some((node, in_card, in_carousel)) = stack.pop() {
+        let (mut card, mut carousel) = (in_card, in_carousel);
+        match node {
+            N::Card(part) => {
+                if in_card {
+                    say("a card stands inside a card".to_owned());
+                }
+                if part.action.is_some() && part.label.as_deref().is_none_or(|label| label.trim().is_empty()) {
+                    say("a card that is tapped has no name".to_owned());
+                }
+                card = true;
+            }
+            N::Carousel(_) => {
+                if in_carousel {
+                    say("a carousel stands inside a carousel".to_owned());
+                }
+                carousel = true;
+            }
+            N::Text(text) if text.style == n::TextStyle::Display => display += 1,
+            N::Adaptive(part) => {
+                let ids = |nodes: &[N]| {
+                    let mut ids: Vec<String> = Vec::new();
+                    let mut inside: Vec<&N> = nodes.iter().collect();
+                    while let Some(node) = inside.pop() {
+                        ids.extend(node.id().map(str::to_owned));
+                        inside.extend(node.children());
+                    }
+                    ids
+                };
+                let wide = ids(&part.wide);
+                for id in ids(&part.compact) {
+                    if wide.contains(&id) {
+                        say(format!("the part “{id}” stands in both rooms of an adaptive part"));
+                    }
+                }
+            }
+            _ => {}
+        }
+        for child in node.children() {
+            stack.push((child, card, carousel));
+        }
+    }
+    if display > 1 {
+        say(format!("{display} figures are set in the display style: a screen has one"));
+    }
+    gaps
 }
 
 /// The labels as a sentence names them: “A” and “B”, or “A”, “B” and “C”.
@@ -302,9 +389,14 @@ impl fmt::Display for Coverage {
                 line.dropped.join(", "),
             )?;
         }
+        // Screens written for native clients are counted where an app has some.
+        let designed = match self.graded(Grade::Designed) {
+            0 => String::new(),
+            count => format!("{count} designed, "),
+        };
         write!(
             f,
-            "{} of {} native: {} idiom, {} layout, {} web",
+            "{} of {} native: {} idiom, {designed}{} layout, {} web",
             self.native(),
             self.pages(),
             self.graded(Grade::Idiom),
@@ -337,6 +429,67 @@ mod tests {
             coverage
                 .to_string()
                 .ends_with("1 of 2 native: 1 idiom, 0 layout, 1 web")
+        );
+    }
+
+    #[test]
+    fn a_designed_screen_is_held_to_what_a_composition_may_say() {
+        use navree_native::ui::{
+            Action, Adaptive, Button, Card, Carousel, Role, Screen, Stack, Text, TextStyle,
+        };
+        let sound = Screen::titled("Shelves")
+            .action(Button::new("Inventory").role(Role::Secondary).to("/inventory"))
+            .body(Stack::down().parts((
+                Text::new("6").style(TextStyle::Display),
+                Card::new()
+                    .id("shelf-7")
+                    .opens("Brass lota, out of stock", Action::navigate("/inventory/7"))
+                    .parts(Text::new("Brass lota")),
+                Carousel::new().parts(Card::new().parts(Text::new("Phulkari dupatta"))),
+                Adaptive::new()
+                    .compact(Text::new("3 shelves are empty").id("empty"))
+                    .wide(Text::new("3 shelves are empty and 3 are running low")),
+            )));
+        assert_eq!(designed(&sound), Vec::<String>::new());
+        let unsound = Screen::titled("").action(Button::new("Export")).body(Stack::down().parts((
+            Text::new("6").style(TextStyle::Display),
+            Text::new("12").style(TextStyle::Display),
+            Card::new()
+                .opens(" ", Action::navigate("/inventory/7"))
+                .parts(Card::new().parts(Carousel::new().parts(Carousel::new()))),
+            Adaptive::new()
+                .compact(Text::new("3 shelves are empty").id("empty"))
+                .wide(Stack::down().parts(Text::new("3 are empty").id("empty"))),
+        )));
+        let mut gaps = designed(&unsound);
+        gaps.sort();
+        assert_eq!(
+            gaps,
+            [
+                "2 figures are set in the display style: a screen has one",
+                "a card stands inside a card",
+                "a card that is tapped has no name",
+                "a carousel stands inside a carousel",
+                "the action “Export” has no role",
+                "the part “empty” stands in both rooms of an adaptive part",
+                "the screen has no title",
+            ]
+        );
+    }
+
+    #[test]
+    fn designed_screens_are_counted_where_there_are_some() {
+        let mut coverage = Coverage::new();
+        let mut answered = crate::native::Answered::parts(Vec::new());
+        answered.grade = Grade::Designed;
+        coverage.add_answer("/", 100, 80, &answered);
+        coverage.add_answer("/orders", 100, 80, &crate::native::Answered::parts(Vec::new()));
+        assert_eq!((coverage.native(), coverage.graded(Grade::Designed)), (2, 1));
+        assert!(
+            coverage
+                .to_string()
+                .ends_with("2 of 2 native: 1 idiom, 1 designed, 0 layout, 0 web"),
+            "{coverage}"
         );
     }
 

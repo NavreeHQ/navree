@@ -273,7 +273,7 @@ pub(crate) fn finished(envelope: Envelope, request: &scope::Request, shell: &str
 /// client's vocabulary, stamped with the app's stamp and `shell`'s, its icon
 /// shapes said once each. JSON nested deeper than a client reads is refused
 /// as the web view.
-fn respond(
+pub(crate) fn respond(
     status: StatusCode,
     cache: &'static str,
     mut envelope: Envelope,

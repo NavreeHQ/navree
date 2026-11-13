@@ -230,6 +230,14 @@ pub use navree_schedule as schedule;
 pub use navree_session as session;
 #[cfg(feature = "ui")]
 pub use navree_ui as ui;
+
+/// Navree Native: the protocol a native client is answered in, and Navree
+/// Native UI (`navree::native::ui`), the parts and builders a screen for
+/// native clients is written with in Rust. A screen written with them depends
+/// on nothing else: no request, no database, no HTML. A preview, outside the
+/// 1.x promise.
+#[cfg(feature = "ui-native-preview")]
+pub use navree_ui::native::protocol as native;
 #[cfg(feature = "validation")]
 pub use navree_validation as validation;
 

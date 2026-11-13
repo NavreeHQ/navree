@@ -206,7 +206,7 @@ pub(crate) struct Row {
     pub route: String,
     /// The address that was asked.
     pub path: String,
-    /// `idiom`, `layout` or `web`.
+    /// `idiom`, `designed`, `layout` or `web`.
     pub grade: String,
     /// Whether the client got native parts (a screen) and not its web view.
     pub native: bool,
@@ -399,7 +399,13 @@ where
             None => "answered operations, not a screen".to_owned(),
         });
     }
-    let answered = Answered::of(&envelope);
+    // What the answer says of itself, when it does: a screen written for native
+    // clients is known only by that. Any other answer is graded from what was sent.
+    let answered = parts
+        .extensions
+        .get::<Answered>()
+        .cloned()
+        .unwrap_or_else(|| Answered::of(&envelope));
     let html_bytes = html_size(router, path, extra).await;
     Asked::Page(Box::new(Row {
         route: route.to_owned(),
@@ -872,6 +878,35 @@ mod tests {
         };
         assert_eq!(row.grade, "layout");
         assert_eq!(row.missing, ["the screen has no title"]);
+    }
+
+    #[tokio::test]
+    async fn a_screen_written_for_native_clients_is_graded_designed_by_its_own_word() {
+        // The answer says of itself how it was made and what it lacks.
+        let router = service_fn(|request: Request<Body>| async move {
+            let native = request.headers().contains_key(NATIVE_HEADER);
+            let mut response = Response::new(Body::from(if native {
+                screen("Today")
+            } else {
+                "<html>the page</html>".to_owned()
+            }));
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static(if native { NATIVE_TYPE } else { "text/html" }),
+            );
+            let envelope: Envelope = serde_json::from_str(&screen("Today")).unwrap();
+            let mut answered = Answered::of(&envelope);
+            answered.grade = crate::native::Grade::Designed;
+            answered.missing = vec!["a card stands inside a card".to_owned()];
+            response.extensions_mut().insert(answered);
+            Ok::<_, Infallible>(response)
+        });
+        let Asked::Page(row) = ask(&router, "/", "/", &phone(), &[]).await else {
+            panic!("a page");
+        };
+        assert_eq!(row.grade, "designed");
+        assert!(row.native);
+        assert_eq!(row.missing, ["a card stands inside a card"]);
     }
 
     #[tokio::test]
