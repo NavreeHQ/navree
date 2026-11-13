@@ -106,3 +106,9 @@ func modal(_ json: String) throws -> Modal {
     #expect(status.notice?.action.map(MessageButton.is) == true)
     #expect(Drawable.notice(nil).notice == nil)
 }
+
+@Test func aPresentedGlanceRestsAtHalfHeightAndATaskTakesTheFullHeight() throws {
+    #expect(ModalRules.height(try modal(#"{"present":"sheet","stack":[4]}"#)) == .half)
+    #expect(ModalRules.height(try modal(#"{"present":"task","stack":[4]}"#)) == .full)
+    #expect(ModalRules.height(try modal(#"{"present":"sheet","locked":true,"stack":[4]}"#)) == .full)
+}

@@ -104,9 +104,11 @@ struct DialogButtons: View {
 }
 
 /// A sheet of the tree, or a dialog that holds a form, presented as a sheet:
-/// its title in the bar, Cancel at the top leading corner, the form's own
-/// submit (or the confirming action) at the top trailing corner, and its
-/// parts as a grouped list. A medium sheet rests at half height.
+/// its title in the bar, Cancel (a task that holds input) or Close at the top
+/// leading corner, the form's own submit (or the confirming action) at the top
+/// trailing corner, its parts as a grouped list and its destructive actions in
+/// a section of their own at the end. A glance rests at half height and is
+/// swiped away; a task takes the full height.
 struct OverlaySheet: View {
     let node: Navree.Node
     @Environment(\.navree) private var context
@@ -120,13 +122,25 @@ struct OverlaySheet: View {
                 .modifier(Subtitle(text: parts.subtitle))
                 .navigationBarTitleDisplayModeInline()
                 .toolbar {
-                    PlacedActions(actions: parts.actions, depth: .sheet, overlay: parts.id, form: parts.form.map(FormRef.init))
+                    PlacedActions(
+                        actions: parts.actions.filter { !ScreenView.isDestructive($0) }, depth: .sheet, overlay: parts.id,
+                        form: parts.form.map(FormRef.init)
+                    )
                     if !parts.hasCancel {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button(role: .close) {
-                                context.send(.dismissed(overlay: parts.id))
-                            } label: {
-                                Label("Close", systemImage: "xmark")
+                            switch parts.dismissal {
+                            case .cancel:
+                                Button(role: .cancel) {
+                                    context.send(.dismissed(overlay: parts.id))
+                                } label: {
+                                    Label("Cancel", systemImage: "xmark")
+                                }
+                            case .close:
+                                Button(role: .close) {
+                                    context.send(.dismissed(overlay: parts.id))
+                                } label: {
+                                    Label("Close", systemImage: "xmark")
+                                }
                             }
                         }
                     }
@@ -148,64 +162,66 @@ struct OverlaySheet: View {
         var form: Navree.Form?
         var detents: Set<PresentationDetent>
         var hasCancel: Bool
-    }
-
-    /// The first form in `node` that is not inside another sheet or dialog.
-    static func ownForm(_ node: Navree.Node) -> Navree.Form? {
-        switch node {
-        case .form(let form): return form
-        case .sheet, .dialog, .popover: return nil
-        default: return node.children.lazy.compactMap(ownForm).first
-        }
+        var dismissal: SheetDismissal
     }
 
     /// The parts of a sheet or a form dialog. A form's submit button leaves
     /// the content for the toolbar: there is no submit button at the foot of a
     /// form on iOS.
     static func parts(of node: Navree.Node) -> Parts {
-        var parts = Parts(id: node.id ?? "", title: "", body: [], actions: [], detents: [.large], hasCancel: false)
+        var parts = Parts(
+            id: node.id ?? "", title: "", body: [], actions: [], detents: [.large], hasCancel: false, dismissal: .close
+        )
+        var task = false
         switch node {
         case .sheet(let sheet):
             parts.title = sheet.title ?? ""
             parts.subtitle = sheet.subtitle
             parts.body = sheet.children
-            parts.actions = sheet.actions
-            parts.detents = PresentationRules.sheet(sheet.size) == .resizable ? [.medium, .large] : [.large]
+            parts.actions = ActionRules.expand(sheet.actions)
+            task = sheet.task
+            parts.detents = SheetRules.height(task: task) == .half && PresentationRules.sheet(sheet.size) != .large
+                ? [.medium, .large] : [.large]
         case .dialog(let dialog):
             parts.title = dialog.title ?? ""
             parts.text = dialog.text
             parts.body = dialog.children
-            parts.actions = dialog.actions
+            parts.actions = ActionRules.expand(dialog.actions)
+            // A dialog that holds a form is a small task.
+            task = true
+            parts.detents = [.medium, .large]
+        case .popover(let popover):
+            parts.body = popover.children
             parts.detents = [.medium, .large]
         default:
             break
         }
         // The sheet's own form gives its submit buttons to the toolbar, as the
         // confirming action. A dialog or sheet inside it keeps its own.
-        if let form = parts.body.lazy.compactMap(Self.ownForm).first {
-            parts.form = form
-            form.walkFields { field in
-                if case .button(var button) = field, case .submit? = button.action {
-                    if button.role == Navree.Role.none || button.role == .primary { button.role = .confirm }
-                    parts.actions.append(.button(button))
-                }
-            }
-        }
+        let lifted = SheetRules.lift(parts.body)
+        parts.form = lifted.form
+        parts.actions.append(contentsOf: lifted.confirms.map(Navree.Node.button))
         parts.hasCancel = parts.actions.contains { node in
             if case .button(let button) = node { return button.role == .cancel }
             return false
         }
+        parts.dismissal = SheetRules.dismissal(task: task, holdsInput: SheetRules.holdsInput(parts.body))
         return parts
     }
 }
 
 /// The content of a sheet: the dialog's words, then its parts as sections of
-/// a grouped list, without the submit buttons the toolbar now holds.
+/// a grouped list, without the submit buttons the toolbar now holds, and its
+/// destructive actions in a section of their own at the end.
 struct OverlayContent: View {
     let parts: OverlaySheet.Parts
 
     var body: some View {
         let sections = SectionRules.sections(parts.body).map(Self.withoutSubmits)
+        let destructive = parts.actions.compactMap { node -> Navree.Button? in
+            if case .button(let button) = node, ScreenView.isDestructive(node) { return button }
+            return nil
+        }
         List {
             if let text = parts.text {
                 Section {
@@ -214,6 +230,15 @@ struct OverlayContent: View {
             }
             ForEach(sections) { section in
                 SectionView(section: section)
+            }
+            if !destructive.isEmpty {
+                Section {
+                    ForEach(Array(destructive.enumerated()), id: \.offset) { _, button in
+                        ButtonRow(button: button, inFootedSection: true)
+                    }
+                } footer: {
+                    if let footer = ActionRules.footer(destructive) { Text(footer) }
+                }
             }
         }
         .modifier(ListLook(layout: .insetGrouped))

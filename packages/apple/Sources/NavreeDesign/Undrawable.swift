@@ -10,6 +10,5 @@ public let undrawable: [String] = [
     "message",
     "pane",
     "popover",
-    "toolbar",
     "web",
 ]
