@@ -70,6 +70,11 @@
     <string name="navree_choose_across">Select all %1$s</string>
     <string name="navree_choose_all_shown">Select all rows</string>
     <string name="navree_clear_choice">Clear selection</string>
+    <string name="navree_about_hint">About %1$s</string>
+    <string name="navree_previous_day">Previous day</string>
+    <string name="navree_next_day">Next day</string>
+    <string name="navree_choose_day">Choose a day</string>
+    <string name="navree_today">Today</string>
     <string name="navree_drag_handle">Reorder</string>
     <string name="navree_move_up">Move up</string>
     <string name="navree_move_down">Move down</string>

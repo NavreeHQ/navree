@@ -222,10 +222,23 @@ class ScreenRulesTest {
     }
 
     @Test
-    fun a_presented_route_is_full_screen_on_a_phone_and_a_dialog_on_a_tablet() {
-        assertEquals(Presentation.FullScreenDialog, ScreenRules.presentation(false, WindowInfo.Phone))
-        assertEquals(Presentation.Dialog, ScreenRules.presentation(false, WindowInfo.Tablet))
-        assertEquals(Presentation.FullScreenDialog, ScreenRules.presentation(true, WindowInfo.Tablet))
+    fun a_task_is_full_screen_on_a_phone_and_a_dialog_on_a_tablet() {
+        assertEquals(Presentation.FullScreenDialog, ScreenRules.presentation(Navree.Present.TASK, WindowInfo.Phone))
+        assertEquals(Presentation.Dialog, ScreenRules.presentation(Navree.Present.TASK, WindowInfo.Tablet))
+        assertEquals("full is full everywhere", Presentation.FullScreenDialog, ScreenRules.presentation(Navree.Present.FULL, WindowInfo.Tablet))
+    }
+
+    @Test
+    fun a_sheet_rises_from_the_bottom_on_a_phone_and_is_a_dialog_on_a_tablet() {
+        assertEquals(Presentation.BottomSheet, ScreenRules.presentation(Navree.Present.SHEET, WindowInfo.Phone))
+        assertEquals(Presentation.Dialog, ScreenRules.presentation(Navree.Present.SHEET, WindowInfo.Tablet))
+    }
+
+    @Test
+    fun a_glance_stands_beside_the_content_on_a_wide_window() {
+        assertEquals(Presentation.BottomSheet, ScreenRules.sheet(task = false, window = WindowInfo.Phone))
+        assertEquals(Presentation.SideSheet, ScreenRules.sheet(task = false, window = WindowInfo.Tablet))
+        assertEquals(Presentation.Dialog, ScreenRules.sheet(task = true, window = WindowInfo.Tablet))
     }
 
     @Test

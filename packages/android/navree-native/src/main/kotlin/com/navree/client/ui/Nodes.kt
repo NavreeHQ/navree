@@ -183,8 +183,19 @@ internal fun NodeView(node: Navree.Node, place: Place, modifier: Modifier = Modi
         is Navree.Disclosure -> DisclosureView(node, place, modifier)
         is Navree.Divider -> HorizontalDivider(modifier.padding(vertical = 8.dp))
         is Navree.Spacer -> Spacer(modifier.height(16.dp))
-        is Navree.Gauge -> GaugeView(node, modifier)
-        is Navree.Figure -> FigureView(node, modifier)
+        is Navree.Gauge -> HealthGaugeView(node, modifier)
+        is Navree.Figure -> HealthFigureView(node, place, modifier)
+        is Navree.Ring -> RingView(node, modifier)
+        is Navree.Rings -> RingsView(node, modifier)
+        is Navree.DayClock -> DayClockView(node, modifier)
+        is Navree.DayPager -> DayPagerView(node, place, modifier)
+        is Navree.Meter -> MeterView(node, modifier)
+        is Navree.MiniColumns -> MiniColumnsView(node, modifier)
+        is Navree.ColorStrip -> StripView(node, modifier)
+        is Navree.RangeScale -> RangeView(node, modifier)
+        is Navree.CalendarHeatmap -> CalendarHeatmapView(node, modifier)
+        is Navree.MatrixHeatmap -> MatrixHeatmapView(node, modifier)
+        is Navree.Scatter -> ScatterView(node, modifier)
         is Navree.Timeline -> TimelineView(node, place, modifier)
         is Navree.FeedRow -> FeedRowView(node, place, modifier)
         is Navree.Message -> MessageView(node, place, modifier)
@@ -425,7 +436,7 @@ private fun SectionView(node: Navree.Section, place: Place, modifier: Modifier) 
     val content: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val title = node.title
-            if (title != null || node.actions.isNotEmpty()) {
+            if (title != null || node.actions.isNotEmpty() || node.hint != null) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         title?.let { Text(it, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() }) }
@@ -433,6 +444,7 @@ private fun SectionView(node: Navree.Section, place: Place, modifier: Modifier) 
                             Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                    node.hint?.let { HintMark(it) }
                     for (action in node.actions) NodeView(action, place)
                 }
             }
@@ -441,8 +453,11 @@ private fun SectionView(node: Navree.Section, place: Place, modifier: Modifier) 
         }
     }
     if (node.style == Navree.SectionStyle.CARD) {
-        // One card variant on every screen: the outlined one, quiet beside the rows around it.
-        OutlinedCard(modifier.fillMaxWidth()) { Box(Modifier.padding(16.dp)) { content() } }
+        // One card variant on every screen: Material's filled card, a tonal step above the surface.
+        Card(
+            modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        ) { Box(Modifier.padding(16.dp)) { content() } }
     } else {
         Box(modifier.fillMaxWidth()) { content() }
     }
@@ -660,64 +675,6 @@ internal fun StatusView(node: Navree.Badge, modifier: Modifier = Modifier) {
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = 6.dp),
         )
-    }
-}
-
-/** A gauge: a value between a least and a most, as a ring with the value in it and its label under. */
-@Composable
-private fun GaugeView(node: Navree.Gauge, modifier: Modifier) {
-    val span = (node.max - node.min).takeIf { it > 0 } ?: 1.0
-    val fraction = ((node.value - node.min) / span).toFloat().coerceIn(0f, 1f)
-    val said = node.shown ?: node.value.toString()
-    Column(
-        modifier.semantics(mergeDescendants = true) { contentDescription = listOfNotNull(node.label, said).joinToString(": ") },
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(
-                progress = { fraction },
-                modifier = Modifier.size(88.dp),
-                color = if (node.tone == null) MaterialTheme.colorScheme.primary else markColour(node.tone),
-                strokeWidth = 8.dp,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-            )
-            Text(said, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-        }
-        node.label?.let {
-            Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
-        }
-    }
-}
-
-/**
- * A figure: one number that matters, with its label above and its trend
- * under it, on a filled card. The trend says up, down or flat in words and an
- * arrow, never by colour alone.
- */
-@Composable
-private fun FigureView(node: Navree.Figure, modifier: Modifier) {
-    Card(
-        modifier = modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(node.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(node.value, style = MaterialTheme.typography.headlineMedium, color = if (node.tone == null) LocalContentColor.current else textColour(node.tone, Navree.TextStyle.TITLE))
-            val trend = node.trend
-            if (trend != null) {
-                val symbol = when (trend.direction) {
-                    Navree.Direction.UP -> "trending_up"
-                    Navree.Direction.DOWN -> "trending_down"
-                    Navree.Direction.FLAT -> "trending_flat"
-                }
-                val tint = markColour(trend.tone)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    symbolVector(symbol)?.let { Icon(it, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp)) }
-                    trend.text?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = tint, modifier = Modifier.padding(start = 4.dp)) }
-                }
-            }
-            node.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
     }
 }
 

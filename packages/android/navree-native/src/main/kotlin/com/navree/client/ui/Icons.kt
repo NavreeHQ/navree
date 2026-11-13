@@ -68,9 +68,8 @@ internal object Glyphs {
     val DateRange get() = symbolVector("date_range")!!
     val Help get() = symbolVector("help")!!
     val Info get() = symbolVector("info")!!
-    val ChevronLeft get() = symbolVector("chevron_left")!!
     val ChevronRight get() = symbolVector("chevron_right")!!
-    val Today get() = symbolVector("today")!!
+    val Today get() = symbolVector("calendar_today")!!
 }
 
 /**

@@ -3,6 +3,7 @@ package com.navree.client.ui
 import com.navree.client.core.ScreenView
 import com.navree.client.design.ContentRules
 import com.navree.client.design.ListRules
+import com.navree.client.design.PagerRules
 import com.navree.client.design.SelectionRules
 import com.navree.client.design.childNodes
 import com.navree.client.design.nodeId
@@ -42,6 +43,9 @@ internal sealed interface Block {
 
     /** A node that fills the window: an empty state that is the whole screen. */
     data class Fill(override val key: String, val node: Navree.Node) : Block
+
+    /** Cards side by side on a wide window, a line of the dashboard's grid. */
+    data class Cards(override val key: String, val nodes: List<Navree.Node>, val columns: Int, val form: String?) : Block
 }
 
 /** Whether the node draws anything where it stands. Overlays are drawn over the screen, not in it. */
@@ -50,6 +54,8 @@ internal fun inFlow(node: Navree.Node, screen: ScreenView): Boolean = when {
     screen.hidden(node.nodeId) -> false
     node is Navree.Sheet || node is Navree.Dialog || node is Navree.Popover -> false
     node is Navree.Toolbar -> false
+    // A day pager that leads the screen stands in the app bar.
+    node is Navree.DayPager && screen.screen?.let { PagerRules.inBar(it) } === node -> false
     // The buttons for chosen rows are the contextual app bar's.
     node is Navree.Form && node.id != null && node.id == bulkFormId(screen) -> false
     else -> true
@@ -80,8 +86,11 @@ internal fun blocks(
     widthDp: Int,
     omit: Navree.Node? = null,
     hoisted: Navree.Form? = null,
+    fontScale: Float = 1f,
 ): List<Block> {
     val out = ArrayList<Block>()
+    val cardColumns = ContentRules.cardColumns(widthDp, fontScale)
+    fun card(node: Navree.Node) = node is Navree.Section && node.style == Navree.SectionStyle.CARD
     val used = HashSet<String>()
 
     fun key(path: String, id: String?): String {
@@ -98,7 +107,22 @@ internal fun blocks(
                 val gap = ContentRules.gap(node.gap)
                 var any = false
                 val shown = node.children.count { it !== omit && inFlow(it, screen) }
+                var run = ArrayList<Pair<Int, Navree.Node>>()
+                fun flush() {
+                    for (line in run.chunked(cardColumns)) {
+                        if (any && gap > 0) out += Block.Space(key("$path/${line.first().first}/gap", null), gap)
+                        out += Block.Cards(key("$path/${line.first().first}/cards", null), line.map { it.second }, cardColumns, form)
+                        any = true
+                    }
+                    run = ArrayList()
+                }
                 node.children.forEachIndexed { index, child ->
+                    // On a wide window, cards that follow each other stand side by side.
+                    if (cardColumns > 1 && card(child) && child !== omit && inFlow(child, screen)) {
+                        run += index to child
+                        return@forEachIndexed
+                    }
+                    if (run.isNotEmpty()) flush()
                     if (child !== omit && inFlow(child, screen)) {
                         val before = out.size
                         if (any && gap > 0) out += Block.Space(key("$path/$index/gap", null), gap)
@@ -112,6 +136,7 @@ internal fun blocks(
                         }
                     }
                 }
+                if (run.isNotEmpty()) flush()
             } else {
                 // A row of parts whose only part is drawn elsewhere draws nothing.
                 if (node.children.any { it !== omit && inFlow(it, screen) }) out += Block.Single(key(path, node.id), node, form)

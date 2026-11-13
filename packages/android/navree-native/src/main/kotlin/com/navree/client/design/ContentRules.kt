@@ -330,6 +330,17 @@ object ContentRules {
     /** The most a table drawn as a table spans: wider than a column of text, because its columns need the room. */
     const val TABLE_MOST_DP = 1440
 
+    /**
+     * How many cards stand side by side in a pane this wide: one on a phone
+     * and a medium window, two on an expanded one, three where it is very
+     * wide. Larger text keeps fewer, so a card is never too narrow to read.
+     */
+    fun cardColumns(paneDp: Int, fontScale: Float = 1f): Int {
+        val least = 400f * fontScale.coerceAtLeast(1f)
+        if (paneDp < 840) return 1
+        return (paneDp / least).toInt().coerceIn(1, 3)
+    }
+
     /** Label and value sit side by side until the text is large; then the value goes under its label. */
     fun factsStacked(window: WindowInfo): Boolean = window.largeText
 

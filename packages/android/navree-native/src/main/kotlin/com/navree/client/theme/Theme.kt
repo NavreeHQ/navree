@@ -42,6 +42,9 @@ private val LocalToneColours = staticCompositionLocalOf {
     )
 }
 
+/** Whether the person turned animations off: charts then appear at once, without growing. */
+val LocalReducedMotion = staticCompositionLocalOf { false }
+
 /** The container and content colours a tone is drawn with in the current theme. */
 @Composable
 @ReadOnlyComposable
@@ -162,7 +165,7 @@ fun NavreeTheme(
     val reduced = remember(context) {
         android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
     }
-    CompositionLocalProvider(LocalToneColours provides tones) {
+    CompositionLocalProvider(LocalToneColours provides tones, LocalReducedMotion provides reduced) {
         ExpressiveTheme(colorScheme = scheme, shapes = shapes, typography = MaterialTheme.typography, reducedMotion = reduced, content = content)
     }
 }

@@ -6,12 +6,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -88,6 +90,7 @@ import com.navree.client.design.Presentation
 import com.navree.client.design.ScreenContext
 import com.navree.client.design.ScreenPlan
 import com.navree.client.design.ScreenRules
+import com.navree.client.design.PagerRules
 import com.navree.client.design.SelectionRules
 import com.navree.client.design.SearchPlace
 import com.navree.client.design.SubmitPlace
@@ -279,8 +282,8 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
                     .consumeWindowInsets(padding)
                     .imePadding(),
             ) {
-                val items = remember(screen.body, view, maxWidth, barSubmit, hoisted) {
-                    blocks(screen.body, view, maxWidth.value.toInt(), omit = barSubmit, hoisted = hoisted)
+                val items = remember(screen.body, view, maxWidth, barSubmit, hoisted, window.fontScale) {
+                    blocks(screen.body, view, maxWidth.value.toInt(), omit = barSubmit, hoisted = hoisted, fontScale = window.fontScale)
                 }
                 val floating = (fab != null && plan.fabPlace == FabPlace.BottomEnd) || bars.isNotEmpty()
                 val bottom = padding.calculateBottomPadding() + if (floating) 88.dp else 16.dp
@@ -383,6 +386,14 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
             }
         }
         is Block.Fill -> Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) { NodeView(block.node, place) }
+        is Block.Cards -> Row(
+            Modifier.readable(ContentRules.TABLE_MOST_DP).padding(horizontal = margin).height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            val inner = place.copy(form = block.form ?: place.form)
+            for (node in block.nodes) Box(Modifier.weight(1f).fillMaxHeight()) { NodeView(node, inner, Modifier.fillMaxHeight()) }
+            repeat(block.columns - block.nodes.size) { Spacer(Modifier.weight(1f)) }
+        }
     }
 }
 
@@ -482,8 +493,15 @@ private fun ScreenBar(
             return
         }
     }
+    val pager = remember(screen) { PagerRules.inBar(screen) }
     when {
         plan.bar == BarKind.None -> Unit
+        pager != null && !searching -> TopAppBar(
+            title = { DayPagerView(pager, place, inBar = true) },
+            navigationIcon = navigationIcon,
+            actions = actions,
+            scrollBehavior = behaviour,
+        )
         plan.bar == BarKind.Search || (searching && plan.search != SearchPlace.None) ->
             SearchTopBar(view, screen, plan, place, info, temporary = plan.bar != BarKind.Search) { setSearching(false) }
         else -> TopAppBar(

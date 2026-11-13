@@ -3,6 +3,7 @@ package com.navree.client.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -36,7 +37,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -152,7 +155,23 @@ internal fun QuietButton(node: Navree.Button, place: Place, colour: Color = Colo
 @Composable
 internal fun LinkView(node: Navree.Link, place: Place, modifier: Modifier = Modifier) {
     val ui = LocalUi.current
-    TextButton(onClick = { ui.act(place, node.action) }, modifier = modifier) { Text(node.label) }
+    if (node.children.isEmpty()) {
+        TextButton(onClick = { ui.act(place, node.action) }, modifier = modifier) { Text(node.label) }
+        return
+    }
+    // A link that holds parts (a ring and its words) is one touch target with the shape of a card's item.
+    Box(
+        modifier
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(role = androidx.compose.ui.semantics.Role.Button) { ui.act(place, node.action) }
+            .semantics(mergeDescendants = true) {}
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            for (child in node.children) NodeView(child, place)
+        }
+    }
 }
 
 /** A menu in the content: a button that opens its items under it. */

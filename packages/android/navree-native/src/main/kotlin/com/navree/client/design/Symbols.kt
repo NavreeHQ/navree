@@ -59,6 +59,8 @@ object Symbols {
         "board" to "view_kanban", "boards" to "view_kanban", "tasks" to "checklist", "projects" to "view_kanban",
         "reports" to "bar_chart", "analytics" to "bar_chart", "settings" to "settings", "notifications" to "notifications",
         "calendar" to "calendar_today", "files" to "folder", "documents" to "description", "shipping" to "local_shipping",
+        "sleep" to "bedtime", "fitness" to "directions_run", "activity" to "directions_run", "movement" to "directions_run",
+        "heart" to "monitor_heart", "mind" to "psychology", "recovery" to "ecg_heart", "health" to "favorite",
     )
 
     /** Whether the client carries the drawing of this symbol. */
@@ -68,6 +70,18 @@ object Symbols {
     fun paths(symbol: String, filled: Boolean): String? = SymbolPaths.all[symbol]?.let { if (filled) it.second else it.first }
 
     private val names: Map<String, String> = mapOf(
+        "brain" to "psychology",
+        "sunrise" to "wb_twilight",
+        "footprints" to "steps",
+        "heart-pulse" to "monitor_heart",
+        "activity" to "monitor_heart",
+        "flame" to "local_fire_department",
+        "route" to "route",
+        "timer" to "timer",
+        "date" to "calendar_today",
+        "moon" to "bedtime",
+        "bed" to "bedtime",
+        "dumbbell" to "exercise",
         "layout-dashboard" to "dashboard",
         "gauge" to "dashboard",
         "home" to "home",
