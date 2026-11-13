@@ -10,7 +10,8 @@
 //! - No published crate depends on a workspace crate that is not published.
 //! - No cycle: a publish order exists ([`crate::order`]).
 //! - `CHANGELOG.md` has a section for the version.
-//! - `Cargo.lock` is current.
+//! - `Cargo.lock` is current, and so is the lock file of each workspace beside
+//!   the root one ([`OTHER_WORKSPACES`]).
 
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -18,7 +19,7 @@ use std::process::{Command, Stdio};
 use crate::changelog;
 use crate::metadata::{DepKind, Workspace, cargo, workspace_version};
 use crate::order;
-use crate::prepare::versioned_package_jsons;
+use crate::prepare::{OTHER_WORKSPACES, read_workspace, versioned_package_jsons};
 
 /// The problems the static checks found in `workspace` for `version`,
 /// with the root manifest's text (for `[workspace.dependencies]`).
@@ -176,6 +177,13 @@ pub fn run(root: &Path) -> Result<Report, String> {
             "Cargo.lock is not current (run `cargo update --workspace`):\n{}",
             String::from_utf8_lossy(&locked.stderr).trim()
         ));
+    }
+    for dir in OTHER_WORKSPACES {
+        if let Err(stderr) = read_workspace(root, dir, &["--locked"])? {
+            problems.push(format!(
+                "{dir}/Cargo.lock is not current (run `cargo metadata --manifest-path {dir}/Cargo.toml`, which `release prepare` does):\n{stderr}"
+            ));
+        }
     }
 
     let publishable: Vec<String> = workspace.publishable().map(|p| p.name.clone()).collect();

@@ -737,7 +737,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d045de693cb712d0b22c6a64be5b953f67b3ce00ab5ad3dd5d8b441886ab8e1a"
 dependencies = [
  "quote",
- "syn 2.0.119",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -957,7 +957,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -979,6 +979,18 @@ dependencies = [
  "parking",
  "pin-project-lite",
 ]
+
+[[package]]
+name = "fallible-iterator"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
+
+[[package]]
+name = "fallible-streaming-iterator"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
 name = "fastrand"
@@ -2099,7 +2111,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "navree-access"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "http",
@@ -2117,7 +2129,7 @@ dependencies = [
 
 [[package]]
 name = "navree-api"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "http",
  "indexmap",
@@ -2136,7 +2148,7 @@ dependencies = [
 
 [[package]]
 name = "navree-auth"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -2170,7 +2182,7 @@ dependencies = [
 
 [[package]]
 name = "navree-bounded"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "hashbrown 0.17.1",
  "tokio",
@@ -2178,7 +2190,7 @@ dependencies = [
 
 [[package]]
 name = "navree-cache"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bytes",
  "navree-bounded",
@@ -2197,7 +2209,7 @@ dependencies = [
 
 [[package]]
 name = "navree-cli"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2220,7 +2232,7 @@ dependencies = [
 
 [[package]]
 name = "navree-config"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "navree-contracts",
  "navree-kernel",
@@ -2235,7 +2247,7 @@ dependencies = [
 
 [[package]]
 name = "navree-contracts"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "navree-kernel",
@@ -2247,7 +2259,7 @@ dependencies = [
 
 [[package]]
 name = "navree-crypto"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -2273,7 +2285,7 @@ dependencies = [
 
 [[package]]
 name = "navree-db"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -2300,7 +2312,7 @@ dependencies = [
 
 [[package]]
 name = "navree-directory"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -2333,9 +2345,13 @@ dependencies = [
 
 [[package]]
 name = "navree-dock"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
+ "base64 0.23.1",
+ "hex",
+ "hmac",
  "serde_json",
+ "sha2 0.11.1",
  "thiserror",
  "toml",
  "toml_edit",
@@ -2343,7 +2359,7 @@ dependencies = [
 
 [[package]]
 name = "navree-documents"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -2368,7 +2384,7 @@ dependencies = [
 
 [[package]]
 name = "navree-domains"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -2406,7 +2422,7 @@ dependencies = [
 
 [[package]]
 name = "navree-events"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "navree-contracts",
  "navree-kernel",
@@ -2478,11 +2494,11 @@ dependencies = [
 
 [[package]]
 name = "navree-glob"
-version = "1.0.0"
+version = "1.1.0"
 
 [[package]]
 name = "navree-harbor"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -2504,7 +2520,7 @@ dependencies = [
 
 [[package]]
 name = "navree-http"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -2543,7 +2559,7 @@ dependencies = [
 
 [[package]]
 name = "navree-http-client"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -2569,7 +2585,7 @@ dependencies = [
 
 [[package]]
 name = "navree-integrations"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -2601,7 +2617,7 @@ dependencies = [
 
 [[package]]
 name = "navree-kernel"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "thiserror",
  "tokio",
@@ -2611,7 +2627,7 @@ dependencies = [
 
 [[package]]
 name = "navree-logbook"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -2641,7 +2657,7 @@ dependencies = [
 
 [[package]]
 name = "navree-macros"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "heck",
  "proc-macro-crate",
@@ -2652,7 +2668,7 @@ dependencies = [
 
 [[package]]
 name = "navree-mail"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -2696,14 +2712,14 @@ dependencies = [
 
 [[package]]
 name = "navree-markdown"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "pulldown-cmark",
 ]
 
 [[package]]
 name = "navree-mcp"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2735,7 +2751,7 @@ dependencies = [
 
 [[package]]
 name = "navree-micro"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -2766,7 +2782,7 @@ dependencies = [
 
 [[package]]
 name = "navree-navigator"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "futures-util",
@@ -2774,6 +2790,7 @@ dependencies = [
  "navree-config",
  "navree-dock",
  "reqwest",
+ "rusqlite",
  "rustls",
  "serde",
  "serde_json",
@@ -2787,7 +2804,7 @@ dependencies = [
 
 [[package]]
 name = "navree-oauth"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -2818,7 +2835,7 @@ dependencies = [
 
 [[package]]
 name = "navree-openapi"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "indexmap",
@@ -2830,7 +2847,7 @@ dependencies = [
 
 [[package]]
 name = "navree-orm"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "argon2",
  "base64 0.23.1",
@@ -2863,7 +2880,7 @@ dependencies = [
 
 [[package]]
 name = "navree-orm-macros"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "heck",
@@ -2875,7 +2892,7 @@ dependencies = [
 
 [[package]]
 name = "navree-pdf"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "aes",
  "bytes",
@@ -2891,11 +2908,11 @@ dependencies = [
 
 [[package]]
 name = "navree-phone"
-version = "1.0.0"
+version = "1.1.0"
 
 [[package]]
 name = "navree-queue"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "futures-util",
@@ -2923,7 +2940,7 @@ dependencies = [
 
 [[package]]
 name = "navree-realtime"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bytes",
  "dashmap",
@@ -2952,7 +2969,7 @@ dependencies = [
 
 [[package]]
 name = "navree-schedule"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "futures-util",
@@ -2971,7 +2988,7 @@ dependencies = [
 
 [[package]]
 name = "navree-schema"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "navree-config",
  "serde",
@@ -2983,7 +3000,7 @@ dependencies = [
 
 [[package]]
 name = "navree-search"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "futures",
@@ -3012,7 +3029,7 @@ dependencies = [
 
 [[package]]
 name = "navree-sheets"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bytes",
  "chardetng",
@@ -3048,7 +3065,7 @@ dependencies = [
 
 [[package]]
 name = "navree-sso"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -3081,7 +3098,7 @@ dependencies = [
 
 [[package]]
 name = "navree-storage"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -3105,7 +3122,7 @@ dependencies = [
 
 [[package]]
 name = "navree-telemetry"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "navree-kernel",
@@ -3117,7 +3134,7 @@ dependencies = [
 
 [[package]]
 name = "navree-template"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "serde",
  "stacker",
@@ -3125,7 +3142,7 @@ dependencies = [
 
 [[package]]
 name = "navree-testing"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bytes",
  "cookie",
@@ -3145,7 +3162,7 @@ dependencies = [
 
 [[package]]
 name = "navree-time"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -3165,7 +3182,7 @@ dependencies = [
 
 [[package]]
 name = "navree-ui"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "brotli",
  "bytes",
@@ -3193,7 +3210,7 @@ dependencies = [
 
 [[package]]
 name = "navree-ui-macros"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "heck",
  "proc-macro-crate",
@@ -3204,7 +3221,7 @@ dependencies = [
 
 [[package]]
 name = "navree-validation"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "form_urlencoded",
@@ -3232,7 +3249,7 @@ dependencies = [
 
 [[package]]
 name = "navree-validation-macros"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "heck",
  "proc-macro-crate",
@@ -3244,7 +3261,7 @@ dependencies = [
 
 [[package]]
 name = "navree-view"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "navree-config",
@@ -3258,7 +3275,7 @@ dependencies = [
 
 [[package]]
 name = "navree-webhooks"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -3295,7 +3312,7 @@ dependencies = [
 
 [[package]]
 name = "navree-workspace"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -4047,6 +4064,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rsqlite-vfs"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c51c9ae4df8a7fba42103df5c621fa3c37eccf3a3c650879e90fc48b11cc192c"
+dependencies = [
+ "hashbrown 0.16.1",
+ "thiserror",
+]
+
+[[package]]
 name = "rtoolbox"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4054,6 +4081,20 @@ checksum = "9a1efe12a1469752d0e6ff5ebec0b6ef4924cc5c4c71046b0ec730040535819d"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "rusqlite"
+version = "0.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0d2b0146dd9661bf67bb107c0bb2a55064d556eeb3fc314151b957f313bcd4e"
+dependencies = [
+ "bitflags",
+ "fallible-iterator",
+ "fallible-streaming-iterator",
+ "libsqlite3-sys",
+ "smallvec",
+ "sqlite-wasm-rs",
 ]
 
 [[package]]
@@ -4118,7 +4159,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4175,7 +4216,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4470,6 +4511,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e"
 dependencies = [
  "lock_api",
+]
+
+[[package]]
+name = "sqlite-wasm-rs"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc3efc0da82635d7e1ced0053bbbfa8c7ab9645d0bf36ceb4f7127bb85315d75"
+dependencies = [
+ "cc",
+ "js-sys",
+ "rsqlite-vfs",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -4843,7 +4896,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5445,7 +5498,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -12,10 +12,12 @@
 //!   subjects since the last release tag;
 //! - the docs that print the version, and a section for it in the release
 //!   notes, written from the changelog section ([`docs`]);
-//! - `Cargo.lock`, for the workspace's own entries.
+//! - `Cargo.lock`, for the workspace's own entries, and the lock file of each
+//!   workspace beside it that depends on its crates by path
+//!   ([`OTHER_WORKSPACES`]).
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use toml_edit::{DocumentMut, Item, Value};
 
@@ -253,7 +255,45 @@ pub fn prepare(root: &Path, version: &str, date: &str) -> Result<Vec<PathBuf>, S
         return Err("cargo update --workspace failed".to_owned());
     }
     changed.push(root.join("Cargo.lock"));
+    for dir in OTHER_WORKSPACES {
+        changed.push(refresh_lock(root, dir)?);
+    }
     Ok(changed)
+}
+
+/// The workspaces in the repository beside the root one: each depends on the
+/// root's crates by path, so its own lock file records their versions and goes
+/// stale at every release unless it is refreshed with them.
+pub const OTHER_WORKSPACES: &[&str] = &["fuzz"];
+
+/// `cargo metadata` for the workspace in `dir`, with `more` arguments: reading a
+/// workspace is what brings its lock file up to date, or with `--locked` says
+/// that it is not.
+pub fn read_workspace(root: &Path, dir: &str, more: &[&str]) -> Result<Result<(), String>, String> {
+    let manifest = root.join(dir).join("Cargo.toml");
+    let output = Command::new(cargo())
+        .args(["metadata", "--format-version", "1", "--manifest-path"])
+        .arg(&manifest)
+        .args(more)
+        .current_dir(root)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("cannot run cargo metadata for {dir}: {e}"))?;
+    Ok(if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_owned())
+    })
+}
+
+/// Brings `<dir>/Cargo.lock` up to date: the crates it has by path get the
+/// versions they have now and the dependencies they ask for now, and every
+/// other entry stays where it is.
+fn refresh_lock(root: &Path, dir: &str) -> Result<PathBuf, String> {
+    read_workspace(root, dir, &[])?
+        .map_err(|stderr| format!("{dir}/Cargo.lock could not be brought up to date:\n{stderr}"))?;
+    Ok(root.join(dir).join("Cargo.lock"))
 }
 
 fn read(file: &Path) -> Result<String, String> {
