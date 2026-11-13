@@ -178,6 +178,9 @@ pub(crate) struct Endpoints {
     /// Send the client secret with HTTP Basic authentication (else in the
     /// form).
     pub(crate) basic_auth: bool,
+    /// Where tokens are revoked (RFC 7009), for the providers whose tokens
+    /// Navree revokes when an account is disconnected or deleted.
+    pub(crate) revoke: Option<String>,
 }
 
 /// An OpenID Connect discovery document (the members Navree reads).
@@ -288,6 +291,12 @@ impl ProviderEntry {
                 )),
                 issuer: exact(&["https://accounts.google.com", "accounts.google.com"]),
                 basic_auth: false,
+                revoke: Some(format!(
+                    "{}/revoke",
+                    c.url
+                        .as_deref()
+                        .map_or("https://oauth2.googleapis.com", trim)
+                )),
             },
             Kind::GitHub => {
                 let base = c.url.as_deref().map_or("https://github.com", trim);
@@ -303,6 +312,7 @@ impl ProviderEntry {
                     jwks: None,
                     issuer: Issuer::Exact(Vec::new()),
                     basic_auth: false,
+                    revoke: None,
                 }
             }
             Kind::Apple => {
@@ -314,6 +324,7 @@ impl ProviderEntry {
                     jwks: Some(or(&c.jwks_url, format!("{base}/auth/keys"))),
                     issuer: Issuer::Exact(vec![c.issuer.clone().unwrap_or(base.to_owned())]),
                     basic_auth: false,
+                    revoke: Some(format!("{base}/auth/revoke")),
                 }
             }
             Kind::Microsoft => {
@@ -338,6 +349,7 @@ impl ProviderEntry {
                         None => Issuer::MicrosoftTenant(base.to_owned()),
                     },
                     basic_auth: false,
+                    revoke: None,
                 }
             }
             Kind::GitLab => {
@@ -349,6 +361,7 @@ impl ProviderEntry {
                     jwks: None,
                     issuer: exact(&[base]),
                     basic_auth: false,
+                    revoke: None,
                 }
             }
             Kind::Slack => {
@@ -363,6 +376,7 @@ impl ProviderEntry {
                     jwks: None,
                     issuer: exact(&[base]),
                     basic_auth: false,
+                    revoke: None,
                 }
             }
             Kind::LinkedIn => Endpoints {
@@ -381,6 +395,7 @@ impl ProviderEntry {
                 jwks: None,
                 issuer: exact(&["https://www.linkedin.com/oauth"]),
                 basic_auth: false,
+                revoke: None,
             },
             Kind::Discord => {
                 let base = c.url.as_deref().map_or("https://discord.com", trim);
@@ -391,6 +406,7 @@ impl ProviderEntry {
                     jwks: None,
                     issuer: Issuer::Exact(Vec::new()),
                     basic_auth: false,
+                    revoke: None,
                 }
             }
             Kind::X => Endpoints {
@@ -401,6 +417,7 @@ impl ProviderEntry {
                 issuer: Issuer::Exact(Vec::new()),
                 // X authenticates confidential clients with HTTP Basic.
                 basic_auth: true,
+                revoke: None,
             },
             Kind::Oidc | Kind::Custom => {
                 let issuer = c.issuer.clone().unwrap_or_default();
@@ -411,6 +428,7 @@ impl ProviderEntry {
                     jwks: c.jwks_url.clone(),
                     issuer: Issuer::Exact(vec![issuer]),
                     basic_auth: false,
+                    revoke: None,
                 }
             }
         }
@@ -443,6 +461,7 @@ impl ProviderEntry {
             // RFC 8414: client_secret_basic is the default; use the form
             // only when the provider does not list Basic.
             basic_auth: methods.is_empty() || methods.iter().any(|m| m == "client_secret_basic"),
+            revoke: None,
         }
     }
 

@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use navree_auth::{AuthOptions, AuthService};
 use navree_config::ModuleBuilderConfigExt;
+use navree_contracts::ModuleBuilderRevocationExt;
 use navree_crypto::{Encrypter, Hasher};
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
@@ -15,6 +16,7 @@ use navree_kernel::{
 use crate::controller::SocialController;
 use crate::error::map_social_error;
 use crate::migration::migrations;
+use crate::native::SocialRevoker;
 use crate::runtime::Runtime;
 use crate::{Social, SocialError, SocialOptions, SocialProvider};
 
@@ -26,8 +28,14 @@ use crate::{Social, SocialError, SocialOptions, SocialProvider};
 ///   `GET {provider}/redirect` and `POST {provider}/callback` (public; the
 ///   callback counts against `auth.login_throttle_per_minute` per client
 ///   IP), `GET accounts`, `POST {provider}/link` and `DELETE
-///   accounts/{provider}` (signed in);
-/// - the `social` migration set (`social_accounts`, after `auth`);
+///   accounts/{provider}` (signed in), the native apps' `POST
+///   {provider}/native/nonce`, `POST {provider}/native` (and `.../session`
+///   with the feature `session`), and Apple's `POST apple/notifications`
+///   (public);
+/// - the `social` migration set (`social_accounts` and
+///   `social_account_clients`, after `auth`);
+/// - a credential revoker (`social`): navree-auth's offboarding revokes the
+///   users' stored Apple and Google tokens at the provider;
 /// - the mapping of [`SocialError`]s returned from handlers to error
 ///   responses.
 ///
@@ -121,6 +129,7 @@ fn register(m: &mut ModuleBuilder, options: Option<SocialOptions>) {
         .exports::<Social>()
         .lifecycle::<Social>()
         .controller::<SocialController>()
+        .credential_revoker::<SocialRevoker>()
         .migrations(migrations())
         .map_error::<SocialError>(map_social_error);
 }

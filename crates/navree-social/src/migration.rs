@@ -1,7 +1,7 @@
 //! The social module's migrations (`MigrationSet` `social`, after `auth`),
 //! written with the schema builder.
 //!
-//! The migration keeps the name it always had, so a database migrated by an
+//! The first migration keeps the name it always had, so a database migrated by an
 //! earlier version finds nothing pending. The columns are the types it
 //! created: UUIDs as `BINARY(16)` on MySQL and MariaDB (where navree-db
 //! writes UUIDs as 16 bytes, and where `users.id` is that type), names and
@@ -23,6 +23,10 @@ pub(crate) fn migrations() -> MigrationSet {
         .migration(SchemaMigration::new(
             "m20261026_000001_create_social_accounts_table",
             CreateSocialAccounts,
+        ))
+        .migration(SchemaMigration::new(
+            "m20261113_000001_create_social_account_clients_table",
+            CreateSocialAccountClients,
         ))
 }
 
@@ -82,5 +86,31 @@ impl Migration for CreateSocialAccounts {
 
     async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
         schema.drop_if_exists("social_accounts").await
+    }
+}
+
+/// Creates `social_account_clients`: the client an account's tokens were
+/// issued to (Sign in with Apple's bundle id or Services ID); rows go with
+/// their account.
+struct CreateSocialAccountClients;
+
+impl Migration for CreateSocialAccountClients {
+    async fn up(&self, schema: &Schema<'_>) -> SchemaResult {
+        let dialect = schema.target().await?.dialect();
+        schema
+            .create("social_account_clients", |t| {
+                uuid(t, "account_id", dialect).primary();
+                varchar(t, "client_id", dialect);
+                t.timestamp_tz("updated_at");
+                t.foreign("account_id")
+                    .references("id")
+                    .on("social_accounts")
+                    .cascade_on_delete();
+            })
+            .await
+    }
+
+    async fn down(&self, schema: &Schema<'_>) -> SchemaResult {
+        schema.drop_if_exists("social_account_clients").await
     }
 }

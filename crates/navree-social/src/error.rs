@@ -125,6 +125,22 @@ pub enum SocialError {
         /// When the client may try again.
         retry_after: std::time::Duration,
     },
+    /// The provider has no sign-in from native apps: it is neither Apple
+    /// nor Google, or (Apple) no app is configured in `auth.apps.apple`.
+    #[error("{provider} sign-in from an app is not set up")]
+    NativeUnavailable {
+        /// The provider's display name.
+        provider: String,
+    },
+    /// A provider's server-to-server notification failed verification
+    /// (signature, issuer, audience, age or shape).
+    #[error("invalid notification from {provider}: {reason}")]
+    InvalidNotification {
+        /// The provider's display name.
+        provider: String,
+        /// Which check failed.
+        reason: String,
+    },
     /// The [`Social`](crate::Social) service is not part of a booted app
     /// (a [`Social::fake`](crate::Social::fake) never passed to
     /// `override_value`).
@@ -241,6 +257,13 @@ impl SocialError {
                         "Too many sign-in attempts. Please try again in {} seconds.",
                         retry_after.as_secs().max(1)
                     ))
+            }
+            SocialError::NativeUnavailable { provider } => AppError::not_found()
+                .with_code("native_sign_in_unavailable")
+                .with_detail(format!("{provider} sign-in from an app is not set up")),
+            SocialError::InvalidNotification { provider, .. } => {
+                AppError::bad_request(format!("{provider} sent an invalid notification"))
+                    .with_code("invalid_notification")
             }
             SocialError::Auth(error) => return error.to_app_error(),
             SocialError::Db(error) => return navree_db::map_db_error(error),
@@ -462,6 +485,17 @@ mod tests {
                     retry_after: Duration::from_secs(30),
                 },
                 "too_many_login_attempts",
+            ),
+            (
+                SocialError::NativeUnavailable { provider: github() },
+                "native_sign_in_unavailable",
+            ),
+            (
+                SocialError::InvalidNotification {
+                    provider: github(),
+                    reason: "bad signature".to_owned(),
+                },
+                "invalid_notification",
             ),
             (
                 SocialError::Config("x".to_owned()),

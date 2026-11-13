@@ -4,6 +4,7 @@
 
 mod flow;
 mod linking;
+mod native;
 mod orm;
 mod policy;
 mod providers;

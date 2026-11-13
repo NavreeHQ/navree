@@ -13,32 +13,34 @@ use serde_json::{Map, Value, json};
 use crate::provider::{
     Endpoints, Issuer, Kind, MICROSOFT_CONSUMERS_TENANT, ProfileSource, ProviderEntry,
 };
-use crate::runtime::Runtime;
+use crate::runtime::{Runtime, jwks_lifetime};
 use crate::state::StatePayload;
 use crate::{AuthorizeUrl, ProviderToken, SocialCallback, SocialError, SocialUser};
 
 /// Clock skew allowed on ID token times, in seconds.
-const LEEWAY_SECS: i64 = 60;
+pub(crate) const LEEWAY_SECS: i64 = 60;
 
 /// Lifetime of Sign in with Apple's client secret JWT, in seconds.
 const APPLE_SECRET_TTL_SECS: i64 = 300;
 
 /// An outgoing request failed: the provider is unreachable.
-fn unavailable(entry: &ProviderEntry) -> impl FnOnce(HttpClientError) -> SocialError + '_ {
+pub(crate) fn unavailable(
+    entry: &ProviderEntry,
+) -> impl FnOnce(HttpClientError) -> SocialError + '_ {
     move |error| SocialError::ProviderUnavailable {
         provider: entry.name.clone(),
         message: error.to_string(),
     }
 }
 
-fn refused(entry: &ProviderEntry, message: impl Into<String>) -> SocialError {
+pub(crate) fn refused(entry: &ProviderEntry, message: impl Into<String>) -> SocialError {
     SocialError::Provider {
         provider: entry.name.clone(),
         message: message.into(),
     }
 }
 
-fn invalid_id_token(entry: &ProviderEntry, reason: impl Into<String>) -> SocialError {
+pub(crate) fn invalid_id_token(entry: &ProviderEntry, reason: impl Into<String>) -> SocialError {
     SocialError::InvalidIdToken {
         provider: entry.name.clone(),
         reason: reason.into(),
@@ -119,9 +121,14 @@ pub(crate) fn decorate(
     url
 }
 
-/// The client secret to send: Apple's freshly signed JWT, or the
-/// configured one.
-fn client_secret(rt: &Runtime, entry: &ProviderEntry) -> Result<Option<String>, SocialError> {
+/// The client secret to send as `client_id`: Apple's freshly signed JWT
+/// (its subject is the client: the Services ID, or an app's bundle id), or
+/// the configured one.
+fn client_secret(
+    rt: &Runtime,
+    entry: &ProviderEntry,
+    client_id: &str,
+) -> Result<Option<String>, SocialError> {
     if let Some(key) = &entry.apple_key {
         let now = rt.now().timestamp();
         let audience = entry
@@ -134,13 +141,14 @@ fn client_secret(rt: &Runtime, entry: &ProviderEntry) -> Result<Option<String>, 
             "iat": now,
             "exp": now + APPLE_SECRET_TTL_SECS,
             "aud": audience,
-            "sub": entry.config.client_id,
+            "sub": client_id,
         });
         // `{"alg":"ES256","kid":"<key_id>"}`, as Apple expects.
         return key
             .sign_json(&key.header(), &claims)
             .map(Some)
             .map_err(|error| {
+                // The key's error, never the key.
                 SocialError::Config(format!("cannot sign Apple's client secret: {error}"))
             });
     }
@@ -152,18 +160,28 @@ async fn token_request(
     rt: &Runtime,
     entry: &ProviderEntry,
     endpoints: &Endpoints,
+    form: Vec<(&'static str, String)>,
+) -> Result<Response, SocialError> {
+    let url = endpoints.token.clone();
+    client_request(rt, entry, endpoints, &url, &entry.config.client_id, form).await
+}
+
+/// POSTs `form` to `url` as `client_id`, with its credentials.
+pub(crate) async fn client_request(
+    rt: &Runtime,
+    entry: &ProviderEntry,
+    endpoints: &Endpoints,
+    url: &str,
+    client_id: &str,
     mut form: Vec<(&'static str, String)>,
 ) -> Result<Response, SocialError> {
-    let mut request = rt
-        .http
-        .post(&endpoints.token)
-        .header("accept", "application/json");
-    form.push(("client_id", entry.config.client_id.clone()));
-    if let Some(secret) = client_secret(rt, entry)? {
+    let mut request = rt.http.post(url).header("accept", "application/json");
+    form.push(("client_id", client_id.to_owned()));
+    if let Some(secret) = client_secret(rt, entry, client_id)? {
         if endpoints.basic_auth {
             let encode =
                 |v: &str| form_urlencoded::byte_serialize(v.as_bytes()).collect::<String>();
-            let credentials = format!("{}:{}", encode(&entry.config.client_id), encode(&secret));
+            let credentials = format!("{}:{}", encode(client_id), encode(&secret));
             request = request.header(
                 "authorization",
                 format!("Basic {}", STANDARD.encode(credentials)),
@@ -196,19 +214,22 @@ pub(crate) async fn exchange(
     parse_token(entry, &body, rt.now(), None)
 }
 
-/// Exchanges a refresh token for a new access token:
+/// Exchanges a refresh token for a new access token, as `client` when the
+/// token was issued to another client than the configured one:
 /// [`SocialError::Reauthorize`] when the provider refuses it.
 pub(crate) async fn refresh(
     rt: &Runtime,
     entry: &ProviderEntry,
     refresh_token: &str,
+    client: Option<&str>,
 ) -> Result<ProviderToken, SocialError> {
     let endpoints = endpoints(rt, entry).await?;
     let form = vec![
         ("grant_type", "refresh_token".to_owned()),
         ("refresh_token", refresh_token.to_owned()),
     ];
-    let response = token_request(rt, entry, &endpoints, form).await?;
+    let client = client.unwrap_or(&entry.config.client_id);
+    let response = client_request(rt, entry, &endpoints, &endpoints.token, client, form).await?;
     let body = read_token_response(entry, &response).map_err(|error| match error {
         SocialError::Provider { provider, .. } => SocialError::Reauthorize { provider },
         other => other,
@@ -217,7 +238,10 @@ pub(crate) async fn refresh(
 }
 
 /// The token response's JSON, or the provider's refusal.
-fn read_token_response(entry: &ProviderEntry, response: &Response) -> Result<Value, SocialError> {
+pub(crate) fn read_token_response(
+    entry: &ProviderEntry,
+    response: &Response,
+) -> Result<Value, SocialError> {
     let status = response.status();
     if status.is_server_error() {
         return Err(SocialError::ProviderUnavailable {
@@ -242,7 +266,7 @@ fn read_token_response(entry: &ProviderEntry, response: &Response) -> Result<Val
     Ok(body)
 }
 
-fn parse_token(
+pub(crate) fn parse_token(
     entry: &ProviderEntry,
     body: &Value,
     now: DateTime<Utc>,
@@ -418,7 +442,26 @@ pub(crate) async fn verify_id_token(
     id_token: &str,
     nonce: &str,
 ) -> Result<Value, SocialError> {
-    let jws = Jws::parse(id_token).map_err(|e| invalid_id_token(entry, e.to_string()))?;
+    let claims = verify_signature(rt, entry, endpoints, id_token).await?;
+    check_claims(
+        entry,
+        &endpoints.issuer,
+        &claims,
+        nonce,
+        rt.now().timestamp(),
+    )?;
+    Ok(claims)
+}
+
+/// The claims of a JWS signed with a key of the provider's key set (an ID
+/// token, or a notification Apple sends), once the signature verifies.
+pub(crate) async fn verify_signature(
+    rt: &Runtime,
+    entry: &ProviderEntry,
+    endpoints: &Endpoints,
+    token: &str,
+) -> Result<Value, SocialError> {
+    let jws = Jws::parse(token).map_err(|e| invalid_id_token(entry, e.to_string()))?;
     let claims: Map<String, Value> = jws.claims().map_err(|_| {
         invalid_id_token(
             entry,
@@ -429,9 +472,24 @@ pub(crate) async fn verify_id_token(
         .jwks
         .as_deref()
         .ok_or_else(|| SocialError::Config(format!("{} has no key set", entry.name)))?;
-    let keys = rt
-        .jwks
-        .get(jwks_url, jws.header().kid.as_deref(), || async {
+    let keys = key_set(rt, entry, jwks_url, jws.header().kid.as_deref()).await?;
+    // RS256/384/512, PS256/384/512, ES256, ES384 or EdDSA: a key set never
+    // verifies `none` or an HMAC token.
+    jws.verify_with(&keys)
+        .map_err(|e| invalid_id_token(entry, e.to_string()))?;
+    Ok(Value::Object(claims))
+}
+
+/// The provider's key set, from the cache or fetched over the client (TLS
+/// to the provider), kept as long as its `Cache-Control` says.
+async fn key_set(
+    rt: &Runtime,
+    entry: &ProviderEntry,
+    jwks_url: &str,
+    kid: Option<&str>,
+) -> Result<JwkSet, SocialError> {
+    rt.jwks
+        .get(jwks_url, kid, rt.now(), || async {
             let response = rt
                 .http
                 .get(jwks_url)
@@ -445,27 +503,15 @@ pub(crate) async fn verify_id_token(
                     message: format!("the key set answered {}", response.status().as_u16()),
                 });
             }
-            response
+            let set = response
                 .json::<JwkSet>()
                 .map_err(|_| SocialError::ProviderUnavailable {
                     provider: entry.name.clone(),
                     message: "the key set is not valid".to_owned(),
-                })
+                })?;
+            Ok((set, jwks_lifetime(response.header("cache-control"))))
         })
-        .await?;
-    // RS256/384/512, PS256/384/512, ES256, ES384 or EdDSA: a key set never
-    // verifies `none` or an HMAC token.
-    jws.verify_with(&keys)
-        .map_err(|e| invalid_id_token(entry, e.to_string()))?;
-    let claims = Value::Object(claims);
-    check_claims(
-        entry,
-        &endpoints.issuer,
-        &claims,
-        nonce,
-        rt.now().timestamp(),
-    )?;
-    Ok(claims)
+        .await
 }
 
 /// The issuer, audience, time and nonce checks of an ID token.
@@ -475,6 +521,47 @@ pub(crate) fn check_claims(
     claims: &Value,
     nonce: &str,
     now: i64,
+) -> Result<(), SocialError> {
+    check_token(
+        entry,
+        issuer,
+        claims,
+        &[entry.config.client_id.as_str()],
+        now,
+    )?;
+    if claims.get("nonce").and_then(Value::as_str) != Some(nonce) {
+        return Err(invalid_id_token(entry, "the nonce does not match"));
+    }
+    Ok(())
+}
+
+/// The issuer, audience (one of `audiences`) and time checks of a token.
+pub(crate) fn check_token(
+    entry: &ProviderEntry,
+    issuer: &Issuer,
+    claims: &Value,
+    audiences: &[&str],
+    now: i64,
+) -> Result<(), SocialError> {
+    check_issuer_and_audience(entry, issuer, claims, audiences)?;
+    let exp = claims.get("exp").and_then(Value::as_i64).unwrap_or(0);
+    if exp + LEEWAY_SECS <= now {
+        return Err(invalid_id_token(entry, "the token has expired"));
+    }
+    if let Some(nbf) = claims.get("nbf").and_then(Value::as_i64)
+        && nbf - LEEWAY_SECS > now
+    {
+        return Err(invalid_id_token(entry, "the token is not valid yet"));
+    }
+    Ok(())
+}
+
+/// The issuer and audience (one of `audiences`) checks of a token.
+pub(crate) fn check_issuer_and_audience(
+    entry: &ProviderEntry,
+    issuer: &Issuer,
+    claims: &Value,
+    audiences: &[&str],
 ) -> Result<(), SocialError> {
     let iss = claims
         .get("iss")
@@ -493,29 +580,17 @@ pub(crate) fn check_claims(
             format!("unexpected issuer `{iss}`"),
         ));
     }
-    let client_id = entry.config.client_id.as_str();
+    let ours = |value: Option<&str>| value.is_some_and(|value| audiences.contains(&value));
     let audience_ok = match claims.get("aud") {
-        Some(Value::String(aud)) => aud == client_id,
+        Some(Value::String(aud)) => ours(Some(aud)),
         Some(Value::Array(auds)) => {
-            auds.iter().any(|a| a.as_str() == Some(client_id))
-                && (auds.len() == 1 || claims.get("azp").and_then(Value::as_str) == Some(client_id))
+            auds.iter().any(|a| ours(a.as_str()))
+                && (auds.len() == 1 || ours(claims.get("azp").and_then(Value::as_str)))
         }
         _ => false,
     };
     if !audience_ok {
         return Err(invalid_id_token(entry, "the token is for another client"));
-    }
-    let exp = claims.get("exp").and_then(Value::as_i64).unwrap_or(0);
-    if exp + LEEWAY_SECS <= now {
-        return Err(invalid_id_token(entry, "the token has expired"));
-    }
-    if let Some(nbf) = claims.get("nbf").and_then(Value::as_i64)
-        && nbf - LEEWAY_SECS > now
-    {
-        return Err(invalid_id_token(entry, "the token is not valid yet"));
-    }
-    if claims.get("nonce").and_then(Value::as_str) != Some(nonce) {
-        return Err(invalid_id_token(entry, "the nonce does not match"));
     }
     Ok(())
 }
@@ -533,7 +608,7 @@ fn merge_userinfo(claims: &mut Value, info: &Value) {
 }
 
 /// `true`, or the string `"true"` (Apple).
-fn truthy(value: Option<&Value>) -> bool {
+pub(crate) fn truthy(value: Option<&Value>) -> bool {
     match value {
         Some(Value::Bool(b)) => *b,
         Some(Value::String(s)) => s == "true",
@@ -541,7 +616,7 @@ fn truthy(value: Option<&Value>) -> bool {
     }
 }
 
-fn str_of<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
+pub(crate) fn str_of<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value
         .get(key)
         .and_then(Value::as_str)
@@ -582,7 +657,7 @@ pub(crate) fn standard_user(
 }
 
 /// The user of a verified ID token, with each provider's rules.
-fn id_token_user(
+pub(crate) fn id_token_user(
     entry: &ProviderEntry,
     claims: Value,
     callback: &SocialCallback,
