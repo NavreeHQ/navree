@@ -6,7 +6,7 @@ use navree_contracts::JobRegistration;
 use navree_db::{DatabaseModule, Db, Executor as _, Statement};
 use navree_kernel::{Factory, Module, ModuleBuilder, ProviderKey};
 use navree_notify::{
-    DELIVERIES_TABLE, DeliveryLog, NOTIFICATIONS_TABLE, Notifier, NotifyModule, NotifyOptions,
+    Channel, DELIVERIES_TABLE, DeliveryLog, NOTIFICATIONS_TABLE, Notifier, NotifyModule, NotifyOptions,
     OPT_OUTS_TABLE, OptOuts, PUSH_SUBSCRIPTIONS_TABLE, PushSubscriptions,
 };
 use navree_testing::TestApp;
@@ -28,6 +28,14 @@ impl Module for DealsModule {
     }
 }
 
+/// `options` as an app that can't push to native apps runs with them: no
+/// switch and no quiet-hours hold for that channel.
+fn without_push(mut options: NotifyOptions) -> NotifyOptions {
+    options.preferences.channels.retain(|c| *c != Channel::Push);
+    options.deferred.channels.retain(|c| *c != Channel::Push);
+    options
+}
+
 #[tokio::test]
 async fn from_config_reads_the_notify_section() {
     let app = crate::database::database(TestApp::builder())
@@ -40,11 +48,11 @@ async fn from_config_reads_the_notify_section() {
 
     assert_eq!(
         app.get::<Notifier>().await.options(),
-        &NotifyOptions {
+        &without_push(NotifyOptions {
             queue: true,
             routes: false,
             ..NotifyOptions::default()
-        }
+        })
     );
 }
 
@@ -96,7 +104,7 @@ async fn a_plain_module_uses_the_defaults() {
 
     assert_eq!(
         app.get::<Notifier>().await.options(),
-        &NotifyOptions::default()
+        &without_push(NotifyOptions::default())
     );
 }
 
