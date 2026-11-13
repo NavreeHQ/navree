@@ -125,3 +125,35 @@ private func button(
     #expect(SettingsRules.destination(in: [profile, gear, signOut])?.index == 1)
     #expect(SettingsRules.destination(in: [profile, signOut]) == nil)
 }
+
+// MARK: A detail beside its list
+
+@Test func theListsCommandsStayWhileADetailIsOpenItsNewKeepingCommandN() throws {
+    // The corpus orders list ("New order") beside an order, and the live order
+    // with its own actions: File > New Order keeps ⌘N, as Mail's New Message
+    // stays whatever is open, and the order's own commands follow.
+    let list = CommandRules.leaves(try answerScreen("store-orders").actions)
+        + [button("New order", role: .create)]
+    let detail = CommandRules.leaves(try answerScreen("store-order1").actions)
+    let window = CommandRules.window(detail: detail, list: list)
+    let entries = CommandRules.entries(window.map(\.node))
+    #expect(entries.first?.title == "New Order")
+    #expect(entries.first?.shortcut == .new)
+    #expect(window.first?.fromList == true)
+    #expect(entries.map(\.title).contains("Resend Confirmation…"))
+    #expect(window.filter { !$0.fromList }.count == detail.count)
+    // The detail's own way to make something new comes after and has no ⌘N.
+    let both = CommandRules.window(detail: [button("New refund", role: .create)], list: [button("New order", role: .create)])
+    let made = CommandRules.entries(both.map(\.node))
+    #expect(made.map(\.title) == ["New Order", "New Refund"])
+    #expect(made.map(\.shortcut) == [.new, nil])
+}
+
+@Test func aCommandTheListAndTheDetailBothOfferIsListedOnce() {
+    let share = button("Share", standard: .share)
+    let window = CommandRules.window(detail: [share, button("Refund")], list: [button("New order", role: .create), share, button("Export")])
+    #expect(window.map(\.fromList) == [true, false, false, true])
+    #expect(CommandRules.entries(window.map(\.node)).map(\.title) == ["New Order", "Share…", "Refund", "Export"])
+    // With nothing beside it, the detail's commands are the window's.
+    #expect(CommandRules.window(detail: [button("Refund")], list: []).map(\.fromList) == [false])
+}
