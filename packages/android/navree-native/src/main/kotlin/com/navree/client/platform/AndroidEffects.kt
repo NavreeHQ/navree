@@ -45,7 +45,7 @@ class AndroidEffects(
     private val streams = CoreStreams(http.client) { post(it) }
     private val cache = SealedCache(app)
     private val timers = HashMap<Long, Runnable>()
-    val devices = DeviceCalls(http.client, origin, googleClientId) { post(it) }
+    val devices = DeviceCalls(origin, googleClientId) { post(it) }
     val pushes: PushRegistration? = push?.let { PushRegistration(http.client, origin, app.packageName, it) }
 
     /** The activity in front, while there is one. */

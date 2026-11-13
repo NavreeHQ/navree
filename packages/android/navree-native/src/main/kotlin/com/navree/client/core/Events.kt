@@ -33,6 +33,7 @@ object Events {
         overlay: String? = null,
         text: String? = null,
         now: Long = System.currentTimeMillis() / 1000,
+        ask: Navree.Question? = null,
     ) = event("act") {
         screen?.let { put("screen", it) }
         put("action", CoreJson.encodeToJsonElement(Navree.ActionSerializer, action))
@@ -40,6 +41,40 @@ object Events {
         overlay?.let { put("overlay", it) }
         text?.let { put("text", it) }
         put("now", now)
+        ask?.let { put("ask", CoreJson.encodeToJsonElement(Navree.Question.serializer(), it)) }
+    }
+
+    /** The person answered the core's question: `yes` for its confirming button, `false` for every other way out. */
+    fun answer(screen: Long, question: Long, yes: Boolean) = event("answer") {
+        put("screen", screen)
+        put("question", question)
+        put("yes", yes)
+    }
+
+    /** A row of a table that can be chosen was ticked or cleared; without a row, every row. */
+    fun choose(screen: Long, table: String, row: String?, on: Boolean) = event("choose") {
+        put("screen", screen)
+        put("table", table)
+        row?.let { put("row", it) }
+        put("on", on)
+    }
+
+    /** A row was dragged from one list to a place in another (or the same); `before` is the row it now stands before. */
+    fun move(screen: Long, item: String, from: String, to: String, before: String?) = event("move") {
+        put("screen", screen)
+        put("item", item)
+        put("from", from)
+        put("to", to)
+        before?.let { put("before", it) }
+    }
+
+    /** The words a searched choice is searched with changed, or the end of its options is near. */
+    fun options(screen: Long, form: String?, field: String, text: String? = null, more: Boolean = false) = event("options") {
+        put("screen", screen)
+        form?.let { put("form", it) }
+        put("field", field)
+        text?.let { put("text", it) }
+        if (more) put("more", true)
     }
 
     fun field(screen: Long, form: String?, field: String, value: FieldValue) = event("field") {
@@ -71,9 +106,10 @@ object Events {
         put("region", region)
     }
 
-    fun more(screen: Long, id: String) = event("more") {
+    fun more(screen: Long, id: String, before: Boolean = false) = event("more") {
         put("screen", screen)
         put("id", id)
+        if (before) put("before", true)
     }
 
     fun regionGo(screen: Long, region: String, href: String) = event("region_go") {

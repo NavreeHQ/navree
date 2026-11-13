@@ -22,6 +22,9 @@ sealed interface Body {
     data class Form(val text: String) : Body
 
     data class Multipart(val parts: List<Part>) : Body
+
+    /** JSON, sent as the body bytes; the content type is in the headers. */
+    data class Json(val text: String) : Body
 }
 
 /**
@@ -50,8 +53,12 @@ sealed interface Effect {
 
     data class Haptic(val kind: String) : Effect
 
-    /** A device call. `device` is the protocol's call as JSON (`{"f":"share",...}`). */
-    data class Device(val call: Long, val device: JsonObject, val posts: Boolean, val ticket: String?) : Effect
+    /**
+     * A device call. `device` is the protocol's call as JSON (`{"f":"share",...}`);
+     * `options` what the server answered the core for it (a confirmation's passkey
+     * request, a sign-in's nonce).
+     */
+    data class Device(val call: Long, val device: JsonObject, val posts: Boolean, val options: JsonObject?) : Effect
 
     data class CacheRead(val key: String) : Effect
 
@@ -98,7 +105,7 @@ sealed interface Effect {
                 "sign_in" -> SignIn(s("url") ?: "", s("callback"), b("ephemeral"))
                 "message" -> Show(l("id") ?: 0)
                 "haptic" -> Haptic(s("kind") ?: "light")
-                "device" -> Device(l("call") ?: 0, o["device"] as? JsonObject ?: JsonObject(emptyMap()), b("posts"), s("ticket"))
+                "device" -> Device(l("call") ?: 0, o["device"] as? JsonObject ?: JsonObject(emptyMap()), b("posts"), o["options"] as? JsonObject)
                 "cache_read" -> CacheRead(s("key") ?: "")
                 "cache_write" -> CacheWrite(s("key") ?: "", s("value"))
                 "cache_clear" -> CacheClear
@@ -131,6 +138,7 @@ sealed interface Effect {
             fun s(from: JsonObject, name: String) = (from[name] as? JsonPrimitive)?.contentOrNull
             return when (s(o, "t")) {
                 "form" -> Body.Form(s(o, "text") ?: "")
+                "json" -> Body.Json(s(o, "text") ?: "")
                 "multipart" -> Body.Multipart(
                     (o["parts"] as? JsonArray)?.mapNotNull { element ->
                         val part = element as? JsonObject ?: return@mapNotNull null
@@ -158,4 +166,5 @@ val Notice.wire: String
         Notice.Copied -> "copied"
         Notice.FieldsNeedAttention -> "fields_need_attention"
         Notice.Loaded -> "loaded"
+        Notice.SecondStep -> "second_step"
     }

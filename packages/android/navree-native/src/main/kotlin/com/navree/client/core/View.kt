@@ -62,6 +62,7 @@ enum class Notice {
     @SerialName("copied") Copied,
     @SerialName("fields_need_attention") FieldsNeedAttention,
     @SerialName("loaded") Loaded,
+    @SerialName("second_step") SecondStep,
 }
 
 /** The window's width class, as the client reported it. */
@@ -193,6 +194,8 @@ sealed interface FieldValue {
     data class Flag(val on: Boolean) : FieldValue
     data class Many(val values: List<String>) : FieldValue
     data class Files(val files: List<FileRef>) : FieldValue
+    /** A range of two ends; an end not picked is empty. */
+    data class Range(val from: String, val to: String) : FieldValue
     data object None : FieldValue
 
     fun json(): JsonElement = CoreJson.encodeToJsonElement(FieldValueSerializer, this)
@@ -212,6 +215,10 @@ object FieldValueSerializer : KSerializer<FieldValue> {
                 (fields["files"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull {
                     runCatching { input.json.decodeFromJsonElement(FileRef.serializer(), it) }.getOrNull()
                 }.orEmpty(),
+            )
+            "range" -> FieldValue.Range(
+                (fields["from"] as? JsonPrimitive)?.contentOrNull ?: "",
+                (fields["to"] as? JsonPrimitive)?.contentOrNull ?: "",
             )
             else -> FieldValue.None
         }
@@ -237,18 +244,29 @@ object FieldValueSerializer : KSerializer<FieldValue> {
                     put("t", "files")
                     put("files", buildJsonArray { value.files.forEach { add(output.json.encodeToJsonElement(FileRef.serializer(), it)) } })
                 }
+                is FieldValue.Range -> buildJsonObject {
+                    put("t", "range")
+                    put("from", value.from)
+                    put("to", value.to)
+                }
                 FieldValue.None -> buildJsonObject { put("t", "none") }
             },
         )
     }
 }
 
-/** What one field holds and what is wrong with it. */
+/** What one field holds and what is wrong with it, and the options a search found for it. */
 @Serializable
 data class FieldView(
     val name: String = "",
     val value: FieldValue = FieldValue.None,
     val errors: List<String> = emptyList(),
+    /** While present, the option list in place of the input's own. */
+    val options: List<Navree.ChoiceOption>? = null,
+    /** The searched list goes on. */
+    val more: Boolean = false,
+    /** A search for options is on its way. */
+    val searching: Boolean = false,
 )
 
 /** The state of one form. */
@@ -262,9 +280,24 @@ data class FormView(
 @Serializable
 data class RegionView(val loading: Boolean = false, val failure: Failure? = null)
 
-/** The state of a list or table that loads more by cursor. */
+/** The state of a list or table that loads more by cursor, at its end and before its first row. */
 @Serializable
-data class ListView(val loading: Boolean = false, val failed: Boolean = false)
+data class ListView(
+    val loading: Boolean = false,
+    val failed: Boolean = false,
+    @SerialName("loading_before") val loadingBefore: Boolean = false,
+    @SerialName("failed_before") val failedBefore: Boolean = false,
+)
+
+/** The confirmation the core asks the person for, in the server's words. Every way out is an `answer`. */
+@Serializable
+data class Question(
+    val id: Long,
+    val title: String = "",
+    val text: String? = null,
+    val confirm: String = "",
+    val cancel: String? = null,
+)
 
 /** A request to move the focus; answered with `focused`. */
 @Serializable
@@ -288,6 +321,7 @@ data class ScreenView(
     val regions: Map<String, RegionView> = emptyMap(),
     val lists: Map<String, ListView> = emptyMap(),
     val focus: Focus? = null,
+    val question: Question? = null,
 ) {
     val screen: Navree.Screen? get() = (content as? Content.Native)?.screen
 

@@ -152,6 +152,8 @@ fun coreConfig(config: NavreeConfig, device: Device, caps: List<String>): JsonOb
         buildJsonObject {
             put("paths", buildJsonArray { config.signInPaths.forEach { add(JsonPrimitive(it)) } })
             config.signInCallback?.let { put("callback", it) }
+            // Google's own sheet signs in on Android; any other provider goes the web's way.
+            if ("platform_sign_in" in caps) put("native", buildJsonArray { add(JsonPrimitive("google")) })
         },
     )
 }

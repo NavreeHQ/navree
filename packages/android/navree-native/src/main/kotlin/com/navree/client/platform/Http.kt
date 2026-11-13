@@ -100,6 +100,7 @@ class CoreHttp(
         val type = effect.headers.firstOrNull { it.first.equals("content-type", ignoreCase = true) }?.second
         val body: RequestBody? = when (val sent = effect.body) {
             is Body.Form -> sent.text.toRequestBody(type?.toMediaTypeOrNull())
+            is Body.Json -> sent.text.toRequestBody(type?.toMediaTypeOrNull())
             is Body.Multipart -> MultipartBody.Builder().setType(MultipartBody.FORM).apply {
                 for (part in sent.parts) {
                     when (part) {
