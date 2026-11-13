@@ -1,0 +1,20 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "ops": [
+    {
+      "op": "signed_out"
+    },
+    {
+      "op": "toast",
+      "tone": "info",
+      "text": "You have signed out of Charkha Supply Co."
+    },
+    {
+      "op": "navigate",
+      "href": "/sign-in",
+      "present": "root"
+    }
+  ]
+}

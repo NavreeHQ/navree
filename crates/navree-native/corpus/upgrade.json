@@ -1,0 +1,9 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "upgrade": {
+    "min_app": "1.2.0",
+    "url": "https://example.com/app"
+  }
+}

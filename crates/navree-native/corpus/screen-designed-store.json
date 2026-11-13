@@ -1,0 +1,1317 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "screen": {
+    "title": "Shelves",
+    "id": "shelves",
+    "back": {
+      "title": "Today",
+      "href": "/"
+    },
+    "nav": "/inventory",
+    "actions": [
+      {
+        "t": "button",
+        "label": "Inventory",
+        "icon": {
+          "name": "boxes",
+          "symbol": {
+            "apple": "shippingbox",
+            "material": "inventory_2"
+          }
+        },
+        "role": "secondary",
+        "action": {
+          "t": "navigate",
+          "href": "/inventory"
+        }
+      }
+    ],
+    "refresh": true,
+    "body": {
+      "t": "stack",
+      "id": "shelves",
+      "gap": 4,
+      "children": [
+        {
+          "t": "stack",
+          "children": [
+            {
+              "t": "text",
+              "id": "needing",
+              "value": "6",
+              "style": "display",
+              "tabular": true,
+              "change": "count"
+            },
+            {
+              "t": "text",
+              "value": "shelves need a hand today",
+              "style": "callout",
+              "muted": true
+            }
+          ]
+        },
+        {
+          "t": "grid",
+          "id": "levels",
+          "cols": 3,
+          "min": 104,
+          "gap": 3,
+          "children": [
+            {
+              "t": "card",
+              "id": "level-out",
+              "colour": {
+                "hue": "danger"
+              },
+              "children": [
+                {
+                  "t": "stack",
+                  "axis": "horizontal",
+                  "gap": 3,
+                  "align": "center",
+                  "children": [
+                    {
+                      "t": "shape",
+                      "form": "capsule",
+                      "fill": {
+                        "hue": "danger"
+                      },
+                      "size": {
+                        "width": 6,
+                        "height": 36,
+                        "scaled": true
+                      }
+                    },
+                    {
+                      "t": "stack",
+                      "grow": true,
+                      "children": [
+                        {
+                          "t": "text",
+                          "value": "2",
+                          "style": "title",
+                          "weight": "bold",
+                          "tabular": true,
+                          "change": "count"
+                        },
+                        {
+                          "t": "text",
+                          "value": "Out of stock",
+                          "style": "caption",
+                          "muted": true,
+                          "weight": "semibold"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "t": "card",
+              "id": "level-low",
+              "colour": {
+                "hue": "warning"
+              },
+              "children": [
+                {
+                  "t": "stack",
+                  "axis": "horizontal",
+                  "gap": 3,
+                  "align": "center",
+                  "children": [
+                    {
+                      "t": "shape",
+                      "form": "capsule",
+                      "fill": {
+                        "hue": "warning"
+                      },
+                      "size": {
+                        "width": 6,
+                        "height": 36,
+                        "scaled": true
+                      }
+                    },
+                    {
+                      "t": "stack",
+                      "grow": true,
+                      "children": [
+                        {
+                          "t": "text",
+                          "value": "4",
+                          "style": "title",
+                          "weight": "bold",
+                          "tabular": true,
+                          "change": "count"
+                        },
+                        {
+                          "t": "text",
+                          "value": "Running low",
+                          "style": "caption",
+                          "muted": true,
+                          "weight": "semibold"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "t": "card",
+              "id": "level-in",
+              "colour": {
+                "hue": "success"
+              },
+              "children": [
+                {
+                  "t": "stack",
+                  "axis": "horizontal",
+                  "gap": 3,
+                  "align": "center",
+                  "children": [
+                    {
+                      "t": "shape",
+                      "form": "capsule",
+                      "fill": {
+                        "hue": "success"
+                      },
+                      "size": {
+                        "width": 6,
+                        "height": 36,
+                        "scaled": true
+                      }
+                    },
+                    {
+                      "t": "stack",
+                      "grow": true,
+                      "children": [
+                        {
+                          "t": "text",
+                          "value": "1,994",
+                          "style": "title",
+                          "weight": "regular",
+                          "tabular": true,
+                          "change": "count"
+                        },
+                        {
+                          "t": "text",
+                          "value": "Stocked",
+                          "style": "caption",
+                          "muted": true,
+                          "weight": "semibold"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "t": "card",
+          "id": "next-delivery",
+          "appear": "rise",
+          "children": [
+            {
+              "t": "text",
+              "value": "Next delivery",
+              "style": "caption",
+              "muted": true,
+              "weight": "semibold"
+            },
+            {
+              "t": "text",
+              "value": "Monday, 16 November · from Moradabad",
+              "style": "headline"
+            },
+            {
+              "t": "text",
+              "value": "Checked a minute ago",
+              "style": "caption",
+              "muted": true,
+              "align": "end",
+              "change": "fade"
+            }
+          ]
+        },
+        {
+          "t": "stack",
+          "gap": 4,
+          "align": "start",
+          "wide": "horizontal",
+          "children": [
+            {
+              "t": "stack",
+              "gap": 3,
+              "grow": true,
+              "children": [
+                {
+                  "t": "text",
+                  "value": "The emptiest shelves",
+                  "style": "title2",
+                  "heading": 2,
+                  "weight": "bold"
+                },
+                {
+                  "t": "stack",
+                  "axis": "horizontal",
+                  "gap": 3,
+                  "wrap": true,
+                  "children": [
+                    {
+                      "t": "stack",
+                      "axis": "horizontal",
+                      "gap": 1,
+                      "align": "center",
+                      "children": [
+                        {
+                          "t": "shape",
+                          "form": "rect",
+                          "fill": {
+                            "hue": "danger"
+                          },
+                          "size": {
+                            "width": 10,
+                            "height": 10,
+                            "scaled": true
+                          }
+                        },
+                        {
+                          "t": "text",
+                          "value": "Out of stock",
+                          "style": "caption",
+                          "muted": true
+                        }
+                      ]
+                    },
+                    {
+                      "t": "stack",
+                      "axis": "horizontal",
+                      "gap": 1,
+                      "align": "center",
+                      "children": [
+                        {
+                          "t": "shape",
+                          "form": "rect",
+                          "fill": {
+                            "hue": "warning"
+                          },
+                          "size": {
+                            "width": 10,
+                            "height": 10,
+                            "scaled": true
+                          }
+                        },
+                        {
+                          "t": "text",
+                          "value": "Running low",
+                          "style": "caption",
+                          "muted": true
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "t": "grid",
+                  "id": "wall",
+                  "min": 160,
+                  "gap": 3,
+                  "children": [
+                    {
+                      "t": "card",
+                      "id": "shelf-7",
+                      "action": {
+                        "t": "request",
+                        "href": "/inventory/7/peek"
+                      },
+                      "label": "Brass lota, out of stock",
+                      "menu": [
+                        {
+                          "t": "button",
+                          "label": "Restock 24",
+                          "action": {
+                            "t": "request",
+                            "method": "post",
+                            "href": "/inventory/7/restock",
+                            "fields": [
+                              {
+                                "name": "quantity",
+                                "value": "24"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "t": "link",
+                          "label": "Open in the inventory",
+                          "action": {
+                            "t": "navigate",
+                            "href": "/inventory?search=7"
+                          }
+                        }
+                      ],
+                      "appear": "scale",
+                      "children": [
+                        {
+                          "t": "stack",
+                          "axis": "horizontal",
+                          "align": "start",
+                          "justify": "between",
+                          "children": [
+                            {
+                              "t": "layers",
+                              "place": "bottom_end",
+                              "children": [
+                                {
+                                  "t": "layers",
+                                  "size": {
+                                    "width": 40,
+                                    "height": 40,
+                                    "scaled": true
+                                  },
+                                  "children": [
+                                    {
+                                      "t": "shape",
+                                      "form": "circle",
+                                      "fill": {
+                                        "hue": "danger"
+                                      },
+                                      "soft": true
+                                    },
+                                    {
+                                      "t": "icon",
+                                      "name": "cup-soda",
+                                      "colour": {
+                                        "hue": "danger"
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "t": "shape",
+                                  "form": "circle",
+                                  "fill": {
+                                    "hue": "danger"
+                                  },
+                                  "stroke": {
+                                    "hue": "neutral"
+                                  },
+                                  "size": {
+                                    "width": 12,
+                                    "height": 12
+                                  },
+                                  "label": "Out of stock"
+                                }
+                              ]
+                            },
+                            {
+                              "t": "badge",
+                              "text": "Out of stock",
+                              "tone": "danger"
+                            }
+                          ]
+                        },
+                        {
+                          "t": "text",
+                          "value": "Brass lota",
+                          "style": "headline",
+                          "lines": 2
+                        },
+                        {
+                          "t": "text",
+                          "value": "None left · reorders at 12",
+                          "style": "caption",
+                          "muted": true
+                        },
+                        {
+                          "t": "progress",
+                          "value": 0,
+                          "label": "Stock against the point it reorders at"
+                        }
+                      ]
+                    },
+                    {
+                      "t": "card",
+                      "id": "shelf-31",
+                      "action": {
+                        "t": "request",
+                        "href": "/inventory/31/peek"
+                      },
+                      "label": "Masala dabba, steel, out of stock",
+                      "menu": [
+                        {
+                          "t": "button",
+                          "label": "Restock 24",
+                          "action": {
+                            "t": "request",
+                            "method": "post",
+                            "href": "/inventory/31/restock",
+                            "fields": [
+                              {
+                                "name": "quantity",
+                                "value": "24"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "t": "link",
+                          "label": "Open in the inventory",
+                          "action": {
+                            "t": "navigate",
+                            "href": "/inventory?search=31"
+                          }
+                        }
+                      ],
+                      "appear": "scale",
+                      "children": [
+                        {
+                          "t": "stack",
+                          "axis": "horizontal",
+                          "align": "start",
+                          "justify": "between",
+                          "children": [
+                            {
+                              "t": "layers",
+                              "place": "bottom_end",
+                              "children": [
+                                {
+                                  "t": "layers",
+                                  "size": {
+                                    "width": 40,
+                                    "height": 40,
+                                    "scaled": true
+                                  },
+                                  "children": [
+                                    {
+                                      "t": "shape",
+                                      "form": "circle",
+                                      "fill": {
+                                        "hue": "danger"
+                                      },
+                                      "soft": true
+                                    },
+                                    {
+                                      "t": "icon",
+                                      "name": "soup",
+                                      "colour": {
+                                        "hue": "danger"
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "t": "shape",
+                                  "form": "circle",
+                                  "fill": {
+                                    "hue": "danger"
+                                  },
+                                  "stroke": {
+                                    "hue": "neutral"
+                                  },
+                                  "size": {
+                                    "width": 12,
+                                    "height": 12
+                                  },
+                                  "label": "Out of stock"
+                                }
+                              ]
+                            },
+                            {
+                              "t": "badge",
+                              "text": "Out of stock",
+                              "tone": "danger"
+                            }
+                          ]
+                        },
+                        {
+                          "t": "text",
+                          "value": "Masala dabba, steel",
+                          "style": "headline",
+                          "lines": 2
+                        },
+                        {
+                          "t": "text",
+                          "value": "None left · reorders at 8",
+                          "style": "caption",
+                          "muted": true
+                        },
+                        {
+                          "t": "progress",
+                          "value": 0,
+                          "label": "Stock against the point it reorders at"
+                        }
+                      ]
+                    },
+                    {
+                      "t": "card",
+                      "id": "shelf-12",
+                      "action": {
+                        "t": "request",
+                        "href": "/inventory/12/peek"
+                      },
+                      "label": "Khadi kurta, indigo, running low",
+                      "menu": [
+                        {
+                          "t": "button",
+                          "label": "Restock 24",
+                          "action": {
+                            "t": "request",
+                            "method": "post",
+                            "href": "/inventory/12/restock",
+                            "fields": [
+                              {
+                                "name": "quantity",
+                                "value": "24"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "t": "link",
+                          "label": "Open in the inventory",
+                          "action": {
+                            "t": "navigate",
+                            "href": "/inventory?search=12"
+                          }
+                        }
+                      ],
+                      "appear": "scale",
+                      "children": [
+                        {
+                          "t": "stack",
+                          "axis": "horizontal",
+                          "align": "start",
+                          "justify": "between",
+                          "children": [
+                            {
+                              "t": "layers",
+                              "place": "bottom_end",
+                              "children": [
+                                {
+                                  "t": "layers",
+                                  "size": {
+                                    "width": 40,
+                                    "height": 40,
+                                    "scaled": true
+                                  },
+                                  "children": [
+                                    {
+                                      "t": "shape",
+                                      "form": "circle",
+                                      "fill": {
+                                        "hue": "warning"
+                                      },
+                                      "soft": true
+                                    },
+                                    {
+                                      "t": "icon",
+                                      "name": "shirt",
+                                      "colour": {
+                                        "hue": "warning"
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "t": "shape",
+                                  "form": "circle",
+                                  "fill": {
+                                    "hue": "warning"
+                                  },
+                                  "stroke": {
+                                    "hue": "neutral"
+                                  },
+                                  "size": {
+                                    "width": 12,
+                                    "height": 12
+                                  },
+                                  "label": "Running low"
+                                }
+                              ]
+                            },
+                            {
+                              "t": "badge",
+                              "text": "Running low",
+                              "tone": "warning"
+                            }
+                          ]
+                        },
+                        {
+                          "t": "text",
+                          "value": "Khadi kurta, indigo",
+                          "style": "headline",
+                          "lines": 2
+                        },
+                        {
+                          "t": "text",
+                          "value": "3 left · reorders at 10",
+                          "style": "caption",
+                          "muted": true
+                        },
+                        {
+                          "t": "progress",
+                          "value": 300,
+                          "label": "Stock against the point it reorders at"
+                        }
+                      ]
+                    },
+                    {
+                      "t": "card",
+                      "id": "shelf-44",
+                      "action": {
+                        "t": "request",
+                        "href": "/inventory/44/peek"
+                      },
+                      "label": "Punjabi jutti, size 8, running low",
+                      "menu": [
+                        {
+                          "t": "button",
+                          "label": "Restock 24",
+                          "action": {
+                            "t": "request",
+                            "method": "post",
+                            "href": "/inventory/44/restock",
+                            "fields": [
+                              {
+                                "name": "quantity",
+                                "value": "24"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "t": "link",
+                          "label": "Open in the inventory",
+                          "action": {
+                            "t": "navigate",
+                            "href": "/inventory?search=44"
+                          }
+                        }
+                      ],
+                      "appear": "scale",
+                      "children": [
+                        {
+                          "t": "stack",
+                          "axis": "horizontal",
+                          "align": "start",
+                          "justify": "between",
+                          "children": [
+                            {
+                              "t": "layers",
+                              "place": "bottom_end",
+                              "children": [
+                                {
+                                  "t": "layers",
+                                  "size": {
+                                    "width": 40,
+                                    "height": 40,
+                                    "scaled": true
+                                  },
+                                  "children": [
+                                    {
+                                      "t": "shape",
+                                      "form": "circle",
+                                      "fill": {
+                                        "hue": "warning"
+                                      },
+                                      "soft": true
+                                    },
+                                    {
+                                      "t": "icon",
+                                      "name": "footprints",
+                                      "symbol": {
+                                        "apple": "figure.walk",
+                                        "material": "directions_walk"
+                                      },
+                                      "colour": {
+                                        "hue": "warning"
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "t": "shape",
+                                  "form": "circle",
+                                  "fill": {
+                                    "hue": "warning"
+                                  },
+                                  "stroke": {
+                                    "hue": "neutral"
+                                  },
+                                  "size": {
+                                    "width": 12,
+                                    "height": 12
+                                  },
+                                  "label": "Running low"
+                                }
+                              ]
+                            },
+                            {
+                              "t": "badge",
+                              "text": "Running low",
+                              "tone": "warning"
+                            }
+                          ]
+                        },
+                        {
+                          "t": "text",
+                          "value": "Punjabi jutti, size 8",
+                          "style": "headline",
+                          "lines": 2
+                        },
+                        {
+                          "t": "text",
+                          "value": "4 left · reorders at 8",
+                          "style": "caption",
+                          "muted": true
+                        },
+                        {
+                          "t": "progress",
+                          "value": 500,
+                          "label": "Stock against the point it reorders at"
+                        }
+                      ]
+                    },
+                    {
+                      "t": "card",
+                      "id": "shelf-18",
+                      "action": {
+                        "t": "request",
+                        "href": "/inventory/18/peek"
+                      },
+                      "label": "Phulkari dupatta, running low",
+                      "menu": [
+                        {
+                          "t": "button",
+                          "label": "Restock 24",
+                          "action": {
+                            "t": "request",
+                            "method": "post",
+                            "href": "/inventory/18/restock",
+                            "fields": [
+                              {
+                                "name": "quantity",
+                                "value": "24"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "t": "link",
+                          "label": "Open in the inventory",
+                          "action": {
+                            "t": "navigate",
+                            "href": "/inventory?search=18"
+                          }
+                        }
+                      ],
+                      "appear": "scale",
+                      "children": [
+                        {
+                          "t": "stack",
+                          "axis": "horizontal",
+                          "align": "start",
+                          "justify": "between",
+                          "children": [
+                            {
+                              "t": "layers",
+                              "place": "bottom_end",
+                              "children": [
+                                {
+                                  "t": "layers",
+                                  "size": {
+                                    "width": 40,
+                                    "height": 40,
+                                    "scaled": true
+                                  },
+                                  "children": [
+                                    {
+                                      "t": "shape",
+                                      "form": "circle",
+                                      "fill": {
+                                        "hue": "warning"
+                                      },
+                                      "soft": true
+                                    },
+                                    {
+                                      "t": "icon",
+                                      "name": "flower",
+                                      "colour": {
+                                        "hue": "warning"
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "t": "shape",
+                                  "form": "circle",
+                                  "fill": {
+                                    "hue": "warning"
+                                  },
+                                  "stroke": {
+                                    "hue": "neutral"
+                                  },
+                                  "size": {
+                                    "width": 12,
+                                    "height": 12
+                                  },
+                                  "label": "Running low"
+                                }
+                              ]
+                            },
+                            {
+                              "t": "badge",
+                              "text": "Running low",
+                              "tone": "warning"
+                            }
+                          ]
+                        },
+                        {
+                          "t": "text",
+                          "value": "Phulkari dupatta",
+                          "style": "headline",
+                          "lines": 2
+                        },
+                        {
+                          "t": "text",
+                          "value": "6 left · reorders at 12",
+                          "style": "caption",
+                          "muted": true
+                        },
+                        {
+                          "t": "progress",
+                          "value": 500,
+                          "label": "Stock against the point it reorders at"
+                        }
+                      ]
+                    },
+                    {
+                      "t": "card",
+                      "id": "shelf-52",
+                      "action": {
+                        "t": "request",
+                        "href": "/inventory/52/peek"
+                      },
+                      "label": "Block-print bedsheet, running low",
+                      "menu": [
+                        {
+                          "t": "button",
+                          "label": "Restock 24",
+                          "action": {
+                            "t": "request",
+                            "method": "post",
+                            "href": "/inventory/52/restock",
+                            "fields": [
+                              {
+                                "name": "quantity",
+                                "value": "24"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "t": "link",
+                          "label": "Open in the inventory",
+                          "action": {
+                            "t": "navigate",
+                            "href": "/inventory?search=52"
+                          }
+                        }
+                      ],
+                      "appear": "scale",
+                      "children": [
+                        {
+                          "t": "stack",
+                          "axis": "horizontal",
+                          "align": "start",
+                          "justify": "between",
+                          "children": [
+                            {
+                              "t": "layers",
+                              "place": "bottom_end",
+                              "children": [
+                                {
+                                  "t": "layers",
+                                  "size": {
+                                    "width": 40,
+                                    "height": 40,
+                                    "scaled": true
+                                  },
+                                  "children": [
+                                    {
+                                      "t": "shape",
+                                      "form": "circle",
+                                      "fill": {
+                                        "hue": "warning"
+                                      },
+                                      "soft": true
+                                    },
+                                    {
+                                      "t": "icon",
+                                      "name": "bed",
+                                      "symbol": {
+                                        "apple": "bed.double",
+                                        "apple_filled": "bed.double.fill",
+                                        "material": "bed"
+                                      },
+                                      "colour": {
+                                        "hue": "warning"
+                                      }
+                                    }
+                                  ]
+                                },
+                                {
+                                  "t": "shape",
+                                  "form": "circle",
+                                  "fill": {
+                                    "hue": "warning"
+                                  },
+                                  "stroke": {
+                                    "hue": "neutral"
+                                  },
+                                  "size": {
+                                    "width": 12,
+                                    "height": 12
+                                  },
+                                  "label": "Running low"
+                                }
+                              ]
+                            },
+                            {
+                              "t": "badge",
+                              "text": "Running low",
+                              "tone": "warning"
+                            }
+                          ]
+                        },
+                        {
+                          "t": "text",
+                          "value": "Block-print bedsheet",
+                          "style": "headline",
+                          "lines": 2
+                        },
+                        {
+                          "t": "text",
+                          "value": "9 left · reorders at 15",
+                          "style": "caption",
+                          "muted": true
+                        },
+                        {
+                          "t": "progress",
+                          "value": 600,
+                          "label": "Stock against the point it reorders at"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "t": "adaptive",
+              "compact": [
+                {
+                  "t": "stack",
+                  "gap": 3,
+                  "appear": "fade",
+                  "children": [
+                    {
+                      "t": "text",
+                      "value": "Top sellers today",
+                      "style": "title2",
+                      "heading": 2,
+                      "weight": "bold"
+                    },
+                    {
+                      "t": "carousel",
+                      "min": 148,
+                      "gap": 3,
+                      "label": "Top sellers today",
+                      "children": [
+                        {
+                          "t": "card",
+                          "pad": 3,
+                          "children": [
+                            {
+                              "t": "layers",
+                              "size": {
+                                "width": 44,
+                                "height": 44,
+                                "scaled": true
+                              },
+                              "children": [
+                                {
+                                  "t": "shape",
+                                  "fill": {
+                                    "hue": "accent"
+                                  },
+                                  "soft": true
+                                },
+                                {
+                                  "t": "icon",
+                                  "name": "trending-up",
+                                  "symbol": {
+                                    "apple": "chart.line.uptrend.xyaxis",
+                                    "material": "trending_up"
+                                  },
+                                  "scale": "title2",
+                                  "colour": {
+                                    "hue": "accent"
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "t": "text",
+                              "value": "Amritsari papad",
+                              "style": "callout",
+                              "lines": 2,
+                              "weight": "medium"
+                            },
+                            {
+                              "t": "text",
+                              "value": "31 sold · ₹4,340",
+                              "style": "caption",
+                              "muted": true
+                            }
+                          ]
+                        },
+                        {
+                          "t": "card",
+                          "pad": 3,
+                          "children": [
+                            {
+                              "t": "layers",
+                              "size": {
+                                "width": 44,
+                                "height": 44,
+                                "scaled": true
+                              },
+                              "children": [
+                                {
+                                  "t": "shape",
+                                  "fill": {
+                                    "hue": "accent"
+                                  },
+                                  "soft": true
+                                },
+                                {
+                                  "t": "icon",
+                                  "name": "trending-up",
+                                  "symbol": {
+                                    "apple": "chart.line.uptrend.xyaxis",
+                                    "material": "trending_up"
+                                  },
+                                  "scale": "title2",
+                                  "colour": {
+                                    "hue": "accent"
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "t": "text",
+                              "value": "Phulkari dupatta",
+                              "style": "callout",
+                              "lines": 2,
+                              "weight": "medium"
+                            },
+                            {
+                              "t": "text",
+                              "value": "14 sold · ₹27,860",
+                              "style": "caption",
+                              "muted": true
+                            }
+                          ]
+                        },
+                        {
+                          "t": "card",
+                          "pad": 3,
+                          "children": [
+                            {
+                              "t": "layers",
+                              "size": {
+                                "width": 44,
+                                "height": 44,
+                                "scaled": true
+                              },
+                              "children": [
+                                {
+                                  "t": "shape",
+                                  "fill": {
+                                    "hue": "accent"
+                                  },
+                                  "soft": true
+                                },
+                                {
+                                  "t": "icon",
+                                  "name": "trending-up",
+                                  "symbol": {
+                                    "apple": "chart.line.uptrend.xyaxis",
+                                    "material": "trending_up"
+                                  },
+                                  "scale": "title2",
+                                  "colour": {
+                                    "hue": "accent"
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "t": "text",
+                              "value": "Punjabi jutti, size 8",
+                              "style": "callout",
+                              "lines": 2,
+                              "weight": "medium"
+                            },
+                            {
+                              "t": "text",
+                              "value": "9 sold · ₹11,691",
+                              "style": "caption",
+                              "muted": true
+                            }
+                          ]
+                        },
+                        {
+                          "t": "card",
+                          "pad": 3,
+                          "children": [
+                            {
+                              "t": "layers",
+                              "size": {
+                                "width": 44,
+                                "height": 44,
+                                "scaled": true
+                              },
+                              "children": [
+                                {
+                                  "t": "shape",
+                                  "fill": {
+                                    "hue": "accent"
+                                  },
+                                  "soft": true
+                                },
+                                {
+                                  "t": "icon",
+                                  "name": "trending-up",
+                                  "symbol": {
+                                    "apple": "chart.line.uptrend.xyaxis",
+                                    "material": "trending_up"
+                                  },
+                                  "scale": "title2",
+                                  "colour": {
+                                    "hue": "accent"
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "t": "text",
+                              "value": "Brass lota",
+                              "style": "callout",
+                              "lines": 2,
+                              "weight": "medium"
+                            },
+                            {
+                              "t": "text",
+                              "value": "6 sold · ₹5,094",
+                              "style": "caption",
+                              "muted": true
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "wide": [
+                {
+                  "t": "section",
+                  "title": "Top sellers today",
+                  "style": "inset",
+                  "children": [
+                    {
+                      "t": "list",
+                      "children": [
+                        {
+                          "t": "row",
+                          "title": "Amritsari papad",
+                          "subtitle": "31 sold · ₹4,340"
+                        },
+                        {
+                          "t": "row",
+                          "title": "Phulkari dupatta",
+                          "subtitle": "14 sold · ₹27,860"
+                        },
+                        {
+                          "t": "row",
+                          "title": "Punjabi jutti, size 8",
+                          "subtitle": "9 sold · ₹11,691"
+                        },
+                        {
+                          "t": "row",
+                          "title": "Brass lota",
+                          "subtitle": "6 sold · ₹5,094"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "icons": {
+    "bed": {
+      "paths": [
+        "M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"
+      ]
+    },
+    "boxes": {
+      "paths": [
+        "M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"
+      ]
+    },
+    "cup-soda": {
+      "paths": [
+        "M6 8h12l-1.5 12h-9zM5 4h14l-1 4H6z"
+      ]
+    },
+    "flower": {
+      "paths": [
+        "M12 7.5a4.5 4.5 0 1 1 4.5 4.5M12 7.5A4.5 4.5 0 1 0 7.5 12M12 7.5V9M7.5 12a4.5 4.5 0 1 0 4.5 4.5M7.5 12H9M16.5 12a4.5 4.5 0 1 1-4.5 4.5M16.5 12H15M12 16.5V15"
+      ]
+    },
+    "footprints": {
+      "paths": [
+        "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z"
+      ]
+    },
+    "shirt": {
+      "paths": [
+        "M8 3 3 6l2 4 2-1v11h10V9l2 1 2-4-5-3a4 4 0 0 1-8 0z"
+      ]
+    },
+    "soup": {
+      "paths": [
+        "M4 12h16a8 8 0 0 1-16 0zM7 21h10M12 3v5"
+      ]
+    },
+    "trending-up": {
+      "paths": [
+        "M22 7 13.5 15.5l-5-5L2 17M16 7h6v6"
+      ]
+    }
+  }
+}

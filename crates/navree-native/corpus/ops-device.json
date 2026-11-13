@@ -1,0 +1,38 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "ops": [
+    {
+      "op": "device",
+      "call": {
+        "f": "haptic",
+        "kind": "success"
+      }
+    },
+    {
+      "op": "device",
+      "call": {
+        "f": "set_badge"
+      }
+    },
+    {
+      "op": "device",
+      "call": {
+        "f": "cancel_notification",
+        "id": "restock"
+      }
+    },
+    {
+      "op": "device",
+      "call": {
+        "f": "request_review"
+      }
+    },
+    {
+      "op": "toast",
+      "tone": "success",
+      "text": "Order CH-1042 delivered to Amritsar."
+    }
+  ]
+}

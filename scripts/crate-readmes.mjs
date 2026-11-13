@@ -59,6 +59,7 @@ const GUIDE = {
   media: "packages/media",
   micro: "microservices/introduction",
   mongo: "orm/mongodb",
+  native: "ui/native",
   navigator: "ai/navigator",
   notify: "digging-deeper/notifications",
   oauth: "packages/oauth-server",
@@ -105,6 +106,12 @@ const NOTICE = {
     "It bundles GraphiQL and React (MIT); their licence texts are in `assets/`.",
   "navree-phone":
     "It holds libphonenumber's numbering plans (Apache-2.0); the notice is in `THIRD_PARTY.md`.",
+};
+
+// Crates reached through a preview feature of `navree`: the feature that
+// turns each on, and the module it is seen as.
+const PREVIEW = {
+  "navree-native": { feature: "ui-native-preview", module: "native" },
 };
 
 // Crates whose README is written by hand.
@@ -179,6 +186,17 @@ function sections(pkg) {
       "```",
       "",
       "Building it compiles Dock, Harbor and Navigator, which takes a few minutes. The release page also has prebuilt binaries for Linux, macOS and Windows.",
+    );
+  } else if (PREVIEW[name]) {
+    const preview = PREVIEW[name];
+    lines.push(
+      `It is a preview: what it holds may change in a minor release. Turn on the \`${preview.feature}\` feature of \`navree\` to get \`navree::${preview.module}\`:`,
+      "",
+      "```sh",
+      `cargo add navree --features ${preview.feature}`,
+      "```",
+      "",
+      "Depend on `navree` and not on this crate, so the two always fit each other.",
     );
   } else if (dep && !dep.optional) {
     lines.push(

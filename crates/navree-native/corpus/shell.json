@@ -1,0 +1,117 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "stamp": "7ae16baddfe0a274",
+  "name": "Charkha Supply Co.",
+  "context": "Store operations",
+  "home": "/",
+  "theme": {
+    "name": "ocean",
+    "accent": "#0b6bcb",
+    "accent_dark": "#5aa9f0"
+  },
+  "nav": {
+    "groups": [
+      {
+        "label": "Store",
+        "items": [
+          {
+            "label": "Dashboard",
+            "icon": {
+              "name": "layout-dashboard",
+              "paths": [
+                "M3 3h7v9H3zM14 3h7v5h-7z"
+              ]
+            },
+            "href": "/"
+          },
+          {
+            "label": "Orders",
+            "icon": {
+              "name": "shopping-bag",
+              "paths": [
+                "M6 2 3 6v14h18V6l-3-4z"
+              ]
+            },
+            "href": "/orders",
+            "badge": "12",
+            "items": [
+              {
+                "label": "Returns",
+                "href": "/orders/returns"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "items": [
+          {
+            "label": "Inventory",
+            "href": "/inventory"
+          }
+        ]
+      }
+    ]
+  },
+  "user": {
+    "name": "Ravneet Kaur",
+    "email": "ravneet.kaur@example.com",
+    "menu": [
+      {
+        "t": "link",
+        "label": "Profile",
+        "action": {
+          "t": "navigate",
+          "href": "/profile"
+        }
+      },
+      {
+        "t": "button",
+        "label": "Sign out",
+        "action": {
+          "t": "request",
+          "method": "post",
+          "href": "/sign-out",
+          "fields": [
+            {
+              "name": "_csrf",
+              "value": "tok"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "routes": [
+    {
+      "match": "/orders/new",
+      "present": "sheet"
+    },
+    {
+      "match": "/sign-in",
+      "present": "full",
+      "chrome": false
+    }
+  ],
+  "device": {
+    "caps": [
+      "confirm",
+      "push",
+      "share",
+      "scan_code"
+    ],
+    "push": {
+      "register": "/api/notifications/push-devices"
+    },
+    "lock": {
+      "after_secs": 300
+    }
+  },
+  "sign_in": {
+    "start": "/auth/app/sign-in",
+    "exchange": "/api/auth/app/exchange",
+    "callback": "https://charkha.example/app/signed-in",
+    "second_step": "/sign-in/two-factor"
+  }
+}

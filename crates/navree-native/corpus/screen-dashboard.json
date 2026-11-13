@@ -1,0 +1,479 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "app": "app-7f3a91c2",
+  "shell": "7ae16baddfe0a274",
+  "screen": {
+    "title": "Today",
+    "nav": "/",
+    "actions": [
+      {
+        "t": "toolbar",
+        "id": "dashboard-bar",
+        "items": [
+          {
+            "title": "Share",
+            "icon": {
+              "name": "share"
+            },
+            "standard": "share",
+            "action": {
+              "t": "navigate",
+              "href": "/reports/today/share"
+            }
+          },
+          {
+            "id": "new-order",
+            "title": "New order",
+            "icon": {
+              "name": "plus"
+            },
+            "role": "create",
+            "prominence": "high",
+            "action": {
+              "t": "navigate",
+              "href": "/orders/new",
+              "present": "sheet"
+            }
+          },
+          {
+            "title": "Close the day",
+            "icon": {
+              "name": "lock"
+            },
+            "role": "secondary",
+            "disabled": true,
+            "reason": "3 orders are still to be packed.",
+            "action": {
+              "t": "request",
+              "method": "post",
+              "href": "/day/close",
+              "fields": [
+                {
+                  "name": "_csrf",
+                  "value": "tok"
+                }
+              ]
+            }
+          },
+          {
+            "title": "More",
+            "icon": {
+              "name": "ellipsis"
+            },
+            "standard": "more",
+            "role": "secondary",
+            "menu": [
+              {
+                "t": "button",
+                "label": "Edit the dashboard",
+                "standard": "edit",
+                "action": {
+                  "t": "navigate",
+                  "href": "/dashboard/edit"
+                }
+              },
+              {
+                "t": "button",
+                "label": "Search orders",
+                "standard": "search",
+                "action": {
+                  "t": "navigate",
+                  "href": "/orders?focus=search"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "refresh": true,
+    "body": {
+      "t": "stack",
+      "gap": 4,
+      "children": [
+        {
+          "t": "grid",
+          "cols": 3,
+          "min": 140,
+          "gap": 3,
+          "children": [
+            {
+              "t": "figure",
+              "label": "Revenue today",
+              "value": "₹1,24,050",
+              "trend": {
+                "direction": "up",
+                "text": "12%",
+                "tone": "success"
+              },
+              "detail": "against yesterday"
+            },
+            {
+              "t": "figure",
+              "label": "Returns",
+              "value": "3",
+              "trend": {
+                "direction": "down",
+                "text": "2",
+                "tone": "success"
+              },
+              "detail": "against yesterday"
+            },
+            {
+              "t": "figure",
+              "label": "Orders",
+              "value": "212",
+              "trend": {
+                "direction": "flat",
+                "text": "0",
+                "tone": "neutral"
+              },
+              "detail": "against yesterday"
+            }
+          ]
+        },
+        {
+          "t": "gauge",
+          "id": "space",
+          "value": 72,
+          "min": 0,
+          "max": 100,
+          "label": "Ludhiana warehouse space",
+          "shown": "72%",
+          "tone": "warning"
+        },
+        {
+          "t": "section",
+          "title": "CH-1042 today",
+          "style": "card",
+          "children": [
+            {
+              "t": "timeline",
+              "id": "order-day",
+              "items": [
+                {
+                  "title": "Placed",
+                  "subtitle": "3 units for ₹1,24,050",
+                  "time": "09:41",
+                  "state": "done",
+                  "icon": {
+                    "name": "receipt"
+                  },
+                  "detail": [
+                    {
+                      "t": "text",
+                      "value": "Paid by UPI",
+                      "muted": true
+                    }
+                  ]
+                },
+                {
+                  "title": "Packed",
+                  "time": "11:05",
+                  "state": "done",
+                  "icon": {
+                    "name": "package"
+                  }
+                },
+                {
+                  "title": "Reminder sent to the carrier",
+                  "time": "11:30",
+                  "state": "done",
+                  "icon": {
+                    "name": "bell"
+                  },
+                  "muted": true
+                },
+                {
+                  "title": "Shipping",
+                  "time": "Next",
+                  "state": "current",
+                  "icon": {
+                    "name": "truck"
+                  },
+                  "tone": "info"
+                },
+                {
+                  "title": "Delivered",
+                  "time": "Later",
+                  "state": "upcoming",
+                  "icon": {
+                    "name": "house"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "t": "section",
+          "title": "Activity",
+          "children": [
+            {
+              "t": "list",
+              "id": "activity",
+              "children": [
+                {
+                  "t": "feed_row",
+                  "id": "activity-4412",
+                  "actor": {
+                    "name": "Ravneet Kaur",
+                    "initials": "RK"
+                  },
+                  "runs": [
+                    {
+                      "text": "Ravneet Kaur",
+                      "bold": true
+                    },
+                    {
+                      "text": " packed "
+                    },
+                    {
+                      "text": "CH-1042",
+                      "href": "/orders/1042"
+                    }
+                  ],
+                  "time": "11:05",
+                  "action": {
+                    "t": "navigate",
+                    "href": "/orders/1042"
+                  }
+                },
+                {
+                  "t": "feed_row",
+                  "id": "activity-4411",
+                  "icon": {
+                    "name": "triangle-alert"
+                  },
+                  "runs": [
+                    {
+                      "text": "Stock of "
+                    },
+                    {
+                      "text": "Brass Kadhai",
+                      "bold": true
+                    },
+                    {
+                      "text": " fell below 10"
+                    }
+                  ],
+                  "time": "10:30",
+                  "tone": "warning",
+                  "detail": [
+                    {
+                      "t": "text",
+                      "value": "9 left on the shelf in Amritsar",
+                      "muted": true
+                    }
+                  ]
+                }
+              ],
+              "more": "/activity?after=4410"
+            }
+          ]
+        },
+        {
+          "t": "rich",
+          "id": "note",
+          "blocks": [
+            {
+              "kind": "heading",
+              "runs": [
+                {
+                  "text": "Before Diwali"
+                }
+              ],
+              "level": 2
+            },
+            {
+              "runs": [
+                {
+                  "text": "Orders double in the week before. "
+                },
+                {
+                  "text": "Restock early.",
+                  "bold": true
+                }
+              ]
+            },
+            {
+              "kind": "bullet",
+              "runs": [
+                {
+                  "text": "Brass Kadhai: 40 more"
+                }
+              ]
+            },
+            {
+              "kind": "bullet",
+              "runs": [
+                {
+                  "text": "Diyas, a set of 12: 200 more"
+                }
+              ],
+              "level": 1
+            },
+            {
+              "kind": "numbered",
+              "runs": [
+                {
+                  "text": "Call the Jalandhar supplier"
+                }
+              ]
+            },
+            {
+              "kind": "quote",
+              "runs": [
+                {
+                  "text": "Ship nothing after the 28th that can't arrive by the 31st."
+                }
+              ]
+            },
+            {
+              "kind": "code",
+              "runs": [
+                {
+                  "text": "SKU BK-12 x 40"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "t": "button",
+          "label": "Delete this draft",
+          "role": "destructive",
+          "standard": "delete",
+          "undoable": true,
+          "action": {
+            "t": "request",
+            "method": "post",
+            "href": "/drafts/31/delete",
+            "fields": [
+              {
+                "name": "_csrf",
+                "value": "tok"
+              }
+            ]
+          }
+        },
+        {
+          "t": "stack",
+          "axis": "horizontal",
+          "gap": 2,
+          "justify": "end",
+          "children": [
+            {
+              "t": "button",
+              "label": "Add a product",
+              "standard": "add",
+              "action": {
+                "t": "navigate",
+                "href": "/products/new"
+              }
+            },
+            {
+              "t": "button",
+              "label": "Cancel",
+              "role": "cancel",
+              "standard": "cancel",
+              "action": {
+                "t": "back"
+              }
+            },
+            {
+              "t": "button",
+              "label": "Done",
+              "role": "confirm",
+              "standard": "done",
+              "action": {
+                "t": "submit"
+              }
+            }
+          ]
+        },
+        {
+          "t": "split",
+          "id": "sales-split",
+          "primary": {
+            "t": "pane",
+            "role": "content",
+            "title": "Sales",
+            "current": true,
+            "children": [
+              {
+                "t": "text",
+                "value": "₹8,40,300 this week"
+              }
+            ]
+          },
+          "detail": {
+            "t": "pane",
+            "role": "supporting",
+            "title": "Filters",
+            "children": [
+              {
+                "t": "text",
+                "value": "Punjab, all channels"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "icons": {
+    "bell": {
+      "paths": [
+        "M3 7l9-4 9 4v10l-9 4-9-4z"
+      ]
+    },
+    "ellipsis": {
+      "paths": [
+        "M5 12h.01M12 12h.01M19 12h.01"
+      ]
+    },
+    "house": {
+      "paths": [
+        "M3 7l9-4 9 4v10l-9 4-9-4z"
+      ]
+    },
+    "lock": {
+      "paths": [
+        "M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3"
+      ]
+    },
+    "package": {
+      "paths": [
+        "M3 7l9-4 9 4v10l-9 4-9-4z"
+      ]
+    },
+    "plus": {
+      "paths": [
+        "M5 12h14M12 5v14"
+      ]
+    },
+    "receipt": {
+      "paths": [
+        "M3 7l9-4 9 4v10l-9 4-9-4z"
+      ]
+    },
+    "share": {
+      "paths": [
+        "M4 12v8h16v-8M12 3v13M8 7l4-4 4 4"
+      ]
+    },
+    "triangle-alert": {
+      "paths": [
+        "M12 9v4M12 17h.01M3 20h18L12 4z"
+      ]
+    },
+    "truck": {
+      "paths": [
+        "M3 7l9-4 9 4v10l-9 4-9-4z"
+      ]
+    }
+  }
+}

@@ -1,0 +1,23 @@
+[package]
+name = "navree-native"
+description = "The protocol of Navree Native: the parts, actions and ops a native client draws with its system's toolkit, the client descriptor, and example envelopes."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "native", "protocol", "ui"]
+categories = ["gui", "encoding"]
+readme = "README.md"
+include = ["src/**", "corpus/**", "schema/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

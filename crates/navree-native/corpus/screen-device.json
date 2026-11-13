@@ -1,0 +1,266 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "screen": {
+    "title": "Pay and share",
+    "body": {
+      "t": "stack",
+      "gap": 2,
+      "children": [
+        {
+          "t": "button",
+          "label": "Pick a size",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "haptic",
+              "kind": "selection"
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Copy the code",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "copy",
+              "text": "482913",
+              "sensitive": true
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Share the invoice",
+          "role": "secondary",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "share",
+              "title": "Invoice CH-1042",
+              "text": "₹1,24,050 from Charkha Supply Co.",
+              "href": "/orders/1042",
+              "file": "/orders/1042/invoice.pdf"
+            },
+            "then": {
+              "href": "/orders/1042/shared",
+              "ticket": "tk-share",
+              "exp": 1794000000
+            },
+            "alt": {
+              "t": "text",
+              "text": "Copy the link from the address bar"
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Track the parcel",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "open_url",
+              "url": "https://track.example/LDH-7731",
+              "inside": true
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Continue with Google",
+          "role": "primary",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "auth_session",
+              "start": "/auth/google/redirect"
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Turn on order updates",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "register_push",
+              "categories": [
+                "orders",
+                "stock"
+              ]
+            },
+            "then": {
+              "href": "/settings/push",
+              "ticket": "tk-push",
+              "exp": 1794000000
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Remind me at 9",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "notify",
+              "id": "restock",
+              "title": "Restock the shelves",
+              "body": "Brass Kadhai is down to 9 in Amritsar.",
+              "at": {
+                "t": "daily",
+                "hour": 9,
+                "minute": 0
+              },
+              "href": "/inventory?filter[stock][lt]=10",
+              "thread": "stock"
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Stop the reminder",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "cancel_notification",
+              "id": "restock"
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Show 3 on the icon",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "set_badge",
+              "count": 3
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Allow notifications in Settings",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "open_settings",
+              "page": "notifications"
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Sign in with a passkey",
+          "role": "primary",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "passkey",
+              "mode": "sign_in",
+              "options": "/auth/passkeys/login/options"
+            },
+            "then": {
+              "href": "/auth/passkeys/login",
+              "ticket": "tk-passkey",
+              "exp": 1794000000
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Approve",
+          "role": "confirm",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "confirm",
+              "reason": "Approve payment",
+              "challenge": "/api/auth/confirm/options",
+              "detail": "₹1,00,000 to Gurpreet Kaur, HDFC ••4821"
+            },
+            "then": {
+              "href": "/payments/42/approve",
+              "ticket": "tk-confirm",
+              "exp": 1794000000
+            },
+            "alt": {
+              "t": "navigate",
+              "href": "/payments/42/approve-with-code"
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Find the nearest store",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "locate_once",
+              "max_age_secs": 600,
+              "timeout_secs": 10
+            },
+            "then": {
+              "href": "/stores/nearest",
+              "ticket": "tk-locate",
+              "exp": 1794000000
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Scan a product",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "scan_code",
+              "formats": [
+                "ean13",
+                "code128"
+              ],
+              "prompt": "Scan the SKU on the box"
+            },
+            "then": {
+              "href": "/inventory/scanned",
+              "ticket": "tk-scan",
+              "exp": 1794000000
+            },
+            "alt": {
+              "t": "hide"
+            }
+          }
+        },
+        {
+          "t": "button",
+          "label": "Sign in with Apple",
+          "role": "primary",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "platform_sign_in",
+              "provider": "apple",
+              "nonce": "/api/auth/social/apple/native/nonce",
+              "sign_in": "/api/auth/social/apple/native/session",
+              "web": "/api/auth/social/apple/redirect",
+              "second_step": "/sign-in/two-factor"
+            }
+          }
+        },
+        {
+          "t": "field",
+          "id": "receipt",
+          "name": "receipt",
+          "label": "Photo of the receipt",
+          "input": {
+            "t": "file",
+            "accept": "image/*",
+            "capture": "environment",
+            "keep_location": true
+          }
+        }
+      ]
+    }
+  }
+}

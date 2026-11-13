@@ -1,0 +1,387 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "screen": {
+    "title": "Every part",
+    "body": {
+      "t": "stack",
+      "gap": 4,
+      "children": [
+        {
+          "t": "banner",
+          "id": "notice",
+          "tone": "warning",
+          "title": "Three shelves are running low",
+          "text": "Restock them before the weekend.",
+          "icon": {
+            "name": "triangle-alert",
+            "paths": [
+              "M12 9v4M12 17h.01M3 20h18L12 4z"
+            ]
+          },
+          "actions": [
+            {
+              "t": "link",
+              "label": "See the inventory",
+              "action": {
+                "t": "navigate",
+                "href": "/inventory"
+              }
+            }
+          ]
+        },
+        {
+          "t": "grid",
+          "cols": 2,
+          "min": 160,
+          "gap": 3,
+          "children": [
+            {
+              "t": "section",
+              "title": "Revenue today",
+              "style": "card",
+              "actions": [
+                {
+                  "t": "menu",
+                  "id": "revenue-menu",
+                  "label": "More",
+                  "icon": {
+                    "name": "ellipsis",
+                    "paths": [
+                      "M5 12h.01M12 12h.01M19 12h.01"
+                    ]
+                  },
+                  "items": [
+                    {
+                      "t": "button",
+                      "label": "Copy the figure",
+                      "action": {
+                        "t": "commands",
+                        "list": [
+                          {
+                            "c": "copy",
+                            "text": "₹1,24,050"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "t": "divider"
+                    },
+                    {
+                      "t": "button",
+                      "label": "Hide this card",
+                      "role": "destructive",
+                      "action": {
+                        "t": "commands",
+                        "list": [
+                          {
+                            "c": "set",
+                            "id": "revenue",
+                            "state": "hidden",
+                            "on": true
+                          },
+                          {
+                            "c": "toast",
+                            "text": "Hidden"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ],
+              "children": [
+                {
+                  "t": "text",
+                  "id": "revenue",
+                  "value": "₹1,24,050",
+                  "style": "large_title",
+                  "tone": "success",
+                  "lines": 1
+                },
+                {
+                  "t": "progress",
+                  "value": 620,
+                  "label": "62% of the day's goal",
+                  "colour": {
+                    "hue": "green"
+                  }
+                },
+                {
+                  "t": "progress",
+                  "value": 910,
+                  "label": "Stock room: 91% full",
+                  "tone": "warning"
+                }
+              ],
+              "footer": [
+                {
+                  "t": "text",
+                  "value": "Up 12% on yesterday",
+                  "muted": true
+                }
+              ]
+            },
+            {
+              "t": "chart",
+              "id": "sales",
+              "kind": "bar",
+              "title": "Orders this week",
+              "labels": [
+                "Mon",
+                "Tue",
+                "Wed"
+              ],
+              "series": [
+                {
+                  "label": "UPI",
+                  "values": [
+                    41,
+                    38,
+                    null
+                  ]
+                },
+                {
+                  "label": "Card",
+                  "values": [
+                    12,
+                    9.5,
+                    17
+                  ],
+                  "shown": [
+                    "12",
+                    "9.5",
+                    "17"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "t": "tabs",
+          "id": "views",
+          "items": [
+            {
+              "label": "Activity",
+              "icon": {
+                "name": "activity",
+                "paths": [
+                  "M22 12h-4l-3 9L9 3l-3 9H2"
+                ]
+              },
+              "selected": true,
+              "children": [
+                {
+                  "t": "list",
+                  "id": "feed",
+                  "children": [
+                    {
+                      "t": "row",
+                      "id": "event-981",
+                      "leading": {
+                        "t": "avatar",
+                        "name": "Ravneet Kaur",
+                        "initials": "RK"
+                      },
+                      "title": "CH-1042 was packed",
+                      "subtitle": "At the Ludhiana warehouse",
+                      "detail": [
+                        {
+                          "t": "rich",
+                          "runs": [
+                            {
+                              "text": "Packed by "
+                            },
+                            {
+                              "text": "Ravneet",
+                              "bold": true
+                            },
+                            {
+                              "text": ", see ",
+                              "italic": true
+                            },
+                            {
+                              "text": "the order",
+                              "href": "/orders/1042"
+                            },
+                            {
+                              "text": " LDH-7",
+                              "code": true
+                            }
+                          ],
+                          "style": "caption",
+                          "muted": true
+                        }
+                      ],
+                      "trailing": {
+                        "t": "text",
+                        "value": "11:05",
+                        "muted": true
+                      },
+                      "badge": {
+                        "text": "New",
+                        "tone": "accent",
+                        "dot": true
+                      },
+                      "action": {
+                        "t": "navigate",
+                        "href": "/orders/1042"
+                      },
+                      "swipe": [
+                        {
+                          "label": "Archive",
+                          "role": "destructive",
+                          "action": {
+                            "t": "request",
+                            "method": "post",
+                            "href": "/feed/981/archive"
+                          }
+                        }
+                      ],
+                      "menu": [
+                        {
+                          "t": "button",
+                          "label": "Copy the order number",
+                          "action": {
+                            "t": "commands",
+                            "list": [
+                              {
+                                "c": "copy",
+                                "text": "CH-1042"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "more": "/feed?after=981",
+                  "before": "/feed?before=981",
+                  "since": "0004410",
+                  "changes": "/feed?dir=live",
+                  "live": {
+                    "src": "/broadcasting/stream",
+                    "event": "feed"
+                  }
+                }
+              ]
+            },
+            {
+              "label": "Stock",
+              "children": [
+                {
+                  "t": "region",
+                  "id": "stock-figures",
+                  "src": "/inventory/figures",
+                  "lazy": true
+                }
+              ]
+            },
+            {
+              "label": "Reports",
+              "href": "/reports"
+            }
+          ]
+        },
+        {
+          "t": "split",
+          "id": "panes",
+          "primary": {
+            "t": "empty",
+            "icon": {
+              "name": "inbox",
+              "paths": [
+                "M22 12h-6l-2 3h-4l-2-3H2"
+              ]
+            },
+            "title": "No conversation is open",
+            "text": "Choose one from the list.",
+            "actions": [
+              {
+                "t": "button",
+                "label": "Refresh",
+                "action": {
+                  "t": "refresh"
+                }
+              }
+            ]
+          },
+          "detail": {
+            "t": "disclosure",
+            "id": "about",
+            "label": "About this customer",
+            "open": true,
+            "children": [
+              {
+                "t": "image",
+                "src": "/files/shop.jpg",
+                "alt": "The shop's front on Mall Road",
+                "width": 320,
+                "height": 180,
+                "fit": "cover"
+              },
+              {
+                "t": "code",
+                "text": "GSTIN 03ABCDE1234F1Z5"
+              }
+            ]
+          }
+        },
+        {
+          "t": "popover",
+          "id": "hint",
+          "children": [
+            {
+              "t": "text",
+              "value": "Totals leave out cancelled orders."
+            }
+          ]
+        },
+        {
+          "t": "sheet",
+          "id": "order",
+          "title": "Order CH-1042",
+          "subtitle": "3 units for Harpreet Sandhu in Amritsar, Punjab",
+          "children": [
+            {
+              "t": "text",
+              "value": "…"
+            }
+          ],
+          "actions": [
+            {
+              "t": "button",
+              "label": "Close",
+              "role": "cancel",
+              "action": {
+                "t": "dismiss"
+              }
+            }
+          ]
+        },
+        {
+          "t": "native",
+          "id": "map",
+          "name": "map",
+          "props": {
+            "lat": 30.901,
+            "lng": 75.8573,
+            "zoom": 12
+          },
+          "alt": {
+            "t": "text",
+            "value": "Ludhiana warehouse, Punjab"
+          }
+        },
+        {
+          "t": "web",
+          "id": "terms",
+          "html": "<p>Goods once sold are <em>not</em> taken back after 7 days.</p>"
+        }
+      ]
+    }
+  }
+}

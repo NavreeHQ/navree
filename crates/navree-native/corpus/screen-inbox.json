@@ -1,0 +1,408 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "screen": {
+    "title": "Inbox",
+    "nav": "/inbox",
+    "body": {
+      "t": "split",
+      "id": "inbox",
+      "primary": {
+        "t": "pane",
+        "id": "conversations",
+        "role": "list",
+        "title": "Inbox",
+        "children": [
+          {
+            "t": "list",
+            "id": "conversation-list",
+            "children": [
+              {
+                "t": "row",
+                "id": "c-88",
+                "leading": {
+                  "t": "avatar",
+                  "name": "Harpreet Sandhu"
+                },
+                "title": "Harpreet Sandhu",
+                "subtitle": "My order CH-1042 has not come yet.",
+                "action": {
+                  "t": "navigate",
+                  "href": "/inbox/88"
+                }
+              },
+              {
+                "t": "row",
+                "id": "c-87",
+                "leading": {
+                  "t": "avatar",
+                  "name": "Simran Bhatia"
+                },
+                "title": "Simran Bhatia",
+                "subtitle": "Thank you, it arrived.",
+                "action": {
+                  "t": "navigate",
+                  "href": "/inbox/87"
+                }
+              }
+            ],
+            "more": "/inbox/rows?after=88"
+          }
+        ]
+      },
+      "detail": {
+        "t": "split",
+        "id": "conversation",
+        "primary": {
+          "t": "pane",
+          "id": "thread",
+          "role": "detail",
+          "title": "Harpreet Sandhu",
+          "current": true,
+          "children": [
+            {
+              "t": "message",
+              "author": "Harpreet Sandhu",
+              "body": [
+                {
+                  "t": "text",
+                  "value": "My order CH-1042 has not come yet. It was due on Tuesday."
+                }
+              ],
+              "time": "Yesterday, 18:02"
+            },
+            {
+              "t": "message",
+              "id": "m-3",
+              "author": "Amandeep Gill",
+              "mine": true,
+              "note": true,
+              "body": [
+                {
+                  "t": "text",
+                  "value": "The courier lost a day in Ambala."
+                }
+              ],
+              "time": "09:12"
+            },
+            {
+              "t": "message",
+              "id": "m-4",
+              "author": "Amandeep Gill",
+              "avatar": {
+                "name": "Amandeep Gill",
+                "initials": "AG"
+              },
+              "mine": true,
+              "body": [
+                {
+                  "t": "text",
+                  "value": "Sorry for the wait. It reaches Amritsar by Friday."
+                }
+              ],
+              "time": "09:20",
+              "delivery": "read"
+            },
+            {
+              "t": "message",
+              "author": "Amandeep Gill",
+              "mine": true,
+              "body": [
+                {
+                  "t": "text",
+                  "value": "Tracking: LDH-7731"
+                }
+              ],
+              "time": "09:21",
+              "delivery": "failed"
+            },
+            {
+              "t": "message",
+              "author": "Amandeep Gill",
+              "mine": true,
+              "body": [
+                {
+                  "t": "text",
+                  "value": "I've added ₹100 credit."
+                }
+              ],
+              "time": "09:22",
+              "delivery": "sending"
+            },
+            {
+              "t": "message",
+              "author": "Amandeep Gill",
+              "mine": true,
+              "body": [
+                {
+                  "t": "text",
+                  "value": "Anything else?"
+                }
+              ],
+              "time": "09:23",
+              "delivery": "sent"
+            },
+            {
+              "t": "message",
+              "author": "Amandeep Gill",
+              "mine": true,
+              "body": [
+                {
+                  "t": "text",
+                  "value": "Have a good day."
+                }
+              ],
+              "time": "09:24",
+              "delivery": "delivered"
+            },
+            {
+              "t": "form",
+              "id": "reply",
+              "method": "post",
+              "action": "/inbox/88/reply",
+              "hidden": [
+                {
+                  "name": "_csrf",
+                  "value": "tok"
+                }
+              ],
+              "children": [
+                {
+                  "t": "field",
+                  "id": "reply-assignee",
+                  "name": "assignee",
+                  "label": "Assign to",
+                  "input": {
+                    "t": "choice",
+                    "kind": "list",
+                    "options": [
+                      {
+                        "value": "12",
+                        "label": "Amandeep Gill"
+                      }
+                    ],
+                    "value": "12",
+                    "search": {
+                      "href": "/inbox/assignees/options",
+                      "name": "q",
+                      "min": 2
+                    }
+                  }
+                },
+                {
+                  "t": "field",
+                  "id": "reply-tags",
+                  "name": "tags",
+                  "label": "Tags",
+                  "input": {
+                    "t": "choices",
+                    "options": [
+                      {
+                        "value": "refund",
+                        "label": "Refund"
+                      },
+                      {
+                        "value": "late",
+                        "label": "Late delivery"
+                      }
+                    ],
+                    "values": [
+                      "late"
+                    ],
+                    "search": {
+                      "href": "/inbox/tags/options",
+                      "name": "q"
+                    },
+                    "create": {
+                      "label": "Add a tag",
+                      "href": "/inbox/tags"
+                    },
+                    "more": "/inbox/tags/options?after=late"
+                  }
+                },
+                {
+                  "t": "field",
+                  "id": "reply-follow-up",
+                  "name": "follow_up",
+                  "label": "Follow up on",
+                  "help": "The shop is shut on Sundays and on Gurpurab.",
+                  "input": {
+                    "t": "date",
+                    "value": "2026-11-16",
+                    "min": "2026-11-13",
+                    "off_days": [
+                      "2026-11-15"
+                    ],
+                    "off_weekdays": [
+                      "sunday"
+                    ]
+                  }
+                },
+                {
+                  "t": "field",
+                  "id": "reply-city",
+                  "name": "city",
+                  "label": "City",
+                  "input": {
+                    "t": "choice",
+                    "options": [
+                      {
+                        "value": "ludhiana",
+                        "label": "Ludhiana"
+                      },
+                      {
+                        "value": "amritsar",
+                        "label": "Amritsar"
+                      }
+                    ],
+                    "create": {
+                      "label": "Another city"
+                    }
+                  }
+                },
+                {
+                  "t": "button",
+                  "label": "Send",
+                  "role": "primary",
+                  "prominence": "high",
+                  "action": {
+                    "t": "submit"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "detail": {
+          "t": "pane",
+          "id": "customer",
+          "role": "inspector",
+          "title": "Customer",
+          "children": [
+            {
+              "t": "facts",
+              "items": [
+                {
+                  "label": "Phone",
+                  "value": [
+                    {
+                      "t": "text",
+                      "value": "+91 98140 12345"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "t": "table",
+              "id": "customer-orders",
+              "caption": "Orders",
+              "columns": [
+                {
+                  "key": "who",
+                  "label": "Customer",
+                  "role": "leading"
+                },
+                {
+                  "key": "number",
+                  "label": "Order",
+                  "role": "title"
+                },
+                {
+                  "key": "placed_on",
+                  "label": "Placed",
+                  "role": "subtitle"
+                },
+                {
+                  "key": "total",
+                  "label": "Total",
+                  "numeric": true,
+                  "role": "trailing"
+                },
+                {
+                  "label": "Actions",
+                  "role": "actions"
+                }
+              ],
+              "rows": [
+                {
+                  "id": "1042",
+                  "cells": [
+                    {
+                      "t": "avatar",
+                      "name": "Harpreet Sandhu",
+                      "initials": "HS"
+                    },
+                    {
+                      "t": "text",
+                      "value": "CH-1042"
+                    },
+                    {
+                      "t": "text",
+                      "value": "Today, 09:41"
+                    },
+                    {
+                      "t": "text",
+                      "value": "₹1,24,050"
+                    },
+                    {
+                      "t": "spacer"
+                    }
+                  ],
+                  "action": {
+                    "t": "navigate",
+                    "href": "/orders/1042"
+                  },
+                  "actions": [
+                    {
+                      "t": "menu",
+                      "label": "Order actions",
+                      "items": [
+                        {
+                          "t": "button",
+                          "label": "Refund",
+                          "action": {
+                            "t": "commands",
+                            "list": [
+                              {
+                                "c": "open",
+                                "id": "refund"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "t": "button",
+                          "label": "Cancel order",
+                          "role": "destructive",
+                          "ask": {
+                            "title": "Cancel order CH-1042?",
+                            "text": "₹1,24,050 goes back to Harpreet Sandhu's UPI account.",
+                            "confirm": "Cancel order",
+                            "cancel": "Keep it"
+                          },
+                          "action": {
+                            "t": "request",
+                            "method": "post",
+                            "href": "/orders/1042/cancel",
+                            "fields": [
+                              {
+                                "name": "_csrf",
+                                "value": "tok"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

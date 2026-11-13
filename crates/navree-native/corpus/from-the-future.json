@@ -1,0 +1,138 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "app": "app-2031-04-1a",
+  "shell": "c3ec6fa78f7194a3",
+  "hologram_quality": "high",
+  "screen": {
+    "title": "Warehouse",
+    "subtitle": "Ludhiana",
+    "ambient": {
+      "colour": "saffron"
+    },
+    "actions": [
+      {
+        "t": "button",
+        "label": "Teleport",
+        "glow": 3,
+        "action": {
+          "t": "teleport",
+          "to": "/warehouse/2"
+        }
+      }
+    ],
+    "body": {
+      "t": "stack",
+      "gap": 2,
+      "parallax": true,
+      "children": [
+        {
+          "t": "text",
+          "id": "stock-heading",
+          "value": "Stock across Punjab",
+          "sparkle": {
+            "speed": 2
+          }
+        },
+        {
+          "t": "hologram",
+          "id": "shelves-3d",
+          "model": "/models/shelves.glb",
+          "rotation": [0, 45, 0],
+          "alt": {
+            "t": "image",
+            "src": "/files/shelves.jpg",
+            "alt": "The shelves at the Ludhiana warehouse",
+            "aura": 1
+          }
+        },
+        {
+          "t": "hologram",
+          "id": "no-stand-in",
+          "model": "/models/aisle.glb"
+        },
+        {
+          "t": "form",
+          "id": "move",
+          "method": "post",
+          "action": "/stock/move",
+          "children": [
+            {
+              "t": "field",
+              "name": "signature",
+              "label": "Sign here",
+              "input": {
+                "t": "signature",
+                "pen": "fine"
+              }
+            },
+            {
+              "t": "field",
+              "name": "units",
+              "label": "Units",
+              "input": {
+                "t": "text",
+                "kind": "number",
+                "value": "24",
+                "haptic_ticks": true
+              }
+            }
+          ]
+        },
+        {
+          "t": "button",
+          "id": "celebrate",
+          "label": "Celebrate",
+          "action": {
+            "t": "commands",
+            "list": [
+              {
+                "c": "confetti",
+                "colours": 3
+              },
+              {
+                "c": "toast",
+                "text": "Moved"
+              }
+            ]
+          }
+        },
+        {
+          "t": "button",
+          "id": "measure",
+          "label": "Measure the aisle",
+          "action": {
+            "t": "device",
+            "call": {
+              "f": "lidar_scan",
+              "range_m": 10
+            },
+            "alt": {
+              "t": "glow"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "ops": [
+    {
+      "op": "confetti",
+      "colours": 3
+    },
+    {
+      "op": "device",
+      "call": {
+        "f": "locate_once",
+        "accuracy": "precise"
+      }
+    },
+    {
+      "op": "toast",
+      "text": "Synced",
+      "tone": "success",
+      "sound": "chime"
+    }
+  ]
+}
