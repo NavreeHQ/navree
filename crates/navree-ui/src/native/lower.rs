@@ -706,6 +706,7 @@ impl Cx {
                     label: attr(element, "aria-label").map(Cow::into_owned),
                     shown: Some(shown).filter(|shown| !shown.is_empty()),
                     tone: None,
+                    ..n::Gauge::default()
                 })])
             }
             "progress" => {
@@ -2412,6 +2413,7 @@ mod tests {
                 label: Some("Budget used".into()),
                 shown: Some("₹42,000 of ₹60,000".into()),
                 tone: None,
+                ..n::Gauge::default()
             })
         );
         // A fraction stays a fraction; a value past the end is held at it.

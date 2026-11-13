@@ -130,6 +130,7 @@ pub(crate) fn figure(cx: &mut Cx, element: &Element) -> Read {
                 label,
                 values,
                 shown: words,
+                ..n::Series::default()
             }
         })
         .collect();
@@ -139,6 +140,7 @@ pub(crate) fn figure(cx: &mut Cx, element: &Element) -> Read {
         title,
         labels,
         series,
+        ..n::Chart::default()
     })])
 }
 
