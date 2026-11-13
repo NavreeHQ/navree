@@ -195,6 +195,16 @@ object ClockRules {
     fun barDp(innerDp: Float): Float = (2f * Math.PI.toFloat() * innerDp / 24f) * 0.62f
 }
 
+/** A gauge: an arc open at the foot. */
+object GaugeRules {
+    /**
+     * The share of its square a gauge needs in height: the arc runs through 240
+     * degrees from the lower left to the lower right, so the foot of the
+     * square, below the arc's ends, is empty.
+     */
+    const val HEIGHT_SHARE = 0.8f
+}
+
 /** The key of a chart: each kind's name and what the page says of it. */
 object KeyRules {
     /** An entry of a key: the name and, when the page says it, its share or total beside it. */

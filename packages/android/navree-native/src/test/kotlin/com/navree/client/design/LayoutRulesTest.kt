@@ -249,6 +249,17 @@ class DialRulesTest {
     }
 }
 
+class GaugeRulesTest {
+    @Test
+    fun an_arc_open_at_the_foot_needs_less_than_its_square() {
+        // The arc's ends are at 150 and 30 degrees below the horizontal: half a radius under the middle, with its stroke.
+        val radius = 0.5
+        val lowest = radius + radius * Math.sin(Math.toRadians(30.0))
+        assertTrue("the share keeps the ends of the arc", GaugeRules.HEIGHT_SHARE >= lowest + 0.02)
+        assertTrue(GaugeRules.HEIGHT_SHARE < 1f)
+    }
+}
+
 class BidiRulesTest {
     @Test
     fun an_amount_with_its_unit_is_one_run_left_to_right() {
