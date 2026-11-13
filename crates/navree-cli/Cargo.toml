@@ -15,8 +15,9 @@ include = ["src/**", "build.rs", "templates/**", "README.md", "LICENSE-*"]
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
 
-# The command enum gains a variant with each new command. The library is here
-# for this crate's own binary and its tests, so nothing outside matches on it.
+# The command enum gains a variant with each new command. The promise is the
+# command line; this library is the tool's own and is not public API
+# (docs/prologue/versioning-and-support.mdx).
 [package.metadata.cargo-semver-checks.lints]
 enum_variant_added = "allow"
 
