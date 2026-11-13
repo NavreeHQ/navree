@@ -159,6 +159,6 @@ class DialRulesTest {
 class BidiRulesTest {
     @Test
     fun an_amount_with_its_unit_is_one_run_left_to_right() {
-        assertEquals("⁦540/600 kcal⁩", BidiRules.amount("540/600 kcal"))
+        assertEquals("\u2066540/600 kcal\u2069", BidiRules.amount("540/600 kcal"))
     }
 }
