@@ -37,6 +37,16 @@ class LineRulesTest {
     }
 
     @Test
+    fun a_column_that_centres_its_parts_takes_the_width_unless_it_is_a_part_of_a_line() {
+        val centred = Navree.Stack(align = Navree.Align.CENTER)
+        assertTrue(CompositionRules.fillsWidth(centred, Navree.Axis.VERTICAL, inLine = false))
+        assertTrue(CompositionRules.fillsWidth(centred.copy(align = Navree.Align.END), Navree.Axis.VERTICAL, inLine = false))
+        assertFalse("a part of a line keeps what it needs", CompositionRules.fillsWidth(centred, Navree.Axis.VERTICAL, inLine = true))
+        assertFalse("parts at the start stand at the start either way", CompositionRules.fillsWidth(Navree.Stack(), Navree.Axis.VERTICAL, inLine = false))
+        assertFalse("a line is not a column", CompositionRules.fillsWidth(centred, Navree.Axis.HORIZONTAL, inLine = false))
+    }
+
+    @Test
     fun a_line_the_page_lets_wrap_is_left_to_wrap() {
         val wrapping = activity.copy(wrap = true)
         assertEquals(Navree.Axis.HORIZONTAL, CompositionRules.laidAxis(wrapping, wrapping.children, 200f, 16f, 1f))

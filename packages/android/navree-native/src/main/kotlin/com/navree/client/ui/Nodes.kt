@@ -50,6 +50,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -543,7 +544,9 @@ private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthD
             val even = line.all(::measuresAhead)
             Row(if (even) Modifier.height(IntrinsicSize.Min) else Modifier, horizontalArrangement = Arrangement.spacedBy(gap.dp)) {
                 for (child in line) {
-                    Box(Modifier.weight(1f).fillMaxHeight()) { Roomed(cell) { NodeView(child, place, Modifier.fillMaxHeight()) } }
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                        CompositionLocalProvider(LocalInLine provides false) { Roomed(cell) { NodeView(child, place, Modifier.fillMaxHeight()) } }
+                    }
                 }
                 // An unfinished last line keeps its columns the width of the others.
                 repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
@@ -608,7 +611,7 @@ private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.
                 verticalArrangement = Arrangement.spacedBy(gap),
                 itemVerticalAlignment = upright,
             ) {
-                Roomed(room) { for (child in shown) NodeView(child, place) }
+                CompositionLocalProvider(LocalInLine provides true) { Roomed(room) { for (child in shown) NodeView(child, place) } }
             }
         } else {
             Row(modifier = if (wide) modifier.fillMaxWidth() else modifier, horizontalArrangement = across, verticalAlignment = upright) {
@@ -620,13 +623,17 @@ private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.
                         grows -> CompositionRules.roomLeftDp(room, shown, gap.value, fontScale)
                         else -> CompositionRules.leastAcrossDp(child, fontScale).takeIf { it > 0f } ?: room
                     }
-                    Roomed(own) { NodeView(child, place, if (grows) Modifier.weight(1f) else Modifier) }
+                    CompositionLocalProvider(LocalInLine provides true) {
+                        Roomed(own) { NodeView(child, place, if (grows) Modifier.weight(1f) else Modifier) }
+                    }
                 }
             }
         }
     } else {
+        // Parts that are centred or put at the end are placed within the whole width, not within the widest part.
+        val fills = CompositionRules.fillsWidth(node, axis, LocalInLine.current)
         Column(
-            modifier = modifier,
+            modifier = if (fills) modifier.fillMaxWidth() else modifier,
             verticalArrangement = Arrangement.spacedBy(gap),
             horizontalAlignment = when (node.align) {
                 Navree.Align.CENTER -> Alignment.CenterHorizontally
@@ -634,7 +641,7 @@ private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.
                 else -> Alignment.Start
             },
         ) {
-            Roomed(room) { for (child in shown) NodeView(child, place) }
+            CompositionLocalProvider(LocalInLine provides false) { Roomed(room) { for (child in shown) NodeView(child, place) } }
         }
     }
 }

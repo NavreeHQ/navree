@@ -47,6 +47,15 @@ object CompositionRules {
         else -> false
     }
 
+    /**
+     * Whether a column of parts takes the whole width it is given: one that
+     * centres or ends its parts does, because they are placed within that
+     * width, not within the width of the widest of them. A line across
+     * (where the column is one part of a line) keeps the width it needs.
+     */
+    fun fillsWidth(stack: Navree.Stack, axis: Navree.Axis, inLine: Boolean): Boolean =
+        axis == Navree.Axis.VERTICAL && !inLine && (stack.align == Navree.Align.CENTER || stack.align == Navree.Align.END)
+
     /** The room a ring's legend needs beside its dial, and the space between the two, in dp. */
     private const val LEGEND_DP = 96f
     private const val LEGEND_GAP_DP = 24f

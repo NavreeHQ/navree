@@ -54,9 +54,14 @@ class FolderScreensTest {
         server.close()
     }
 
-    /** A file of the folder, read as the shell user, who can read what `adb push` left there. */
+    /**
+     * A file of the folder, read as the shell user, who can read what `adb
+     * push` left there. The command is not run by a shell: it is split at
+     * spaces and its words are passed as they are, so quotes would become part
+     * of the name. The folder's path and the files' names hold no spaces.
+     */
     private fun read(folder: String, file: String): String? =
-        Shots.shell("cat '$folder/$file'").takeIf { it.isNotEmpty() && !it.startsWith("cat:") }
+        Shots.shell("cat $folder/$file").takeIf { it.isNotEmpty() && !it.startsWith("cat:") }
 
     private fun waitFor(what: String, timeout: Long = 30_000, check: () -> Boolean) {
         try {
