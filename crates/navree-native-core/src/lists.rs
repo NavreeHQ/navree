@@ -499,13 +499,14 @@ impl Core {
         let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
             return;
         };
-        let across = view.lists.get(target).is_some_and(|state| state.across);
-        let Content::Native { screen } = &mut view.content else {
+        let ScreenView { content, lists, .. } = view;
+        let Content::Native { screen } = content else {
             return;
         };
         let Some(table) = find_in_mut(screen, &|node| pages(node, target)).and_then(table_of_mut) else {
             return;
         };
+        let across = lists.get(table.id.as_deref().unwrap_or(target)).is_some_and(|state| state.across);
         // A record is never in a table twice.
         rows.retain(|row| row.id.as_ref().is_none_or(|id| !table.rows.iter().any(|held| held.id.as_ref() == Some(id))));
         let mut names = Names {
