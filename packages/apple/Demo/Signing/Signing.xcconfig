@@ -1,0 +1,19 @@
+// How the demo is signed. As it stands: for the simulator, with no team and
+// no entitlements, so it offers nothing that needs Apple's Developer Program:
+// Sign in with Apple, passkeys and a confirmation with one, push, and a
+// sign-in session that comes back on a link of the site.
+//
+// A team turns them on with one file: copy Signing.local.xcconfig.example to
+// Signing.local.xcconfig beside this one (it is never committed), fill it
+// in, and run `xcodegen generate` again.
+
+NAVREE_BUNDLE_ID = com.navree.demo
+DEVELOPMENT_TEAM =
+CODE_SIGN_ENTITLEMENTS =
+// The site the build is associated with (`charkha.example`, no scheme).
+NAVREE_ASSOCIATED_DOMAIN =
+// What the build is signed with, as the app reads it from its Info.plist:
+// `associated-domains`, `sign-in-with-apple`, `push`, words apart.
+NAVREE_SIGNED_WITH =
+
+#include? "Signing.local.xcconfig"

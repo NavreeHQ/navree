@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["<TEAM_ID>.<BUNDLE_ID>"],
+        "components": [
+          { "/": "/orders/*/print", "exclude": true },
+          { "/": "/orders/*" }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["<TEAM_ID>.<BUNDLE_ID>"]
+  }
+}
