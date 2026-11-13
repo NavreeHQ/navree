@@ -1,0 +1,53 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "name": "Charkha Supply Co.",
+ "context": "Store operations",
+ "home": "/",
+ "nav": {
+  "groups": [
+   {
+    "items": [
+     {
+      "label": "Overview",
+      "href": "/"
+     }
+    ]
+   }
+  ]
+ },
+ "routes": [
+  {
+   "match": "/orders/new",
+   "present": "sheet"
+  },
+  {
+   "match": "/sign-in",
+   "present": "full",
+   "chrome": false
+  },
+  {
+   "match": "/orders/*"
+  },
+  {
+   "match": "/help",
+   "present": "external"
+  },
+  {
+   "match": "/reports",
+   "present": "root"
+  }
+ ],
+ "sign_in": {
+  "start": "/auth/app/sign-in",
+  "exchange": "/api/auth/app/exchange",
+  "callback": "https://shop.example/app/signed-in",
+  "second_step": "/sign-in/two-factor"
+ },
+ "device": {
+  "push": {
+   "register": "/api/notifications/push-devices"
+  }
+ },
+ "stamp": "shell-nobody"
+}

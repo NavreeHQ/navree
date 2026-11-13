@@ -1,0 +1,304 @@
+{
+  "about": "Lists and tables that load by cursor, never all at once. The client says when the end is near; the core asks for the next rows, one fetch at a time, and says which rows were added so a client need not read the screen again.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/activity"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/activity","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/activity.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/content/screen/body/more","is":"/activity?cursor=a3"}
+      ]
+    },
+    {
+      "note": "The end of the list is near.",
+      "send": {"t":"more","screen":3,"id":"feed"},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":3,"id":"feed","from":3,"count":0}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/activity?cursor=a3","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","feed"]],"timeout_ms":10000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/3/lists/feed","is":{"failed":false,"loading":true}}
+      ]
+    },
+    {
+      "note": "The client says so again while the rows are on their way: nothing more is asked.",
+      "send": {"t":"more","screen":3,"id":"feed"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The answer is an `append` op with three rows and the address after them. One of the rows is already in the list: a row is never in a list twice. The form that came in a row has state.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/activity-2.json",
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":3,"id":"feed","from":3,"count":2}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/content/screen/body/children/3/id","is":"e4"},
+        {"at":"/screens/3/content/screen/body/children/4/id","is":"e5"},
+        {"at":"/screens/3/content/screen/body/children/5","is":null},
+        {"at":"/screens/3/content/screen/body/more","is":"/activity?cursor=a5"},
+        {"at":"/screens/3/lists/feed","is":{"failed":false,"loading":false}},
+        {"at":"/screens/3/forms/@~1orders~1220476~1note/fields/@~1orders~1220476~1note.note/value","is":{"t":"text","text":""}}
+      ]
+    },
+    {
+      "send": {"t":"more","screen":3,"id":"feed"},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":3,"id":"feed","from":5,"count":0}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/activity?cursor=a5","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","feed"]],"timeout_ms":10000}
+        ]
+      }
+    },
+    {
+      "note": "This time the next rows come as a whole screen: the list of the same id in it is the page. It names no address after it, so the list has ended.",
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/activity-3.json",
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":3,"id":"feed","from":5,"count":2}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/content/screen/body/children/6/id","is":"e7"},
+        {"at":"/screens/3/content/screen/body/more","is":null}
+      ]
+    },
+    {
+      "note": "Nothing is asked of a list that has ended.",
+      "send": {"t":"more","screen":3,"id":"feed"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"/activity"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/activity","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/activity.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"more","screen":4,"id":"feed"},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":4,"id":"feed","from":3,"count":0}
+        ],
+        "effects": [
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/activity?cursor=a3","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","feed"]],"timeout_ms":10000}
+        ]
+      }
+    },
+    {
+      "note": "The next rows fail to load. The list says so, and keeps its address.",
+      "send": {"t":"response","request":8,"error":"offline"},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":4,"id":"feed","from":3,"count":0}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/4/lists/feed","is":{"failed":true,"loading":false}},
+        {"at":"/screens/4/content/screen/body/more","is":"/activity?cursor=a3"}
+      ]
+    },
+    {
+      "note": "The person taps to try again.",
+      "send": {"t":"more","screen":4,"id":"feed"},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":4,"id":"feed","from":3,"count":0}
+        ],
+        "effects": [
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/activity?cursor=a3","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","feed"]],"timeout_ms":10000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/4/lists/feed","is":{"failed":false,"loading":true}}
+      ]
+    },
+    {
+      "note": "An answer that leaves the address as it was has no page after it: the list ends, or asking would never end.",
+      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/activity-same.json",
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":4,"id":"feed","from":3,"count":0}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/4/content/screen/body/more","is":null}
+      ]
+    },
+    {
+      "send": {"t":"select","destination":2},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":5}
+        ],
+        "effects": [
+          {"t":"fetch","request":10,"method":"get","url":"https://shop.example/inventory","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The store's inventory: a table of 25 products in a region, with the address of the next 25.",
+      "send": {"t":"response","request":10,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/inventory.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":5}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":2,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      },
+      "check": [
+        {"at":"/screens/5/content/screen/body/children/0/rows/24/id","is":"129"},
+        {"at":"/screens/5/content/screen/body/children/0/more","is":"/inventory?page=2"}
+      ]
+    },
+    {
+      "note": "A table's paging is its region's: the client names the region.",
+      "send": {"t":"more","screen":5,"id":"products"},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":5,"id":"products","from":25,"count":0}
+        ],
+        "effects": [
+          {"t":"fetch","request":11,"method":"get","url":"https://shop.example/inventory?page=2","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","products"]],"timeout_ms":10000}
+        ]
+      }
+    },
+    {
+      "note": "The answer is the whole page again. The table in the region of the same id is the next page: its rows are added, each with its restock form, and its address after them is taken.",
+      "send": {"t":"response","request":11,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/inventory-page-2.json",
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":5,"id":"products","from":25,"count":25}
+        ],
+        "effects": [
+          {"t":"announce","notice":"loaded","count":25}
+        ]
+      },
+      "check": [
+        {"at":"/screens/5/content/screen/body/children/0/rows/25/id","is":"152"},
+        {"at":"/screens/5/content/screen/body/children/0/rows/49/id","is":"269"},
+        {"at":"/screens/5/content/screen/body/children/0/more","is":"/inventory?page=3"},
+        {"at":"/screens/5/content/screen/body/children/0/summary","is":"Showing 26 to 50 of 2,000 results"},
+        {"at":"/screens/5/forms/@~1inventory~1152~1restock/pending","is":false}
+      ]
+    }
+  ]
+}

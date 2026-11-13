@@ -1,0 +1,34 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "row",
+   "target": "2001",
+   "row": {
+    "id": "2001",
+    "cells": [
+     {
+      "t": "text",
+      "value": "INV-2001"
+     },
+     {
+      "t": "text",
+      "value": "Gurpreet Kaur, Ludhiana"
+     },
+     {
+      "t": "text",
+      "value": "Paid"
+     }
+    ],
+    "detail": [
+     {
+      "t": "text",
+      "value": "Paid on 13 November, 10:05 IST."
+     }
+    ]
+   }
+  }
+ ]
+}

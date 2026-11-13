@@ -1,0 +1,768 @@
+{
+ "navree": 1,
+ "build": "3f9a1c07b2de",
+ "vocab": 0,
+ "screen": {
+  "title": "Thursday",
+  "nav": "/",
+  "refresh": true,
+  "body": {
+   "t": "stack",
+   "gap": 4,
+   "children": [
+    {
+     "t": "day_pager",
+     "id": "day",
+     "day": "Thursday, 12 November",
+     "date": "2026-11-12",
+     "previous": "/?date=2026-11-11",
+     "first": "2026-01-02",
+     "last": "2026-11-13",
+     "pick": {
+      "href": "/",
+      "name": "date"
+     },
+     "scores": {
+      "t": "rings",
+      "id": "day-scores",
+      "rings": [
+       {
+        "name": "Movement",
+        "value": 35,
+        "max": 100,
+        "shown": "35",
+        "colour": {
+         "hue": "orange"
+        }
+       },
+       {
+        "name": "Recovery",
+        "value": 72,
+        "max": 100,
+        "shown": "72",
+        "colour": {
+         "hue": "green"
+        }
+       },
+       {
+        "name": "Sleep",
+        "value": 78,
+        "max": 100,
+        "shown": "78",
+        "colour": {
+         "hue": "violet"
+        }
+       }
+      ],
+      "prominence": "low",
+      "summary": "Today's scores: Movement 35, Recovery 72, Sleep 78."
+     },
+     "words": {
+      "previous": "Previous day",
+      "next": "Next day",
+      "choose": "Choose a day"
+     },
+     "next": "/?date=2026-11-13",
+     "today": "/"
+    },
+    {
+     "t": "text",
+     "value": "Good evening, Amandeep",
+     "style": "large_title",
+     "heading": 1
+    },
+    {
+     "t": "text",
+     "value": "Your Friday, 13 November, from your own readings.",
+     "muted": true
+    },
+    {
+     "t": "section",
+     "style": "card",
+     "children": [
+      {
+       "t": "stack",
+       "gap": 3,
+       "align": "center",
+       "children": [
+        {
+         "t": "ring",
+         "id": "health-score",
+         "value": 83,
+         "max": 100,
+         "shown": "83",
+         "label": "Health score",
+         "colour": {
+          "hue": "cyan",
+          "to": "violet"
+         },
+         "prominence": "high",
+         "summary": "Health score: 83 of 100, 83%.",
+         "hint": {
+          "about": "the health score",
+          "title": "How the score is made",
+          "text": "Your health score blends five pillars, each scored from 0 to 100 from your own readings. A pillar with no data that day is left out and the rest are weighed up. It describes a pattern in your readings; it is not advice."
+         }
+        },
+        {
+         "t": "stack",
+         "axis": "horizontal",
+         "gap": 2,
+         "align": "center",
+         "children": [
+          {
+           "t": "badge",
+           "text": "Excellent",
+           "tone": "success"
+          },
+          {
+           "t": "text",
+           "value": "2.4% lower than your last 7 days",
+           "muted": true
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "t": "grid",
+       "id": "pillars",
+       "cols": 3,
+       "min": 96,
+       "gap": 3,
+       "children": [
+        {
+         "t": "link",
+         "id": "pillar-sleep",
+         "label": "Sleep, 25% of score",
+         "action": {
+          "t": "navigate",
+          "href": "/sleep"
+         },
+         "children": [
+          {
+           "t": "stack",
+           "gap": 1,
+           "align": "center",
+           "children": [
+            {
+             "t": "ring",
+             "id": "sleep-score",
+             "value": 87,
+             "max": 100,
+             "shown": "87",
+             "colour": {
+              "hue": "violet"
+             },
+             "summary": "Sleep score: 87 of 100, 87%."
+            },
+            {
+             "t": "text",
+             "value": "Sleep",
+             "style": "headline"
+            },
+            {
+             "t": "text",
+             "value": "25% of score",
+             "muted": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "t": "link",
+         "id": "pillar-heart",
+         "label": "Heart, 20% of score",
+         "action": {
+          "t": "navigate",
+          "href": "/heart"
+         },
+         "children": [
+          {
+           "t": "stack",
+           "gap": 1,
+           "align": "center",
+           "children": [
+            {
+             "t": "ring",
+             "id": "heart-score",
+             "value": 90,
+             "max": 100,
+             "shown": "90",
+             "colour": {
+              "hue": "rose"
+             },
+             "summary": "Heart score: 90 of 100, 90%."
+            },
+            {
+             "t": "text",
+             "value": "Heart",
+             "style": "headline"
+            },
+            {
+             "t": "text",
+             "value": "20% of score",
+             "muted": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "t": "link",
+         "id": "pillar-recovery",
+         "label": "Recovery, 20% of score",
+         "action": {
+          "t": "navigate",
+          "href": "/recovery"
+         },
+         "children": [
+          {
+           "t": "stack",
+           "gap": 1,
+           "align": "center",
+           "children": [
+            {
+             "t": "ring",
+             "id": "recovery-score",
+             "value": 60,
+             "max": 100,
+             "shown": "60",
+             "colour": {
+              "hue": "green"
+             },
+             "summary": "Recovery score: 60 of 100, 60%."
+            },
+            {
+             "t": "text",
+             "value": "Recovery",
+             "style": "headline"
+            },
+            {
+             "t": "text",
+             "value": "20% of score",
+             "muted": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "t": "link",
+         "id": "pillar-fitness",
+         "label": "Movement, 20% of score",
+         "action": {
+          "t": "navigate",
+          "href": "/fitness"
+         },
+         "children": [
+          {
+           "t": "stack",
+           "gap": 1,
+           "align": "center",
+           "children": [
+            {
+             "t": "ring",
+             "id": "fitness-score",
+             "value": 78,
+             "max": 100,
+             "shown": "78",
+             "colour": {
+              "hue": "orange"
+             },
+             "summary": "Movement score: 78 of 100, 78%."
+            },
+            {
+             "t": "text",
+             "value": "Movement",
+             "style": "headline"
+            },
+            {
+             "t": "text",
+             "value": "20% of score",
+             "muted": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "t": "link",
+         "id": "pillar-mind",
+         "label": "Mind, No data",
+         "action": {
+          "t": "navigate",
+          "href": "/mind"
+         },
+         "children": [
+          {
+           "t": "stack",
+           "gap": 1,
+           "align": "center",
+           "children": [
+            {
+             "t": "ring",
+             "id": "mind-score",
+             "max": 100,
+             "colour": {
+              "hue": "cyan"
+             },
+             "centre": "icon",
+             "icon": {
+              "name": "brain",
+              "paths": [
+               "M12 5a3 3 0 1 0-5.9 1A4 4 0 0 0 6 14a4 4 0 0 0 6 3zM12 5a3 3 0 1 1 5.9 1A4 4 0 0 1 18 14a4 4 0 0 1-6 3z"
+              ]
+             },
+             "summary": "Mind score: no reading."
+            },
+            {
+             "t": "text",
+             "value": "Mind",
+             "style": "headline"
+            },
+            {
+             "t": "text",
+             "value": "No data",
+             "muted": true
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Your day",
+     "style": "card",
+     "children": [
+      {
+       "t": "day_clock",
+       "id": "day-clock",
+       "title": "Steps by hour",
+       "hours": [
+        {
+         "value": 0,
+         "level": 0,
+         "category": 2
+        },
+        {
+         "value": 0,
+         "level": 0,
+         "category": 2
+        },
+        {
+         "value": 0,
+         "level": 0,
+         "category": 2
+        },
+        {
+         "value": 0,
+         "level": 0,
+         "category": 2
+        },
+        {
+         "value": 0,
+         "level": 0,
+         "category": 2
+        },
+        {
+         "value": 0,
+         "level": 0,
+         "category": 2
+        },
+        {
+         "value": 120,
+         "level": 0.2,
+         "category": 1
+        },
+        {
+         "value": 1850,
+         "level": 0.9,
+         "category": 0
+        },
+        {
+         "value": 940,
+         "level": 0.5,
+         "category": 0
+        },
+        {
+         "value": 520,
+         "level": 0.3,
+         "category": 1
+        },
+        {
+         "value": 380,
+         "level": 0.25,
+         "category": 1
+        },
+        {
+         "value": 610,
+         "level": 0.4,
+         "category": 1
+        },
+        {
+         "value": 760,
+         "level": 0.5,
+         "category": 1
+        },
+        {
+         "value": 300,
+         "level": 0.2,
+         "category": 1
+        },
+        {
+         "value": 280,
+         "level": 0.2,
+         "category": 1
+        },
+        {
+         "value": 350,
+         "level": 0.25,
+         "category": 1
+        },
+        {
+         "value": 600,
+         "level": 0.4,
+         "category": 1
+        },
+        {
+         "value": 1200,
+         "level": 0.8,
+         "category": 0
+        },
+        {
+         "value": 940,
+         "level": 0.55,
+         "category": 0
+        },
+        {
+         "value": 420,
+         "level": 0.3,
+         "category": 1
+        },
+        {
+         "value": 142,
+         "level": 0.1,
+         "category": 1
+        },
+        {},
+        {},
+        {}
+       ],
+       "key": [
+        {
+         "name": "Active",
+         "colour": {
+          "hue": "green"
+         }
+        },
+        {
+         "name": "Calm",
+         "colour": {
+          "hue": "cyan"
+         }
+        },
+        {
+         "name": "Rest",
+         "colour": {
+          "hue": "violet"
+         }
+        }
+       ],
+       "moments": [
+        {
+         "at": 6.5,
+         "name": "Woke up, 6:30 am",
+         "icon": {
+          "name": "sunrise",
+          "paths": [
+           "M12 2v6M4.9 10.9l1.4 1.4M2 18h2M20 18h2M17.7 12.3l1.4-1.4M22 22H2M16 18a4 4 0 0 0-8 0"
+          ]
+         },
+         "colour": {
+          "hue": "amber"
+         }
+        },
+        {
+         "at": 7.25,
+         "name": "Morning run, 3.2 km",
+         "icon": {
+          "name": "footprints",
+          "paths": [
+           "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z"
+          ]
+         },
+         "colour": {
+          "hue": "green"
+         }
+        },
+        {
+         "at": 18.4,
+         "name": "Highest heart rate, 158 bpm",
+         "icon": {
+          "name": "heart-pulse",
+          "paths": [
+           "M19.5 12.6 12 20l-7.5-7.4a5 5 0 0 1 7.5-6.6 5 5 0 0 1 7.5 6.6zM3 12h4l2-3 3 6 2-3h5"
+          ]
+         },
+         "colour": {
+          "hue": "rose"
+         }
+        }
+       ],
+       "now": 20,
+       "unit": "steps",
+       "shown": "9,412",
+       "label": "Steps",
+       "icon": {
+        "name": "footprints",
+        "paths": [
+         "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z"
+        ]
+       },
+       "colour": {
+        "hue": "blue"
+       },
+       "hub": {
+        "hue": "violet"
+       },
+       "summary": "9,412 steps in the day so far. Busiest at 7 am: 1,850. 3 moments: Woke up, 6:30 am, Morning run, 3.2 km, Highest heart rate, 158 bpm."
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Activity",
+     "style": "card",
+     "children": [
+      {
+       "t": "rings",
+       "id": "activity-rings",
+       "title": "Activity rings",
+       "rings": [
+        {
+         "name": "Move",
+         "value": 540,
+         "max": 600,
+         "unit": "kcal",
+         "shown": "540",
+         "colour": {
+          "hue": "red"
+         }
+        },
+        {
+         "name": "Exercise",
+         "value": 38,
+         "max": 30,
+         "unit": "min",
+         "shown": "38",
+         "colour": {
+          "hue": "green"
+         }
+        },
+        {
+         "name": "Stand",
+         "value": 9,
+         "max": 12,
+         "unit": "hr",
+         "shown": "9",
+         "colour": {
+          "hue": "cyan"
+         }
+        }
+       ],
+       "centre": "values",
+       "legend": true,
+       "summary": "Activity rings: Move 540 of 600 kcal, 90%. Exercise 38 of 30 min, 127%. Stand 9 of 12 hr, 75%."
+      },
+      {
+       "t": "grid",
+       "id": "activity-figures",
+       "cols": 2,
+       "min": 150,
+       "gap": 3,
+       "children": [
+        {
+         "t": "figure",
+         "id": "figure-steps",
+         "label": "Steps",
+         "value": "9,412",
+         "icon": {
+          "name": "footprints",
+          "paths": [
+           "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z"
+          ]
+         },
+         "detail": "94% of 10,000",
+         "colour": {
+          "hue": "green"
+         },
+         "aside": {
+          "t": "ring",
+          "value": 9412,
+          "max": 10000,
+          "colour": {
+           "hue": "green"
+          },
+          "centre": "nothing",
+          "prominence": "low",
+          "summary": "Steps: 9,412 of 10,000, 94%."
+         },
+         "action": {
+          "t": "navigate",
+          "href": "/fitness/steps"
+         }
+        },
+        {
+         "t": "figure",
+         "id": "figure-active-energy",
+         "label": "Active energy",
+         "value": "540",
+         "unit": "kcal",
+         "icon": {
+          "name": "flame",
+          "paths": [
+           "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.3.1-4.4 2-5.5.3 2.4 2 4 3.6 5.4 1.4 1.3 2.4 3 2.4 5.1a6 6 0 0 1-12 0c0-.9.3-1.8.5-2.5"
+          ]
+         },
+         "detail": "90% of 600 kcal",
+         "colour": {
+          "hue": "orange"
+         },
+         "action": {
+          "t": "navigate",
+          "href": "/fitness/energy"
+         }
+        },
+        {
+         "t": "figure",
+         "id": "figure-distance",
+         "label": "Distance",
+         "value": "6.4",
+         "unit": "km",
+         "icon": {
+          "name": "route",
+          "paths": [
+           "M6 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM9 16h6a3 3 0 0 0 0-6H9"
+          ]
+         },
+         "detail": "Across Ludhiana and back",
+         "colour": {
+          "hue": "cyan"
+         },
+         "action": {
+          "t": "navigate",
+          "href": "/fitness/distance"
+         }
+        },
+        {
+         "t": "figure",
+         "id": "figure-exercise",
+         "label": "Exercise",
+         "value": "38",
+         "unit": "min",
+         "icon": {
+          "name": "timer",
+          "paths": [
+           "M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"
+          ]
+         },
+         "trend": {
+          "direction": "up",
+          "text": "8 min",
+          "tone": "success"
+         },
+         "detail": "against your goal of 30",
+         "status": {
+          "text": "Goal reached",
+          "tone": "success"
+         },
+         "colour": {
+          "hue": "green"
+         },
+         "action": {
+          "t": "navigate",
+          "href": "/fitness/exercise"
+         }
+        }
+       ]
+      }
+     ],
+     "hint": {
+      "about": "how activity is counted",
+      "text": "Move counts the energy your body spent moving, Exercise the minutes of brisk activity and Stand the hours in which you stood and moved for a minute.",
+      "mark": "info"
+     }
+    },
+    {
+     "t": "list",
+     "id": "readings",
+     "since": "r1",
+     "children": [
+      {
+       "t": "figure",
+       "id": "reading-heart",
+       "label": "Resting heart rate",
+       "value": "58 bpm",
+       "icon": {
+        "name": "footprints",
+        "paths": [
+         "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z"
+        ]
+       },
+       "detail": "at 07:30 IST",
+       "colour": {
+        "hue": "green"
+       },
+       "aside": {
+        "t": "ring",
+        "value": 58,
+        "max": 100,
+        "colour": {
+         "hue": "green"
+        },
+        "centre": "nothing",
+        "prominence": "low",
+        "summary": "Resting heart rate: 58 bpm.",
+        "id": "reading-heart-ring"
+       }
+      },
+      {
+       "t": "figure",
+       "id": "reading-oxygen",
+       "label": "Blood oxygen",
+       "value": "97%",
+       "icon": {
+        "name": "footprints",
+        "paths": [
+         "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z"
+        ]
+       },
+       "detail": "at 07:30 IST",
+       "colour": {
+        "hue": "green"
+       },
+       "aside": {
+        "t": "ring",
+        "value": 97,
+        "max": 100,
+        "colour": {
+         "hue": "green"
+        },
+        "centre": "nothing",
+        "prominence": "low",
+        "summary": "Blood oxygen: 97%.",
+        "id": "reading-oxygen-ring"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

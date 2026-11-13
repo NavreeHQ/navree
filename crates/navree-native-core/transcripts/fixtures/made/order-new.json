@@ -1,0 +1,114 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "New order",
+  "nav": "/orders",
+  "body": {
+   "t": "form",
+   "id": "order-new",
+   "method": "post",
+   "action": "/orders",
+   "hidden": [
+    {
+     "name": "_csrf",
+     "value": "t0k3n"
+    }
+   ],
+   "children": [
+    {
+     "t": "field",
+     "name": "customer",
+     "label": "Customer",
+     "input": {
+      "t": "text"
+     },
+     "required": true
+    },
+    {
+     "t": "field",
+     "name": "city",
+     "label": "City",
+     "input": {
+      "t": "choice",
+      "options": [
+       {
+        "value": "ludhiana",
+        "label": "Ludhiana"
+       },
+       {
+        "value": "amritsar",
+        "label": "Amritsar"
+       },
+       {
+        "value": "chandigarh",
+        "label": "Chandigarh"
+       },
+       {
+        "value": "jalandhar",
+        "label": "Jalandhar"
+       }
+      ]
+     }
+    },
+    {
+     "t": "field",
+     "name": "express",
+     "label": "Express delivery",
+     "input": {
+      "t": "toggle",
+      "value": "1"
+     }
+    },
+    {
+     "t": "field",
+     "name": "note",
+     "label": "Note",
+     "input": {
+      "t": "text",
+      "kind": "multiline"
+     }
+    },
+    {
+     "t": "stack",
+     "axis": "horizontal",
+     "justify": "end",
+     "children": [
+      {
+       "t": "button",
+       "label": "Cancel",
+       "role": "cancel",
+       "action": {
+        "t": "dismiss"
+       }
+      },
+      {
+       "t": "button",
+       "label": "Save draft",
+       "action": {
+        "t": "submit",
+        "with": {
+         "name": "intent",
+         "value": "draft"
+        }
+       }
+      },
+      {
+       "t": "button",
+       "label": "Create order",
+       "role": "primary",
+       "action": {
+        "t": "submit",
+        "with": {
+         "name": "intent",
+         "value": "create"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

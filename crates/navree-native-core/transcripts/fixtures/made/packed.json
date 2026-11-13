@@ -1,0 +1,38 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "device",
+   "call": {
+    "f": "haptic",
+    "kind": "success"
+   }
+  },
+  {
+   "op": "device",
+   "call": {
+    "f": "set_badge",
+    "count": 3
+   }
+  },
+  {
+   "op": "device",
+   "call": {
+    "f": "request_review"
+   }
+  },
+  {
+   "op": "device",
+   "call": {
+    "f": "scan_code"
+   }
+  },
+  {
+   "op": "toast",
+   "tone": "success",
+   "text": "CS-220479 is packed"
+  }
+ ]
+}

@@ -1,0 +1,186 @@
+{
+  "about": "A redirect that means only that a page has moved. The screen takes the address the answer came from; nothing is presented over anything, even when the new address is one the shell presents as a sheet. A page that answers a plain request with nothing but `navigate` has moved in the same way.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-routes.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "A link to an order by its number.",
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/orders/by-number/CS-20481"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/by-number/CS-20481","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      }
+    },
+    {
+      "note": "The server redirects to the order's own address. The core follows it.",
+      "send": {"t":"response","request":4,"status":301,"location":"/orders/1"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The screen that was pushed shows the order, at the address it came from.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[2,3]},
+        {"at":"/screens/3/url","is":"/orders/1"},
+        {"at":"/modals","is":[]}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"/orders/1/again"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/orders/1/again","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "A redirect to an address the shell's routes present as a sheet. The screen was already pushed for the link: it has only moved.",
+      "send": {"t":"response","request":6,"status":302,"location":"/orders/new"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/orders/new","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/order-new.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[2,3,4]},
+        {"at":"/screens/4/url","is":"/orders/new"},
+        {"at":"/modals","is":[]},
+        {"at":"/screens/4/chrome","is":true}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":4,"action":{"t":"navigate","href":"/orders/latest"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":5}
+        ],
+        "effects": [
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/orders/latest","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "This page answers with no screen, only `navigate`: it is that other page. The screen made for it takes the other address.",
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/go-order-2.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":5}
+        ],
+        "effects": [
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/orders/2","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[2,3,4,5]},
+        {"at":"/screens/5/url","is":"/orders/2"},
+        {"at":"/screens/5/loading","is":true}
+      ]
+    },
+    {
+      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":5}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/5/content/screen/title","is":"Order CS-20481"}
+      ]
+    }
+  ]
+}

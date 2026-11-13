@@ -1,0 +1,164 @@
+{
+  "about": "Going from page to page: a destination is chosen, a link pushes a screen, a page that says it is missing is still a screen, and a link to a destination selects it.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person chooses Orders. Its stack is empty, so its first screen is made and asked for.",
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/selected","is":1},
+        {"at":"/destinations/1/stack","is":[2]},
+        {"at":"/front","is":2},
+        {"at":"/screens/2/url","is":"/orders"}
+      ]
+    },
+    {
+      "note": "The orders arrive as a tree. Its table stands in a live region, so the stream is opened; every form and field has an id of its own.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      },
+      "check": [
+        {"at":"/screens/2/content/t","is":"native"},
+        {"at":"/screens/2/content/screen/title","is":"Orders"},
+        {"at":"/screens/2/regions/orders/loading","is":false},
+        {"at":"/screens/2/forms/orders-f/fields/orders-f.search/value","is":{"t":"text","text":""}},
+        {"at":"/screens/2/forms/orders-f/fields/orders-f.limit/value","is":{"t":"text","text":"25"}},
+        {"at":"/screens/2/forms/@~1orders~1200000~1peek/pending","is":false}
+      ]
+    },
+    {
+      "note": "A link to an order is pushed onto the destination's stack. The orders screen is no longer in front, so its stream is closed.",
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/orders/1"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[2,3]},
+        {"at":"/front","is":3},
+        {"at":"/can_go_back","is":true},
+        {"at":"/screens/3/loading","is":true}
+      ]
+    },
+    {
+      "note": "The order arrives.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/content/screen/title","is":"Order CS-20481"},
+        {"at":"/screens/3/status","is":200},
+        {"at":"/screens/3/forms/refund/fields/refund-amount/value/text","is":"7,848.00"}
+      ]
+    },
+    {
+      "note": "A link to an order that does not exist.",
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"/orders/999999"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/orders/999999","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The server answers 404 with a page that says so. It is a screen like any other.",
+      "send": {"t":"response","request":5,"status":404,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order-missing.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/4/status","is":404},
+        {"at":"/screens/4/content/screen/title","is":"No such order"},
+        {"at":"/screens/4/failure","is":null}
+      ]
+    },
+    {
+      "note": "Its button leads to /orders, which is a destination: the destination is selected and shows its first screen, and the screens stacked on it go.",
+      "send": {"t":"act","screen":4,"action":{"t":"navigate","href":"/orders"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":2,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[2]},
+        {"at":"/front","is":2},
+        {"at":"/screens/3","is":null},
+        {"at":"/screens/4","is":null}
+      ]
+    }
+  ]
+}

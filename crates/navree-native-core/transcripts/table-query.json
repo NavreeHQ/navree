@@ -1,0 +1,211 @@
+{
+  "about": "The table's query form: its search box, its filters and its rows a page. It asks by itself as its fields change (at once for a choice, after a pause for typing), and the answer takes the table's place. The screen's address follows the table's.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "The person ticks the Open filter. The form's values become a query on its address; a control that holds nothing stays out of it.",
+      "send": {"t":"field","screen":2,"form":"orders-f","field":"orders-f.filter[status][in]","value":{"t":"many","values":["open"]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders?filter%5Bstatus%5D%5Bin%5D=open&limit=25","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","orders"]],"timeout_ms":15000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/2/regions/orders/loading","is":true}
+      ]
+    },
+    {
+      "note": "The answer is the whole page. The region of the same id in it takes the region's place, and the screen's address follows.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders-open.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/2/regions/orders/loading","is":false},
+        {"at":"/screens/2/url","is":"/orders?filter%5Bstatus%5D%5Bin%5D=open&limit=25"},
+        {"at":"/screens/2/content/screen/body/children/0/src","is":"/orders?filter%5Bstatus%5D%5Bin%5D=open&limit=25"},
+        {"at":"/screens/2/content/screen/body/children/0/children/0/summary","is":"3,729 results"},
+        {"at":"/screens/2/forms/orders-f/fields/orders-f.filter[status][in]/value","is":{"t":"many","values":["open"]}}
+      ]
+    },
+    {
+      "note": "The person types in the search box. Typing waits for a pause of 100 ms.",
+      "send": {"t":"field","screen":2,"form":"orders-f","field":"orders-f.search","value":{"t":"text","text":"rand"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":2,"form":"orders-f"}
+        ],
+        "effects": [
+          {"t":"timer","timer":1,"ms":100}
+        ]
+      }
+    },
+    {
+      "note": "Another letter: the wait starts again.",
+      "send": {"t":"field","screen":2,"form":"orders-f","field":"orders-f.search","value":{"t":"text","text":"randh"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":2,"form":"orders-f"}
+        ],
+        "effects": [
+          {"t":"cancel_timer","timer":1},
+          {"t":"timer","timer":2,"ms":100}
+        ]
+      }
+    },
+    {
+      "note": "The pause came: the table is asked.",
+      "send": {"t":"timer","timer":2},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/orders?sort=total&search=randh&filter%5Bstatus%5D%5Bin%5D=open&limit=25","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","orders"]],"timeout_ms":15000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/2/regions/orders/loading","is":true}
+      ]
+    },
+    {
+      "note": "The keyboard's search key sends the form: asked at once, and the fetch before it is no longer wanted.",
+      "send": {"t":"act","screen":2,"action":{"t":"submit"},"form":"orders-f"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"cancel","request":5},
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/orders?sort=total&search=randh&filter%5Bstatus%5D%5Bin%5D=open&limit=25","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","orders"]],"timeout_ms":15000}
+        ]
+      }
+    },
+    {
+      "note": "The older answer changes nothing.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders-open.json",
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders-open.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/2/regions/orders/loading","is":false},
+        {"at":"/screens/2/forms/orders-f/fields/orders-f.search/value/text","is":"randh"}
+      ]
+    },
+    {
+      "note": "A tap on a column's heading: the table goes to another address of itself.",
+      "send": {"t":"region_go","screen":2,"region":"orders","href":"/orders?filter%5Bstatus%5D%5Bin%5D=open&sort=-total"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/orders?filter%5Bstatus%5D%5Bin%5D=open&sort=-total","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","orders"]],"timeout_ms":15000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders-open.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/2/url","is":"/orders?filter%5Bstatus%5D%5Bin%5D=open&sort=-total"}
+      ]
+    },
+    {
+      "note": "A refresh asks for the screen at the address the table took it to.",
+      "send": {"t":"refresh","screen":2},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/orders?filter%5Bstatus%5D%5Bin%5D=open&sort=-total","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    }
+  ]
+}

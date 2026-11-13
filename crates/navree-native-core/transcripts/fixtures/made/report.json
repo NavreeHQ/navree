@@ -1,0 +1,48 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Sales report",
+  "body": {
+   "t": "form",
+   "id": "report",
+   "method": "post",
+   "action": "/reports/sales",
+   "hidden": [
+    {
+     "name": "_csrf",
+     "value": "tk-91c2"
+    }
+   ],
+   "children": [
+    {
+     "t": "field",
+     "id": "period",
+     "name": "period",
+     "label": "Period",
+     "input": {
+      "t": "range",
+      "from": {
+       "name": "from",
+       "value": "2026-11-01"
+      },
+      "to": {
+       "name": "to",
+       "value": "2026-11-12"
+      },
+      "max": "2026-11-13"
+     }
+    },
+    {
+     "t": "button",
+     "label": "Run",
+     "action": {
+      "t": "submit"
+     },
+     "role": "primary"
+    }
+   ]
+  }
+ }
+}

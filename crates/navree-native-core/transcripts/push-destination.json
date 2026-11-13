@@ -1,0 +1,113 @@
+{
+  "about": "A link that says push stacks its screen where the person is, also when its address is a top-level destination's own: the detail a card of one destination opens of another, with a way back. A link that says nothing selects the destination.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: three destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The dashboard.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A card of the dashboard opens the orders as a detail: its link says push. Orders is a destination, and still the screen is stacked on the dashboard, in the stack the person is in, from the card.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/orders","present":"push"},"from":"orders-card"},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/selected","is":0},
+        {"at":"/destinations/0/stack","is":[1,2]},
+        {"at":"/destinations/1/stack","is":[]},
+        {"at":"/screens/2/url","is":"/orders"},
+        {"at":"/screens/2/from","is":"orders-card"},
+        {"at":"/can_go_back","is":true}
+      ]
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      },
+      "check": [
+        {"at":"/screens/2/title","is":"Orders"}
+      ]
+    },
+    {
+      "note": "Back leads to the dashboard.",
+      "send": {"t":"back"},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": [
+          {"t":"stream_close","stream":1}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/selected","is":0}
+      ]
+    },
+    {
+      "note": "A link to the same address that says nothing selects the destination, as ever: nothing is stacked, and its first screen is from no part.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/orders"},"from":"orders-link"},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_open","stream":2,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      },
+      "check": [
+        {"at":"/selected","is":1},
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/destinations/1/stack","is":[3]},
+        {"at":"/screens/3/from","is":null}
+      ]
+    }
+  ]
+}

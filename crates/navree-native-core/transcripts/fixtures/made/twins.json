@@ -1,0 +1,32 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Twins",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "text",
+     "value": "first",
+     "id": "x"
+    },
+    {
+     "t": "text",
+     "value": "second",
+     "id": "x"
+    },
+    {
+     "t": "button",
+     "label": "Change",
+     "action": {
+      "t": "request",
+      "method": "post",
+      "href": "/twins"
+     }
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,193 @@
+{
+  "about": "Rows moved by dragging. The row stands where the person put it at once and the move is posted; a move the server refuses puts it back. A row moves within its list and between the lists of one group, never into a full list, and never into a list that takes no moves.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/packing.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "An order is dragged from one column to the top of the next. It stands there, and the move is posted with where it came from and where it is.",
+      "send": {"t":"move","screen":1,"item":"p-2","from":"to-pack","to":"packed","before":"p-7"},
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"packed","rows":["p-2"],"gone":[]},
+          {"t":"redraw","screen":1,"id":"to-pack","rows":[],"gone":["p-2"]}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"post","url":"https://shop.example/packing/move","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"item=1042&from=to_pack&to=packed&before=p-7&position=0&_csrf=tk-91c2"},"timeout_ms":60000,"xsrf":true}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/0/children/1/id","is":"p-3"},
+        {"at":"/screens/1/content/screen/body/children/1/children/0/id","is":"p-2"},
+        {"at":"/screens/1/content/screen/body/children/1/children/1/id","is":"p-7"}
+      ]
+    },
+    {
+      "note": "The server took it.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/gift-saved.json",
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"neutral","text":"Saved"}
+        ]
+      }
+    },
+    {
+      "note": "The next column is full: the row is not moved and nothing is posted. The client is told to draw the lists as they are.",
+      "send": {"t":"move","screen":1,"item":"p-3","from":"to-pack","to":"packed"},
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"to-pack","rows":["p-3"],"gone":[]}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/0/children/1/id","is":"p-3"},
+        {"at":"/screens/1/content/screen/body/children/1/children/2","is":null}
+      ]
+    },
+    {
+      "note": "That list takes no moves.",
+      "send": {"t":"move","screen":1,"item":"p-3","from":"to-pack","to":"courier"},
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"to-pack","rows":["p-3"],"gone":[]}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Within its own list, to the top.",
+      "send": {"t":"move","screen":1,"item":"p-3","from":"to-pack","to":"to-pack","before":"p-1"},
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"to-pack","rows":["p-3"],"gone":[]}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"post","url":"https://shop.example/packing/move","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"item=p-3&from=to_pack&to=to_pack&before=1041&position=0&_csrf=tk-91c2"},"timeout_ms":60000,"xsrf":true}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/0/children/0/id","is":"p-3"},
+        {"at":"/screens/1/content/screen/body/children/0/children/1/id","is":"p-1"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/gift-saved.json",
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":2,"tone":"neutral","text":"Saved"}
+        ]
+      }
+    },
+    {
+      "note": "A packed order is dragged back, to the end of the first column.",
+      "send": {"t":"move","screen":1,"item":"p-7","from":"packed","to":"to-pack"},
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"packed","rows":[],"gone":["p-7"]},
+          {"t":"redraw","screen":1,"id":"to-pack","rows":["p-7"],"gone":[]}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/packing/move","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"item=p-7&from=packed&to=to_pack&before=&position=2&_csrf=tk-91c2"},"timeout_ms":60000,"xsrf":true}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/0/children/2/id","is":"p-7"},
+        {"at":"/screens/1/content/screen/body/children/1/children/1","is":null}
+      ]
+    },
+    {
+      "note": "The server refuses, and says why. The row goes back where it was.",
+      "send": {"t":"response","request":5,"status":422,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/move-refused.json",
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"packed","rows":["p-7"],"gone":[]},
+          {"t":"redraw","screen":1,"id":"to-pack","rows":[],"gone":["p-7"]},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":3,"tone":"danger","text":"CS-1037 is sealed: it can't go back to packing."}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/children/1/id","is":"p-7"},
+        {"at":"/screens/1/content/screen/body/children/0/children/2","is":null},
+        {"at":"/messages/2/tone","is":"danger"}
+      ]
+    },
+    {
+      "note": "A move to the end of its own list, which fails on the way: it goes back too.",
+      "send": {"t":"move","screen":1,"item":"p-3","from":"to-pack","to":"to-pack"},
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"to-pack","rows":["p-3"],"gone":[]}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/packing/move","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"item=p-3&from=to_pack&to=to_pack&before=&position=1&_csrf=tk-91c2"},"timeout_ms":60000,"xsrf":true}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/0/children/0/id","is":"p-1"},
+        {"at":"/screens/1/content/screen/body/children/0/children/1/id","is":"p-3"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":6,"error":"offline"},
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"to-pack","rows":["p-3"],"gone":[]},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":4,"tone":"danger","notice":"offline"}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/0/children/0/id","is":"p-3"},
+        {"at":"/screens/1/content/screen/body/children/0/children/1/id","is":"p-1"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1165 @@
+//! Walking and changing a tree of parts, and the rules for ids.
+//!
+//! Ids are not unique in real pages: a dialog and the form inside it may share
+//! one. So a target is always looked up among the kinds the asker can mean, and
+//! the first in document order wins, as a browser's lookup by id does. A target
+//! that is not there is skipped.
+//!
+//! A client has to say which form a field belongs to and which form a button
+//! sends, so every tree is given names on arrival ([`Names::name`]): each form
+//! and each field ends up with an id that no other form or field of its screen
+//! has. A form that came with none is named after its address.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use navree_native::Screen;
+use navree_native::charts::DayPager;
+use navree_native::input::Input;
+use navree_native::node::{Field, Form, Live, Method, Node};
+
+use crate::event::FieldValue;
+
+/// The deepest tree the store holds, in nodes: the deepest the protocol lets
+/// one answer be. A page is nowhere near it; an op that would nest a screen
+/// past it is skipped, so nothing that walks a tree can run out of stack.
+pub(crate) const MAX_DEPTH: usize = navree_native::MAX_DEPTH;
+
+/// A place in a node that holds nodes.
+pub(crate) enum Slot<'a> {
+    /// Any number of nodes.
+    Many(&'a mut Vec<Node>),
+    /// One node or none.
+    Maybe(&'a mut Option<Box<Node>>),
+    /// Exactly one node.
+    One(&'a mut Node),
+}
+
+/// The places of `node` that hold nodes, in the order [`Node::children`] reads them.
+///
+/// A kind that holds nodes has an arm here. A test reads the protocol's schema
+/// for every place a kind holds nodes and fails for one this does not walk, so
+/// a kind or a place the protocol gains can't go unseen.
+pub(crate) fn slots(node: &mut Node) -> Vec<Slot<'_>> {
+    match node {
+        Node::Stack(n) => vec![Slot::Many(&mut n.children)],
+        Node::Grid(n) => vec![Slot::Many(&mut n.children)],
+        Node::Section(n) => vec![
+            Slot::Many(&mut n.actions),
+            Slot::Many(&mut n.children),
+            Slot::Many(&mut n.footer),
+        ],
+        Node::List(n) => vec![Slot::Many(&mut n.children)],
+        Node::Row(n) => vec![
+            Slot::Maybe(&mut n.leading),
+            Slot::Many(&mut n.detail),
+            Slot::Maybe(&mut n.trailing),
+            Slot::Many(&mut n.menu),
+        ],
+        Node::Split(n) => vec![Slot::One(&mut n.primary), Slot::One(&mut n.detail)],
+        Node::Tabs(n) => n
+            .items
+            .iter_mut()
+            .map(|tab| Slot::Many(&mut tab.children))
+            .collect(),
+        Node::Disclosure(n) => vec![Slot::Many(&mut n.children)],
+        Node::Region(n) => vec![Slot::Many(&mut n.children)],
+        Node::Banner(n) => vec![Slot::Many(&mut n.actions)],
+        Node::Empty(n) => vec![Slot::Many(&mut n.actions)],
+        Node::Facts(n) => n
+            .items
+            .iter_mut()
+            .map(|fact| Slot::Many(&mut fact.value))
+            .collect(),
+        Node::Table(n) => {
+            let mut out = Vec::with_capacity(n.rows.len() * 3 + 2);
+            if let Some(query) = &mut n.query {
+                out.push(Slot::Many(&mut query.children));
+            }
+            for row in &mut n.rows {
+                out.push(Slot::Many(&mut row.cells));
+                out.push(Slot::Many(&mut row.actions));
+                out.push(Slot::Many(&mut row.detail));
+            }
+            out.push(Slot::Maybe(&mut n.empty));
+            out
+        }
+        Node::Link(n) => vec![Slot::Many(&mut n.children)],
+        Node::Menu(n) => vec![Slot::Many(&mut n.items)],
+        Node::Form(n) => vec![Slot::Many(&mut n.children)],
+        Node::Sheet(n) => vec![Slot::Many(&mut n.children), Slot::Many(&mut n.actions)],
+        Node::Dialog(n) => vec![Slot::Many(&mut n.children), Slot::Many(&mut n.actions)],
+        Node::Popover(n) => vec![Slot::Many(&mut n.children)],
+        Node::Native(n) => vec![Slot::Maybe(&mut n.alt)],
+        Node::Toolbar(n) => n.items.iter_mut().map(|item| Slot::Many(&mut item.menu)).collect(),
+        Node::Timeline(n) => n.items.iter_mut().map(|item| Slot::Many(&mut item.detail)).collect(),
+        Node::FeedRow(n) => vec![Slot::Many(&mut n.detail)],
+        Node::Message(n) => vec![Slot::Many(&mut n.body)],
+        Node::Pane(n) => vec![Slot::Many(&mut n.children)],
+        Node::Figure(n) => vec![Slot::Maybe(&mut n.aside), Slot::Maybe(&mut n.chart)],
+        Node::DayPager(n) => vec![Slot::Maybe(&mut n.scores)],
+        Node::Card(n) => vec![Slot::Many(&mut n.children), Slot::Many(&mut n.menu)],
+        Node::Layers(n) => vec![Slot::Many(&mut n.children)],
+        Node::Carousel(n) => vec![Slot::Many(&mut n.children)],
+        Node::Adaptive(n) => vec![Slot::Many(&mut n.compact), Slot::Many(&mut n.wide)],
+        Node::Unknown(n) => vec![Slot::Maybe(&mut n.alt)],
+        _ => Vec::new(),
+    }
+}
+
+/// Calls `visit` with `node` and every node inside it, in document order.
+pub(crate) fn walk<'a>(node: &'a Node, visit: &mut dyn FnMut(&'a Node)) {
+    visit(node);
+    for child in node.children() {
+        walk(child, visit);
+    }
+}
+
+/// How many nodes deep `node` goes: `1` for a node that holds none.
+pub(crate) fn depth(node: &Node) -> usize {
+    1 + node.children().into_iter().map(depth).max().unwrap_or(0)
+}
+
+/// The first node, in document order, that `is` accepts.
+pub(crate) fn find<'a>(node: &'a Node, is: &dyn Fn(&Node) -> bool) -> Option<&'a Node> {
+    if is(node) {
+        return Some(node);
+    }
+    node.children().into_iter().find_map(|child| find(child, is))
+}
+
+/// The first node, in document order, that `is` accepts, to change in place.
+pub(crate) fn find_mut<'a>(
+    node: &'a mut Node,
+    is: &dyn Fn(&Node) -> bool,
+) -> Option<&'a mut Node> {
+    if is(node) {
+        return Some(node);
+    }
+    for slot in slots(node) {
+        match slot {
+            Slot::Many(list) => {
+                for child in list {
+                    if let Some(found) = find_mut(child, is) {
+                        return Some(found);
+                    }
+                }
+            }
+            Slot::Maybe(child) => {
+                if let Some(found) = child.as_deref_mut().and_then(|child| find_mut(child, is)) {
+                    return Some(found);
+                }
+            }
+            Slot::One(child) => {
+                if let Some(found) = find_mut(child, is) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn nothing() -> Node {
+    Node::Stack(navree_native::node::Stack::default())
+}
+
+// A node is half a kilobyte, and a debug build keeps every one it moves in
+// the frame of the function that moves it. So what moves a node is done in
+// these three, which do not call themselves: the walk that finds the place
+// holds only references, and stays small at every level of a deep tree.
+
+#[inline(never)]
+fn change_in_list(list: &mut Vec<Node>, at: usize, change: &mut dyn FnMut(Node) -> Option<Node>) {
+    let old = list.remove(at);
+    if let Some(new) = change(old) {
+        list.insert(at, new);
+    }
+}
+
+#[inline(never)]
+fn change_in_place(place: &mut Option<Box<Node>>, change: &mut dyn FnMut(Node) -> Option<Node>) {
+    let old = place.take().map(|old| *old);
+    *place = old.and_then(change).map(Box::new);
+}
+
+#[inline(never)]
+fn change_where_one_must_be(child: &mut Node, change: &mut dyn FnMut(Node) -> Option<Node>) {
+    let old = std::mem::replace(child, nothing());
+    if let Some(new) = change(old) {
+        *child = new;
+    }
+}
+
+/// Puts the first node inside `node` that `is` accepts through `change`: none
+/// takes it out, one takes its place. A place that must hold a node keeps an
+/// empty stack when it is given none. Returns whether one was found.
+pub(crate) fn rewrite(
+    node: &mut Node,
+    is: &dyn Fn(&Node) -> bool,
+    change: &mut dyn FnMut(Node) -> Option<Node>,
+) -> bool {
+    for slot in slots(node) {
+        match slot {
+            Slot::Many(list) => {
+                let mut at = 0;
+                while at < list.len() {
+                    if is(&list[at]) {
+                        change_in_list(list, at, change);
+                        return true;
+                    }
+                    if rewrite(&mut list[at], is, change) {
+                        return true;
+                    }
+                    at += 1;
+                }
+            }
+            Slot::Maybe(place) => {
+                if place.as_deref().is_some_and(is) {
+                    change_in_place(place, change);
+                    return true;
+                }
+                if let Some(child) = place.as_deref_mut()
+                    && rewrite(child, is, change)
+                {
+                    return true;
+                }
+            }
+            Slot::One(child) => {
+                if is(child) {
+                    change_where_one_must_be(child, change);
+                    return true;
+                }
+                if rewrite(child, is, change) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// The nodes a screen starts from: its actions, then what the day pager in
+/// its bar holds (the day's scores), then its body.
+pub(crate) fn roots(screen: &Screen) -> impl Iterator<Item = &Node> {
+    let scores = screen.pager.as_ref().and_then(|pager| pager.scores.as_deref());
+    screen.actions.iter().chain(scores).chain(std::iter::once(&screen.body))
+}
+
+/// The same nodes, to change in place.
+pub(crate) fn roots_mut(screen: &mut Screen) -> impl Iterator<Item = &mut Node> {
+    let scores = screen.pager.as_mut().and_then(|pager| pager.scores.as_deref_mut());
+    screen.actions.iter_mut().chain(scores).chain(std::iter::once(&mut screen.body))
+}
+
+/// The day pagers of a screen: the one it carries in its bar, then those
+/// among its parts, in document order.
+pub(crate) fn pagers(screen: &Screen) -> Vec<&DayPager> {
+    let mut found: Vec<&DayPager> = screen.pager.iter().collect();
+    for root in roots(screen) {
+        walk(root, &mut |node| {
+            if let Node::DayPager(pager) = node {
+                found.push(pager);
+            }
+        });
+    }
+    found
+}
+
+/// Whether the day pager in the screen's bar has this id.
+pub(crate) fn pager_has_id(screen: &Screen, id: &str) -> bool {
+    screen.pager.as_ref().is_some_and(|pager| pager.id.as_deref() == Some(id))
+}
+
+/// The first node of the screen that `is` accepts.
+pub(crate) fn find_in<'a>(screen: &'a Screen, is: &dyn Fn(&Node) -> bool) -> Option<&'a Node> {
+    roots(screen).find_map(|root| find(root, is))
+}
+
+/// The first node of the screen that `is` accepts, to change in place.
+pub(crate) fn find_in_mut<'a>(
+    screen: &'a mut Screen,
+    is: &dyn Fn(&Node) -> bool,
+) -> Option<&'a mut Node> {
+    roots_mut(screen).find_map(|root| find_mut(root, is))
+}
+
+/// [`rewrite`] over a whole screen. A body that is taken out leaves an empty stack.
+pub(crate) fn rewrite_in(
+    screen: &mut Screen,
+    is: &dyn Fn(&Node) -> bool,
+    change: &mut dyn FnMut(Node) -> Option<Node>,
+) -> bool {
+    let mut at = 0;
+    while at < screen.actions.len() {
+        if is(&screen.actions[at]) {
+            change_in_list(&mut screen.actions, at, change);
+            return true;
+        }
+        if rewrite(&mut screen.actions[at], is, change) {
+            return true;
+        }
+        at += 1;
+    }
+    // What the day pager in the bar holds stands between the actions and the body.
+    if let Some(pager) = &mut screen.pager {
+        if pager.scores.as_deref().is_some_and(is) {
+            change_in_place(&mut pager.scores, change);
+            return true;
+        }
+        if let Some(scores) = pager.scores.as_deref_mut()
+            && rewrite(scores, is, change)
+        {
+            return true;
+        }
+    }
+    if is(&screen.body) {
+        change_where_one_must_be(&mut screen.body, change);
+        return true;
+    }
+    rewrite(&mut screen.body, is, change)
+}
+
+/// How deep in the screen the first node that `is` accepts stands: `1` for a root.
+pub(crate) fn depth_of(screen: &Screen, is: &dyn Fn(&Node) -> bool) -> Option<usize> {
+    fn seek(node: &Node, is: &dyn Fn(&Node) -> bool, at: usize) -> Option<usize> {
+        if is(node) {
+            return Some(at);
+        }
+        node.children().into_iter().find_map(|child| seek(child, is, at + 1))
+    }
+    roots(screen).find_map(|root| seek(root, is, 1))
+}
+
+/// Whether the node has this id.
+pub(crate) fn has_id(node: &Node, id: &str) -> bool {
+    node.id() == Some(id)
+}
+
+/// Whether `open` and `close` can mean the node: a sheet, a dialog, a popover
+/// or a disclosure.
+pub(crate) fn opens(node: &Node) -> bool {
+    matches!(
+        node,
+        Node::Sheet(_) | Node::Dialog(_) | Node::Popover(_) | Node::Disclosure(_)
+    )
+}
+
+/// The list of nodes an `append` or a `prepend` adds to, when the node has one.
+pub(crate) fn main_list(node: &mut Node) -> Option<&mut Vec<Node>> {
+    match node {
+        Node::Stack(n) => Some(&mut n.children),
+        Node::Grid(n) => Some(&mut n.children),
+        Node::Section(n) => Some(&mut n.children),
+        Node::List(n) => Some(&mut n.children),
+        Node::Disclosure(n) => Some(&mut n.children),
+        Node::Region(n) => Some(&mut n.children),
+        Node::Form(n) => Some(&mut n.children),
+        Node::Sheet(n) => Some(&mut n.children),
+        Node::Dialog(n) => Some(&mut n.children),
+        Node::Popover(n) => Some(&mut n.children),
+        Node::Menu(n) => Some(&mut n.items),
+        Node::Pane(n) => Some(&mut n.children),
+        Node::Card(n) => Some(&mut n.children),
+        Node::Layers(n) => Some(&mut n.children),
+        Node::Carousel(n) => Some(&mut n.children),
+        _ => None,
+    }
+}
+
+/// Whether an `append` or a `prepend` can mean the node.
+pub(crate) fn holds(node: &Node) -> bool {
+    matches!(
+        node,
+        Node::Stack(_)
+            | Node::Grid(_)
+            | Node::Section(_)
+            | Node::List(_)
+            | Node::Disclosure(_)
+            | Node::Region(_)
+            | Node::Form(_)
+            | Node::Sheet(_)
+            | Node::Dialog(_)
+            | Node::Popover(_)
+            | Node::Menu(_)
+            | Node::Pane(_)
+            | Node::Card(_)
+            | Node::Layers(_)
+            | Node::Carousel(_)
+    )
+}
+
+/// What a control holds, as the tree says it.
+pub(crate) fn value_of(input: &Input) -> FieldValue {
+    let text = |text: &str| FieldValue::Text {
+        text: text.to_owned(),
+    };
+    match input {
+        Input::Text(input) => text(&input.value),
+        Input::Toggle(input) => FieldValue::Flag { on: input.on },
+        Input::Choice(input) => input.value.as_deref().map_or(FieldValue::None, text),
+        Input::Choices(input) => FieldValue::Many {
+            values: input.values.clone(),
+        },
+        Input::Date(input) => text(&input.value),
+        Input::Slider(input) => text(&input.value),
+        Input::Colour(input) => text(&input.value),
+        Input::File(_) => FieldValue::Files { files: Vec::new() },
+        Input::Range(input) => FieldValue::Range {
+            from: input.from.value.clone(),
+            to: input.to.value.clone(),
+        },
+        _ => FieldValue::None,
+    }
+}
+
+/// Whether a value is of the kind the control holds, so a value typed into a
+/// field is not kept for a control of another kind that took its place.
+pub(crate) fn fits(input: &Input, value: &FieldValue) -> bool {
+    matches!(
+        (input, value),
+        (
+            Input::Text(_) | Input::Date(_) | Input::Slider(_) | Input::Colour(_),
+            FieldValue::Text { .. },
+        ) | (Input::Text(_), FieldValue::Phone { .. })
+            | (Input::Toggle(_), FieldValue::Flag { .. })
+            | (Input::Choice(_), FieldValue::Text { .. } | FieldValue::None)
+            | (Input::Choices(_), FieldValue::Many { .. })
+            | (Input::File(_), FieldValue::Files { .. })
+            | (Input::Range(_), FieldValue::Range { .. })
+    )
+}
+
+/// Gives every form and field of arriving nodes an id of its own.
+pub(crate) struct Names<'a> {
+    /// The form ids the screen already has.
+    pub forms: &'a mut BTreeSet<String>,
+    /// The field ids the screen already has.
+    pub fields: &'a mut BTreeSet<String>,
+    /// The id the server gave each form, by the id the form has here.
+    pub server: &'a mut BTreeMap<String, Option<String>>,
+}
+
+fn base_of(form: &Form) -> String {
+    form.id
+        .clone()
+        .unwrap_or_else(|| format!("@{}", form.action))
+}
+
+fn count_bases(node: &Node, counts: &mut BTreeMap<String, usize>) {
+    match node {
+        Node::Form(form) => *counts.entry(base_of(form)).or_default() += 1,
+        Node::Table(table) => {
+            if let Some(query) = &table.query {
+                *counts.entry(base_of(query)).or_default() += 1;
+            }
+        }
+        _ => {}
+    }
+    for child in node.children() {
+        count_bases(child, counts);
+    }
+}
+
+fn free(taken: &BTreeSet<String>, stem: String) -> String {
+    if !taken.contains(&stem) {
+        return stem;
+    }
+    (2u32..)
+        .map(|n| format!("{stem}~{n}"))
+        .find(|name| !taken.contains(name))
+        .unwrap_or(stem)
+}
+
+impl Names<'_> {
+    /// Names the forms and fields of `nodes`, which are about to stand under a
+    /// node whose id is `scope`.
+    pub(crate) fn name(&mut self, nodes: &mut [Node], scope: Option<&str>) {
+        let mut counts = BTreeMap::new();
+        for node in nodes.iter() {
+            count_bases(node, &mut counts);
+        }
+        for node in nodes {
+            self.node(node, scope, None, &counts);
+        }
+    }
+
+    fn form(&mut self, form: &mut Form, scope: Option<&str>, counts: &BTreeMap<String, usize>) -> String {
+        let server = form.id.clone();
+        let base = base_of(form);
+        let repeated = counts.get(&base).copied().unwrap_or(0) > 1 || self.forms.contains(&base);
+        let stem = match scope {
+            Some(scope) if repeated => format!("{base}~{scope}"),
+            _ => base,
+        };
+        let handle = free(self.forms, stem);
+        self.forms.insert(handle.clone());
+        self.server.insert(handle.clone(), server);
+        form.id = Some(handle.clone());
+        handle
+    }
+
+    fn field(&mut self, field: &mut Field, form: Option<&str>) {
+        let own = field.id.clone().filter(|id| !self.fields.contains(id));
+        let id = own.unwrap_or_else(|| {
+            let mut stem = format!("{}.{}", form.unwrap_or(""), field.name);
+            if let Input::Toggle(toggle) = &field.input
+                && let Some(value) = &toggle.value
+            {
+                stem.push('=');
+                stem.push_str(value);
+            }
+            free(self.fields, stem)
+        });
+        self.fields.insert(id.clone());
+        field.id = Some(id);
+    }
+
+    fn node(
+        &mut self,
+        node: &mut Node,
+        scope: Option<&str>,
+        form: Option<&str>,
+        counts: &BTreeMap<String, usize>,
+    ) {
+        match node {
+            Node::Form(inner) => {
+                // What stands in a form is scoped by the id the server gave it.
+                let server = inner.id.clone();
+                let handle = self.form(inner, scope, counts);
+                let scope = server.as_deref().or(scope);
+                for child in &mut inner.children {
+                    self.node(child, scope, Some(&handle), counts);
+                }
+            }
+            Node::Field(field) => self.field(field, form),
+            Node::Table(table) => {
+                let scope = table.id.clone().or_else(|| scope.map(str::to_owned));
+                let scope = scope.as_deref();
+                if let Some(query) = &mut table.query {
+                    let handle = self.form(query, scope, counts);
+                    for child in &mut query.children {
+                        self.node(child, scope, Some(&handle), counts);
+                    }
+                }
+                for row in &mut table.rows {
+                    let own = row.id.clone();
+                    let scope = own.as_deref().or(scope);
+                    for cell in row.nodes_mut() {
+                        self.node(cell, scope, form, counts);
+                    }
+                }
+                if let Some(empty) = table.empty.as_deref_mut() {
+                    self.node(empty, scope, form, counts);
+                }
+            }
+            other => {
+                let own = other.id().map(str::to_owned);
+                let scope = own.as_deref().or(scope);
+                for slot in slots(other) {
+                    match slot {
+                        Slot::Many(list) => {
+                            for child in list {
+                                self.node(child, scope, form, counts);
+                            }
+                        }
+                        Slot::Maybe(child) => {
+                            if let Some(child) = child.as_deref_mut() {
+                                self.node(child, scope, form, counts);
+                            }
+                        }
+                        Slot::One(child) => self.node(child, scope, form, counts),
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A form found in a tree.
+#[derive(Debug)]
+pub(crate) struct FoundForm<'a> {
+    /// Its id here.
+    pub handle: String,
+    /// How it is sent.
+    pub method: Method,
+    /// Where it is sent, as the tree says.
+    pub action: &'a str,
+    /// The id of the region or table whose query it is.
+    pub query_of: Option<String>,
+    /// Its fields, in document order.
+    pub fields: Vec<&'a Field>,
+}
+
+/// A region found in a tree.
+#[derive(Debug)]
+pub(crate) struct FoundRegion<'a> {
+    pub id: &'a str,
+    pub src: &'a str,
+    /// It came empty and asks to be fetched once the screen is drawn.
+    pub wants: bool,
+    pub live: Option<&'a Live>,
+}
+
+/// What a tree holds that the runtime keeps state for.
+#[derive(Debug, Default)]
+pub(crate) struct Survey<'a> {
+    pub forms: Vec<FoundForm<'a>>,
+    /// Fields that stand in no form.
+    pub loose: Vec<&'a Field>,
+    pub regions: Vec<FoundRegion<'a>>,
+    /// The ids of the lists and tables that have more to load, and of the
+    /// regions that hold such a table.
+    pub more: Vec<&'a str>,
+    /// The sheets, dialogs and popovers that are open, in document order.
+    pub open: Vec<&'a str>,
+    /// The lists that say where to ask what changed in them, each with the
+    /// stream that says when.
+    pub live: Vec<(&'a str, &'a str, Option<&'a navree_native::node::Live>)>,
+    /// How many tabs that do not show the walk is inside of: a lazy region
+    /// there waits for its tab.
+    unseen: usize,
+}
+
+impl<'a> Survey<'a> {
+    /// Reads `nodes`.
+    pub(crate) fn of(nodes: impl Iterator<Item = &'a Node>) -> Self {
+        let mut survey = Self::default();
+        for node in nodes {
+            survey.node(node, None, None);
+        }
+        survey
+    }
+
+    fn form(&mut self, form: &'a Form, query_of: Option<String>) -> usize {
+        self.forms.push(FoundForm {
+            handle: form.id.clone().unwrap_or_default(),
+            method: form.method,
+            action: &form.action,
+            query_of,
+            fields: Vec::new(),
+        });
+        self.forms.len() - 1
+    }
+
+    fn node(&mut self, node: &'a Node, form: Option<usize>, region: Option<&'a str>) {
+        match node {
+            Node::Form(inner) => {
+                let at = self.form(inner, None);
+                for child in &inner.children {
+                    self.node(child, Some(at), region);
+                }
+                return;
+            }
+            Node::Field(field) => match form {
+                Some(at) => self.forms[at].fields.push(field),
+                None => self.loose.push(field),
+            },
+            Node::Region(inner) => {
+                self.regions.push(FoundRegion {
+                    id: &inner.id,
+                    src: &inner.src,
+                    wants: inner.lazy && inner.children.is_empty() && self.unseen == 0,
+                    live: inner.live.as_ref(),
+                });
+                for child in &inner.children {
+                    self.node(child, form, Some(&inner.id));
+                }
+                return;
+            }
+            Node::Table(table) => {
+                let owner = region.or(table.id.as_deref());
+                if table.more.is_some() {
+                    self.more.extend(owner);
+                }
+                if let Some(query) = &table.query {
+                    let at = self.form(query, owner.map(str::to_owned));
+                    for child in &query.children {
+                        self.node(child, Some(at), region);
+                    }
+                }
+                for cell in table.rows.iter().flat_map(navree_native::node::TableRow::nodes) {
+                    self.node(cell, form, region);
+                }
+                if let Some(empty) = table.empty.as_deref() {
+                    self.node(empty, form, region);
+                }
+                return;
+            }
+            Node::List(list) => {
+                if list.more.is_some() || list.before.is_some() {
+                    self.more.extend(list.id.as_deref());
+                }
+                if let (Some(id), Some(changes)) = (list.id.as_deref(), list.changes.as_deref()) {
+                    self.live.push((id, changes, list.live.as_ref()));
+                }
+            }
+            // Of a set of tabs the client can switch through the core (one
+            // with an id), only the selected one shows.
+            Node::Tabs(tabs) if tabs.id.is_some() => {
+                for tab in &tabs.items {
+                    let waits = usize::from(!tab.selected);
+                    self.unseen += waits;
+                    for child in &tab.children {
+                        self.node(child, form, region);
+                    }
+                    self.unseen -= waits;
+                }
+                return;
+            }
+            Node::Sheet(sheet) if sheet.open => self.open.push(&sheet.id),
+            Node::Dialog(dialog) if dialog.open => self.open.push(&dialog.id),
+            _ => {}
+        }
+        for child in node.children() {
+            self.node(child, form, region);
+        }
+    }
+}
+
+/// The form of the screen whose id here is `handle`: a form node, or a table's query.
+pub(crate) fn form_of<'a>(screen: &'a Screen, handle: &str) -> Option<&'a Form> {
+    fn seek<'a>(node: &'a Node, handle: &str) -> Option<&'a Form> {
+        match node {
+            Node::Form(form) if form.id.as_deref() == Some(handle) => return Some(form),
+            Node::Table(table) => {
+                if let Some(query) = table.query.as_ref().filter(|query| query.id.as_deref() == Some(handle)) {
+                    return Some(query);
+                }
+            }
+            _ => {}
+        }
+        node.children().into_iter().find_map(|child| seek(child, handle))
+    }
+    roots(screen).find_map(|root| seek(root, handle))
+}
+
+/// The fields of a form, in document order.
+pub(crate) fn fields_of(form: &Form) -> Vec<&Field> {
+    let mut fields = Vec::new();
+    for child in &form.children {
+        walk(child, &mut |node| {
+            if let Node::Field(field) = node {
+                fields.push(field);
+            }
+        });
+    }
+    fields
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use navree_native::Envelope;
+    use navree_native::node::{Dialog, Region, Sheet, Stack, Table, TableRow, Text};
+
+    fn label(node: &Node) -> String {
+        format!("{}#{}", node.kind().as_str(), node.id().unwrap_or(""))
+    }
+
+    fn walk_mut(node: &mut Node, out: &mut Vec<String>) {
+        out.push(label(node));
+        for slot in slots(node) {
+            match slot {
+                Slot::Many(list) => list.iter_mut().for_each(|child| walk_mut(child, out)),
+                Slot::Maybe(child) => {
+                    if let Some(child) = child.as_deref_mut() {
+                        walk_mut(child, out);
+                    }
+                }
+                Slot::One(child) => walk_mut(child, out),
+            }
+        }
+    }
+
+    /// Places the protocol's own examples leave empty, so the walk of each is
+    /// held to something. When the test below names a place no example
+    /// fills, an example goes here.
+    const OWN: &[&str] = &[r#"{"t":"table","columns":[{"label":"Order"}],"empty":{"t":"empty","title":"No orders yet"}}"#];
+
+    /// Every root node of every example of the protocol that holds nodes (a
+    /// screen's body and actions, the nodes an op brings), and this file's own.
+    fn examples() -> Vec<(String, Node)> {
+        let dir = format!("{}/../navree-native/corpus", env!("CARGO_MANIFEST_DIR"));
+        let mut files: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|entry| entry.unwrap().path()).filter(|path| path.extension().is_some_and(|kind| kind == "json")).collect();
+        files.sort();
+        let mut roots = Vec::new();
+        for path in files {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            let value: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            // The shell and the like are not answers that hold a screen or ops.
+            if value.get("screen").is_none() && value.get("ops").is_none() {
+                continue;
+            }
+            let envelope: Envelope = serde_json::from_value(value).unwrap_or_else(|error| panic!("{name}: {error}"));
+            let mut nodes = Vec::new();
+            if let Some(screen) = envelope.screen {
+                nodes.extend(screen.actions);
+                nodes.push(screen.body);
+            }
+            let of_row = |row: TableRow| row.cells.into_iter().chain(row.actions).chain(row.detail);
+            for op in envelope.ops {
+                match op {
+                    navree_native::Op::Morph { node, .. } | navree_native::Op::Replace { node, .. } => nodes.push(node),
+                    navree_native::Op::Append { nodes: more, .. } | navree_native::Op::Prepend { nodes: more, .. } | navree_native::Op::Merge { nodes: more, .. } => nodes.extend(more),
+                    navree_native::Op::Rows { rows, .. } => nodes.extend(rows.into_iter().flat_map(of_row)),
+                    navree_native::Op::Row { row, .. } => nodes.extend(of_row(row)),
+                    _ => {}
+                }
+            }
+            roots.extend(nodes.into_iter().map(|node| (name.clone(), node)));
+        }
+        roots.extend(OWN.iter().map(|own| ("this file's own".to_owned(), serde_json::from_str(own).unwrap())));
+        roots
+    }
+
+    /// The places under a schema that hold nodes, each as the names that lead
+    /// to it, with `[]` for "each of a list".
+    fn places(defs: &serde_json::Value, schema: &serde_json::Value, inside: &mut Vec<String>) -> Vec<Vec<String>> {
+        if let Some(name) = schema.get("$ref").and_then(serde_json::Value::as_str).and_then(|path| path.rsplit('/').next()) {
+            if name == "Node" {
+                return vec![Vec::new()];
+            }
+            if inside.iter().any(|seen| seen == name) {
+                return Vec::new();
+            }
+            inside.push(name.to_owned());
+            let found = places(defs, &defs[name], inside);
+            inside.pop();
+            return found;
+        }
+        let under = |name: &str, found: Vec<Vec<String>>| -> Vec<Vec<String>> {
+            found
+                .into_iter()
+                .map(|mut place| {
+                    place.insert(0, name.to_owned());
+                    place
+                })
+                .collect()
+        };
+        let mut out = Vec::new();
+        for key in ["anyOf", "oneOf", "allOf"] {
+            for part in schema.get(key).and_then(serde_json::Value::as_array).into_iter().flatten() {
+                out.extend(places(defs, part, inside));
+            }
+        }
+        if let Some(items) = schema.get("items") {
+            out.extend(under("[]", places(defs, items, inside)));
+        }
+        for (name, part) in schema.get("properties").and_then(serde_json::Value::as_object).into_iter().flatten() {
+            out.extend(under(name, places(defs, part, inside)));
+        }
+        out
+    }
+
+    /// Whether a node, as JSON, holds a node at a place.
+    fn filled(value: &serde_json::Value, place: &[String]) -> bool {
+        match place.split_first() {
+            None => !value.is_null(),
+            Some((each, rest)) if each == "[]" => value.as_array().is_some_and(|list| list.iter().any(|item| filled(item, rest))),
+            Some((name, rest)) => value.get(name).is_some_and(|inner| filled(inner, rest)),
+        }
+    }
+
+    /// The walk this file changes trees by knows every place a kind holds
+    /// nodes. The protocol's schema says what those places are; an example
+    /// fills each one; and on every example the walk finds what the
+    /// protocol's own walk finds, in the same order. A kind or a place the
+    /// protocol gains fails here until this file knows it.
+    #[test]
+    fn the_walk_knows_every_place_a_kind_holds_nodes() {
+        let schema = navree_native::schema::document();
+        let defs = &schema["$defs"];
+        let mut wanted: BTreeMap<String, Vec<Vec<String>>> = BTreeMap::new();
+        for kind in defs["Node"]["oneOf"].as_array().expect("the schema lists the kinds of node") {
+            let name = kind["properties"]["t"]["const"].as_str().expect("a kind has a name");
+            let held = kind["allOf"][0]["$ref"].as_str().and_then(|path| path.rsplit('/').next()).expect("a kind has a shape");
+            let mut found = places(defs, &defs[held], &mut vec![held.to_owned()]);
+            found.sort();
+            found.dedup();
+            wanted.insert(name.to_owned(), found);
+        }
+        for kind in navree_native::Kind::ALL {
+            assert!(wanted.contains_key(kind.as_str()), "the schema does not describe `{}`", kind.as_str());
+        }
+
+        let mut seen = BTreeSet::new();
+        let mut held = BTreeSet::new();
+        for (name, mut root) in examples() {
+            let mut plain = Vec::new();
+            walk(&root, &mut |node| plain.push(label(node)));
+            let mut changing = Vec::new();
+            walk_mut(&mut root, &mut changing);
+            assert_eq!(plain, changing, "{name}: the walk that changes a tree misses a child, or finds them in another order");
+            // The protocol's own walk that changes a tree agrees too.
+            let mut protocol = Vec::new();
+            let mut stack = vec![&mut root];
+            while let Some(node) = stack.pop() {
+                protocol.push(label(node));
+                stack.extend(node.children_mut().into_iter().rev());
+            }
+            assert_eq!(plain, protocol, "{name}");
+            walk(&root, &mut |node| {
+                let kind = node.kind().as_str();
+                seen.insert(kind);
+                let json = serde_json::to_value(node).unwrap();
+                for place in wanted.get(kind).into_iter().flatten() {
+                    if filled(&json, place) {
+                        held.insert(format!("{kind}.{}", place.join(".")));
+                    }
+                }
+            });
+        }
+        // A kind no example holds would be a kind whose children the walk may miss.
+        for kind in navree_native::Kind::ALL {
+            assert!(seen.contains(kind.as_str()), "no example of `{}` was walked", kind.as_str());
+        }
+        // And so would a place no example fills.
+        for (kind, found) in &wanted {
+            for place in found {
+                let place = format!("{kind}.{}", place.join("."));
+                assert!(held.contains(&place), "no example holds a node at `{place}`: add one to OWN, so the walk of that place is held to something");
+            }
+        }
+        // Forty places today; fewer would mean the schema is no longer read as it is written.
+        assert!(wanted.values().map(Vec::len).sum::<usize>() >= 40, "the schema names fewer places than the walk knows");
+    }
+
+    fn text(id: &str, value: &str) -> Node {
+        Node::Text(Text {
+            id: Some(id.to_owned()),
+            value: value.to_owned(),
+            ..Text::default()
+        })
+    }
+
+    fn stack(id: Option<&str>, children: Vec<Node>) -> Node {
+        Node::Stack(Stack {
+            id: id.map(str::to_owned),
+            children,
+            ..Stack::default()
+        })
+    }
+
+    #[test]
+    fn the_first_node_in_document_order_wins() {
+        // The outer `refund` is a dialog, the inner one a form; `b` is there twice.
+        let form = Node::Form(Form {
+            id: Some("refund".to_owned()),
+            children: vec![text("b", "inner")],
+            ..Form::default()
+        });
+        let dialog = Node::Dialog(Dialog {
+            id: "refund".to_owned(),
+            children: vec![form],
+            ..Dialog::default()
+        });
+        let mut screen = Screen::new("Order", stack(Some("page"), vec![dialog, text("b", "outer")]));
+        let found = find_in(&screen, &|node| has_id(node, "refund")).unwrap();
+        assert!(matches!(found, Node::Dialog(_)));
+        let found = find_in(&screen, &|node| has_id(node, "refund") && matches!(node, Node::Form(_)));
+        assert!(found.is_some());
+        assert!(find_in(&screen, &|node| has_id(node, "gone")).is_none());
+        assert_eq!(depth_of(&screen, &|node| has_id(node, "b")), Some(4));
+
+        // A rewrite changes the first `b` only: the one inside the form.
+        let changed = rewrite_in(&mut screen, &|node| has_id(node, "b"), &mut |_| Some(text("b", "new")));
+        assert!(changed);
+        let mut values = Vec::new();
+        walk(&screen.body, &mut |node| {
+            if let Node::Text(text) = node {
+                values.push(text.value.clone());
+            }
+        });
+        assert_eq!(values, ["new", "outer"]);
+        // Taking a node out, and a target that is not there.
+        assert!(rewrite_in(&mut screen, &|node| has_id(node, "b"), &mut |_| None));
+        assert!(rewrite_in(&mut screen, &|node| has_id(node, "b"), &mut |_| None));
+        assert!(!rewrite_in(&mut screen, &|node| has_id(node, "b"), &mut |_| None));
+        // The body itself can be the target.
+        assert!(rewrite_in(&mut screen, &|node| has_id(node, "page"), &mut |_| Some(text("page", "all"))));
+        assert!(matches!(screen.body, Node::Text(_)));
+    }
+
+    #[test]
+    fn what_the_pager_in_the_bar_holds_is_found_and_changed_as_a_part_is() {
+        use navree_native::charts::{DayPager, Rings};
+        let rings = |title: &str| {
+            Node::Rings(Rings {
+                id: Some("day-scores".to_owned()),
+                title: Some(title.to_owned()),
+                ..Rings::default()
+            })
+        };
+        let mut screen = Screen::new("Today", stack(Some("today"), vec![text("b", "body")]));
+        screen.pager = Some(DayPager {
+            id: Some("day".to_owned()),
+            day: "Today".to_owned(),
+            date: "2026-11-13".to_owned(),
+            scores: Some(Box::new(rings("Yesterday"))),
+            ..DayPager::default()
+        });
+        // The scores stand between the screen's actions and its body.
+        let order: Vec<String> = roots(&screen).map(label).collect();
+        assert_eq!(order, ["rings#day-scores", "stack#today"]);
+        assert_eq!(roots_mut(&mut screen).count(), 2);
+        assert!(find_in(&screen, &|node| has_id(node, "day-scores")).is_some());
+        assert_eq!(depth_of(&screen, &|node| has_id(node, "day-scores")), Some(1));
+        assert!(pager_has_id(&screen, "day") && !pager_has_id(&screen, "today"));
+        assert_eq!(pagers(&screen).len(), 1);
+        // They are changed in place, put through a change, and taken out.
+        let Some(Node::Rings(found)) = find_in_mut(&mut screen, &|node| has_id(node, "day-scores")) else {
+            panic!("the scores are found to change");
+        };
+        found.title = Some("Changed".to_owned());
+        assert!(rewrite_in(&mut screen, &|node| has_id(node, "day-scores"), &mut |_| Some(rings("Today"))));
+        let scores = screen.pager.as_ref().and_then(|pager| pager.scores.as_deref());
+        assert!(matches!(scores, Some(Node::Rings(rings)) if rings.title.as_deref() == Some("Today")));
+        assert!(rewrite_in(&mut screen, &|node| has_id(node, "day-scores"), &mut |_| None));
+        assert!(screen.pager.as_ref().is_some_and(|pager| pager.scores.is_none()));
+        // The body is still reached past a pager that holds nothing.
+        assert!(rewrite_in(&mut screen, &|node| has_id(node, "b"), &mut |_| None));
+    }
+
+    #[test]
+    fn nodes_are_added_to_a_card_layers_and_a_carousel() {
+        use navree_native::compose::{Adaptive, Card, Carousel, Layers, Shape};
+        let mut nodes = [
+            Node::Card(Card::default()),
+            Node::Layers(Layers::default()),
+            Node::Carousel(Carousel::default()),
+        ];
+        for node in &mut nodes {
+            assert!(holds(node), "{}", node.kind().as_str());
+            main_list(node).expect("it has a list to add to").push(text("new", "added"));
+            assert_eq!(node.children().len(), 1, "{}", node.kind().as_str());
+        }
+        // A shape holds nothing, and the two rooms of an adaptive part are
+        // not one list: neither is added to.
+        for mut node in [Node::Shape(Shape::default()), Node::Adaptive(Adaptive::default())] {
+            assert!(!holds(&node) && main_list(&mut node).is_none(), "{}", node.kind().as_str());
+        }
+    }
+
+    fn field(name: &str, id: Option<&str>) -> Node {
+        Node::Field(Field {
+            id: id.map(str::to_owned),
+            name: name.to_owned(),
+            ..Field::default()
+        })
+    }
+
+    fn form(id: Option<&str>, action: &str, children: Vec<Node>) -> Node {
+        Node::Form(Form {
+            id: id.map(str::to_owned),
+            action: action.to_owned(),
+            children,
+            ..Form::default()
+        })
+    }
+
+    fn form_ids(node: &Node) -> Vec<String> {
+        let survey = Survey::of(std::iter::once(node));
+        survey
+            .forms
+            .iter()
+            .map(|form| {
+                let fields: Vec<&str> = form.fields.iter().map(|field| field.id.as_deref().unwrap()).collect();
+                format!("{} [{}]", form.handle, fields.join(" "))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn every_form_and_field_gets_an_id_of_its_own() {
+        let row = |id: &str, cells: Vec<Node>| TableRow {
+            id: Some(id.to_owned()),
+            cells,
+            ..TableRow::default()
+        };
+        let table = Node::Table(Table {
+            query: Some(Form {
+                id: Some("orders-f".to_owned()),
+                action: "/orders".to_owned(),
+                children: vec![field("search", None)],
+                ..Form::default()
+            }),
+            rows: vec![
+                row("18", vec![form(None, "/inventory/18/restock", vec![field("quantity", None)])]),
+                row("19", vec![form(None, "/inventory/19/restock", vec![field("quantity", None)])]),
+                // Two rows whose forms go to one address: the row tells them apart.
+                row("20", vec![form(None, "/cart/remove", vec![field("quantity", Some("qty"))])]),
+                row("21", vec![form(None, "/cart/remove", vec![field("quantity", Some("qty"))])]),
+            ],
+            ..Table::default()
+        });
+        let mut nodes = vec![Node::Region(Region {
+            id: "orders".to_owned(),
+            src: "/orders".to_owned(),
+            children: vec![table],
+            ..Region::default()
+        })];
+        let (mut forms, mut fields, mut server) = (BTreeSet::new(), BTreeSet::new(), BTreeMap::new());
+        Names {
+            forms: &mut forms,
+            fields: &mut fields,
+            server: &mut server,
+        }
+        .name(&mut nodes, None);
+        assert_eq!(
+            form_ids(&nodes[0]),
+            [
+                "orders-f [orders-f.search]",
+                "@/inventory/18/restock [@/inventory/18/restock.quantity]",
+                "@/inventory/19/restock [@/inventory/19/restock.quantity]",
+                "@/cart/remove~20 [qty]",
+                "@/cart/remove~21 [@/cart/remove~21.quantity]",
+            ]
+        );
+        assert_eq!(server["orders-f"], Some("orders-f".to_owned()));
+        assert_eq!(server["@/cart/remove~21"], None);
+        let survey = Survey::of(nodes.iter());
+        assert_eq!(survey.forms[0].query_of.as_deref(), Some("orders"));
+        assert_eq!(survey.regions[0].id, "orders");
+
+        // A node that arrives later is named around what the screen already has.
+        let mut later = vec![form(Some("orders-f"), "/x", vec![field("search", Some("qty"))])];
+        Names {
+            forms: &mut forms,
+            fields: &mut fields,
+            server: &mut server,
+        }
+        .name(&mut later, Some("panel"));
+        assert_eq!(form_ids(&later[0]), ["orders-f~panel [orders-f~panel.search]"]);
+        assert_eq!(server["orders-f~panel"], Some("orders-f".to_owned()));
+    }
+
+    #[test]
+    fn what_is_open_and_what_wants_fetching_is_found() {
+        let body = stack(
+            None,
+            vec![
+                Node::Region(Region {
+                    id: "figures".to_owned(),
+                    src: "/fragments/figures".to_owned(),
+                    lazy: true,
+                    ..Region::default()
+                }),
+                Node::Sheet(Sheet {
+                    id: "order".to_owned(),
+                    open: true,
+                    children: vec![Node::Dialog(Dialog {
+                        id: "refund".to_owned(),
+                        ..Dialog::default()
+                    })],
+                    ..Sheet::default()
+                }),
+                field("loose", None),
+            ],
+        );
+        let survey = Survey::of(std::iter::once(&body));
+        assert!(survey.regions[0].wants);
+        assert_eq!(survey.open, ["order"]);
+        assert_eq!(survey.loose.len(), 1);
+        assert_eq!(depth(&body), 3);
+    }
+}

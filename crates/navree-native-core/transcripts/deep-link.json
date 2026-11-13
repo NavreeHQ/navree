@@ -1,0 +1,126 @@
+{
+  "about": "An address from outside the app. It opens only when the shell knows it: a destination, or an address one of its routes names. It is only ever fetched as a page.",
+  "steps": [
+    {
+      "note": "The app is opened with a link before it has started. The link waits for the shell.",
+      "send": {"t":"open_link","url":"https://shop.example/orders/7?from=mail"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives, and with it the route /orders/*. The link belongs to Orders: that destination is selected, its first screen goes underneath, and the linked screen on top.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-routes.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders/7?from=mail","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/selected","is":1},
+        {"at":"/destinations/1/stack","is":[1,2]},
+        {"at":"/screens/1/url","is":"/orders"},
+        {"at":"/screens/2/url","is":"/orders/7?from=mail"},
+        {"at":"/front","is":2},
+        {"at":"/can_go_back","is":true}
+      ]
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The screen underneath arrives. It is not in front, so its stream stays closed.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "An address no destination or route names does not open.",
+      "send": {"t":"open_link","url":"https://shop.example/admin/secret"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Nor does another site's.",
+      "send": {"t":"open_link","url":"https://evil.example/orders/7"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"open_link","url":"javascript:alert(1)"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The route for /orders/new says `sheet`: the link opens as one, over where the person is.",
+      "send": {"t":"open_link","url":"https://shop.example/orders/new"},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/new","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/modals","is":[{"locked":false,"present":"sheet","stack":[3]}]}
+      ]
+    },
+    {
+      "note": "A link to a destination selects it, and takes the sheet away.",
+      "send": {"t":"open_link","url":"https://shop.example/inventory"},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"cancel","request":4},
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/inventory","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/modals","is":[]},
+        {"at":"/selected","is":2},
+        {"at":"/destinations/2/stack","is":[4]}
+      ]
+    }
+  ]
+}

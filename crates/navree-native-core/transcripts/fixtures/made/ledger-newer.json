@@ -1,0 +1,32 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "rows",
+   "target": "ledger",
+   "at": "start",
+   "prev": "/ledger/rows?before=2000",
+   "rows": [
+    {
+     "id": "2000",
+     "cells": [
+      {
+       "t": "text",
+       "value": "INV-2000"
+      },
+      {
+       "t": "text",
+       "value": "Mehak Arora, Mohali"
+      },
+      {
+       "t": "text",
+       "value": "₹2,300"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

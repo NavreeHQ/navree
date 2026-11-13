@@ -1,0 +1,110 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Orders",
+  "actions": [
+   {
+    "t": "menu",
+    "id": "view",
+    "label": "View",
+    "items": [
+     {
+      "t": "button",
+      "label": "Show packed",
+      "action": {
+       "t": "commands",
+       "list": [
+        {
+         "c": "flip",
+         "id": "show-packed",
+         "state": "checked"
+        },
+        {
+         "c": "toggle",
+         "id": "packed"
+        }
+       ]
+      },
+      "id": "show-packed",
+      "checked": false
+     },
+     {
+      "t": "button",
+      "label": "Newest first",
+      "action": {
+       "t": "commands",
+       "list": [
+        {
+         "c": "set",
+         "id": "sort-new",
+         "state": "checked",
+         "on": true
+        }
+       ]
+      },
+      "id": "sort-new",
+      "checked": true,
+      "one_of": "sort"
+     },
+     {
+      "t": "button",
+      "label": "Oldest first",
+      "action": {
+       "t": "commands",
+       "list": [
+        {
+         "c": "set",
+         "id": "sort-old",
+         "state": "checked",
+         "on": true
+        },
+        {
+         "c": "set",
+         "id": "x",
+         "state": "glowing",
+         "on": true
+        }
+       ]
+      },
+      "id": "sort-old",
+      "checked": false,
+      "one_of": "sort"
+     }
+    ]
+   }
+  ],
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "stack",
+     "id": "packed",
+     "hidden": true,
+     "children": [
+      {
+       "t": "text",
+       "value": "CS-1037 is packed"
+      }
+     ]
+    },
+    {
+     "t": "stack",
+     "id": "row-tools",
+     "children": [
+      {
+       "t": "button",
+       "label": "More",
+       "action": {
+        "t": "request",
+        "method": "post",
+        "href": "/orders/1/tools"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

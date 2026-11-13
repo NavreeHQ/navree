@@ -1,0 +1,173 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "close",
+   "target": "refund"
+  },
+  {
+   "op": "morph",
+   "target": "order",
+   "node": {
+    "t": "sheet",
+    "id": "order",
+    "title": "Order CS-20481",
+    "children": [
+     {
+      "t": "text",
+      "value": "Refunded ₹10.00 to UPI"
+     }
+    ]
+   }
+  },
+  {
+   "op": "morph",
+   "target": "order-page",
+   "node": {
+    "t": "stack",
+    "id": "order-page",
+    "children": [
+     {
+      "t": "badge",
+      "text": "Partly refunded",
+      "tone": "warning",
+      "dot": true
+     },
+     {
+      "t": "text",
+      "value": "Placed on 13 Nov, 17:21 · ₹7,848"
+     },
+     {
+      "t": "text",
+      "value": "Refunded ₹10.00 to UPI"
+     },
+     {
+      "t": "dialog",
+      "id": "refund",
+      "title": "Refund CS-20481",
+      "text": "Up to ₹7,838 can go back to the customer's UPI account.",
+      "children": [
+       {
+        "t": "form",
+        "id": "refund",
+        "method": "post",
+        "action": "/orders/1/refund",
+        "children": [
+         {
+          "t": "field",
+          "name": "amount",
+          "label": "Amount",
+          "input": {
+           "t": "text",
+           "kind": "decimal",
+           "value": "7,838.00"
+          },
+          "id": "refund-amount",
+          "required": true
+         },
+         {
+          "t": "field",
+          "name": "reason",
+          "label": "Reason",
+          "input": {
+           "t": "choice",
+           "options": [
+            {
+             "value": "returned",
+             "label": "Returned by the customer"
+            },
+            {
+             "value": "late",
+             "label": "Arrived late"
+            }
+           ],
+           "value": "returned"
+          },
+          "id": "refund-reason",
+          "required": true
+         },
+         {
+          "t": "button",
+          "label": "Refund",
+          "role": "primary",
+          "action": {
+           "t": "submit"
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "replace",
+   "target": "refund",
+   "node": {
+    "t": "dialog",
+    "id": "refund",
+    "title": "Refund CS-20481",
+    "text": "Up to ₹7,838 can go back to the customer's UPI account.",
+    "children": [
+     {
+      "t": "form",
+      "id": "refund",
+      "method": "post",
+      "action": "/orders/1/refund",
+      "children": [
+       {
+        "t": "field",
+        "name": "amount",
+        "label": "Amount",
+        "input": {
+         "t": "text",
+         "kind": "decimal",
+         "value": "7,838.00"
+        },
+        "id": "refund-amount",
+        "required": true
+       },
+       {
+        "t": "field",
+        "name": "reason",
+        "label": "Reason",
+        "input": {
+         "t": "choice",
+         "options": [
+          {
+           "value": "returned",
+           "label": "Returned by the customer"
+          },
+          {
+           "value": "late",
+           "label": "Arrived late"
+          }
+         ],
+         "value": "returned"
+        },
+        "id": "refund-reason",
+        "required": true
+       },
+       {
+        "t": "button",
+        "label": "Refund",
+        "role": "primary",
+        "action": {
+         "t": "submit"
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "toast",
+   "tone": "success",
+   "text": "Refunded ₹10.00"
+  }
+ ]
+}

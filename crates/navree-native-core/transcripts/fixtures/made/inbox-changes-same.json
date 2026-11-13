@@ -1,0 +1,13 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "merge",
+   "target": "inbox",
+   "since": "0000416",
+   "more": true
+  }
+ ]
+}

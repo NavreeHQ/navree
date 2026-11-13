@@ -1,0 +1,31 @@
+[package]
+name = "navree-native-core"
+description = "Navree Native's runtime core: everything a native client does that is not drawing, placement or talking to the system, as one pure function of state and event, behind a small C interface."
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "native", "runtime", "ui"]
+categories = ["gui"]
+readme = "README.md"
+publish = false
+
+# The workspace forbids `unsafe`. This crate has a C interface, so it denies it
+# everywhere and allows it in one file, `src/ffi.rs`.
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[features]
+# The glue for the Kotlin class `com.navree.core.Core`.
+jni = ["dep:jni-sys"]
+
+[dependencies]
+navree-native = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# The sign-in hand-over proves itself with the SHA-256 of a secret. Pure Rust.
+sha2 = { workspace = true }
+jni-sys = { version = "0.4.1", optional = true }

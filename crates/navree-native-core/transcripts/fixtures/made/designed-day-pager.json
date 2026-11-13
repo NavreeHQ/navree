@@ -1,0 +1,65 @@
+{
+ "navree": 1,
+ "build": "3f9a1c07b2de",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "replace",
+   "target": "day",
+   "node": {
+    "t": "day_pager",
+    "id": "day",
+    "day": "Thu 12 Nov",
+    "date": "2026-11-12",
+    "previous": "/?date=2026-11-11",
+    "today": "/",
+    "first": "2026-01-02",
+    "last": "2026-11-13",
+    "pick": {
+     "href": "/",
+     "name": "date"
+    },
+    "scores": {
+     "t": "rings",
+     "id": "day-scores",
+     "rings": [
+      {
+       "name": "Movement",
+       "value": 44,
+       "max": 100,
+       "shown": "44",
+       "colour": {
+        "hue": "orange"
+       }
+      },
+      {
+       "name": "Recovery",
+       "value": 72,
+       "max": 100,
+       "shown": "72",
+       "colour": {
+        "hue": "green"
+       }
+      },
+      {
+       "name": "Sleep",
+       "value": 78,
+       "max": 100,
+       "shown": "78",
+       "colour": {
+        "hue": "violet"
+       }
+      }
+     ],
+     "prominence": "low",
+     "summary": "The day's scores: Movement 44, Recovery 72, Sleep 78."
+    },
+    "words": {
+     "previous": "Previous day",
+     "next": "Next day",
+     "choose": "Choose a day"
+    }
+   }
+  }
+ ]
+}

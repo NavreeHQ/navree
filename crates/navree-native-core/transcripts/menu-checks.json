@@ -1,0 +1,82 @@
+{
+  "about": "A menu whose items are ticked. An item that turns something on or off says so itself; one of a choice of one unticks the others of its menu. A state from a newer server is passed over.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/view.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Show packed is ticked, and the packed orders are shown.",
+      "send": {"t":"act","screen":1,"action":{"t":"commands","list":[{"c":"flip","id":"show-packed","state":"checked"},{"c":"toggle","id":"packed"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/actions/0/items/0/checked","is":true},
+        {"at":"/screens/1/content/screen/body/children/0/hidden","is":null}
+      ]
+    },
+    {
+      "note": "Oldest first is chosen: Newest first is no longer. The second command names a state this build does not know, and is passed over.",
+      "send": {"t":"act","screen":1,"action":{"t":"commands","list":[{"c":"set","id":"sort-old","state":"checked","on":true},{"c":"set","id":"x","state":"unknown","on":true}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/actions/0/items/2/checked","is":true},
+        {"at":"/screens/1/content/screen/actions/0/items/1/checked","is":false},
+        {"at":"/screens/1/states","is":{}}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"commands","list":[{"c":"flip","id":"show-packed","state":"checked"},{"c":"toggle","id":"packed"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/actions/0/items/0/checked","is":false}
+      ]
+    }
+  ]
+}

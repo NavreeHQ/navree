@@ -1,0 +1,29 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "close",
+   "target": "confirm"
+  },
+  {
+   "op": "open",
+   "target": "more"
+  },
+  {
+   "op": "invalidate",
+   "target": "totals"
+  },
+  {
+   "op": "toast",
+   "tone": "info",
+   "text": "Saved again",
+   "id": "board"
+  },
+  {
+   "op": "navigate_external",
+   "href": "https://pay.example/invoice/7"
+  }
+ ]
+}

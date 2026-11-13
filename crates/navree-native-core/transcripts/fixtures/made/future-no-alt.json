@@ -1,0 +1,21 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Shawl",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "text",
+     "value": "Pashmina shawl, Patiala"
+    },
+    {
+     "t": "hologram",
+     "src": "/3d/shawl.usdz"
+    }
+   ]
+  }
+ }
+}

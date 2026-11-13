@@ -1,0 +1,132 @@
+{
+  "about": "A control that asks before it acts. The client hands over the control's question with its action; the core holds what the control was about to do, and the question is in the view state until the person answers. No lets it go; yes runs it.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/dispatch.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"choose","screen":1,"table":"dispatch","row":"1043","on":true},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"dispatch","from":3,"count":0}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Cancel orders asks first. Nothing is sent.",
+      "send": {"t":"act","screen":1,"action":{"t":"submit","with":{"name":"intent","value":"cancel"}},"form":"bulk","ask":{"title":"Cancel 1 order?","text":"₹1,499.00 goes back to the customer.","confirm":"Cancel order","cancel":"Keep"}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/question","is":{"cancel":"Keep","confirm":"Cancel order","id":1,"text":"₹1,499.00 goes back to the customer.","title":"Cancel 1 order?"}}
+      ]
+    },
+    {
+      "note": "The person keeps the order: the question goes, and nothing was sent.",
+      "send": {"t":"answer","screen":1,"question":1,"yes":false},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/question","is":null}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"submit","with":{"name":"intent","value":"cancel"}},"form":"bulk","ask":{"title":"Cancel 1 order?","text":"₹1,499.00 goes back to the customer.","confirm":"Cancel order","cancel":"Keep"}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/question/id","is":2}
+      ]
+    },
+    {
+      "note": "An answer to a question that is no longer asked changes nothing.",
+      "send": {"t":"answer","screen":1,"question":1,"yes":true},
+      "expect": {
+        "changed": [],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/question/id","is":2}
+      ]
+    },
+    {
+      "note": "Yes: now the form is sent, with the row chosen.",
+      "send": {"t":"answer","screen":1,"question":2,"yes":true},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"post","url":"https://shop.example/dispatch/bulk","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=tk-91c2&ids%5B%5D=1043&intent=cancel"},"timeout_ms":60000,"xsrf":true}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/question","is":null},
+        {"at":"/screens/1/forms/bulk/pending","is":true}
+      ]
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/dispatch-cancelled.json",
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"bulk"},
+          {"t":"redraw","screen":1,"id":"dispatch","rows":[],"gone":["1043"]},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"neutral","text":"CS-1043 is cancelled"}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/rows/2","is":null}
+      ]
+    }
+  ]
+}

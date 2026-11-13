@@ -1,0 +1,346 @@
+{
+  "about": "The health screens: rings, a day's clock, meters, strips, ranges, heatmaps, a scatter, and figures that hold a ring or a chart. They are parts like any other: found by id, changed by ops, their hints as they came. A day pager steps to another day in place: the screen takes the other day's page, and the stack does not grow. A figure's action is a link like any other.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-health.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The Today screen, as the protocol's own example has it.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "../../../navree-native/corpus/screen-today.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person steps to the day before: the client sends the pager's own address. The screen stays where it is in its stack and asks for that day; what it shows stays until the answer is here. A hint is in the tree as it came.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/?date=2026-11-12"}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/?date=2026-11-12","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/screens/1/url","is":"/?date=2026-11-12"},
+        {"at":"/screens/1/loading","is":true},
+        {"at":"/screens/1/content/t","is":"native"},
+        {"at":"/screens/1/content/screen/body/children/3/children/0/children/0/hint/about","is":"the health score"},
+        {"at":"/screens/1/content/screen/body/children/3/children/0/children/0/hint/title","is":"How the score is made"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/day-before.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/screens/1/title","is":"Thursday"}
+      ]
+    },
+    {
+      "note": "The page asks for newer readings.",
+      "send": {"t":"act","screen":1,"action":{"t":"request","method":"post","href":"/readings/sync"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":4,"method":"post","url":"https://shop.example/readings/sync","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "A merge into a list of figures: one is drawn again with the ring it holds, one is new, one left. The change names those rows.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/health-merge.json",
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"readings","rows":["reading-breath","reading-heart"],"gone":["reading-oxygen"]}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The day after.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/?date=2026-11-13"}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/?date=2026-11-13","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/screens/1/url","is":"/?date=2026-11-13"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "../../../navree-native/corpus/screen-today.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person picks a day in the system's date control. The client sends the pager's `pick` address and the day; the core asks for it under the name the pager gives.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/"},"text":"2026-10-31"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/?date=2026-10-31","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/screens/1/url","is":"/?date=2026-10-31"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/day-before.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A day before the first the pager says can be chosen is not asked for.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/"},"text":"2025-12-25"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Nor is something that is not a day.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/"},"text":"next Tuesday"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Back to today, by the pager's own address for it.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/"}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/screens/1/url","is":"/"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "../../../navree-native/corpus/screen-today.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"request","method":"post","href":"/activity/refresh"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":8,"method":"post","url":"https://shop.example/activity/refresh","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "Ops find the new parts by id wherever they stand: a figure; the ring that figure holds; the rings the pager holds; and a set of rings that is taken out.",
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/health-ops.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/5/children/0/children/0/value","is":"9,640"},
+        {"at":"/screens/1/content/screen/body/children/5/children/0/children/0/aside/id","is":"steps-ring"},
+        {"at":"/screens/1/content/screen/body/children/5/children/0/children/0/aside/value","is":9700},
+        {"at":"/screens/1/content/screen/body/children/0/scores/rings/0/value","is":41},
+        {"at":"/screens/1/content/screen/body/children/5/children/0/id","is":"activity-figures"}
+      ]
+    },
+    {
+      "note": "A figure's action is a link like any other: its screen is pushed.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/fitness/steps"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/fitness/steps","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1,2]}
+      ]
+    },
+    {
+      "note": "The Fitness screen: a figure with a chart in it, gauges with zones, a strip, a calendar of days, a matrix and a scatter.",
+      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "../../../navree-native/corpus/screen-fitness.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/2/title","is":"Fitness"},
+        {"at":"/screens/2/content/t","is":"native"}
+      ]
+    },
+    {
+      "send": {"t":"back"},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A ring in a link leads to the Sleep screen.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/sleep"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":10,"method":"get","url":"https://shop.example/sleep","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":10,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "../../../navree-native/corpus/screen-sleep.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/title","is":"Sleep"},
+        {"at":"/destinations/0/stack","is":[1,3]}
+      ]
+    },
+    {
+      "note": "The night before, on a screen that is not the first of its stack: it steps in place too.",
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"/sleep?date=2026-11-11"}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":11,"method":"get","url":"https://shop.example/sleep?date=2026-11-11","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1,3]},
+        {"at":"/screens/3/url","is":"/sleep?date=2026-11-11"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":11,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "../../../navree-native/corpus/screen-sleep.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "And the night after.",
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"/sleep?date=2026-11-13"}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":12,"method":"get","url":"https://shop.example/sleep?date=2026-11-13","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":12,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "../../../navree-native/corpus/screen-sleep.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Back leads out of the Sleep screen, not back through the nights.",
+      "send": {"t":"back"},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/front","is":1},
+        {"at":"/destinations/0/stack","is":[1]}
+      ]
+    }
+  ]
+}

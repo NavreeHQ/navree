@@ -1,0 +1,268 @@
+{
+  "about": "The closed list of changes a control makes by itself, with no request. They change state: in the node's own field where it has one, beside the tree where it has none.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/guide"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/guide","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/commands.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "toggle: a hidden stack is shown.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"toggle","id":"tips"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/content/screen/body/children/0/hidden","is":null}
+      ]
+    },
+    {
+      "note": "And hidden again.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"toggle","id":"tips"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/content/screen/body/children/0/hidden","is":true}
+      ]
+    },
+    {
+      "note": "show, and hide on a node that has no field for it: the state is kept beside the tree.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"show","id":"tips"},{"c":"hide","id":"panel"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/states","is":{"panel":["hidden"]}}
+      ]
+    },
+    {
+      "note": "open: a sheet, and a popover inside it.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"open","id":"help"},{"c":"open","id":"hint"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/overlays","is":["help","hint"]},
+        {"at":"/screens/3/states/hint","is":["open"]}
+      ]
+    },
+    {
+      "note": "close: closing the sheet closes what is open inside it.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"close","id":"help"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/overlays","is":[]},
+        {"at":"/screens/3/states/hint","is":null}
+      ]
+    },
+    {
+      "note": "A disclosure opens in place; it is not presented over anything.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"open","id":"about"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/content/screen/body/children/3/open","is":true},
+        {"at":"/screens/3/overlays","is":[]}
+      ]
+    },
+    {
+      "note": "copy: the clipboard is the client's to write; the core asks.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"copy","text":"CS-220480"}]}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"copy","text":"CS-220480"},
+          {"t":"announce","notice":"copied"}
+        ]
+      }
+    },
+    {
+      "note": "set and flip: a state with no field is kept beside the tree; `disabled` on a button is the button's own.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"set","id":"row-1","state":"selected","on":true},{"c":"flip","id":"row-2","state":"selected"},{"c":"set","id":"save","state":"disabled","on":true},{"c":"flip","id":"panel","state":"hidden"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/states","is":{"row-1":["selected"],"row-2":["selected"]}},
+        {"at":"/screens/3/content/screen/body/children/6/disabled","is":true}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"focus","id":"note-text"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/focus/target","is":"note-text"}
+      ]
+    },
+    {
+      "note": "text: only a text node takes words from a command.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"text","id":"status","text":"Saved"},{"c":"text","id":"save","text":"Not a text"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/content/screen/body/children/2/value","is":"Saved"},
+        {"at":"/screens/3/content/screen/body/children/6/label","is":"Save"}
+      ]
+    },
+    {
+      "note": "count: how many characters the control the command ran on holds, as a person counts them.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"count","id":"count","max":160}]},"text":"नमस्ते जी"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/content/screen/body/children/1/value","is":"9/160"}
+      ]
+    },
+    {
+      "send": {"t":"field","screen":3,"form":"note","field":"note-text","value":{"t":"text","text":"Namaste"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"note"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "value sets a hidden value the page opened to commands by giving it an id (the token has none and stays), and submit sends the form.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"value","id":"note-mode","value":"final"},{"c":"value","id":"_csrf","value":"stolen"},{"c":"submit","id":"note"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/notes","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"mode=final&_csrf=t0k3n&text=Namaste"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"toast","tone":"success","text":"Copied"}]}},
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"success","text":"Copied"}
+        ]
+      },
+      "check": [
+        {"at":"/messages/0/text","is":"Copied"}
+      ]
+    }
+  ]
+}

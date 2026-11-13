@@ -1,0 +1,351 @@
+{
+  "about": "Where a post leads when its answer says `navigate`. Out of a presented screen and back to what is under it; back to a screen already in the stack; or in place of the screen that posted. When the op itself says how to present the screen, that wins.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-routes.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "A sheet, by the shell's route.",
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/orders/new"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/new","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/order-new.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"field","screen":3,"form":"order-new","field":"order-new.customer","value":{"t":"text","text":"Jasleen Kaur"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"order-new"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"submit","with":{"name":"intent","value":"create"}},"form":"order-new"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"order-new"}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=t0k3n&customer=Jasleen+Kaur&note=&intent=create"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The answer says to go to the orders. The sheet has done its work and goes; the orders are what is under it, so they are fetched again rather than stacked a second time.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/go-orders.json",
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"success","text":"Saved"},
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_open","stream":2,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      },
+      "check": [
+        {"at":"/modals","is":[]},
+        {"at":"/destinations/1/stack","is":[2]},
+        {"at":"/front","is":2},
+        {"at":"/screens/2/loading","is":true},
+        {"at":"/messages/0/text","is":"Saved"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/orders/1"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":2}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":4,"action":{"t":"navigate","href":"/orders/1/returns/new"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":5}
+        ],
+        "effects": [
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/orders/1/returns/new","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/return-new.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":5}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"field","screen":5,"form":"return","field":"return.reason","value":{"t":"text","text":"The zari has come loose at one corner."}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":5,"form":"return"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":5,"action":{"t":"submit"},"form":"return"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":5,"form":"return"}
+        ],
+        "effects": [
+          {"t":"fetch","request":9,"method":"post","url":"https://shop.example/orders/1/returns","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=t0k3n&reason=The+zari+has+come+loose+at+one+corner."},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The answer says to go to the order, which is already under this screen: the stack goes back to it, and it is fetched again.",
+      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/return-sent.json",
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":2,"tone":"success","text":"The return is with the shop"},
+          {"t":"fetch","request":10,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[2,4]},
+        {"at":"/front","is":4},
+        {"at":"/screens/4/loading","is":true},
+        {"at":"/screens/5","is":null}
+      ]
+    },
+    {
+      "send": {"t":"response","request":10,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":4,"action":{"t":"request","method":"post","href":"/orders/1/copy"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":11,"method":"post","url":"https://shop.example/orders/1/copy","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The answer says to go to an order that is nowhere in the stack: its screen takes the place of the one that posted.",
+      "send": {"t":"response","request":11,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/go-order-2.json",
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":6}
+        ],
+        "effects": [
+          {"t":"fetch","request":12,"method":"get","url":"https://shop.example/orders/2","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[2,6]},
+        {"at":"/screens/6/url","is":"/orders/2"},
+        {"at":"/screens/4","is":null}
+      ]
+    },
+    {
+      "send": {"t":"response","request":12,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":6}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":6,"action":{"t":"request","method":"post","href":"/orders/2/receipt"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":13,"method":"post","url":"https://shop.example/orders/2/receipt","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "This `navigate` says `present: sheet`. That wins: a sheet opens, and the screen that posted stays where it is.",
+      "send": {"t":"response","request":13,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/go-receipt-sheet.json",
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":7}
+        ],
+        "effects": [
+          {"t":"fetch","request":14,"method":"get","url":"https://shop.example/orders/1/receipt","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[2,6]},
+        {"at":"/modals","is":[{"locked":false,"present":"sheet","stack":[7]}]}
+      ]
+    },
+    {
+      "send": {"t":"response","request":14,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order-steps.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":7}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"back"},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":6,"action":{"t":"request","method":"post","href":"/orders/2/next"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":15,"method":"post","url":"https://shop.example/orders/2/next","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "And this one says `present: push`: the screen is stacked on the one that posted instead of taking its place.",
+      "send": {"t":"response","request":15,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/go-order-push.json",
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":8}
+        ],
+        "effects": [
+          {"t":"fetch","request":16,"method":"get","url":"https://shop.example/orders/3","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[2,6,8]},
+        {"at":"/screens/8/url","is":"/orders/3"}
+      ]
+    }
+  ]
+}

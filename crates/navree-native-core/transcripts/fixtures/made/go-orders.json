@@ -1,0 +1,16 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "toast",
+   "tone": "success",
+   "text": "Saved"
+  },
+  {
+   "op": "navigate",
+   "href": "/orders"
+  }
+ ]
+}

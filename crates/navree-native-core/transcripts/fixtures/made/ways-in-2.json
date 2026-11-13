@@ -1,0 +1,27 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Sign in",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "button",
+     "label": "Sign in with Apple",
+     "action": {
+      "t": "device",
+      "call": {
+       "f": "platform_sign_in",
+       "provider": "apple",
+       "nonce": "/api/auth/social/apple/native/nonce",
+       "sign_in": "/api/auth/social/apple/native/session",
+       "second_step": "/sign-in/two-factor"
+      }
+     }
+    }
+   ]
+  }
+ }
+}
