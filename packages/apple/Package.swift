@@ -25,7 +25,8 @@ let package = Package(
         .target(name: "NavreeDesign", dependencies: ["NavreeProtocol"]),
         .target(name: "NavreeShell", dependencies: ["NavreeProtocol", "NavreeDesign", "NavreeRuntime", "NavreeCoreBridge"]),
         .testTarget(name: "NavreeProtocolTests", dependencies: ["NavreeProtocol"]),
-        .testTarget(name: "NavreeDesignTests", dependencies: ["NavreeDesign", "NavreeProtocol"]),
+        // Answers of the demo servers, read from their place in the tests' folder.
+        .testTarget(name: "NavreeDesignTests", dependencies: ["NavreeDesign", "NavreeProtocol"], exclude: ["Answers"]),
         .testTarget(name: "NavreeShellTests", dependencies: ["NavreeShell", "NavreeRuntime", "NavreeProtocol", "NavreeCoreBridge"]),
     ]
 )
