@@ -21,11 +21,13 @@ struct FeedRowPart: View {
                         .foregroundStyle(row.muted ? Color.secondary : Color.primary)
                         .fixedSize(horizontal: false, vertical: true)
                     ForEach(Array(row.detail.enumerated()), id: \.offset) { _, part in
-                        NodeView(part).font(.subheadline).foregroundStyle(.secondary)
+                        NodeView(part).font(.subheadline).foregroundStyle(Color.secondary)
                             .environment(\.navreeInRowDetail, true)
                     }
                     if let time = row.time {
-                        Text(time).font(.subheadline).foregroundStyle(.secondary)
+                        // The secondary colour itself: inside a link a hierarchical
+                        // style would take the link's tint.
+                        Text(time).font(.subheadline).foregroundStyle(Color.secondary)
                     }
                 }
                 Spacer(minLength: 0)
