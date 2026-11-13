@@ -1,6 +1,11 @@
 import Charts
 import NavreeProtocol
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// A chart drawn with Swift Charts from the numbers the server sent: each
 /// series in its colour, a gap left a gap, the page's reference lines dashed
@@ -20,6 +25,9 @@ struct ChartPart: View {
     private var smallHeight: CGFloat { 84 * scale.capped(1.4) }
     private var sparkHeight: CGFloat { 36 * scale.capped(1.4) }
     private var laneHeight: CGFloat { 34 * scale.capped(1.4) }
+    /// The plot's own width, as the chart laid it out: the chart's less its
+    /// values' axis, whatever the words of that axis are.
+    @State private var plotWidth: Double?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -34,6 +42,9 @@ struct ChartPart: View {
             }
             GeometryReader { proxy in
                 plot(width: proxy.size.width)
+                    // The days named change with the plot's width: the axis is
+                    // drawn again for them, never left with the first ones.
+                    .id(ticks(width: proxy.size.width))
             }
             .frame(height: height)
             if many, chart.kind == .line || chart.kind == .area, chart.levels.isEmpty {
@@ -121,10 +132,11 @@ struct ChartPart: View {
     // MARK: Axes
 
     private func ticks(width: CGFloat) -> [Int] {
-        let longest = chart.labels.map(\.count).max() ?? 4
-        // The plot is the chart less the values' axis at its end.
-        let most = small ? 3 : AxisRules.most(width: Double(width) - 40, label: Double(longest) * 6.5)
-        return AxisRules.ticks(count: count, most: most)
+        if small { return AxisRules.ticks(count: count, most: 3) }
+        // Until the chart has laid its plot out, the plot is taken as the
+        // chart less a values' axis of ten figures.
+        let plot = plotWidth ?? Double(width) - 64
+        return AxisRules.ticks(count: count, most: AxisRules.most(width: plot, label: AxisType.widest(chart.labels)))
     }
 
     private func xAxis(width: CGFloat) -> some AxisContent {
@@ -139,7 +151,7 @@ struct ChartPart: View {
                 collisionResolution: .disabled
             ) {
                 if let key = value.as(String.self), let index = Int(key), index < chart.labels.count {
-                    Text(chart.labels[index])
+                    Text(chart.labels[index]).font(AxisType.font)
                 }
             }
         }
@@ -209,6 +221,7 @@ struct ChartPart: View {
         .chartForegroundStyleScale(domain: chart.series.map(\.label), range: chart.series.indices.map(colour))
         .chartLegend(many ? .visible : .hidden)
         .modifier(BarAxes(horizontal: horizontal, chart: chart, domain: domain, bounds: bounds, small: small, xAxis: xAxis(width: width), yAxis: yAxis))
+        .chartOverlay { proxy in PlotWidth(chart: proxy, width: $plotWidth) }
     }
 
     private func lines(width: CGFloat) -> some View {
@@ -250,6 +263,7 @@ struct ChartPart: View {
             if small { AxisMarks(values: [Double]()) { _ in } } else { yAxis }
         }
         .chartLegend(.hidden)
+        .chartOverlay { proxy in PlotWidth(chart: proxy, width: $plotWidth) }
     }
 
     private var sparkline: some View {
@@ -349,12 +363,13 @@ struct ChartPart: View {
             AxisMarks(values: ticks(width: width).map { Double($0) }) { value in
                 AxisValueLabel(anchor: .topLeading, collisionResolution: .disabled) {
                     if let place = value.as(Double.self), Int(place) < chart.labels.count {
-                        Text(chart.labels[Int(place)])
+                        Text(chart.labels[Int(place)]).font(AxisType.font)
                     }
                 }
             }
         }
         .chartOverlay { proxy in
+            PlotWidth(chart: proxy, width: $plotWidth)
             GeometryReader { geometry in
                 if let frame = proxy.plotFrame.map({ geometry[$0] }) {
                     ForEach(Array(chart.levels.enumerated()), id: \.offset) { level, name in
@@ -417,6 +432,43 @@ private struct BarAxes<X: AxisContent, Y: AxisContent>: ViewModifier {
                     if small { AxisMarks(values: [Double]()) { _ in } } else { yAxis }
                 }
         }
+    }
+}
+
+/// The type a chart's labels are written in along its foot, and how wide the
+/// widest of them is in it: the page's own words, measured, never guessed
+/// from how many letters they have.
+enum AxisType {
+    static let font = Font.caption2
+
+    static func widest(_ labels: [String]) -> Double {
+        #if canImport(UIKit)
+        let font = UIFont.preferredFont(forTextStyle: .caption2)
+        #else
+        let font = NSFont.preferredFont(forTextStyle: .caption2)
+        #endif
+        let widths = labels.map { ($0 as NSString).size(withAttributes: [.font: font]).width }
+        return Double((widths.max() ?? 0).rounded(.up))
+    }
+}
+
+/// Tells the chart's drawing how wide its plot came out.
+private struct PlotWidth: View {
+    let chart: ChartProxy
+    @Binding var width: Double?
+
+    var body: some View {
+        GeometryReader { geometry in
+            let plot = chart.plotFrame.map { Double(geometry[$0].width) }
+            Color.clear
+                .onAppear { keep(plot) }
+                .onChange(of: plot) { _, plot in keep(plot) }
+        }
+    }
+
+    private func keep(_ plot: Double?) {
+        guard let plot, plot > 0, plot != width else { return }
+        width = plot
     }
 }
 
