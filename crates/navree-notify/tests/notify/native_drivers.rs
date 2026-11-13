@@ -888,6 +888,8 @@ async fn a_platform_without_a_service_is_skipped() {
         .config("notify.push.apns.key", key.to_pkcs8_pem().unwrap())
         .config("notify.push.apns.bundle_ids", json!(["com.acme.crm"]))
         .config("notify.push.apns.endpoint", apple_server.uri())
+        // The Android app is listed, with no Firebase service to reach it.
+        .config("notify.push.fcm.packages", json!(["com.acme.crm"]))
         .build()
         .await;
     let user = crate::support::TestUser::new();

@@ -194,7 +194,8 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
                     ios: push.apns.bundle_ids.clone(),
                     android: push.fcm.packages.clone(),
                 };
-                Ok(Arc::new(PushDevices::new(r.app().downgrade(), apps)))
+                let served = can_push(&r, &push).await;
+                Ok(Arc::new(PushDevices::new(r.app().downgrade(), apps, served)))
             })
             .deps(vec![ProviderKey::of::<PushOptions>()]),
         )
@@ -277,20 +278,33 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
     m.multi(
         Factory::<dyn navree_ui::NativeShellPart>::new(|r: Resolver| async move {
             let notifier = r.get::<Notifier>().await?;
+            let devices = r.get::<PushDevices>().await?;
             let api_prefix = match r.app().try_get::<navree_http::HttpOptions>().await {
                 Some(http) => http.api_prefix.clone(),
                 None => String::new(),
             };
             Ok(Arc::new(NativeRoutes {
-                on: notifier.options().routes,
+                on: notifier.options().routes && devices.served(),
                 part: crate::ui::PushShellPart::new(&api_prefix),
             }) as Arc<dyn navree_ui::NativeShellPart>)
         })
-        .deps(vec![ProviderKey::of::<Notifier>()]),
+        .deps(vec![
+            ProviderKey::of::<Notifier>(),
+            ProviderKey::of::<PushDevices>(),
+        ]),
     );
 }
 
-/// The push route in the shell document, only while the notification routes are on.
+/// Whether the app can push to native apps: Apple's or Firebase's service
+/// is configured in `notify.push`, or a `dyn PushDriver` is registered.
+async fn can_push(r: &Resolver, push: &PushOptions) -> bool {
+    push.apns.is_configured()
+        || push.fcm.is_configured()
+        || r.app().try_get::<dyn crate::PushDriver>().await.is_some()
+}
+
+/// The push route in the shell document, only while the notification routes are on and the
+/// app can push.
 #[cfg(feature = "ui")]
 struct NativeRoutes {
     on: bool,

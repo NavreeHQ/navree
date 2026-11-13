@@ -46,7 +46,7 @@ const DEVICE_BODY_LIMIT: usize = 8 * 1024;
 /// [`NotifyOptions::routes`](crate::NotifyOptions::routes) is on; and
 /// `GET /notifications/push-key` (with a VAPID key pair) and `POST` /
 /// `DELETE /notifications/push-subscriptions`; `POST` / `DELETE
-/// /notifications/push-devices`; and `GET` / `PATCH
+/// /notifications/push-devices` (while the app can push to native apps); and `GET` / `PATCH
 /// /notifications/preferences` and `/notifications/preferences/workspace`.
 pub(crate) struct NotificationsController {
     notifier: Arc<Notifier>,
@@ -102,7 +102,10 @@ impl Controller for NotificationsController {
             return Vec::new();
         }
         let mut routes = self.clone().push_routes();
-        routes.extend(self.clone().device_routes());
+        // Devices register only where something can be pushed to them.
+        if self.devices.served() {
+            routes.extend(self.clone().device_routes());
+        }
         routes.extend(self.clone().preference_routes());
         routes.extend(self.read_routes());
         routes

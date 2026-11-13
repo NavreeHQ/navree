@@ -117,7 +117,7 @@ The roles are `title`, `subtitle`, `status` and `trailing`. The table's search, 
 
 ## Signing in, signing out and push
 
-The shell document also says where the app signs a person in (the hand-over the system's sign-in session makes, its exchange, the app's own callback and the page of a second step) and where a device's push token goes. The modules that own those routes say them: the authentication module, with its pages on, names the hand-over and the second step, and the notification module names its push-devices route. A module of your own adds to the document by registering a `NativeShellPart` as a multi-binding. A reply that signs a person out says so with `Reply::signed_out()`: a native client then removes its push device, forgets its cookies and what it kept, and fetches the shell again; a browser's reply is what it was.
+The shell document also says where the app signs a person in (the hand-over the system's sign-in session makes, its exchange, the app's own callback and the page of a second step) and where a device's push token goes. The modules that own those routes say them: the authentication module, with its pages on, names the hand-over and the second step, and the notification module names its push-devices route while the app can push. A module of your own adds to the document by registering a `NativeShellPart` as a multi-binding. A reply that signs a person out says so with `Reply::signed_out()`: a native client then removes its push device, forgets its cookies and what it kept, and fetches the shell again; a browser's reply is what it was.
 
 The theme on the wire is its name and its accent for a light and a dark ground. A corner style, a density or a typeface are not carried: the protocol has no word for them.
 
