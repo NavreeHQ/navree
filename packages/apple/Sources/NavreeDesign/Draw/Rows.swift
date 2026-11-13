@@ -61,9 +61,20 @@ struct Opening<Label: View>: View {
     let place: Place
     @ViewBuilder let label: () -> Label
     @Environment(\.navree) private var context
+    @Environment(\.navreeChoose) private var choose
 
     var body: some View {
-        if let action, NavigationRules.pushes(action, routes: context.routes) {
+        if let action, let choose, NavigationRules.pushes(action, routes: context.routes) {
+            // A row of a list beside its detail: a tap chooses what the detail
+            // shows. A Mac's list selects a link of its own accord (as a window
+            // comes to the front), so these rows are no links.
+            Button {
+                choose(action, place)
+            } label: {
+                label().contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else if let action, NavigationRules.pushes(action, routes: context.routes) {
             NavigationLink(value: PathEntry.tap(action, place)) {
                 label()
             }
