@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The words the client says by itself. Everything else comes from the app's pages. -->
+    <string name="navree_back">Back</string>
+    <string name="navree_close">Close</string>
+    <string name="navree_more_options">More options</string>
+    <string name="navree_menu">Navigation menu</string>
+    <string name="navree_search">Search</string>
+    <string name="navree_clear">Clear</string>
+    <string name="navree_account">Account</string>
+    <string name="navree_retry">Try again</string>
+    <string name="navree_loading">Loading</string>
+    <string name="navree_offline_title">No connection</string>
+    <string name="navree_offline_text">Check your connection and try again.</string>
+    <string name="navree_server_title">Something went wrong</string>
+    <string name="navree_server_text">The server could not answer. Try again in a moment.</string>
+    <string name="navree_protocol_title">This screen can\'t be shown</string>
+    <string name="navree_protocol_text">Update the app, or try again later.</string>
+    <string name="navree_offline_short">No connection</string>
+    <string name="navree_server_short">Couldn\'t reach the server</string>
+    <string name="navree_protocol_short">Couldn\'t show the answer</string>
+    <string name="navree_upgrade_title">Update the app to continue</string>
+    <string name="navree_upgrade_text">This version is too old to use safely.</string>
+    <string name="navree_upgrade_action">Update</string>
+    <string name="navree_show_password">Show password</string>
+    <string name="navree_hide_password">Hide password</string>
+    <string name="navree_pick_date">Choose a date</string>
+    <string name="navree_pick_dates">Choose dates</string>
+    <string name="navree_pick_time">Choose a time</string>
+    <string name="navree_increase">Increase</string>
+    <string name="navree_decrease">Decrease</string>
+    <string name="navree_required_note">* Required</string>
+    <string name="navree_error_prefix">Error: %1$s</string>
+    <string name="navree_expand">Expand</string>
+    <string name="navree_collapse">Collapse</string>
+    <string name="navree_sorted_ascending">Sorted ascending</string>
+    <string name="navree_sorted_descending">Sorted descending</string>
+    <string name="navree_web_page">Web page</string>
+    <string name="navree_timeout_title">This is taking too long</string>
+    <string name="navree_timeout_text">The server did not answer in time. Try again.</string>
+    <string name="navree_notice_offline">You\'re offline</string>
+    <string name="navree_notice_timeout">That took too long. Try again.</string>
+    <string name="navree_notice_failed">That didn\'t work. Try again.</string>
+    <string name="navree_notice_unsaved">Your latest change wasn\'t saved. Check it and save again.</string>
+    <string name="navree_notice_loading">Still loading. Try again in a moment.</string>
+    <string name="navree_notice_fields">Some fields need your attention</string>
+    <string name="navree_notice_loaded">More loaded</string>
+    <string name="navree_notice_second_step">One more step is needed to sign in. Sign in another way to finish.</string>
+    <string name="navree_copied">Copied</string>
+    <string name="navree_more_failed">Couldn\'t load more</string>
+    <!-- The headline of the question a destructive action asks: the action's own words. -->
+    <string name="navree_confirm_question">%1$s?</string>
+    <string name="navree_sending">Sending</string>
+    <string name="navree_sent">Sent</string>
+    <string name="navree_delivered">Delivered</string>
+    <string name="navree_read">Read</string>
+    <string name="navree_not_sent">Not sent</string>
+    <plurals name="navree_fields_need_attention">
+        <item quantity="one">%d field needs your attention</item>
+        <item quantity="other">%d fields need your attention</item>
+    </plurals>
+    <plurals name="navree_rows_loaded">
+        <item quantity="one">%d more loaded</item>
+        <item quantity="other">%d more loaded</item>
+    </plurals>
+    <plurals name="navree_chosen">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+    <string name="navree_all_chosen">All %1$s selected</string>
+    <string name="navree_choose_across">Select all %1$s</string>
+    <string name="navree_choose_all_shown">Select all rows</string>
+    <string name="navree_clear_choice">Clear selection</string>
+    <string name="navree_about_hint">About %1$s</string>
+    <string name="navree_previous_day">Previous day</string>
+    <string name="navree_next_day">Next day</string>
+    <string name="navree_choose_day">Choose a day</string>
+    <string name="navree_today">Today</string>
+    <string name="navree_now">Now</string>
+    <string name="navree_drag_handle">Reorder</string>
+    <string name="navree_move_up">Move up</string>
+    <string name="navree_move_down">Move down</string>
+    <string name="navree_move_to">Move to %1$s</string>
+
+    <!-- What an app sets. -->
+    <string name="navree_origin" translatable="false">https://example.invalid</string>
+    <string name="navree_name" translatable="false"></string>
+    <bool name="navree_dynamic_colour">false</bool>
+    <bool name="navree_loopback_http">false</bool>
+    <!-- The server's OAuth client id for Sign in with Google, when its calls do not carry one. -->
+    <string name="navree_google_client_id" translatable="false"></string>
+</resources>

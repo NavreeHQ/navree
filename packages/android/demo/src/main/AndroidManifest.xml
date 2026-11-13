@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="false"
+        android:enableOnBackInvokedCallback="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/navree_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Navree">
+
+        <!-- The whole app is the client's activity, told what to be by res/values/navree.xml. -->
+        <activity
+            android:name="com.navree.client.NavreeActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Links to the app's origin open in the app. The site proves the app is its own with
+                 /.well-known/assetlinks.json, which the server writes from its auth.apps section. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="store.example.com" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

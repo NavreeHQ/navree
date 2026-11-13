@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The one origin the app talks to. It must be HTTPS. -->
+    <string name="navree_origin" translatable="false">https://store.example.com</string>
+    <!-- The name under the icon, and in the app until the server sends its own. -->
+    <string name="navree_name" translatable="false">Store</string>
+    <!-- The colour the app's palette grows from, until the server sends the brand's. -->
+    <color name="navree_seed">#0F766E</color>
+    <!-- Whether the user's wallpaper colours may replace the brand's on Android 12 and later. -->
+    <bool name="navree_dynamic_colour">false</bool>
+</resources>
