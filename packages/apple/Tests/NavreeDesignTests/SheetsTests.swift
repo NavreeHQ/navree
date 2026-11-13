@@ -47,3 +47,22 @@ import Testing
     let inventory = try answerScreen("store-inventory")
     #expect(SheetRules.ownForm([inventory.body])?.method != .post)
 }
+
+@Test func aProductsRestockIsItsTasksDoneWhateverTheWebsLookMadeItsRole() throws {
+    let peek = try answer("store-inventory-peek")
+    guard case .morph(let morph)? = peek.ops.first, case .sheet(let sheet) = morph.node else {
+        Issue.record("the peek does not fill its sheet")
+        return
+    }
+    let lifted = SheetRules.lift(sheet.children)
+    #expect(lifted.confirms.map(\.label) == ["Restock"])
+    #expect(lifted.confirms.first?.role == .confirm)
+    let slots = PlacementRules.place(lifted.confirms.map { ActionTraits(.button($0))! }, depth: .sheet)
+    #expect(slots == [.confirm])
+}
+
+@Test func aSheetOfSeveralFormsHasNoOneTaskToFinish() throws {
+    let card = try answerScreen("board-card1")
+    #expect(SheetRules.ownForm([card.body]) == nil)
+    #expect(SheetRules.lift([card.body]).confirms.isEmpty)
+}

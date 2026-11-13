@@ -31,32 +31,38 @@ public enum SheetRules {
         task ? .full : .half
     }
 
-    /// A sheet's own form: the first in its parts that does not stand in a
-    /// sheet, dialog or popover of its own, nor in a table (a record's inline edit).
+    /// A sheet's own form: the one form in its parts that does not stand in
+    /// a sheet, dialog or popover of its own, nor in a table (a record's
+    /// inline edit). A sheet of several forms (a card with its checklist and
+    /// its column) has no one task to finish: none.
     public static func ownForm(_ nodes: [Navree.Node]) -> Navree.Form? {
-        func find(_ node: Navree.Node) -> Navree.Form? {
+        var found: [Navree.Form] = []
+        func find(_ node: Navree.Node) {
             switch node {
-            case .form(let form): return form
-            case .sheet, .dialog, .popover, .table: return nil
-            default: return node.children.lazy.compactMap(find).first
+            case .form(let form): found.append(form)
+            case .sheet, .dialog, .popover, .table: return
+            default: node.children.forEach(find)
             }
         }
-        return nodes.lazy.compactMap(find).first
+        nodes.forEach(find)
+        return found.count == 1 ? found[0] : nil
     }
 
     /// The submit buttons of a sheet's own form, lifted to its bar: there is
-    /// no submit button at the foot of a form on Apple's systems. A submit
-    /// with no role, or the primary one, confirms.
+    /// no submit button at the foot of a form on Apple's systems. The task's
+    /// main submit confirms it (Done at the top trailing corner): the primary
+    /// one, else the first that neither cancels nor destroys, whatever the
+    /// web's look made its role.
     public static func lift(_ nodes: [Navree.Node]) -> LiftedSubmits {
         guard let form = ownForm(nodes) else { return LiftedSubmits(form: nil, confirms: []) }
-        var confirms: [Navree.Button] = []
+        var submits: [Navree.Button] = []
         form.walkFields { node in
-            if case .button(var button) = node, case .submit? = button.action {
-                if button.role == Navree.Role.none || button.role == .primary { button.role = .confirm }
-                confirms.append(button)
-            }
+            if case .button(let button) = node, case .submit? = button.action { submits.append(button) }
         }
-        return LiftedSubmits(form: form, confirms: confirms)
+        let main = submits.firstIndex { $0.role == .primary || $0.role == .confirm }
+            ?? submits.firstIndex { $0.role != .destructive && $0.role != .cancel }
+        if let main { submits[main].role = .confirm }
+        return LiftedSubmits(form: form, confirms: submits)
     }
 
     /// Whether a sheet's parts hold something to fill in: a field of a form.
