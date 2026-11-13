@@ -15,6 +15,11 @@ include = ["src/**", "build.rs", "templates/**", "README.md", "LICENSE-*"]
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
 
+# The command enum gains a variant with each new command. The library is here
+# for this crate's own binary and its tests, so nothing outside matches on it.
+[package.metadata.cargo-semver-checks.lints]
+enum_variant_added = "allow"
+
 # The generators, the dev loop and the forwarding live in a library so the
 # integration tests can drive them without spawning the binary.
 [lib]
