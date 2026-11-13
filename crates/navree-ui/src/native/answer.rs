@@ -171,7 +171,14 @@ impl<'a> Answer<'a> {
             Said::Screen(screen) => self.screen(*screen, request),
             Said::Part(part) => {
                 let mut view = self.frame("");
-                let mut screen = Screen::new("", *part);
+                // A part is named after itself, or after the region that asked for it:
+                // no client shows the name, and an answer with none reads as unfinished.
+                let name = part
+                    .id()
+                    .map(str::to_owned)
+                    .or_else(|| request.region.clone())
+                    .unwrap_or_else(|| "Part".to_owned());
+                let mut screen = Screen::new(name, *part);
                 finish(&mut screen, view.csrf_token());
                 let parts = view.native_parts();
                 let page = Page {
