@@ -12,6 +12,8 @@ struct RowView: View {
             NodeView(node)
         case .record(let row):
             RecordRowView(row: row)
+                .tag(row.id ?? "")
+                .selectionDisabled(!row.choosable)
         case .row(let row):
             TreeRowView(row: row)
         case .button(let button, let form):

@@ -92,12 +92,19 @@ public enum Intent: Sendable, Equatable {
     case focused(serial: Int)
     /// Files were picked for a field: the app keeps their bytes for the form.
     case files(form: FormRef, name: String, urls: [URL])
+    /// A row of a table was ticked or cleared; without a row, all of them;
+    /// with `across`, every record that matches its query.
+    case choose(table: String, row: String?, on: Bool, across: Bool)
+    /// A row was dragged to stand before another (or at the end) of a list.
+    case move(item: String, from: String, to: String, before: String?)
 }
 
 /// Whether the rows after a list's last are on their way, or failed to come.
 public struct ListStatus: Sendable, Equatable {
     public var loading: Bool
     public var failed: Bool
+    /// Every record that matches the table's query is chosen, not only its rows.
+    public var across = false
 
     public init(loading: Bool = false, failed: Bool = false) {
         self.loading = loading

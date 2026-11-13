@@ -37,6 +37,9 @@ public struct ListSection: Sendable, Equatable, Identifiable {
     /// The region the section stands in, when it is one: what its table's
     /// query and more answer into.
     public var region: String?
+    /// The list the rows come from, when they are its rows: what a drag
+    /// reorders.
+    public var list: Navree.List?
 }
 
 /// Reads a screen's body as the sections of a list, as iOS sets content out:
@@ -146,11 +149,15 @@ public enum SectionRules {
                 close()
             case .list(let list):
                 if !current.rows.isEmpty { close() }
+                current.list = list
                 for child in list.children { readListChild(child, region: region) }
                 if let more = list.more {
                     row(.more(target: list.id ?? region ?? "", href: more))
                 }
                 close()
+            case .grid(let grid) where !grid.children.isEmpty && grid.children.allSatisfy(Self.isSection):
+                // Columns of sections on a wide page (a board) are its sections, one after another.
+                for child in grid.children { read(child, region: region) }
             case .row(let part):
                 row(.row(part))
             case .facts(let facts):
@@ -178,6 +185,11 @@ public enum SectionRules {
             default:
                 row(.part(node))
             }
+        }
+
+        static func isSection(_ node: Navree.Node) -> Bool {
+            if case .section = node { return true }
+            return false
         }
 
         mutating func readListChild(_ node: Navree.Node, region: String?) {

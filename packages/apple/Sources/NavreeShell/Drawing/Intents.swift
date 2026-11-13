@@ -20,7 +20,9 @@ extension NativeClient {
             errors: { [weak self] form, name in self?.field(form, name, on: id)?.errors },
             list: { [weak self] list in
                 let view = self?.screen(id)?.lists[list]
-                return ListStatus(loading: view?.loading ?? false, failed: view?.failed ?? false)
+                var status = ListStatus(loading: view?.loading ?? false, failed: view?.failed ?? false)
+                status.across = view?.across ?? false
+                return status
             },
             region: { [weak self] region in
                 let view = self?.screen(id)?.regions[region]
@@ -99,6 +101,10 @@ extension NativeClient {
                 return FileStore.shared.keep(url)
             }
             send(.field(screen: id, form: Self.formID(form), field: found.id, value: .files(files)))
+        case .choose(let table, let row, let on, let across):
+            send(.choose(screen: id, table: table, row: row, on: on, across: across))
+        case .move(let item, let from, let to, let before):
+            send(.move(screen: id, item: item, from: from, to: to, before: before))
         }
     }
 
