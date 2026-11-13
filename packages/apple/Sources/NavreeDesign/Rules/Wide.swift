@@ -207,6 +207,19 @@ public enum SplitRules {
         }
     }
 
+    /// A split that stands among a screen's other parts: its two sides beside
+    /// each other where the window is wider than compact; on a compact one,
+    /// one over the other with the side the server marks current first.
+    public static func inPlace(_ split: Navree.Split, width: WindowClass) -> (sideBySide: Bool, panes: [Navree.Node]) {
+        let sides = [split.primary, split.detail]
+        if width != .compact { return (true, sides) }
+        func current(_ node: Navree.Node) -> Bool {
+            if case .pane(let pane) = node { return pane.current }
+            return false
+        }
+        return (false, sides.filter(current) + sides.filter { !current($0) })
+    }
+
     /// The row of a list beside its detail that opened the detail shown (the
     /// one whose link leads to the detail's address), with the actions of its
     /// context menu: what the menu bar's commands for the chosen thing act on,

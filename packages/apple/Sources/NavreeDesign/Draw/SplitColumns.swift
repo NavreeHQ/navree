@@ -230,3 +230,28 @@ struct DetailMinimum: ViewModifier {
         #endif
     }
 }
+
+/// A split that stands among a screen's other parts (content beside what
+/// supports it): its panes side by side where there is room, one over the
+/// other where there is not, the one the server marks current first.
+struct InPlaceSplit: View {
+    let split: Navree.Split
+    @Environment(\.navreeWindow) private var window
+
+    var body: some View {
+        let parts = SplitRules.inPlace(split, width: window)
+        if parts.sideBySide {
+            HStack(alignment: .top, spacing: 20) {
+                ForEach(Array(parts.panes.enumerated()), id: \.offset) { _, pane in
+                    NodeView(pane).frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(Array(parts.panes.enumerated()), id: \.offset) { _, pane in
+                    NodeView(pane)
+                }
+            }
+        }
+    }
+}

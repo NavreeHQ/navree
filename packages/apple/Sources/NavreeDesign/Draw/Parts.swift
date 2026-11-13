@@ -25,11 +25,7 @@ public struct NodeView: View {
             }
         case .list(let list): ListPart(list: list)
         case .row(let row): RowContent(row: row)
-        case .split(let split):
-            VStack(alignment: .leading, spacing: 16) {
-                NodeView(split.primary)
-                NodeView(split.detail)
-            }
+        case .split(let split): InPlaceSplit(split: split)
         case .tabs(let tabs): TabsPart(tabs: tabs)
         case .disclosure(let disclosure): DisclosurePart(disclosure: disclosure)
         case .divider: Divider()
