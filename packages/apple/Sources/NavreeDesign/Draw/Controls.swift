@@ -152,7 +152,10 @@ struct LinkPart: View {
     }
 }
 
-/// A pull-down menu of actions.
+/// A pull-down menu of actions in the content. Its words always show beside
+/// its symbol: a menu in a row of controls often names what it sets ("Open",
+/// "High"), as Reminders writes a reminder's priority and Calendar an event's
+/// availability, and a symbol alone would leave the person to guess.
 struct MenuPart: View {
     let menu: Navree.Menu
     @Environment(\.navree) private var context
@@ -161,11 +164,24 @@ struct MenuPart: View {
         Menu {
             MenuItems(items: menu.items)
         } label: {
-            if let icon = menu.icon {
-                Label { Text(menu.label) } icon: { Glyph(icon: icon, icons: context.icons) }
-            } else {
+            switch (ContentRules.menuLabel(menu), menu.icon) {
+            case (.titleAndIcon, let icon?):
+                label(icon).labelStyle(.titleAndIcon)
+            case (.icon, let icon?):
+                label(icon).labelStyle(.iconOnly)
+            default:
                 Text(menu.label)
             }
+        }
+        .fixedSize()
+        .accessibilityLabel(Text(menu.label))
+    }
+
+    @ViewBuilder private func label(_ icon: Navree.Icon) -> some View {
+        if let symbol = Symbols.symbol(for: icon) {
+            Label(menu.label, systemImage: symbol)
+        } else {
+            Label { Text(menu.label) } icon: { Glyph(icon: icon, icons: context.icons) }
         }
     }
 }
