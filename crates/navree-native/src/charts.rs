@@ -921,6 +921,98 @@ pub struct CalendarHeatmap {
     pub hint: Option<Hint>,
 }
 
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// How two measures of a [`MatrixHeatmap`] relate.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Relation {
+    /// The first measure: its place in the matrix's `measures`, from 0.
+    pub a: u32,
+    /// The second measure. The pair is the same either way round.
+    pub b: u32,
+    /// What the pair came to: a signed value, such as a correlation. None for a
+    /// pair never tested, which a client draws almost blank.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<serde_json::Number>,
+    /// Whether the link is real and not chance. A pair that is not significant
+    /// is drawn neutral whatever its value, so it is not taken for a link.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub significant: bool,
+    /// Words about the pair, shown when it is asked about: the days it rests
+    /// on, the test.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+impl Default for Relation {
+    fn default() -> Self {
+        Self {
+            a: 0,
+            b: 0,
+            value: None,
+            significant: true,
+            note: None,
+        }
+    }
+}
+
+/// Every measure against every other, such as a correlation matrix: a row and a
+/// column for each measure, a cell for each pair. Colour says the sign (one
+/// colour for a link that moves together, another for one that moves apart) and
+/// how deep it is says how strong the link is, up to `peak`. A pair whose link
+/// is not significant is neutral, and a pair never tested is almost blank, so
+/// neither is taken for no link or for a strong one.
+///
+/// With `lower`, each pair is drawn once, below the diagonal, so the matrix is
+/// a staircase: the first measure heads the columns and the last heads the
+/// rows. A pair that is not given is a pair never tested.
+///
+/// The matrix is named by its `summary`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MatrixHeatmap {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What the matrix shows: `What moves together`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// The measures, in the order of the rows and columns.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub measures: Vec<String>,
+    /// The pairs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relations: Vec<Relation>,
+    /// Whether each pair is drawn once, below the diagonal.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub lower: bool,
+    /// The colour of a link that moves together. A client picks colours that
+    /// stay apart for every reader when there is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub positive: Option<Colour>,
+    /// The colour of a link that moves apart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub negative: Option<Colour>,
+    /// The value at which the colour is deepest: 1 for a correlation. A larger
+    /// value is as deep.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peak: Option<serde_json::Number>,
+    /// What a pair's value is called: `Correlation`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// One sentence that says the whole matrix to a reader who can't see it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// A note about what the matrix means, shown when asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
+}
+
 /// Where a day the person chooses is asked for.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DayPick {

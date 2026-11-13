@@ -13,9 +13,9 @@ use serde::{Deserialize, Serialize, Serializer};
 use crate::action::Action;
 pub use crate::charts::{
     CalendarHeatmap, Category, Centre, ClockMoment, ColorStrip, Colour, Curve, DayClock, DayPager,
-    DayPick, HeatDay, Hint, HintMark, Hour, Hue, Measure, Meter, MiniColumn, MiniColumns,
-    PagerWords, RangeScale, Reference, ReferenceKind, Ring, RingValue, Rings, RingsCentre, Segment,
-    Stacking, StripCell, Zone,
+    DayPick, HeatDay, Hint, HintMark, Hour, Hue, MatrixHeatmap, Measure, Meter, MiniColumn,
+    MiniColumns, PagerWords, RangeScale, Reference, ReferenceKind, Relation, Ring, RingValue, Rings,
+    RingsCentre, Segment, Stacking, StripCell, Zone,
 };
 use crate::input::Input;
 
@@ -137,6 +137,8 @@ pub enum Node {
     Range(RangeScale),
     /// A calendar of days, each shaded by its value.
     CalendarHeatmap(CalendarHeatmap),
+    /// Every measure against every other, each pair shaded by how they relate.
+    MatrixHeatmap(MatrixHeatmap),
     /// A kind this build has never heard of, from a newer server. A client
     /// draws its `alt`, or shows the page in its web view when it has none.
     Unknown(Unknown),
@@ -241,6 +243,7 @@ impl Node {
             Self::Strip(node) => node.id.as_deref(),
             Self::Range(node) => node.id.as_deref(),
             Self::CalendarHeatmap(node) => node.id.as_deref(),
+            Self::MatrixHeatmap(node) => node.id.as_deref(),
             Self::Unknown(node) => node.id.as_deref(),
         }
     }
@@ -320,7 +323,8 @@ impl Node {
             | Self::Columns(_)
             | Self::Strip(_)
             | Self::Range(_)
-            | Self::CalendarHeatmap(_) => Vec::new(),
+            | Self::CalendarHeatmap(_)
+            | Self::MatrixHeatmap(_) => Vec::new(),
         }
     }
 
@@ -424,7 +428,8 @@ impl Node {
             | Self::Columns(_)
             | Self::Strip(_)
             | Self::Range(_)
-            | Self::CalendarHeatmap(_) => Vec::new(),
+            | Self::CalendarHeatmap(_)
+            | Self::MatrixHeatmap(_) => Vec::new(),
         }
     }
 

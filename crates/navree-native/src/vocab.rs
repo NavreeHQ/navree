@@ -273,6 +273,7 @@ kinds! {
     Strip(ColorStrip) => "strip" since 0,
     Range(RangeScale) => "range" since 0,
     CalendarHeatmap(CalendarHeatmap) => "calendar_heatmap" since 0,
+    MatrixHeatmap(MatrixHeatmap) => "matrix_heatmap" since 0,
 }
 
 /// A field that arrived after its type did: the type's name in the schema
@@ -793,11 +794,47 @@ impl Node {
                     ..n::Chart::default()
                 })
             }
+            Self::MatrixHeatmap(node) => {
+                // The pairs with a link that is not chance, the strongest first: a
+                // pair that is not significant is no link, as the matrix itself says.
+                let name = |at: u32| {
+                    node.measures
+                        .get(at as usize)
+                        .cloned()
+                        .unwrap_or_else(|| at.to_string())
+                };
+                let mut linked: Vec<(f64, &n::Relation)> = node
+                    .relations
+                    .iter()
+                    .filter(|relation| relation.significant)
+                    .filter_map(|relation| {
+                        Some((relation.value.as_ref()?.as_f64()?, relation))
+                    })
+                    .collect();
+                linked.sort_by(|a, b| b.0.abs().total_cmp(&a.0.abs()));
+                Node::Facts(n::Facts {
+                    id: node.id.clone(),
+                    items: linked
+                        .into_iter()
+                        .take(OLDER_PAIRS)
+                        .map(|(value, relation)| n::Fact {
+                            label: format!("{} ↔ {}", name(relation.a), name(relation.b)),
+                            value: vec![Node::text(quantity(value).to_string())],
+                            icon: None,
+                            tone: None,
+                            details: relation.note.clone().into_iter().collect(),
+                        })
+                        .collect(),
+                })
+            }
             Self::Unknown(node) => return node.alt.as_deref().cloned(),
             _ => return None,
         })
     }
 }
+
+/// The most pairs of a matrix an older client is shown.
+const OLDER_PAIRS: usize = 20;
 
 /// The most days of a calendar an older client is shown, as bars.
 const OLDER_DAYS: usize = 90;
@@ -852,11 +889,11 @@ pub fn newer_than(node: &Node, vocab: u32) -> Option<Kind> {
 mod tests {
     use super::*;
     use crate::node::{
-        Avatar, Badge, Chart, ClockMoment, Colour, DayClock, DayPager, Direction, FeedRow, Figure,
-        CalendarHeatmap, Category, ColorStrip, Gauge, HeatDay, Hour, Hue, Icon, Message, Meter,
-        MiniColumn, MiniColumns, Moment, PagerWords, Pane, PaneRole, RangeScale, Ring, RingValue, Rings, RingsCentre,
-        RowState, Run, Section, Segment, Stack, Standard, StripCell, Timeline, Tone, Toolbar,
-        ToolbarItem, Trend, Unknown, Zone,
+        Avatar, Badge, CalendarHeatmap, Category, Chart, ClockMoment, ColorStrip, Colour, DayClock,
+        DayPager, Direction, FeedRow, Figure, Gauge, HeatDay, Hour, Hue, Icon, MatrixHeatmap,
+        Message, Meter, MiniColumn, MiniColumns, Moment, PagerWords, Pane, PaneRole, RangeScale,
+        Relation, Ring, RingValue, Rings, RingsCentre, RowState, Run, Section, Segment, Stack,
+        Standard, StripCell, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown, Zone,
     };
 
     #[test]
@@ -996,6 +1033,39 @@ mod tests {
                 caption: Some("Goal reached".to_owned()),
                 colour: Some(Colour::new(Hue::Success)),
                 ..Ring::default()
+            }),
+            Node::MatrixHeatmap(MatrixHeatmap {
+                id: Some("links".to_owned()),
+                measures: ["Sleep", "Stress", "Steps", "HRV"].map(String::from).to_vec(),
+                relations: vec![
+                    Relation {
+                        a: 0,
+                        b: 1,
+                        value: Some(quantity(-0.58)),
+                        note: Some("30 days".to_owned()),
+                        ..Relation::default()
+                    },
+                    Relation {
+                        a: 3,
+                        b: 0,
+                        value: Some(quantity(0.71)),
+                        ..Relation::default()
+                    },
+                    // Chance, and never tested: neither is a link.
+                    Relation {
+                        a: 1,
+                        b: 3,
+                        value: Some(quantity(-0.34)),
+                        significant: false,
+                        ..Relation::default()
+                    },
+                    Relation {
+                        a: 1,
+                        b: 2,
+                        ..Relation::default()
+                    },
+                ],
+                ..MatrixHeatmap::default()
             }),
             Node::CalendarHeatmap(CalendarHeatmap {
                 id: Some("calendar".to_owned()),
@@ -1208,7 +1278,8 @@ mod tests {
             | Kind::Columns
             | Kind::Strip
             | Kind::Range
-            | Kind::CalendarHeatmap => 1,
+            | Kind::CalendarHeatmap
+            | Kind::MatrixHeatmap => 1,
             kind => kind.since(),
         }
     }
@@ -1323,6 +1394,33 @@ mod tests {
         };
         assert_eq!(progress.label.as_deref(), Some("Load ratio: 1.12 (Overuse)"));
         assert_eq!(progress.value, Some(560));
+    }
+
+    #[test]
+    fn a_matrix_becomes_its_links_the_strongest_first_and_leaves_out_what_may_be_chance() {
+        let matrix = part(Kind::MatrixHeatmap);
+        let Downgraded::Node(Node::Facts(facts)) =
+            downgrade_by(matrix, 0, only(Kind::MatrixHeatmap))
+        else {
+            panic!("a matrix becomes facts");
+        };
+        assert_eq!(facts.id.as_deref(), Some("links"));
+        let labels: Vec<&str> = facts.items.iter().map(|fact| fact.label.as_str()).collect();
+        // The pair given as (3, 0) is the same as (0, 3); the pair that is chance and the pair
+        // never tested are not in the list.
+        assert_eq!(labels, ["HRV ↔ Sleep", "Sleep ↔ Stress"]);
+        assert_eq!(facts.items[1].details, ["30 days"]);
+        assert!(matches!(&facts.items[0].value[..], [Node::Text(text)] if text.value == "0.71"));
+    }
+
+    #[test]
+    fn a_pair_is_a_link_unless_it_says_it_is_chance() {
+        let pair: Relation = serde_json::from_str(r#"{"a":0,"b":1,"value":0.5}"#).unwrap();
+        assert!(pair.significant);
+        let chance: Relation =
+            serde_json::from_str(r#"{"a":0,"b":1,"value":0.1,"significant":false}"#).unwrap();
+        assert!(!chance.significant);
+        assert_eq!(serde_json::to_string(&pair).unwrap(), r#"{"a":0,"b":1,"value":0.5}"#);
     }
 
     #[test]

@@ -547,6 +547,79 @@
         },
         {
           "t": "section",
+          "title": "Patterns",
+          "style": "card",
+          "children": [
+            {
+              "t": "matrix_heatmap",
+              "id": "what-moves-together",
+              "title": "What moves together",
+              "measures": [
+                "Sleep",
+                "Stress",
+                "Steps",
+                "HRV"
+              ],
+              "relations": [
+                {
+                  "a": 0,
+                  "b": 1,
+                  "value": -0.58,
+                  "note": "30 days, p < 0.001"
+                },
+                {
+                  "a": 0,
+                  "b": 3,
+                  "value": 0.71,
+                  "note": "30 days, p < 0.001"
+                },
+                {
+                  "a": 1,
+                  "b": 3,
+                  "value": -0.34,
+                  "significant": false,
+                  "note": "30 days, p = 0.07"
+                },
+                {
+                  "a": 0,
+                  "b": 2,
+                  "value": 0.22,
+                  "note": "30 days, p = 0.03"
+                },
+                {
+                  "a": 2,
+                  "b": 3,
+                  "value": 0.18,
+                  "significant": false,
+                  "note": "30 days, p = 0.2"
+                },
+                {
+                  "a": 1,
+                  "b": 2,
+                  "significant": false,
+                  "note": "Too few days with both readings"
+                }
+              ],
+              "lower": true,
+              "positive": {
+                "hue": "blue"
+              },
+              "negative": {
+                "hue": "orange"
+              },
+              "peak": 1,
+              "label": "Correlation",
+              "summary": "What moves together: 4 measures, 6 pairs, 5 tested, 3 significant. Strongest: Sleep and HRV, 0.71.",
+              "hint": {
+                "about": "what moves together",
+                "title": "How to read it",
+                "text": "Each cell compares two measures over your last 30 days: blue where they rise and fall together, orange where one rises as the other falls. A grey cell is a pattern that may be chance. It shows a pattern, never a cause."
+              }
+            }
+          ]
+        },
+        {
+          "t": "section",
           "title": "The week in minutes",
           "style": "card",
           "children": [

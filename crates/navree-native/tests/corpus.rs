@@ -29,10 +29,10 @@ use navree_native::node::{
     Delivery, Dialog,
     Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Hour, Icon, Image, Justify, Link, List, Live,
-    Menu, Message, Meter, Method, MiniColumn, MiniColumns, Moment, NativeView, Node, Pane,
-    PaneRole, Popover, Progress, Prominence,
+    MatrixHeatmap, Menu, Message, Meter, Method, MiniColumn, MiniColumns, Moment, NativeView,
+    Node, Pane, PaneRole, Popover, Progress, Prominence,
     PagerWords, Purpose, Question, Region, Reorder, Rich, Ring, RingValue, Rings, RingsCentre,
-    RangeScale, Role, Row, RowState, Run, Section, SectionStyle, Segment, StripCell,
+    RangeScale, Relation, Role, Row, RowState, Run, Section, SectionStyle, Segment, StripCell,
     Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table,
     TableRow, Tabs, Text, TextStyle, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown,
     WebRegion, Zone,
@@ -2818,6 +2818,48 @@ fn screen_fitness() -> Envelope {
         )),
         ..CalendarHeatmap::default()
     });
+    // Every measure against every other, each pair once: which move together
+    // (blue) and which apart (orange), how strongly, and which are chance.
+    let pair = |a: u32, b: u32, value: f64, note: &str, significant: bool| Relation {
+        a,
+        b,
+        value: Some(decimal(value)),
+        significant,
+        note: Some(s(note)),
+    };
+    let links = Node::MatrixHeatmap(MatrixHeatmap {
+        id: Some(s("what-moves-together")),
+        title: Some(s("What moves together")),
+        measures: ["Sleep", "Stress", "Steps", "HRV"].map(s).to_vec(),
+        relations: vec![
+            pair(0, 1, -0.58, "30 days, p < 0.001", true),
+            pair(0, 3, 0.71, "30 days, p < 0.001", true),
+            pair(1, 3, -0.34, "30 days, p = 0.07", false),
+            pair(0, 2, 0.22, "30 days, p = 0.03", true),
+            pair(2, 3, 0.18, "30 days, p = 0.2", false),
+            // A pair never tested has no value.
+            Relation {
+                a: 1,
+                b: 2,
+                value: None,
+                significant: false,
+                note: Some(s("Too few days with both readings")),
+            },
+        ],
+        lower: true,
+        positive: Some(Colour::new(Hue::Blue)),
+        negative: Some(Colour::new(Hue::Orange)),
+        peak: Some(number(1)),
+        label: Some(s("Correlation")),
+        summary: Some(s("What moves together: 4 measures, 6 pairs, 5 tested, 3 significant. Strongest: Sleep and HRV, 0.71.")),
+        hint: Some(Hint {
+            about: s("what moves together"),
+            title: Some(s("How to read it")),
+            text: s("Each cell compares two measures over your last 30 days: blue where they rise and fall together, orange where one rises as the other falls. A grey cell is a pattern that may be chance. It shows a pattern, never a cause."),
+            ..Hint::default()
+        }),
+        ..MatrixHeatmap::default()
+    });
     let days = || ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(s).to_vec();
     let minutes = |name: &str, hue: Hue, values: [i64; 7]| Series {
         label: s(name),
@@ -2944,6 +2986,12 @@ fn screen_fitness() -> Envelope {
                 title: Some(s("Consistency")),
                 style: SectionStyle::Card,
                 children: vec![calendar],
+                ..Section::default()
+            }),
+            Node::Section(Section {
+                title: Some(s("Patterns")),
+                style: SectionStyle::Card,
+                children: vec![links],
                 ..Section::default()
             }),
             Node::Section(Section {
