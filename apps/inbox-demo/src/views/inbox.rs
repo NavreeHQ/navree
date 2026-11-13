@@ -496,7 +496,9 @@ pub fn assign_page(conversation: &Conversation, team: &[Agent], q: &str, back: &
                             .value(q.to_owned())
                             .placeholder("Search the team")
                             .attr("aria-label", "Search the team"),
-                        Button::outline("Search").submit(),
+                        Button::outline("Search")
+                            .submit()
+                            .standard(Standard::Search),
                     )),
                 ),
             if rows.is_empty() {

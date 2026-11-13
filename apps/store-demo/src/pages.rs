@@ -42,7 +42,8 @@ use crate::views::inventory::{
     self, ProductRow, RestockForm, empty_sheet, inventory_table, product_sheet,
 };
 use crate::views::order::{
-    ConfirmForm, OrderView, PAGE, Parts, RefundForm, order_drawer, order_page, other_orders,
+    ConfirmForm, OrderView, PAGE, Parts, RefundForm, native_actions, order_drawer, order_page,
+    other_orders,
     refund_dialog, steps,
 };
 use crate::views::orders::{DRAWER, OrderRow, empty_drawer, orders_table};
@@ -390,12 +391,18 @@ impl Pages {
             history: &history,
             others: &others,
         };
-        Ok(shell
+        let page = shell
             .page(format!("Order {}", view.order.number))
             .crumb("Dashboard", "/")
             .crumb("Orders", "/orders")
-            .body(order_page(&view, today(), parts))
-            .into_response())
+            .body(order_page(&view, today(), parts));
+        // The page's own actions, for a native client; a browser's are in what it shows.
+        let page = if crate::views::asked_by_native() {
+            page.actions(native_actions(&view, false))
+        } else {
+            page
+        };
+        Ok(page.into_response())
     }
 
     /// `GET /orders/{id}/peek`: the order in the drawer, opened.
@@ -462,6 +469,11 @@ impl Pages {
             if done {
                 reply = reply.op(Op::replace("refund", &refund_dialog(&view).into()));
             }
+        }
+        // A native client draws the page's actions on its own, outside what is morphed: the
+        // screen is fetched again, so each is as the order allows it now.
+        if crate::views::asked_by_native() {
+            reply = reply.op(Op::Reload);
         }
         Ok(reply
             .toast_with(Toast::new(tone, text).title(title))
@@ -590,10 +602,15 @@ impl Pages {
             .await?
             .map_or(0, |product| product.into_inner().stock);
         let reply = if crate::views::asked_by_native() {
-            // The sheet the form was sent from has done its work.
-            reply.op(Op::Close {
-                target: inventory::SHEET.to_owned(),
-            })
+            // The sheet the form was sent from has done its work, and the record it changed
+            // is drawn again with the stock it has now.
+            reply
+                .op(Op::Close {
+                    target: inventory::SHEET.to_owned(),
+                })
+                .op(Op::Invalidate {
+                    target: inventory::TABLE.to_owned(),
+                })
         } else {
             reply
         };

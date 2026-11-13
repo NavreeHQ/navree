@@ -46,7 +46,7 @@ a phone whatever it runs on. Each rule has a test in
 | `Role::Create` or `add` | A plus at the trailing end of the top bar. Never a floating button. |
 | The one `Primary` action | The one prominent item at the trailing end of the top bar; in a sheet, Done or Save at the top trailing corner. A second primary goes to the overflow menu. |
 | `Secondary` actions | The system's overflow menu at the trailing end; no overflow menu of your own. |
-| `Destructive` actions | A section of their own at the end of the content, in red, never prominent. They ask first, in a confirmation dialog anchored to the button with the destructive choice first and Cancel last, because Navree cannot yet say an action can be undone. |
+| `Destructive` actions | A section of their own at the end of the content, in red, never prominent. They ask first, in a confirmation dialog anchored to the button with the destructive choice first and Cancel last, unless the page says the action can be undone (`Button::undoable()`), when it asks nothing and offers Undo after. |
 | `Cancel` in a sheet | The top leading corner, as a close symbol. Swiping the sheet down stays on. |
 | A sheet (`medium`, `large`, `full`) | Medium: rests at half height with a grabber, can be pulled up. Large: full height. Full: a full-screen cover, for a camera or a long flow. One sheet at a time. A dialog that holds a form is a sheet; one that only asks is an alert or, for a destructive question, a confirmation dialog. |
 | A toast, a banner | There is no toast on Apple systems. A failure is an alert; anything else is a dismissible line of status at the top of the content, with a symbol, a haptic (success, warning or error) and a VoiceOver announcement. |

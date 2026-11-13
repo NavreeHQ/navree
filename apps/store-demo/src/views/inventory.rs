@@ -123,6 +123,9 @@ fn restock_form(id: i64, units: i64, name: &str) -> Node {
         .into()
 }
 
+/// The id of the inventory table, which a restock draws again.
+pub const TABLE: &str = "products";
+
 /// The id of the sheet a row opens on a screen drawn by the system's own toolkit.
 pub const SHEET: &str = "product";
 
@@ -156,7 +159,7 @@ pub fn inventory_table<'a>(
     query: &'a TableQuery<ProductRow>,
     page: &'a TablePage<ProductRow>,
 ) -> DataTable<'a, ProductRow> {
-    DataTable::new("products", query, page)
+    DataTable::new(TABLE, query, page)
         .caption("Inventory")
         .cell("name", |row| product(&row.icon, &row.name, &row.sku))
         .cell("price", |row| Text::new(money(row.price)).inline())

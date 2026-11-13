@@ -60,7 +60,7 @@ pub(crate) fn written<'a>(
 }
 
 /// `Chart`, `Donut`, `Funnel`: a figure.
-pub(crate) fn figure(_: &mut Cx, element: &Element) -> Read {
+pub(crate) fn figure(cx: &mut Cx, element: &Element) -> Read {
     let mut parts = Parts::of(element);
     let header = parts.slot("chart-header");
     let state = parts.slot("chart-state");
@@ -88,6 +88,14 @@ pub(crate) fn figure(_: &mut Cx, element: &Element) -> Read {
         return fail("a chart with no header");
     };
     let title = title_of(header)?;
+    // A title the page shows to assistive technology only (a card around the chart names
+    // it) is no visible title: the chart is not drawn with a second one.
+    let title = if has(header, "data-sr") {
+        cx.dropped.push("chart-title-hidden".to_owned());
+        None
+    } else {
+        Some(title)
+    };
     if let Some(state) = state {
         return unready(state).map(|node| vec![node]);
     }
@@ -128,7 +136,7 @@ pub(crate) fn figure(_: &mut Cx, element: &Element) -> Read {
     Ok(vec![N::Chart(n::Chart {
         id: id(element),
         kind,
-        title: Some(title),
+        title,
         labels,
         series,
     })])
@@ -293,6 +301,29 @@ mod tests {
             .iter()
             .map(|value| value.as_ref().and_then(serde_json::Number::as_f64))
             .collect()
+    }
+
+    #[test]
+    fn a_title_only_assistive_technology_hears_is_not_drawn_as_a_second_title() {
+        let hidden = chart_of(|| {
+            Chart::line("Revenue by day")
+                .hide_title()
+                .categories(["Mon", "Tue"])
+                .series(Series::new("Revenue", [1, 2]))
+                .into()
+        });
+        assert_eq!(hidden.title, None);
+        let shown = chart_of(|| {
+            Chart::line("Revenue by day")
+                .categories(["Mon", "Tue"])
+                .series(Series::new("Revenue", [1, 2]))
+                .into()
+        });
+        assert_eq!(shown.title.as_deref(), Some("Revenue by day"));
+        let page = TestNative::build(phone(), || {
+            View::new("x").body(Chart::line("Revenue by day").hide_title().series(Series::new("R", [1])))
+        });
+        assert!(page.page().dropped.iter().any(|name| name == "chart-title-hidden"));
     }
 
     #[test]

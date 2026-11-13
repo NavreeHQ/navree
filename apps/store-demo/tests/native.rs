@@ -306,6 +306,28 @@ async fn the_orders_are_a_table_a_phone_can_draw_as_a_list() {
 }
 
 #[tokio::test]
+async fn an_action_that_cannot_be_taken_says_why_in_the_words_the_page_says_it_in() {
+    let (app, _dir) = boot().await;
+    // Among the first orders there are some that shipped or were cancelled.
+    let mut held = None;
+    for id in 1..=30 {
+        let asked = ask(&app, &format!("/orders/{id}")).await;
+        let screen = envelope(&asked.native).screen.expect("a screen");
+        let off = screen.actions.iter().find_map(|node| match node {
+            N::Button(button) if button.disabled => Some(button.clone()),
+            _ => None,
+        });
+        if off.is_some() {
+            held = off;
+            break;
+        }
+    }
+    let held = held.expect("an order with an action that is held back");
+    let reason = held.reason.as_deref().expect("a reason");
+    assert!(reason.contains("CS-"), "{reason}");
+}
+
+#[tokio::test]
 async fn an_order_is_a_screen_with_its_dialogs_and_an_action_answers_ops() {
     let (app, _dir) = boot().await;
     let asked = ask(&app, "/orders/1").await;
@@ -314,8 +336,33 @@ async fn an_order_is_a_screen_with_its_dialogs_and_an_action_answers_ops() {
     assert_eq!(screen.id.as_deref(), Some("order-page"));
     assert_eq!(screen.trail.len(), 2);
     let nodes = all(&screen.body);
-    // The three actions open their dialogs by command.
-    let opens: Vec<&str> = nodes
+    // The three actions are the page's own, each with its role, and they open their dialogs
+    // by command; none is a button in what the page shows.
+    let actions: Vec<&N> = screen.actions.iter().flat_map(all).collect();
+    let roles: Vec<(&str, n::Role)> = actions
+        .iter()
+        .filter_map(|node| match node {
+            N::Button(button) => Some((button.label.as_str(), button.role)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        roles,
+        [
+            ("Resend confirmation", n::Role::Secondary),
+            ("Refund", n::Role::Secondary),
+            ("Cancel order", n::Role::Destructive)
+        ]
+    );
+    // What the body holds is what a dialog answers with, not a button that opens one.
+    assert!(
+        !nodes.iter().any(|node| matches!(
+            node,
+            N::Button(button) if matches!(&button.action, Some(Action::Commands { .. }))
+        )),
+        "the actions are in the screen's own"
+    );
+    let opens: Vec<&str> = actions
         .iter()
         .filter_map(|node| match node {
             N::Button(button) => match &button.action {
@@ -655,6 +702,13 @@ async fn the_inventory_opens_a_product_with_its_restock_form_where_the_reader_is
             .any(|op| matches!(op, Op::Close { target } if target == "product")),
         "{ops:?}"
     );
+    // The record that changed is drawn again, with the stock it has now, besides the toast.
+    assert!(
+        ops.iter()
+            .any(|op| matches!(op, Op::Invalidate { target } if target == "products")),
+        "{ops:?}"
+    );
+    assert!(ops.iter().any(|op| matches!(op, Op::Toast(_))), "{ops:?}");
     let web = app
         .client()
         .post(&format!("/inventory/{id}/restock"))
@@ -664,4 +718,5 @@ async fn the_inventory_opens_a_product_with_its_restock_form_where_the_reader_is
         .send()
         .await;
     assert!(!web.text().contains(r#""target":"product""#));
+    assert!(!web.text().contains(r#""op":"invalidate""#));
 }

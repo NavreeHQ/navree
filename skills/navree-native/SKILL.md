@@ -1,6 +1,6 @@
 ---
 name: navree-native
-description: "Makes a Navree UI app answer native clients (iPhone, iPad, Android phones and tablets) from the same pages, so each system draws them with its own components: turns on the preview (`ui-native-preview`), says what a page's parts are (`AppPage::actions` and `Button::role` for a screen's actions, `Button::presented` for how the screen a button leads to opens, `#[col(role = ..)]` and `DataTable::row_opens` for records, `Item` lists, a sheet that is a task or a glance, `native::only` and `native::web_only`), reads `navree native:coverage` (the grades idiom, layout and web) and `native.toml`, tests a page as a native client with `TestNative`, and says plainly what falls back to the web view and what does not exist yet (device features from a page, watch and TV, widgets, Windows and Linux clients, the app on the device). Use when asked to make a Navree app a native app or an iOS or Android app, to make a page look right on a phone, to read or raise native coverage, or to ask whether a part is native. This is the entry point: it says which of `navree-native-design`, `navree-native-apple` and `navree-native-android` to load next."
+description: "Makes a Navree UI app answer native clients (iPhone, iPad, Android phones and tablets) from the same pages, so each system draws them with its own components: turns on the preview (`ui-native-preview`), says what a page's parts are (`AppPage::actions` and `Button::role` for a screen's actions, `Button::presented` for how the screen a button or a link leads to opens, `Button::undoable`, `Button::standard` and `Button::reason`, `#[col(role = ..)]` and `DataTable::row_opens` for records, `Item` lists, a sheet that is a task or a glance, `native::only` and `native::web_only`), reads `navree native:coverage` (the grades idiom, layout and web) and `native.toml`, tests a page as a native client with `TestNative`, and says plainly what falls back to the web view and what does not exist yet (device features from a page, watch and TV, widgets, Windows and Linux clients, the app on the device). Use when asked to make a Navree app a native app or an iOS or Android app, to make a page look right on a phone, to read or raise native coverage, or to ask whether a part is native. This is the entry point: it says which of `navree-native-design`, `navree-native-apple` and `navree-native-android` to load next."
 ---
 
 # Navree Native (preview)
@@ -75,7 +75,9 @@ them where its system puts a screen's actions. The look of a button decides
 its role unless you say it: `Button::primary` is the main action,
 `Button::outline` a secondary one and `Button::destructive` a destructive one.
 A default or ghost button in `actions` has no role, and the page is only
-`layout`. One main action per screen.
+`layout`. One main action per screen: two (`Primary` or `Create`) are `layout`
+too, and the report says which ("the screen has two main actions: “Mark as
+packed” and “Print label”").
 
 ```rust
 use navree::ui::{AppPage, AppShell, Button, Card, Role, Text, icons};
@@ -115,6 +117,53 @@ pub fn refund_button(order: i64) -> Button {
         .href(format!("/orders/{order}/refund"))
         .role(Role::Secondary)
         .presented(Presented::Task)
+}
+```
+
+### What else a button can say
+
+Each of these is a field of the button that writes no HTML.
+
+- `Button::undoable()`: what it does can be undone (a toast restores it). A
+  system whose guidelines say so asks nothing first and offers Undo after.
+  Without it a destructive action asks first.
+- `Button::standard(Standard)`: it is a standard action by meaning (`Share`,
+  `Delete`, `Add`, `Edit`, `Search`, `Done`, `Cancel`, `More`), so each system
+  draws its own symbol and label for it.
+- `Button::reason(text)`: why a disabled button is disabled, in the page's
+  words. A disabled button whose `title` says it is read the same way.
+- `presented(Presented)` is also on `Item` and on any link written as an
+  element (`el("a").href(..).presented(..)`).
+- `FormView::cancel` gives its link the `Cancel` role by itself.
+
+```rust
+use navree::ui::{Button, Item, Presented, Standard};
+
+/// Final, so it asks first: the destructive role and a question.
+pub fn cancel_order() -> Button {
+    Button::destructive("Cancel order").opens_dialog("cancel")
+}
+
+/// Can be undone, because a toast restores it: no question first.
+pub fn archive() -> Button {
+    Button::destructive("Archive").undoable()
+}
+
+/// A standard action by its meaning: each system draws its own symbol and label.
+pub fn share() -> Button {
+    Button::outline("Send the invoice").standard(Standard::Share)
+}
+
+/// Off, and why, in the page's own words.
+pub fn resend() -> Button {
+    Button::outline("Resend")
+        .disabled(true)
+        .reason("It went out at 09:41. It can go again after 09:46.")
+}
+
+/// A row that is a link says how its screen opens, as a button does.
+pub fn order_row() -> Item {
+    Item::new("Order CS-20481").href("/orders/1").presented(Presented::Sheet)
 }
 ```
 
@@ -206,7 +255,11 @@ a system gives it its Cancel and Done places. A sheet that holds none is a
 apart by the form (`task` is on the sheet the client gets); you decide by what
 you put in. Neither client uses the difference yet, so today both draw a
 sheet as a sheet, but write the page as if they did. Do not put a form in a
-glance only to get a button.
+glance only to get a button. A sheet's own buttons (Cancel, Done, Refund) go in
+its footer (`Sheet::footer`, `Dialog::footer`), not in its body: a client draws
+the footer's buttons as the sheet's actions, by role, and the buttons of the
+body as content. Do the same for a page: what is the page's own is in
+`AppPage::actions`; the body keeps the content.
 
 ```rust
 use navree::ui::{FactCard, FactGrid, Sheet, Stack, Text};
@@ -400,9 +453,6 @@ Say these plainly to the owner; do not build around them.
   `native:build`. The clients are packages in the repository
   (`packages/android`, `packages/apple`, each with a demo app); a store build
   of your own app is not packaged yet.
-- **Saying a destructive action can be undone.** The protocol has the word
-  (`undoable`) and the clients honour it, but Navree UI has no author word
-  for it yet. Until it does, every destructive action asks first.
 
 ## 8. Which skill next
 

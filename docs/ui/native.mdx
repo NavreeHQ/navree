@@ -44,7 +44,41 @@ pub fn orders_page(shell: AppShell) -> AppPage {
 }
 ```
 
-`Button::role` says what a button is for (`Primary`, `Secondary`, `Destructive`, `Cancel`, `Confirm`, `Create`, `Navigation`); an Android phone draws creation as the floating action button and an iPhone as a plus in the toolbar. `Button::presented` says how the screen a link leads to opens (`Push`, `Replace`, `Root`, `Sheet`, `Task`, `Full`).
+`Button::role` says what a button is for (`Primary`, `Secondary`, `Destructive`, `Cancel`, `Confirm`, `Create`, `Navigation`); an Android phone draws creation as the floating action button and an iPhone as a plus in the toolbar. `Button::presented` says how the screen a link leads to opens (`Push`, `Replace`, `Root`, `Sheet`, `Task`, `Full`); a row that is a link (`Item::presented`) and a link written as an element (`el("a").href(..).presented(..)`) say it the same way. A form's cancel link has the `Cancel` role by itself.
+
+A button can say three things more:
+
+- `Button::undoable()`: what it does can be undone, so a system whose guidelines say so asks nothing first and offers Undo after. Without it, a destructive action asks first.
+- `Button::standard(Standard)`: it is a standard action by meaning (`Share`, `Delete`, `Add`, `Edit`, `Search`, `Done`, `Cancel`, `More`), so each system draws its own symbol and label.
+- `Button::reason(text)`: why a disabled button is disabled, in the page's words. A disabled button whose `title` says it is read the same way.
+
+```rust
+use navree::ui::{Button, Item, Presented, Standard};
+
+/// Can be undone, because a toast restores it.
+pub fn archive() -> Button {
+    Button::destructive("Archive").undoable()
+}
+
+/// A standard action by its meaning.
+pub fn share() -> Button {
+    Button::outline("Send the invoice").standard(Standard::Share)
+}
+
+/// Off, and why.
+pub fn resend() -> Button {
+    Button::outline("Resend")
+        .disabled(true)
+        .reason("It went out at 09:41. It can go again after 09:46.")
+}
+
+/// A row that is a link says how its screen opens.
+pub fn order_row() -> Item {
+    Item::new("Order CS-20481").href("/orders/1").presented(Presented::Sheet)
+}
+```
+
+A sheet's or a dialog's own buttons go in its footer (`Sheet::footer`, `Dialog::footer`), and a page's own in `AppPage::actions`: a client draws them as the sheet's or the page's actions, by role, and the body as content.
 
 For records, the columns of a [DataTable](/docs/ui/data-table/) say which is the record's name, a line under it, its state and what stands at its end, and a row says what it opens:
 
@@ -79,6 +113,12 @@ pub fn orders_table<'a>(
 
 The roles are `title`, `subtitle`, `status` and `trailing`. The table's search, filters and sort become the screen's search bar, filter chips and sort menu. `native::only` and `native::web_only` keep a part for one side. The [agent skill `navree-native`](/docs/ai/agent-skills/) lists every word, and `navree-native-design` the rules that hold on every system.
 
+## Signing in, signing out and push
+
+The shell document also says where the app signs a person in (the hand-over the system's sign-in session makes, its exchange, the app's own callback and the page of a second step) and where a device's push token goes. The modules that own those routes say them: the authentication module, with its pages on, names the hand-over and the second step, and the notification module names its push-devices route. A module of your own adds to the document by registering a `NativeShellPart` as a multi-binding. A reply that signs a person out says so with `Reply::signed_out()`: a native client then removes its push device, forgets its cookies and what it kept, and fetches the shell again; a browser's reply is what it was.
+
+The theme on the wire is its name and its accent for a light and a dark ground. A corner style, a density or a typeface are not carried: the protocol has no word for them.
+
 ## Grades and coverage
 
 `navree native:coverage` asks every page route in process, as a native client, and grades it:
@@ -86,7 +126,7 @@ The roles are `title`, `subtitle`, `status` and `trailing`. The table's search, 
 | Grade | Means |
 |---|---|
 | `idiom` | The page's parts say what they are, so the client lays the screen out as its own system does. |
-| `layout` | Native parts, laid out as the web page is. It works and looks like a web page drawn with the system's controls. |
+| `layout` | Native parts, laid out as the web page is. It works and looks like a web page drawn with the system's controls. An action with no role, or a screen with two main actions, also gives this grade, and the report says which. |
 | `web` | The client shows the page in its web view, because a part of it has no native meaning yet. |
 
 Only `idiom` belongs to its system. The command, its options, the `native.toml` file of example values and `navree native:doctor` are on the [CLI page](/docs/digging-deeper/cli/#native-apps).

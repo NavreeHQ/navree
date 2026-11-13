@@ -13,7 +13,7 @@ same on every system: what a page must say so any client can do it right,
 and how to check the result. It does not copy the guidelines; each system
 skill summarises them and links their pages.
 
-The words an author has (`Button::role`, `Button::presented`,
+The words an author has (`Button::role`, `Button::presented`, `Button::undoable`, `Button::standard`, `Button::reason`,
 `#[col(role = ..)]`, `DataTable::row_opens`, `AppPage::actions`) are in
 [`navree-native`](../navree-native/SKILL.md). The rules below say how to use
 them. Where the guidelines and a brand disagree, the guidelines win.
@@ -40,10 +40,10 @@ them. Where the guidelines and a brand disagree, the guidelines win.
 Android puts the first action in the app bar and creation in the floating
 action button. Two main actions have no place on either. An action with no
 role has no place the client can choose, so the page is only `layout`.
-*Check:* `screen.actions` has at most one `Primary`, `Create` or `Confirm`
-button and none with role `None`. Coverage flags a missing role ("the action
-“Copy link” has no role") but not a second main action: check that in a
-`TestNative` test or by eye.
+*Check:* `screen.actions` has at most one `Primary` or `Create` button and none
+with role `None`. Coverage flags both: a missing role ("the action “Copy link”
+has no role") and a second main action ("the screen has two main actions:
+“Mark as packed” and “Print label”"), each as `layout`.
 
 ```rust
 use navree::ui::{AppPage, AppShell, Button, Text, icons};
@@ -107,11 +107,11 @@ it and offer Undo in the snackbar).
 the question names the thing ("Cancel order CS-20481?") and the answer repeats
 the action's words, never "OK".
 
-Navree UI has no word yet for "this can be undone" (the protocol has
-`undoable`, the clients honour it). Until it does, every destructive action
-asks first. So **reserve the destructive role for what cannot be undone**, and
-make a reversible action a plain secondary action that answers with a toast
-carrying an Undo action.
+Say which it is. `Button::undoable()` says what the action does can be undone
+(a toast restores it): a system whose guidelines say so asks nothing first and
+offers Undo after. Without the word a destructive action asks first. So
+**reserve the destructive role without `undoable` for what cannot be undone**;
+a reversible one is `undoable`, and answers with a toast carrying an Undo action.
 
 ```rust
 use navree::ui::{AlertDialog, Button, Element, Toast, ToastAction, ToastTone, Uses, el};
@@ -140,7 +140,12 @@ pub fn cancel_order() -> (Button, AlertDialog) {
     )
 }
 
-/// Right, for what can be undone: a plain action, and Undo in the toast it answers with.
+/// Right, for what can be undone: it says so, and Undo is in the toast it answers with.
+pub fn archive() -> Button {
+    Button::destructive("Archive").undoable().href("/orders/1/archive")
+}
+
+/// The toast the archive answers with.
 pub fn archive_done() -> Toast {
     Toast::new(ToastTone::Success, "Order CS-20481 archived")
         .action(ToastAction::post("Undo", "/orders/1/restore"))
