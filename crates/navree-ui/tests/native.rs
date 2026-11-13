@@ -17,7 +17,7 @@ use navree_native::node::{self as n, Node as N};
 use navree_native::{Action, Client, Command, Envelope, FormFactor, Op as NativeOp, Platform};
 use navree_testing::TestApp;
 use navree_ui::form::{FormView, Money, Rejected, Submit};
-use navree_ui::native::{Stamp, TestNative, lower};
+use navree_ui::native::{self, Stamp, TestNative, lower};
 use navree_ui::select::{Choice, ChoiceList};
 use navree_ui::sortable::{Move, MoveRejected};
 use navree_ui::table::BulkRequest;
@@ -141,6 +141,58 @@ fn a_form_view_reads_as_a_form_of_fields_with_their_labels_and_help() {
     assert_eq!(submit.label, "Refund");
     assert_eq!(submit.role, n::Role::Primary);
     assert_eq!(submit.action, Some(Action::submit()));
+}
+
+#[test]
+fn a_form_view_is_said_to_a_native_client_as_the_same_form_without_its_buttons() {
+    let view = || {
+        refund_form()
+            .csrf("tok")
+            .hidden("step", "2")
+            .with_errors(std::collections::BTreeMap::from([(
+                "amount".to_owned(),
+                vec!["Enter an amount above zero.".to_owned()],
+            )]))
+    };
+    let form = native::form(&view());
+    // The id `#[derive(Form)]` gave it, and where the page's form posts.
+    assert_eq!(form.id.as_deref(), Some("refund-form"));
+    assert_eq!(
+        (form.method, form.action.as_str()),
+        (n::Method::Post, "/orders/1/refund")
+    );
+    // What it sends unseen: the session's token and the page's own value.
+    let unseen: Vec<(&str, &str)> = form
+        .hidden
+        .iter()
+        .map(|hidden| (hidden.name.as_str(), hidden.value.as_str()))
+        .collect();
+    assert_eq!(unseen, [("_csrf", "tok"), ("step", "2")]);
+    // Its fields alone, in their order: no stack groups them, and no button
+    // stands after them.
+    let [N::Field(amount), N::Field(reason), N::Field(notify)] = form.children.as_slice() else {
+        panic!("not three fields alone: {:?}", form.children);
+    };
+    assert_eq!(
+        (
+            amount.name.as_str(),
+            reason.name.as_str(),
+            notify.name.as_str()
+        ),
+        ("amount", "reason", "notify")
+    );
+    assert_eq!(amount.id.as_deref(), Some("refund-form-amount"));
+    assert_eq!(amount.error.as_deref(), Some("Enter an amount above zero."));
+    assert!(matches!(&amount.input, Input::Text(typed)
+        if typed.kind == TextKind::Decimal && typed.value == "7848.00"));
+    // Each is the field the page's own form reads as.
+    let N::Form(read) = lower(&view().into()).node else {
+        panic!("not a form");
+    };
+    assert_eq!(fields_in(&read.children), [amount, reason, notify]);
+    assert_eq!(read.hidden, form.hidden);
+    // The fields by themselves, for a form the screen writes round them.
+    assert_eq!(native::fields(&view()), form.children);
 }
 
 /// The orders' statuses a filter offers.

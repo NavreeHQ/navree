@@ -22,6 +22,13 @@ use crate::op::ToastTone;
 use crate::theme::{ThemeMenu, Token};
 use crate::view::View;
 
+impl AppShell {
+    /// The app's name, and where its home is.
+    pub(crate) fn name_and_home(&self) -> (&str, &crate::html::Href) {
+        (&self.shell.name, &self.shell.home)
+    }
+}
+
 /// What a page in the shell is made of, kept by the [`View`] it became while
 /// a native client asked: its title, its steps, its actions and its body, and
 /// the shell around it.

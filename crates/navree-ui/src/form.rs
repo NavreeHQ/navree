@@ -1494,6 +1494,33 @@ impl<T: Form> FormView<T> {
             .collect()
     }
 
+    /// The form without its buttons: its id, where it posts, what it sends unseen
+    /// and its fields. What a native client's form is read from.
+    #[cfg(feature = "native-preview")]
+    pub(crate) fn without_actions(&self) -> Element {
+        let hidden: Vec<Element> = self
+            .hidden
+            .iter()
+            .map(|(name, value)| {
+                el("input")
+                    .attr("type", "hidden")
+                    .attr("name", name.clone())
+                    .attr("value", value.clone())
+            })
+            .collect();
+        el("form")
+            .slot("form")
+            .attr("id", self.shape.id)
+            .attr("method", self.method)
+            .attr_opt("action", self.action.clone().map(AttrHref))
+            .flag("data-ui-form", true)
+            .children((
+                self.csrf.clone().map(csrf_field),
+                hidden,
+                self.fields_node(),
+            ))
+    }
+
     fn into_node(self) -> Node {
         let fields = self.fields_node();
         // A file goes with the form when no script sent it first.

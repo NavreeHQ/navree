@@ -50,6 +50,7 @@
 
 mod answer;
 mod coverage;
+mod forms;
 mod icon;
 mod lower;
 pub(crate) mod page;
@@ -64,6 +65,7 @@ mod test;
 pub use crate::asked::{WhoAsked, who_asked};
 pub use answer::{Answer, Said, append, asked, morph, prepend, replace};
 pub use coverage::{Coverage, Grade, designed, graded};
+pub use forms::{fields, form};
 pub use lower::{Lowered, Miss, lower, lower_keeping_markup};
 pub use navree_native as protocol;
 /// Navree Native UI: the parts a screen for native clients is written with,

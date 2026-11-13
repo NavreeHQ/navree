@@ -480,6 +480,34 @@ impl Reply {
         self
     }
 
+    /// Goes on with the reply for the client that asked: `web` for a browser, `native`
+    /// for a native client, each given the reply so far. Only the one that is needed
+    /// runs. What both are told (a dialog that closes, a toast, the status) is said
+    /// once, before or after.
+    ///
+    /// ```
+    /// use navree_ui::native::{self, ui};
+    /// use navree_ui::{Op, Reply, ToastTone, el};
+    ///
+    /// let total = "₹1,240";
+    /// let reply = Reply::ops_or_redirect("/orders/1")
+    ///     .op(Op::Close { target: "refund".to_owned() })
+    ///     .each(
+    ///         |reply| reply.morph("order-total", el("span").id("order-total").child(total)),
+    ///         |reply| reply.op(native::morph("order-total", ui::Text::new(total).id("order-total"))),
+    ///     )
+    ///     .toast(ToastTone::Success, "Refunded");
+    /// # let _ = reply;
+    /// ```
+    #[cfg(feature = "native-preview")]
+    pub fn each(self, web: impl FnOnce(Self) -> Self, native: impl FnOnce(Self) -> Self) -> Self {
+        if crate::native::asked() {
+            native(self)
+        } else {
+            web(self)
+        }
+    }
+
     /// Answers with the fallback, with the ops kept for [`crate::UiModule`]'s layer.
     fn fallback_response(self) -> (Response, Envelope, StatusCode) {
         let mut envelope = Envelope::new(self.ops);
@@ -540,6 +568,60 @@ impl IntoResponse for Reply {
 mod tests {
     use super::*;
     use crate::el;
+
+    #[cfg(feature = "native-preview")]
+    #[test]
+    fn a_reply_goes_on_for_the_client_that_asked() {
+        use crate::native::scope::{self, Asked};
+        use navree_native::ui::Text;
+
+        let reply = || {
+            Reply::ops_or_redirect("/orders/1")
+                .op(Op::Close {
+                    target: "refund".to_owned(),
+                })
+                .each(
+                    |reply| {
+                        reply.morph("order-total", el("span").id("order-total").child("₹1,240"))
+                    },
+                    |reply| {
+                        reply.op(crate::native::morph(
+                            "order-total",
+                            Text::new("₹1,240").id("order-total"),
+                        ))
+                    },
+                )
+                .toast(ToastTone::Success, "Refunded")
+        };
+        let kinds = |reply: Reply| -> Vec<&'static str> {
+            reply
+                .ops
+                .iter()
+                .map(|op| match op {
+                    Op::Close { .. } => "close",
+                    Op::Morph { .. } => "morph",
+                    Op::Native(_) => "native",
+                    Op::Toast(_) => "toast",
+                    _ => "other",
+                })
+                .collect()
+        };
+        // A browser: the markup. What both are told stands round it, once.
+        assert_eq!(kinds(reply()), ["close", "morph", "toast"]);
+        // A native client: the parts.
+        let client = navree_native::Client::new(
+            navree_native::Platform::Ios,
+            navree_native::FormFactor::Phone,
+        );
+        let asked = Asked::Native(std::sync::Arc::new(scope::Request::new(
+            client,
+            "/orders/1",
+        )));
+        assert_eq!(
+            kinds(scope::sync(asked, reply)),
+            ["close", "native", "toast"]
+        );
+    }
 
     #[test]
     fn the_wire_format_is_stable() {

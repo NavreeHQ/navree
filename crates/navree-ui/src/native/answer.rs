@@ -30,7 +30,7 @@
 
 use std::sync::Arc;
 
-use http::header::{CACHE_CONTROL, CONTENT_TYPE, SET_COOKIE, VARY};
+use http::header::{CACHE_CONTROL, SET_COOKIE, VARY};
 use http::{HeaderValue, StatusCode};
 use navree_http::response::{IntoResponse, Response};
 use navree_native::action::{Action, Pair};
@@ -146,12 +146,13 @@ impl<'a> Answer<'a> {
     }
 
     /// Answers a route that has only a native side. A browser, and the web
-    /// view inside a native client, are told so: `406`, with a line of plain
-    /// text.
+    /// view inside a native client, get a small page that says so: that the
+    /// screen is in the app (by the app's name, [in its shell](Self::in_shell)),
+    /// and the way to the app's home. Its status is `406`.
     pub fn native<S: Into<Said>>(self, native: impl FnOnce() -> S) -> Response {
         match scope::asked() {
             Some(Asked::Native(request)) => self.say(native().into(), &request),
-            _ => not_a_page(),
+            _ => not_a_page(self.shell),
         }
     }
 
@@ -275,21 +276,26 @@ impl<'a> Answer<'a> {
     }
 }
 
-/// What a browser gets from a route that has only a native side.
-fn not_a_page() -> Response {
-    (
-        StatusCode::NOT_ACCEPTABLE,
-        [
-            (
-                CONTENT_TYPE,
-                HeaderValue::from_static("text/plain; charset=utf-8"),
-            ),
-            (CACHE_CONTROL, HeaderValue::from_static("no-store")),
-            (VARY, HeaderValue::from_static(NATIVE_HEADER)),
-        ],
-        "This screen is made for the app.",
-    )
-        .into_response()
+/// What a browser gets from a route that has only a native side: a small
+/// page that says the screen is in the app, with the way to the app's home.
+fn not_a_page(shell: Option<&AppShell>) -> Response {
+    let mut page = crate::pages::ErrorPage::new(StatusCode::NOT_ACCEPTABLE)
+        .title("This screen is in the app")
+        .without_retry();
+    page = match shell.map(AppShell::name_and_home) {
+        Some((name, home)) => page
+            .description(format!(
+                "{name} shows this screen in its app. It has no page on the web."
+            ))
+            .home(home.clone()),
+        None => page.description("This screen is shown in the app. It has no page on the web."),
+    };
+    let mut response = page.into_view().into_response();
+    let headers = response.headers_mut();
+    // The same address answers a native client with the screen.
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    headers.append(VARY, HeaderValue::from_static(NATIVE_HEADER));
+    response
 }
 
 /// The nodes an op carries.
@@ -447,6 +453,7 @@ pub fn prepend(target: impl Into<String>, parts: impl navree_native::ui::IntoPar
 
 #[cfg(test)]
 mod tests {
+    use http::header::CONTENT_TYPE;
     use navree_native::ui::{self, Button, Card, Field, Form, Icon, Stack, Text, TextStyle};
     use navree_native::{Client, FormFactor, Op, Platform};
 
@@ -550,10 +557,56 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_route_with_only_a_native_side_tells_a_browser_so() {
+    async fn a_route_with_only_a_native_side_gives_a_browser_a_small_page_that_says_so() {
+        let text = |response: Response| async {
+            let bytes = navree_http::body::to_bytes(response.into_body(), 1 << 20)
+                .await
+                .unwrap();
+            String::from_utf8(bytes.to_vec()).unwrap()
+        };
+        // Outside any shell: the page says where the screen is.
         let refused = Answer::new().native(today);
         assert_eq!(refused.status(), StatusCode::NOT_ACCEPTABLE);
-        assert_eq!(refused.headers()[CONTENT_TYPE], "text/plain; charset=utf-8");
+        assert_eq!(refused.headers()[CONTENT_TYPE], "text/html; charset=utf-8");
+        assert_eq!(refused.headers()[CACHE_CONTROL], "no-store");
+        assert!(
+            refused
+                .headers()
+                .get_all(VARY)
+                .iter()
+                .any(|value| value == NATIVE_HEADER)
+        );
+        let html = text(refused).await;
+        assert!(
+            html.contains("<title>This screen is in the app</title>"),
+            "{html}"
+        );
+        assert!(html.contains("This screen is shown in the app. It has no page on the web."));
+        assert!(html.contains(r#"href="/""#), "the way home");
+        // The screen itself is never built for a browser, and nothing of it is in the page.
+        assert!(!html.contains("₹1,24,050"));
+        // In the app's shell: by the app's name, with the way to the app's home.
+        let shell = Shell::new("Charkha Supply Co.")
+            .home("/orders")
+            .for_request("/shelves", &http::HeaderMap::new());
+        let refused = Answer::in_shell(&shell)
+            .native(|| -> Screen { panic!("the screen is not built for a browser") });
+        assert_eq!(refused.status(), StatusCode::NOT_ACCEPTABLE);
+        let html = text(refused).await;
+        assert!(
+            html.contains(
+                "Charkha Supply Co. shows this screen in its app. It has no page on the web."
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(r#"href="/orders""#),
+            "the way to the app's home"
+        );
+        // The web view inside a native client is told the same.
+        let inside = scope::sync(Asked::Embed, || Answer::new().native(today));
+        assert_eq!(inside.status(), StatusCode::NOT_ACCEPTABLE);
+        assert_eq!(inside.headers()[CONTENT_TYPE], "text/html; charset=utf-8");
         let response = as_native("/shelves", || {
             Answer::new().status(StatusCode::NOT_FOUND).native(today)
         });
@@ -669,18 +722,13 @@ mod tests {
             Answer::new().each(
                 || View::new("Activity"),
                 || {
-                    vec![Op::Merge {
-                        target: "activity".to_owned(),
-                        nodes: vec![
-                            ui::Row::new("Order CS-20481 was packed")
-                                .id("event-8")
-                                .into(),
-                        ],
-                        gone: Vec::new(),
-                        since: "8".to_owned(),
-                        at: navree_native::op::Edge::Start,
-                        more: false,
-                    }]
+                    vec![Op::merge(
+                        "activity",
+                        "8",
+                        ui::Edge::Start,
+                        ui::Row::new("Order CS-20481 was packed").id("event-8"),
+                        [],
+                    )]
                 },
             )
         });

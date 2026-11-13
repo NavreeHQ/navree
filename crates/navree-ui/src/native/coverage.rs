@@ -123,7 +123,9 @@ pub fn graded(screen: &Screen) -> (Grade, Vec<String>) {
 ///
 /// A designed screen is held to what every screen is held to (a title, a role
 /// on each action, one main action, a table whose rows are records) and to
-/// what a composition may say: a card that is tapped has a name; a card does
+/// what a composition may say: a card that is tapped has a name; a card
+/// grows only into a screen its tap opens, and has an id for the screen to
+/// shrink back into; a card does
 /// not stand in a card, nor a carousel in a carousel; one figure is set in
 /// the display style; and a part with an id stands in one room of an adaptive
 /// part only, since an answer that names an id finds one node.
@@ -167,8 +169,18 @@ pub fn designed(screen: &Screen) -> Vec<String> {
                 {
                     say("a card that is tapped has no name".to_owned());
                 }
+                if part.transition.is_some() {
+                    // A card grows into the screen its tap opens, and the
+                    // screen finds its way back into the card by the card's id.
+                    if !matches!(part.action, Some(navree_native::Action::Navigate { .. })) {
+                        say("a card grows into a screen it does not open".to_owned());
+                    } else if part.id.is_none() {
+                        say("a card that grows into a screen has no id".to_owned());
+                    }
+                }
                 card = true;
             }
+            N::Web(_) => say("the screen holds markup that no part draws".to_owned()),
             N::Carousel(_) => {
                 if in_carousel {
                     say("a carousel stands inside a carousel".to_owned());
@@ -491,6 +503,44 @@ mod tests {
                 "the part “empty” stands in both rooms of an adaptive part",
                 "the screen has no title",
             ]
+        );
+    }
+
+    #[test]
+    fn a_card_grows_only_into_a_screen_its_tap_opens_and_markup_is_named() {
+        use navree_native::ui::*;
+
+        let grows = |card: Card| designed(&Screen::titled("Today").body(card));
+        // Into the screen its tap opens, with an id to shrink back into.
+        let sound = Card::new()
+            .id("pillar-sleep")
+            .opens("Sleep, 87 of 100", Action::navigate("/sleep"))
+            .zoom();
+        assert_eq!(grows(sound), Vec::<String>::new());
+        // A request answers with changes to this screen: there is no screen to grow into.
+        let asks = Card::new()
+            .id("shelf-7")
+            .opens("Brass lota", Action::request("/inventory/7/peek"))
+            .zoom();
+        assert_eq!(grows(asks), ["a card grows into a screen it does not open"]);
+        assert_eq!(
+            grows(Card::new().zoom()),
+            ["a card grows into a screen it does not open"]
+        );
+        let unnamed = Card::new()
+            .opens("Sleep, 87 of 100", Action::navigate("/sleep"))
+            .zoom();
+        assert_eq!(
+            grows(unnamed),
+            ["a card that grows into a screen has no id"]
+        );
+        // Markup in a screen written for native clients is said, once.
+        let markup = Screen::titled("Today").body(
+            Stack::down().parts((WebRegion::new("<p>Old</p>"), WebRegion::new("<p>Older</p>"))),
+        );
+        assert_eq!(
+            designed(&markup),
+            ["the screen holds markup that no part draws"]
         );
     }
 
