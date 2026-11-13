@@ -204,6 +204,5 @@ mod marks {
             assert_eq!(role_of(&MARKS[0..0]), None);
             assert_eq!(role_of(&MARKS[8..8]), None);
         }
-
     }
 }

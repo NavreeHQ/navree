@@ -469,11 +469,7 @@ mod tests {
     #[test]
     fn what_the_modules_say_is_in_the_document_and_in_its_stamp() {
         use crate::NativeSignIn;
-        let shell = || {
-            app()
-                .for_request("/", &http::HeaderMap::new())
-                .csrf("tok")
-        };
+        let shell = || app().for_request("/", &http::HeaderMap::new()).csrf("tok");
         let bare = shell().native_document(None, &crate::NativeShellParts::default());
         assert!(bare.sign_in.is_none() && bare.device.is_none());
         let mut parts = crate::NativeShellParts::default();
@@ -513,7 +509,10 @@ mod tests {
         // A route the protocol would refuse is left out whole.
         let mut wrong = crate::NativeShellParts::default();
         wrong
-            .sign_in(NativeSignIn::new("//elsewhere.example/start", "/api/exchange"))
+            .sign_in(NativeSignIn::new(
+                "//elsewhere.example/start",
+                "/api/exchange",
+            ))
             .push_register("https://elsewhere.example/push");
         let document = shell().native_document(None, &wrong);
         assert!(document.sign_in.is_none() && document.device.is_none());
@@ -524,7 +523,10 @@ mod tests {
         let shell = app()
             .for_request("/", &http::HeaderMap::new())
             .csrf("tok")
-            .native_document(Some("/sign-in?from=app"), &crate::NativeShellParts::default());
+            .native_document(
+                Some("/sign-in?from=app"),
+                &crate::NativeShellParts::default(),
+            );
         assert_eq!(shell.name, "Charkha Supply Co.");
         assert_eq!(shell.context.as_deref(), Some("Store operations"));
         assert_eq!(shell.home, "/");

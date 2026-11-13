@@ -43,8 +43,7 @@ use crate::views::inventory::{
 };
 use crate::views::order::{
     ConfirmForm, OrderView, PAGE, Parts, RefundForm, native_actions, order_drawer, order_page,
-    other_orders,
-    refund_dialog, steps,
+    other_orders, refund_dialog, steps,
 };
 use crate::views::orders::{DRAWER, OrderRow, empty_drawer, orders_table};
 use crate::views::units;

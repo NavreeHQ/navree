@@ -1973,7 +1973,9 @@ mod tests {
         let node = read(
             Timeline::new("steps", "Steps").events([
                 TimelineEvent::new("Packed by hand").at(1_793_773_800),
-                TimelineEvent::new("Label printed").at(1_793_773_900).muted(),
+                TimelineEvent::new("Label printed")
+                    .at(1_793_773_900)
+                    .muted(),
             ]),
         );
         let mut muted: Vec<(&str, bool)> = Vec::new();

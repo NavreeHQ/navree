@@ -152,7 +152,8 @@ impl Module for AuthPages {
                         )
                         .replace("//", "/"),
                         second_step: paths.two_factor,
-                    }) as Arc<dyn navree_ui::NativeShellPart>)
+                    })
+                        as Arc<dyn navree_ui::NativeShellPart>)
                 }
             })
             .deps(vec![
@@ -173,14 +174,20 @@ struct HandOverShellPart {
 }
 
 impl navree_ui::NativeShellPart for HandOverShellPart {
-    fn contribute(&self, shell: &mut navree_ui::NativeShellParts, client: &navree_ui::NativeClient) {
+    fn contribute(
+        &self,
+        shell: &mut navree_ui::NativeShellParts,
+        client: &navree_ui::NativeClient,
+    ) {
         use navree_ui::NativeFamily;
         if !self.handed_over {
             return;
         }
-        let mut routes =
-            navree_ui::NativeSignIn::new(crate::hand_over::APP_SIGN_IN_PATH, self.exchange.as_str())
-                .second_step(self.second_step.as_str());
+        let mut routes = navree_ui::NativeSignIn::new(
+            crate::hand_over::APP_SIGN_IN_PATH,
+            self.exchange.as_str(),
+        )
+        .second_step(self.second_step.as_str());
         let family = match client.family {
             NativeFamily::Apple => Some("apple"),
             NativeFamily::Android => Some("android"),

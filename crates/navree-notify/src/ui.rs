@@ -43,8 +43,11 @@ impl PushShellPart {
     /// The part for the routes under `api_prefix`.
     pub(crate) fn new(api_prefix: &str) -> Self {
         Self {
-            path: format!("/{}/notifications/push-devices", api_prefix.trim_matches('/'))
-                .replace("//", "/"),
+            path: format!(
+                "/{}/notifications/push-devices",
+                api_prefix.trim_matches('/')
+            )
+            .replace("//", "/"),
         }
     }
 }

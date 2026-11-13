@@ -603,21 +603,23 @@ fn toolbar(view: &OrderView, open_as_page: bool) -> Node {
     let mut reasons = held_back(view);
     reasons.dedup();
     // A native client has the actions as the sheet's or the page's own, each with its reason.
-    web_only(Stack::gap(2).children((
-        Row::gap(2)
-            .align(Align::Center)
-            .justify(Justify::Between)
-            .wrap()
-            .children((
-                actions(view),
-                open_as_page.then(|| {
-                    Button::ghost("Open as a page")
-                        .icon(icons::EXTERNAL_LINK)
-                        .href(format!("/orders/{}", view.order.id))
-                }),
-            )),
-        reasons.into_iter().map(Text::muted).collect::<Vec<_>>(),
-    )))
+    web_only(
+        Stack::gap(2).children((
+            Row::gap(2)
+                .align(Align::Center)
+                .justify(Justify::Between)
+                .wrap()
+                .children((
+                    actions(view),
+                    open_as_page.then(|| {
+                        Button::ghost("Open as a page")
+                            .icon(icons::EXTERNAL_LINK)
+                            .href(format!("/orders/{}", view.order.id))
+                    }),
+                )),
+            reasons.into_iter().map(Text::muted).collect::<Vec<_>>(),
+        )),
+    )
 }
 
 /// How an order's slower parts are drawn: its history, and the customer's other

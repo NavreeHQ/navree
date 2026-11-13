@@ -264,7 +264,8 @@ fn a_move_a_native_client_posts_is_read_in_the_protocols_words() {
     // Keys for the rows and the lists, and a position counted from 0.
     let body = b"_csrf=t&item=12&from=ready&to=review&before=9&position=2";
     let mv = Move::from_form(body).unwrap();
-    assert_eq!(mv, Move::new("12", "ready", "review").before("9"));
+    // The row it now stands before is where it goes; the number is kept, from 1.
+    assert_eq!(mv, Move::new("12", "ready", "review").before("9").at(3));
     // At the end there is no row to go before: the place is the number, which a form counts from 1.
     let body = b"item=12&from=ready&to=ready&before=&position=4";
     let mv = Move::from_form(body).unwrap();

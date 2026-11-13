@@ -242,10 +242,7 @@ mod tests {
         // No region to fetch again: the list itself follows its stream.
         assert_eq!(list.id.as_deref(), Some("convs"));
         assert_eq!(list.since.as_deref(), Some("r7"));
-        assert_eq!(
-            list.changes.as_deref(),
-            Some("/inbox/rows?dir=live")
-        );
+        assert_eq!(list.changes.as_deref(), Some("/inbox/rows?dir=live"));
         assert_eq!(
             list.live,
             Some(n::Live {

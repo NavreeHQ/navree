@@ -177,7 +177,11 @@ impl PageNote {
     /// The stamp of the shell the page is drawn in: the stamp the shell's own
     /// document has for the same person, so a client that sees another
     /// fetches the shell again.
-    pub(crate) fn shell_stamp(&self, sign_in: Option<&str>, parts: &crate::NativeShellParts) -> String {
+    pub(crate) fn shell_stamp(
+        &self,
+        sign_in: Option<&str>,
+        parts: &crate::NativeShellParts,
+    ) -> String {
         let page = &self.page;
         let mut document = document(
             &page.shell,

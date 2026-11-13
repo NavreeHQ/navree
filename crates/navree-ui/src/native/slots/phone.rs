@@ -139,7 +139,9 @@ mod tests {
         };
         assert_eq!(text.country.as_ref().map(|c| c.value.as_str()), Some(""));
         let fixed = field_of(read(
-            PhoneInput::new("phone").region(Region::parse("IN")).readonly(),
+            PhoneInput::new("phone")
+                .region(Region::parse("IN"))
+                .readonly(),
         ));
         let i::Input::Text(text) = &fixed.input else {
             panic!("not text");
@@ -150,7 +152,12 @@ mod tests {
 
     #[test]
     fn a_hook_no_reader_knows_inside_a_phone_input_is_still_a_miss() {
-        for name in ["phone-input", "phone-country", "phone-country-trigger", "phone-countries"] {
+        for name in [
+            "phone-input",
+            "phone-country",
+            "phone-country-trigger",
+            "phone-countries",
+        ] {
             let node: Node = PhoneInput::new("phone").into();
             assert_eq!(
                 misses(tamper(node, name, "data-ui-wizard")),

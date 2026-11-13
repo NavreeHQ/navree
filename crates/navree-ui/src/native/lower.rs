@@ -1215,8 +1215,8 @@ impl Cx {
             }
             None => None,
         };
-        let disabled = has(element, "disabled")
-            || attr(element, "aria-disabled").as_deref() == Some("true");
+        let disabled =
+            has(element, "disabled") || attr(element, "aria-disabled").as_deref() == Some("true");
         let said = element.said();
         let hints = said.as_ref();
         // What the author said of why it is off comes first; a page that says it in the

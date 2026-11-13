@@ -767,12 +767,7 @@ async fn a_table_page_asked_for_by_a_native_client_is_native_with_its_rows() {
         .send()
         .await;
     let before: Envelope = serde_json::from_str(&response.text()).expect("an envelope");
-    let [
-        NativeOp::Rows {
-            at, more, prev, ..
-        },
-    ] = before.ops.as_slice()
-    else {
+    let [NativeOp::Rows { at, more, prev, .. }] = before.ops.as_slice() else {
         panic!("not one op of rows: {:?}", before.ops);
     };
     assert_eq!(*at, navree_native::op::Edge::Start);
@@ -1548,11 +1543,13 @@ async fn the_shell_document_holds_what_the_apps_modules_say_for_the_client_that_
         Some("/api/notifications/push-devices")
     );
     // An Apple client has no callback of its own here.
-    let apple = ask(
-        "platform=ios; os=26; form=phone; app=0.1.0; vocab=0; locale=en-IN; tz=Asia/Kolkata",
-    )
-    .await;
-    assert_eq!(apple.sign_in.as_ref().and_then(|s| s.callback.clone()), None);
+    let apple =
+        ask("platform=ios; os=26; form=phone; app=0.1.0; vocab=0; locale=en-IN; tz=Asia/Kolkata")
+            .await;
+    assert_eq!(
+        apple.sign_in.as_ref().and_then(|s| s.callback.clone()),
+        None
+    );
     // The pages a client is sent carry the stamp of the document it fetched.
     let screen = ask_native(&app, Method::GET, "/orders/1", &[], "").await.1;
     assert_eq!(screen.shell, android.stamp);
@@ -1580,7 +1577,10 @@ async fn signing_out_is_said_to_a_native_client_and_to_no_one_else() {
         .send()
         .await
         .text();
-    assert!(!web.contains("signed_out") && !web.contains("signedout"), "{web}");
+    assert!(
+        !web.contains("signed_out") && !web.contains("signedout"),
+        "{web}"
+    );
     assert!(web.contains(r#""op":"navigate""#), "{web}");
 }
 
@@ -1965,7 +1965,14 @@ fn a_forms_cancel_link_is_the_cancel_role_by_itself() {
         View::new("Refund").body(refund_form().cancel("Back to the order", "/orders/1"))
     });
     assert!(page.is_native(), "{:?}", page.why());
-    let Some(N::Form(form)) = page.screen().body.children().into_iter().find(|node| matches!(node, N::Form(_))).or(Some(&page.screen().body)) else {
+    let Some(N::Form(form)) = page
+        .screen()
+        .body
+        .children()
+        .into_iter()
+        .find(|node| matches!(node, N::Form(_)))
+        .or(Some(&page.screen().body))
+    else {
         panic!("no form");
     };
     let mut stack: Vec<&N> = form.children.iter().collect();
@@ -2353,17 +2360,23 @@ fn a_form_in_a_cell_stays_the_rows_inline_edit() {
     };
     assert_eq!(edit.action, "/orders/1/status");
     assert_eq!(edit.method, n::Method::Post);
-    assert!(edit.children.iter().any(|node| matches!(node, N::Field(field) if field.name == "status")));
-    assert!(edit.children.iter().any(|node| matches!(node, N::Button(button) if button.action == Some(Action::submit()))));
+    assert!(
+        edit.children
+            .iter()
+            .any(|node| matches!(node, N::Field(field) if field.name == "status"))
+    );
+    assert!(
+        edit.children.iter().any(
+            |node| matches!(node, N::Button(button) if button.action == Some(Action::submit()))
+        )
+    );
 }
 
 /// The orders with a box that is switched off for the ones that are done.
 fn picky_view() -> View {
     let query: TableQuery<OrderRow, NoFilter> = TableQuery::parse("/orders", "open=2");
     let page = TablePage::new(vec![order(1, "open"), order(2, "completed")], 5);
-    View::new("Orders").body(
-        full_table(&query, &page).selectable_if(|row| row.status == "open"),
-    )
+    View::new("Orders").body(full_table(&query, &page).selectable_if(|row| row.status == "open"))
 }
 
 #[test]
@@ -2402,10 +2415,20 @@ fn what_the_page_opened_and_what_cannot_be_chosen_are_said_of_the_rows() {
         panic!("not a form and a table");
     };
     assert_eq!(
-        table.rows.iter().map(|row| row.unchoosable).collect::<Vec<_>>(),
+        table
+            .rows
+            .iter()
+            .map(|row| row.unchoosable)
+            .collect::<Vec<_>>(),
         [false, true]
     );
-    assert_eq!(table.select.as_ref().and_then(|select| select.across.as_ref()), None);
+    assert_eq!(
+        table
+            .select
+            .as_ref()
+            .and_then(|select| select.across.as_ref()),
+        None
+    );
 }
 
 #[test]

@@ -321,9 +321,18 @@ mod tests {
         });
         assert_eq!(shown.title.as_deref(), Some("Revenue by day"));
         let page = TestNative::build(phone(), || {
-            View::new("x").body(Chart::line("Revenue by day").hide_title().series(Series::new("R", [1])))
+            View::new("x").body(
+                Chart::line("Revenue by day")
+                    .hide_title()
+                    .series(Series::new("R", [1])),
+            )
         });
-        assert!(page.page().dropped.iter().any(|name| name == "chart-title-hidden"));
+        assert!(
+            page.page()
+                .dropped
+                .iter()
+                .any(|name| name == "chart-title-hidden")
+        );
     }
 
     #[test]

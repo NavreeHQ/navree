@@ -583,7 +583,10 @@ mod tests {
         };
         // The lists are named by the keys the page knows them by, and so are the rows.
         assert_eq!(list_of_section(todo).reorder, expected(Some(2), "todo"));
-        assert_eq!(list_of_section(todo).children[0].id(), Some("board-item-c1"));
+        assert_eq!(
+            list_of_section(todo).children[0].id(),
+            Some("board-item-c1")
+        );
         let N::Row(card) = &list_of_section(todo).children[0] else {
             panic!("not a row");
         };
@@ -601,13 +604,15 @@ mod tests {
     #[test]
     fn a_key_that_is_not_plain_is_still_the_rows_and_the_lists_key() {
         let node = read(
-            Sortable::new("board", "Cards").post("/cards/move").list(
-                SortList::new("to do", "To do").item(SortItem::new("a card", "Fix login")),
-            ),
+            Sortable::new("board", "Cards")
+                .post("/cards/move")
+                .list(SortList::new("to do", "To do").item(SortItem::new("a card", "Fix login"))),
         );
         let list = list_of_section(&sections(&node)[0]);
         assert_eq!(
-            list.reorder.as_ref().and_then(|reorder| reorder.key.as_deref()),
+            list.reorder
+                .as_ref()
+                .and_then(|reorder| reorder.key.as_deref()),
             Some("to do")
         );
         let [N::Row(row)] = list.children.as_slice() else {

@@ -299,7 +299,11 @@ struct NativeRoutes {
 
 #[cfg(feature = "ui")]
 impl navree_ui::NativeShellPart for NativeRoutes {
-    fn contribute(&self, shell: &mut navree_ui::NativeShellParts, client: &navree_ui::NativeClient) {
+    fn contribute(
+        &self,
+        shell: &mut navree_ui::NativeShellParts,
+        client: &navree_ui::NativeClient,
+    ) {
         if self.on {
             self.part.contribute(shell, client);
         }
