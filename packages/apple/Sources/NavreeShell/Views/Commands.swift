@@ -35,9 +35,42 @@ public final class WindowCommands {
     /// The screen the person is looking at, when it shows parts.
     var front: ScreenState? { client.front }
 
-    /// The front screen's own actions, one by one.
-    var screenActions: [Navree.Node] {
-        CommandRules.leaves(front?.screen?.actions ?? [])
+    /// The list a detail stands beside in the window, while a screen is open
+    /// beside it: the first screen of the destination, when its stack is drawn
+    /// as columns and holds more than it.
+    var besideList: ScreenID? {
+        let nav = client.nav
+        guard nav.modals.isEmpty, nav.destinations.indices.contains(nav.selected) else { return nil }
+        let stack = nav.destinations[nav.selected].stack
+        guard stack.count > 1, let root = client.screen(stack[0])?.screen else { return nil }
+        switch SplitRules.layout(root.body, width: WindowRules.window(nav.width)) {
+        case .panes, .listBesideDetail: return stack[0]
+        case .stack: return nil
+        }
+    }
+
+    /// The window's commands, one by one, with the screen each acts on: the
+    /// front screen's own actions, and while a detail stands beside its list,
+    /// the list's too (its making something new keeping ⌘N).
+    var commands: [(node: Navree.Node, screen: ScreenID)] {
+        guard let shown = client.nav.front else { return [] }
+        let own = CommandRules.leaves(front?.screen?.actions ?? [])
+        guard let list = besideList, list != shown, let root = client.screen(list)?.screen else {
+            return own.map { ($0, shown) }
+        }
+        let listed = CommandRules.leaves(SplitRules.part(.list, of: root).actions)
+        return CommandRules.window(detail: own, list: listed).map { ($0.node, $0.fromList ? list : shown) }
+    }
+
+    /// The window's commands' actions, in order.
+    var screenActions: [Navree.Node] { commands.map(\.node) }
+
+    /// Whether Find has a search field to go to: the front screen's, or the
+    /// list's beside it.
+    var searches: Bool {
+        if let screen = front?.screen, CommandRules.searches(screen) { return true }
+        guard let list = besideList, let root = client.screen(list)?.screen else { return false }
+        return CommandRules.searches(SplitRules.part(.list, of: root))
     }
 
     /// The row whose detail the window shows beside its list, with its context
@@ -82,7 +115,8 @@ extension FocusedValues {
 }
 
 /// The app's commands in the menu bar, for the window in front: every action
-/// its toolbar offers and every action of the chosen row's context menu, with
+/// its toolbar offers (and, while a detail stands beside its list, the list's
+/// too) and every action of the chosen row's context menu, with
 /// the shortcuts Apple's apps give the standard ones (⌘N new, ⌘⌫ delete, ⌘R
 /// refresh, ⌘[ back, ⌘1 to ⌘9 for the destinations), the account's menu in
 /// the App menu, and the system's sidebar, toolbar and inspector commands.
@@ -136,10 +170,10 @@ struct SlotCommands: View {
     let slot: MenuSlot
 
     var body: some View {
-        if let target, let front = target.client.nav.front {
-            let actions = target.screenActions
-            ForEach(Array(CommandRules.entries(actions).filter { $0.slot == slot }.enumerated()), id: \.offset) { _, entry in
-                CommandItem(entry: entry) { target.perform(actions[entry.index], on: front) }
+        if let target {
+            let commands = target.commands
+            ForEach(Array(CommandRules.entries(commands.map(\.node)).filter { $0.slot == slot }.enumerated()), id: \.offset) { _, entry in
+                CommandItem(entry: entry) { target.perform(commands[entry.index].node, on: commands[entry.index].screen) }
             }
         }
     }
@@ -169,7 +203,7 @@ struct FindCommands: View {
         if let target {
             let finds = CommandRules.entries(target.screenActions).contains { $0.slot == .find }
             SlotCommands(target: target, slot: .find)
-            if !finds, let screen = target.front?.screen, CommandRules.searches(screen) {
+            if !finds, target.searches {
                 Button("Find…") { target.finding += 1 }
                     .keyboardShortcut(KeyCommand.equivalent(.find))
             }
@@ -241,11 +275,11 @@ struct ScreenCommands: View {
     let target: WindowCommands?
 
     var body: some View {
-        if let target, let front = target.client.nav.front {
-            let actions = target.screenActions
-            let entries = CommandRules.entries(actions)
+        if let target {
+            let commands = target.commands
+            let entries = CommandRules.entries(commands.map(\.node))
             ForEach(Array(entries.filter { $0.slot == .screen }.enumerated()), id: \.offset) { _, entry in
-                CommandItem(entry: entry) { target.perform(actions[entry.index], on: front) }
+                CommandItem(entry: entry) { target.perform(commands[entry.index].node, on: commands[entry.index].screen) }
             }
             if let chosen = target.chosen, !chosen.actions.isEmpty {
                 let rows = CommandRules.entries(chosen.actions)
@@ -259,7 +293,7 @@ struct ScreenCommands: View {
             if !destructive.isEmpty {
                 Divider()
                 ForEach(Array(destructive.enumerated()), id: \.offset) { _, entry in
-                    CommandItem(entry: entry) { target.perform(actions[entry.index], on: front) }
+                    CommandItem(entry: entry) { target.perform(commands[entry.index].node, on: commands[entry.index].screen) }
                 }
             }
         }

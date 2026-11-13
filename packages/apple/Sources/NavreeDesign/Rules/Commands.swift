@@ -123,6 +123,60 @@ public enum CommandRules {
         }
     }
 
+    /// One of a window's commands, and whose it is.
+    public struct WindowAction: Sendable, Equatable {
+        public var node: Navree.Node
+        /// The list's, beside the detail open: it acts on the list's screen.
+        public var fromList: Bool
+
+        public init(node: Navree.Node, fromList: Bool) {
+            self.node = node
+            self.fromList = fromList
+        }
+    }
+
+    /// The commands of a window that shows a detail beside its list (each
+    /// already a leaf): the list's commands stay while a detail is open, as
+    /// Mail keeps New Message whatever message is open. The list's actions
+    /// that make something new come first, so the first of them keeps ⌘N;
+    /// then the detail's; then the list's others. A command both offer, in the
+    /// same words with the same action, is listed once.
+    public static func window(detail: [Navree.Node], list: [Navree.Node]) -> [WindowAction] {
+        func creates(_ node: Navree.Node) -> Bool {
+            if case .button(let button) = node { return button.role == .create || button.standard == .add }
+            return false
+        }
+        let ordered = list.filter(creates).map { WindowAction(node: $0, fromList: true) }
+            + detail.map { WindowAction(node: $0, fromList: false) }
+            + list.filter { !creates($0) }.map { WindowAction(node: $0, fromList: true) }
+        var seen: [Sameness] = []
+        return ordered.filter { action in
+            guard let key = Sameness(action.node) else { return true }
+            if seen.contains(key) { return false }
+            seen.append(key)
+            return true
+        }
+    }
+
+    /// What makes two commands one: their words and what they do.
+    struct Sameness: Equatable {
+        let words: String
+        let action: Navree.Action?
+
+        init?(_ node: Navree.Node) {
+            switch node {
+            case .button(let button):
+                words = CommandRules.title(button.label)
+                action = button.action
+            case .link(let link):
+                words = CommandRules.title(link.label)
+                action = link.action
+            default:
+                return nil
+            }
+        }
+    }
+
     /// A toolbar's item as the button or menu it stands for.
     static func part(_ item: Navree.ToolbarItem) -> Navree.Node {
         if !item.menu.isEmpty {
