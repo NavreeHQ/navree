@@ -1,36 +1,40 @@
 import Foundation
+import NavreeRuntime
+import NavreeShell
 
-/// The store demo's answers, kept in the app, served to the app's own
+/// The store demo's answers, kept in the app, given to the runtime core's
 /// requests in place of a server. The answers to pages were recorded from the
 /// store demo; the answers to posts are written in the shapes it answers with.
-nonisolated final class RecordedAnswers: URLProtocol, @unchecked Sendable {
-    override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host == URL(string: DemoConfiguration.recordedOrigin)?.host
-    }
+@MainActor
+final class RecordedStore: Transport {
+    var jar: CookieJar? { nil }
 
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
-
-    override func startLoading() {
-        guard let url = request.url else { return }
-        let body = Self.body(of: request)
-        let (status, name) = Self.answer(method: request.httpMethod ?? "GET", url: url, body: body)
+    func fetch(_ request: FetchRequest, answer: @escaping @MainActor (Response) -> Void) {
+        let fields: [String: String]
+        if case .form(let text)? = request.body { fields = Self.fields(text) } else { fields = [:] }
+        let url = URL(string: request.url)
+        let (status, name) = url.map { Self.answer(method: request.method.uppercased(), url: $0, body: fields) } ?? (404, nil)
         let data = name.flatMap(Self.file) ?? Data("Not found".utf8)
-        let type = name == nil ? "text/plain" : "application/vnd.navree.native+json"
-        let response = HTTPURLResponse(
-            url: url, statusCode: status, httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": type, "Vary": "X-Navree-Native"]
-        )!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: data)
-        client?.urlProtocolDidFinishLoading(self)
+        let response = Response(
+            request: request.request, status: status,
+            contentType: name == nil ? "text/plain" : "application/vnd.navree.native+json",
+            body: String(decoding: data, as: UTF8.self)
+        )
+        // Answered after the event that asked, as the network would.
+        Task { @MainActor in answer(response) }
     }
 
-    override func stopLoading() {}
+    func cancel(_ request: Int) {}
+
+    /// The recorded store has no live streams: they stay quiet.
+    func open(
+        stream: Int, url: String, headers: [(String, String)], report: @escaping @MainActor (CoreEvent.StreamState) -> Void
+    ) {}
+
+    func close(stream: Int) {}
 
     /// Which recorded answer a request gets, and its status.
-    static func answer(method: String, url: URL, body: [String: String]) -> (Int, String?) {
+    nonisolated static func answer(method: String, url: URL, body: [String: String]) -> (Int, String?) {
         let path = url.path
         let query = url.query ?? ""
         let segments = path.split(separator: "/").map(String.init)
@@ -63,12 +67,12 @@ nonisolated final class RecordedAnswers: URLProtocol, @unchecked Sendable {
 
     /// The markup of a page the web view shows, for an address.
     ///
-    /// The web view asks the network for what the page links to, never this
-    /// URL protocol, and the recorded origin has no server: a stylesheet linked
-    /// in the head would hold the page's first paint until its request fails,
-    /// however long that takes. So the toolkit's own stylesheets, font and
-    /// scripts are taken out and its stylesheets put in the page itself.
-    static func page(for address: String) -> String? {
+    /// The web view asks the network for what the page links to, and the
+    /// recorded origin has no server: a stylesheet linked in the head would
+    /// hold the page's first paint until its request fails, however long that
+    /// takes. So the toolkit's own stylesheets, font and scripts are taken out
+    /// and its stylesheets put in the page itself.
+    nonisolated static func page(for address: String) -> String? {
         let path = address.split(separator: "?").first.map(String.init) ?? "/"
         guard path == "/", let url = resource("index.embed", "html"),
             var html = try? String(contentsOf: url, encoding: .utf8)
@@ -86,30 +90,19 @@ nonisolated final class RecordedAnswers: URLProtocol, @unchecked Sendable {
             .replacingOccurrences(of: "<html ", with: "<html data-mode=\"system\" ")
     }
 
-    static func file(_ name: String) -> Data? {
+    nonisolated static func file(_ name: String) -> Data? {
         resource(name, "json").flatMap { try? Data(contentsOf: $0) }
     }
 
-    static func resource(_ name: String, _ ext: String) -> URL? {
+    nonisolated static func resource(_ name: String, _ ext: String) -> URL? {
         Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Recorded")
             ?? Bundle.main.url(forResource: name, withExtension: ext)
     }
 
-    /// A post's fields: the body comes as a stream to a URL protocol.
-    static func body(of request: URLRequest) -> [String: String] {
-        var data = request.httpBody ?? Data()
-        if data.isEmpty, let stream = request.httpBodyStream {
-            stream.open()
-            var buffer = [UInt8](repeating: 0, count: 4096)
-            while stream.hasBytesAvailable {
-                let count = stream.read(&buffer, maxLength: buffer.count)
-                if count <= 0 { break }
-                data.append(buffer, count: count)
-            }
-            stream.close()
-        }
+    /// A post's fields, from the form body the core wrote.
+    nonisolated static func fields(_ text: String) -> [String: String] {
         var fields: [String: String] = [:]
-        for pair in String(decoding: data, as: UTF8.self).split(separator: "&") {
+        for pair in text.split(separator: "&") {
             let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
             let decode = { (text: String) in text.replacingOccurrences(of: "+", with: " ").removingPercentEncoding ?? text }
             fields[decode(parts[0])] = parts.count > 1 ? decode(parts[1]) : ""

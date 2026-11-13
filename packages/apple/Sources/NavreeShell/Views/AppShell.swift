@@ -1,75 +1,318 @@
+import NavreeCoreBridge
 import NavreeDesign
 import NavreeProtocol
+import NavreeRuntime
 import SwiftUI
 
-/// The app's chrome, drawn from the shell document: its destinations as a tab
-/// bar on a compact width and as a tab bar that becomes a sidebar on a
-/// regular one (chosen from the window, never from the device), a navigation
-/// stack for each, a sheet and a cover over everything.
+#if canImport(UIKit)
+import UIKit
+#endif
+
+/// The app's chrome, drawn from the runtime core's view state: its
+/// destinations as a tab bar on a compact width and as a tab bar that becomes
+/// a sidebar on a regular one (chosen from the window, never from the
+/// device), a navigation stack bound to each destination's stack, and the
+/// screens the core presents over everything.
 public struct AppShell: View {
-    @State private var client: NativeClient
+    @State private var session: Session
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.scenePhase) private var phase
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.locale) private var locale
+    @Environment(\.timeZone) private var timeZone
+    /// Set while the app is away: the system brings the scene back with it
+    /// only when it ended the app itself, never after the person quit it.
+    @SceneStorage("navree.restorable") private var restorable = false
 
     public init(configuration: ShellConfiguration) {
-        _client = State(initialValue: NativeClient(configuration: configuration))
-    }
-
-    public init(client: NativeClient) {
-        _client = State(initialValue: client)
+        _session = State(initialValue: Session(configuration: configuration))
     }
 
     public var body: some View {
-        let state = client.state
-        let width = WidthClass(sizeClass)
-        destinations(state: state, width: width)
-            .sheet(isPresented: presented(.sheet)) {
-                StackView(container: .sheet, client: client)
+        Group {
+            if let client = session.client {
+                Chrome(client: client, configuration: session.configuration)
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
+                        session.window(WindowRules.width(sizeClass: WidthClass(sizeClass), points: width))
+                    }
+            } else {
+                ContentUnavailableView(
+                    "This App Can't Start", systemImage: "exclamationmark.triangle",
+                    description: Text("Its origin is not one https address.")
+                )
             }
-            .modifier(Cover(isPresented: presented(.cover), client: client))
-            .task { client.start() }
-            .onOpenURL { client.send(.deepLink($0)) }
-            .tint(ThemeColor.accent(state.shell?.theme))
+        }
+        .task {
+            session.begin(restoring: restorable)
+            restorable = false
+            session.environment(traits)
+        }
+        .onChange(of: traits) { _, traits in session.environment(traits) }
+        .onChange(of: phase) { _, phase in
+            switch phase {
+            case .active:
+                session.client?.send(.foreground)
+            case .background:
+                session.client?.send(.background)
+                session.keep()
+                restorable = true
+            default:
+                break
+            }
+        }
+        .onOpenURL { url in session.client?.send(.openLink(url: url.absoluteString)) }
+        .onReceive(NotificationCenter.default.publisher(for: AppEvents.pushToken)) { note in
+            if let token = note.userInfo?["token"] as? String {
+                session.client?.send(.pushToken(token: token, sandbox: AppEvents.sandbox))
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AppEvents.notification)) { note in
+            if let href = note.userInfo?["href"] as? String { session.client?.send(.notification(href: href)) }
+        }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            if let url = activity.webpageURL { session.client?.send(.openLink(url: url.absoluteString)) }
+        }
     }
 
-    @ViewBuilder private func destinations(state: ViewState, width: WidthClass) -> some View {
-        let items = state.destinations
-        switch NavigationRules.structure(destinations: items.count, width: width) {
+    /// The person's settings as the core hears them.
+    private var traits: DeviceTraits {
+        var traits = Session.device()
+        traits.scheme = scheme == .dark ? .dark : .light
+        traits.contrast = contrast == .increased ? .more : .normal
+        traits.textPercent = WindowRules.textPercent(typeSize)
+        traits.locale = locale.identifier(.bcp47)
+        traits.tz = timeZone.identifier
+        return traits
+    }
+}
+
+/// The core, the client over it, and what carries out its effects, for as
+/// long as the scene lives.
+@MainActor
+@Observable
+final class Session {
+    let configuration: ShellConfiguration
+    let client: NativeClient?
+    let effects: SystemEffects?
+    @ObservationIgnored private var heard: DeviceTraits
+    @ObservationIgnored private var width: Width?
+    @ObservationIgnored private var launched = false
+
+    init(configuration: ShellConfiguration) {
+        self.configuration = configuration
+        let device = Session.device()
+        heard = device
+        let config = CoreConfiguration.json(configuration, device: device)
+        guard let core = Core(config: config) else {
+            client = nil
+            effects = nil
+            return
+        }
+        let effects = SystemEffects(
+            transport: configuration.transport(), signedWith: configuration.signedWith, origin: configuration.base
+        )
+        self.effects = effects
+        client = NativeClient(core: core, effects: effects)
+    }
+
+    /// Starts once: from the kept snapshot when the system brings back a
+    /// scene it ended, else plainly (and what was kept is let go).
+    func begin(restoring: Bool) {
+        guard let client, let effects, !client.began else { return }
+        let snapshot = restoring ? effects.snapshots.readData(Self.snapshot) : nil
+        if snapshot == nil { effects.snapshots.clear() }
+        client.begin(restoring: snapshot)
+        // The token is asked for at every launch of a build signed for push.
+        if configuration.signedWith.contains(.pushNotifications) { AppEvents.registerForPush() }
+        launch(configuration.launch, in: client)
+    }
+
+    /// The app went away: what the core keeps for a launch the system may end.
+    func keep() {
+        guard let client, let effects else { return }
+        effects.snapshots.writeData(Self.snapshot, client.snapshot())
+    }
+
+    func window(_ width: Width) {
+        guard width != self.width else { return }
+        self.width = width
+        client?.send(.window(width: width))
+    }
+
+    /// Tells the core what changed of the person's settings, once.
+    func environment(_ traits: DeviceTraits) {
+        let change = WindowRules.change(from: heard, to: traits)
+        heard = traits
+        if !change.isEmpty { client?.send(.environment(change)) }
+    }
+
+    /// Opens what the launch asks for, as taps, once the app is ready.
+    private func launch(_ launch: Launch, in client: NativeClient) {
+        guard !launch.isEmpty, !launched else { return }
+        if client.nav.stage == .ready {
+            launched = true
+            return LaunchSteps.run(launch, on: client)
+        }
+        withObservationTracking {
+            _ = client.nav.stage
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.launch(launch, in: client) }
+        }
+    }
+
+    static let snapshot = "snapshot"
+
+    /// This device as the app starts.
+    static func device() -> DeviceTraits {
+        #if canImport(UIKit)
+        let device = UIDevice.current
+        let traits = UITraitCollection.current
+        return DeviceTraits(
+            platform: .ios, os: device.systemVersion, form: device.userInterfaceIdiom == .pad ? .tablet : .phone,
+            scheme: traits.userInterfaceStyle == .dark ? .dark : .light,
+            contrast: traits.accessibilityContrast == .high ? .more : .normal,
+            textPercent: Int((UIFontMetrics.default.scaledValue(for: 17) / 17 * 100).rounded()),
+            locale: Locale.current.identifier(.bcp47), tz: TimeZone.current.identifier
+        )
+        #else
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        return DeviceTraits(
+            platform: .macos, os: "\(version.majorVersion).\(version.minorVersion)", form: .desktop,
+            locale: Locale.current.identifier(.bcp47), tz: TimeZone.current.identifier
+        )
+        #endif
+    }
+}
+
+/// The screens a launch opens, told to the core as taps: the destination
+/// chosen, each address followed from the screen in front, a sheet last.
+@MainActor
+enum LaunchSteps {
+    static func run(_ launch: Launch, on client: NativeClient) {
+        if let select = launch.select, let index = client.nav.destinations.firstIndex(where: { $0.href == select }) {
+            client.send(.select(destination: index))
+        }
+        for address in launch.push {
+            guard let front = client.nav.front else { break }
+            client.send(.act(.init(screen: front, action: .navigate(.init(href: address, present: .push)))))
+        }
+        if let sheet = launch.sheet, let front = client.nav.front {
+            client.send(.act(.init(screen: front, action: .navigate(.init(href: sheet, present: .sheet)))))
+        }
+    }
+}
+
+/// What a window and the person's settings are, in the core's words.
+public enum WindowRules {
+    /// The window's width class: compact as the system's compact size class;
+    /// a regular one is medium until it is as wide as a tablet held across.
+    public static func width(sizeClass: WidthClass, points: CGFloat) -> Width {
+        switch sizeClass {
+        case .compact: .compact
+        case .regular: points < 1000 ? .medium : .expanded
+        }
+    }
+
+    /// The text size as a share of the default, from the body style's size at
+    /// each Dynamic Type size.
+    public static func textPercent(_ size: DynamicTypeSize) -> Int {
+        let body: Double = switch size {
+        case .xSmall: 14
+        case .small: 15
+        case .medium: 16
+        case .large: 17
+        case .xLarge: 19
+        case .xxLarge: 21
+        case .xxxLarge: 23
+        case .accessibility1: 28
+        case .accessibility2: 33
+        case .accessibility3: 40
+        case .accessibility4: 47
+        case .accessibility5: 53
+        @unknown default: 17
+        }
+        return Int((body / 17 * 100).rounded())
+    }
+
+    /// What changed of the person's settings, and only that.
+    public static func change(from old: DeviceTraits, to new: DeviceTraits) -> CoreEvent.Environment {
+        CoreEvent.Environment(
+            scheme: old.scheme == new.scheme ? nil : new.scheme,
+            contrast: old.contrast == new.contrast ? nil : new.contrast,
+            textPercent: old.textPercent == new.textPercent ? nil : new.textPercent,
+            locale: old.locale == new.locale ? nil : new.locale,
+            tz: old.tz == new.tz ? nil : new.tz
+        )
+    }
+}
+
+/// The app in each of its stages: starting, failed, too old, ready.
+struct Chrome: View {
+    let client: NativeClient
+    let configuration: ShellConfiguration
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    var body: some View {
+        switch client.nav.stage {
+        case .starting:
+            ProgressView()
+                .controlSize(.large)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .failed:
+            let words = Words.failure(client.nav.failure)
+            ContentUnavailableView {
+                Label(words.title, systemImage: "wifi.exclamationmark")
+            } description: {
+                Text(words.text)
+            } actions: {
+                Button("Try Again") { client.send(.start) }
+                    .buttonStyle(.borderedProminent)
+            }
+        case .upgrade:
+            ContentUnavailableView {
+                Label("Update Required", systemImage: "arrow.down.app")
+            } description: {
+                Text("This version of the app is too old for the server. Version \(client.nav.upgrade?.minApp ?? "") or later is needed.")
+            } actions: {
+                Button("Get the Update") { client.send(.openUpgrade) }
+                    .buttonStyle(.borderedProminent)
+            }
+        case .ready:
+            destinations
+                .modifier(Modals(level: 0, client: client, configuration: configuration))
+                .tint(ThemeColor.accent(client.app?.theme))
+        }
+    }
+
+    @ViewBuilder private var destinations: some View {
+        let items = client.nav.destinations
+        let groups = Set(items.compactMap(\.group)).count
+        switch NavigationRules.structure(destinations: items.count, width: WidthClass(sizeClass)) {
         case .single:
-            StackView(container: .destination(items.first?.href ?? state.selected), client: client)
+            if let first = items.first {
+                StackView(stack: first.stack, client: client, configuration: configuration)
+            }
         case .tabBar:
             TabView(selection: selection) {
-                ForEach(items, id: \.href) { item in
-                    Tab(value: item.href) {
-                        StackView(container: .destination(item.href), client: client)
-                    } label: {
-                        DestinationLabel(item: item)
-                    }
-                    .badge(item.badge.flatMap { Int($0) } ?? 0)
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                    tab(item, index)
                 }
             }
-        case .sidebarAdaptable where !NavigationRules.groupsAsSections(state.shell?.nav.groups.count ?? 0):
+        case .sidebarAdaptable where !NavigationRules.groupsAsSections(groups):
             TabView(selection: selection) {
-                ForEach(items, id: \.href) { item in
-                    Tab(value: item.href) {
-                        StackView(container: .destination(item.href), client: client)
-                    } label: {
-                        DestinationLabel(item: item)
-                    }
-                    .badge(item.badge.flatMap { Int($0) } ?? 0)
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                    tab(item, index)
                 }
             }
             .tabViewStyle(.sidebarAdaptable)
         case .sidebarAdaptable:
             TabView(selection: selection) {
-                ForEach(Array((state.shell?.nav.groups ?? []).enumerated()), id: \.offset) { _, group in
-                    TabSection(group.label ?? "") {
-                        ForEach(group.items, id: \.href) { item in
-                            Tab(value: item.href) {
-                                StackView(container: .destination(item.href), client: client)
-                            } label: {
-                                DestinationLabel(item: item)
-                            }
-                            .badge(item.badge.flatMap { Int($0) } ?? 0)
+                ForEach(DestinationGroup.of(items)) { group in
+                    TabSection(group.name) {
+                        ForEach(group.members) { member in
+                            tab(member.item, member.index)
                         }
                     }
                 }
@@ -78,76 +321,60 @@ public struct AppShell: View {
         }
     }
 
-    private var selection: Binding<String> {
-        Binding(get: { client.state.selected }, set: { client.send(.select($0)) })
+    private func tab(_ item: Destination, _ index: Int) -> some TabContent<Int> {
+        Tab(value: index) {
+            StackView(stack: item.stack, client: client, configuration: configuration)
+        } label: {
+            DestinationLabel(label: item.label, icon: item.icon)
+        }
+        .badge(item.badge.flatMap { Int($0) } ?? 0)
     }
 
-    private func presented(_ container: Container) -> Binding<Bool> {
-        Binding(
-            get: { !(client.state.stacks[container] ?? []).isEmpty },
-            set: { shown in if !shown { client.send(.dismissed(container)) } }
-        )
+    private var selection: Binding<Int> {
+        Binding(get: { client.nav.selected }, set: { client.send(.select(destination: $0)) })
+    }
+}
+
+/// The destinations of a group, in the order the groups first come.
+struct DestinationGroup: Identifiable {
+    struct Member: Identifiable {
+        let index: Int
+        let item: Destination
+        var id: Int { index }
+    }
+
+    let name: String
+    var members: [Member]
+    var id: String { name }
+
+    static func of(_ items: [Destination]) -> [DestinationGroup] {
+        var groups: [DestinationGroup] = []
+        for (index, item) in items.enumerated() {
+            let name = item.group ?? ""
+            if let at = groups.firstIndex(where: { $0.name == name }) {
+                groups[at].members.append(Member(index: index, item: item))
+            } else {
+                groups.append(DestinationGroup(name: name, members: [Member(index: index, item: item)]))
+            }
+        }
+        return groups
     }
 }
 
 /// A destination's label in the tab bar or the sidebar: its name and the
 /// system symbol that means the same, or its own icon drawn as a template.
 struct DestinationLabel: View {
-    let item: Navree.NavItem
+    let label: String
+    let icon: Navree.Icon?
 
     var body: some View {
-        if let icon = item.icon, let symbol = Symbols.symbol(for: icon) {
-            Label(item.label, systemImage: symbol)
-        } else if let icon = item.icon, let image = IconImage.image(icon) {
-            Label { Text(item.label) } icon: { image }
+        if let icon, let symbol = Symbols.symbol(for: icon) {
+            Label(label, systemImage: symbol)
+        } else if let icon, let image = IconImage.image(icon) {
+            Label { Text(label) } icon: { image }
         } else {
-            Label(item.label, systemImage: "square.dashed")
+            Label(label, systemImage: "square.dashed")
         }
-    }
-}
-
-/// The cover over everything: sign-in and full-screen tasks. A Mac has no
-/// such thing, and gets a sheet.
-struct Cover: ViewModifier {
-    let isPresented: Binding<Bool>
-    let client: NativeClient
-
-    func body(content: Content) -> some View {
-        #if os(iOS)
-        content.fullScreenCover(isPresented: isPresented) {
-            StackView(container: .cover, client: client)
-        }
-        #else
-        content.sheet(isPresented: isPresented) {
-            StackView(container: .cover, client: client)
-        }
-        #endif
-    }
-}
-
-/// A navigation stack of screens: the runtime's stack is its path, and the
-/// system's back button and swipe tell the runtime what they took away.
-struct StackView: View {
-    let container: Container
-    let client: NativeClient
-
-    var body: some View {
-        NavigationStack(path: path) {
-            PageView(ref: PageRef(container, 0), client: client)
-                .navigationDestination(for: Step.self) { step in
-                    PageView(ref: PageRef(container, step.depth), client: client)
-                }
-        }
-    }
-
-    private var path: Binding<[Step]> {
-        Binding(
-            get: {
-                let stack = client.state.stacks[container] ?? []
-                return stack.enumerated().dropFirst().map { Step(address: $0.element.address, depth: $0.offset) }
-            },
-            set: { client.send(.path(container, $0)) }
-        )
     }
 }
 

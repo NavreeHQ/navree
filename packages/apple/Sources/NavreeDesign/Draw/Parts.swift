@@ -472,6 +472,8 @@ struct TabsPart: View {
                 chosen = index
                 if let href = tabs.items[index].href {
                     context.send(.act(.navigate(Navree.Action.Navigate(href: href, present: .replace)), Place()))
+                } else if let id = tabs.id {
+                    context.send(.tab(id: id, index: index))
                 }
             })) {
                 ForEach(Array(tabs.items.enumerated()), id: \.offset) { index, tab in Text(tab.label).tag(index) }
@@ -503,7 +505,11 @@ struct RegionPart: View {
     @Environment(\.navree) private var context
 
     var body: some View {
-        if region.children.isEmpty {
+        if region.children.isEmpty, context.region(region.id).failed {
+            Button("Try Again") { context.send(.retry(region: region.id)) }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
+        } else if region.children.isEmpty {
             ProgressView()
                 .frame(maxWidth: .infinity)
                 .task { context.send(.appear(region: region.id)) }

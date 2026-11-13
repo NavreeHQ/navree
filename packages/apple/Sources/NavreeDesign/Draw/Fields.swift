@@ -15,7 +15,7 @@ struct FieldControl: View {
         VStack(alignment: .leading, spacing: 6) {
             control
                 .disabled(field.disabled)
-            if let error = field.error {
+            if let error {
                 Label(error, systemImage: "exclamationmark.circle.fill")
                     .font(.footnote)
                     .foregroundStyle(.red)
@@ -28,6 +28,12 @@ struct FieldControl: View {
 
     private var ref: FormRef { form ?? .loose }
     private var label: String { field.label ?? field.name }
+
+    /// What is wrong with the value, as the runtime holds it.
+    private var error: String? {
+        let messages = context.errors(ref, field.name) ?? field.error.map { [$0] } ?? []
+        return messages.isEmpty ? nil : messages.joined(separator: " ")
+    }
 
     /// The values the field holds now: what the reader chose, or what came.
     private var values: [String] {
@@ -45,7 +51,7 @@ struct FieldControl: View {
     @ViewBuilder private var control: some View {
         switch field.input {
         case .text(let input):
-            TextControl(label: label, input: input, text: text, invalid: field.error != nil, id: field.id)
+            TextControl(label: label, input: input, text: text, invalid: error != nil, id: field.id)
         case .toggle(let input):
             Toggle(label, isOn: Binding(get: { !values.isEmpty }, set: { set($0 ? [input.value ?? "on"] : []) }))
         case .choice(let input):
@@ -105,6 +111,7 @@ struct TextControl: View {
     let invalid: Bool
     let id: String?
     @FocusState private var focused: Bool
+    @Environment(\.navree) private var context
 
     var body: some View {
         let keyboard = ContentRules.keyboard(input)
@@ -126,6 +133,12 @@ struct TextControl: View {
             }
         }
         .focused($focused)
+        .task(id: context.focus?.serial) {
+            // The screen asks for the focus here: it moves, and the runtime hears so.
+            guard let request = context.focus, request.target == id else { return }
+            focused = true
+            context.send(.focused(serial: request.serial))
+        }
         .readOnly(input.readonly)
         .keyboard(keyboard)
         .accessibilityValue(invalid ? "Needs a change" : "")

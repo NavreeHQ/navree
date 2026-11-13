@@ -1,56 +1,84 @@
 import Foundation
+import NavreeDesign
 import NavreeProtocol
+import NavreeRuntime
 
 /// What an app built on the shell is compiled with. The origin is part of the
-/// app, never something a server or a link can change.
+/// app, never something a server or a link can change: the runtime core holds
+/// it, and every address any part of the app asks for is checked there.
 public struct ShellConfiguration: Sendable {
-    /// The origin pattern every request, page and link must be on.
-    public var origin: Origin
-    /// The host the app talks to now: on the origin.
-    public var base: URL
+    /// The one origin the app talks to, such as `https://store.example.in`.
+    public var origin: String
+    /// Plain `http` to this machine: for a server run locally in development only.
+    public var loopbackHTTP: Bool
+    /// The bundle id: without it no sign-in is handed over and no push token posted.
+    public var appID: String
     /// The app's version, sent in the descriptor.
     public var appVersion: String
-    /// The app's own URL scheme, for links from other apps.
-    public var urlScheme: String?
-    /// The device features this build may use, sent in the descriptor.
-    public var caps: [String]
-    /// Addresses that start a sign-in with another service (`*` is one
-    /// segment): they open in the system's sign-in session, never in the web
-    /// view, since providers refuse embedded browsers.
+    /// The app's own URL scheme, when a sign-in session is to come back on it
+    /// rather than on a link of the origin.
+    public var signInScheme: String?
+    /// Addresses that open the system's sign-in session instead of a page
+    /// (`*` is one segment).
     public var signInPaths: [String]
-    /// The address on the origin the sign-in session ends at. Its query carries
-    /// what the server needs to finish signing in this client.
-    public var signInCallbackPath: String
-    /// Whether the session is kept in the Keychain between launches.
+    /// What the build is signed with beyond what any app has: it decides which
+    /// device features the app says it has.
+    public var signedWith: Set<Entitlement>
+    /// Whether a link from outside may open any address of the origin, or only
+    /// a destination and the addresses the shell's routes name.
+    public var openAnyLink: Bool
+    /// Whether the session's cookies are kept in the Keychain between launches.
     public var keepsSession: Bool
-    /// The session configuration the transport starts from; a demo or a test
-    /// answers requests itself through its `protocolClasses`.
-    public var sessionConfiguration: @Sendable () -> URLSessionConfiguration
-    /// Where the web view gets its pages: the network, or (for a demo with no
-    /// server) markup the app supplies for an address.
+    /// What answers the core's requests: the network, or (for a demo or a
+    /// test) answers the app has with it.
+    public var transport: @MainActor @Sendable () -> any Transport
+    /// Where the web view gets its pages: the network, or markup the app supplies.
     public var webContent: WebContent
-    /// The destination shown first, and the screens already pushed on each
-    /// destination's stack: what a relaunch restores.
-    public var restoration: Restoration
+    /// Screens opened as the app starts, as a person would open them: for a
+    /// demo and its tests.
+    public var launch: Launch
 
     public init(
-        origin: Origin, base: URL, appVersion: String, urlScheme: String? = nil, caps: [String] = [],
-        signInPaths: [String] = ["/auth/*/redirect"], signInCallbackPath: String = "/_navree/native/signed-in",
-        keepsSession: Bool = true, sessionConfiguration: @escaping @Sendable () -> URLSessionConfiguration = { .ephemeral },
-        webContent: WebContent = .network, restoration: Restoration = Restoration()
+        origin: String, loopbackHTTP: Bool = false, appID: String = Bundle.main.bundleIdentifier ?? "",
+        appVersion: String, signInScheme: String? = nil, signInPaths: [String] = ["/auth/*/redirect"],
+        signedWith: Set<Entitlement> = [], openAnyLink: Bool = false, keepsSession: Bool = true,
+        transport: (@MainActor @Sendable () -> any Transport)? = nil, webContent: WebContent = .network,
+        launch: Launch = Launch()
     ) {
         self.origin = origin
-        self.base = base
+        self.loopbackHTTP = loopbackHTTP
+        self.appID = appID
         self.appVersion = appVersion
-        self.urlScheme = urlScheme
-        self.caps = caps
+        self.signInScheme = signInScheme
         self.signInPaths = signInPaths
-        self.signInCallbackPath = signInCallbackPath
+        self.signedWith = signedWith
+        self.openAnyLink = openAnyLink
         self.keepsSession = keepsSession
-        self.sessionConfiguration = sessionConfiguration
+        let keeps = keepsSession
+        let origin = origin
+        self.transport = transport ?? { HTTPTransport(jar: CookieJar(origin: origin, persistent: keeps)) }
         self.webContent = webContent
-        self.restoration = restoration
+        self.launch = launch
     }
+
+    /// The origin as a URL: what relative addresses of pictures are read against.
+    public var base: URL? {
+        URL(string: origin.hasSuffix("/") ? origin : origin + "/")
+    }
+}
+
+/// What a build can be signed with that changes what it can do. Each needs an
+/// Apple Developer Program team, and most an associated domain the origin
+/// serves (`apple-app-site-association`).
+public enum Entitlement: String, Sendable, CaseIterable {
+    /// `webcredentials:` and `applinks:` for the origin's host: passkeys, a
+    /// confirmation signed with one, and a sign-in session that comes back on
+    /// a link of the origin.
+    case associatedDomains
+    /// Sign in with Apple.
+    case signInWithApple
+    /// `aps-environment`: push notifications.
+    case pushNotifications
 }
 
 /// Where a web page's markup comes from.
@@ -62,18 +90,106 @@ public enum WebContent: Sendable {
     case supplied(@Sendable (String) async -> String?)
 }
 
-/// The navigation a launch starts with.
-public struct Restoration: Sendable, Equatable {
+/// What a launch opens before the person does anything, told to the core as
+/// the person's own taps would be: a destination chosen, links followed.
+public struct Launch: Sendable, Equatable {
     /// The destination shown first, by its address.
-    public var selected: String?
-    /// For each destination, the addresses pushed over its first screen.
-    public var stacks: [String: [String]]
-    /// An address presented in a sheet over everything.
+    public var select: String?
+    /// Addresses opened one over the other on that destination's stack.
+    public var push: [String]
+    /// An address presented as a sheet over everything.
     public var sheet: String?
 
-    public init(selected: String? = nil, stacks: [String: [String]] = [:], sheet: String? = nil) {
-        self.selected = selected
-        self.stacks = stacks
+    public init(select: String? = nil, push: [String] = [], sheet: String? = nil) {
+        self.select = select
+        self.push = push
         self.sheet = sheet
+    }
+
+    public var isEmpty: Bool {
+        select == nil && push.isEmpty && sheet == nil
+    }
+}
+
+/// This client library.
+public enum Library {
+    public static let version = "0.1.0"
+}
+
+/// What the device and the person's settings are as the app starts; the
+/// changes after that are events.
+public struct DeviceTraits: Sendable, Equatable {
+    public var platform: Navree.Platform
+    public var os: String
+    public var form: Navree.FormFactor
+    public var scheme: Navree.Scheme
+    public var contrast: Navree.Contrast
+    public var textPercent: Int
+    public var locale: String
+    public var tz: String
+
+    public init(
+        platform: Navree.Platform = .ios, os: String = "", form: Navree.FormFactor = .phone,
+        scheme: Navree.Scheme = .light, contrast: Navree.Contrast = .normal, textPercent: Int = 100,
+        locale: String = "en-IN", tz: String = "Asia/Kolkata"
+    ) {
+        self.platform = platform
+        self.os = os
+        self.form = form
+        self.scheme = scheme
+        self.contrast = contrast
+        self.textPercent = textPercent
+        self.locale = locale
+        self.tz = tz
+    }
+}
+
+public enum CoreConfiguration {
+    /// The device features this build carries out, by the protocol's names:
+    /// a control that calls one the build does not list is replaced by what
+    /// the server wrote to stand in for it, before the app sees the tree.
+    ///
+    /// Always: the clipboard, the share sheet, opening an address, the
+    /// system's settings and its review prompt. A sign-in session only when it
+    /// can come back: on the app's own scheme, or on a link of the origin the
+    /// build has the associated domain for. A confirmation with a passkey, Sign
+    /// in with Apple and push only when the build is signed for them.
+    public static func caps(signedWith: Set<Entitlement>, signInScheme: String?) -> [String] {
+        var caps = ["clipboard", "open_settings", "open_url", "request_review", "share"]
+        if signInScheme != nil || signedWith.contains(.associatedDomains) { caps.append("auth_session") }
+        if signedWith.contains(.associatedDomains) { caps.append("confirm") }
+        if signedWith.contains(.signInWithApple) { caps.append("platform_sign_in") }
+        if signedWith.contains(.pushNotifications) { caps.append("push") }
+        return caps.sorted()
+    }
+
+    /// The core's configuration for this app on this device.
+    public static func json(_ configuration: ShellConfiguration, device: DeviceTraits) -> Data {
+        var signIn: [String: Any] = [
+            "paths": configuration.signInPaths,
+            // Apple's own sheet signs in with Apple; any other provider goes the web's way.
+            "native": ["apple"],
+        ]
+        if let scheme = configuration.signInScheme { signIn["callback"] = scheme }
+        var config: [String: Any] = [
+            "origin": configuration.origin.hasSuffix("/") ? String(configuration.origin.dropLast()) : configuration.origin,
+            "app_id": configuration.appID,
+            "client": [
+                "platform": device.platform.rawValue, "os": device.os, "form": device.form.rawValue,
+                "app": configuration.appVersion, "lib": Library.version, "vocab": Navree.vocab,
+                "scheme": device.scheme.rawValue, "contrast": device.contrast.rawValue,
+                "text_percent": device.textPercent, "locale": device.locale, "tz": device.tz,
+                "caps": caps(signedWith: configuration.signedWith, signInScheme: configuration.signInScheme),
+            ] as [String: Any],
+            // Back on Apple's systems goes down the stack and never across to another destination.
+            "back_to_first": false,
+            "deep_links": configuration.openAnyLink ? "origin" : "routes",
+            "cache": ["pages": 24, "persist": true] as [String: Any],
+            "undrawable": undrawable,
+            "views": [String](),
+            "sign_in": signIn,
+        ]
+        if configuration.loopbackHTTP { config["loopback_http"] = true }
+        return (try? JSONSerialization.data(withJSONObject: config, options: [.sortedKeys])) ?? Data()
     }
 }

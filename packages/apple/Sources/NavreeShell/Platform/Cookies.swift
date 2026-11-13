@@ -54,32 +54,41 @@ public struct CookieRecord: Sendable, Equatable, Codable {
     func applies(to url: URL, at now: Date) -> Bool {
         guard let host = url.host?.lowercased() else { return false }
         if let expires, expires <= now { return false }
-        if secure && url.scheme?.lowercased() != "https" && !Origin.isLoopback(host) { return false }
-        let domain = self.domain.lowercased()
-        let hostMatches = domain.hasPrefix(".")
-            ? host == domain.dropFirst() || host.hasSuffix(domain)
-            : host == domain
-        guard hostMatches else { return false }
+        if secure && url.scheme?.lowercased() != "https" && !Self.isLoopback(host) { return false }
+        guard matches(host: host) else { return false }
         let requestPath = url.path.isEmpty ? "/" : url.path
         return requestPath == path || requestPath.hasPrefix(path.hasSuffix("/") ? path : path + "/")
     }
+
+    /// Whether it belongs to `host`, as a browser matches a cookie's domain.
+    func matches(host: String) -> Bool {
+        let domain = self.domain.lowercased()
+        return domain.hasPrefix(".")
+            ? host == domain.dropFirst() || host.hasSuffix(domain)
+            : host == domain
+    }
+
+    /// This machine, where a browser treats plain `http` as secure.
+    static func isLoopback(_ host: String) -> Bool {
+        host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
+    }
 }
 
-/// The one place the session lives: the native requests read and write it,
-/// and it is copied into the web view's store before a page loads and read
-/// back from it when a page signs in or out. Its master copy is in the
-/// Keychain, for this device only, so a backup restored elsewhere is not
-/// signed in.
+/// The one place the session lives, by name: the native requests read and
+/// write it, it is copied into the web view's store before a page loads, and
+/// it takes back what a page set. Its master copy is in the Keychain, for this
+/// device only, so a backup restored elsewhere is not signed in.
+///
+/// It holds what the origin's answers set: the runtime core decides which
+/// addresses are asked, and the jar keeps what they say.
 @MainActor
 public final class CookieJar {
-    public let origin: Origin
     private(set) var records: [CookieRecord] = []
     private let keychain: KeychainSlot?
 
-    /// A jar for `origin`; `persistent` keeps it in the Keychain.
-    public init(origin: Origin, persistent: Bool = true) {
-        self.origin = origin
-        keychain = persistent ? KeychainSlot(service: "com.navree.native.session", account: origin.description) : nil
+    /// A jar for the app at `origin`; `persistent` keeps it in the Keychain.
+    public init(origin: String, persistent: Bool = true) {
+        keychain = persistent ? KeychainSlot(service: "com.navree.native.session", account: origin) : nil
         if let data = keychain?.read(), let saved = try? JSONDecoder().decode([CookieRecord].self, from: data) {
             records = saved.filter { $0.expires.map { $0 > Date() } ?? true }
         }
@@ -87,15 +96,21 @@ public final class CookieJar {
 
     /// The `Cookie` header for a request to `url`, or `nil` when no cookie goes.
     public func header(for url: URL, at now: Date = Date()) -> String? {
-        guard origin.contains(url) else { return nil }
         let matching = records.filter { $0.applies(to: url, at: now) }
             .sorted { $0.path.count > $1.path.count }
         return matching.isEmpty ? nil : matching.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
     }
 
-    /// Takes the `Set-Cookie` headers of an answer from the origin.
+    /// The value an `x-xsrf-token` header carries for `url`: the `XSRF-TOKEN`
+    /// cookie, percent-decoded. `nil` when there is none.
+    public func xsrfToken(for url: URL, at now: Date = Date()) -> String? {
+        let cookie = records.filter { $0.name == "XSRF-TOKEN" && $0.applies(to: url, at: now) }
+            .max { $0.path.count < $1.path.count }
+        return cookie.map { $0.value.removingPercentEncoding ?? $0.value }
+    }
+
+    /// Takes the `Set-Cookie` headers of an answer, a redirect's too.
     public func take(from response: HTTPURLResponse, for url: URL) {
-        guard origin.contains(url) else { return }
         var fields: [String: String] = [:]
         for (key, value) in response.allHeaderFields {
             if let key = key as? String, let value = value as? String { fields[key] = value }
@@ -126,32 +141,41 @@ public final class CookieJar {
         }
     }
 
-    /// Reads back what a page in the web view set for the origin.
-    public func adopt(from store: WKHTTPCookieStore) async {
-        let cookies = await store.allCookies()
-        let ours = cookies.filter { cookie in
-            var components = URLComponents()
-            components.scheme = origin.scheme
-            components.host = cookie.domain.hasPrefix(".") ? String(cookie.domain.dropFirst()) : cookie.domain
-            return components.url.map(origin.contains) ?? false
-        }
-        let records = ours.map(CookieRecord.init)
-        guard records != self.records else { return }
-        self.records = records
+    /// Takes back what a page of `host` set in the web view's store.
+    public func adopt(from store: WKHTTPCookieStore, host: String) async {
+        let cookies = await store.allCookies().map(CookieRecord.init).filter { $0.matches(host: host.lowercased()) }
+        let others = records.filter { !$0.matches(host: host.lowercased()) }
+        let next = others + cookies
+        guard next != records else { return }
+        records = next
         save()
     }
 
-    /// Ends the session on this device: the jar, the Keychain and the web
-    /// view's store are emptied.
-    public func clear(_ store: WKHTTPCookieStore?) async {
-        let removed = records.compactMap(\.cookie)
+    /// The hosts the jar holds cookies for: the app's origins.
+    public var hosts: Set<String> {
+        Set(records.map { $0.domain.hasPrefix(".") ? String($0.domain.dropFirst()) : $0.domain }.map { $0.lowercased() })
+    }
+
+    /// Ends the session on this device: the jar and its Keychain item are
+    /// emptied, and the web view's store loses every cookie and all stored
+    /// data of the same hosts.
+    public func forget(_ store: WKWebsiteDataStore?) async {
+        let hosts = self.hosts
         records = []
         keychain?.delete()
-        if let store {
-            for cookie in removed {
-                await store.deleteCookie(cookie)
+        guard let store else { return }
+        for cookie in await store.httpCookieStore.allCookies() {
+            let record = CookieRecord(cookie)
+            if hosts.contains(where: { record.matches(host: $0) }) {
+                await store.httpCookieStore.deleteCookie(cookie)
             }
         }
+        let kinds = WKWebsiteDataStore.allWebsiteDataTypes()
+        let found = await store.dataRecords(ofTypes: kinds)
+        let ours = found.filter { record in
+            hosts.contains { host in record.displayName == host || host.hasSuffix("." + record.displayName) }
+        }
+        await store.removeData(ofTypes: kinds, for: ours)
     }
 
     private func save() {
