@@ -102,7 +102,7 @@ fn view(handle: &NavreeCore, query: &[u8]) -> Vec<u8> {
     let Ok(core) = handle.core.lock() else {
         return error("the core stopped after an earlier failure");
     };
-    match catch_unwind(AssertUnwindSafe(|| core.view().part(&query))) {
+    match catch_unwind(AssertUnwindSafe(|| core.part(&query))) {
         Ok(part) => serde_json::to_vec(&part).unwrap_or_else(|_| error("the view does not write")),
         Err(_) => error("the core failed on this query"),
     }

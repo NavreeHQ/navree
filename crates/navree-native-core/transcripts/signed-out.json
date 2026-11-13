@@ -1,0 +1,128 @@
+{
+  "about": "Signing out on purpose. The reply to the sign-out says so. Everything of the person's goes at once; the device's push token is taken away at the shell's push route; and only when that is answered is the client told to forget the session's cookies, since a request takes its cookies when it is sent. Then the app starts again from the shell, and lands where the reply said.",
+  "config": {"app_id":"com.charkha.supply","client":{"caps":["push"],"form":"phone","platform":"android","text_percent":100,"vocab":0}},
+  "steps": [
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"push_token","token":"fcm-A1b2C3d4E5f6G7h8"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"post","url":"https://shop.example/api/notifications/push-devices","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"android\",\"token\":\"fcm-A1b2C3d4E5f6G7h8\",\"app_id\":\"com.charkha.supply\"}"},"timeout_ms":30000,"xsrf":true},
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":2,"status":201,"content_type":"application/json"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/account.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person taps Sign out.",
+      "send": {"t":"act","screen":1,"action":{"t":"request","method":"post","href":"/sign-out"}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"post","url":"https://shop.example/sign-out","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The reply says they signed out, says so in words, and says where to land. Every screen and everything kept goes; the token's removal is asked for; the cookies are not forgotten yet.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/signed-out.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"delete","url":"https://shop.example/api/notifications/push-devices","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"token\":\"fcm-A1b2C3d4E5f6G7h8\"}"},"timeout_ms":5000,"xsrf":true},
+          {"t":"message","id":1,"tone":"neutral","text":"You are signed out"}
+        ]
+      },
+      "check": [
+        {"at":"/stage","is":"starting"},
+        {"at":"/app","is":null},
+        {"at":"/destinations","is":[]},
+        {"at":"/screens","is":{}},
+        {"at":"/messages/0/text","is":"You are signed out"}
+      ]
+    },
+    {
+      "note": "The removal is answered. Now the session is forgotten, and the shell is fetched again.",
+      "send": {"t":"response","request":5,"status":204,"content_type":"application/json"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"forget_session"},
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "Nobody is signed in. The person lands where the reply said, presented as the shell's routes say.",
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app-nobody.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/sign-in","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/app/user","is":null},
+        {"at":"/modals/0/present","is":"full"},
+        {"at":"/screens/2/url","is":"/sign-in"}
+      ]
+    },
+    {
+      "note": "The token at the next launch goes nowhere while nobody is signed in.",
+      "send": {"t":"push_token","token":"fcm-A1b2C3d4E5f6G7h8"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    }
+  ]
+}

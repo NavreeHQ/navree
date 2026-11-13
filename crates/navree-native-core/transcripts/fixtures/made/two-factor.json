@@ -1,0 +1,45 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "One more step",
+  "body": {
+   "t": "form",
+   "id": "two-factor",
+   "method": "post",
+   "action": "/sign-in/two-factor",
+   "hidden": [
+    {
+     "name": "_csrf",
+     "value": "tk-91c2"
+    },
+    {
+     "name": "next",
+     "value": "/"
+    }
+   ],
+   "children": [
+    {
+     "t": "field",
+     "name": "code",
+     "label": "Code from your authenticator app",
+     "input": {
+      "t": "text",
+      "kind": "number"
+     },
+     "required": true,
+     "id": "code"
+    },
+    {
+     "t": "button",
+     "label": "Continue",
+     "action": {
+      "t": "submit"
+     },
+     "role": "primary"
+    }
+   ]
+  }
+ }
+}

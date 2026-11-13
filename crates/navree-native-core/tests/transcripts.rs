@@ -45,6 +45,16 @@ struct Step {
     expect: Option<Update>,
     #[serde(default)]
     check: Vec<Check>,
+    /// What the core gives a client to store, after this step. The tool
+    /// writes it where a step has the field at all.
+    #[serde(default)]
+    snapshot: Option<Value>,
+    /// The system ended the app before this step: the core is made again.
+    #[serde(default)]
+    restart: bool,
+    /// The step's `restore` carries the snapshot taken last. The tool writes it in.
+    #[serde(default)]
+    last: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -91,6 +101,12 @@ fn written(transcript: &Transcript) -> String {
         if let Some(note) = &step.note {
             lines.push(format!("      \"note\": {}", compact(note)));
         }
+        if step.restart {
+            lines.push("      \"restart\": true".to_owned());
+        }
+        if step.last {
+            lines.push("      \"last\": true".to_owned());
+        }
         lines.push(format!("      \"send\": {}", compact(&step.send)));
         if let Some(body) = &step.body {
             lines.push(format!("      \"body\": {}", compact(body)));
@@ -110,6 +126,9 @@ fn written(transcript: &Transcript) -> String {
         if !step.check.is_empty() {
             let checks: Vec<String> = step.check.iter().map(compact).collect();
             lines.push(format!("      \"check\": [\n        {}\n      ]", checks.join(",\n        ")));
+        }
+        if let Some(snapshot) = &step.snapshot {
+            lines.push(format!("      \"snapshot\": {}", compact(snapshot)));
         }
         out.push_str(&lines.join(",\n"));
         out.push_str(if at + 1 == transcript.steps.len() { "\n    }\n" } else { "\n    },\n" });
@@ -147,15 +166,110 @@ fn query_of(change: &Change) -> Query {
             from: *from,
             count: *count,
         },
+        Change::Redraw { screen, id, rows, gone } => Query::Redraw {
+            screen: *screen,
+            id: id.clone(),
+            rows: rows.clone(),
+            gone: gone.clone(),
+        },
         Change::Messages => Query::Messages,
         other => panic!("a change the runner does not know: {other:?}"),
     }
 }
 
+/// The list or table `id` in a screen's tree: the node itself, or the table
+/// in the region of that id.
+fn list_in<'a>(node: &'a mut Value, id: &str) -> Option<&'a mut Value> {
+    let kind = node.get("t").and_then(Value::as_str).map(str::to_owned);
+    let named = node.get("id").and_then(Value::as_str) == Some(id);
+    match (kind.as_deref(), named) {
+        (Some("list" | "table"), true) => return Some(node),
+        (Some("region"), true) => {
+            return node.get_mut("children")?.as_array_mut()?.iter_mut().find(|child| child.get("t").and_then(Value::as_str) == Some("table"));
+        }
+        _ => {}
+    }
+    match node {
+        Value::Object(map) => map.values_mut().find_map(|value| list_in(value, id)),
+        Value::Array(list) => list.iter_mut().find_map(|value| list_in(value, id)),
+        _ => None,
+    }
+}
+
+/// The rows of a list or table, taken out of it, with what it says of
+/// itself: what is left of the screen is everything else.
+fn take_rows(screen: &mut Value, id: &str) -> Vec<Value> {
+    let Some(list) = list_in(screen, id).and_then(Value::as_object_mut) else {
+        return Vec::new();
+    };
+    for said in ["more", "before", "prev", "since", "summary"] {
+        list.remove(said);
+    }
+    let rows = list.get_mut("children").map(Value::take).or_else(|| list.get_mut("rows").map(Value::take));
+    rows.and_then(|rows| rows.as_array().cloned()).unwrap_or_default()
+}
+
+/// The ids of the rows that are chosen, with the mark taken off each: a tick
+/// is said by the list of the rows chosen, not by a row drawn again.
+fn take_chosen(rows: &mut [Value]) -> Vec<Value> {
+    let mut chosen = Vec::new();
+    for row in rows {
+        if let Some(map) = row.as_object_mut()
+            && map.remove("selected") == Some(Value::Bool(true))
+        {
+            chosen.push(map.get("id").cloned().unwrap_or(Value::Null));
+        }
+    }
+    chosen
+}
+
+/// A change that names rows names every one: the rows it left alone are as
+/// they were and where they were, and doing to the old rows what the part
+/// says gives the rows the list holds now.
+fn rows_are_as_said(place: &str, core: &Core, was: &mut Value, now: &mut Value, change: &Change) {
+    let (id, part) = match change {
+        Change::Rows { id, .. } | Change::Redraw { id, .. } => (id, core.part(&query_of(change))),
+        _ => return,
+    };
+    let mut rows = take_rows(&mut was["content"], id);
+    let mut held = take_rows(&mut now["content"], id);
+    let named = |row: &Value| row.get("id").and_then(Value::as_str).map(str::to_owned);
+    match change {
+        Change::Rows { from, count, .. } => {
+            assert_eq!(rows.len(), *from, "{place}: {change:?}: the list held another number of rows before");
+            let mut added = part.get("nodes").or(part.get("rows")).and_then(Value::as_array).cloned().unwrap_or_default();
+            assert_eq!(added.len(), *count, "{place}: {change:?} read alone");
+            // Which rows are chosen is said for the whole table at once.
+            take_chosen(&mut rows);
+            take_chosen(&mut added);
+            let chosen = take_chosen(&mut held);
+            if let Some(said) = part.get("selected").and_then(Value::as_array) {
+                assert_eq!(said, &chosen, "{place}: {change:?}: the rows chosen");
+            }
+            rows.extend(added);
+        }
+        _ => {
+            let gone: Vec<String> = part["gone"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned).collect();
+            let put = part["rows"].as_array().cloned().unwrap_or_default();
+            rows.retain(|row| named(row).is_none_or(|id| !gone.contains(&id) && !put.iter().any(|put| put["id"].as_str() == Some(id.as_str()))));
+            // From the last to the first, each before the row it stands before now.
+            for put in put.iter().rev() {
+                let row = put.get("node").or(put.get("row")).cloned().unwrap_or(Value::Null);
+                let at = match put["before"].as_str() {
+                    Some(before) => rows.iter().position(|row| named(row).as_deref() == Some(before)).unwrap_or_else(|| panic!("{place}: {change:?}: `{before}` is not in the list")),
+                    None => rows.len(),
+                };
+                rows.insert(at, row);
+            }
+        }
+    }
+    assert_eq!(rows, held, "{place}: {change:?} does not name everything that changed in the list");
+}
+
 const NAV: [&str; 9] = ["stage", "failure", "upgrade", "destinations", "selected", "modals", "front", "can_go_back", "window"];
 
 /// Every part of the view state that differs is named in `changed`.
-fn nothing_changes_unsaid(name: &str, at: usize, before: &Value, after: &Value, update: &Update) {
+fn nothing_changes_unsaid(name: &str, at: usize, core: &Core, before: &Value, after: &Value, update: &Update) {
     let said = |change: &Change| update.changed.contains(change);
     let place = format!("{name}, at {}", at + 1);
     if before["app"] != after["app"] {
@@ -188,12 +302,17 @@ fn nothing_changes_unsaid(name: &str, at: usize, before: &Value, after: &Value, 
                     was["forms"][form] = Value::Null;
                     now["forms"][form] = Value::Null;
                 }
-                Change::Rows { screen, .. } if *screen == id => rows = true,
+                Change::Rows { screen, .. } | Change::Redraw { screen, .. } if *screen == id => {
+                    rows = true;
+                    rows_are_as_said(&place, core, &mut was, &mut now, change);
+                }
                 _ => {}
             }
         }
         if rows {
-            for key in ["content", "forms", "lists"] {
+            // With the rows taken out, the tree is what it was. The forms in
+            // the rows and the list's own state are read with the rows.
+            for key in ["forms", "lists"] {
                 was[key] = Value::Null;
                 now[key] = Value::Null;
             }
@@ -205,7 +324,7 @@ fn nothing_changes_unsaid(name: &str, at: usize, before: &Value, after: &Value, 
 /// Reading a changed part alone gives what the whole view state holds for it.
 fn parts_read_alone(name: &str, at: usize, core: &Core, after: &Value, update: &Update) {
     for change in &update.changed {
-        let alone = core.view().part(&query_of(change));
+        let alone = core.part(&query_of(change));
         if let Some(whole) = part_of(after, change) {
             assert_eq!(alone, whole, "{name}, at {}: {change:?} read alone differs from the whole", at + 1);
         }
@@ -213,10 +332,6 @@ fn parts_read_alone(name: &str, at: usize, core: &Core, after: &Value, update: &
             for key in NAV {
                 assert_eq!(alone.get(key).unwrap_or(&Value::Null), &after[key], "{name}, at {}: nav.{key}", at + 1);
             }
-        }
-        if let Change::Rows { count, .. } = change {
-            let held = alone.get("nodes").or(alone.get("rows")).and_then(Value::as_array).map(Vec::len);
-            assert_eq!(held, Some(*count), "{name}, at {}: {change:?} read alone", at + 1);
         }
     }
 }
@@ -239,9 +354,22 @@ fn replay(name: &str, write: bool, schema: &schema::Schema) -> Result<(), String
     let mut transcript: Transcript = serde_json::from_str(&text).map_err(|error| format!("{name}: {error}"))?;
     let config = config(&transcript.config);
     schema.check("Config", &serde_json::to_value(&config).unwrap()).map_err(|error| format!("{name}: config: {error}"))?;
-    let mut core = Core::new(config);
+    let mut core = Core::new(config.clone());
     let mut failures = Vec::new();
+    let mut kept = Value::Null;
     for (at, step) in transcript.steps.iter_mut().enumerate() {
+        if step.restart {
+            // The system ended the app. It starts again from what was stored.
+            core = Core::new(config.clone());
+        }
+        if step.last {
+            match &mut step.send {
+                Event::Restore { snapshot } if write => *snapshot = kept.clone(),
+                Event::Restore { snapshot } if *snapshot != kept => failures.push(format!("{name}, at {}: the snapshot restored is not the one taken last", at + 1)),
+                Event::Restore { .. } => {}
+                other => return Err(format!("{name}, at {}: `last` is for a `restore`, not {other:?}", at + 1)),
+            }
+        }
         let mut event = step.send.clone();
         if let Some(body) = &step.body {
             let text = std::fs::read_to_string(dir().join("fixtures").join(body)).map_err(|error| format!("{name}: {body}: {error}"))?;
@@ -257,7 +385,7 @@ fn replay(name: &str, write: bool, schema: &schema::Schema) -> Result<(), String
         let after = serde_json::to_value(core.view()).unwrap();
         schema.check("Update", &serde_json::to_value(&update).unwrap()).map_err(|error| format!("{name}, at {}: update: {error}", at + 1))?;
         schema.check("ViewState", &after).map_err(|error| format!("{name}, at {}: view: {error}", at + 1))?;
-        nothing_changes_unsaid(name, at, &before, &after, &update);
+        nothing_changes_unsaid(name, at, &core, &before, &after, &update);
         parts_read_alone(name, at, &core, &after, &update);
         // The update and the view state read back as what they were.
         let round: Update = serde_json::from_value(serde_json::to_value(&update).unwrap()).map_err(|error| format!("{name}: {error}"))?;
@@ -266,6 +394,18 @@ fn replay(name: &str, write: bool, schema: &schema::Schema) -> Result<(), String
             let held = after.pointer(&check.at).cloned().unwrap_or(Value::Null);
             if held != check.is {
                 failures.push(format!("{name}, at {}: `{}` is {held}, not {}", at + 1, check.at, check.is));
+            }
+        }
+        if step.snapshot.is_some() {
+            kept = core.part(&Query::Snapshot);
+            schema.check("Snapshot", &kept).map_err(|error| format!("{name}, at {}: snapshot: {error}", at + 1))?;
+            // It reads back as what the core gave.
+            let read: navree_native_core::Snapshot = serde_json::from_value(kept.clone()).map_err(|error| format!("{name}: {error}"))?;
+            assert_eq!(serde_json::to_value(&read).unwrap(), kept, "{name}, at {}: the snapshot does not read back", at + 1);
+            if write {
+                step.snapshot = Some(kept.clone());
+            } else if step.snapshot.as_ref() != Some(&kept) {
+                failures.push(format!("{name}, at {}: the snapshot differs\n  expected {}\n  got      {}", at + 1, compact(&step.snapshot), compact(&kept)));
             }
         }
         if write {
@@ -338,6 +478,16 @@ const REQUIRED: &[&str] = &[
     "menu-post",
     "present-task",
     "platform-sign-in",
+    "hand-over",
+    "second-step",
+    "push",
+    "signed-out",
+    "signed-out-no-token",
+    "table-words",
+    "phone-country",
+    "tabs",
+    "snapshot",
+    "snapshot-refused",
 ];
 
 #[test]

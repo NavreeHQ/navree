@@ -59,12 +59,7 @@ impl Core {
     pub(crate) fn go(&mut self, from: Option<ScreenId>, url: &str, present: Present) -> Option<ScreenId> {
         // A sign-in with another site runs in the system's own session, never in a fetch.
         if self.config.sign_in.paths.iter().any(|pattern| route_matches(pattern, url)) {
-            self.inner.signing_in = true;
-            self.effects.push(Effect::SignIn {
-                url: self.inner.origin.absolute(url),
-                callback: self.config.sign_in.callback.clone(),
-                ephemeral: false,
-            });
+            self.sign_in_session(url, false);
             return from;
         }
         // A link that says nothing more than "go there" is presented as the
@@ -358,6 +353,10 @@ impl Core {
     /// of a sign-in. It is only ever fetched as a page, and only when the
     /// shell knows it: a destination, or an address one of its routes names.
     pub(crate) fn opened(&mut self, address: &str) {
+        // The address a sign-in session comes back on is never a place to go.
+        if self.is_return(address) {
+            return self.returned_as_a_link(address);
+        }
         let own = self.own_scheme(address).map(|rest| format!("/{}", rest.trim_start_matches('/')));
         let Target::Inside(url) = self.inner.origin.resolve(own.as_deref().unwrap_or(address), "/") else {
             return;

@@ -26,4 +26,6 @@ jni = ["dep:jni-sys"]
 navree-native = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# The sign-in hand-over proves itself with the SHA-256 of a secret. Pure Rust.
+sha2 = { workspace = true }
 jni-sys = { version = "0.4.1", optional = true }

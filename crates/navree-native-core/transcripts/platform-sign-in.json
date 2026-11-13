@@ -80,7 +80,7 @@
         ],
         "effects": [
           {"t":"message","id":1,"tone":"warning","notice":"second_step"},
-          {"t":"report","what":"sign_in","detail":"the sign-in route asks for a second step, which this client can't take the person through"},
+          {"t":"report","what":"sign_in","detail":"the sign-in route asks for a second step, and no page is named to finish it on"},
           {"t":"fetch","request":5,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       },

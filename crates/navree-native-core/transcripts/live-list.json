@@ -93,7 +93,7 @@
       "body": "made/inbox-changes-1.json",
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"redraw","screen":1,"id":"inbox","rows":["c-88","c-95"],"gone":["c-80"]}
         ],
         "effects": [
           {"t":"fetch","request":4,"method":"get","url":"https://shop.example/inbox/changes?since=0000415","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","inbox"]],"timeout_ms":10000}
@@ -114,7 +114,7 @@
       "body": "made/inbox-changes-2.json",
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"redraw","screen":1,"id":"inbox","rows":["c-96"],"gone":[]}
         ],
         "effects": []
       },
@@ -147,7 +147,7 @@
       "body": "made/inbox-changes-same.json",
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"rows","screen":1,"id":"inbox","from":4,"count":0}
         ],
         "effects": []
       }
@@ -178,7 +178,7 @@
       "body": "made/inbox-before.json",
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"redraw","screen":1,"id":"inbox","rows":["c-98","c-99"],"gone":[]}
         ],
         "effects": []
       },

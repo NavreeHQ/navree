@@ -1,0 +1,100 @@
+{
+  "about": "A phone number names the country it is read in, as a second field beside it. A client with no country picker changes nothing and the country the page came with is sent; one with a picker says which country the person picked.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/contact.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Sent as it came.",
+      "send": {"t":"act","screen":1,"action":{"t":"submit"},"form":"contact"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"contact"}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"post","url":"https://shop.example/account/contact","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=tk-91c2&phone=98140+12345&phone_country=IN"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/gift-saved.json",
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"contact"},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"neutral","text":"Saved"}
+        ]
+      }
+    },
+    {
+      "note": "The person picks another country and types a number.",
+      "send": {"t":"field","screen":1,"form":"contact","field":"phone","value":{"t":"phone","text":"7700 900123","country":"GB"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"contact"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"submit"},"form":"contact"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"contact"}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"post","url":"https://shop.example/account/contact","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=tk-91c2&phone=7700+900123&phone_country=GB"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/gift-saved.json",
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"contact"},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":2,"tone":"neutral","text":"Saved"}
+        ]
+      }
+    }
+  ]
+}

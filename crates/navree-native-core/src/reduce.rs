@@ -20,7 +20,7 @@ use navree_native::{CLIENT_HEADER, CONTENT_TYPE, MAJOR, NATIVE_HEADER, Op, SHELL
 use serde_json::Value;
 
 use crate::decode::{self, Answer, Read};
-use crate::effect::{Body, Change, Effect, Request, Update};
+use crate::effect::{Body, Change, Effect, Request, Update, Verb};
 use crate::event::{Event, Response, StreamState, TransportError};
 use crate::origin::{Target, path_of, route_matches};
 use crate::state::{
@@ -97,7 +97,17 @@ impl Core {
                 }
             }
             Event::Answer { screen, question, yes } => self.answer(screen, question, yes),
-            Event::Choose { screen, table, row, on } => self.choose(screen, &table, row.as_deref(), on),
+            Event::Choose {
+                screen,
+                table,
+                row,
+                on,
+                across,
+            } => self.choose(screen, &table, row.as_deref(), on, across),
+            Event::Tab { screen, id, index } => self.tab(screen, &id, index),
+            Event::Random { request, bytes } => self.random(request, &bytes),
+            Event::PushToken { token, environment } => self.push_token(token, environment),
+            Event::Restore { snapshot } => self.restore(snapshot),
             Event::Move {
                 screen,
                 item,
@@ -166,7 +176,11 @@ impl Core {
                     client.tz = tz;
                 }
             }
-            Event::Foreground => self.inner.background = false,
+            Event::Foreground => {
+                self.inner.background = false;
+                // A token that could not be sent before is tried again.
+                self.push_sync();
+            }
             Event::Background => {
                 self.inner.background = true;
                 // A hidden app holds no stream; what its regions miss is fetched when it is back.
@@ -178,6 +192,9 @@ impl Core {
                 // A shell asked for before now would be the old session's.
                 self.drop_pending(|_| true);
                 self.wipe();
+                self.inner.hand_over = None;
+                self.inner.signing_out = false;
+                self.push_forget();
                 self.inner.has_shell = false;
                 self.inner.user = None;
                 self.view.app = None;
@@ -295,6 +312,7 @@ impl Core {
             method: Method::Get,
             body: None,
             limit,
+            delete: false,
             hops: 0,
             region: Some(part.to_owned()),
         });
@@ -314,6 +332,7 @@ impl Core {
             method,
             body,
             limit,
+            delete: false,
             hops: 0,
             region: None,
         });
@@ -321,7 +340,7 @@ impl Core {
 
     /// Posts JSON to one of the framework's own routes, by its path on the
     /// app's origin. False when the path is not one.
-    fn post_json(&mut self, purpose: Pending, path: &str, text: String) -> bool {
+    pub(crate) fn post_json(&mut self, purpose: Pending, path: &str, text: String) -> bool {
         let Target::Inside(url) = self.inner.origin.resolve(path, "/") else {
             return false;
         };
@@ -332,19 +351,20 @@ impl Core {
             method: Method::Post,
             body: Some(Body::Json { text }),
             limit: SEND_LIMIT,
+            delete: false,
             hops: 0,
             region: None,
         });
         true
     }
 
-    fn ask(&mut self, asked: Asked) {
+    pub(crate) fn ask(&mut self, asked: Asked) {
         self.inner.next.request += 1;
         let request = self.inner.next.request;
         let headers = self.headers(asked.body.as_ref(), asked.region.as_deref());
         self.effects.push(Effect::Fetch(Request {
             request,
-            method: asked.method,
+            method: if asked.delete { Verb::Delete } else { asked.method.into() },
             url: self.inner.origin.absolute(&asked.url),
             headers,
             body: asked.body.clone(),
@@ -372,6 +392,7 @@ impl Core {
                     method: if same { asked.method } else { Method::Get },
                     body: asked.body.clone().filter(|_| same),
                     limit: asked.limit,
+                    delete: asked.delete && same,
                     hops: asked.hops + 1,
                     region: asked.region.clone(),
                 });
@@ -478,7 +499,7 @@ impl Core {
         self.notice(notice, screen);
     }
 
-    fn report(&mut self, what: &str, detail: String) {
+    pub(crate) fn report(&mut self, what: &str, detail: String) {
         self.effects.push(Effect::Report {
             what: what.to_owned(),
             detail,
@@ -512,7 +533,7 @@ impl Core {
 
     // Starting, and the shell.
 
-    fn start(&mut self) {
+    pub(crate) fn start(&mut self) {
         let asking = self.inner.pending.values().any(|asked| asked.purpose == Pending::Shell);
         if asking {
             return;
@@ -612,6 +633,12 @@ impl Core {
 
     fn install(&mut self, shell: Shell) {
         let user = shell.user.as_ref().map(|user| (user.name.clone(), user.email.clone()));
+        self.inner.sign_in = shell.sign_in;
+        self.inner.push_route = shell.device.and_then(|device| device.push).map(|push| push.register.as_str().to_owned());
+        if self.inner.user != user {
+            // What the server held of the device's token was the session's before.
+            self.push_forget();
+        }
         if self.inner.has_shell && self.inner.user != user {
             match (&user, &self.inner.person) {
                 // Another person: nothing of the one before stays, not even where they were.
@@ -696,9 +723,16 @@ impl Core {
         }
         self.touch(Change::App);
         self.touch(Change::Nav);
+        // Where the person was when the system ended the app, if a snapshot says.
+        self.restore_stacks();
         if let Some(launch) = self.inner.launch.take() {
             self.opened(&launch);
         }
+        // Where a reply said to land, whatever the rules for links from outside say.
+        if let Some(land) = self.inner.land.take() {
+            self.go(None, &land, Present::Auto);
+        }
+        self.push_sync();
     }
 
     /// Empties every screen but the sign-in a session's end put up: what they
@@ -944,12 +978,7 @@ impl Core {
                 inside: open.inside,
             }),
             Call::AuthSession(session) => {
-                self.inner.signing_in = true;
-                self.effects.push(Effect::SignIn {
-                    url: self.inner.origin.absolute(session.start.as_str()),
-                    callback: self.config.sign_in.callback.clone(),
-                    ephemeral: session.ephemeral,
-                });
+                self.sign_in_session(session.start.as_str(), session.ephemeral);
             }
             Call::Confirm(confirm) => {
                 // The ticket is spent at the challenge route, which answers
@@ -993,6 +1022,7 @@ impl Core {
                 self.inner.next.call += 1;
                 let number = self.inner.next.call;
                 let (nonce, route) = (sign_in.nonce.as_str().to_owned(), sign_in.sign_in.as_str().to_owned());
+                let second_step = sign_in.second_step.as_ref().map(|page| page.as_str().to_owned());
                 self.inner.calls.insert(
                     number,
                     crate::state::DeviceCall {
@@ -1002,6 +1032,7 @@ impl Core {
                             sign_in: route,
                             state: String::new(),
                             web,
+                            second_step,
                         },
                     },
                 );
@@ -1045,7 +1076,12 @@ impl Core {
         };
         let (then, spent) = match known.goes {
             Goes::Then { then, spent } => (then, spent),
-            Goes::SignIn { sign_in, state, web } => return self.signed_with_provider(screen, ok, refusal.as_deref(), &fields, &sign_in, &state, web.as_deref()),
+            Goes::SignIn {
+                sign_in,
+                state,
+                web,
+                second_step,
+            } => return self.signed_with_provider(screen, ok, refusal.as_deref(), &fields, (&sign_in, &state), web.as_deref(), second_step),
         };
         if !ok {
             // A refusal has no result to post.
@@ -1064,12 +1100,7 @@ impl Core {
         if !self.built_with(Some(Feature::AuthSession)) {
             return self.report("device", "no sign-in session to sign in on the web with".to_owned());
         }
-        self.inner.signing_in = true;
-        self.effects.push(Effect::SignIn {
-            url: self.inner.origin.absolute(web),
-            callback: self.config.sign_in.callback.clone(),
-            ephemeral: false,
-        });
+        self.sign_in_session(web, false);
     }
 
     /// What the server gave for a device call to start with came: the
@@ -1120,7 +1151,8 @@ impl Core {
     /// route as JSON, with the state the nonce came with; a system with no
     /// sheet for the provider goes the web's way.
     #[allow(clippy::too_many_arguments)]
-    fn signed_with_provider(&mut self, screen: ScreenId, ok: bool, refusal: Option<&str>, fields: &[navree_native::Pair], sign_in: &str, state: &str, web: Option<&str>) {
+    fn signed_with_provider(&mut self, screen: ScreenId, ok: bool, refusal: Option<&str>, fields: &[navree_native::Pair], route: (&str, &str), web: Option<&str>, second_step: Option<String>) {
+        let (sign_in, state) = route;
         let held = |name: &str| fields.iter().find(|pair| pair.name == name).map(|pair| pair.value.as_str()).filter(|value| !value.is_empty());
         let Some(token) = held("id_token").filter(|_| ok) else {
             // The person closed the sheet or said no: nothing changed.
@@ -1145,11 +1177,11 @@ impl Core {
             }
             body["user"] = serde_json::json!({ "name": name });
         }
-        self.post_json(Pending::SignIn { screen }, sign_in, body.to_string());
+        self.post_json(Pending::SignIn { screen, second_step }, sign_in, body.to_string());
     }
 
     /// The app's sign-in route answered the provider's token.
-    fn sign_in_answered(&mut self, screen: ScreenId, response: &Response) {
+    fn sign_in_answered(&mut self, screen: ScreenId, second_step: Option<&str>, response: &Response) {
         let screen = Some(screen).filter(|screen| self.view.holds(*screen)).or(self.front());
         let good = response.error.is_none() && response.left.is_none() && (200..300).contains(&response.status);
         let answer: Option<Value> = serde_json::from_str(&response.body).ok();
@@ -1158,30 +1190,19 @@ impl Core {
         let second = answer.as_ref().and_then(|answer| answer.get("two_factor_required")).is_some_and(|needed| needed != &Value::Bool(false) && !needed.is_null());
         if good && !second && answer.is_some_and(|answer| answer.is_object()) {
             // Who is signed in changed, and with it everything on screen.
-            self.fetch_shell();
-            for inner in self.inner.screens.values_mut() {
-                inner.stale = true;
-            }
-            self.inner.epoch += 1;
-            self.forget_pages();
-            // A way in that a session's end put up has done its work.
-            if let Some(cover) = self.view.modals.iter().position(|modal| modal.locked) {
-                self.take_modals_from(cover);
-                self.touch(Change::Nav);
-            }
-            if let Some(front) = self.front() {
-                self.fetch_page(front, false);
-            }
-            return;
+            return self.signed_in();
         }
         match response.error {
             Some(TransportError::Timeout) => self.failed(Failure::Timeout, screen),
             Some(_) => self.failed(Failure::Offline, screen),
+            // Nobody is signed in yet. The step is finished on a page of the
+            // app, opened here with the app's own cookies.
+            None if good && second && self.second_step(second_step) => {}
             None if good && second => {
-                // The protocol has no words for the second step: the person
-                // is told, and the page is asked again for what it shows now.
+                // Neither the call nor the shell names a page for it: the
+                // person is told, and the page is asked again for what it shows now.
                 self.notice(Notice::SecondStep, screen);
-                self.report("sign_in", "the sign-in route asks for a second step, which this client can't take the person through".to_owned());
+                self.report("sign_in", "the sign-in route asks for a second step, and no page is named to finish it on".to_owned());
                 if let Some(screen) = screen {
                     self.fetch_page(screen, false);
                 }
@@ -1191,24 +1212,6 @@ impl Core {
                 self.report("sign_in", format!("the sign-in route answered {}", response.status));
             }
         }
-    }
-
-    fn sign_in_done(&mut self, url: Option<&str>) {
-        if !std::mem::take(&mut self.inner.signing_in) {
-            return;
-        }
-        // The person gave up: nothing changed.
-        let Some(url) = url else {
-            return;
-        };
-        // Who is signed in may have changed, and with it everything on screen.
-        self.fetch_shell();
-        for inner in self.inner.screens.values_mut() {
-            inner.stale = true;
-        }
-        self.inner.epoch += 1;
-        self.forget_pages();
-        self.opened(url);
     }
 
     // Screens.
@@ -1362,6 +1365,7 @@ impl Core {
             view.url = url.to_owned();
             view.chrome = self.inner.routes.iter().find(|route| route_matches(&route.matches, url)).is_none_or(|route| route.chrome);
         }
+        view.title = Some(screen.title.clone()).filter(|title| !title.is_empty());
         view.content = Content::Native {
             screen: Box::new(screen),
         };
@@ -1378,6 +1382,8 @@ impl Core {
             for region in again {
                 self.fetch_region(id, &region, None);
             }
+            // What the person had typed before the system ended the app.
+            self.restore_typed(id);
         }
         self.touch_screen(id);
     }
@@ -1389,6 +1395,9 @@ impl Core {
         };
         self.inner.next.web += 1;
         view.url = url.to_owned();
+        if title.is_some() {
+            view.title.clone_from(&title);
+        }
         view.content = Content::Web {
             url: self.inner.origin.absolute(page),
             title,
@@ -1462,14 +1471,17 @@ impl Core {
         match asked.purpose {
             Pending::Shell => return self.shell_answered(response),
             Pending::BeforeCall { call } => return self.before_call_answered(call, &response),
-            Pending::SignIn { screen } => return self.sign_in_answered(screen, &response),
+            Pending::SignIn { screen, second_step } => return self.sign_in_answered(screen, second_step.as_deref(), &response),
+            Pending::Exchange => return self.exchange_answered(&response),
+            Pending::PushPut { token } => return self.push_put_answered(token, &response),
+            Pending::PushGone => return self.push_gone_answered(),
             _ => {}
         }
         let answer = decode::read(response, &asked.url, &self.inner.origin, &self.config);
         // A redirect is measured against the address that was asked for first.
         let Asked { purpose, first: asked, .. } = asked;
         match purpose {
-            Pending::Shell | Pending::BeforeCall { .. } | Pending::SignIn { .. } => {}
+            Pending::Shell | Pending::BeforeCall { .. } | Pending::SignIn { .. } | Pending::Exchange | Pending::PushPut { .. } | Pending::PushGone => {}
             Pending::Before { screen, visit, id, was } => self.before_answered(screen, visit, &id, &was, answer),
             Pending::Changes { screen, visit, list } => self.changes_answered(screen, visit, &list, answer),
             Pending::Move {
@@ -1674,11 +1686,29 @@ impl Core {
             self.touch(Change::Nav);
         }
         self.sync_streams();
-        let changed = std::mem::take(&mut self.changed);
+        let mut changed = std::mem::take(&mut self.changed);
+        // Two changes to the rows of one list can't be told apart by their
+        // order: its screen is read again instead.
+        let mut lists: Vec<(ScreenId, &str)> = changed
+            .iter()
+            .filter_map(|change| match change {
+                Change::Rows { screen, id, count, .. } if *count > 0 => Some((*screen, id.as_str())),
+                Change::Redraw { screen, id, .. } => Some((*screen, id.as_str())),
+                _ => None,
+            })
+            .collect();
+        lists.sort_unstable();
+        let twice: Vec<ScreenId> = lists.windows(2).filter(|pair| pair[0] == pair[1]).map(|pair| pair[0].0).collect();
+        changed.extend(twice.into_iter().map(|id| Change::Screen { id }));
         let whole = |screen: &ScreenId| changed.contains(&Change::Screen { id: *screen });
         // A list whose rows were added says so once: the rows say its state too.
         let grew = |screen: &ScreenId, list: &str| {
-            changed.iter().any(|change| matches!(change, Change::Rows { screen: other, id, count, .. } if other == screen && id == list && *count > 0))
+            changed.iter().any(|change| match change {
+                Change::Rows { screen: other, id, count, .. } => other == screen && id == list && *count > 0,
+                // Rows drawn again say the list's state with them.
+                Change::Redraw { screen: other, id, .. } => other == screen && id == list,
+                _ => false,
+            })
         };
         let changed = changed
             .iter()
@@ -1686,6 +1716,7 @@ impl Core {
                 Change::Screen { id } => self.view.holds(*id),
                 Change::Form { screen, .. } => self.view.holds(*screen) && !whole(screen),
                 Change::Rows { screen, id, count, .. } => self.view.holds(*screen) && !whole(screen) && (*count > 0 || !grew(screen, id)),
+                Change::Redraw { screen, .. } => self.view.holds(*screen) && !whole(screen),
                 _ => true,
             })
             .cloned()
@@ -1713,7 +1744,7 @@ mod tests {
         let Effect::Fetch(request) = &update.effects[0] else {
             panic!("{update:?}");
         };
-        assert_eq!(request.method, Method::Get);
+        assert_eq!(request.method, Verb::Get);
         assert_eq!(request.headers[0], ("x-navree-native".to_owned(), "1".to_owned()));
         assert!(request.headers[1].1.starts_with("platform=ios; "), "{:?}", request.headers[1]);
         assert!(request.headers[1].1.contains("lib=0.1.0"), "{:?}", request.headers[1]);

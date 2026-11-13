@@ -148,6 +148,39 @@
         {
           "additionalProperties": false,
           "properties": {
+            "gone": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "id": {
+              "type": "string"
+            },
+            "rows": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "redraw"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "id",
+            "rows"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "t": {
               "const": "messages"
             }
@@ -167,6 +200,9 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "app_id": {
+          "type": "string"
         },
         "back_to_first": {
           "type": "boolean"
@@ -262,7 +298,8 @@
             "method": {
               "enum": [
                 "get",
-                "post"
+                "post",
+                "delete"
               ],
               "type": "string"
             },
@@ -440,6 +477,38 @@
             "t",
             "call",
             "device"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "bytes": {
+              "type": "integer"
+            },
+            "request": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "random"
+            }
+          },
+          "required": [
+            "t",
+            "request",
+            "bytes"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "const": "forget_session"
+            }
+          },
+          "required": [
+            "t"
           ],
           "type": "object"
         },
@@ -801,6 +870,9 @@
         {
           "additionalProperties": false,
           "properties": {
+            "across": {
+              "type": "boolean"
+            },
             "on": {
               "type": "boolean"
             },
@@ -822,6 +894,87 @@
             "screen",
             "table",
             "on"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "index": {
+              "type": "integer"
+            },
+            "screen": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "tab"
+            }
+          },
+          "required": [
+            "t",
+            "screen",
+            "id",
+            "index"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "bytes": {
+              "type": "string"
+            },
+            "request": {
+              "type": "integer"
+            },
+            "t": {
+              "const": "random"
+            }
+          },
+          "required": [
+            "t",
+            "request",
+            "bytes"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "environment": {
+              "enum": [
+                "sandbox",
+                "production"
+              ],
+              "type": "string"
+            },
+            "t": {
+              "const": "push_token"
+            },
+            "token": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "token"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "snapshot": {},
+            "t": {
+              "const": "restore"
+            }
+          },
+          "required": [
+            "t",
+            "snapshot"
           ],
           "type": "object"
         },
@@ -1505,6 +1658,26 @@
         {
           "additionalProperties": false,
           "properties": {
+            "country": {
+              "type": "string"
+            },
+            "t": {
+              "const": "phone"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "t",
+            "text",
+            "country"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "from": {
               "type": "string"
             },
@@ -1778,6 +1951,51 @@
         {
           "additionalProperties": false,
           "properties": {
+            "gone": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "id": {
+              "type": "string"
+            },
+            "part": {
+              "const": "redraw"
+            },
+            "rows": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "screen": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "part",
+            "screen",
+            "id",
+            "rows"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "part": {
+              "const": "snapshot"
+            }
+          },
+          "required": [
+            "part"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "part": {
               "const": "messages"
             }
@@ -1900,6 +2118,9 @@
           "additionalProperties": {
             "additionalProperties": false,
             "properties": {
+              "across": {
+                "type": "boolean"
+              },
               "failed": {
                 "type": "boolean"
               },
@@ -2006,6 +2227,9 @@
         "status": {
           "type": "integer"
         },
+        "title": {
+          "type": "string"
+        },
         "url": {
           "type": "string"
         }
@@ -2024,6 +2248,125 @@
         "forms",
         "regions",
         "lists"
+      ],
+      "type": "object"
+    },
+    "Snapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "destinations": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "href": {
+                "type": "string"
+              },
+              "stack": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "fields": {
+                      "additionalProperties": {
+                        "$ref": "#/$defs/FieldValue"
+                      },
+                      "type": "object"
+                    },
+                    "open": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "url"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "href",
+              "stack"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "modals": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "present": {
+                "enum": [
+                  "sheet",
+                  "full",
+                  "task"
+                ],
+                "type": "string"
+              },
+              "stack": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "fields": {
+                      "additionalProperties": {
+                        "$ref": "#/$defs/FieldValue"
+                      },
+                      "type": "object"
+                    },
+                    "open": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "url"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "present",
+              "stack"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "origin": {
+          "type": "string"
+        },
+        "person": {
+          "type": "string"
+        },
+        "selected": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "origin"
       ],
       "type": "object"
     },

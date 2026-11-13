@@ -42,10 +42,11 @@
       "send": {"t":"move","screen":1,"item":"p-2","from":"to-pack","to":"packed","before":"p-7"},
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"redraw","screen":1,"id":"packed","rows":["p-2"],"gone":[]},
+          {"t":"redraw","screen":1,"id":"to-pack","rows":[],"gone":["p-2"]}
         ],
         "effects": [
-          {"t":"fetch","request":3,"method":"post","url":"https://shop.example/packing/move","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"item=p-2&from=to-pack&to=packed&before=p-7&position=0&_csrf=tk-91c2"},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":3,"method":"post","url":"https://shop.example/packing/move","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"item=1042&from=to_pack&to=packed&before=p-7&position=0&_csrf=tk-91c2"},"timeout_ms":60000,"xsrf":true}
         ]
       },
       "check": [
@@ -72,7 +73,7 @@
       "send": {"t":"move","screen":1,"item":"p-3","from":"to-pack","to":"packed"},
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"redraw","screen":1,"id":"to-pack","rows":["p-3"],"gone":[]}
         ],
         "effects": []
       },
@@ -86,7 +87,7 @@
       "send": {"t":"move","screen":1,"item":"p-3","from":"to-pack","to":"courier"},
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"redraw","screen":1,"id":"to-pack","rows":["p-3"],"gone":[]}
         ],
         "effects": []
       }
@@ -96,10 +97,10 @@
       "send": {"t":"move","screen":1,"item":"p-3","from":"to-pack","to":"to-pack","before":"p-1"},
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"redraw","screen":1,"id":"to-pack","rows":["p-3"],"gone":[]}
         ],
         "effects": [
-          {"t":"fetch","request":4,"method":"post","url":"https://shop.example/packing/move","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"item=p-3&from=to-pack&to=to-pack&before=p-1&position=0&_csrf=tk-91c2"},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":4,"method":"post","url":"https://shop.example/packing/move","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"item=p-3&from=to_pack&to=to_pack&before=1041&position=0&_csrf=tk-91c2"},"timeout_ms":60000,"xsrf":true}
         ]
       },
       "check": [
@@ -124,10 +125,11 @@
       "send": {"t":"move","screen":1,"item":"p-7","from":"packed","to":"to-pack"},
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"redraw","screen":1,"id":"packed","rows":[],"gone":["p-7"]},
+          {"t":"redraw","screen":1,"id":"to-pack","rows":["p-7"],"gone":[]}
         ],
         "effects": [
-          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/packing/move","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"item=p-7&from=packed&to=to-pack&before=&position=2&_csrf=tk-91c2"},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/packing/move","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"item=p-7&from=packed&to=to_pack&before=&position=2&_csrf=tk-91c2"},"timeout_ms":60000,"xsrf":true}
         ]
       },
       "check": [
@@ -141,7 +143,8 @@
       "body": "made/move-refused.json",
       "expect": {
         "changed": [
-          {"t":"screen","id":1},
+          {"t":"redraw","screen":1,"id":"packed","rows":["p-7"],"gone":[]},
+          {"t":"redraw","screen":1,"id":"to-pack","rows":[],"gone":["p-7"]},
           {"t":"messages"}
         ],
         "effects": [
@@ -159,10 +162,10 @@
       "send": {"t":"move","screen":1,"item":"p-3","from":"to-pack","to":"to-pack"},
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"redraw","screen":1,"id":"to-pack","rows":["p-3"],"gone":[]}
         ],
         "effects": [
-          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/packing/move","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"item=p-3&from=to-pack&to=to-pack&before=&position=1&_csrf=tk-91c2"},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/packing/move","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"item=p-3&from=to_pack&to=to_pack&before=&position=1&_csrf=tk-91c2"},"timeout_ms":60000,"xsrf":true}
         ]
       },
       "check": [
@@ -174,7 +177,7 @@
       "send": {"t":"response","request":6,"error":"offline"},
       "expect": {
         "changed": [
-          {"t":"screen","id":1},
+          {"t":"redraw","screen":1,"id":"to-pack","rows":["p-3"],"gone":[]},
           {"t":"messages"}
         ],
         "effects": [

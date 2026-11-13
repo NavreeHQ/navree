@@ -1,0 +1,39 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Order CS-20481",
+  "body": {
+   "t": "tabs",
+   "id": "parts",
+   "items": [
+    {
+     "label": "Summary",
+     "selected": true,
+     "children": [
+      {
+       "t": "text",
+       "value": "2 phulkari dupattas, ₹1,499.00"
+      }
+     ]
+    },
+    {
+     "label": "History",
+     "children": [
+      {
+       "t": "region",
+       "id": "history",
+       "src": "/orders/1/history",
+       "lazy": true
+      }
+     ]
+    },
+    {
+     "label": "Invoice",
+     "href": "/orders/1/invoice"
+    }
+   ]
+  }
+ }
+}

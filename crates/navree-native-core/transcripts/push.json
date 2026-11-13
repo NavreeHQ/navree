@@ -1,0 +1,166 @@
+{
+  "about": "The device's push token reaches the server through the core, by the one route the shell names. The client only hands the token over, at every launch and whenever the system changes it. Asking the person's permission is a call of its own, which says only what they answered.",
+  "config": {"app_id":"com.charkha.supply","client":{"caps":["push"],"form":"phone","platform":"android","text_percent":100,"vocab":0}},
+  "steps": [
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The system gives the device a token before the shell has said who is signed in: nothing is sent yet.",
+      "send": {"t":"push_token","token":"fcm-A1b2C3d4E5f6G7h8"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Somebody is signed in: the token is posted where the shell says, as JSON, with the app's id.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"post","url":"https://shop.example/api/notifications/push-devices","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"android\",\"token\":\"fcm-A1b2C3d4E5f6G7h8\",\"app_id\":\"com.charkha.supply\"}"},"timeout_ms":30000,"xsrf":true},
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The server holds it.",
+      "send": {"t":"response","request":2,"status":201,"content_type":"application/json"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/account.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The same token at the next launch is not sent again.",
+      "send": {"t":"push_token","token":"fcm-A1b2C3d4E5f6G7h8"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The system changes the token: the new one is posted.",
+      "send": {"t":"push_token","token":"fcm-Z9y8X7w6V5u4T3s2"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":4,"method":"post","url":"https://shop.example/api/notifications/push-devices","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"android\",\"token\":\"fcm-Z9y8X7w6V5u4T3s2\",\"app_id\":\"com.charkha.supply\"}"},"timeout_ms":30000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The server will not take this one. It is not posted again until it changes.",
+      "send": {"t":"response","request":4,"status":422,"content_type":"application/json"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"push","detail":"the push route answered 422: the device is not registered"}
+        ]
+      }
+    },
+    {
+      "send": {"t":"push_token","token":"fcm-Z9y8X7w6V5u4T3s2"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"foreground"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Another token, for the push service's sandbox.",
+      "send": {"t":"push_token","token":"fcm-Q1w2E3r4T5y6U7i8","environment":"sandbox"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/api/notifications/push-devices","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"android\",\"token\":\"fcm-Q1w2E3r4T5y6U7i8\",\"app_id\":\"com.charkha.supply\",\"environment\":\"sandbox\"}"},"timeout_ms":30000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "It did not get there.",
+      "send": {"t":"response","request":5,"error":"offline"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "It is tried again when the app is next in front.",
+      "send": {"t":"foreground"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/api/notifications/push-devices","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"android\",\"token\":\"fcm-Q1w2E3r4T5y6U7i8\",\"app_id\":\"com.charkha.supply\",\"environment\":\"sandbox\"}"},"timeout_ms":30000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":6,"status":201,"content_type":"application/json"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The page asks to send notifications. The client shows the system's prompt and answers what the person said; no token goes this way.",
+      "send": {"t":"act","screen":1,"action":{"t":"device","call":{"f":"register_push"},"then":{"href":"/account/notifications","ticket":"tk_p19","exp":1794000000}},"now":1793990000},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"device","call":1,"device":{"f":"register_push"},"posts":true}
+        ]
+      }
+    },
+    {
+      "note": "Their answer is posted to the call's continuation, with its ticket.",
+      "send": {"t":"device_result","call":1,"ok":true,"fields":[{"name":"granted","value":"true"}]},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":7,"method":"post","url":"https://shop.example/account/notifications","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"granted=true&_call=tk_p19&outcome=ok"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/noted.json",
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"neutral","text":"Noted"}
+        ]
+      }
+    }
+  ]
+}

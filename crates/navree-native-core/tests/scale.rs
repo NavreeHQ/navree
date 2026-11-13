@@ -123,8 +123,8 @@ fn ten_thousand_rows_by_cursor() {
 
 /// What a change costs once ten thousand rows are loaded: a merge into a list
 /// that is kept up to date, and a tick in a table whose rows can be chosen.
-/// A merge tells the client to read the screen again; a tick tells it only
-/// that the table's state changed.
+/// A merge names the rows it changed, and a tick says only that the table's
+/// state changed: neither asks for the screen to be read again.
 #[test]
 fn a_change_among_ten_thousand_rows() {
     let mut core = Core::new(Config::new("https://shop.example", Client::new(Platform::Android, FormFactor::Phone)));
@@ -177,15 +177,34 @@ fn a_change_among_ten_thousand_rows() {
     let step = Instant::now();
     let update = answer(&mut core, asked, &merge);
     let merged = step.elapsed();
-    assert_eq!(update.changed, [Change::Screen { id: screen }]);
+    // The update names the three rows, and nothing asks for the screen to be read again.
+    let named = Change::Redraw {
+        screen,
+        id: "orders".to_owned(),
+        rows: vec!["order-10000".to_owned(), "order-5000".to_owned()],
+        gone: vec!["order-7".to_owned()],
+    };
+    assert_eq!(update.changed, [named]);
     let step = Instant::now();
-    let read = core.view().part(&Query::Screen { id: screen });
+    let part = core.part(&Query::Redraw {
+        screen,
+        id: "orders".to_owned(),
+        rows: vec!["order-10000".to_owned(), "order-5000".to_owned()],
+        gone: vec!["order-7".to_owned()],
+    });
     let reading = step.elapsed();
-    let list = &read["content"]["screen"]["body"]["children"][0];
-    assert_eq!(list["children"].as_array().map(Vec::len), Some(10_000));
-    assert_eq!(list["children"][0]["id"], "order-10000");
-    assert_eq!(list["children"][5_000]["subtitle"], "Simran Bhatia, Chandigarh · ₹1,499");
-    assert_eq!(list["since"], "42");
+    assert_eq!(part["rows"].as_array().map(Vec::len), Some(2));
+    assert_eq!((&part["rows"][0]["id"], &part["rows"][0]["before"]), (&json!("order-10000"), &json!("order-0")));
+    assert_eq!(part["rows"][1]["node"]["subtitle"], "Simran Bhatia, Chandigarh · ₹1,499");
+    assert_eq!(part["rows"][1]["before"], "order-5001");
+    assert_eq!(part["gone"], json!(["order-7"]));
+    assert_eq!(part["since"], "42");
+    assert_eq!(part["forms"].as_object().map(serde_json::Map::len), Some(2));
+    // For comparison: what reading the whole screen again would have cost.
+    let step = Instant::now();
+    let whole = core.part(&Query::Screen { id: screen });
+    let whole_read = step.elapsed();
+    assert_eq!(whole["content"]["screen"]["body"]["children"][0]["children"].as_array().map(Vec::len), Some(10_000));
 
     // A tick says only that the table's state changed, and the part read holds no row.
     let step = Instant::now();
@@ -194,6 +213,7 @@ fn a_change_among_ten_thousand_rows() {
         table: "ledger".to_owned(),
         row: Some("r-9000".to_owned()),
         on: true,
+        across: false,
     });
     let ticked = step.elapsed();
     let state = Change::Rows {
@@ -204,7 +224,7 @@ fn a_change_among_ten_thousand_rows() {
     };
     assert_eq!(update.changed, [state]);
     let step = Instant::now();
-    let part = core.view().part(&Query::Rows {
+    let part = core.part(&Query::Rows {
         screen,
         id: "ledger".to_owned(),
         from: 10_000,
@@ -214,5 +234,5 @@ fn a_change_among_ten_thousand_rows() {
     assert_eq!(part["selected"], json!(["r-9000"]));
     assert_eq!(part["rows"].as_array().map(Vec::len), Some(0));
 
-    println!("among 10,000 rows: a merge of 3 rows took {merged:?} and the screen read again {reading:?}; a tick took {ticked:?} and its part {part_read:?}");
+    println!("among 10,000 rows: a merge of 3 rows took {merged:?} and its rows read again {reading:?} (the whole screen: {whole_read:?}); a tick took {ticked:?} and its part {part_read:?}");
 }

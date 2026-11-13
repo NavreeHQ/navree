@@ -1,0 +1,331 @@
+{
+  "about": "Signing in through the system's own sign-in session, handed over to the app. The session has cookies of its own, so the core proves the sign-in is its own: it makes a secret from random bytes the client hands it, opens the session with the secret's SHA-256 and a `state`, takes the session's return only while that session is open and only with that `state`, and exchanges the code it carries, with the secret, for a session of the app's own. Only an answer of 200 is a sign-in.",
+  "config": {"app_id":"com.charkha.supply","client":{"caps":["auth_session"],"form":"phone","platform":"ios","text_percent":100,"vocab":0},"sign_in":{"paths":["/sign-in"]}},
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app-nobody.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/welcome.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person taps Sign in. The core asks for random bytes: it has none of its own.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/sign-in"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"random","request":1,"bytes":48}
+        ]
+      }
+    },
+    {
+      "note": "The bytes come. The session opens at the shell's start route, with the challenge and the state made from them, where it comes back, and nothing of the secret.",
+      "send": {"t":"random","request":1,"bytes":"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"sign_in","url":"https://shop.example/auth/app/sign-in?platform=apple&app=com.charkha.supply&code_challenge=658WgAyQKf_KhWlXY9I8Os5xARz0DpNUrNgQIF4lD4c&code_challenge_method=S256&state=ISIjJCUmJygpKissLS4vMA&redirect_uri=https%3A%2F%2Fshop.example%2Fapp%2Fsigned-in","callback":"https://shop.example/app/signed-in"}
+        ]
+      }
+    },
+    {
+      "note": "The session comes back with a code and the state. The code goes to the exchange route with the secret, as JSON.",
+      "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?code=Tq7uX0b2c9&state=ISIjJCUmJygpKissLS4vMA"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":3,"method":"post","url":"https://shop.example/api/auth/app/exchange","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"apple\",\"app\":\"com.charkha.supply\",\"code\":\"Tq7uX0b2c9\",\"code_verifier\":\"AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA\"}"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "200: signed in. The shell is fetched again, and the screen in front.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/json"},
+      "body": "made/exchanged.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/loading","is":true}
+      ]
+    },
+    {
+      "note": "The shell says who.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/app/user/name","is":"Ravneet Kaur"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A return that arrives when no sign-in is open is not used, whatever it carries: nothing is sent and nothing is shown.",
+      "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?code=PLANTED000&state=ISIjJCUmJygpKissLS4vMA"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"sign_in","detail":"a sign-in's return arrived with no sign-in open, and was not used"}
+        ]
+      }
+    },
+    {
+      "note": "Nor when it arrives as a link another app opened: it is not a place to go.",
+      "send": {"t":"open_link","url":"https://shop.example/app/signed-in?code=PLANTED000&state=anything"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"sign_in","detail":"a sign-in's return arrived with no sign-in open, and was not used"}
+        ]
+      }
+    },
+    {
+      "note": "Another sign-in.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/sign-in"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"random","request":2,"bytes":48}
+        ]
+      }
+    },
+    {
+      "send": {"t":"random","request":2,"bytes":"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"sign_in","url":"https://shop.example/auth/app/sign-in?platform=apple&app=com.charkha.supply&code_challenge=658WgAyQKf_KhWlXY9I8Os5xARz0DpNUrNgQIF4lD4c&code_challenge_method=S256&state=ISIjJCUmJygpKissLS4vMA&redirect_uri=https%3A%2F%2Fshop.example%2Fapp%2Fsigned-in","callback":"https://shop.example/app/signed-in"}
+        ]
+      }
+    },
+    {
+      "note": "The return carries a state that is not this sign-in's. It is refused: nothing is exchanged, and the person is told it did not work.",
+      "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?code=Xk3mQ8r1v5&state=not-the-state"},
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"danger","notice":"failed"},
+          {"t":"report","what":"sign_in","detail":"a sign-in's return carried a state that is not this sign-in's, and was not used"}
+        ]
+      },
+      "check": [
+        {"at":"/messages/0/notice","is":"failed"}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/sign-in"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"random","request":3,"bytes":48}
+        ]
+      }
+    },
+    {
+      "send": {"t":"random","request":3,"bytes":"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"sign_in","url":"https://shop.example/auth/app/sign-in?platform=apple&app=com.charkha.supply&code_challenge=658WgAyQKf_KhWlXY9I8Os5xARz0DpNUrNgQIF4lD4c&code_challenge_method=S256&state=ISIjJCUmJygpKissLS4vMA&redirect_uri=https%3A%2F%2Fshop.example%2Fapp%2Fsigned-in","callback":"https://shop.example/app/signed-in"}
+        ]
+      }
+    },
+    {
+      "note": "The person closes the sheet. Nothing changed.",
+      "send": {"t":"sign_in_done"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "And a return after that is one with no sign-in open.",
+      "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?code=Xk3mQ8r1v5&state=ISIjJCUmJygpKissLS4vMA"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"sign_in","detail":"a sign-in's return arrived with no sign-in open, and was not used"}
+        ]
+      }
+    },
+    {
+      "note": "A sign-in is opened.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/sign-in"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"random","request":4,"bytes":48}
+        ]
+      }
+    },
+    {
+      "send": {"t":"random","request":4,"bytes":"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"sign_in","url":"https://shop.example/auth/app/sign-in?platform=apple&app=com.charkha.supply&code_challenge=658WgAyQKf_KhWlXY9I8Os5xARz0DpNUrNgQIF4lD4c&code_challenge_method=S256&state=ISIjJCUmJygpKissLS4vMA&redirect_uri=https%3A%2F%2Fshop.example%2Fapp%2Fsigned-in","callback":"https://shop.example/app/signed-in"}
+        ]
+      }
+    },
+    {
+      "note": "A second one is started while it is open: it takes the first one's place, with a secret and a state of its own.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/sign-in"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"random","request":5,"bytes":48}
+        ]
+      }
+    },
+    {
+      "send": {"t":"random","request":5,"bytes":"65666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091929394"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"sign_in","url":"https://shop.example/auth/app/sign-in?platform=apple&app=com.charkha.supply&code_challenge=CCxGvnugw5PTt5DPu1surubVX390bdczL9jaXhbKhb4&code_challenge_method=S256&state=hYaHiImKi4yNjo-QkZKTlA&redirect_uri=https%3A%2F%2Fshop.example%2Fapp%2Fsigned-in","callback":"https://shop.example/app/signed-in"}
+        ]
+      }
+    },
+    {
+      "note": "A return of the first is refused by its state.",
+      "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?code=Xk3mQ8r1v5&state=ISIjJCUmJygpKissLS4vMA"},
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":2,"tone":"danger","notice":"failed"},
+          {"t":"report","what":"sign_in","detail":"a sign-in's return carried a state that is not this sign-in's, and was not used"}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/sign-in"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"random","request":6,"bytes":48}
+        ]
+      }
+    },
+    {
+      "send": {"t":"random","request":6,"bytes":"65666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091929394"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"sign_in","url":"https://shop.example/auth/app/sign-in?platform=apple&app=com.charkha.supply&code_challenge=CCxGvnugw5PTt5DPu1surubVX390bdczL9jaXhbKhb4&code_challenge_method=S256&state=hYaHiImKi4yNjo-QkZKTlA&redirect_uri=https%3A%2F%2Fshop.example%2Fapp%2Fsigned-in","callback":"https://shop.example/app/signed-in"}
+        ]
+      }
+    },
+    {
+      "note": "A good return.",
+      "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?code=Zr5nW2p7d1&state=hYaHiImKi4yNjo-QkZKTlA"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/api/auth/app/exchange","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"apple\",\"app\":\"com.charkha.supply\",\"code\":\"Zr5nW2p7d1\",\"code_verifier\":\"ZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5_gIGCg4Q\"}"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The exchange route answers 400: the code was used or ran out. Nobody is signed in by it: the shell is not asked for.",
+      "send": {"t":"response","request":6,"status":400,"content_type":"application/json"},
+      "body": "made/invalid-hand-over.json",
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":3,"tone":"danger","notice":"failed"},
+          {"t":"report","what":"sign_in","detail":"the exchange route answered 400"}
+        ]
+      },
+      "check": [
+        {"at":"/messages/2/notice","is":"failed"}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/sign-in"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"random","request":7,"bytes":48}
+        ]
+      }
+    },
+    {
+      "note": "Too few bytes make no secret: no session is opened.",
+      "send": {"t":"random","request":7,"bytes":"00ff00ff"},
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":4,"tone":"danger","notice":"failed"},
+          {"t":"report","what":"sign_in","detail":"a sign-in needs 48 random bytes; 4 came"}
+        ]
+      }
+    },
+    {
+      "note": "Bytes nobody asked for are not used.",
+      "send": {"t":"random","request":99,"bytes":"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    }
+  ]
+}

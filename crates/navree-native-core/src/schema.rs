@@ -132,7 +132,11 @@ pub fn schema() -> Value {
             ],
         ),
         ("answer", &[("screen", screen()), ("question", integer()), ("yes", boolean())]),
-        ("choose", &[("screen", screen()), ("table", string()), ("row?", string()), ("on", boolean())]),
+        ("choose", &[("screen", screen()), ("table", string()), ("row?", string()), ("on", boolean()), ("across?", boolean())]),
+        ("tab", &[("screen", screen()), ("id", string()), ("index", integer())]),
+        ("random", &[("request", integer()), ("bytes", string())]),
+        ("push_token", &[("token", string()), ("environment?", words(&["sandbox", "production"]))]),
+        ("restore", &[("snapshot", json!({}))]),
         ("move", &[("screen", screen()), ("item", string()), ("from", string()), ("to", string()), ("before?", string())]),
         ("options", &[("screen", screen()), ("form?", string()), ("field", string()), ("text?", string()), ("more?", boolean())]),
         ("field", &[("screen", screen()), ("form?", string()), ("field", string()), ("value", one("FieldValue"))]),
@@ -182,7 +186,7 @@ pub fn schema() -> Value {
     ];
     let fetch = [
         ("request", integer()),
-        ("method", words(&["get", "post"])),
+        ("method", words(&["get", "post", "delete"])),
         ("url", string()),
         ("headers", headers()),
         ("body?", one("Body")),
@@ -198,6 +202,8 @@ pub fn schema() -> Value {
         ("message", message.as_slice()),
         ("haptic", &[("kind", string())]),
         ("device", &[("call", integer()), ("device", protocol("device::Call")), ("posts?", boolean()), ("options?", json!({"type": "object"}))]),
+        ("random", &[("request", integer()), ("bytes", integer())]),
+        ("forget_session", &[]),
         ("cache_read", &[("key", string())]),
         ("cache_write", &[("key", string()), ("value?", string())]),
         ("cache_clear", &[]),
@@ -217,14 +223,18 @@ pub fn schema() -> Value {
         ("screen", &[("id", screen())]),
         ("form", &[("screen", screen()), ("form", string())]),
         ("rows", &[("screen", screen()), ("id", string()), ("from", integer()), ("count", integer())]),
+        ("redraw", &[("screen", screen()), ("id", string()), ("rows", list(string())), ("gone?", list(string()))]),
+        ("snapshot", &[]),
         ("messages", &[]),
     ];
-    let change: Vec<(&str, &[(&str, Value)])> = part.iter().filter(|(name, _)| *name != "all").copied().collect();
+    let change: Vec<(&str, &[(&str, Value)])> = part.iter().filter(|(name, _)| !matches!(*name, "all" | "snapshot")).copied().collect();
+    let kept_screen = object(&[("url", string()), ("title?", string()), ("fields?", map(one("FieldValue"))), ("open?", list(string()))]);
     let defs = json!({
         "Config": object(&[
             ("origin", string()),
             ("also?", list(string())),
             ("loopback_http?", boolean()),
+            ("app_id?", string()),
             ("client", protocol("ClientDescriptor")),
             ("back_to_first?", boolean()),
             ("deep_links?", words(&["routes", "origin"])),
@@ -240,7 +250,16 @@ pub fn schema() -> Value {
             ("many", &[("values", list(string()))]),
             ("files", &[("files", list(object(&[("token", string()), ("name", string()), ("type?", string()), ("size?", integer())])))]),
             ("none", &[]),
+            ("phone", &[("text", string()), ("country", string())]),
             ("range", &[("from?", string()), ("to?", string())]),
+        ]),
+        "Snapshot": object(&[
+            ("version", integer()),
+            ("origin", string()),
+            ("person?", string()),
+            ("selected?", string()),
+            ("destinations?", list(object(&[("href", string()), ("stack", list(kept_screen.clone()))]))),
+            ("modals?", list(object(&[("present", words(&["sheet", "full", "task"])), ("stack", list(kept_screen))]))),
         ]),
         "Update": object(&[("changed", list(one("Change"))), ("effects", list(one("Effect")))]),
         "Change": forms("t", &change),
@@ -292,6 +311,7 @@ pub fn schema() -> Value {
         "Screen": object(&[
             ("id", integer()),
             ("url", string()),
+            ("title?", string()),
             ("content", forms("t", &[
                 ("blank", &[]),
                 ("native", &[("screen", protocol("Screen"))]),
@@ -307,7 +327,7 @@ pub fn schema() -> Value {
             ("states", map(list(words(&["open", "hidden", "checked", "selected", "disabled", "active", "invalid", "pending"])))),
             ("forms", map(one("Form"))),
             ("regions", map(object(&[("loading", boolean()), ("failure?", failure())]))),
-            ("lists", map(object(&[("loading", boolean()), ("failed", boolean()), ("loading_before?", boolean()), ("failed_before?", boolean())]))),
+            ("lists", map(object(&[("loading", boolean()), ("failed", boolean()), ("loading_before?", boolean()), ("failed_before?", boolean()), ("across?", boolean())]))),
             ("focus?", object(&[("target", string()), ("serial", integer())])),
             ("question?", object(&[("id", integer()), ("title", string()), ("text?", string()), ("confirm", string()), ("cancel?", string())])),
         ]),

@@ -1,7 +1,6 @@
 //! [`Effect`]: everything the core asks a client to do, and [`Update`]: what
 //! one event led to. The core does nothing itself.
 
-use navree_native::node::Method;
 use serde::{Deserialize, Serialize};
 
 use crate::state::{Message, Notice, ScreenId};
@@ -54,13 +53,34 @@ pub enum Body {
     },
 }
 
+/// How a request is sent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Verb {
+    /// A read.
+    Get,
+    /// A write.
+    Post,
+    /// A removal: the device's push token, when the person signs out.
+    Delete,
+}
+
+impl From<navree_native::node::Method> for Verb {
+    fn from(method: navree_native::node::Method) -> Self {
+        match method {
+            navree_native::node::Method::Get => Self::Get,
+            navree_native::node::Method::Post => Self::Post,
+        }
+    }
+}
+
 /// A request to the app's origin. The client adds its cookies and nothing else.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
     /// The number the answer comes back with.
     pub request: u64,
-    /// `get` or `post`.
-    pub method: Method,
+    /// `get`, `post` or `delete`.
+    pub method: Verb,
     /// The whole address.
     pub url: String,
     /// The headers to send, each a name and a value.
@@ -135,6 +155,18 @@ pub enum Effect {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         options: Option<serde_json::Value>,
     },
+    /// Hand the core bytes from the system's own secure random generator, and
+    /// come back with a `random` event that carries `request`. The core has
+    /// no randomness of its own; a sign-in's secret is made from these.
+    Random {
+        /// The number the bytes come back with.
+        request: u64,
+        /// How many bytes, at least.
+        bytes: u32,
+    },
+    /// Forget the session: every cookie of the app's origins, in the web
+    /// view's store too. The person signed out.
+    ForgetSession,
     /// Read what the client keeps under a key, and come back with a `cache` event.
     CacheRead {
         /// The key.
@@ -242,6 +274,22 @@ pub enum Change {
         from: usize,
         /// How many were added.
         count: usize,
+    },
+    /// Some rows of a list or table changed, and nothing else of the screen
+    /// but what that list says of itself. Each row named in `rows` is new, has
+    /// new content or stands in a new place: the part read with the query of
+    /// the same shape gives its content and the row it now stands before. The
+    /// rows named in `gone` left. A client that does not redraw rows by
+    /// themselves reads the screen.
+    Redraw {
+        /// The screen.
+        screen: ScreenId,
+        /// The id of the list or of the table.
+        id: String,
+        /// The ids of the rows to draw again.
+        rows: Vec<String>,
+        /// The ids of the rows that left.
+        gone: Vec<String>,
     },
     /// The messages waiting to be shown.
     Messages,

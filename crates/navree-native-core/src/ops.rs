@@ -98,6 +98,7 @@ impl Core {
     pub(crate) fn apply_ops(&mut self, id: ScreenId, ops: Vec<Op>, after_send: bool) -> bool {
         let mut current = id;
         let mut left = false;
+        let mut signed_out = false;
         let focuses = ops.iter().any(|op| matches!(op, Op::Focus { .. }));
         for op in ops {
             match op {
@@ -114,7 +115,25 @@ impl Core {
                     at,
                     more,
                 } => self.merge(current, &target, nodes, &gone, since, at, more),
-                Op::Rows { target, rows, at, more } => self.table_rows(current, &target, rows, at, more),
+                Op::Rows {
+                    target,
+                    rows,
+                    at,
+                    more,
+                    prev,
+                } => self.table_rows(current, &target, rows, at, more, prev),
+                // The person signed out on purpose. What follows is applied as
+                // it comes: a `navigate` says where they land once the shell is back.
+                Op::SignedOut => {
+                    left = true;
+                    signed_out = true;
+                    self.signed_out_on_purpose();
+                }
+                Op::Navigate { href, .. } if signed_out => {
+                    if let Target::Inside(url) = self.inner.origin.resolve(&href, "/") {
+                        self.inner.land = Some(url);
+                    }
+                }
                 Op::Row { target, row } => self.table_row(current, &target, row),
                 // Without a focus of the server's own, the first field in error is brought into view.
                 Op::Errors { form, fields } => self.errors(current, &form, &fields, after_send && !focuses),
@@ -297,7 +316,10 @@ impl Core {
             return;
         };
         let mut rows = false;
+        let mut first = None;
         if let Node::List(list) = parent {
+            // Rows that join the start of a list are named, when each has an id.
+            first = nodes.iter().map(|node| node.id().map(str::to_owned)).collect::<Option<Vec<String>>>().filter(|_| !at_end);
             rows = at_end;
             match (at_end, more) {
                 (true, Some(more)) => list.more = more,
@@ -324,7 +346,10 @@ impl Core {
             });
         } else {
             self.reconcile(id, Some(&BTreeSet::new()));
-            self.touch_screen(id);
+            match first {
+                Some(rows) => self.redraw(id, target, rows, Vec::new()),
+                None => self.touch_screen(id),
+            }
         }
     }
 
@@ -384,6 +409,10 @@ impl Core {
             return;
         };
         let is = |other: &Node| has_id(other, target);
+        // A row of a list or a table that leaves is named, so the rest is not drawn again.
+        let list = crate::lists::list_holding(screen, target);
+        let table = crate::lists::table_holding(screen, target);
+        let node = find_in(screen, &is).is_some();
         let found = match find_in(screen, &is) {
             Some(old) => {
                 let survey = Survey::of(std::iter::once(old));
@@ -403,8 +432,19 @@ impl Core {
             None => screen.actions.iter_mut().chain(std::iter::once(&mut screen.body)).any(|root| remove_row(root, target)),
         };
         if found {
+            // A list's row is named only when the list really lost it: of two
+            // nodes with one id, the first is the one that went.
+            let holds = self.view.screens.get(&id).and_then(ScreenView::screen).and_then(|screen| crate::lists::list_holding(screen, target));
+            let named = match (node, list, table) {
+                (true, Some(list), _) if holds.as_ref() != Some(&list) => Some(list),
+                (false, _, Some(table)) => Some(table),
+                _ => None,
+            };
             self.reconcile(id, Some(&BTreeSet::new()));
-            self.touch_screen(id);
+            match named {
+                Some(held) => self.redraw(id, &held, Vec::new(), vec![target.to_owned()]),
+                None => self.touch_screen(id),
+            }
         }
     }
 
@@ -524,6 +564,8 @@ impl Core {
             return;
         };
         let Some(node) = find_in_mut(screen, &|other| has_id(other, target) && opens(other)) else {
+            // What is under a table row opens and shuts by the row's id.
+            self.row_open(id, target, open);
             return;
         };
         let overlay = !matches!(node, Node::Disclosure(_));
@@ -691,7 +733,7 @@ impl Core {
         }
         inner.live.retain(|region, _| inner.regions.get(region).is_some_and(|meta| meta.live.is_some()));
         inner.turns.retain(|region, _| inner.regions.contains_key(region));
-        lists.retain(|list, _| survey.more.iter().any(|other| other == list) || inner.more.contains_key(list) || inner.before.contains_key(list));
+        lists.retain(|list, state| state.across || survey.more.iter().any(|other| other == list) || inner.more.contains_key(list) || inner.before.contains_key(list));
 
         if !states.is_empty() {
             states.retain(|id, _| find_in(screen, &|node| has_id(node, id)).is_some());
