@@ -33,8 +33,13 @@
 //! person's, or the attacker's own) fails at the exchange. An app whose
 //! callback is a custom scheme (`custom_scheme`, which another app could
 //! claim) never gets a sign-in the browser already had: the browser is
-//! signed out at the start and the person signs in afresh. The redirect
-//! that carries the code is `no-store` and `no-referrer`.
+//! signed out at the start and the person signs in afresh, on a sign-in
+//! page whose `next` is the finish address with the hand-over's own
+//! one-time `attempt`. The finish hands such an app only a sign-in that came
+//! back on that address; a sign-in made for anything else while the
+//! hand-over waited (the person signing in to the site in another tab) is
+//! refused, and the hand-over ends. The redirect that carries the code is
+//! `no-store` and `no-referrer`.
 
 use std::fmt;
 use std::sync::Arc;
@@ -109,6 +114,19 @@ struct Pending {
     was_signed_in: bool,
     /// When it began (Unix seconds).
     started_at: i64,
+    /// For an app whose callback is a custom scheme: the random value the
+    /// sign-in page comes back with (`?attempt=` on the finish address).
+    /// Only a sign-in that came back with it is handed over.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    attempt: Option<String>,
+}
+
+/// The query of [`APP_SIGN_IN_FINISH_PATH`]: the hand-over's `attempt`, when
+/// the sign-in page sent the browser back.
+#[derive(Clone, Default, Deserialize)]
+pub(crate) struct FinishRequest {
+    #[serde(default)]
+    pub(crate) attempt: Option<String>,
 }
 
 /// An issued code, kept in the cache under its SHA-256.
@@ -124,8 +142,9 @@ struct Code {
 /// Where [`AuthService::finish_app_sign_in`] sends the browser.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Finish {
-    /// Not signed in yet: to the sign-in page, which comes back here.
-    SignIn,
+    /// Not signed in yet: to the sign-in page, which comes back here (with
+    /// the hand-over's `attempt`, when it has one).
+    SignIn(Option<String>),
     /// To the app's callback, with the code and the state.
     App(String),
 }
@@ -190,8 +209,11 @@ impl AuthService {
         };
         // Any app on the device can claim a custom scheme, and the app that
         // started the hand-over holds the verifier: never hand such an app a
-        // sign-in the browser already had. The person signs in afresh.
-        if was_signed_in && !app.callback.starts_with("https://") {
+        // sign-in the browser already had, or one it makes for anything
+        // else while the hand-over waits. The person signs in afresh, and
+        // the sign-in page comes back with `attempt`.
+        let custom_scheme = !app.callback.starts_with("https://");
+        if was_signed_in && custom_scheme {
             self.sign_out_session(session, meta).await?;
             was_signed_in = false;
         }
@@ -206,6 +228,7 @@ impl AuthService {
                     state: request.state.clone(),
                     was_signed_in,
                     started_at: self.clock.now().timestamp(),
+                    attempt: custom_scheme.then(|| random_token(32)),
                 },
             )
             .map_err(|error| AuthError::Session(error.to_string()))?;
@@ -254,10 +277,13 @@ impl AuthService {
     /// one gets a one-time code for the app and goes to its callback
     /// ([`Finish::App`]), signed out first unless it was signed in before
     /// or `keep_browser_signed_in` says otherwise. An impersonation is never
-    /// handed over.
+    /// handed over. For an app whose callback is a custom scheme, the
+    /// sign-in must come back with the hand-over's `attempt`: any other
+    /// sign-in ends the hand-over, refused.
     pub(crate) async fn finish_app_sign_in(
         &self,
         session: &Session,
+        attempt: Option<&str>,
         keep_browser_signed_in: bool,
         meta: &ClientMeta,
     ) -> Result<Finish, AuthError> {
@@ -282,8 +308,21 @@ impl AuthService {
             None => None,
         };
         let Some(signed_in) = signed_in else {
-            return Ok(Finish::SignIn);
+            return Ok(Finish::SignIn(pending.attempt.clone()));
         };
+        // A sign-in that did not come back from the hand-over's own sign-in
+        // page is not handed to an app another app could stand in for.
+        if let Some(expected) = &pending.attempt
+            && !attempt.is_some_and(|attempt| {
+                constant_time_eq(attempt.as_bytes(), expected.as_bytes())
+            })
+        {
+            session.remove(PENDING_KEY);
+            let error = refused("the sign-in was not made for this app sign-in");
+            self.hand_over_refused(Some(&pending.app), &error, meta)
+                .await;
+            return Err(error);
+        }
         if signed_in.impersonator.is_some() {
             session.remove(PENDING_KEY);
             let error = refused("an impersonation is not handed over");
@@ -542,21 +581,19 @@ impl Controller for AppSignInController {
 
         let service = self.service.clone();
         let keep = self.apps.keep_browser_signed_in;
-        let sign_in = format!(
-            "{}?next={}",
-            self.sign_in,
-            form_urlencoded::byte_serialize(APP_SIGN_IN_FINISH_PATH.as_bytes()).collect::<String>()
-        );
-        let finish = move |session: Session, meta: ClientMeta| {
+        let sign_in = self.sign_in.clone();
+        let finish = move |session: Session,
+                           meta: ClientMeta,
+                           Query(request): Query<FinishRequest>| {
             let service = service.clone();
             let sign_in = sign_in.clone();
             async move {
                 let target = match service
-                    .finish_app_sign_in(&session, keep, &meta)
+                    .finish_app_sign_in(&session, request.attempt.as_deref(), keep, &meta)
                     .await
                     .map_err(AuthError::into_app_error)?
                 {
-                    Finish::SignIn => sign_in,
+                    Finish::SignIn(attempt) => sign_in_href(&sign_in, attempt.as_deref()),
                     Finish::App(callback) => callback,
                 };
                 // The code is in the address: never cached, never sent on as
@@ -634,9 +671,37 @@ impl Controller for AppSignInController {
 /// Exchanges one client may attempt per minute.
 const EXCHANGES_PER_MINUTE: u32 = 30;
 
+/// The sign-in page `sign_in` with `next` set to the finish address, carrying
+/// the hand-over's `attempt` when it has one.
+fn sign_in_href(sign_in: &str, attempt: Option<&str>) -> String {
+    let next = match attempt {
+        Some(attempt) => format!(
+            "{APP_SIGN_IN_FINISH_PATH}?attempt={}",
+            form_urlencoded::byte_serialize(attempt.as_bytes()).collect::<String>()
+        ),
+        None => APP_SIGN_IN_FINISH_PATH.to_owned(),
+    };
+    format!(
+        "{sign_in}?next={}",
+        form_urlencoded::byte_serialize(next.as_bytes()).collect::<String>()
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_sign_in_page_comes_back_to_the_finish_address_with_the_attempt() {
+        assert_eq!(
+            sign_in_href("/sign-in", None),
+            "/sign-in?next=%2Fauth%2Fapp%2Ffinish"
+        );
+        assert_eq!(
+            sign_in_href("/login", Some("a-b_c")),
+            "/login?next=%2Fauth%2Fapp%2Ffinish%3Fattempt%3Da-b_c"
+        );
+    }
 
     #[test]
     fn pkce_values_are_read_strictly() {
