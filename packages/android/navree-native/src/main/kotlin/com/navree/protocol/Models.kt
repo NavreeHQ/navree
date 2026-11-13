@@ -46,6 +46,14 @@ public object Navree {
         @SerialName("precise") PRECISE,
     }
 
+    /** `Across`. */
+    @Serializable
+    public data class Across(
+        val name: String,
+        val total: Long? = null,
+        val value: String,
+    )
+
     /** `Action`: one of its variants, told apart by `t`. */
     @Serializable(with = Navree.ActionSerializer::class)
     public sealed interface Action {
@@ -326,6 +334,7 @@ public object Navree {
         val oneOf: String? = null,
         val pending: Boolean = false,
         val prominence: Navree.Prominence = Navree.Prominence.MEDIUM,
+        val reason: String? = null,
         val role: Navree.Role = Navree.Role.NONE,
         val standard: Navree.Standard? = null,
         val undoable: Boolean = false,
@@ -807,11 +816,11 @@ public object Navree {
     /** `Confirmed`. */
     @Serializable
     public data class Confirmed(
-        val challenge: String,
+        val challenge: String? = null,
         val credential: String? = null,
         @SerialName("key_id")
         val keyId: String? = null,
-        val method: Navree.ConfirmedBy,
+        val method: Navree.ConfirmedBy = Navree.ConfirmedBy.PASSKEY,
         val signature: String? = null,
     )
 
@@ -1329,6 +1338,7 @@ public object Navree {
         val detail: kotlin.collections.List<Navree.Node> = emptyList(),
         val icon: Navree.Icon? = null,
         val id: String? = null,
+        val muted: Boolean = false,
         val state: Navree.RowState? = null,
         val subtitle: String? = null,
         val time: String? = null,
@@ -1679,6 +1689,7 @@ public object Navree {
         public data class Rows(
             val at: Navree.Edge = Navree.Edge.END,
             val more: String? = null,
+            val prev: String? = null,
             val rows: kotlin.collections.List<Navree.TableRow>,
             val target: String,
         ) : Navree.Op
@@ -1738,6 +1749,8 @@ public object Navree {
         ) : Navree.Op
         /** `reload`. */
         public data object Reload : Navree.Op
+        /** `signed_out`. */
+        public data object SignedOut : Navree.Op
         /** A variant this build does not know, from a newer server, with what it keeps. */
         public data class Unknown(
             val tag: String,
@@ -1773,6 +1786,7 @@ public object Navree {
                 "invalidate" -> input.json.decodeFromJsonElement(Navree.Op.Invalidate.serializer(), body)
                 "device" -> input.json.decodeFromJsonElement(Navree.Op.Device.serializer(), body)
                 "reload" -> Navree.Op.Reload
+                "signed_out" -> Navree.Op.SignedOut
                 else -> Navree.Op.Unknown(
                     tag = tag ?: "",
                 )
@@ -1860,6 +1874,10 @@ public object Navree {
                     tag = "reload"
                     body = JsonObject(emptyMap())
                 }
+                is Navree.Op.SignedOut -> {
+                    tag = "signed_out"
+                    body = JsonObject(emptyMap())
+                }
                 is Navree.Op.Unknown -> {
                     tag = value.tag
                     val kept = LinkedHashMap<String, JsonElement>()
@@ -1938,6 +1956,13 @@ public object Navree {
         val lastName: String? = null,
     )
 
+    /** `PhoneCountry`. */
+    @Serializable
+    public data class PhoneCountry(
+        val name: String,
+        val value: String,
+    )
+
     /** `Platform`. */
     @Serializable
     public enum class Platform {
@@ -1960,6 +1985,8 @@ public object Navree {
         val clientId: String? = null,
         val nonce: String,
         val provider: Navree.SignInProvider,
+        @SerialName("second_step")
+        val secondStep: String? = null,
         @SerialName("sign_in")
         val signIn: String,
         val web: String? = null,
@@ -2016,32 +2043,34 @@ public object Navree {
         val register: String,
     )
 
+    /** `PushDevice`. */
+    @Serializable
+    public data class PushDevice(
+        @SerialName("app_id")
+        val appId: String,
+        val environment: Navree.PushEnvironment = Navree.PushEnvironment.PRODUCTION,
+        val platform: Navree.PushPlatform,
+        val token: String,
+    )
+
     /** `PushEnvironment`. */
     @Serializable
     public enum class PushEnvironment {
-        @SerialName("development") DEVELOPMENT,
+        @SerialName("sandbox") SANDBOX,
         @SerialName("production") PRODUCTION,
     }
 
-    /** `PushProvider`. */
+    /** `PushPlatform`. */
     @Serializable
-    public enum class PushProvider {
-        @SerialName("apns") APNS,
-        @SerialName("fcm") FCM,
-        @SerialName("wns") WNS,
+    public enum class PushPlatform {
+        @SerialName("ios") IOS,
+        @SerialName("android") ANDROID,
     }
 
     /** `PushRegistered`. */
     @Serializable
     public data class PushRegistered(
-        @SerialName("app_id")
-        val appId: String,
-        val environment: Navree.PushEnvironment,
-        @SerialName("install_id")
-        val installId: String,
-        val locale: String? = null,
-        val provider: Navree.PushProvider,
-        val token: String,
+        val granted: Boolean,
     )
 
     /** `Question`. */
@@ -2109,6 +2138,7 @@ public object Navree {
         val fields: kotlin.collections.List<Navree.Pair> = emptyList(),
         val group: String? = null,
         val href: String,
+        val key: String? = null,
         val limit: Long? = null,
     )
 
@@ -2212,6 +2242,7 @@ public object Navree {
         val badge: Navree.Badge? = null,
         val detail: kotlin.collections.List<Navree.Node> = emptyList(),
         val id: String? = null,
+        val key: String? = null,
         val leading: Navree.Node? = null,
         val menu: kotlin.collections.List<Navree.Node> = emptyList(),
         val muted: Boolean = false,
@@ -2309,6 +2340,7 @@ public object Navree {
     /** `Selection`. */
     @Serializable
     public data class Selection(
+        val across: Navree.Across? = null,
         val form: String? = null,
         val name: String,
     )
@@ -2382,10 +2414,39 @@ public object Navree {
         val nav: Navree.Nav = Navree.Nav(),
         val navree: Long,
         val routes: kotlin.collections.List<Navree.Route> = emptyList(),
+        @SerialName("sign_in")
+        val signIn: Navree.SignIn? = null,
         val stamp: String = "",
         val theme: Navree.Theme? = null,
         val user: Navree.User? = null,
     )
+
+    /** `SignIn`. */
+    @Serializable
+    public data class SignIn(
+        val callback: String? = null,
+        val exchange: String,
+        @SerialName("second_step")
+        val secondStep: String? = null,
+        val start: String,
+    )
+
+    /** `SignInExchange`. */
+    @Serializable
+    public data class SignInExchange(
+        val app: String,
+        val code: String,
+        @SerialName("code_verifier")
+        val codeVerifier: String,
+        val platform: Navree.SignInPlatform,
+    )
+
+    /** `SignInPlatform`. */
+    @Serializable
+    public enum class SignInPlatform {
+        @SerialName("apple") APPLE,
+        @SerialName("android") ANDROID,
+    }
 
     /** `SignInProvider`. */
     @Serializable
@@ -2529,7 +2590,9 @@ public object Navree {
         val cells: kotlin.collections.List<Navree.Node> = emptyList(),
         val detail: kotlin.collections.List<Navree.Node> = emptyList(),
         val id: String? = null,
+        val open: Boolean = false,
         val selected: Boolean = false,
+        val unchoosable: Boolean = false,
     )
 
     /** `Tabs`. */
@@ -2555,6 +2618,7 @@ public object Navree {
     @Serializable
     public data class TextInput(
         val autofill: String? = null,
+        val country: Navree.PhoneCountry? = null,
         val kind: Navree.TextKind = Navree.TextKind.PLAIN,
         val max: String? = null,
         @SerialName("max_length")
@@ -2681,6 +2745,7 @@ public object Navree {
         val id: String? = null,
         val menu: kotlin.collections.List<Navree.Node> = emptyList(),
         val prominence: Navree.Prominence = Navree.Prominence.MEDIUM,
+        val reason: String? = null,
         val role: Navree.Role = Navree.Role.NONE,
         val standard: Navree.Standard? = null,
         val title: String,
