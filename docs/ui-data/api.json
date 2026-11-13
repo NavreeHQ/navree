@@ -10246,6 +10246,48 @@
     ],
     "shared": []
   },
+  "JsonLd": {
+    "name": "JsonLd",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/seo/ld.rs",
+    "summary": "A graph of schema.org nodes: one `<script type=\"application/ld+json\">` block.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "An empty graph."
+      }
+    ],
+    "methods": [
+      {
+        "name": "node",
+        "generics": "",
+        "args": "node: impl Into<Thing>",
+        "doc": "Adds a node."
+      },
+      {
+        "name": "nodes",
+        "generics": "",
+        "args": "",
+        "doc": "The nodes, in order."
+      },
+      {
+        "name": "to_value",
+        "generics": "",
+        "args": "",
+        "doc": "The graph as JSON."
+      },
+      {
+        "name": "to_script",
+        "generics": "",
+        "args": "",
+        "doc": "The graph as the text of a script block: see `script_json`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Justify": {
     "name": "Justify",
     "kind": "enum",
@@ -13078,6 +13120,44 @@
     "variants": [],
     "shared": []
   },
+  "OgType": {
+    "name": "OgType",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/seo/mod.rs",
+    "summary": "What kind of thing a page is, for Open Graph (`og:type`).",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "as_str",
+        "generics": "",
+        "args": "",
+        "doc": "The value of `og:type`."
+      }
+    ],
+    "variants": [
+      {
+        "name": "Website",
+        "doc": "A page of a site: the home page, a features or pricing page. The default.",
+        "default": true
+      },
+      {
+        "name": "Article",
+        "doc": "A post, a story, a page of documentation.",
+        "default": false
+      },
+      {
+        "name": "Product",
+        "doc": "A thing that is sold.",
+        "default": false
+      },
+      {
+        "name": "Profile",
+        "doc": "A person.",
+        "default": false
+      }
+    ],
+    "shared": []
+  },
   "Op": {
     "name": "Op",
     "kind": "enum",
@@ -13393,6 +13473,49 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "PageKind": {
+    "name": "PageKind",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/seo/ld.rs",
+    "summary": "Which kind of page a `WebPage` is.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "as_str",
+        "generics": "",
+        "args": "",
+        "doc": "The schema.org type."
+      }
+    ],
+    "variants": [
+      {
+        "name": "WebPage",
+        "doc": "A page. The default.",
+        "default": true
+      },
+      {
+        "name": "AboutPage",
+        "doc": "About the organization: give it a `main_entity`.",
+        "default": false
+      },
+      {
+        "name": "CollectionPage",
+        "doc": "A list of other pages: a blog's index, a changelog.",
+        "default": false
+      },
+      {
+        "name": "ContactPage",
+        "doc": "How to reach the organization.",
+        "default": false
+      },
+      {
+        "name": "ItemPage",
+        "doc": "Plans and prices, or a product.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "PagesOptions": {
@@ -16346,6 +16469,96 @@
     "variants": [],
     "shared": []
   },
+  "Robots": {
+    "name": "Robots",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/seo/mod.rs",
+    "summary": "What a page asks of search engines: whether to list it, whether to follow its links, and how much of it a result may show.",
+    "constructors": [
+      {
+        "name": "index",
+        "generics": "",
+        "args": "",
+        "doc": "List the page and follow its links, with large previews."
+      },
+      {
+        "name": "noindex",
+        "generics": "",
+        "args": "",
+        "doc": "Keep the page out of results, but follow its links: a not-found page, a thank-you page, a search page."
+      }
+    ],
+    "methods": [
+      {
+        "name": "nofollow",
+        "generics": "",
+        "args": "",
+        "doc": "Don't follow the page's links either."
+      },
+      {
+        "name": "is_indexed",
+        "generics": "",
+        "args": "",
+        "doc": "Whether the page asks to be listed."
+      },
+      {
+        "name": "content",
+        "generics": "",
+        "args": "",
+        "doc": "The `content` of `<meta name=\"robots\">`."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "RobotsTxt": {
+    "name": "RobotsTxt",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/seo/files.rs",
+    "summary": "`robots.txt`: which crawlers may read which paths, and where the sitemap is. Serve it from a route; it answers with its text.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "Every crawler may read every path."
+      }
+    ],
+    "methods": [
+      {
+        "name": "disallow",
+        "generics": "",
+        "args": "path: impl Into<String>",
+        "doc": "Keeps every crawler out of paths that start with `path`: an account area, a search page, an admin. A page that must not be listed also says so in its own head (`Robots::noindex`); this only stops the reading."
+      },
+      {
+        "name": "welcome",
+        "generics": "",
+        "args": "agents: &[&str]",
+        "doc": "Names each crawler in `agents` in a group of its own that allows every path: the rule for everyone already does, and naming them keeps the welcome explicit if that rule ever changes. `AI_CRAWLERS` is the usual list."
+      },
+      {
+        "name": "block",
+        "generics": "",
+        "args": "agent: &str",
+        "doc": "Keeps the crawler `agent` out of the whole site."
+      },
+      {
+        "name": "sitemap",
+        "generics": "",
+        "args": "url: impl Into<String>",
+        "doc": "Where the sitemap is: an absolute URL."
+      },
+      {
+        "name": "to_text",
+        "generics": "",
+        "args": "",
+        "doc": "The file."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Row": {
     "name": "Row",
     "kind": "struct",
@@ -17172,6 +17385,144 @@
     "variants": [],
     "shared": []
   },
+  "Seo": {
+    "name": "Seo",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/seo/mod.rs",
+    "summary": "What a page says about itself in its head, for search engines, link previews and answer engines. `View::seo` writes it.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "description: impl Into<String>",
+        "doc": "A page described by `description`: what a search result shows under its title, and what a shared link shows under its picture. 70 to 160 characters show whole."
+      }
+    ],
+    "methods": [
+      {
+        "name": "canonical",
+        "generics": "",
+        "args": "url: impl Into<String>",
+        "doc": "The page's one address, absolute: what a search engine lists, whatever query or path it was reached by. Also the page's `og:url`."
+      },
+      {
+        "name": "robots",
+        "generics": "",
+        "args": "robots: Robots",
+        "doc": "What search engines may do with the page. Listed, with large previews, by default."
+      },
+      {
+        "name": "noindex",
+        "generics": "",
+        "args": "",
+        "doc": "Keeps the page out of search results: shorthand for `.robots(Robots::noindex())`."
+      },
+      {
+        "name": "social_title",
+        "generics": "",
+        "args": "title: impl Into<String>",
+        "doc": "The title a shared link shows, when it should differ from the page's `<title>` (which drops the site's name, say)."
+      },
+      {
+        "name": "site_name",
+        "generics": "",
+        "args": "name: impl Into<String>",
+        "doc": "The site's name, shown above a shared link's title (`og:site_name`)."
+      },
+      {
+        "name": "locale",
+        "generics": "",
+        "args": "locale: impl Into<String>",
+        "doc": "The page's language and region for Open Graph, with an underscore: `en_IN`."
+      },
+      {
+        "name": "other_locale",
+        "generics": "",
+        "args": "locale: impl Into<String>",
+        "doc": "Another language and region the page is published in (`og:locale:alternate`)."
+      },
+      {
+        "name": "og_type",
+        "generics": "",
+        "args": "kind: OgType",
+        "doc": "What kind of thing the page is. A website page by default."
+      },
+      {
+        "name": "image",
+        "generics": "",
+        "args": "image: SocialImage",
+        "doc": "The picture a shared link shows, for Open Graph and the Twitter card both."
+      },
+      {
+        "name": "twitter_card",
+        "generics": "",
+        "args": "card: TwitterCard",
+        "doc": "The Twitter card: a large image by default."
+      },
+      {
+        "name": "twitter_site",
+        "generics": "",
+        "args": "handle: impl Into<String>",
+        "doc": "The site's account on X, with its `@`."
+      },
+      {
+        "name": "twitter_creator",
+        "generics": "",
+        "args": "handle: impl Into<String>",
+        "doc": "The author's account on X, with its `@`."
+      },
+      {
+        "name": "language",
+        "generics": "",
+        "args": "hreflang: impl Into<String>, url: impl Into<String>",
+        "doc": "The same page in another language: `hreflang` is a language tag (`hi-IN`, `en`) or `x-default` for the page a reader of any other language gets. List every language, this page's own included, on every one of them."
+      },
+      {
+        "name": "format",
+        "generics": "",
+        "args": "mime: &'static str, url: impl Into<String>",
+        "doc": "The page in another format, such as its Markdown (`text/markdown`) for answer engines, or the site's feed (`application/rss+xml`)."
+      },
+      {
+        "name": "json_ld",
+        "generics": "",
+        "args": "data: JsonLd",
+        "doc": "Adds structured data. Call it again for another block; one graph per page is the usual way, and lets nodes point at each other by `@id`."
+      },
+      {
+        "name": "description",
+        "generics": "",
+        "args": "",
+        "doc": "The description."
+      },
+      {
+        "name": "canonical_url",
+        "generics": "",
+        "args": "",
+        "doc": "The canonical address."
+      },
+      {
+        "name": "robots_rule",
+        "generics": "",
+        "args": "",
+        "doc": "What search engines may do with the page."
+      },
+      {
+        "name": "data",
+        "generics": "",
+        "args": "",
+        "doc": "The structured data blocks."
+      },
+      {
+        "name": "problems",
+        "generics": "",
+        "args": "title: &str",
+        "doc": "What a search engine or a link preview would hold against the page titled `title`, in words, one line each: empty when the head is in order. The rules are a search result's: a title of 30 to 60 characters and a description of 70 to 160, an absolute `https` canonical address and picture, the picture's size and alt text, the site's name and locale, and structured data whose nodes have the properties their types need and whose `@id` references point at nodes of the page. A page that asks not to be listed is only checked for that."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Separator": {
     "name": "Separator",
     "kind": "struct",
@@ -17923,6 +18274,78 @@
     "variants": [],
     "shared": []
   },
+  "Sitemap": {
+    "name": "Sitemap",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/seo/files.rs",
+    "summary": "`sitemap.xml`: every page a search engine should list, each with when it last changed. Serve it from a route; it answers with its XML.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "",
+        "doc": "An empty sitemap."
+      }
+    ],
+    "methods": [
+      {
+        "name": "url",
+        "generics": "",
+        "args": "url: SitemapUrl",
+        "doc": "Adds a page. A page listed twice is listed once."
+      },
+      {
+        "name": "urls",
+        "generics": "",
+        "args": "urls: impl IntoIterator<Item = SitemapUrl>",
+        "doc": "Adds pages."
+      },
+      {
+        "name": "locations",
+        "generics": "",
+        "args": "",
+        "doc": "The addresses it lists, in order."
+      },
+      {
+        "name": "to_xml",
+        "generics": "",
+        "args": "",
+        "doc": "The file."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SitemapUrl": {
+    "name": "SitemapUrl",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/seo/files.rs",
+    "summary": "One page of a `Sitemap`.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "loc: impl Into<String>",
+        "doc": "The page at `loc`: its absolute, canonical address."
+      }
+    ],
+    "methods": [
+      {
+        "name": "lastmod",
+        "generics": "",
+        "args": "date: impl Display",
+        "doc": "When its content last changed: a date such as `2026-11-12`, or a `chrono::NaiveDate`. Never a date in the future, and never the build's date for a page that didn't change."
+      },
+      {
+        "name": "language",
+        "generics": "",
+        "args": "hreflang: impl Into<String>, url: impl Into<String>",
+        "doc": "The same page in another language, as `Seo::language` lists it in the page's head."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "Size": {
     "name": "Size",
     "kind": "enum",
@@ -18354,6 +18777,36 @@
         "generics": "",
         "args": "error: SliderError, labels: &SliderLabels",
         "doc": "The error in words, with the grid's numbers in them."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
+  "SocialImage": {
+    "name": "SocialImage",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/seo/mod.rs",
+    "summary": "The picture a shared link shows: an absolute URL, its size in pixels and what it shows, in words. 1200 by 630 is the size every network crops well.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "url: impl Into<String>, width: u32, height: u32, alt: impl Into<String>",
+        "doc": "The picture at `url` (absolute, on `https`), `width` by `height` pixels, showing what `alt` says."
+      }
+    ],
+    "methods": [
+      {
+        "name": "mime",
+        "generics": "",
+        "args": "mime: &'static str",
+        "doc": "Its type, written as `og:image:type`: `image/png`, `image/jpeg` or `image/webp`."
+      },
+      {
+        "name": "url",
+        "generics": "",
+        "args": "",
+        "doc": "The URL."
       }
     ],
     "variants": [],
@@ -21160,6 +21613,72 @@
     "variants": [],
     "shared": []
   },
+  "Thing": {
+    "name": "Thing",
+    "kind": "struct",
+    "file": "crates/navree-ui/src/seo/ld.rs",
+    "summary": "One schema.org node of any type: its `@type`, its `@id` and its properties. The typed builders (`Organization`, `WebPage`, ...) become one; build a `Thing` yourself for a type they don't cover.",
+    "constructors": [
+      {
+        "name": "new",
+        "generics": "",
+        "args": "kind: impl Into<Cow<'static, str>>",
+        "doc": "A node of the schema.org type `kind`."
+      }
+    ],
+    "methods": [
+      {
+        "name": "kind",
+        "generics": "",
+        "args": "",
+        "doc": "Its schema.org type."
+      },
+      {
+        "name": "id",
+        "generics": "",
+        "args": "id: impl Into<String>",
+        "doc": "Names the node, so others can point at it: an absolute URL, usually the page's or the site's address and a fragment (`https://kesar.example/#organization`)."
+      },
+      {
+        "name": "prop",
+        "generics": "",
+        "args": "name: &str, value: impl Into<Value>",
+        "doc": "Sets a property. A later value for the same name replaces the earlier one."
+      },
+      {
+        "name": "link",
+        "generics": "",
+        "args": "name: &str, id: impl Into<String>",
+        "doc": "Points the property `name` at the node whose `@id` is `id`."
+      },
+      {
+        "name": "node",
+        "generics": "",
+        "args": "name: &str, node: impl Into<Thing>",
+        "doc": "Sets the property `name` to a node of its own."
+      },
+      {
+        "name": "push",
+        "generics": "",
+        "args": "name: &str, value: impl Into<Value>",
+        "doc": "Adds `value` to the list in property `name`."
+      },
+      {
+        "name": "get",
+        "generics": "",
+        "args": "name: &str",
+        "doc": "The value of property `name`."
+      },
+      {
+        "name": "to_value",
+        "generics": "",
+        "args": "",
+        "doc": "The node as JSON."
+      }
+    ],
+    "variants": [],
+    "shared": []
+  },
   "ThreadList": {
     "name": "ThreadList",
     "kind": "struct",
@@ -23137,6 +23656,34 @@
       }
     ],
     "variants": [],
+    "shared": []
+  },
+  "TwitterCard": {
+    "name": "TwitterCard",
+    "kind": "enum",
+    "file": "crates/navree-ui/src/seo/mod.rs",
+    "summary": "The card a link to the page unfolds into on X and the apps that read its tags.",
+    "constructors": [],
+    "methods": [
+      {
+        "name": "as_str",
+        "generics": "",
+        "args": "",
+        "doc": "The value of `twitter:card`."
+      }
+    ],
+    "variants": [
+      {
+        "name": "SummaryLargeImage",
+        "doc": "A wide image above the title. The default.",
+        "default": true
+      },
+      {
+        "name": "Summary",
+        "doc": "A small square image beside the title.",
+        "default": false
+      }
+    ],
     "shared": []
   },
   "Upload": {
