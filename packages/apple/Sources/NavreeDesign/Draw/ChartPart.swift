@@ -36,11 +36,22 @@ struct ChartPart: View {
                 plot(width: proxy.size.width)
             }
             .frame(height: height)
+            if many, chart.kind == .line || chart.kind == .area, chart.levels.isEmpty {
+                KeyFlow(entries: chart.series.indices.map { (colour($0), chart.series[$0].label, nil as String?) })
+            }
             // The reference lines' words stand under the plot, where no mark
             // can cover them.
             let named = chart.references.filter { $0.label != nil && $0.kind == .level }
-            if !named.isEmpty {
+            let bands = chart.zones.filter { $0.label != nil }
+            if !named.isEmpty || !bands.isEmpty {
                 Flow(spacing: 14, lineSpacing: 4) {
+                    ForEach(Array(bands.enumerated()), id: \.offset) { _, zone in
+                        HStack(spacing: 5) {
+                            RoundedRectangle(cornerRadius: 2).fill(Hues.color(zone.colour, fallback: .secondary).opacity(0.3))
+                                .frame(width: 12, height: 10)
+                            Text(zone.label ?? "")
+                        }
+                    }
                     ForEach(Array(named.enumerated()), id: \.offset) { _, reference in
                         HStack(spacing: 5) {
                             Dash().stroke(Hues.color(reference.colour, fallback: .secondary), style: StrokeStyle(lineWidth: 1.5, dash: [3, 2]))
@@ -147,12 +158,7 @@ struct ChartPart: View {
     @ChartContentBuilder private var guides: some ChartContent {
         ForEach(Array(chart.zones.enumerated()), id: \.offset) { _, zone in
             RectangleMark(yStart: .value("Value", min(zone.from, zone.to)), yEnd: .value("Value", max(zone.from, zone.to)))
-                .foregroundStyle(Hues.color(zone.colour, fallback: .secondary).opacity(0.12))
-                .annotation(position: .overlay, alignment: .topLeading) {
-                    if let label = zone.label, !small {
-                        Text(label).font(.caption2).foregroundStyle(.secondary).padding(4)
-                    }
-                }
+                .foregroundStyle(Hues.color(zone.colour, fallback: .secondary).opacity(0.14))
         }
         ForEach(Array(chart.references.enumerated()), id: \.offset) { _, reference in
             if let value = reference.value, reference.kind == .level {
@@ -175,6 +181,7 @@ struct ChartPart: View {
                     BarMark(
                         x: .value("Value", point.value),
                         y: .value("Label", String(point.index)),
+                        height: .ratio(0.62),
                         stacking: chart.stacking == .shares ? .normalized : .standard
                     )
                     .foregroundStyle(by: .value("Series", point.series))
@@ -389,7 +396,7 @@ private struct BarAxes<X: AxisContent, Y: AxisContent>: ViewModifier {
             content
                 .chartYScale(domain: domain)
                 .chartYAxis {
-                    AxisMarks(values: domain) { value in
+                    AxisMarks(position: .leading, values: domain) { value in
                         AxisValueLabel {
                             if let key = value.as(String.self), let index = Int(key), index < chart.labels.count {
                                 Text(chart.labels[index])

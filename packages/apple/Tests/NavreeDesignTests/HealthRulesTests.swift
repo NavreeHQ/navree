@@ -141,6 +141,13 @@ import Testing
     #expect(GaugeRules.diameter(aside: true) < GaugeRules.diameter(aside: false))
 }
 
+@Test func aGaugeWritesItsNumberLargeAndItsUnitUnderIt() {
+    #expect(GaugeRules.split("44.2 mL/kg/min") == ("44.2", "mL/kg/min"))
+    #expect(GaugeRules.split("0.93") == ("0.93", nil))
+    #expect(GaugeRules.split("1,420 steps") == ("1,420", "steps"))
+    #expect(GaugeRules.split("Very high") == ("Very high", nil))
+}
+
 @Test func aPercentFollowsItsNumberAndOtherUnitsStandApart() {
     #expect(NumberWords.withUnit("3.1", unit: "%") == "3.1%")
     #expect(NumberWords.withUnit("5.4", unit: "km/h") == "5.4 km/h")

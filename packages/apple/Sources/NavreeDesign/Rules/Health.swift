@@ -285,6 +285,18 @@ public enum GaugeRules {
     /// square, below the arc's ends, holds the scale's end labels.
     public static let heightShare = 0.84
 
+    /// A gauge's words as the number to write large and what follows it
+    /// ("44.2 mL/kg/min" is 44.2 over mL/kg/min); words that do not start
+    /// with a number are written whole.
+    public static func split(_ shown: String) -> (number: String, unit: String?) {
+        guard let space = shown.firstIndex(of: " "),
+            shown[..<space].contains(where: \.isNumber),
+            shown[..<space].allSatisfy({ $0.isNumber || ",.-−+".contains($0) })
+        else { return (shown, nil) }
+        let rest = shown[shown.index(after: space)...].trimmingCharacters(in: .whitespaces)
+        return (String(shown[..<space]), rest.isEmpty ? nil : rest)
+    }
+
     /// The base width of a gauge before the person's text size: one that leads
     /// its card, and one beside a figure's words.
     public static func diameter(aside: Bool) -> Double {
