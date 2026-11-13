@@ -124,7 +124,7 @@ pub(crate) struct UiAlways;
 
 /// The answer to "does anything need the toolkit", settled before the first
 /// request and read by the layer.
-struct UiGate(Arc<OnceLock<bool>>);
+pub(crate) struct UiGate(pub(crate) Arc<OnceLock<bool>>);
 
 fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     m.global();

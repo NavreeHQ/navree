@@ -79,20 +79,24 @@ pub(crate) async fn app_stamp(ctx: &AppContext) -> Stamp {
     Stamp::of(version.as_deref())
 }
 
-/// Serves [`SHELL_PATH`](navree_native::SHELL_PATH).
+/// Serves [`SHELL_PATH`](navree_native::SHELL_PATH), there only while the
+/// toolkit is wanted, as the route of its files is.
 pub(crate) struct Routes {
     ctx: AppContext,
+    wanted: bool,
 }
 
 impl Injectable for Routes {
     fn dependencies() -> Vec<ProviderKey> {
-        Vec::new()
+        vec![ProviderKey::of::<crate::module::UiGate>()]
     }
 
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
+            let gate = r.get::<crate::module::UiGate>().await?;
             Ok(Self {
                 ctx: r.app().clone(),
+                wanted: gate.0.get().copied().unwrap_or(false),
             })
         })
     }
@@ -161,6 +165,9 @@ impl Controller for Routes {
     }
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        if !self.wanted {
+            return Vec::new();
+        }
         let ctx = self.ctx.clone();
         vec![
             RouteDef::on(
