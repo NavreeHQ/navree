@@ -107,7 +107,7 @@ public struct ScreenView: View {
         } else if let table, sections.count == 1, ContentRules.table(table, width: width) == .columns {
             TableColumnsView(table: table, region: sections[0].region)
         } else {
-            List {
+            List(selection: selection(table)) {
                 if let notice {
                     Section { NoticeRow(notice: notice) }
                 }
@@ -130,7 +130,27 @@ public struct ScreenView: View {
                 }
             }
             .modifier(ListLook(layout: ContentRules.list(screen.body)))
+            .modifier(Editing(table: table, region: sections.first { $0.table != nil }?.region, tree: screen.body, reorders: sections.contains { $0.list?.reorder != nil }))
         }
+    }
+
+    /// The rows chosen of a table whose rows can be chosen: what the list
+    /// shows ticked in edit mode, each change told to the core.
+    private func selection(_ table: Navree.Table?) -> Binding<Set<String>>? {
+        guard let table, table.select != nil else { return nil }
+        let key = table.id ?? sectionsRegion ?? ""
+        return Binding(
+            get: { EditRules.chosen(table) },
+            set: { next in
+                for change in EditRules.changes(table, to: next) {
+                    context.send(.choose(table: key, row: change.row, on: change.on, across: false))
+                }
+            }
+        )
+    }
+
+    private var sectionsRegion: String? {
+        SectionRules.sections(screen.body).first { $0.table != nil }?.region
     }
 
     static func isDestructive(_ node: Navree.Node) -> Bool {
@@ -164,11 +184,27 @@ extension OverlayPresenter {
 /// and its footer.
 struct SectionView: View {
     let section: ListSection
+    @Environment(\.navree) private var context
 
     var body: some View {
         Section {
-            ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
-                RowView(item: row)
+            if let list = section.list, let id = list.id, let ids = EditRules.movable(list) {
+                // The list's rows, which the person drags into a new order.
+                ForEach(Array(section.rows.prefix(ids.count).enumerated()), id: \.offset) { _, row in
+                    RowView(item: row)
+                }
+                .onMove { offsets, destination in
+                    if let move = EditRules.move(ids: ids, from: Array(offsets), to: destination) {
+                        context.send(.move(item: move.item, from: id, to: id, before: move.before))
+                    }
+                }
+                ForEach(Array(section.rows.dropFirst(ids.count).enumerated()), id: \.offset) { _, row in
+                    RowView(item: row)
+                }
+            } else {
+                ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
+                    RowView(item: row)
+                }
             }
         } header: {
             if section.header != nil || section.subheader != nil {

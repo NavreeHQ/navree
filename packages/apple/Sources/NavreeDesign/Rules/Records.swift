@@ -3,6 +3,10 @@ import NavreeProtocol
 /// A table's record, read as one row of a list: what a narrow window shows
 /// instead of columns.
 public struct RecordRow: Sendable, Equatable {
+    /// The record's id, which a chosen row is sent by.
+    public var id: String?
+    /// Whether the person may choose the row, where its table lets them.
+    public var choosable = true
     /// What leads the row: a picture, an avatar, an icon.
     public var leading: Navree.Node?
     /// The record's name: the title column's first words.
@@ -55,6 +59,8 @@ public enum RecordRules {
         let titleIndex = columns.firstIndex { $0.role == .title } ?? 0
         let hasSubtitle = columns.contains { $0.role == .subtitle }
         var row = RecordRow(title: "", subtitle: [], action: record.action, controls: record.actions)
+        row.id = record.id
+        row.choosable = record.id != nil && !record.unchoosable
         var subtitle: [String] = []
         var others: [String] = []
         for (index, cell) in cells.enumerated() {
