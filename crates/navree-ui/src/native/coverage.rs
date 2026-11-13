@@ -159,7 +159,12 @@ pub fn designed(screen: &Screen) -> Vec<String> {
                 if in_card {
                     say("a card stands inside a card".to_owned());
                 }
-                if part.action.is_some() && part.label.as_deref().is_none_or(|label| label.trim().is_empty()) {
+                if part.action.is_some()
+                    && part
+                        .label
+                        .as_deref()
+                        .is_none_or(|label| label.trim().is_empty())
+                {
                     say("a card that is tapped has no name".to_owned());
                 }
                 card = true;
@@ -184,7 +189,9 @@ pub fn designed(screen: &Screen) -> Vec<String> {
                 let wide = ids(&part.wide);
                 for id in ids(&part.compact) {
                     if wide.contains(&id) {
-                        say(format!("the part “{id}” stands in both rooms of an adaptive part"));
+                        say(format!(
+                            "the part “{id}” stands in both rooms of an adaptive part"
+                        ));
                     }
                 }
             }
@@ -195,7 +202,9 @@ pub fn designed(screen: &Screen) -> Vec<String> {
         }
     }
     if display > 1 {
-        say(format!("{display} figures are set in the display style: a screen has one"));
+        say(format!(
+            "{display} figures are set in the display style: a screen has one"
+        ));
     }
     gaps
 }
@@ -438,29 +447,37 @@ mod tests {
             Action, Adaptive, Button, Card, Carousel, Role, Screen, Stack, Text, TextStyle,
         };
         let sound = Screen::titled("Shelves")
-            .action(Button::new("Inventory").role(Role::Secondary).to("/inventory"))
-            .body(Stack::down().parts((
+            .action(
+                Button::new("Inventory")
+                    .role(Role::Secondary)
+                    .to("/inventory"),
+            )
+            .body(
+                Stack::down().parts((
+                    Text::new("6").style(TextStyle::Display),
+                    Card::new()
+                        .id("shelf-7")
+                        .opens("Brass lota, out of stock", Action::navigate("/inventory/7"))
+                        .parts(Text::new("Brass lota")),
+                    Carousel::new().parts(Card::new().parts(Text::new("Phulkari dupatta"))),
+                    Adaptive::new()
+                        .compact(Text::new("3 shelves are empty").id("empty"))
+                        .wide(Text::new("3 shelves are empty and 3 are running low")),
+                )),
+            );
+        assert_eq!(designed(&sound), Vec::<String>::new());
+        let unsound = Screen::titled("").action(Button::new("Export")).body(
+            Stack::down().parts((
                 Text::new("6").style(TextStyle::Display),
+                Text::new("12").style(TextStyle::Display),
                 Card::new()
-                    .id("shelf-7")
-                    .opens("Brass lota, out of stock", Action::navigate("/inventory/7"))
-                    .parts(Text::new("Brass lota")),
-                Carousel::new().parts(Card::new().parts(Text::new("Phulkari dupatta"))),
+                    .opens(" ", Action::navigate("/inventory/7"))
+                    .parts(Card::new().parts(Carousel::new().parts(Carousel::new()))),
                 Adaptive::new()
                     .compact(Text::new("3 shelves are empty").id("empty"))
-                    .wide(Text::new("3 shelves are empty and 3 are running low")),
-            )));
-        assert_eq!(designed(&sound), Vec::<String>::new());
-        let unsound = Screen::titled("").action(Button::new("Export")).body(Stack::down().parts((
-            Text::new("6").style(TextStyle::Display),
-            Text::new("12").style(TextStyle::Display),
-            Card::new()
-                .opens(" ", Action::navigate("/inventory/7"))
-                .parts(Card::new().parts(Carousel::new().parts(Carousel::new()))),
-            Adaptive::new()
-                .compact(Text::new("3 shelves are empty").id("empty"))
-                .wide(Stack::down().parts(Text::new("3 are empty").id("empty"))),
-        )));
+                    .wide(Stack::down().parts(Text::new("3 are empty").id("empty"))),
+            )),
+        );
         let mut gaps = designed(&unsound);
         gaps.sort();
         assert_eq!(
@@ -483,8 +500,16 @@ mod tests {
         let mut answered = crate::native::Answered::parts(Vec::new());
         answered.grade = Grade::Designed;
         coverage.add_answer("/", 100, 80, &answered);
-        coverage.add_answer("/orders", 100, 80, &crate::native::Answered::parts(Vec::new()));
-        assert_eq!((coverage.native(), coverage.graded(Grade::Designed)), (2, 1));
+        coverage.add_answer(
+            "/orders",
+            100,
+            80,
+            &crate::native::Answered::parts(Vec::new()),
+        );
+        assert_eq!(
+            (coverage.native(), coverage.graded(Grade::Designed)),
+            (2, 1)
+        );
         assert!(
             coverage
                 .to_string()

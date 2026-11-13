@@ -214,16 +214,26 @@ impl<'a> Answer<'a> {
                                 *node = older;
                             }
                             _ => {
-                                let envelope =
-                                    Envelope::ops(crate::assets::BUILD, vec![navree_native::Op::Reload]);
-                                return swap::respond(self.status, "no-store", envelope, request, "");
+                                let envelope = Envelope::ops(
+                                    crate::assets::BUILD,
+                                    vec![navree_native::Op::Reload],
+                                );
+                                return swap::respond(
+                                    self.status,
+                                    "no-store",
+                                    envelope,
+                                    request,
+                                    "",
+                                );
                             }
                         }
                     }
                 }
                 let envelope = Envelope::ops(crate::assets::BUILD, ops);
                 let mut response = swap::respond(self.status, "no-store", envelope, request, "");
-                response.extensions_mut().insert(Answered::parts(Vec::new()));
+                response
+                    .extensions_mut()
+                    .insert(Answered::parts(Vec::new()));
                 response
             }
         }
@@ -302,7 +312,11 @@ fn finish(screen: &mut Screen, token: Option<&str>) {
     for action in &mut screen.actions {
         finish_part(action, token);
     }
-    if let Some(scores) = screen.pager.as_mut().and_then(|pager| pager.scores.as_deref_mut()) {
+    if let Some(scores) = screen
+        .pager
+        .as_mut()
+        .and_then(|pager| pager.scores.as_deref_mut())
+    {
         finish_part(scores, token);
     }
 }
@@ -329,7 +343,11 @@ fn finish_part(part: &mut Part, token: Option<&str>) {
                 });
             }
             for action in node.actions_mut() {
-                if let Action::Request { method: n::Method::Post, fields, .. } = action
+                if let Action::Request {
+                    method: n::Method::Post,
+                    fields,
+                    ..
+                } = action
                     && !fields.iter().any(|pair| pair.name == CSRF_FIELD)
                 {
                     fields.push(Pair {
@@ -408,7 +426,11 @@ pub fn replace(target: impl Into<String>, part: impl Into<Part>) -> crate::Op {
 pub fn append(target: impl Into<String>, parts: impl navree_native::ui::IntoParts) -> crate::Op {
     let mut nodes = Vec::new();
     parts.push_into(&mut nodes);
-    node_op(How::Append, target, nodes.into_iter().map(finished).collect())
+    node_op(
+        How::Append,
+        target,
+        nodes.into_iter().map(finished).collect(),
+    )
 }
 
 /// Adds `parts` at the start of the part `target` of a native client's
@@ -416,7 +438,11 @@ pub fn append(target: impl Into<String>, parts: impl navree_native::ui::IntoPart
 pub fn prepend(target: impl Into<String>, parts: impl navree_native::ui::IntoParts) -> crate::Op {
     let mut nodes = Vec::new();
     parts.push_into(&mut nodes);
-    node_op(How::Prepend, target, nodes.into_iter().map(finished).collect())
+    node_op(
+        How::Prepend,
+        target,
+        nodes.into_iter().map(finished).collect(),
+    )
 }
 
 #[cfg(test)]
@@ -462,7 +488,9 @@ mod tests {
             Stack::down().id("today").parts((
                 Text::new("₹1,24,050").style(TextStyle::Display),
                 Card::new().parts(Icon::named("shopping-bag")),
-                Form::post("/orders/1/refund").id("refund").parts(Field::amount("amount", "₹")),
+                Form::post("/orders/1/refund")
+                    .id("refund")
+                    .parts(Field::amount("amount", "₹")),
                 Button::new("Resend").post("/orders/1/resend", [("copy", "1")]),
             )),
         )
@@ -479,7 +507,9 @@ mod tests {
         // A browser, and anything outside a native client's request: the page.
         let page = both();
         assert_eq!(page.headers()[CONTENT_TYPE], "text/html; charset=utf-8");
-        let html = navree_http::body::to_bytes(page.into_body(), 1 << 20).await.unwrap();
+        let html = navree_http::body::to_bytes(page.into_body(), 1 << 20)
+            .await
+            .unwrap();
         assert!(String::from_utf8_lossy(&html).contains("the page"));
         // A native client: the screen that was written for it, not the page read.
         let response = as_native("/", both);
@@ -562,7 +592,11 @@ mod tests {
         let Some(Part::Form(form)) = screen.body.find("refund") else {
             panic!("no form");
         };
-        assert!(form.hidden.iter().any(|hidden| hidden.name == CSRF_FIELD && hidden.value == "tok"));
+        assert!(
+            form.hidden
+                .iter()
+                .any(|hidden| hidden.name == CSRF_FIELD && hidden.value == "tok")
+        );
         let posts: Vec<&Part> = screen
             .body
             .children()
@@ -572,15 +606,21 @@ mod tests {
         let [Part::Button(resend)] = posts.as_slice() else {
             panic!("no button");
         };
-        assert!(matches!(&resend.action, Some(Action::Request { fields, .. })
+        assert!(
+            matches!(&resend.action, Some(Action::Request { fields, .. })
             if fields.iter().any(|pair| pair.name == CSRF_FIELD && pair.value == "tok")
-                && fields.iter().any(|pair| pair.name == "copy")));
+                && fields.iter().any(|pair| pair.name == "copy"))
+        );
         // A screen that says its own destination keeps it.
         let response = as_native("/orders/7", || {
             Answer::in_shell(&shell).native(|| today().nav("/"))
         });
         assert_eq!(
-            envelope(response).await.screen.and_then(|screen| screen.nav).as_deref(),
+            envelope(response)
+                .await
+                .screen
+                .and_then(|screen| screen.nav)
+                .as_deref(),
             Some("/"),
             "the screen's own word wins"
         );
@@ -607,7 +647,10 @@ mod tests {
             panic!("not an icon");
         };
         assert!(!icon.paths.is_empty());
-        assert_eq!(icon.symbol.as_ref().map(|symbol| symbol.apple.as_str()), Some("bag"));
+        assert_eq!(
+            icon.symbol.as_ref().map(|symbol| symbol.apple.as_str()),
+            Some("bag")
+        );
     }
 
     #[tokio::test]
@@ -628,7 +671,11 @@ mod tests {
                 || {
                     vec![Op::Merge {
                         target: "activity".to_owned(),
-                        nodes: vec![ui::Row::new("Order CS-20481 was packed").id("event-8").into()],
+                        nodes: vec![
+                            ui::Row::new("Order CS-20481 was packed")
+                                .id("event-8")
+                                .into(),
+                        ],
                         gone: Vec::new(),
                         since: "8".to_owned(),
                         at: navree_native::op::Edge::Start,
@@ -638,8 +685,10 @@ mod tests {
             )
         });
         let ops = envelope(rows).await.ops;
-        assert!(matches!(ops.as_slice(), [Op::Merge { target, nodes, since, .. }]
-            if target == "activity" && nodes.len() == 1 && since == "8"));
+        assert!(
+            matches!(ops.as_slice(), [Op::Merge { target, nodes, since, .. }]
+            if target == "activity" && nodes.len() == 1 && since == "8")
+        );
     }
 
     #[tokio::test]
@@ -655,13 +704,20 @@ mod tests {
             let crate::Op::Native(first) = &ops[0] else {
                 panic!("not a native op");
             };
-            assert_eq!((first.how, first.target.as_str()), (How::Replace, "shelf-7"));
+            assert_eq!(
+                (first.how, first.target.as_str()),
+                (How::Replace, "shelf-7")
+            );
             // What the reply layer does with a reply's ops for a native client.
             swap::native_ops(&ops).expect("every op can be said natively")
         });
-        assert!(matches!(&response[0], Op::Replace { target, node: Part::Card(card) }
-            if target == "shelf-7" && card.children == [Part::text("27 left")]));
-        assert!(matches!(&response[1], Op::Append { target, nodes, .. } if target == "wall" && nodes.len() == 2));
+        assert!(
+            matches!(&response[0], Op::Replace { target, node: Part::Card(card) }
+            if target == "shelf-7" && card.children == [Part::text("27 left")])
+        );
+        assert!(
+            matches!(&response[1], Op::Append { target, nodes, .. } if target == "wall" && nodes.len() == 2)
+        );
         assert!(matches!(&response[2], Op::Toast(toast) if toast.text == "Restocked"));
     }
 }

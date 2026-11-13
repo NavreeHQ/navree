@@ -925,10 +925,9 @@ impl Icon {
 /// assert!(matches!(&mark.children[0], Node::Shape(shape) if shape.soft));
 /// ```
 pub fn chip(icon: Icon, hue: Hue) -> Layers {
-    Layers::new().size(Size::square(40).scaled()).parts((
-        Shape::circle().fill(hue).soft(),
-        icon.colour(hue),
-    ))
+    Layers::new()
+        .size(Size::square(40).scaled())
+        .parts((Shape::circle().fill(hue).soft(), icon.colour(hue)))
 }
 
 impl Badge {
@@ -958,7 +957,11 @@ impl Badge {
 impl Progress {
     /// `done` of `whole`.
     pub fn of(done: f64, whole: f64) -> Self {
-        let share = if whole > 0.0 { (done / whole).clamp(0.0, 1.0) } else { 0.0 };
+        let share = if whole > 0.0 {
+            (done / whole).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         Self {
             value: Some((share * 1000.0).round() as u16),
             ..Self::default()
@@ -1019,7 +1022,11 @@ impl Button {
 
     /// A tap posts `fields` to `href`.
     #[must_use]
-    pub fn post<N, V>(self, href: impl Into<String>, fields: impl IntoIterator<Item = (N, V)>) -> Self
+    pub fn post<N, V>(
+        self,
+        href: impl Into<String>,
+        fields: impl IntoIterator<Item = (N, V)>,
+    ) -> Self
     where
         N: Into<String>,
         V: Into<String>,
@@ -1055,7 +1062,12 @@ impl Button {
     /// The question it asks before it acts: `title`, and the words of the
     /// button that goes ahead.
     #[must_use]
-    pub fn ask(mut self, title: impl Into<String>, text: Option<String>, confirm: impl Into<String>) -> Self {
+    pub fn ask(
+        mut self,
+        title: impl Into<String>,
+        text: Option<String>,
+        confirm: impl Into<String>,
+    ) -> Self {
         self.ask = Some(Question {
             title: title.into(),
             text,
@@ -1433,7 +1445,10 @@ impl Chart {
 
     /// A small line with no axes, named `title` for a reader who can't see
     /// it, through `values`.
-    pub fn sparkline<V: IntoNumber>(title: impl Into<String>, values: impl IntoIterator<Item = V>) -> Self {
+    pub fn sparkline<V: IntoNumber>(
+        title: impl Into<String>,
+        values: impl IntoIterator<Item = V>,
+    ) -> Self {
         let title = title.into();
         Self::new(ChartKind::Sparkline, title.clone()).series(title, values)
     }
@@ -1447,10 +1462,17 @@ impl Chart {
 
     /// Adds a series named `label`, a value a label.
     #[must_use]
-    pub fn series<V: IntoNumber>(mut self, label: impl Into<String>, values: impl IntoIterator<Item = V>) -> Self {
+    pub fn series<V: IntoNumber>(
+        mut self,
+        label: impl Into<String>,
+        values: impl IntoIterator<Item = V>,
+    ) -> Self {
         self.series.push(Series {
             label: label.into(),
-            values: values.into_iter().map(|value| Some(value.into_number())).collect(),
+            values: values
+                .into_iter()
+                .map(|value| Some(value.into_number()))
+                .collect(),
             ..Series::default()
         });
         self
@@ -1894,7 +1916,12 @@ impl DayClock {
     /// The day's total in the middle: the number as the screen writes it,
     /// what it counts, and what it is.
     #[must_use]
-    pub fn total(mut self, shown: impl Into<String>, unit: impl Into<String>, label: impl Into<String>) -> Self {
+    pub fn total(
+        mut self,
+        shown: impl Into<String>,
+        unit: impl Into<String>,
+        label: impl Into<String>,
+    ) -> Self {
         self.shown = Some(shown.into());
         self.unit = Some(unit.into());
         self.label = Some(label.into());
@@ -2191,16 +2218,25 @@ mod tests {
             .back("Today", "/")
             .nav("/inventory")
             .refresh()
-            .action(Button::new("Inventory").role(Role::Secondary).to("/inventory"))
+            .action(
+                Button::new("Inventory")
+                    .role(Role::Secondary)
+                    .to("/inventory"),
+            )
             .body(
                 Stack::down().id("shelves").gap(4).parts((
-                    Text::new("3").style(TextStyle::Display).change(Change::Count),
+                    Text::new("3")
+                        .style(TextStyle::Display)
+                        .change(Change::Count),
                     Card::new()
                         .id("shelf-7")
                         .tint(Hue::Amber)
                         .opens("Brass lota, 3 left", Action::request("/inventory/7/peek"))
                         .zoom()
-                        .menu(Button::new("Restock 24").post("/inventory/7/restock", [("quantity", "24")]))
+                        .menu(
+                            Button::new("Restock 24")
+                                .post("/inventory/7/restock", [("quantity", "24")]),
+                        )
                         .parts((
                             chip(Icon::named("package"), Hue::Amber),
                             Text::new("Brass lota").style(TextStyle::Headline).lines(2),
@@ -2246,16 +2282,23 @@ mod tests {
         let stack = Stack::across().parts((
             Text::new("Running low"),
             low.iter().map(|name| Badge::new(*name)),
-            low.iter().filter_map(|name| name.strip_suffix(" kurta").map(Text::new)),
+            low.iter()
+                .filter_map(|name| name.strip_suffix(" kurta").map(Text::new)),
             vec![Divider::default(), Divider::default()],
             [Spacer::default()],
             None::<Text>,
             each(low.iter().rev().map(|name| Text::new(*name))),
         ));
-        let kinds: Vec<&str> = stack.children.iter().map(|part| part.kind().as_str()).collect();
+        let kinds: Vec<&str> = stack
+            .children
+            .iter()
+            .map(|part| part.kind().as_str())
+            .collect();
         assert_eq!(
             kinds,
-            ["text", "badge", "badge", "text", "divider", "divider", "spacer", "text", "text"]
+            [
+                "text", "badge", "badge", "text", "divider", "divider", "spacer", "text", "text"
+            ]
         );
     }
 
@@ -2270,26 +2313,40 @@ mod tests {
 
     #[test]
     fn a_form_and_a_dialog_are_written_with_their_fields_and_answers() {
-        let dialog = Dialog::new("refund").title("Refund").parts(
-            Form::post("/orders/1/refund").id("refund").parts((
-                Field::amount("amount", "₹").label("Amount").required().value("450.00"),
-                Field::choice("reason", ChoiceKind::Menu, [("late", "Arrived late"), ("damaged", "Damaged")])
+        let dialog = Dialog::new("refund")
+            .title("Refund")
+            .parts(
+                Form::post("/orders/1/refund").id("refund").parts((
+                    Field::amount("amount", "₹")
+                        .label("Amount")
+                        .required()
+                        .value("450.00"),
+                    Field::choice(
+                        "reason",
+                        ChoiceKind::Menu,
+                        [("late", "Arrived late"), ("damaged", "Damaged")],
+                    )
                     .label("Reason")
                     .value("late"),
-            )),
-        )
-        .action((
-            Button::new("Keep").role(Role::Cancel).dismisses(),
-            Button::new("Refund").role(Role::Confirm).action(Action::Submit {
-                form: Some("refund".to_owned()),
-                href: None,
-                with: None,
-            }),
-        ));
+                )),
+            )
+            .action((
+                Button::new("Keep").role(Role::Cancel).dismisses(),
+                Button::new("Refund")
+                    .role(Role::Confirm)
+                    .action(Action::Submit {
+                        form: Some("refund".to_owned()),
+                        href: None,
+                        with: None,
+                    }),
+            ));
         let Node::Form(form) = &dialog.children[0] else {
             panic!("the dialog holds the form");
         };
-        assert_eq!((form.method, form.action.as_str()), (Method::Post, "/orders/1/refund"));
+        assert_eq!(
+            (form.method, form.action.as_str()),
+            (Method::Post, "/orders/1/refund")
+        );
         let Node::Field(amount) = &form.children[0] else {
             panic!("a field");
         };

@@ -26,12 +26,57 @@ struct Shelf {
 }
 
 const SHELVES: [Shelf; 6] = [
-    Shelf { id: 7, name: "Brass lota", icon: ("cup-soda", "M6 8h12l-1.5 12h-9zM5 4h14l-1 4H6z"), stock: 0, reorder_at: 12 },
-    Shelf { id: 31, name: "Masala dabba, steel", icon: ("soup", "M4 12h16a8 8 0 0 1-16 0zM7 21h10M12 3v5"), stock: 0, reorder_at: 8 },
-    Shelf { id: 12, name: "Khadi kurta, indigo", icon: ("shirt", "M8 3 3 6l2 4 2-1v11h10V9l2 1 2-4-5-3a4 4 0 0 1-8 0z"), stock: 3, reorder_at: 10 },
-    Shelf { id: 44, name: "Punjabi jutti, size 8", icon: ("footprints", "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z"), stock: 4, reorder_at: 8 },
-    Shelf { id: 18, name: "Phulkari dupatta", icon: ("flower", "M12 7.5a4.5 4.5 0 1 1 4.5 4.5M12 7.5A4.5 4.5 0 1 0 7.5 12M12 7.5V9M7.5 12a4.5 4.5 0 1 0 4.5 4.5M7.5 12H9M16.5 12a4.5 4.5 0 1 1-4.5 4.5M16.5 12H15M12 16.5V15"), stock: 6, reorder_at: 12 },
-    Shelf { id: 52, name: "Block-print bedsheet", icon: ("bed", "M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"), stock: 9, reorder_at: 15 },
+    Shelf {
+        id: 7,
+        name: "Brass lota",
+        icon: ("cup-soda", "M6 8h12l-1.5 12h-9zM5 4h14l-1 4H6z"),
+        stock: 0,
+        reorder_at: 12,
+    },
+    Shelf {
+        id: 31,
+        name: "Masala dabba, steel",
+        icon: ("soup", "M4 12h16a8 8 0 0 1-16 0zM7 21h10M12 3v5"),
+        stock: 0,
+        reorder_at: 8,
+    },
+    Shelf {
+        id: 12,
+        name: "Khadi kurta, indigo",
+        icon: (
+            "shirt",
+            "M8 3 3 6l2 4 2-1v11h10V9l2 1 2-4-5-3a4 4 0 0 1-8 0z",
+        ),
+        stock: 3,
+        reorder_at: 10,
+    },
+    Shelf {
+        id: 44,
+        name: "Punjabi jutti, size 8",
+        icon: (
+            "footprints",
+            "M4 16v-2.4C4 11 5 9 7 9s3 2 3 4.6V16zM14 12v-2.4C14 7 15 5 17 5s3 2 3 4.6V12z",
+        ),
+        stock: 4,
+        reorder_at: 8,
+    },
+    Shelf {
+        id: 18,
+        name: "Phulkari dupatta",
+        icon: (
+            "flower",
+            "M12 7.5a4.5 4.5 0 1 1 4.5 4.5M12 7.5A4.5 4.5 0 1 0 7.5 12M12 7.5V9M7.5 12a4.5 4.5 0 1 0 4.5 4.5M7.5 12H9M16.5 12a4.5 4.5 0 1 1-4.5 4.5M16.5 12H15M12 16.5V15",
+        ),
+        stock: 6,
+        reorder_at: 12,
+    },
+    Shelf {
+        id: 52,
+        name: "Block-print bedsheet",
+        icon: ("bed", "M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"),
+        stock: 9,
+        reorder_at: 15,
+    },
 ];
 
 /// What sold today: a product, how many, and what they brought in.
@@ -59,8 +104,14 @@ fn count(id: &str, shown: &str, label: &str, hue: Hue, weight: Weight) -> Card {
         Stack::across().gap(3).align(Align::Center).parts((
             Shape::capsule().fill(hue).size(Size::new(6, 36).scaled()),
             Stack::down().grow().parts((
-                Text::new(shown).style(TextStyle::Title).weight(weight).change(Change::Count),
-                Text::new(label).style(TextStyle::Caption).weight(Weight::Semibold).muted(),
+                Text::new(shown)
+                    .style(TextStyle::Title)
+                    .weight(weight)
+                    .change(Change::Count),
+                Text::new(label)
+                    .style(TextStyle::Caption)
+                    .weight(Weight::Semibold)
+                    .muted(),
             )),
         )),
     )
@@ -84,18 +135,31 @@ fn tile(shelf: &Shelf) -> Card {
         .zoom()
         .appear(Appear::Scale)
         .menu((
-            Button::new("Restock 24").post(format!("/inventory/{}/restock", shelf.id), [("quantity", "24")]),
-            Link::to("Open in the inventory", format!("/inventory?search={}", shelf.id)),
+            Button::new("Restock 24").post(
+                format!("/inventory/{}/restock", shelf.id),
+                [("quantity", "24")],
+            ),
+            Link::to(
+                "Open in the inventory",
+                format!("/inventory?search={}", shelf.id),
+            ),
         ))
         .parts((
-            Stack::across().justify(Justify::Between).align(Align::Start).parts((
-                // The product's mark, with a dot of its level at its corner.
-                Layers::new().place(Place::BottomEnd).parts((
-                    chip(Icon::named(name).path(path), hue),
-                    Shape::circle().fill(hue).stroke(Hue::Neutral).size(Size::square(12)).label(word),
+            Stack::across()
+                .justify(Justify::Between)
+                .align(Align::Start)
+                .parts((
+                    // The product's mark, with a dot of its level at its corner.
+                    Layers::new().place(Place::BottomEnd).parts((
+                        chip(Icon::named(name).path(path), hue),
+                        Shape::circle()
+                            .fill(hue)
+                            .stroke(Hue::Neutral)
+                            .size(Size::square(12))
+                            .label(word),
+                    )),
+                    Badge::new(word).tone(tone),
                 )),
-                Badge::new(word).tone(tone),
-            )),
             Text::new(shelf.name).style(TextStyle::Headline).lines(2),
             Text::new(left).style(TextStyle::Caption).muted(),
             Progress::of(f64::from(shelf.stock), f64::from(shelf.reorder_at))
@@ -114,7 +178,10 @@ fn seller((name, sold): &(&str, &str)) -> Card {
                 .scale(TextStyle::Title2)
                 .colour(Hue::Accent),
         )),
-        Text::new(*name).style(TextStyle::Callout).weight(Weight::Medium).lines(2),
+        Text::new(*name)
+            .style(TextStyle::Callout)
+            .weight(Weight::Medium)
+            .lines(2),
         Text::new(*sold).style(TextStyle::Caption).muted(),
     ))
 }
@@ -123,7 +190,12 @@ fn seller((name, sold): &(&str, &str)) -> Card {
 pub fn screen() -> Screen {
     let out = SHELVES.iter().filter(|shelf| shelf.stock == 0).count();
     let low = SHELVES.len() - out;
-    let sellers_heading = || Text::new("Top sellers today").style(TextStyle::Title2).weight(Weight::Bold).heading(2);
+    let sellers_heading = || {
+        Text::new("Top sellers today")
+            .style(TextStyle::Title2)
+            .weight(Weight::Bold)
+            .heading(2)
+    };
     // The key to the dots: a mark of each level's hue beside its words.
     let key = |hue: Hue, word: &str| {
         Stack::across().gap(1).align(Align::Center).parts((
@@ -132,23 +204,39 @@ pub fn screen() -> Screen {
         ))
     };
     let wall = Stack::down().gap(3).grow().parts((
-        Text::new("The emptiest shelves").style(TextStyle::Title2).weight(Weight::Bold).heading(2),
+        Text::new("The emptiest shelves")
+            .style(TextStyle::Title2)
+            .weight(Weight::Bold)
+            .heading(2),
         Stack::across().gap(3).wrap().parts((
             key(Hue::Danger, "Out of stock"),
             key(Hue::Warning, "Running low"),
         )),
-        Grid::fit(160).gap(3).id("wall").parts(SHELVES.iter().map(tile)),
+        Grid::fit(160)
+            .gap(3)
+            .id("wall")
+            .parts(SHELVES.iter().map(tile)),
     ));
     // A run that scrolls across on a phone; a list beside the wall in a wide room.
     let sellers = Adaptive::new()
-        .compact(Stack::down().gap(3).appear(Appear::Fade).parts((
-            sellers_heading(),
-            Carousel::new().min(148).gap(3).label("Top sellers today").parts(SELLERS.iter().map(seller)),
-        )))
+        .compact(
+            Stack::down().gap(3).appear(Appear::Fade).parts((
+                sellers_heading(),
+                Carousel::new()
+                    .min(148)
+                    .gap(3)
+                    .label("Top sellers today")
+                    .parts(SELLERS.iter().map(seller)),
+            )),
+        )
         .wide(
-            Section::titled("Top sellers today")
-                .inset()
-                .parts(List::new().parts(SELLERS.iter().map(|(name, sold)| Row::new(*name).subtitle(*sold)))),
+            Section::titled("Top sellers today").inset().parts(
+                List::new().parts(
+                    SELLERS
+                        .iter()
+                        .map(|(name, sold)| Row::new(*name).subtitle(*sold)),
+                ),
+            ),
         );
     Screen::titled("Shelves")
         .back("Today", "/")
@@ -156,31 +244,68 @@ pub fn screen() -> Screen {
         .refresh()
         .action(
             Button::new("Inventory")
-                .icon(Icon::named("boxes").system("shippingbox", "inventory_2").path("M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"))
+                .icon(
+                    Icon::named("boxes")
+                        .system("shippingbox", "inventory_2")
+                        .path("M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"),
+                )
                 .role(Role::Secondary)
                 .to("/inventory"),
         )
-        .body(Stack::down().id("shelves").gap(4).parts((
-            // The one figure the screen is about.
-            Stack::down().parts((
-                Text::new(SHELVES.len().to_string())
-                    .id("needing")
-                    .style(TextStyle::Display)
-                    .change(Change::Count),
-                Text::new("shelves need a hand today").style(TextStyle::Callout).muted(),
+        .body(
+            Stack::down().id("shelves").gap(4).parts((
+                // The one figure the screen is about.
+                Stack::down().parts((
+                    Text::new(SHELVES.len().to_string())
+                        .id("needing")
+                        .style(TextStyle::Display)
+                        .change(Change::Count),
+                    Text::new("shelves need a hand today")
+                        .style(TextStyle::Callout)
+                        .muted(),
+                )),
+                Grid::fit(104).most(3).gap(3).id("levels").parts((
+                    count(
+                        "level-out",
+                        &out.to_string(),
+                        "Out of stock",
+                        Hue::Danger,
+                        Weight::Bold,
+                    ),
+                    count(
+                        "level-low",
+                        &low.to_string(),
+                        "Running low",
+                        Hue::Warning,
+                        Weight::Bold,
+                    ),
+                    count(
+                        "level-in",
+                        "1,994",
+                        "Stocked",
+                        Hue::Success,
+                        Weight::Regular,
+                    ),
+                )),
+                Card::new().id("next-delivery").appear(Appear::Rise).parts((
+                    Text::new("Next delivery")
+                        .style(TextStyle::Caption)
+                        .weight(Weight::Semibold)
+                        .muted(),
+                    Text::new("Monday, 16 November · from Moradabad").style(TextStyle::Headline),
+                    Text::new("Checked a minute ago")
+                        .style(TextStyle::Caption)
+                        .change(Change::Fade)
+                        .align(Align::End)
+                        .muted(),
+                )),
+                Stack::down()
+                    .gap(4)
+                    .wide(Axis::Horizontal)
+                    .align(Align::Start)
+                    .parts((wall, sellers)),
             )),
-            Grid::fit(104).most(3).gap(3).id("levels").parts((
-                count("level-out", &out.to_string(), "Out of stock", Hue::Danger, Weight::Bold),
-                count("level-low", &low.to_string(), "Running low", Hue::Warning, Weight::Bold),
-                count("level-in", "1,994", "Stocked", Hue::Success, Weight::Regular),
-            )),
-            Card::new().id("next-delivery").appear(Appear::Rise).parts((
-                Text::new("Next delivery").style(TextStyle::Caption).weight(Weight::Semibold).muted(),
-                Text::new("Monday, 16 November · from Moradabad").style(TextStyle::Headline),
-                Text::new("Checked a minute ago").style(TextStyle::Caption).change(Change::Fade).align(Align::End).muted(),
-            )),
-            Stack::down().gap(4).wide(Axis::Horizontal).align(Align::Start).parts((wall, sellers)),
-        )))
+        )
 }
 
 /// The screen as a client is sent it: each icon's shapes said once, in the
@@ -194,5 +319,8 @@ pub fn envelope(build: &str) -> Envelope {
 #[allow(dead_code)]
 fn main() {
     let envelope = envelope("3f9a1c07b2de");
-    println!("{}", serde_json::to_string_pretty(&envelope).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&envelope).unwrap_or_default()
+    );
 }

@@ -35,12 +35,12 @@ use navree::ui::*;
 use serde::Deserialize;
 
 use crate::Settings;
-#[cfg(feature = "native-preview")]
-use crate::screens;
 use crate::data::{
     Customer, Event, Fulfilment, Kind, Level, Line, OFFSET, Order, Product, Status, day_of,
 };
 use crate::live::{Hub, now};
+#[cfg(feature = "native-preview")]
+use crate::screens;
 use crate::shop::{self, Done, Refusal};
 use crate::views::dashboard::{
     Cursor, FeedEntry, Figures, METHODS, Sales, Seller, activity_item, dashboard_body, figures,
@@ -437,8 +437,9 @@ impl Pages {
         #[cfg(feature = "native-preview")]
         if native::asked() {
             let asked = query.after.clone().unwrap_or_default();
-            return Ok(native::Answer::new()
-                .native(|| screens::activity_since(&entries, &asked, today())));
+            return Ok(
+                native::Answer::new().native(|| screens::activity_since(&entries, &asked, today()))
+            );
         }
         let rows = ActivityFeed::answer(entries.iter().map(activity_item), OFFSET);
         Ok(match entries.first() {

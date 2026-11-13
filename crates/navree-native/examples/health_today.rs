@@ -24,11 +24,41 @@ struct Pillar {
 }
 
 const PILLARS: [Pillar; 5] = [
-    Pillar { name: "Sleep", key: "sleep", score: Some(87), hue: Hue::Violet, weight: "25% of score" },
-    Pillar { name: "Heart", key: "heart", score: Some(90), hue: Hue::Rose, weight: "20% of score" },
-    Pillar { name: "Recovery", key: "recovery", score: Some(60), hue: Hue::Green, weight: "20% of score" },
-    Pillar { name: "Movement", key: "fitness", score: Some(78), hue: Hue::Orange, weight: "20% of score" },
-    Pillar { name: "Mind", key: "mind", score: None, hue: Hue::Cyan, weight: "No data" },
+    Pillar {
+        name: "Sleep",
+        key: "sleep",
+        score: Some(87),
+        hue: Hue::Violet,
+        weight: "25% of score",
+    },
+    Pillar {
+        name: "Heart",
+        key: "heart",
+        score: Some(90),
+        hue: Hue::Rose,
+        weight: "20% of score",
+    },
+    Pillar {
+        name: "Recovery",
+        key: "recovery",
+        score: Some(60),
+        hue: Hue::Green,
+        weight: "20% of score",
+    },
+    Pillar {
+        name: "Movement",
+        key: "fitness",
+        score: Some(78),
+        hue: Hue::Orange,
+        weight: "20% of score",
+    },
+    Pillar {
+        name: "Mind",
+        key: "mind",
+        score: None,
+        hue: Hue::Cyan,
+        weight: "No data",
+    },
 ];
 
 /// The steps of each hour so far: it is 8 in the evening.
@@ -44,7 +74,10 @@ fn steps_icon() -> Icon {
 
 /// A heading inside a card.
 fn heading(words: &str) -> Text {
-    Text::new(words).style(TextStyle::Title2).weight(Weight::Bold).heading(2)
+    Text::new(words)
+        .style(TextStyle::Title2)
+        .weight(Weight::Bold)
+        .heading(2)
 }
 
 /// The control in the bar: the day, its neighbours, and its three scores.
@@ -104,20 +137,34 @@ fn score() -> Card {
 
 /// One pillar: a card that is tapped as a whole and grows into its page.
 fn pillar(pillar: &Pillar) -> Card {
-    let Pillar { name, key, weight, .. } = pillar;
+    let Pillar {
+        name, key, weight, ..
+    } = pillar;
     let ring = match pillar.score {
-        Some(score) => Ring::of(score, 100).summary(format!("{name} score: {score} of 100, {score}%.")),
+        Some(score) => {
+            Ring::of(score, 100).summary(format!("{name} score: {score} of 100, {score}%."))
+        }
         None => Ring::empty(100).summary(format!("{name} score: no reading.")),
     };
     Card::new()
         .id(format!("pillar-{key}"))
-        .opens(format!("{name}, {weight}"), Action::navigate(format!("/{key}")))
+        .opens(
+            format!("{name}, {weight}"),
+            Action::navigate(format!("/{key}")),
+        )
         .zoom()
-        .parts(Stack::down().gap(1).align(Align::Center).parts((
-            ring.id(format!("{key}-score")).colour(pillar.hue),
-            Text::new(*name).style(TextStyle::Headline).align(Align::Center),
-            Text::new(*weight).style(TextStyle::Caption).align(Align::Center).muted(),
-        )))
+        .parts(
+            Stack::down().gap(1).align(Align::Center).parts((
+                ring.id(format!("{key}-score")).colour(pillar.hue),
+                Text::new(*name)
+                    .style(TextStyle::Headline)
+                    .align(Align::Center),
+                Text::new(*weight)
+                    .style(TextStyle::Caption)
+                    .align(Align::Center)
+                    .muted(),
+            )),
+        )
 }
 
 /// The day as 24 hours round a dial: the steps of each hour, what each hour
@@ -130,7 +177,11 @@ fn day() -> Card {
         _ => 1,
     };
     let hours = (0..24).map(|hour| match STEPS.get(hour) {
-        Some(steps) => Hour::of(*steps, (f64::from(*steps) / 2000.0 * 20.0).round() / 20.0, kind(hour, *steps)),
+        Some(steps) => Hour::of(
+            *steps,
+            (f64::from(*steps) / 2000.0 * 20.0).round() / 20.0,
+            kind(hour, *steps),
+        ),
         None => Hour::default(),
     });
     let total: u32 = STEPS.iter().sum();
@@ -162,7 +213,9 @@ fn day() -> Card {
         .summary(format!(
             "9,412 steps in the day so far ({total} counted by the hour). Busiest at 7 am: 1,850. 3 moments: Woke up, 6:30 am, Morning run, 3.2 km, Highest heart rate, 158 bpm."
         ));
-    Card::new().id("day-card").parts((heading("Your day"), clock))
+    Card::new()
+        .id("day-card")
+        .parts((heading("Your day"), clock))
 }
 
 /// The activity rings beside the day's figures. The figures take the room
@@ -210,7 +263,10 @@ fn activity() -> Card {
     ));
     Card::new().id("activity").parts((
         heading("Activity"),
-        Stack::across().gap(4).align(Align::Center).parts((rings, figures)),
+        Stack::across()
+            .gap(4)
+            .align(Align::Center)
+            .parts((rings, figures)),
     ))
 }
 
@@ -220,16 +276,22 @@ pub fn screen() -> Screen {
         .nav("/")
         .refresh()
         .pager(pager())
-        .body(Stack::down().id("today").gap(4).parts((
-            Text::new("Good evening, Amandeep")
-                .style(TextStyle::LargeTitle)
-                .heading(1),
-            Text::new("Your Friday, 13 November, from your own readings.").muted(),
-            score(),
-            Grid::fit(96).most(5).gap(3).id("pillars").parts(PILLARS.iter().map(pillar)),
-            day(),
-            activity(),
-        )))
+        .body(
+            Stack::down().id("today").gap(4).parts((
+                Text::new("Good evening, Amandeep")
+                    .style(TextStyle::LargeTitle)
+                    .heading(1),
+                Text::new("Your Friday, 13 November, from your own readings.").muted(),
+                score(),
+                Grid::fit(96)
+                    .most(5)
+                    .gap(3)
+                    .id("pillars")
+                    .parts(PILLARS.iter().map(pillar)),
+                day(),
+                activity(),
+            )),
+        )
 }
 
 /// The screen as a client is sent it: each icon's shapes said once, in the
@@ -243,5 +305,8 @@ pub fn envelope(build: &str) -> Envelope {
 #[allow(dead_code)]
 fn main() {
     let envelope = envelope("3f9a1c07b2de");
-    println!("{}", serde_json::to_string_pretty(&envelope).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&envelope).unwrap_or_default()
+    );
 }

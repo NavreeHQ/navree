@@ -93,10 +93,17 @@ async fn the_screens_written_for_native_clients_are_kept_as_files() {
     ] {
         let asked = ask(&app, path).await;
         let sent: serde_json::Value = serde_json::from_str(&asked.native).expect("an envelope");
-        assert!(sent.get("screen").is_some(), "{path}: {:.200}", asked.native);
+        assert!(
+            sent.get("screen").is_some(),
+            "{path}: {:.200}",
+            asked.native
+        );
         let pretty = serde_json::to_string_pretty(&sent).expect("JSON") + "\n";
-        std::fs::write(std::path::Path::new(&dir).join(format!("{name}.json")), pretty)
-            .expect("the file written");
+        std::fs::write(
+            std::path::Path::new(&dir).join(format!("{name}.json")),
+            pretty,
+        )
+        .expect("the file written");
     }
 }
 
@@ -395,7 +402,11 @@ async fn an_order_is_a_record_written_for_native_clients_and_an_action_answers_p
     assert_eq!(
         roles,
         [
-            ("Resend confirmation", n::Role::Secondary, Some("order-resend")),
+            (
+                "Resend confirmation",
+                n::Role::Secondary,
+                Some("order-resend")
+            ),
             ("Refund", n::Role::Secondary, Some("order-refund")),
             ("Cancel order", n::Role::Destructive, Some("order-cancel")),
         ]
@@ -404,7 +415,11 @@ async fn an_order_is_a_record_written_for_native_clients_and_an_action_answers_p
     // the page's form posts to.
     let cancel = actions[2];
     let ask_first = cancel.ask.as_ref().expect("a question");
-    assert!(ask_first.title.starts_with("Cancel CS-"), "{}", ask_first.title);
+    assert!(
+        ask_first.title.starts_with("Cancel CS-"),
+        "{}",
+        ask_first.title
+    );
     assert_eq!(ask_first.confirm, "Cancel order");
     assert!(matches!(
         &cancel.action,
@@ -443,7 +458,11 @@ async fn an_order_is_a_record_written_for_native_clients_and_an_action_answers_p
     };
     assert_eq!((keep.role, go.role), (n::Role::Cancel, n::Role::Confirm));
     // Its state is a card with the total set large, once on the screen.
-    assert!(nodes.iter().any(|node| matches!(node, N::Card(card) if card.id.as_deref() == Some("order-state"))));
+    assert!(
+        nodes
+            .iter()
+            .any(|node| matches!(node, N::Card(card) if card.id.as_deref() == Some("order-state")))
+    );
     let large: Vec<&n::Text> = nodes
         .iter()
         .filter_map(|node| match node {
@@ -470,7 +489,11 @@ async fn an_order_is_a_record_written_for_native_clients_and_an_action_answers_p
         })
         .collect();
     assert!(!lines.is_empty());
-    assert!(lines.iter().all(|row| row.trailing.is_some() && row.leading.is_some()));
+    assert!(
+        lines
+            .iter()
+            .all(|row| row.trailing.is_some() && row.leading.is_some())
+    );
     assert!(nodes.iter().any(|node| matches!(
         node,
         N::Facts(facts) if facts.items.iter().any(|fact| fact.label == "Total")
@@ -481,7 +504,11 @@ async fn an_order_is_a_record_written_for_native_clients_and_an_action_answers_p
         N::Timeline(timeline) if timeline.items.first().is_some_and(|moment| moment.title == "Placed")
     )));
     // Nothing of it is read from the page: no table, and nothing left to a web view.
-    assert!(!nodes.iter().any(|node| matches!(node, N::Table(_) | N::Web(_))));
+    assert!(
+        !nodes
+            .iter()
+            .any(|node| matches!(node, N::Table(_) | N::Web(_)))
+    );
     // A browser gets the page it always got.
     assert!(asked.html.contains(r#"data-slot="sidebar""#));
     assert!(asked.html.contains(r#"id="order-page""#));
@@ -514,7 +541,9 @@ async fn an_order_is_a_record_written_for_native_clients_and_an_action_answers_p
     // and the refund's form from what is left, and a toast says what happened.
     assert_eq!(
         names,
-        ["close", "morph", "replace", "replace", "replace", "replace", "toast"]
+        [
+            "close", "morph", "replace", "replace", "replace", "replace", "toast"
+        ]
     );
     assert!(matches!(
         ops.get(5),
@@ -526,17 +555,28 @@ async fn an_order_is_a_record_written_for_native_clients_and_an_action_answers_p
     assert_eq!(target, "order-page");
     assert_eq!(node.id(), Some("order-page"));
     // What comes back is written with the same parts: the state is its card again.
-    assert!(all(node).iter().any(|node| matches!(node, N::Card(card) if card.id.as_deref() == Some("order-state"))));
+    assert!(
+        all(node)
+            .iter()
+            .any(|node| matches!(node, N::Card(card) if card.id.as_deref() == Some("order-state")))
+    );
     let replaced: Vec<&str> = ops
         .iter()
         .filter_map(|op| match op {
-            Op::Replace { target, node: N::Button(_) } => Some(target.as_str()),
+            Op::Replace {
+                target,
+                node: N::Button(_),
+            } => Some(target.as_str()),
             _ => None,
         })
         .collect();
     assert_eq!(replaced, ["order-resend", "order-refund", "order-cancel"]);
     // It was just sent: sending it again is held back, and says why.
-    let Some(Op::Replace { node: N::Button(again), .. }) = ops.get(2) else {
+    let Some(Op::Replace {
+        node: N::Button(again),
+        ..
+    }) = ops.get(2)
+    else {
         panic!("no resend button");
     };
     assert!(again.disabled && again.reason.is_some());
@@ -583,7 +623,11 @@ async fn the_day_is_a_screen_written_for_native_clients_from_what_the_dashboard_
     assert_eq!(asked.location, None);
     let mut sent = envelope(&asked.native);
     // Each icon the screen names comes with its shapes, said once in the answer's table.
-    assert!(sent.icons.contains_key("shopping-bag"), "{:?}", sent.icons.keys());
+    assert!(
+        sent.icons.contains_key("shopping-bag"),
+        "{:?}",
+        sent.icons.keys()
+    );
     // The screen stands in the app's shell: a client knows by the stamp its own is current.
     assert!(!sent.shell.is_empty());
     sent.inline_icons();
@@ -611,7 +655,10 @@ async fn the_day_is_a_screen_written_for_native_clients_from_what_the_dashboard_
     assert_eq!(large[0].change, Some(n::Change::Count));
     // The figures and the charts follow the shop live: each is a region a client
     // fetches again when the stream speaks.
-    for (id, src) in [("figures", "/fragments/figures"), ("sales", "/fragments/sales")] {
+    for (id, src) in [
+        ("figures", "/fragments/figures"),
+        ("sales", "/fragments/sales"),
+    ] {
         let Some(N::Region(region)) = screen.body.find(id) else {
             panic!("no region {id}");
         };
@@ -657,7 +704,12 @@ async fn the_day_is_a_screen_written_for_native_clients_from_what_the_dashboard_
             assert_eq!(series.values.len(), chart.labels.len());
         }
     }
-    assert!(drawn[0].series[0].shown.iter().all(|words| words.starts_with('₹')));
+    assert!(
+        drawn[0].series[0]
+            .shown
+            .iter()
+            .all(|words| words.starts_with('₹'))
+    );
     // What happened last is a list that asks only for what came since its newest row.
     let Some(N::List(feed)) = screen.body.find("activity") else {
         panic!("no list of events");
@@ -669,7 +721,11 @@ async fn the_day_is_a_screen_written_for_native_clients_from_what_the_dashboard_
         Some("activity")
     );
     assert!(!feed.children.is_empty());
-    assert!(feed.children.iter().all(|row| matches!(row, N::FeedRow(row) if row.id.is_some())));
+    assert!(
+        feed.children
+            .iter()
+            .all(|row| matches!(row, N::FeedRow(row) if row.id.is_some()))
+    );
     // A browser gets the dashboard it always got.
     assert!(asked.html.contains(r#"data-slot="chart""#));
     assert!(asked.html.contains(r#"data-slot="sidebar""#));
@@ -679,9 +735,16 @@ async fn the_day_is_a_screen_written_for_native_clients_from_what_the_dashboard_
     let figures = envelope(&ask(&app, "/fragments/figures").await.native);
     let figures = figures.screen.expect("the figures");
     assert_eq!(figures.body.id(), Some("figures-parts"));
-    assert!(all(&figures.body).iter().any(|node| matches!(node, N::Figure(_))));
+    assert!(
+        all(&figures.body)
+            .iter()
+            .any(|node| matches!(node, N::Figure(_)))
+    );
     let charts = envelope(&ask(&app, "/fragments/sales").await.native);
-    assert!(matches!(charts.screen.expect("the charts").body, N::Carousel(_)));
+    assert!(matches!(
+        charts.screen.expect("the charts").body,
+        N::Carousel(_)
+    ));
     // The new rows of the list are its own answer: events to merge in at the top, as
     // rows written the way the screen's are, with the cursor of the newest.
     let rows = ask(&app, "/fragments/activity?since=0-0").await;
@@ -736,7 +799,8 @@ async fn the_day_is_a_screen_written_for_native_clients_from_what_the_dashboard_
 }
 
 #[tokio::test]
-async fn the_shelves_are_composed_for_native_clients_and_a_tile_opens_restocks_and_is_drawn_again() {
+async fn the_shelves_are_composed_for_native_clients_and_a_tile_opens_restocks_and_is_drawn_again()
+{
     let (app, _dir) = boot().await;
     let asked = ask(&app, "/shelves").await;
     // A browser gets the two cards the dashboard shows, on a page of their own.
@@ -764,7 +828,11 @@ async fn the_shelves_are_composed_for_native_clients_and_a_tile_opens_restocks_a
         .collect();
     assert_eq!(
         hues,
-        [Some(n::Hue::Danger), Some(n::Hue::Warning), Some(n::Hue::Success)]
+        [
+            Some(n::Hue::Danger),
+            Some(n::Hue::Warning),
+            Some(n::Hue::Success)
+        ]
     );
     // The emptiest shelves are a wall of tiles: as many beside each other as fit.
     let Some(N::Grid(wall)) = screen.body.find("wall") else {
@@ -781,7 +849,10 @@ async fn the_shelves_are_composed_for_native_clients_and_a_tile_opens_restocks_a
         })
         .collect();
     for tile in &tiles {
-        let id = tile.id.as_deref().expect("a tile has a name an answer finds it by");
+        let id = tile
+            .id
+            .as_deref()
+            .expect("a tile has a name an answer finds it by");
         let product = id.strip_prefix("shelf-").expect("named after its product");
         // One control with a name: a tap opens the product where the reader is, and the
         // tile grows into it.
@@ -803,7 +874,11 @@ async fn the_shelves_are_composed_for_native_clients_and_a_tile_opens_restocks_a
         ));
         // Its level is said in words beside the colour, and by the dot at its mark's corner.
         let inside = tile.children.iter().flat_map(all).collect::<Vec<_>>();
-        assert!(inside.iter().any(|node| matches!(node, N::Badge(badge) if !badge.text.is_empty())));
+        assert!(
+            inside
+                .iter()
+                .any(|node| matches!(node, N::Badge(badge) if !badge.text.is_empty()))
+        );
         assert!(inside.iter().any(|node| matches!(
             node,
             N::Layers(layers) if layers.place == n::Place::BottomEnd
@@ -818,7 +893,12 @@ async fn the_shelves_are_composed_for_native_clients_and_a_tile_opens_restocks_a
             _ => None,
         })
         .expect("the sellers");
-    assert!(adaptive.wide.iter().any(|node| matches!(node, N::Section(_))));
+    assert!(
+        adaptive
+            .wide
+            .iter()
+            .any(|node| matches!(node, N::Section(_)))
+    );
     assert!(!adaptive.compact.is_empty());
     // The sheet a tile's product is opened in is part of the screen.
     assert!(matches!(
@@ -827,7 +907,12 @@ async fn the_shelves_are_composed_for_native_clients_and_a_tile_opens_restocks_a
     ));
 
     // A tap on a tile: the product in the sheet, opened.
-    let first = tiles[0].id.as_deref().unwrap().trim_start_matches("shelf-").to_owned();
+    let first = tiles[0]
+        .id
+        .as_deref()
+        .unwrap()
+        .trim_start_matches("shelf-")
+        .to_owned();
     let peek = app
         .client()
         .get(&format!("/inventory/{first}/peek"))
@@ -836,11 +921,14 @@ async fn the_shelves_are_composed_for_native_clients_and_a_tile_opens_restocks_a
         .send()
         .await;
     let ops = envelope(&peek.text()).ops;
-    assert!(matches!(
-        ops.as_slice(),
-        [Op::Morph { target, .. }, Op::Open { target: opened }]
-            if target == store_demo::views::inventory::SHEET && opened == store_demo::views::inventory::SHEET
-    ), "{ops:?}");
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::Morph { target, .. }, Op::Open { target: opened }]
+                if target == store_demo::views::inventory::SHEET && opened == store_demo::views::inventory::SHEET
+        ),
+        "{ops:?}"
+    );
     // The restock of its menu: the tile is drawn again by the function that drew it,
     // with the stock it has now.
     let before = tiles[0].clone();
@@ -858,13 +946,22 @@ async fn the_shelves_are_composed_for_native_clients_and_a_tile_opens_restocks_a
     let again = ops
         .iter()
         .find_map(|op| match op {
-            Op::Replace { target, node: N::Card(card) } if *target == format!("shelf-{first}") => Some(card),
+            Op::Replace {
+                target,
+                node: N::Card(card),
+            } if *target == format!("shelf-{first}") => Some(card),
             _ => None,
         })
         .unwrap_or_else(|| panic!("the tile is not drawn again: {ops:?}"));
     assert_eq!(again.id, before.id);
-    assert_ne!(again.children, before.children, "the tile says the stock it has now");
-    assert!(ops.iter().any(|op| matches!(op, Op::Toast(toast) if toast.text.contains("24 units"))));
+    assert_ne!(
+        again.children, before.children,
+        "the tile says the stock it has now"
+    );
+    assert!(
+        ops.iter()
+            .any(|op| matches!(op, Op::Toast(toast) if toast.text.contains("24 units")))
+    );
 }
 
 #[tokio::test]

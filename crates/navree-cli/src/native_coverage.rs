@@ -579,7 +579,11 @@ Not pages, so not asked: not a GET (4); routes under the API prefix (2).
             .unwrap()
             .finish(None, "native.toml");
         assert_eq!(
-            (report.totals.designed, report.totals.idiom, report.totals.layout),
+            (
+                report.totals.designed,
+                report.totals.idiom,
+                report.totals.layout
+            ),
             (2, 1, 0)
         );
         let expected = "\

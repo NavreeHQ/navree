@@ -188,10 +188,18 @@ pub struct Card {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub menu: Vec<Node>,
     /// How the card leads into the screen its action opens.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub transition: Option<Transition>,
     /// How the card comes in when it joins a screen already drawn.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "crate::lenient::or_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::lenient::or_none"
+    )]
     pub appear: Option<Appear>,
     /// The parts, one under another.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -207,7 +215,11 @@ pub struct Layers {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     /// Where the parts sit in the box.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub place: Place,
     /// The size of the box, when the parts do not give it: a part that has no
     /// size of its own (a shape, a ring) fills it.
@@ -237,7 +249,11 @@ pub struct Shape {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     /// Its form.
-    #[serde(default, skip_serializing_if = "is_default", deserialize_with = "crate::lenient::or_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "is_default",
+        deserialize_with = "crate::lenient::or_default"
+    )]
     pub form: ShapeForm,
     /// The colour it is filled with. A blend runs along it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
