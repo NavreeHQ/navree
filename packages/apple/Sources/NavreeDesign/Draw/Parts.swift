@@ -5,6 +5,7 @@ import SwiftUI
 /// are drawn by ``RowView``; this is what goes inside them and anywhere else.
 public struct NodeView: View {
     let node: Navree.Node
+    @Environment(\.navreeOnGround) private var onGround
 
     public init(_ node: Navree.Node) {
         self.node = node
@@ -15,14 +16,14 @@ public struct NodeView: View {
         case .stack(let stack): StackPart(stack: stack)
         case .grid(let grid): GridPart(grid: grid)
         case .section(let section):
-            if CompositionRules.isGroup(section) { GroupPart(section: section) } else { SectionPart(section: section) }
-        case .list(let list):
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(Array(list.children.enumerated()), id: \.offset) { index, child in
-                    if index > 0 { Divider() }
-                    NodeView(child)
-                }
+            if CompositionRules.isGroup(section) {
+                GroupPart(section: section)
+            } else if onGround {
+                GroundSectionPart(section: section)
+            } else {
+                SectionPart(section: section)
             }
+        case .list(let list): ListPart(list: list)
         case .row(let row): RowContent(row: row)
         case .split(let split):
             VStack(alignment: .leading, spacing: 16) {
@@ -39,7 +40,7 @@ public struct NodeView: View {
         case .image(let image): ImagePart(image: image)
         case .icon(let icon): IconPart(icon: icon)
         case .avatar(let avatar): AvatarPart(avatar: avatar)
-        case .badge(let badge): StatusLabel(badge: badge)
+        case .badge(let badge): StatusLabel(badge: badge).font(.subheadline)
         case .progress(let progress): ProgressPart(progress: progress)
         case .banner(let banner): BannerPart(banner: banner)
         case .empty(let empty): EmptyPart(empty: empty)
@@ -98,85 +99,86 @@ public struct NodeView: View {
     }
 }
 
-/// Parts one after another. Across: they wrap onto lines of their own when
-/// the text is large or the room runs out, rather than squeezing.
+/// Parts one after another. A stack that turns with the room (`wide`) keeps
+/// one layout whose axis changes, so its parts keep their state. Across, a
+/// part that grows takes the room left; parts that may not fit go one under
+/// another when the line runs out or the text is at the accessibility sizes,
+/// and a stack that wraps flows onto lines.
 struct StackPart: View {
     let stack: Navree.Stack
     @Environment(\.dynamicTypeSize) private var typeSize
-    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.navreeParentAxis) private var parentAxis
+    private let room = Room()
 
     var body: some View {
         if stack.hidden {
             EmptyView()
         } else {
-            let turned = stack.wide != nil && WidthClass(sizeClass) == .regular
-            laid(turned: turned)
+            let axis = CompositionRules.axis(stack, wide: room.wide)
+            laid(axis: axis)
                 .padding(CGFloat(CompositionRules.points(steps: stack.pad)))
-                .frame(maxWidth: fills ? .infinity : nil, alignment: frameAlignment)
+                .frame(
+                    maxWidth: CompositionRules.fillsWidth(stack, axis: axis, inLine: parentAxis == .horizontal) ? .infinity : nil,
+                    alignment: frameAlignment
+                )
+                .animatesParts(stack.children)
         }
-    }
-
-    /// A stack that grows takes the room left; a vertical stack that centres
-    /// its parts is as wide as its place, so they stand in its middle.
-    private var fills: Bool {
-        stack.grow || (parentAxis == .vertical && stack.align == .center && CompositionRules.axis(stack, width: WidthClass(sizeClass)) == .vertical)
     }
 
     private var frameAlignment: Alignment {
         stack.align == .center ? .center : stack.align == .end ? .trailing : .leading
     }
 
-    @ViewBuilder private func laid(turned: Bool) -> some View {
-        let axis = CompositionRules.axis(stack, width: WidthClass(sizeClass))
-        if axis == .vertical {
+    @ViewBuilder private func laid(axis: Navree.Axis) -> some View {
+        if let wide = stack.wide, wide != stack.axis {
+            let layout = axis == .vertical
+                ? AnyLayout(VStackLayout(alignment: horizontal, spacing: spacing))
+                : AnyLayout(HStackLayout(alignment: vertical, spacing: spacing))
+            layout {
+                Parts(nodes: stack.children, growth: axis, spread: axis == .horizontal && stack.justify == .between)
+            }
+            .environment(\.navreeParentAxis, axis)
+        } else if axis == .vertical {
             VStack(alignment: horizontal, spacing: spacing) {
-                children
+                Parts(nodes: stack.children, growth: .vertical)
             }
             .environment(\.navreeParentAxis, .vertical)
-        } else if turned || (stack.children.contains(where: Self.grows) && !typeSize.isAccessibilitySize) {
-            // Turned across by a wide room, or holding a part that takes the
-            // room left (its words wrap there): no fallback.
-            HStack(alignment: vertical, spacing: spacing) {
-                children
+        } else if stack.wrap {
+            Flow(spacing: spacing ?? 8, lineSpacing: spacing ?? 6) {
+                Parts(nodes: stack.children)
             }
             .environment(\.navreeParentAxis, .horizontal)
         } else if typeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: spacing) {
-                children
+                Parts(nodes: stack.children, growth: .vertical)
             }
+            .environment(\.navreeParentAxis, .vertical)
+        } else if stack.children.contains(where: CompositionRules.grows) {
+            // A part that takes the room left: its words wrap there, so the
+            // line always fits.
+            line
         } else {
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: vertical, spacing: spacing) {
-                    if stack.justify == .between, stack.children.count == 2 {
-                        NodeView(stack.children[0])
-                        Spacer(minLength: 8)
-                        NodeView(stack.children[1])
-                    } else {
-                        children
-                    }
-                }
+                line
                 VStack(alignment: .leading, spacing: spacing) {
-                    children
+                    Parts(nodes: stack.children, growth: .vertical)
                 }
+                .environment(\.navreeParentAxis, .vertical)
             }
-            .environment(\.navreeParentAxis, .horizontal)
         }
     }
 
-    @ViewBuilder private var children: some View {
-        ForEach(Array(stack.children.enumerated()), id: \.offset) { index, child in
-            NodeView(child).environment(\.navreeWordsAbove, HeadingRules.wordsAbove(stack.children, index: index))
+    private var line: some View {
+        HStack(alignment: vertical, spacing: spacing) {
+            if stack.justify == .end || stack.justify == .center { Spacer(minLength: 0) }
+            Parts(nodes: stack.children, growth: .horizontal, spread: stack.justify == .between)
+            if stack.justify == .center { Spacer(minLength: 0) }
         }
-    }
-
-    static func grows(_ node: Navree.Node) -> Bool {
-        if case .stack(let stack) = node { return stack.grow }
-        return false
+        .environment(\.navreeParentAxis, .horizontal)
     }
 
     private var spacing: CGFloat? {
-        stack.gap == 0 ? nil : CGFloat(stack.gap) * 4
+        CompositionRules.spacing(stack.gap).map { CGFloat($0) }
     }
 
     private var horizontal: HorizontalAlignment {
@@ -193,31 +195,6 @@ struct StackPart: View {
         case .end: .bottom
         case .baseline: .firstTextBaseline
         default: .center
-        }
-    }
-}
-
-/// Parts in as many columns as fit.
-struct GridPart: View {
-    let grid: Navree.Grid
-
-    var body: some View {
-        let gap = grid.gap > 0 ? CGFloat(CompositionRules.points(steps: grid.gap)) : 12
-        LazyVGrid(columns: columns(gap: gap), alignment: .leading, spacing: max(gap, 12)) {
-            ForEach(Array(grid.children.enumerated()), id: \.offset) { _, child in
-                NodeView(child).frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-            .environment(\.navreeGridColumns, grid.cols)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func columns(gap: CGFloat) -> [GridItem] {
-        switch CompositionRules.columns(grid) {
-        case .fixed(let count):
-            Array(repeating: GridItem(.flexible(), spacing: gap, alignment: .top), count: count)
-        case .fitting(let minimum):
-            [GridItem(.adaptive(minimum: CGFloat(minimum)), spacing: gap, alignment: .top)]
         }
     }
 }
@@ -243,25 +220,44 @@ struct SectionPart: View {
 }
 
 /// Text, in the system's text style for what it is for, so it follows the
-/// reader's text size.
+/// reader's text size. One word or one figure stays whole on its line,
+/// shrinking a little rather than breaking. When an answer changes its words,
+/// a count rolls to the new number and a fade fades, with the system's own
+/// timing; for a person who asked for less motion a count only fades.
 struct TextPart: View {
     let text: Navree.Text
 
     @ScaledMetric(relativeTo: .largeTitle) private var display: CGFloat = 48
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.navreeInTiles) private var inTiles
 
     var body: some View {
+        let whole = CompositionRules.keepsWhole(text)
+        let change = CompositionRules.change(text.change, reduceMotion: reduceMotion)
         Text(text.value)
             .font(font)
             .fontWeight(text.weight.map(Typography.weight))
             .foregroundStyle(colour)
-            .lineLimit(CompositionRules.shrinksToFit(text) ? 1 : text.lines)
-            .minimumScaleFactor(CompositionRules.shrinksToFit(text) ? 0.6 : 1)
+            .lineLimit(whole ? 1 : text.lines)
+            // Alone, a figure too wide for its place shrinks a little; among
+            // tiles it keeps its size and the grid gives it room.
+            .minimumScaleFactor(whole && !inTiles ? 0.5 : 1)
+            .fixedSize(horizontal: whole && inTiles, vertical: text.lines == nil && !whole)
             .multilineTextAlignment(Typography.alignment(text.align))
             .frame(maxWidth: text.align == .center || text.align == .end ? .infinity : nil, alignment: Typography.frame(text.align))
-            .fixedSize(horizontal: false, vertical: text.lines == nil)
+            .contentTransition(Self.transition(change))
+            .animation(change == .none ? nil : .default, value: text.value)
             .accessibilityAddTraits(text.heading != nil ? .isHeader : [])
             .accessibilityHeading(Typography.heading(text.heading))
+    }
+
+    static func transition(_ change: CompositionRules.ChangeLook) -> ContentTransition {
+        switch change {
+        case .rolls: .numericText()
+        case .fades: .opacity
+        case .none: .identity
+        }
     }
 
     private var font: Font {
@@ -334,7 +330,7 @@ struct IconPart: View {
     @Environment(\.navree) private var context
 
     var body: some View {
-        Glyph(icon: icon, icons: context.icons)
+        Glyph(icon: icon, icons: context.icons, side: CompositionRules.iconSide(icon.scale), relativeTo: icon.scale.map(Typography.textStyle) ?? .body)
             .font(icon.scale.map(Typography.font))
             .foregroundStyle(icon.colour.map { Hues.color($0) } ?? icon.tone.map(Tones.color) ?? Color.secondary)
             .accessibilityLabel(icon.label ?? "")
@@ -346,10 +342,16 @@ struct IconPart: View {
 public struct Glyph: View {
     let icon: Navree.Icon
     let icons: [String: Navree.IconShape]
+    let side: Double
+    let style: Font.TextStyle
 
-    public init(icon: Navree.Icon, icons: [String: Navree.IconShape] = [:]) {
+    /// `side` is the side of an icon drawn from its paths, before the
+    /// person's text size, which it follows as `style` does.
+    public init(icon: Navree.Icon, icons: [String: Navree.IconShape] = [:], side: Double = 20, relativeTo style: Font.TextStyle = .body) {
         self.icon = icon
         self.icons = icons
+        self.side = side
+        self.style = style
     }
 
     public var body: some View {
@@ -360,7 +362,9 @@ public struct Glyph: View {
             IconShapeView(
                 paths: icon.paths.isEmpty ? shape?.paths ?? [] : icon.paths,
                 fills: icon.fills.isEmpty ? shape?.fills ?? [] : icon.fills,
-                viewBox: icon.viewBox ?? shape?.viewBox
+                viewBox: icon.viewBox ?? shape?.viewBox,
+                side: side,
+                relativeTo: style
             )
         }
     }
@@ -428,7 +432,7 @@ struct ProgressPart: View {
     var body: some View {
         if let value = progress.value {
             ProgressView(value: Double(value), total: 1000) {
-                if let label = progress.label, !inRow { Text(label) }
+                if let label = progress.label, !inRow { Text(label).font(.footnote).foregroundStyle(.secondary) }
             }
             .tint(tint)
             .accessibilityLabel(progress.label ?? "")
@@ -577,6 +581,19 @@ public enum Typography {
         case .callout: .callout
         case .caption: .caption
         case .mono: .body.monospaced()
+        }
+    }
+
+    /// The system's text style a style sizes with.
+    static func textStyle(_ style: Navree.TextStyle) -> Font.TextStyle {
+        switch style {
+        case .display, .largeTitle: .largeTitle
+        case .title: .title
+        case .title2: .title2
+        case .headline: .headline
+        case .body, .mono: .body
+        case .callout: .callout
+        case .caption: .caption
         }
     }
 

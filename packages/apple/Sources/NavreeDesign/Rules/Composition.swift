@@ -1,13 +1,18 @@
+import Foundation
 import NavreeProtocol
+import SwiftUI
 
 /// How a screen written for native clients is set out: the rules of the
 /// composition kinds (`card`, `layers`, `shape`, `carousel`, `adaptive`, and
-/// the newer words of `stack` and `grid`) that the health screens need.
+/// the newer words of `stack`, `grid`, `text` and `icon`), as plain functions
+/// of the tree, the room it is drawn in and the person's settings.
 public enum CompositionRules {
+    // MARK: The screen
+
     /// Whether a screen is composed rather than a list of sections: it holds
     /// a card or one of the other composition kinds, or a stack that turns,
     /// grows or pads. Such a screen scrolls on the grouped ground with its
-    /// cards as surfaces, as the Health app's summary does; any other screen
+    /// cards as surfaces, as the Health app's Summary does; any other screen
     /// is the system's grouped list.
     public static func isComposed(_ body: Navree.Node) -> Bool {
         body.first { node in
@@ -19,28 +24,170 @@ public enum CompositionRules {
         } != nil
     }
 
-    /// The axis a stack is set along: its `wide` axis in a wide room (a
-    /// regular width), its own axis otherwise.
-    public static func axis(_ stack: Navree.Stack, width: WidthClass) -> Navree.Axis {
-        width == .regular ? stack.wide ?? stack.axis : stack.axis
+    /// The margin between a composed screen's content and the window's edges:
+    /// the system's own layout margin, 16 points in a narrow window and 20 in
+    /// one at least 414 points wide (a large phone, a tablet, a Mac window),
+    /// so the content starts where the bar's title and back button do.
+    public static func margin(width: Double) -> Double {
+        width >= 414 ? 20 : 16
+    }
+
+    /// The width a composed screen's content has: the window's, less its margins.
+    public static func room(width: Double) -> Double {
+        max(width - 2 * margin(width: width), 0)
+    }
+
+    /// A room at least this wide is wide: what a tablet, a large window or a
+    /// phone on its side gives a screen's content, and a phone held upright
+    /// never does. The same line Android draws, so both clients turn at once.
+    public static let wideRoom = 600.0
+
+    /// Whether the room a screen's content is drawn in is wide: by its width
+    /// where the drawing knows it (a composed screen measures it), else by the
+    /// window's width class. Never by the kind of device.
+    public static func isWide(room: Double?, width: WidthClass) -> Bool {
+        guard let room else { return width == .regular }
+        return room >= wideRoom
+    }
+
+    // MARK: Stacks
+
+    /// The axis a stack is set along: its `wide` axis in a wide room, its own
+    /// axis otherwise.
+    public static func axis(_ stack: Navree.Stack, wide: Bool) -> Navree.Axis {
+        wide ? stack.wide ?? stack.axis : stack.axis
     }
 
     /// Which of an adaptive part's rooms is drawn.
-    public static func room(_ adaptive: Navree.Adaptive, width: WidthClass) -> [Navree.Node] {
-        width == .regular ? adaptive.wide : adaptive.compact
+    public static func room(_ adaptive: Navree.Adaptive, wide: Bool) -> [Navree.Node] {
+        wide ? adaptive.wide : adaptive.compact
     }
 
-    /// How a grid's columns are made: a fixed count when it gives one (the
-    /// five pillars are always one row of five), else as many as fit at its
-    /// least width.
-    public enum Columns: Equatable, Sendable {
-        case fixed(Int)
-        case fitting(minimum: Double)
+    /// Whether a part takes the room left along a line of parts: a stack or
+    /// layers that say so, and a grid, a carousel or a chart, which have no
+    /// width of their own. A ring, a shape, an icon or layers with a size keep
+    /// their own size.
+    public static func grows(_ node: Navree.Node) -> Bool {
+        switch node {
+        case .stack(let stack): stack.grow
+        case .layers(let layers): layers.grow
+        case .grid, .carousel, .chart: true
+        default: false
+        }
     }
 
-    public static func columns(_ grid: Navree.Grid) -> Columns {
-        if let cols = grid.cols, cols > 0 { return .fixed(cols) }
-        return .fitting(minimum: Double(grid.min ?? 160))
+    /// Whether a column of parts takes the whole width it is given: one that
+    /// centres or ends its parts does, so they stand in the middle (or at the
+    /// end) of its place and not of its widest part. Only the width: a column
+    /// never takes the height of what stands beside it, so a ring or a clock
+    /// in a centring stack keeps its own height and two columns side by side
+    /// keep theirs.
+    public static func fillsWidth(_ stack: Navree.Stack, axis: Navree.Axis, inLine: Bool) -> Bool {
+        if stack.grow, inLine { return true }
+        return axis == .vertical && !inLine && (stack.align == .center || stack.align == .end)
+    }
+
+    /// The space between a stack's parts, in points: its steps, or the
+    /// system's own when it gives none.
+    public static func spacing(_ gap: Int) -> Double? {
+        gap == 0 ? nil : points(steps: gap)
+    }
+
+    // MARK: Grids
+
+    /// The room between a grid's parts when it gives none, in points.
+    public static let gridGap = 12.0
+
+    /// The least width of a grid's column when the grid gives neither a count
+    /// nor a least width.
+    public static let gridLeast = 160.0
+
+    /// How many columns a grid has in a place this wide, at most. `cols` is
+    /// the most, `min` the least a column may be (grown with the person's
+    /// text, so larger text gives fewer, wider columns); a grid that gives
+    /// only a count draws that many. Never more columns than parts, never
+    /// fewer than one. ``wholeColumns(most:cuts:)`` then keeps every word of
+    /// the row whole.
+    public static func columns(
+        width: Double,
+        cols: Int?,
+        min least: Int?,
+        gap: Double,
+        textScale: Double = 1,
+        parts: Int
+    ) -> Int {
+        let most = Swift.max(parts, 1)
+        let count: Int
+        if let least {
+            let fits = fit(width, Double(least) * Swift.max(textScale, 1), gap)
+            count = cols.map { Swift.min($0, fits) } ?? fits
+        } else if let cols, cols > 0 {
+            count = cols
+        } else {
+            count = fit(width, gridLeast * Swift.max(textScale, 1), gap)
+        }
+        return Swift.max(1, Swift.min(count, most))
+    }
+
+    /// The columns a row of tiles keeps: the most it may have, fewer while a
+    /// part at that column's width would cut one of the words it keeps whole
+    /// (`cuts`). Siblings in a row share one type size: no name is shrunk on
+    /// its own to fit, the row gives each more room instead.
+    public static func wholeColumns(most: Int, cuts: (Int) -> Bool) -> Int {
+        var count = Swift.max(most, 1)
+        while count > 1, cuts(count) { count -= 1 }
+        return count
+    }
+
+    /// How many parts of this width fit in a place this wide, the gaps
+    /// between them counted: at least one. A place with no bound (a line that
+    /// scrolls, a measure with no width) holds them all.
+    static func fit(_ width: Double, _ part: Double, _ gap: Double) -> Int {
+        guard part + gap > 0 else { return Int.max }
+        let count = ((width + gap) / (part + gap)).rounded(.down)
+        guard count.isFinite else { return Int.max }
+        return Swift.max(1, count >= Double(Int.max) ? Int.max : Int(count))
+    }
+
+    /// The text sizes a row of tiles may be set in, the first that keeps every
+    /// word whole winning: the person's own, then one and two sizes smaller,
+    /// for the whole row at once. At the accessibility sizes only the
+    /// person's own: there the row reflows into fewer columns instead.
+    public static func rowTypeSizes(_ size: DynamicTypeSize) -> [DynamicTypeSize] {
+        guard !size.isAccessibilitySize, let index = DynamicTypeSize.allCases.firstIndex(of: size) else { return [size] }
+        let all = DynamicTypeSize.allCases
+        return (0...2).compactMap { step in index - step >= all.startIndex ? all[index - step] : nil }
+    }
+
+    /// The width of each column of a grid of `count` columns.
+    public static func columnWidth(width: Double, count: Int, gap: Double) -> Double {
+        let count = Swift.max(count, 1)
+        return Swift.max((width - gap * Double(count - 1)) / Double(count), 0)
+    }
+
+    /// Whether a part of a grid's row is as high as the row: a card is, as
+    /// the tiles of the Fitness and Health summaries are, so a row of tiles
+    /// has one top and one foot. A part with no surface (a figure, a link of
+    /// a ring and its words) stands at the top of its cell at its own height.
+    public static func fillsRow(_ node: Navree.Node) -> Bool {
+        if case .card = node { return true }
+        return false
+    }
+
+    // MARK: Cards and sections
+
+    /// The corner of a card: the system's continuous 16 points.
+    public static let cardCorner = 16.0
+
+    /// The space between a card's parts, in points: two steps.
+    public static let cardSpacing = 8.0
+
+    /// The padding inside a card: its own steps, or the system's 16 points; a
+    /// card that is a tile in a row of three or more keeps room for its words
+    /// with 12.
+    public static func padding(_ card: Navree.Card, columns: Int? = nil) -> Double {
+        if let pad = card.pad { return points(steps: pad) }
+        return (columns ?? 1) >= 3 ? 12 : 16
     }
 
     /// A section that holds exactly one card is a group: its heading stands
@@ -51,21 +198,169 @@ public enum CompositionRules {
         return true
     }
 
+    /// Whether a part of a composed screen is drawn on a surface of its own:
+    /// a list (its rows on a card, as an inset grouped list sets them) and a
+    /// section that is inset or a card. A section of one card is its card's.
+    public static func standsOnSurface(_ node: Navree.Node) -> Bool {
+        switch node {
+        case .list: true
+        case .section(let section): !isGroup(section) && (section.style == .inset || section.style == .card)
+        default: false
+        }
+    }
+
+    // MARK: Carousels
+
+    /// How much of the next part a carousel shows when more parts than fit
+    /// are waiting, in points: enough to say the run goes on.
+    public static let carouselPeek = 20.0
+
+    /// How a carousel lays its parts: how many show at once and how wide each
+    /// is. With a least width, as many as fit at it (no more than there are
+    /// parts), each the same width; when more are waiting, the room keeps a
+    /// peek of the next one. With none, each part has its own width (`nil`).
+    public static func carousel(room: Double, min least: Int?, gap: Double, parts: Int) -> (shown: Int, width: Double?) {
+        guard let least else { return (Swift.max(parts, 1), nil) }
+        let column = Double(least)
+        let fits = fit(room, column, gap)
+        if parts <= fits {
+            let shown = Swift.max(parts, 1)
+            return (shown, columnWidth(width: room, count: shown, gap: gap))
+        }
+        let available = room - carouselPeek - gap
+        let shown = fit(available, column, gap)
+        return (shown, columnWidth(width: available, count: shown, gap: gap))
+    }
+
+    /// Whether a carousel scrolls: only when its parts do not all show.
+    public static func scrolls(shown: Int, parts: Int) -> Bool {
+        parts > shown
+    }
+
+    // MARK: Words and symbols
+
     /// Points from a number of the system's spacing steps.
     public static func points(steps: Int) -> Double {
         Double(steps) * 4
     }
 
-    /// The padding inside a card: its own, or the system's 16 points; a card
-    /// in a row of four or more (a tile) keeps the room for its words with 8.
-    public static func padding(_ card: Navree.Card, columns: Int? = nil) -> Double {
-        if let pad = card.pad { return points(steps: pad) }
-        return (columns ?? 1) >= 4 ? 8 : 16
+    /// Whether a text is kept on one line, shrinking a little rather than
+    /// breaking: one short word or one figure (`1,994`, `Movement`,
+    /// `₹14,36,473`) is never cut in two, as Apple's own tiles keep their
+    /// numbers whole. A long run with no space (an address, a code) wraps as
+    /// any text does rather than shrinking out of reach.
+    public static func keepsWhole(_ text: Navree.Text) -> Bool {
+        let value = text.value.trimmingCharacters(in: .whitespaces)
+        return !value.isEmpty && value.count <= wholeWord && !value.contains(where: \.isWhitespace)
     }
 
-    /// Whether a text shrinks to fit rather than breaking: one word set in
-    /// the middle of a narrow place (a tile's name) is never cut in two.
-    public static func shrinksToFit(_ text: Navree.Text) -> Bool {
-        text.align == .center && !text.value.contains(" ")
+    /// The longest word kept whole on its line.
+    public static let wholeWord = 16
+
+    /// The side of an icon drawn from its paths, in points before the person's
+    /// text size, for the text style it is as large as: as tall as a symbol of
+    /// that style, so a drawn icon and a system symbol beside it match.
+    public static func iconSide(_ scale: Navree.TextStyle?) -> Double {
+        switch scale {
+        case .caption: 14
+        case .callout: 19
+        case .title2: 26
+        case .title: 33
+        case .largeTitle: 40
+        case .display: 56
+        case .body, .headline, .mono, nil: 20
+        }
+    }
+
+    // MARK: Motion
+
+    /// How words show that they changed.
+    public enum ChangeLook: Equatable, Sendable {
+        /// The figures roll to the new number.
+        case rolls
+        /// The old words fade into the new.
+        case fades
+        /// They change at once.
+        case none
+    }
+
+    /// How a text shows its change: a count rolls, a fade fades; for a person
+    /// who asked for less motion a count only fades.
+    public static func change(_ change: Navree.Change?, reduceMotion: Bool) -> ChangeLook {
+        switch change {
+        case .count: reduceMotion ? .fades : .rolls
+        case .fade: .fades
+        case nil: .none
+        }
+    }
+
+    /// How a part comes in when an answer adds it to a screen already drawn.
+    public enum Arrival: Equatable, Sendable {
+        case fades, rises, grows
+        /// It is simply there.
+        case none
+    }
+
+    /// How a card or a stack comes in: as it says, or only fading for a person
+    /// who asked for less motion. A part that says nothing is simply there.
+    public static func arrival(_ node: Navree.Node, reduceMotion: Bool) -> Arrival {
+        let appear: Navree.Appear?
+        switch node {
+        case .card(let card): appear = card.appear
+        case .stack(let stack): appear = stack.appear
+        default: appear = nil
+        }
+        switch appear {
+        case nil: return .none
+        case .fade: return .fades
+        case .rise: return reduceMotion ? .fades : .rises
+        case .scale: return reduceMotion ? .fades : .grows
+        }
+    }
+
+    /// The identities of parts drawn one after another: a part's own id, or
+    /// its place among them, made unique. A part an answer adds is a new
+    /// identity, so it comes in as it says; the parts already drawn keep
+    /// theirs, and what they hold (a chosen tab, a scroll) stays.
+    public static func identities(_ nodes: [Navree.Node]) -> [String] {
+        var seen = Set<String>()
+        return nodes.enumerated().map { index, node in
+            var identity = node.id.map { "#" + $0 } ?? "@\(index)"
+            while seen.contains(identity) { identity += "'" }
+            seen.insert(identity)
+            return identity
+        }
+    }
+}
+
+/// The card that grows into the screen its tap opens, and the screen that
+/// shrinks back into it.
+public enum ZoomRules {
+    /// The id a card is matched by when it grows into the screen its tap
+    /// opens: a card that says `zoom`, has an id and navigates. `nil` for any
+    /// other card, and for every card when the person asked for less motion
+    /// (the screen then comes in as the system brings any screen).
+    public static func source(_ card: Navree.Card, reduceMotion: Bool = false) -> String? {
+        guard !reduceMotion, card.transition == .zoom, let id = card.id, case .navigate = card.action else { return nil }
+        return id
+    }
+
+    /// The source a screen the runtime pushed or presented grows out of: the
+    /// part it was opened from (`screens[n].from`), when the screen under it
+    /// holds a card by that id that is a source. `nil` when it was opened
+    /// from anything else (a row, a link, a button) or from nothing.
+    public static func source(from: String?, under: Navree.Node?, reduceMotion: Bool = false) -> String? {
+        guard let from, let under, case .card(let card)? = under.find(from, kinds: ["card"]) else { return nil }
+        return source(card, reduceMotion: reduceMotion) == from ? from : nil
+    }
+}
+
+/// More about a part, on request.
+public enum HintRules {
+    /// The name of the control, or of the VoiceOver action, that opens a
+    /// hint: `About the health score`.
+    public static func actionName(_ hint: Navree.Hint) -> String {
+        let about = hint.about.trimmingCharacters(in: .whitespaces)
+        return about.isEmpty ? "About" : "About \(about)"
     }
 }
