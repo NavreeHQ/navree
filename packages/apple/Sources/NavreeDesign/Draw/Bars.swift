@@ -6,7 +6,8 @@ import SwiftUI
 /// it, each segment's amount in the page's words and what the page says of it.
 struct MeterPart: View {
     let meter: Navree.Meter
-    @ScaledMetric(relativeTo: .body) private var height: CGFloat = 26
+    private let scale = TextScale()
+    private var height: CGFloat { 26 * scale.capped(1.5) }
 
     var body: some View {
         let shares = ShareRules.shares(meter.segments.map(\.value))
@@ -76,7 +77,8 @@ struct MeterPart: View {
 /// that stands out is drawn in full and the others quieter.
 struct ColumnsPart: View {
     let columns: Navree.MiniColumns
-    @ScaledMetric(relativeTo: .body) private var height: CGFloat = 120
+    private let scale = TextScale()
+    private var height: CGFloat { 120 * scale.capped(1.4) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -142,7 +144,8 @@ struct ColumnsPart: View {
 /// ends, and a key that says each kind's share.
 struct StripPart: View {
     let strip: Navree.ColorStrip
-    @ScaledMetric(relativeTo: .body) private var height: CGFloat = 28
+    private let scale = TextScale()
+    private var height: CGFloat { 28 * scale.capped(1.5) }
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {

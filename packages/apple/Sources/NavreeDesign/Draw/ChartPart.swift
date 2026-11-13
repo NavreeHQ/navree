@@ -13,10 +13,13 @@ struct ChartPart: View {
     /// Whether it stands under a figure's number: smaller, with no heading
     /// and no value axis.
     var small = false
-    @ScaledMetric(relativeTo: .body) private var plotHeight: CGFloat = 180
-    @ScaledMetric(relativeTo: .body) private var smallHeight: CGFloat = 84
-    @ScaledMetric(relativeTo: .body) private var sparkHeight: CGFloat = 36
-    @ScaledMetric(relativeTo: .body) private var laneHeight: CGFloat = 34
+    /// Plots grow with the text, to a point: past it they would push the
+    /// numbers they show off the screen.
+    private let scale = TextScale()
+    private var plotHeight: CGFloat { 180 * scale.capped(1.4) }
+    private var smallHeight: CGFloat { 84 * scale.capped(1.4) }
+    private var sparkHeight: CGFloat { 36 * scale.capped(1.4) }
+    private var laneHeight: CGFloat { 34 * scale.capped(1.4) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -58,7 +61,7 @@ struct ChartPart: View {
     private var height: CGFloat {
         if chart.kind == .sparkline { return sparkHeight }
         if !chart.levels.isEmpty { return laneHeight * CGFloat(chart.levels.count) + 24 }
-        return small ? smallHeight : min(plotHeight, 260)
+        return small ? smallHeight : plotHeight
     }
 
     struct Point: Identifiable {

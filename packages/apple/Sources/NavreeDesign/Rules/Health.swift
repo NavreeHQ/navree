@@ -398,8 +398,14 @@ public enum ClockRules {
     /// What a moment says in the clock's key: its name and its time in the
     /// person's clock. A name that already holds a time is said as it is.
     public static func momentEntry(_ name: String, at: Double, uses24: Bool, locale: Locale) -> String {
-        if name.range(of: #"\d:\d\d"#, options: .regularExpression) != nil { return name }
+        if holdsTime(name) { return name }
         return name + ", " + timeLabel(at, uses24: uses24, locale: locale)
+    }
+
+    /// Whether a moment's name already says its time (an older page wrote it
+    /// in): then the time is not written beside it again.
+    public static func holdsTime(_ name: String) -> Bool {
+        name.range(of: #"\d:\d\d"#, options: .regularExpression) != nil
     }
 }
 
@@ -722,6 +728,39 @@ public enum PagerRules {
         let low = pager.first.flatMap(date) ?? Date.distantPast
         let high = pager.last.flatMap(date) ?? Date.distantFuture
         return low <= high ? low...high : nil
+    }
+
+    /// The day control a screen shows in its bar: its own, or a pager that
+    /// leads its body (a screen read from a page says it there), as a day
+    /// view's date stands in the bar of the system's own apps.
+    public static func inBar(_ screen: Navree.Screen) -> Navree.DayPager? {
+        if let pager = screen.pager { return pager }
+        if case .dayPager(let pager) = leading(screen.body) { return pager }
+        return nil
+    }
+
+    /// The screen as it is drawn: a pager that leads its body taken into the
+    /// bar, and out of the body, so it is drawn once.
+    public static func lifted(_ screen: Navree.Screen) -> Navree.Screen {
+        guard screen.pager == nil, case .stack(var stack) = screen.body,
+            let index = stack.children.firstIndex(where: { !isHidden($0) }),
+            case .dayPager(let pager) = stack.children[index]
+        else { return screen }
+        var shown = screen
+        stack.children.remove(at: index)
+        shown.body = .stack(stack)
+        shown.pager = pager
+        return shown
+    }
+
+    private static func leading(_ body: Navree.Node) -> Navree.Node? {
+        if case .stack(let stack) = body { return stack.children.first { !isHidden($0) } }
+        return body
+    }
+
+    private static func isHidden(_ node: Navree.Node) -> Bool {
+        if case .stack(let stack) = node { return stack.hidden }
+        return false
     }
 
     /// How the screen's title shows: a screen with its day control in the bar
