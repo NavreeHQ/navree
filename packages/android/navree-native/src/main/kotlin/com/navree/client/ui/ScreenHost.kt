@@ -386,6 +386,19 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
             }
         }
         is Block.Fill -> Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) { NodeView(block.node, place) }
+        is Block.Before -> {
+            val state = place.screen.lists[block.id]
+            if (state?.failedBefore == true) {
+                RetryLine(stringResource(R.string.navree_more_failed)) { ui.send(Events.more(place.id, block.id, before = true)) }
+            } else {
+                LaunchedEffect(block.key) { ui.send(Events.more(place.id, block.id, before = true)) }
+                if (state?.loadingBefore == true) {
+                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                    }
+                }
+            }
+        }
         is Block.Cards -> Row(
             Modifier.readable(ContentRules.TABLE_MOST_DP).padding(horizontal = margin).height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(16.dp),

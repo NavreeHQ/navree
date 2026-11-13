@@ -38,6 +38,9 @@ internal sealed interface Block {
     /** The end of a list that has more: drawing it asks for the next page. `id` is the list's, or the table's region's. */
     data class More(override val key: String, val id: String) : Block
 
+    /** The start of a list that has rows before its first: drawing it asks for them. */
+    data class Before(override val key: String, val id: String) : Block
+
     /** A region that is still on its way. */
     data class Waiting(override val key: String, val region: String) : Block
 
@@ -157,6 +160,7 @@ internal fun blocks(
             is Navree.List -> if (node.reorder != null) {
                 out += Block.Single(key(path, node.id), node, form)
             } else {
+                node.id?.let { id -> if (node.before != null) out += Block.Before(key("$path/before", null), id) }
                 node.children.forEachIndexed { index, child ->
                     if (inFlow(child, screen)) {
                         if (child is Navree.Row || child is Navree.FeedRow) {

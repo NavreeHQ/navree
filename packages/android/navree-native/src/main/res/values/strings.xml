@@ -25,6 +25,7 @@
     <string name="navree_show_password">Show password</string>
     <string name="navree_hide_password">Hide password</string>
     <string name="navree_pick_date">Choose a date</string>
+    <string name="navree_pick_dates">Choose dates</string>
     <string name="navree_pick_time">Choose a time</string>
     <string name="navree_increase">Increase</string>
     <string name="navree_decrease">Decrease</string>

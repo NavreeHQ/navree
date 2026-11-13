@@ -26,6 +26,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.DisplayMode
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -34,6 +35,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +50,7 @@ import androidx.compose.material3.TimeInput
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TimePickerDialog
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -122,6 +125,7 @@ internal fun FieldView(field: Navree.Field, place: Place, modifier: Modifier = M
         is Navree.ChoiceInput -> ChoiceView(field, input, place, modifier)
         is Navree.ChoicesInput -> ChoicesView(field, input, place, modifier)
         is Navree.DateInput -> DateView(field, input, place, modifier)
+        is Navree.RangeInput -> RangeView(field, input, place, modifier)
         is Navree.SliderInput -> SliderView(field, input, place, modifier)
         // A screen with an input this client cannot draw was shown in the web view instead.
         else -> Unit
@@ -377,6 +381,10 @@ private fun ChoiceView(field: Navree.Field, input: Navree.ChoiceInput, place: Pl
     } ?: input.value
     val support = support(field, place)
     val choose: (Navree.ChoiceOption) -> Unit = { option -> ui.change(place, field, FieldValue.Text(option.value)) }
+    if (input.search != null) {
+        SearchedChoice(field, input, value, support, place, modifier, choose)
+        return
+    }
     when (FormRules.choice(input.kind, input.options.size, ui.window)) {
         ChoiceWidget.ButtonGroup -> Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             FieldLabel(field)
@@ -668,6 +676,156 @@ private fun DateView(field: Navree.Field, input: Navree.DateInput, place: Place,
             title = { Text(field.label ?: chooseTime) },
         ) {
             if (mode == PickerMode.Input) TimeInput(state = state) else TimePicker(state = state)
+        }
+    }
+}
+
+/**
+ * A choice whose options the server searches: the field opens a dialog with
+ * a search box over the options the core holds for the words typed, a
+ * progress line while a search is out, and the next options asked for near
+ * the end. The chosen option's label is kept here, since the options shown
+ * change with the search.
+ */
+@Composable
+private fun SearchedChoice(
+    field: Navree.Field,
+    input: Navree.ChoiceInput,
+    value: String?,
+    support: Support,
+    place: Place,
+    modifier: Modifier,
+    choose: (Navree.ChoiceOption) -> Unit,
+) {
+    val ui = LocalUi.current
+    val id = field.id ?: return
+    val held = place.screen.field(place.form, id)
+    val options = held?.options ?: input.options
+    var label by rememberSaveable(value) { mutableStateOf(input.options.firstOrNull { it.value == value }?.label ?: "") }
+    var open by remember { mutableStateOf(false) }
+    var words by rememberSaveable { mutableStateOf("") }
+    PickerField(field, label, input.placeholder, support, { Icon(Glyphs.Search, contentDescription = null) }, { open = true }, modifier)
+    if (!open) return
+    AlertDialog(
+        onDismissRequest = { open = false },
+        title = field.label?.let { shown -> { Text(shown) } },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = words,
+                    onValueChange = { next ->
+                        words = next
+                        ui.send(Events.options(place.id, place.form, id, text = next))
+                    },
+                    singleLine = true,
+                    leadingIcon = { Icon(Glyphs.Search, contentDescription = null) },
+                    placeholder = input.placeholder?.let { shown -> { Text(shown) } },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (held?.searching == true) LinearProgressIndicator(Modifier.fillMaxWidth())
+                LazyColumn(Modifier.selectableGroup().heightIn(max = 360.dp)) {
+                    items(options.size) { index ->
+                        val option = options[index]
+                        // Drawing the last options asks for more while the list goes on.
+                        if (index == options.lastIndex && held?.more == true) {
+                            LaunchedEffect(options.size) { ui.send(Events.options(place.id, place.form, id, more = true)) }
+                        }
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 56.dp)
+                                .selectable(
+                                    selected = option.value == value,
+                                    enabled = !option.disabled,
+                                    role = Role.RadioButton,
+                                    onClick = {
+                                        open = false
+                                        label = option.label
+                                        choose(option)
+                                    },
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = option.value == value, onClick = null)
+                            Column(Modifier.padding(start = 16.dp)) {
+                                Text(option.label, style = MaterialTheme.typography.bodyLarge)
+                                option.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { open = false }) { Text(stringResource(android.R.string.cancel)) } },
+    )
+}
+
+/**
+ * Two days, as Material's date range picker chooses them: one field that
+ * shows both ends, opening the full-screen range picker bounded as the page
+ * says. An end not picked is sent empty. A range with times keeps the time
+ * each end had and picks its days.
+ */
+@Composable
+private fun RangeView(field: Navree.Field, input: Navree.RangeInput, place: Place, modifier: Modifier) {
+    val ui = LocalUi.current
+    val held = place.value(field) as? FieldValue.Range ?: FieldValue.Range(input.from.value, input.to.value)
+    val support = support(field, place)
+    val from = parseDate(held.from)
+    val to = parseDate(held.to)
+    var picking by remember { mutableStateOf(false) }
+    val format = remember { DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM) }
+    val text = when {
+        from == null && to == null -> ""
+        else -> "${from?.format(format) ?: ""} – ${to?.format(format) ?: ""}"
+    }
+    val choose = stringResource(R.string.navree_pick_dates)
+    PickerField(field, text, null, support, { Icon(Glyphs.DateRange, contentDescription = null) }, { picking = true }, modifier, description = choose)
+
+    fun end(day: LocalDate?, was: String, last: Boolean): String = when {
+        day == null -> ""
+        input.kind == Navree.DateKind.DATE -> day.toString()
+        else -> {
+            val time = parseTime(was) ?: if (last) LocalTime.of(23, 59) else LocalTime.of(0, 0)
+            "$day" + "T" + "%02d:%02d".format(time.hour, time.minute)
+        }
+    }
+
+    if (picking) {
+        val least = parseDate(input.min)
+        val most = parseDate(input.max)
+        val offDays = remember(input.offDays) { input.offDays.mapNotNull(::parseDate).toSet() }
+        val offWeekdays = remember(input.offWeekdays) { input.offWeekdays.map { it.ordinal + 1 }.toSet() }
+        val state = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = from?.let(::millis),
+            initialSelectedEndDateMillis = to?.let(::millis),
+            selectableDates = remember(least, most, offDays, offWeekdays) {
+                object : SelectableDates {
+                    override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                        val day = Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate()
+                        return (least == null || !day.isBefore(least)) && (most == null || !day.isAfter(most)) &&
+                            day !in offDays && day.dayOfWeek.value !in offWeekdays
+                    }
+
+                    override fun isSelectableYear(year: Int): Boolean = (least == null || year >= least.year) && (most == null || year <= most.year)
+                }
+            },
+        )
+        DatePickerDialog(
+            onDismissRequest = { picking = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        picking = false
+                        val start = state.selectedStartDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+                        val stop = state.selectedEndDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+                        ui.change(place, field, FieldValue.Range(end(start, held.from, last = false), end(stop, held.to, last = true)))
+                    },
+                ) { Text(stringResource(android.R.string.ok)) }
+            },
+            dismissButton = { TextButton(onClick = { picking = false }) { Text(stringResource(android.R.string.cancel)) } },
+        ) {
+            DateRangePicker(state = state, title = { Text(field.label ?: choose, modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp)) }, modifier = Modifier.weight(1f))
         }
     }
 }
