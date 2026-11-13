@@ -152,12 +152,26 @@ More: [/docs/security/authentication/](/docs/security/authentication/).
 | `passkeys.enabled` | boolean | `false` | `APP_AUTH__PASSKEYS__ENABLED` | Whether the `/auth/passkeys/*` routes are mounted. |
 | `passkeys.rp_id` | string |  | `APP_AUTH__PASSKEYS__RP_ID` | The relying party id: the app's registrable domain (`example.com`). Required when enabled. |
 | `passkeys.rp_name` | string | `"Navree"` | `APP_AUTH__PASSKEYS__RP_NAME` | The relying party name shown by the browser. |
-| `passkeys.origins` | list of string | `[]` | `APP_AUTH__PASSKEYS__ORIGINS` | The origins the front end runs on (`https://app.example.com`). Required when enabled. |
+| `passkeys.origins` | list of string | `[]` | `APP_AUTH__PASSKEYS__ORIGINS` | The origins the front end runs on (`https://app.example.com`). Required when enabled. An Apple app's passkeys carry the origin `https://<rp_id>`; an Android app's carry `android:apk-key-hash:<base64url SHA-256 of its signing certificate>`, which may be listed here or comes from the app's fingerprints in `auth.apps.android`. Compared exactly. |
 | `passkeys.timeout_secs` | integer | `300` | `APP_AUTH__PASSKEYS__TIMEOUT_SECS` | How long a registration or sign-in ceremony may take, in seconds. |
 | `passkeys.user_verification` | required \| preferred \| discouraged | `"preferred"` | `APP_AUTH__PASSKEYS__USER_VERIFICATION` | `required`, `preferred` or `discouraged`: whether authenticators must verify the user (PIN, biometrics). |
 | `session` | table |  | `APP_AUTH__SESSION` | Browsers signed in on the session cookie (the `session` feature). |
 | `session.lifetime_hours` | integer | `24` | `APP_AUTH__SESSION__LIFETIME_HOURS` | The longest a sign-in lasts without "remember me", however busy the browser is, in hours (default 24). |
 | `session.remember_days` | integer | `30` | `APP_AUTH__SESSION__REMEMBER_DAYS` | How long "remember me" keeps a browser signed in, in days (default 30): the session lives that long without a request, and the sign-in ends that long after it started, whatever happens. |
+
+## `auth.apps`
+
+The site's native apps (configuration section `auth.apps`).
+
+More: [/docs/security/passwordless/](/docs/security/passwordless/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `paths` | list of string | `[]` | `APP_AUTH__APPS__PATHS` | The paths that open in the apps instead of the browser (`/orders/*`; `*` matches any characters, `?` one). Empty: no links are claimed. |
+| `exclude` | list of string | `[]` | `APP_AUTH__APPS__EXCLUDE` | Paths that never open in the apps, even when `paths` match them. |
+| `apple` | table of AppleApp | `"{}"` | `APP_AUTH__APPS__APPLE` | The Apple apps (iOS, iPadOS, macOS, watchOS, visionOS), by name. |
+| `android` | table of AndroidApp | `"{}"` | `APP_AUTH__APPS__ANDROID` | The Android apps, by name. |
+| `keep_browser_signed_in` | boolean | `false` | `APP_AUTH__APPS__KEEP_BROWSER_SIGNED_IN` | Whether a browser that signed in only to hand its sign-in over to an app stays signed in afterwards (default `false`: it is signed out, and only the app holds a session). A browser that was signed in before the hand-over always stays signed in. |
 
 ## `billing`
 
@@ -974,7 +988,7 @@ More: [/docs/digging-deeper/notifications/](/docs/digging-deeper/notifications/)
 | `meta.endpoint` | string |  | `APP_NOTIFY__META__ENDPOINT` | The Graph API's base URL (default `https://graph.facebook.com`). |
 | `preferences` | table |  | `APP_NOTIFY__PREFERENCES` | What people and workspaces choose to receive. |
 | `preferences.enabled` | boolean | `true` | `APP_NOTIFY__PREFERENCES__ENABLED` | Apply the stored preferences when sending (with `DatabaseModule`). Default: `true`. |
-| `preferences.channels` | list of Channel | `"mail, database, slack, teams, sms, whatsapp, web_push"` | `APP_NOTIFY__PREFERENCES__CHANNELS` | The channels people may switch, in the order the preference routes list them: a list, or a comma-separated string from an environment variable. Default: every channel but `broadcast`, which follows the `database` choice (the real-time event of an in-app notification). |
+| `preferences.channels` | list of Channel | `"mail, database, slack, teams, sms, whatsapp, web_push, push"` | `APP_NOTIFY__PREFERENCES__CHANNELS` | The channels people may switch, in the order the preference routes list them: a list, or a comma-separated string from an environment variable. Default: every channel but `broadcast`, which follows the `database` choice (the real-time event of an in-app notification). |
 | `preferences.required` | list of string | `[]` | `APP_NOTIFY__PREFERENCES__REQUIRED` | Categories that cannot be turned off (`security`): their notifications go out over every channel they name, and a change that turns one of their channels off is refused. Default: none. |
 | `preferences.workspace_permission` | string | `"workspace.update"` | `APP_NOTIFY__PREFERENCES__WORKSPACE_PERMISSION` | The permission that changes a workspace's defaults (`PATCH /api/notifications/preferences/workspace`), checked in the request's workspace. Default: `workspace.update`. |
 | `digest` | table |  | `APP_NOTIFY__DIGEST` | The digest mail of batched notifications. |
@@ -983,11 +997,36 @@ More: [/docs/digging-deeper/notifications/](/docs/digging-deeper/notifications/)
 | `digest.subject` | string | `"Your notifications"` | `APP_NOTIFY__DIGEST__SUBJECT` | The digest mail's subject, a template with `count` and `digest` (`daily`). Default: `Your notifications`. |
 | `digest.template` | string | `"notify/digest"` | `APP_NOTIFY__DIGEST__TEMPLATE` | The digest mail's template (`{template}.html` and `.txt`), with `items`, `count`, `digest` and `style`. Default: `notify/digest`, built in; a file of that name replaces it. |
 | `deferred` | table |  | `APP_NOTIFY__DEFERRED` | Deliveries held for quiet hours, send windows and digests. |
-| `deferred.channels` | list of Channel | `"mail, slack, teams, sms, whatsapp, web_push"` | `APP_NOTIFY__DEFERRED__CHANNELS` | The channels quiet hours and send windows hold. Default: `mail`, `slack`, `teams`, `sms`, `whatsapp` and `web_push` (the database and broadcast channels show in the app at once). |
+| `deferred.channels` | list of Channel | `"mail, slack, teams, sms, whatsapp, web_push, push"` | `APP_NOTIFY__DEFERRED__CHANNELS` | The channels quiet hours and send windows hold. Default: `mail`, `slack`, `teams`, `sms`, `whatsapp`, `web_push` and `push` (the database and broadcast channels show in the app at once). |
 | `deferred.batch` | integer | `500` | `APP_NOTIFY__DEFERRED__BATCH` | How many held deliveries one `notify:release` run releases at most. Default: 500. |
 | `deferred.max_attempts` | integer | `5` | `APP_NOTIFY__DEFERRED__MAX_ATTEMPTS` | Attempts before a held delivery that keeps failing is dropped (logged). Default: 5. |
 | `deferred.retry_secs` | integer | `300` | `APP_NOTIFY__DEFERRED__RETRY_SECS` | Seconds before a release that failed is tried again. Default: 300. |
 | `deferred.schedule` | boolean | `true` | `APP_NOTIFY__DEFERRED__SCHEDULE` | Run `notify:release` every minute on `ScheduleModule`'s scheduler. Default: `true`. |
+
+## `notify.push`
+
+How the push channel reaches native apps (configuration section `notify.push`): Apple's push service for iOS devices, Firebase Cloud Messaging for Android devices. A device whose platform has no configured service is skipped.
+
+More: [/docs/digging-deeper/notification-channels/](/docs/digging-deeper/notification-channels/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `ttl_secs` | integer | `86400` | `APP_NOTIFY__PUSH__TTL_SECS` | How long the services keep a notification for an offline device, in seconds, when the message does not say (default 86400, one day). |
+| `apns` | table |  | `APP_NOTIFY__PUSH__APNS` | Apple's push service. |
+| `apns.team_id` | string | `""` | `APP_NOTIFY__PUSH__APNS__TEAM_ID` | The team id (10 characters, from the developer account). |
+| `apns.key_id` | string | `""` | `APP_NOTIFY__PUSH__APNS__KEY_ID` | The id of `key` (10 characters). |
+| `apns.key` | string | secret | `APP_NOTIFY__PUSH__APNS__KEY` | The `.p8` signing key (PEM). It signs for the sandbox too unless `sandbox_key` is set. |
+| `apns.sandbox_key_id` | string |  | `APP_NOTIFY__PUSH__APNS__SANDBOX_KEY_ID` | The id of `sandbox_key`. |
+| `apns.sandbox_key` | string | secret | `APP_NOTIFY__PUSH__APNS__SANDBOX_KEY` | A `.p8` key for the sandbox environment only. |
+| `apns.bundle_ids` | list of string | `[]` | `APP_NOTIFY__PUSH__APNS__BUNDLE_IDS` | The apps' bundle ids: the topics notifications are sent to. A device can register only for one of them. A list, or a comma-separated string from an environment variable. |
+| `apns.endpoint` | string |  | `APP_NOTIFY__PUSH__APNS__ENDPOINT` | The production service (default `https://api.push.apple.com`). |
+| `apns.sandbox_endpoint` | string |  | `APP_NOTIFY__PUSH__APNS__SANDBOX_ENDPOINT` | The sandbox service (default `https://api.sandbox.push.apple.com`). |
+| `fcm` | table |  | `APP_NOTIFY__PUSH__FCM` | Firebase Cloud Messaging. |
+| `fcm.project_id` | string |  | `APP_NOTIFY__PUSH__FCM__PROJECT_ID` | The Firebase project id (default: the service account's `project_id`). |
+| `fcm.service_account` | string | secret | `APP_NOTIFY__PUSH__FCM__SERVICE_ACCOUNT` | The service account's JSON key file, as text. |
+| `fcm.packages` | list of string | `[]` | `APP_NOTIFY__PUSH__FCM__PACKAGES` | The apps' package names. A device can register only for one of them. A list, or a comma-separated string. |
+| `fcm.endpoint` | string |  | `APP_NOTIFY__PUSH__FCM__ENDPOINT` | The API's base URL (default `https://fcm.googleapis.com`). |
+| `fcm.token_url` | string |  | `APP_NOTIFY__PUSH__FCM__TOKEN_URL` | Where the service account's assertion is exchanged for an access token (default: the key file's `token_uri`, else `https://oauth2.googleapis.com/token`). |
 
 ## `oauth`
 

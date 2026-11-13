@@ -7,6 +7,70 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Added
+
+- Navree Native, a preview behind the `ui-native-preview` feature: a `ui` app's pages answer a
+  native client as well as a browser. A request that sends `X-Navree-Native: 1` and describes
+  itself in `X-Navree-Client` gets the page as a tree of parts (a screen with a title and actions
+  by role, lists, tables, forms, sheets, charts) for the system's own toolkit to draw, and the
+  app's shell at `/_navree/native/shell`. A browser's pages are the same bytes with the feature on
+  and off. A page with a part that has no native form yet is shown in the client's web view, and
+  the answer says which part.
+- Words a page says what its parts are with, each a field that writes no HTML: `Button::role`
+  (`Role`), `Button::presented` and `Item::presented` (`Presented`), `Button::undoable`,
+  `Button::standard` (`Standard`), `Button::reason`, `AppPage::actions`, `Sheet::footer` and
+  `Dialog::footer`, `DataTable::row_opens`, a column's `role` (`title`, `subtitle`, `status`,
+  `trailing`) on `#[col]`, and `native::only` and `native::web_only` for a part of one side.
+- Navree Native UI (`navree::native::ui`): a screen written once in Rust for native clients, with
+  builders for every part and every control of a form. Structure the system places (`Screen`,
+  `Section`, `List`, `Row`, `Form`, `Field`, `Sheet`, `Dialog`, `Region`), content it styles
+  (`Figure`, `Ring`, `Rings`, `Chart`, `DayClock`, `Timeline`, `Progress`, `Facts`) and
+  composition (`Stack`, `Grid`, `Card`, `Layers`, `Shape`, `Carousel`, `Adaptive`, `Text`,
+  `Icon`) in the system's text styles, colours by name (`Hue`) and steps of its spacing.
+  `navree::ui::native::Answer` answers one route with a page for a browser and a screen for a
+  native client; `native::form` says a page's own form natively; `Reply::each` goes on with a
+  reply for the client that asked; `Reply::signed_out` tells a native client to forget its
+  session. A route with only a native side answers a browser with a small page and the status
+  406.
+- `navree native:coverage` grades every page route for a native client (`idiom`, `designed`,
+  `layout`, `web`) and says what keeps a page from its system, with `--platform`, `--json` and
+  `--fail-on` for a check in CI and a `native.toml` of example values; `navree native:doctor`
+  checks an app's setup for native clients. `TestNative` drives a page as a native client in a
+  plain test.
+- The crate `navree-native`: the protocol's vocabulary, the client's descriptor, a JSON Schema,
+  the example answers every client decodes, and the builders above. It is a preview and is used
+  through `navree`.
+- Signing in from native apps (`auth`): the association files Apple's and Android's systems ask
+  for, from the apps listed under `auth.apps`; passkeys made in an Android app; a hand-over that
+  signs an app in through the system's sign-in session (`GET /auth/app/sign-in`, then
+  `POST /api/auth/app/exchange` with a PKCE proof); and `ConfirmAction`, which holds an action
+  until the person confirms it with a passkey (`POST /api/auth/confirm/options`,
+  `POST /api/auth/confirm/passkey`).
+- Sign in with Apple and with Google from native apps (`social`): the app posts the identity
+  token the system's own sheet gave it (`POST /api/auth/social/{provider}/native/nonce`, then
+  `POST /api/auth/social/{provider}/native`), and the server signs the person in by the rules of
+  the web callback. Apple's server-to-server notifications are taken at
+  `POST /api/auth/social/apple/notifications`. `Social::revoke_tokens` revokes a user's stored
+  tokens at the provider, and offboarding a user does it too.
+- Push to native apps (`notify`): a `push` channel through Apple's push service and Firebase
+  Cloud Messaging, configured under `notify.push`. An app registers its device with
+  `POST /api/notifications/push-devices` and removes it with `DELETE`; a device belongs to the
+  session that registered it and gets nothing more once that session ends.
+- Agent skills for native apps: `navree-native`, `navree-native-design`, `navree-native-apple`
+  and `navree-native-android`.
+
+### Changed
+
+- Disconnecting a provider (`Social::unlink`, `DELETE /api/auth/social/accounts/{provider}`) now
+  revokes the stored tokens at the provider first. A provider that cannot be reached answers 502
+  and leaves the account linked, to try again. An account with no stored tokens is disconnected
+  as before.
+- An app with an Apple app under `auth.apps` keeps Sign in with Apple's tokens (encrypted)
+  whatever `social.store_tokens` says, because deleting an account must revoke them at Apple. An
+  app with no Apple app there stores what it stored before.
+- The `social` and `notify` modules each add a migration (the client a provider's token was issued
+  to, and push devices). Run `navree migrate` after upgrading.
+
 ### Fixed
 
 - A small `Donut` drew the figure in its middle at one size whatever the ring's, so at
