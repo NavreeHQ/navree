@@ -251,9 +251,11 @@ struct RowContent: View {
                 }
                 if let subtitle = row.subtitle {
                     Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 ForEach(Array(row.detail.enumerated()), id: \.offset) { _, part in
                     NodeView(part).font(.footnote).foregroundStyle(.secondary)
+                        .environment(\.navreeInRowDetail, true)
                 }
             }
             if let trailing = row.trailing, !typeSize.isAccessibilitySize {

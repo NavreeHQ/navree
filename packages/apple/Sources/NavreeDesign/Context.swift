@@ -46,10 +46,14 @@ public struct Step: Hashable, Sendable {
 public struct Place: Sendable, Equatable {
     public var form: FormRef?
     public var overlay: String?
+    /// What the control holds, sent with its action as the event's `text`:
+    /// the day chosen in a day pager's calendar (`YYYY-MM-DD`).
+    public var text: String?
 
-    public init(form: FormRef? = nil, overlay: String? = nil) {
+    public init(form: FormRef? = nil, overlay: String? = nil, text: String? = nil) {
         self.form = form
         self.overlay = overlay
+        self.text = text
     }
 }
 

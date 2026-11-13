@@ -53,7 +53,8 @@ public struct ScreenView: View {
         content(sections: sections, width: width, table: table)
             .navigationTitle(NavigationRules.title(screen.title, appName: appName))
             .modifier(Subtitle(text: screen.subtitle))
-            .modifier(TitleDisplay(mode: NavigationRules.titleMode(depth)))
+            .modifier(TitleDisplay(mode: PagerRules.titleMode(depth, pager: screen.pager)))
+            .modifier(PagerInBar(pager: screen.pager))
             .toolbar {
                 PlacedActions(actions: screen.actions.filter { !Self.isDestructive($0) }, depth: depth, overlay: nil, form: nil)
                 if let query, query.hasFilters || !query.sorts.isEmpty {
@@ -79,6 +80,8 @@ public struct ScreenView: View {
     @ViewBuilder private func content(sections: [ListSection], width: WidthClass, table: Navree.Table?) -> some View {
         if let empty = Self.wholeEmpty(screen.body) {
             EmptyPart(empty: empty)
+        } else if CompositionRules.isComposed(screen.body) {
+            ComposedScreenBody(body: screen.body)
         } else if let table, sections.count == 1, ContentRules.table(table, width: width) == .columns {
             TableColumnsView(table: table, region: sections[0].region)
         } else {
