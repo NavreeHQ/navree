@@ -141,11 +141,39 @@
       }
     },
     {
+      "note": "More records load while every matching one is chosen: the ones that come are chosen too.",
+      "send": {"t":"more","screen":1,"id":"ledger"},
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"ledger","from":3,"count":0}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/ledger/rows?after=2003","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","ledger"]],"timeout_ms":10000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/ledger-more.json",
+      "expect": {
+        "changed": [
+          {"t":"rows","screen":1,"id":"ledger","from":3,"count":1}
+        ],
+        "effects": [
+          {"t":"announce","notice":"loaded","count":1}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/rows/3/id","is":"2004"},
+        {"at":"/screens/1/content/screen/body/children/1/rows/3/selected","is":true}
+      ]
+    },
+    {
       "note": "A row is cleared: what is chosen is rows again.",
       "send": {"t":"choose","screen":1,"table":"ledger","row":"2003","on":false},
       "expect": {
         "changed": [
-          {"t":"rows","screen":1,"id":"ledger","from":3,"count":0}
+          {"t":"rows","screen":1,"id":"ledger","from":4,"count":0}
         ],
         "effects": []
       },
@@ -160,12 +188,12 @@
           {"t":"form","screen":1,"form":"bulk"}
         ],
         "effects": [
-          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/ledger/bulk","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=tk-91c2&ids%5B%5D=2001&intent=remind"},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":7,"method":"post","url":"https://shop.example/ledger/bulk","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=tk-91c2&ids%5B%5D=2001&ids%5B%5D=2004&intent=remind"},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },
     {
-      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/gift-saved.json",
       "expect": {
         "changed": [
@@ -195,16 +223,16 @@
       "send": {"t":"more","screen":1,"id":"ledger","before":true},
       "expect": {
         "changed": [
-          {"t":"rows","screen":1,"id":"ledger","from":3,"count":0}
+          {"t":"rows","screen":1,"id":"ledger","from":4,"count":0}
         ],
         "effects": [
-          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/ledger/rows?before=2001","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","ledger"]],"timeout_ms":10000}
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/ledger/rows?before=2001","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","ledger"]],"timeout_ms":10000}
         ]
       }
     },
     {
       "note": "They join the start, and move the cursor before the first with them.",
-      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/ledger-newer.json",
       "expect": {
         "changed": [
@@ -221,16 +249,16 @@
       "send": {"t":"more","screen":1,"id":"ledger","before":true},
       "expect": {
         "changed": [
-          {"t":"rows","screen":1,"id":"ledger","from":4,"count":0}
+          {"t":"rows","screen":1,"id":"ledger","from":5,"count":0}
         ],
         "effects": [
-          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/ledger/rows?before=2000","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","ledger"]],"timeout_ms":10000}
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/ledger/rows?before=2000","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","ledger"]],"timeout_ms":10000}
         ]
       }
     },
     {
       "note": "These say none are before them.",
-      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/ledger-first.json",
       "expect": {
         "changed": [
@@ -248,13 +276,13 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":9,"method":"post","url":"https://shop.example/ledger/2001/paid","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":10,"method":"post","url":"https://shop.example/ledger/2001/paid","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },
     {
       "note": "The server draws a row again. It stays chosen, and what is under it stays shut, as the reader left it.",
-      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":10,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/ledger-row.json",
       "expect": {
         "changed": [

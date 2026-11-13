@@ -451,7 +451,8 @@ impl Core {
         let (Some(view), Some(inner)) = (self.view.screens.get_mut(&id), self.inner.screens.get_mut(&id)) else {
             return;
         };
-        let Content::Native { screen } = &mut view.content else {
+        let ScreenView { content, lists, .. } = view;
+        let Content::Native { screen } = content else {
             return;
         };
         let Some(table) = find_in_mut(screen, &|node| pages(node, list)).and_then(table_of_mut) else {
@@ -459,6 +460,8 @@ impl Core {
         };
         // A record is never in a table twice.
         page.rows.retain(|row| row.id.as_ref().is_none_or(|id| !table.rows.iter().any(|held| held.id.as_ref() == Some(id))));
+        // While every record that matches is chosen, so is one that just came.
+        let across = lists.get(table.id.as_deref().unwrap_or(list)).is_some_and(|state| state.across);
         let mut names = Names {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
@@ -470,6 +473,7 @@ impl Core {
             names.name(&mut row.cells, scope);
             names.name(&mut row.actions, scope);
             names.name(&mut row.detail, scope);
+            row.selected |= across && row.id.is_some() && !row.unchoosable;
         }
         let from = table.rows.len();
         let count = page.rows.len();
