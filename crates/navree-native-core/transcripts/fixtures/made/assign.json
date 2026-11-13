@@ -1,0 +1,50 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Assign a courier",
+  "body": {
+   "t": "form",
+   "id": "assign",
+   "method": "post",
+   "action": "/orders/1/assign",
+   "hidden": [
+    {
+     "name": "_csrf",
+     "value": "tk-91c2"
+    }
+   ],
+   "children": [
+    {
+     "t": "field",
+     "id": "courier",
+     "name": "courier",
+     "label": "Courier",
+     "input": {
+      "t": "choice",
+      "options": [
+       {
+        "value": "c-1",
+        "label": "Blue Dart, Ludhiana"
+       }
+      ],
+      "search": {
+       "href": "/couriers/options",
+       "name": "q",
+       "min": 2
+      }
+     }
+    },
+    {
+     "t": "button",
+     "label": "Assign",
+     "action": {
+      "t": "submit"
+     },
+     "role": "primary"
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,72 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Inbox",
+  "body": {
+   "t": "list",
+   "id": "inbox",
+   "since": "0000411",
+   "changes": "/inbox/changes",
+   "live": {
+    "src": "/broadcasting/stream?topics=inbox",
+    "event": "inbox"
+   },
+   "before": "/inbox/rows?before=c-90",
+   "more": "/inbox/rows?after=c-80",
+   "children": [
+    {
+     "t": "row",
+     "id": "c-90",
+     "title": "Gurleen Sandhu",
+     "subtitle": "Where is my order CS-20481?"
+    },
+    {
+     "t": "row",
+     "id": "c-88",
+     "title": "Harpreet Sandhu",
+     "subtitle": "The dupatta came in the wrong shade.",
+     "detail": [
+      {
+       "t": "form",
+       "id": "note-c-88",
+       "method": "post",
+       "action": "/inbox/c-88/note",
+       "hidden": [
+        {
+         "name": "_csrf",
+         "value": "tk-91c2"
+        }
+       ],
+       "children": [
+        {
+         "t": "field",
+         "id": "note-c-88-text",
+         "name": "note",
+         "label": "Note to the team",
+         "input": {
+          "t": "text"
+         }
+        },
+        {
+         "t": "button",
+         "label": "Save note",
+         "action": {
+          "t": "submit"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "row",
+     "id": "c-80",
+     "title": "Manpreet Gill",
+     "subtitle": "Thank you, it has arrived."
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,138 @@
+{
+ "navree": 1,
+ "build": "3f9a1c07b2de",
+ "vocab": 0,
+ "screen": {
+  "title": "Thursday",
+  "id": "today",
+  "nav": "/",
+  "refresh": true,
+  "pager": {
+   "id": "day",
+   "day": "Thursday, 12 November",
+   "date": "2026-11-12",
+   "previous": "/?date=2026-11-11",
+   "next": "/?date=2026-11-13",
+   "today": "/",
+   "first": "2026-01-02",
+   "last": "2026-11-13",
+   "pick": {
+    "href": "/",
+    "name": "date"
+   },
+   "scores": {
+    "t": "rings",
+    "id": "day-scores",
+    "rings": [
+     {
+      "name": "Movement",
+      "value": 35,
+      "max": 100,
+      "shown": "35",
+      "colour": {
+       "hue": "orange"
+      }
+     },
+     {
+      "name": "Recovery",
+      "value": 72,
+      "max": 100,
+      "shown": "72",
+      "colour": {
+       "hue": "green"
+      }
+     },
+     {
+      "name": "Sleep",
+      "value": 78,
+      "max": 100,
+      "shown": "78",
+      "colour": {
+       "hue": "violet"
+      }
+     }
+    ],
+    "prominence": "low",
+    "summary": "The day's scores: Movement 35, Recovery 72, Sleep 78."
+   },
+   "words": {
+    "previous": "Previous day",
+    "next": "Next day",
+    "choose": "Choose a day"
+   }
+  },
+  "body": {
+   "t": "stack",
+   "id": "today",
+   "gap": 4,
+   "children": [
+    {
+     "t": "card",
+     "id": "score",
+     "children": [
+      {
+       "t": "ring",
+       "id": "health-score",
+       "value": 71,
+       "max": 100,
+       "shown": "71",
+       "label": "Health score",
+       "prominence": "high"
+      }
+     ]
+    },
+    {
+     "t": "grid",
+     "id": "pillars",
+     "min": 96,
+     "cols": 5,
+     "gap": 3,
+     "children": [
+      {
+       "t": "card",
+       "id": "pillar-sleep",
+       "action": {
+        "t": "navigate",
+        "href": "/sleep?date=2026-11-12"
+       },
+       "label": "Sleep, 78 of 100",
+       "transition": "zoom",
+       "children": [
+        {
+         "t": "ring",
+         "id": "sleep-score",
+         "value": 78,
+         "max": 100,
+         "shown": "78",
+         "label": "Sleep",
+         "prominence": "low"
+        }
+       ]
+      },
+      {
+       "t": "card",
+       "id": "pillar-fitness",
+       "action": {
+        "t": "navigate",
+        "href": "/fitness?date=2026-11-12"
+       },
+       "label": "Fitness, 35 of 100",
+       "transition": "zoom",
+       "children": [
+        {
+         "t": "ring",
+         "id": "fitness-score",
+         "value": 35,
+         "max": 100,
+         "shown": "35",
+         "label": "Fitness",
+         "prominence": "low"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

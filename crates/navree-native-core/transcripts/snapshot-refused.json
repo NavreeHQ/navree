@@ -1,0 +1,109 @@
+{
+  "about": "A snapshot that is not used: of another version, of another origin, one that does not read, and one taken for another person. Each time the app starts as it does the first time, and nothing of the snapshot shows.",
+  "steps": [
+    {
+      "note": "A snapshot of a later version.",
+      "send": {"t":"restore","snapshot":{"origin":"https://shop.example","stacks":"of a form this build has never seen","version":99}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"snapshot","detail":"a snapshot of version 99 is not used: this build reads version 1"},
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/destinations/1/stack","is":[]}
+      ]
+    },
+    {
+      "note": "A snapshot of another origin.",
+      "restart": true,
+      "send": {"t":"restore","snapshot":{"origin":"https://other.example","version":1}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"snapshot","detail":"a snapshot of another origin is not used"},
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "Something that is not a snapshot.",
+      "restart": true,
+      "send": {"t":"restore","snapshot":"not a snapshot at all"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"snapshot","detail":"a snapshot that does not read is not used: invalid type: string \"not a snapshot at all\", expected struct Snapshot"},
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "A snapshot that reads, taken while somebody else was signed in. It is held until the shell says who is signed in now.",
+      "restart": true,
+      "send": {"t":"restore","snapshot":{"destinations":[{"href":"/orders","stack":[{"url":"/orders"},{"fields":{"note-text":{"t":"text","text":"Not for these eyes"}},"url":"/orders/1"}]}],"origin":"https://shop.example","person":"0f0f","selected":"/orders","version":1}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "It is another person: the snapshot is not used, and nothing of it shows.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"report","what":"snapshot","detail":"a snapshot taken for another person is not used"},
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[]},
+        {"at":"/selected","is":0}
+      ]
+    },
+    {
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    }
+  ]
+}

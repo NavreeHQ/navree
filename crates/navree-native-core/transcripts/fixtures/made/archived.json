@@ -1,0 +1,22 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "toast",
+   "text": "Archived",
+   "action": {
+    "label": "Undo",
+    "href": "/orders/1/unarchive",
+    "post": true,
+    "fields": [
+     {
+      "name": "until",
+      "value": "1794000300"
+     }
+    ]
+   }
+  }
+ ]
+}

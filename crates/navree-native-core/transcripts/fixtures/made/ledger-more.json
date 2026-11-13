@@ -1,0 +1,30 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "rows",
+   "target": "ledger",
+   "rows": [
+    {
+     "id": "2004",
+     "cells": [
+      {
+       "t": "text",
+       "value": "INV-2004"
+      },
+      {
+       "t": "text",
+       "value": "Sukhmani Brar, Amritsar"
+      },
+      {
+       "t": "text",
+       "value": "₹4,120"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

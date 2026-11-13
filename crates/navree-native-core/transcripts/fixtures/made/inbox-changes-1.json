@@ -1,0 +1,63 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "merge",
+   "target": "inbox",
+   "since": "0000415",
+   "at": "start",
+   "more": true,
+   "gone": [
+    "c-80"
+   ],
+   "nodes": [
+    {
+     "t": "row",
+     "id": "c-88",
+     "title": "Harpreet Sandhu",
+     "subtitle": "Can I send it back from Amritsar?",
+     "detail": [
+      {
+       "t": "form",
+       "id": "note-c-88",
+       "method": "post",
+       "action": "/inbox/c-88/note",
+       "hidden": [
+        {
+         "name": "_csrf",
+         "value": "tk-91c2"
+        }
+       ],
+       "children": [
+        {
+         "t": "field",
+         "id": "note-c-88-text",
+         "name": "note",
+         "label": "Note to the team",
+         "input": {
+          "t": "text"
+         }
+        },
+        {
+         "t": "button",
+         "label": "Save note",
+         "action": {
+          "t": "submit"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "row",
+     "id": "c-95",
+     "title": "Simran Bhatia",
+     "subtitle": "Do you deliver to Chandigarh by Friday?"
+    }
+   ]
+  }
+ ]
+}

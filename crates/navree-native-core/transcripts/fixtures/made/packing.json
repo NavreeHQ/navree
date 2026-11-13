@@ -1,0 +1,85 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Packing",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "list",
+     "id": "to-pack",
+     "reorder": {
+      "href": "/packing/move",
+      "group": "packing",
+      "fields": [
+       {
+        "name": "_csrf",
+        "value": "tk-91c2"
+       }
+      ],
+      "key": "to_pack"
+     },
+     "children": [
+      {
+       "t": "row",
+       "id": "p-1",
+       "title": "CS-1041",
+       "subtitle": "2 phulkari dupattas",
+       "key": "1041"
+      },
+      {
+       "t": "row",
+       "id": "p-2",
+       "title": "CS-1042",
+       "subtitle": "1 brass lota",
+       "key": "1042"
+      },
+      {
+       "t": "row",
+       "id": "p-3",
+       "title": "CS-1043",
+       "subtitle": "3 juttis"
+      }
+     ]
+    },
+    {
+     "t": "list",
+     "id": "packed",
+     "reorder": {
+      "href": "/packing/move",
+      "group": "packing",
+      "fields": [
+       {
+        "name": "_csrf",
+        "value": "tk-91c2"
+       }
+      ],
+      "limit": 2
+     },
+     "children": [
+      {
+       "t": "row",
+       "id": "p-7",
+       "title": "CS-1037",
+       "subtitle": "1 khes"
+      }
+     ]
+    },
+    {
+     "t": "list",
+     "id": "courier",
+     "children": [
+      {
+       "t": "row",
+       "id": "p-9",
+       "title": "CS-1030",
+       "subtitle": "Handed over"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

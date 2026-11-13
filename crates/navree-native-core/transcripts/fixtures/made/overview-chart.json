@@ -1,0 +1,25 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Overview",
+  "nav": "/",
+  "body": {
+   "t": "stack",
+   "gap": 4,
+   "children": [
+    {
+     "t": "region",
+     "id": "sales",
+     "src": "/fragments/sales",
+     "lazy": true
+    },
+    {
+     "t": "text",
+     "value": "Sales this week"
+    }
+   ]
+  }
+ }
+}

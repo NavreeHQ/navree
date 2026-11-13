@@ -1,0 +1,33 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "morph",
+   "target": "row-tools",
+   "node": {
+    "t": "stack",
+    "id": "row-tools",
+    "children": [
+     {
+      "t": "menu",
+      "id": "row-menu",
+      "label": "More",
+      "items": [
+       {
+        "t": "button",
+        "label": "Archive",
+        "action": {
+         "t": "request",
+         "method": "post",
+         "href": "/orders/1/archive"
+        }
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,21 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "merge",
+   "target": "inbox",
+   "since": "0000416",
+   "at": "start",
+   "nodes": [
+    {
+     "t": "row",
+     "id": "c-96",
+     "title": "Jasleen Kaur",
+     "subtitle": "Please cancel CS-20490."
+    }
+   ]
+  }
+ ]
+}

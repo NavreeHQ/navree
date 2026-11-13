@@ -1,0 +1,25 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "",
+  "body": {
+   "t": "field",
+   "name": "",
+   "input": {
+    "t": "choice",
+    "options": [
+     {
+      "value": "c-4",
+      "label": "Kalsi Couriers, Jalandhar"
+     },
+     {
+      "value": "c-8",
+      "label": "Kang Express, Patiala"
+     }
+    ]
+   }
+  }
+ }
+}

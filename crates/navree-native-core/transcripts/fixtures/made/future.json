@@ -1,0 +1,42 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "later": "a field this build has never seen",
+ "screen": {
+  "title": "Stock",
+  "glow": 3,
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "orbit",
+     "value": 0.7,
+     "label": "Shelf 4",
+     "alt": {
+      "t": "progress",
+      "value": 700,
+      "label": "Shelf 4"
+     }
+    },
+    {
+     "t": "badge",
+     "text": "Low",
+     "tone": "warning",
+     "sparkle": true
+    },
+    {
+     "t": "native",
+     "name": "shelf-map",
+     "props": {
+      "shelf": 4
+     },
+     "alt": {
+      "t": "text",
+      "value": "Shelf 4, aisle 2"
+     }
+    }
+   ]
+  }
+ }
+}

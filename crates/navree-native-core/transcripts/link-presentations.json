@@ -1,0 +1,310 @@
+{
+  "about": "A link says how its screen is presented: pushed, in place of this one, as the first screen of the destination, in a sheet, over everything, or outside the app.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-routes.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "No presentation said, and the route for /orders/* names none: pushed.",
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/orders/1"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[2,3]}
+      ]
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "`replace`: the screen stays, keeps showing what it has, and takes the other address's answer in its place.",
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"/orders/2","present":"replace"}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/orders/2","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[2,3]},
+        {"at":"/screens/3/url","is":"/orders/2"},
+        {"at":"/screens/3/loading","is":true},
+        {"at":"/screens/3/content/t","is":"native"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/loading","is":false}
+      ]
+    },
+    {
+      "note": "`sheet`: a sheet over the destination, with a stack of its own.",
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"/orders/drafts","present":"sheet"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/orders/drafts","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/modals","is":[{"locked":false,"present":"sheet","stack":[4]}]},
+        {"at":"/front","is":4}
+      ]
+    },
+    {
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/order-new.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "`full`: a cover over everything, the sheet included.",
+      "send": {"t":"act","screen":4,"action":{"t":"navigate","href":"/orders/1/history","present":"full"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":5}
+        ],
+        "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/orders/1/history","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/modals/1","is":{"locked":false,"present":"full","stack":[5]}},
+        {"at":"/front","is":5}
+      ]
+    },
+    {
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order-steps.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":5}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/5/content/screen/title","is":"History"}
+      ]
+    },
+    {
+      "note": "The person takes the cover away.",
+      "send": {"t":"dismissed","screen":5},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/front","is":4}
+      ]
+    },
+    {
+      "note": "Back takes the sheet away.",
+      "send": {"t":"back"},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/modals","is":[]},
+        {"at":"/front","is":3}
+      ]
+    },
+    {
+      "note": "`root`: the first screen of the destination, with nothing under it.",
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"/orders/archive","present":"root"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":6}
+        ],
+        "effects": [
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/orders/archive","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[6]},
+        {"at":"/screens/2","is":null},
+        {"at":"/screens/3","is":null}
+      ]
+    },
+    {
+      "note": "Another site opens in the system's browser. Nothing changes in the app.",
+      "send": {"t":"act","screen":6,"action":{"t":"navigate","href":"https://pay.example/invoice/7"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"open_url","url":"https://pay.example/invoice/7"}
+        ]
+      }
+    },
+    {
+      "note": "`external`: an address of the app's own that is not part of the app.",
+      "send": {"t":"act","screen":6,"action":{"t":"navigate","href":"/print/7","present":"external"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"open_url","url":"https://shop.example/print/7"}
+        ]
+      }
+    },
+    {
+      "note": "The system has an app for this.",
+      "send": {"t":"act","screen":6,"action":{"t":"navigate","href":"mailto:help@charkha.example"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"open_url","url":"mailto:help@charkha.example"}
+        ]
+      }
+    },
+    {
+      "note": "An address that is not one a client opens does nothing.",
+      "send": {"t":"act","screen":6,"action":{"t":"navigate","href":"javascript:alert(1)"}},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "A link to a top-level destination selects it instead of stacking a copy of it.",
+      "send": {"t":"act","screen":6,"action":{"t":"navigate","href":"/inventory"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":7}
+        ],
+        "effects": [
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/inventory","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/selected","is":2},
+        {"at":"/destinations/2/stack","is":[7]},
+        {"at":"/destinations/1/stack","is":[6]}
+      ]
+    },
+    {
+      "note": "A link of the app's own whose page turns out to be elsewhere.",
+      "send": {"t":"act","screen":7,"action":{"t":"navigate","href":"/pay/7"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":8}
+        ],
+        "effects": [
+          {"t":"fetch","request":10,"method":"get","url":"https://shop.example/pay/7","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The server redirects to another site. The core does not ask it for anything: it opens outside, and the screen that was made for it goes.",
+      "send": {"t":"response","request":10,"status":302,"location":"https://pay.example/checkout/7"},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": [
+          {"t":"open_url","url":"https://pay.example/checkout/7"}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/2/stack","is":[7]},
+        {"at":"/screens/8","is":null}
+      ]
+    }
+  ]
+}

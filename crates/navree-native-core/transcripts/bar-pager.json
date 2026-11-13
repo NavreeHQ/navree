@@ -1,0 +1,191 @@
+{
+  "about": "A screen written for native clients carries its day pager in its bar, not among its parts. The core knows it as it knows a pager among the parts: a step to another day takes the day's place on the screen, a day is picked under the name the pager gives, and a day outside its first and last is not asked for. Ops reach it too: the scores it holds are found by their id, a pager that arrives for its id takes its place, and a remove takes it away.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives, and the first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-health.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "Today, written for native clients: the pager is the screen's own, with the day's scores in it.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "../../../navree-native/corpus/screen-designed-health.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/pager/day","is":"Today"},
+        {"at":"/screens/1/content/screen/pager/scores/id","is":"day-scores"},
+        {"at":"/screens/1/content/screen/body/id","is":"today"}
+      ]
+    },
+    {
+      "note": "The person steps to the day before from the bar. The screen keeps its place in its stack and asks for that day.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/?date=2026-11-12"}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/?date=2026-11-12","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/screens/1/url","is":"/?date=2026-11-12"},
+        {"at":"/screens/1/loading","is":true}
+      ]
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/designed-day-before.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/title","is":"Thursday"},
+        {"at":"/screens/1/content/screen/pager/day","is":"Thursday, 12 November"},
+        {"at":"/screens/1/content/screen/pager/scores/rings/0/shown","is":"35"}
+      ]
+    },
+    {
+      "note": "A day picked in the system's date control: the pager's pick address with the day as the action's text. It is asked for under the name the pager gives.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/"},"text":"2026-11-01"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/?date=2026-11-01","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/screens/1/url","is":"/?date=2026-11-01"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/designed-day-before.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A day before the pager's first is not asked for.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/"},"text":"2025-12-31"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/url","is":"/?date=2026-11-01"},
+        {"at":"/screens/1/loading","is":false}
+      ]
+    },
+    {
+      "note": "The screen asks for newer readings.",
+      "send": {"t":"act","screen":1,"action":{"t":"request","method":"post","href":"/readings/sync"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/readings/sync","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The answer changes the scores in the bar, found by their own id.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/designed-day-scores.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/pager/scores/rings/0/shown","is":"41"},
+        {"at":"/screens/1/content/screen/pager/day","is":"Thursday, 12 November"}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"request","method":"post","href":"/readings/sync"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/readings/sync","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "A pager that arrives for the pager's id takes its place in the bar.",
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/designed-day-pager.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/pager/day","is":"Thu 12 Nov"},
+        {"at":"/screens/1/content/screen/pager/next","is":null},
+        {"at":"/screens/1/content/screen/pager/scores/rings/0/shown","is":"44"},
+        {"at":"/screens/1/content/screen/body/id","is":"today"}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"request","method":"post","href":"/readings/sync"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":7,"method":"post","url":"https://shop.example/readings/sync","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "A remove takes the pager away, with what it held: the op after it, for the scores, finds nothing and is passed over.",
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/designed-day-gone.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/pager","is":null},
+        {"at":"/screens/1/content/screen/body/id","is":"today"}
+      ]
+    }
+  ]
+}

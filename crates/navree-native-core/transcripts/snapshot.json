@@ -1,0 +1,268 @@
+{
+  "about": "The system ends the app to make room, and the app starts again where the person was. The snapshot a client stores holds the stacks, each screen's address and title, what the person had typed and not sent, and which sheets were open: no tree, no token, and nothing typed into a password field. Starting from it fetches the shell first; each screen is fetched when it comes to the front, and what was typed goes back in when its page arrives.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/orders/1/note"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1/note","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/note.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"field","screen":3,"form":"note","field":"note-text","value":{"t":"text","text":"Wrap the dupattas separately"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"note"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A PIN, in a password field.",
+      "send": {"t":"field","screen":3,"form":"note","field":"note-pin","value":{"t":"text","text":"4321"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":3,"form":"note"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A sheet of the page is opened.",
+      "send": {"t":"act","screen":3,"action":{"t":"commands","list":[{"c":"open","id":"gift"}]}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A notification opens a sheet over all of it.",
+      "send": {"t":"notification","href":"/orders/new"},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/orders/new","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/order-new.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"field","screen":4,"form":"order-new","field":"order-new.customer","value":{"t":"text","text":"Jasleen Kaur"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":4,"form":"order-new"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The app goes to the background, and the client asks for the snapshot and stores it. The note and the customer's name are in it. The PIN is not, nor any token, nor any tree.",
+      "send": {"t":"background"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      },
+      "snapshot": {"destinations":[{"href":"/","stack":[{"title":"Dashboard","url":"/"}]},{"href":"/orders","stack":[{"title":"Orders","url":"/orders"},{"fields":{"note-text":{"t":"text","text":"Wrap the dupattas separately"}},"open":["gift"],"title":"Order CS-20481","url":"/orders/1/note"}]}],"modals":[{"present":"sheet","stack":[{"fields":{"order-new.customer":{"t":"text","text":"Jasleen Kaur"}},"title":"New order","url":"/orders/new"}]}],"origin":"https://shop.example","person":"3cf923612bb089c4437bcb4de035c0d8d14445dbf4a046908f3bf61885b9272d","selected":"/orders","version":1}
+    },
+    {
+      "note": "The system ended the app. It starts again from the snapshot: the shell is asked for first.",
+      "restart": true,
+      "last": true,
+      "send": {"t":"restore","snapshot":{"destinations":[{"href":"/","stack":[{"title":"Dashboard","url":"/"}]},{"href":"/orders","stack":[{"title":"Orders","url":"/orders"},{"fields":{"note-text":{"t":"text","text":"Wrap the dupattas separately"}},"open":["gift"],"title":"Order CS-20481","url":"/orders/1/note"}]}],"modals":[{"present":"sheet","stack":[{"fields":{"order-new.customer":{"t":"text","text":"Jasleen Kaur"}},"title":"New order","url":"/orders/new"}]}],"origin":"https://shop.example","person":"3cf923612bb089c4437bcb4de035c0d8d14445dbf4a046908f3bf61885b9272d","selected":"/orders","version":1}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell names the same person: the stacks are put back, each screen with its address and its title and nothing to show yet. The one in front is fetched.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1},
+          {"t":"screen","id":2},
+          {"t":"screen","id":3},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/orders/new","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/selected","is":1},
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/destinations/1/stack","is":[2,3]},
+        {"at":"/modals","is":[{"locked":false,"present":"sheet","stack":[4]}]},
+        {"at":"/screens/3/title","is":"Order CS-20481"},
+        {"at":"/screens/3/content/t","is":"blank"},
+        {"at":"/screens/3/loading","is":false},
+        {"at":"/screens/4/loading","is":true}
+      ]
+    },
+    {
+      "note": "Its page arrives, and what was typed is back in it.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/order-new.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/4/forms/order-new/fields/order-new.customer/value/text","is":"Jasleen Kaur"}
+      ]
+    },
+    {
+      "note": "The sheet is put away. The screen under it comes to the front, and is fetched now.",
+      "send": {"t":"dismissed","screen":4},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders/1/note","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The note is back, the page's sheet is open again, and the PIN is empty.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/note.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/forms/note/fields/note-text/value/text","is":"Wrap the dupattas separately"},
+        {"at":"/screens/3/forms/note/fields/note-pin/value/text","is":""},
+        {"at":"/screens/3/overlays","is":["gift"]}
+      ]
+    },
+    {
+      "note": "Back closes the sheet.",
+      "send": {"t":"back"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "And back again leads to the orders, which are fetched as they come to the front.",
+      "send": {"t":"back"},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/front","is":2},
+        {"at":"/screens/2/loading","is":true}
+      ]
+    }
+  ]
+}

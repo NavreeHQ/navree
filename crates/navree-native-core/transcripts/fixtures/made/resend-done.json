@@ -1,0 +1,12 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "toast",
+   "tone": "success",
+   "text": "The confirmation is on its way to tanvi.sharma36760@example.com"
+  }
+ ]
+}

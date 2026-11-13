@@ -1,0 +1,98 @@
+{
+  "about": "Size and shape. A tree too deep to read is not read: the page is the web view's. An op that would nest a screen past what the store holds is skipped. Nothing that walks a tree can run out of stack.",
+  "steps": [
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "A page nested 500 deep.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/deep.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"report","what":"depth","detail":"client:depth"}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/t","is":"web"},
+        {"at":"/screens/1/content/why","is":["client:depth"]}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/deep/50"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/deep/50","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "A page nested 50 deep is a page like any other.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/deep-50.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/2/content/t","is":"native"}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"request","method":"post","href":"/deep/50"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":4,"method":"post","url":"https://shop.example/deep/50","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "An op would put another 50 levels at the bottom of it. It is skipped and reported; the op after it applies.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/deep-ops.json",
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"report","what":"depth","detail":"an op on `leaf` would nest the screen past 64 nodes"},
+          {"t":"message","id":1,"tone":"neutral","text":"Still standing"}
+        ]
+      },
+      "check": [
+        {"at":"/messages/0/text","is":"Still standing"},
+        {"at":"/screens/2/content/t","is":"native"}
+      ]
+    }
+  ]
+}

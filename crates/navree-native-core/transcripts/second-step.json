@@ -1,0 +1,163 @@
+{
+  "about": "A sign-in the app carried out itself that needs a second step. The step is finished on a page of the app, opened here with the app's own cookies and never in the system's sign-in session. Nobody is signed in until the shell says so.",
+  "config": {"app_id":"com.charkha.supply","client":{"caps":["platform_sign_in","auth_session"],"form":"phone","platform":"ios","text_percent":100,"vocab":0},"sign_in":{"native":["apple"]}},
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app-nobody.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/ways-in-2.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"device","call":{"f":"platform_sign_in","provider":"apple","nonce":"/api/auth/social/apple/native/nonce","sign_in":"/api/auth/social/apple/native/session","second_step":"/sign-in/two-factor"}}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":3,"method":"post","url":"https://shop.example/api/auth/social/apple/native/nonce","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":""},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/json"},
+      "body": "made/nonce.json",
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"device","call":1,"device":{"f":"platform_sign_in","nonce":"/api/auth/social/apple/native/nonce","provider":"apple","second_step":"/sign-in/two-factor","sign_in":"/api/auth/social/apple/native/session"},"posts":true,"options":{"nonce":"n-7f2c91"}}
+        ]
+      }
+    },
+    {
+      "send": {"t":"device_result","call":1,"ok":true,"fields":[{"name":"id_token","value":"eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIwMDEifQ.c2ln"}]},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":4,"method":"post","url":"https://shop.example/api/auth/social/apple/native/session","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"id_token\":\"eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIwMDEifQ.c2ln\",\"state\":\"nvs1.c2VhbGVk\"}"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The sign-in route says a second step is still to come. Its page is presented over what is there, as a task, with where to go afterwards. Nobody is signed in.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/json"},
+      "body": "made/second-step.json",
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/sign-in/two-factor?next=%2F","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/modals","is":[{"locked":false,"present":"task","stack":[2]}]},
+        {"at":"/screens/2/url","is":"/sign-in/two-factor?next=%2F"},
+        {"at":"/app/user","is":null}
+      ]
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/two-factor.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"field","screen":2,"form":"two-factor","field":"code","value":{"t":"text","text":"424242"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":2,"form":"two-factor"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"submit"},"form":"two-factor"},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":2,"form":"two-factor"}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/sign-in/two-factor","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"_csrf=tk-91c2&next=%2F&code=424242"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "The page leads on to where it was told. The step is done.",
+      "send": {"t":"response","request":6,"status":303,"location":"/"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":60000}
+        ]
+      }
+    },
+    {
+      "note": "The page it led to is the one underneath: it is shown there, the step's page goes, and the shell is asked who is signed in.",
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/modals","is":[]},
+        {"at":"/front","is":1},
+        {"at":"/app/user","is":null}
+      ]
+    },
+    {
+      "note": "The shell says who.",
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/app/user/name","is":"Ravneet Kaur"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,119 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Board",
+  "id": "board",
+  "nav": "/orders",
+  "body": {
+   "t": "stack",
+   "id": "board",
+   "children": [
+    {
+     "t": "text",
+     "value": "3 open",
+     "id": "headline"
+    },
+    {
+     "t": "list",
+     "id": "feed",
+     "children": [
+      {
+       "t": "row",
+       "id": "e1",
+       "title": "CS-220480 was placed"
+      },
+      {
+       "t": "row",
+       "id": "e2",
+       "title": "CS-220479 was packed"
+      }
+     ]
+    },
+    {
+     "t": "region",
+     "id": "totals",
+     "src": "/fragments/totals",
+     "children": [
+      {
+       "t": "text",
+       "value": "₹32,82,553 today"
+      }
+     ]
+    },
+    {
+     "t": "disclosure",
+     "id": "more",
+     "label": "More",
+     "children": [
+      {
+       "t": "text",
+       "value": "Nothing else yet."
+      }
+     ]
+    },
+    {
+     "t": "dialog",
+     "id": "confirm",
+     "title": "Archive the board?",
+     "alert": true,
+     "actions": [
+      {
+       "t": "button",
+       "label": "Keep it",
+       "role": "cancel",
+       "action": {
+        "t": "dismiss"
+       }
+      },
+      {
+       "t": "button",
+       "label": "Archive",
+       "role": "destructive",
+       "action": {
+        "t": "request",
+        "method": "post",
+        "href": "/board/archive"
+       }
+      }
+     ]
+    },
+    {
+     "t": "form",
+     "id": "rename",
+     "method": "post",
+     "action": "/board/rename",
+     "children": [
+      {
+       "t": "field",
+       "name": "name",
+       "label": "Name",
+       "input": {
+        "t": "text",
+        "value": "Diwali orders"
+       },
+       "id": "rename-name"
+      },
+      {
+       "t": "button",
+       "label": "Rename",
+       "action": {
+        "t": "submit"
+       }
+      }
+     ]
+    },
+    {
+     "t": "button",
+     "label": "Run",
+     "action": {
+      "t": "request",
+      "method": "post",
+      "href": "/board/run"
+     }
+    }
+   ]
+  }
+ }
+}

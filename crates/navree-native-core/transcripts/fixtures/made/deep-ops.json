@@ -1,0 +1,270 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "morph",
+   "target": "leaf",
+   "node": {
+    "t": "stack",
+    "children": [
+     {
+      "t": "stack",
+      "children": [
+       {
+        "t": "stack",
+        "children": [
+         {
+          "t": "stack",
+          "children": [
+           {
+            "t": "stack",
+            "children": [
+             {
+              "t": "stack",
+              "children": [
+               {
+                "t": "stack",
+                "children": [
+                 {
+                  "t": "stack",
+                  "children": [
+                   {
+                    "t": "stack",
+                    "children": [
+                     {
+                      "t": "stack",
+                      "children": [
+                       {
+                        "t": "stack",
+                        "children": [
+                         {
+                          "t": "stack",
+                          "children": [
+                           {
+                            "t": "stack",
+                            "children": [
+                             {
+                              "t": "stack",
+                              "children": [
+                               {
+                                "t": "stack",
+                                "children": [
+                                 {
+                                  "t": "stack",
+                                  "children": [
+                                   {
+                                    "t": "stack",
+                                    "children": [
+                                     {
+                                      "t": "stack",
+                                      "children": [
+                                       {
+                                        "t": "stack",
+                                        "children": [
+                                         {
+                                          "t": "stack",
+                                          "children": [
+                                           {
+                                            "t": "stack",
+                                            "children": [
+                                             {
+                                              "t": "stack",
+                                              "children": [
+                                               {
+                                                "t": "stack",
+                                                "children": [
+                                                 {
+                                                  "t": "stack",
+                                                  "children": [
+                                                   {
+                                                    "t": "stack",
+                                                    "children": [
+                                                     {
+                                                      "t": "stack",
+                                                      "children": [
+                                                       {
+                                                        "t": "stack",
+                                                        "children": [
+                                                         {
+                                                          "t": "stack",
+                                                          "children": [
+                                                           {
+                                                            "t": "stack",
+                                                            "children": [
+                                                             {
+                                                              "t": "stack",
+                                                              "children": [
+                                                               {
+                                                                "t": "stack",
+                                                                "children": [
+                                                                 {
+                                                                  "t": "stack",
+                                                                  "children": [
+                                                                   {
+                                                                    "t": "stack",
+                                                                    "children": [
+                                                                     {
+                                                                      "t": "stack",
+                                                                      "children": [
+                                                                       {
+                                                                        "t": "stack",
+                                                                        "children": [
+                                                                         {
+                                                                          "t": "stack",
+                                                                          "children": [
+                                                                           {
+                                                                            "t": "stack",
+                                                                            "children": [
+                                                                             {
+                                                                              "t": "stack",
+                                                                              "children": [
+                                                                               {
+                                                                                "t": "stack",
+                                                                                "children": [
+                                                                                 {
+                                                                                  "t": "stack",
+                                                                                  "children": [
+                                                                                   {
+                                                                                    "t": "stack",
+                                                                                    "children": [
+                                                                                     {
+                                                                                      "t": "stack",
+                                                                                      "children": [
+                                                                                       {
+                                                                                        "t": "stack",
+                                                                                        "children": [
+                                                                                         {
+                                                                                          "t": "stack",
+                                                                                          "children": [
+                                                                                           {
+                                                                                            "t": "stack",
+                                                                                            "children": [
+                                                                                             {
+                                                                                              "t": "stack",
+                                                                                              "children": [
+                                                                                               {
+                                                                                                "t": "stack",
+                                                                                                "children": [
+                                                                                                 {
+                                                                                                  "t": "stack",
+                                                                                                  "children": [
+                                                                                                   {
+                                                                                                    "t": "stack",
+                                                                                                    "children": [
+                                                                                                     {
+                                                                                                      "t": "stack",
+                                                                                                      "children": [
+                                                                                                       {
+                                                                                                        "t": "text",
+                                                                                                        "value": "deeper",
+                                                                                                        "id": "leaf"
+                                                                                                       }
+                                                                                                      ]
+                                                                                                     }
+                                                                                                    ]
+                                                                                                   }
+                                                                                                  ]
+                                                                                                 }
+                                                                                                ]
+                                                                                               }
+                                                                                              ]
+                                                                                             }
+                                                                                            ]
+                                                                                           }
+                                                                                          ]
+                                                                                         }
+                                                                                        ]
+                                                                                       }
+                                                                                      ]
+                                                                                     }
+                                                                                    ]
+                                                                                   }
+                                                                                  ]
+                                                                                 }
+                                                                                ]
+                                                                               }
+                                                                              ]
+                                                                             }
+                                                                            ]
+                                                                           }
+                                                                          ]
+                                                                         }
+                                                                        ]
+                                                                       }
+                                                                      ]
+                                                                     }
+                                                                    ]
+                                                                   }
+                                                                  ]
+                                                                 }
+                                                                ]
+                                                               }
+                                                              ]
+                                                             }
+                                                            ]
+                                                           }
+                                                          ]
+                                                         }
+                                                        ]
+                                                       }
+                                                      ]
+                                                     }
+                                                    ]
+                                                   }
+                                                  ]
+                                                 }
+                                                ]
+                                               }
+                                              ]
+                                             }
+                                            ]
+                                           }
+                                          ]
+                                         }
+                                        ]
+                                       }
+                                      ]
+                                     }
+                                    ]
+                                   }
+                                  ]
+                                 }
+                                ]
+                               }
+                              ]
+                             }
+                            ]
+                           }
+                          ]
+                         }
+                        ]
+                       }
+                      ]
+                     }
+                    ]
+                   }
+                  ]
+                 }
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "op": "toast",
+   "text": "Still standing"
+  }
+ ]
+}

@@ -1,0 +1,25 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Charkha Supply Co.",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "text",
+     "value": "Sign in to see your orders."
+    },
+    {
+     "t": "link",
+     "label": "Sign in",
+     "action": {
+      "t": "navigate",
+      "href": "/sign-in"
+     }
+    }
+   ]
+  }
+ }
+}

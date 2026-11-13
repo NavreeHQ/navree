@@ -1,0 +1,45 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Contact",
+  "body": {
+   "t": "form",
+   "id": "contact",
+   "method": "post",
+   "action": "/account/contact",
+   "hidden": [
+    {
+     "name": "_csrf",
+     "value": "tk-91c2"
+    }
+   ],
+   "children": [
+    {
+     "t": "field",
+     "name": "phone",
+     "label": "Phone",
+     "input": {
+      "t": "text",
+      "kind": "phone",
+      "value": "98140 12345",
+      "country": {
+       "name": "phone_country",
+       "value": "IN"
+      }
+     },
+     "id": "phone"
+    },
+    {
+     "t": "button",
+     "label": "Save",
+     "action": {
+      "t": "submit"
+     },
+     "role": "primary"
+    }
+   ]
+  }
+ }
+}

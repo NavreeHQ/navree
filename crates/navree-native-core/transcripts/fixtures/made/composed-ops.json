@@ -1,0 +1,113 @@
+{
+ "navree": 1,
+ "build": "3f9a1c07b2de",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "append",
+   "target": "offer",
+   "nodes": [
+    {
+     "t": "text",
+     "id": "offer-note",
+     "value": "Ends on Sunday",
+     "style": "caption",
+     "muted": true
+    }
+   ]
+  },
+  {
+   "op": "prepend",
+   "target": "picks",
+   "nodes": [
+    {
+     "t": "card",
+     "id": "pick-0",
+     "children": [
+      {
+       "t": "text",
+       "id": "pick-0-name",
+       "value": "Phulkari dupatta",
+       "style": "headline"
+      },
+      {
+       "t": "text",
+       "id": "pick-0-price",
+       "value": "₹3,100",
+       "style": "caption",
+       "muted": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "op": "append",
+   "target": "picks",
+   "nodes": [
+    {
+     "t": "card",
+     "id": "pick-3",
+     "children": [
+      {
+       "t": "text",
+       "id": "pick-3-name",
+       "value": "Jutti",
+       "style": "headline"
+      },
+      {
+       "t": "text",
+       "id": "pick-3-price",
+       "value": "₹1,800",
+       "style": "caption",
+       "muted": true
+      }
+     ]
+    },
+    {
+     "t": "card",
+     "id": "pick-1",
+     "children": [
+      {
+       "t": "text",
+       "id": "pick-1-name",
+       "value": "Brass lota",
+       "style": "headline"
+      },
+      {
+       "t": "text",
+       "id": "pick-1-price",
+       "value": "₹1,250",
+       "style": "caption",
+       "muted": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "op": "append",
+   "target": "badge",
+   "nodes": [
+    {
+     "t": "text",
+     "id": "badge-count",
+     "value": "3",
+     "style": "caption",
+     "weight": "bold"
+    }
+   ]
+  },
+  {
+   "op": "append",
+   "target": "dot",
+   "nodes": [
+    {
+     "t": "text",
+     "id": "dot-words",
+     "value": "never drawn"
+    }
+   ]
+  }
+ ]
+}

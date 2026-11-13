@@ -1,0 +1,67 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "row",
+   "target": "1042",
+   "row": {
+    "id": "1042",
+    "cells": [
+     {
+      "t": "text",
+      "value": "CS-1042"
+     },
+     {
+      "t": "text",
+      "value": "Amandeep Singh, Jalandhar"
+     },
+     {
+      "t": "text",
+      "value": "Packed"
+     }
+    ],
+    "detail": [
+     {
+      "t": "text",
+      "value": "Packed at 14:05 IST by Ravneet Kaur."
+     }
+    ]
+   }
+  },
+  {
+   "op": "remove",
+   "target": "1041"
+  },
+  {
+   "op": "rows",
+   "target": "dispatch",
+   "at": "start",
+   "rows": [
+    {
+     "id": "1046",
+     "cells": [
+      {
+       "t": "text",
+       "value": "CS-1046"
+      },
+      {
+       "t": "text",
+       "value": "Sukhmani Brar, Amritsar"
+      },
+      {
+       "t": "text",
+       "value": "Paid"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "op": "toast",
+   "tone": "success",
+   "text": "CS-1042 is packed. CS-1041 had already left."
+  }
+ ]
+}
