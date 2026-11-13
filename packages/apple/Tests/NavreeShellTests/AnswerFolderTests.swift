@@ -87,3 +87,40 @@ struct AnswerFolderTests {
         #expect(done())
     }
 }
+
+/// Every screen of the public corpus, served as a destination's first page,
+/// reads through the core with nothing refused: drawn natively, or the web
+/// view's when it holds what this client does not draw yet.
+@MainActor
+@Test(arguments: [
+    "screen-board.json", "screen-dashboard.json", "screen-designed-health.json", "screen-designed-store.json",
+    "screen-detail.json", "screen-device.json", "screen-fitness.json", "screen-form.json", "screen-inbox.json",
+    "screen-kinds.json", "screen-list.json", "screen-sleep.json", "screen-today.json", "screen-with-toast.json",
+])
+func aScreenOfTheCorpusReadsThroughTheCore(_ file: String) async throws {
+    let corpus = Fixtures.repository.appendingPathComponent("crates/navree-native/corpus")
+    let shell = try Shell(answers: [:])
+    shell.transport.answers = [:]
+    let folder = try AnswerFolderTests.folder(
+        [("shell.json", try String(contentsOf: corpus.appendingPathComponent("shell.json"), encoding: .utf8)),
+         (file, try String(contentsOf: corpus.appendingPathComponent(file), encoding: .utf8))],
+        manifest: "file\tstatus\turl\nshell.json\t200\t/_navree/native/shell\n\(file)\t200\t/\n"
+    )
+    let answers = try #require(AnswerFolder(folder: folder))
+    let configuration = ShellConfiguration(origin: "https://answers.example", appVersion: "1.0", keepsSession: false)
+    let core = try #require(Core(config: CoreConfiguration.json(configuration, device: DeviceTraits())))
+    let client = NativeClient(core: core, effects: SystemEffects(
+        transport: answers, cache: KeptFiles(folder: folder.appendingPathComponent("cache")),
+        snapshots: KeptFiles(folder: folder.appendingPathComponent("snapshot"))
+    ))
+    var problems: [String] = []
+    client.problem = { problems.append($0) }
+    client.begin()
+    try await AnswerFolderTests.until { client.screen(1).map { !$0.loading } ?? false }
+    #expect(problems.isEmpty, "\(file): \(problems)")
+    switch client.screen(1)?.content {
+    case .native?, .web?: break
+    default: Issue.record("\(file) is \(String(describing: client.screen(1)?.content)), failure \(String(describing: client.screen(1)?.failure))")
+    }
+    _ = shell
+}
