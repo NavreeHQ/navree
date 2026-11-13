@@ -344,3 +344,20 @@ extension RecordRules {
         return found
     }
 }
+
+/// How a date or a time stands in a form.
+public enum DateStyle: Sendable, Equatable {
+    /// The system's compact picker: the value as a button that opens the
+    /// calendar or the clock (a field with a calendar on a Mac), as Calendar
+    /// and Reminders set a date in a form.
+    case compact
+}
+
+extension ContentRules {
+    /// A date in a form row is the compact picker on every system. The
+    /// wheels are the system's own for a picker standing alone, never a
+    /// form's row; the calendar laid open is the day pager's.
+    public static func dateStyle(_ input: Navree.DateInput) -> DateStyle {
+        .compact
+    }
+}
