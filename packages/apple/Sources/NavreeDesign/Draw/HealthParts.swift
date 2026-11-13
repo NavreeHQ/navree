@@ -28,7 +28,8 @@ struct StatusCapsule: View {
 }
 
 /// Which way a value is going, with the system's arrow, in the colour of its
-/// news rather than of its direction.
+/// news rather than of its direction. Words too long for the line wrap beside
+/// the arrow, never under it.
 struct TrendLabel: View {
     let trend: Navree.Trend
 
@@ -37,38 +38,59 @@ struct TrendLabel: View {
             Image(systemName: TrendRules.symbol(trend.direction))
                 .fontWeight(.semibold)
                 .imageScale(.small)
-            if let text = trend.text { Text(text) }
+            if let text = trend.text {
+                Text(text)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .foregroundStyle(TrendRules.hue(trend).color)
     }
 }
 
 /// More about a part, on request: the system's info button opening the page's
-/// words (a popover in a wide room, a sheet in a narrow one).
+/// words (a popover in a wide room, a sheet in a narrow one). Inside a part
+/// tapped as a whole it is not drawn: nothing there takes a tap of its own.
+/// A part that is one element to VoiceOver offers the same words as one of
+/// its actions, through `open`.
 struct HintButton: View {
     let hint: Navree.Hint
-    @State private var open = false
+    var open: Binding<Bool>? = nil
+    @State private var shown = false
+    @Environment(\.navreeInControl) private var inControl
 
     var body: some View {
-        Button {
-            open = true
-        } label: {
-            Label("About \(hint.about)", systemImage: hint.mark == .question ? "questionmark.circle" : "info.circle")
-                .labelStyle(.iconOnly)
-        }
-        .buttonStyle(.borderless)
-        .popover(isPresented: $open) {
-            VStack(alignment: .leading, spacing: 8) {
-                if let title = hint.title {
-                    Text(title).font(.headline)
-                }
-                Text(hint.text).fixedSize(horizontal: false, vertical: true)
+        let isOpen = open ?? $shown
+        if !inControl {
+            Button {
+                isOpen.wrappedValue = true
+            } label: {
+                Label(HintRules.actionName(hint), systemImage: hint.mark == .question ? "questionmark.circle" : "info.circle")
+                    .labelStyle(.iconOnly)
             }
-            .padding(20)
-            .frame(idealWidth: 340, maxWidth: 420, alignment: .leading)
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
+            .buttonStyle(.borderless)
+            .popover(isPresented: isOpen) {
+                HintWords(hint: hint)
+            }
         }
+    }
+}
+
+/// The words of a hint, as its popover or sheet shows them.
+struct HintWords: View {
+    let hint: Navree.Hint
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let title = hint.title {
+                Text(title).font(.headline)
+            }
+            Text(hint.text).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(20)
+        .frame(idealWidth: 340, maxWidth: 420, alignment: .leading)
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 }
 
