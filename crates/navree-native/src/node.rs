@@ -13,7 +13,8 @@ use serde::{Deserialize, Serialize, Serializer};
 use crate::action::Action;
 pub use crate::charts::{
     Category, Centre, ClockMoment, Colour, DayClock, DayPager, DayPick, Hint, HintMark, Hour, Hue,
-    Meter, PagerWords, Ring, RingValue, Rings, RingsCentre, Segment, Zone,
+    Meter, MiniColumn, MiniColumns, PagerWords, Ring, RingValue, Rings, RingsCentre, Segment,
+    Zone,
 };
 use crate::input::Input;
 
@@ -127,6 +128,8 @@ pub enum Node {
     DayPager(DayPager),
     /// One bar split into segments that add up to the whole.
     Meter(Meter),
+    /// Small multiples: a column for each item, each split into the same parts.
+    Columns(MiniColumns),
     /// A kind this build has never heard of, from a newer server. A client
     /// draws its `alt`, or shows the page in its web view when it has none.
     Unknown(Unknown),
@@ -227,6 +230,7 @@ impl Node {
             Self::DayClock(node) => node.id.as_deref(),
             Self::DayPager(node) => node.id.as_deref(),
             Self::Meter(node) => node.id.as_deref(),
+            Self::Columns(node) => node.id.as_deref(),
             Self::Unknown(node) => node.id.as_deref(),
         }
     }
@@ -302,7 +306,8 @@ impl Node {
             | Self::Ring(_)
             | Self::Rings(_)
             | Self::DayClock(_)
-            | Self::Meter(_) => Vec::new(),
+            | Self::Meter(_)
+            | Self::Columns(_) => Vec::new(),
         }
     }
 
@@ -402,7 +407,8 @@ impl Node {
             | Self::Ring(_)
             | Self::Rings(_)
             | Self::DayClock(_)
-            | Self::Meter(_) => Vec::new(),
+            | Self::Meter(_)
+            | Self::Columns(_) => Vec::new(),
         }
     }
 

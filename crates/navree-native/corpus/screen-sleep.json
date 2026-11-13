@@ -123,6 +123,78 @@
             "text": "Stages are estimated from movement and heart rate while you sleep. They show a pattern in your nights, not a measurement of your brain.",
             "mark": "info"
           }
+        },
+        {
+          "t": "section",
+          "title": "Cycles",
+          "style": "card",
+          "children": [
+            {
+              "t": "columns",
+              "id": "sleep-cycles",
+              "title": "Sleep cycles",
+              "parts": [
+                {
+                  "name": "Deep",
+                  "colour": {
+                    "hue": "violet"
+                  }
+                },
+                {
+                  "name": "REM",
+                  "colour": {
+                    "hue": "cyan"
+                  }
+                },
+                {
+                  "name": "Core",
+                  "colour": {
+                    "hue": "blue"
+                  }
+                }
+              ],
+              "columns": [
+                {
+                  "label": "Cycle 1",
+                  "values": [
+                    36,
+                    18,
+                    40
+                  ],
+                  "shown": "1 h 34 min"
+                },
+                {
+                  "label": "Cycle 2",
+                  "values": [
+                    22,
+                    30,
+                    41
+                  ],
+                  "shown": "1 h 33 min"
+                },
+                {
+                  "label": "Cycle 3",
+                  "values": [
+                    14,
+                    36,
+                    38
+                  ],
+                  "shown": "1 h 28 min"
+                },
+                {
+                  "label": "Cycle 4",
+                  "values": [
+                    11,
+                    12,
+                    34
+                  ],
+                  "shown": "57 min"
+                }
+              ],
+              "highlight": 2,
+              "summary": "Sleep cycles: 4 cycles of Deep, REM and Core. The longest, Cycle 1, was 1 h 34 min."
+            }
+          ]
         }
       ]
     }

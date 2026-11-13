@@ -40,7 +40,8 @@ use serde_json::{Map, Value, json};
 use crate::action::{Action, Command, Pair, Present, State};
 use crate::charts::{
     Category, Centre, ClockMoment, Colour, DayClock, DayPager, DayPick, Hint, HintMark, Hour, Hue,
-    Meter, PagerWords, Ring, RingValue, Rings, RingsCentre, Segment, Zone,
+    Meter, MiniColumn, MiniColumns, PagerWords, Ring, RingValue, Rings, RingsCentre, Segment,
+    Zone,
 };
 use crate::client::{ClientDescriptor, Contrast, FormFactor, Platform, Scheme};
 use crate::device::{
@@ -607,7 +608,7 @@ union!(Node tag "t"
         Text, Rich, Image, Icon, Avatar, Badge, Progress, Banner, Empty, Facts, Table, Chart,
         Code, Button, Link, Menu, Form, Field, Sheet, Dialog, Popover, Native, Web, Toolbar,
         Gauge, Figure, Timeline, FeedRow, Message, Pane, Ring, Rings, DayClock,
-        DayPager, Meter,
+        DayPager, Meter, Columns,
     }
     structs {}
     units {}
@@ -728,6 +729,8 @@ object!(Hour {} { value, level, category });
 object!(ClockMoment { at, name } { icon, colour });
 object!(Segment { name } { value, shown, detail, colour });
 object!(Meter {} { id, title, segments, summary, hint });
+object!(MiniColumn { label } { values, shown });
+object!(MiniColumns {} { id, title, parts, columns, highlight, summary, hint });
 object!(DayPick { href, name } {});
 object!(PagerWords { previous, next, choose } {});
 object!(DayPager { day, date } {

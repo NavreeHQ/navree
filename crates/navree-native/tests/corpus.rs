@@ -28,8 +28,8 @@ use navree_native::node::{
     Delivery, Dialog,
     Direction, Disclosure, Divider, Empty, Fact, Facts, FeedRow,
     Field, Figure, Fit, Form, Gauge, Grid, Hidden, Hour, Icon, Image, Justify, Link, List, Live,
-    Menu, Message, Meter, Method, Moment, NativeView, Node, Pane, PaneRole, Popover, Progress,
-    Prominence,
+    Menu, Message, Meter, Method, MiniColumn, MiniColumns, Moment, NativeView, Node, Pane,
+    PaneRole, Popover, Progress, Prominence,
     PagerWords, Purpose, Question, Region, Reorder, Rich, Ring, RingValue, Rings, RingsCentre,
     Role, Row, RowState, Run, Section, SectionStyle, Segment,
     Selection, Series, Sheet, SheetSize, Sort, SortDir, Spacer, Split, Stack, Standard, Tab, Table,
@@ -2477,6 +2477,36 @@ fn screen_sleep() -> Envelope {
         summary: Some(s("Sleep stages, last night: Deep 1 h 23 min, REM 1 h 36 min, Core 4 h 13 min, Awake 21 min.")),
         ..Meter::default()
     });
+    // The cycles of the night, each split into the same three stages and drawn
+    // as a whole, so they compare what they were made of. The third, with the
+    // most REM, stands out.
+    let part = |name: &str, hue: Hue| Category {
+        name: s(name),
+        colour: Some(Colour::new(hue)),
+    };
+    let cycle = |label: &str, minutes: [i64; 3], total: &str| MiniColumn {
+        label: s(label),
+        values: minutes.iter().map(|value| Some(number(*value))).collect(),
+        shown: Some(s(total)),
+    };
+    let cycles = Node::Columns(MiniColumns {
+        id: Some(s("sleep-cycles")),
+        title: Some(s("Sleep cycles")),
+        parts: vec![
+            part("Deep", Hue::Violet),
+            part("REM", Hue::Cyan),
+            part("Core", Hue::Blue),
+        ],
+        columns: vec![
+            cycle("Cycle 1", [36, 18, 40], "1 h 34 min"),
+            cycle("Cycle 2", [22, 30, 41], "1 h 33 min"),
+            cycle("Cycle 3", [14, 36, 38], "1 h 28 min"),
+            cycle("Cycle 4", [11, 12, 34], "57 min"),
+        ],
+        highlight: Some(2),
+        summary: Some(s("Sleep cycles: 4 cycles of Deep, REM and Core. The longest, Cycle 1, was 1 h 34 min.")),
+        ..MiniColumns::default()
+    });
     let body = Node::Stack(Stack {
         gap: 4,
         children: vec![
@@ -2492,6 +2522,12 @@ fn screen_sleep() -> Envelope {
                     text: s("Stages are estimated from movement and heart rate while you sleep. They show a pattern in your nights, not a measurement of your brain."),
                     mark: HintMark::Info,
                 }),
+                ..Section::default()
+            }),
+            Node::Section(Section {
+                title: Some(s("Cycles")),
+                style: SectionStyle::Card,
+                children: vec![cycles],
                 ..Section::default()
             }),
         ],

@@ -584,6 +584,59 @@ pub struct Meter {
     pub hint: Option<Hint>,
 }
 
+/// One column of [`MiniColumns`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MiniColumn {
+    /// What it is: `Cycle 1`, `Mon`.
+    pub label: String,
+    /// What each part of the chart holds in this column, one for each part in
+    /// the order the parts were given. A part with no value, or none above
+    /// zero, has no height.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<Option<serde_json::Number>>,
+    /// The column's total in the page's words: `1 h 34 min`. A client writes
+    /// the sum of the parts when there are none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shown: Option<String>,
+}
+
+/// The most columns a client draws; the others are listed.
+pub const MAX_COLUMNS: usize = 48;
+
+/// Small multiples: one column for each item (a sleep cycle, a day), each split
+/// into the same parts and drawn as a whole, so the columns compare what they
+/// are made of and not how big they are. A client writes each column's label
+/// above it and its total below, and lists the parts, each with its colour.
+///
+/// One column may stand out: `highlight` is its place, from 0. A client draws
+/// the others quieter, as its system's charts draw a column that is chosen.
+///
+/// The chart is named by its `summary`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MiniColumns {
+    /// The node's id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What the columns show: `Sleep cycles`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// What every column is split into, with the colour of each part.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parts: Vec<Category>,
+    /// The columns, in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub columns: Vec<MiniColumn>,
+    /// The place of the column that stands out, from 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub highlight: Option<u32>,
+    /// One sentence that says the whole chart to a reader who can't see it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// A note about what the chart means, shown when asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<Hint>,
+}
+
 /// Where a day the person chooses is asked for.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DayPick {

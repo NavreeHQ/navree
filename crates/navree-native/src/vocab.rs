@@ -269,6 +269,7 @@ kinds! {
     DayClock(DayClock) => "day_clock" since 0,
     DayPager(DayPager) => "day_pager" since 0,
     Meter(Meter) => "meter" since 0,
+    Columns(MiniColumns) => "columns" since 0,
 }
 
 /// A field that arrived after its type did: the type's name in the schema
@@ -674,6 +675,41 @@ impl Node {
                         .collect(),
                 })
             }
+            Self::Columns(node) => Node::Facts(n::Facts {
+                id: node.id.clone(),
+                items: node
+                    .columns
+                    .iter()
+                    .map(|column| {
+                        let amounts = column.values.iter().map(|value| {
+                            value
+                                .as_ref()
+                                .and_then(serde_json::Number::as_f64)
+                                .filter(|value| *value > 0.0)
+                        });
+                        let sum: f64 = amounts.clone().flatten().sum();
+                        n::Fact {
+                            label: column.label.clone(),
+                            value: vec![Node::text(words(
+                                column.shown.as_deref(),
+                                Some(&quantity(sum)),
+                                None,
+                            ))],
+                            icon: None,
+                            tone: None,
+                            // Each part with its amount: `Deep 36`.
+                            details: node
+                                .parts
+                                .iter()
+                                .zip(amounts)
+                                .filter_map(|(part, amount)| {
+                                    amount.map(|amount| format!("{} {}", part.name, quantity(amount)))
+                                })
+                                .collect(),
+                        }
+                    })
+                    .collect(),
+            }),
             Self::Unknown(node) => return node.alt.as_deref().cloned(),
             _ => return None,
         })
@@ -731,9 +767,9 @@ mod tests {
     use super::*;
     use crate::node::{
         Avatar, Badge, Chart, ClockMoment, Colour, DayClock, DayPager, Direction, FeedRow, Figure,
-        Gauge, Hour, Hue, Icon, Message, Meter, Moment, PagerWords, Pane, PaneRole, Ring,
-        RingValue, Rings, RingsCentre, RowState, Run, Section, Segment, Stack, Standard, Timeline,
-        Tone, Toolbar, ToolbarItem, Trend, Unknown, Zone,
+        Category, Gauge, Hour, Hue, Icon, Message, Meter, MiniColumn, MiniColumns, Moment,
+        PagerWords, Pane, PaneRole, Ring, RingValue, Rings, RingsCentre, RowState, Run, Section,
+        Segment, Stack, Standard, Timeline, Tone, Toolbar, ToolbarItem, Trend, Unknown, Zone,
     };
 
     #[test]
@@ -874,6 +910,34 @@ mod tests {
                 colour: Some(Colour::new(Hue::Success)),
                 ..Ring::default()
             }),
+            Node::Columns(MiniColumns {
+                id: Some("cycles".to_owned()),
+                parts: vec![
+                    Category {
+                        name: "Deep".to_owned(),
+                        colour: Some(Colour::new(Hue::Violet)),
+                    },
+                    Category {
+                        name: "REM".to_owned(),
+                        colour: None,
+                    },
+                ],
+                columns: vec![
+                    MiniColumn {
+                        label: "Cycle 1".to_owned(),
+                        values: vec![Some(36.into()), Some(18.into())],
+                        shown: Some("54 min".to_owned()),
+                    },
+                    // A part with no amount is left out of the column and of its details.
+                    MiniColumn {
+                        label: "Cycle 2".to_owned(),
+                        values: vec![Some(22.into()), None],
+                        shown: None,
+                    },
+                ],
+                highlight: Some(1),
+                ..MiniColumns::default()
+            }),
             Node::Meter(Meter {
                 id: Some("stages".to_owned()),
                 segments: vec![
@@ -981,7 +1045,8 @@ mod tests {
             | Kind::Rings
             | Kind::DayClock
             | Kind::DayPager
-            | Kind::Meter => 1,
+            | Kind::Meter
+            | Kind::Columns => 1,
             kind => kind.since(),
         }
     }
@@ -1096,6 +1161,25 @@ mod tests {
         };
         assert_eq!(progress.label.as_deref(), Some("Load ratio: 1.12 (Overuse)"));
         assert_eq!(progress.value, Some(560));
+    }
+
+    #[test]
+    fn columns_become_a_list_of_facts_one_for_each_column_with_its_parts() {
+        let columns = part(Kind::Columns);
+        let Downgraded::Node(Node::Facts(facts)) = downgrade_by(columns, 0, only(Kind::Columns))
+        else {
+            panic!("columns become facts");
+        };
+        assert_eq!(facts.id.as_deref(), Some("cycles"));
+        let value = |at: usize| match &facts.items[at].value[..] {
+            [Node::Text(text)] => text.value.clone(),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!((facts.items[0].label.as_str(), value(0)), ("Cycle 1", "54 min".to_owned()));
+        assert_eq!(facts.items[0].details, ["Deep 36", "REM 18"]);
+        // With no total in words, the sum of the parts; an empty part has no detail.
+        assert_eq!((facts.items[1].label.as_str(), value(1)), ("Cycle 2", "22".to_owned()));
+        assert_eq!(facts.items[1].details, ["Deep 22"]);
     }
 
     #[test]
