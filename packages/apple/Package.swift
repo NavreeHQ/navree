@@ -14,7 +14,7 @@ let package = Package(
     products: [
         .library(
             name: "NavreeNative",
-            targets: ["NavreeProtocol", "NavreeDesign", "NavreeShell", "NavreeCoreBridge"]
+            targets: ["NavreeProtocol", "NavreeDesign", "NavreeShell", "NavreeCoreBridge", "NavreeRuntime"]
         ),
         // The protocol and the drawing alone, without the core: what the
         // picture tool in Shots/ draws screens with.
@@ -43,4 +43,8 @@ package.targets += [
         linkerSettings: [.linkedLibrary("iconv")]
     ),
     .testTarget(name: "NavreeCoreBridgeTests", dependencies: ["NavreeCoreBridge"]),
+    // The loop over the core: its events, effects and view state as Swift
+    // types, and the observed model the drawing reads.
+    .target(name: "NavreeRuntime", dependencies: ["NavreeProtocol", "NavreeCoreBridge"]),
+    .testTarget(name: "NavreeRuntimeTests", dependencies: ["NavreeRuntime", "NavreeProtocol", "NavreeCoreBridge"]),
 ]
