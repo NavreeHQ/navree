@@ -35,6 +35,9 @@ public enum WindowLayout: Sendable, Equatable {
     /// The destinations as the system's tab view (a tab bar, or the sidebar it
     /// turns into), each destination's stack inside its tab.
     case tabs
+    /// One split view of two columns: the destinations as its sidebar and the
+    /// destination's stack as its detail.
+    case sidebarStack
     /// One split view of three columns, as Mail's mailboxes, messages and
     /// message: the destinations as its sidebar, the destination's list as
     /// its content and what was chosen in it as its detail.
@@ -43,16 +46,19 @@ public enum WindowLayout: Sendable, Equatable {
 
 public enum NavigationRules {
     /// Where the destinations are a sidebar that never turns into a tab bar
-    /// (a window the system gives no size class: a Mac's) and the destination
-    /// shown is a list beside its detail, the sidebar, the list and the detail
-    /// are one split view of three columns, as Mail's: a split view inside
-    /// the tab view's sidebar would inset the detail twice. Where the
-    /// destinations are a tab bar, or turn into one, or the destination is one
-    /// stack, they stay the system's tab view.
+    /// (a window the system gives no size class: a Mac's), they are the
+    /// sidebar of one split view whatever the destination shown, as Mail keeps
+    /// its mailboxes: with the destination's list and its detail as two more
+    /// columns when it is a list beside its detail (a split view inside the
+    /// tab view's sidebar would inset the detail twice), else with its stack
+    /// as the one other column. The sidebar is the same in both, so it keeps
+    /// its width as the person moves between destinations. Where the
+    /// destinations are a tab bar, or turn into one, they stay the system's
+    /// tab view.
     public static func window(destinations: Int, sidebarOnly: Bool, stack: StackLayout) -> WindowLayout {
         guard sidebarOnly, destinations > 1 else { return .tabs }
         switch stack {
-        case .stack: return .tabs
+        case .stack: return .sidebarStack
         case .panes, .listBesideDetail: return .sidebarListDetail
         }
     }

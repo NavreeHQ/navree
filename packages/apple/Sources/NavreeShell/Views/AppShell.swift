@@ -393,6 +393,13 @@ struct Chrome: View {
                 layout: stack, stack: shown, client: client, configuration: configuration,
                 sidebar: DestinationSidebar(client: client)
             )
+        case .sidebarStack:
+            NavigationSplitView {
+                DestinationSidebar(client: client)
+                    .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
+            } detail: {
+                StackView(stack: shown, client: client, configuration: configuration)
+            }
         case .tabs:
             tabs
         }

@@ -219,7 +219,7 @@ private func go(_ href: String, _ present: Navree.Present = .auto) -> Navree.Act
     #expect(ContentRules.dateStyle(Navree.DateInput(kind: .datetime)) == .compact)
 }
 
-@Test func aMacsListBesideItsDetailIsOneSplitViewOfThreeColumnsWithTheDestinationsAsItsSidebar() throws {
+@Test func aMacsDestinationsAreTheSidebarOfOneSplitViewWithAListBesideItsDetailAsTwoMoreColumns() throws {
     let orders = SplitRules.layout(try corpusScreen("screen-list.json").body, width: .expanded)
     let inbox = SplitRules.layout(try corpusScreen("screen-inbox.json").body, width: .expanded)
     let dashboard = SplitRules.layout(try corpusScreen("screen-dashboard.json").body, width: .expanded)
@@ -227,8 +227,8 @@ private func go(_ href: String, _ present: Navree.Present = .auto) -> Navree.Act
     // the inbox are sidebar, list and detail in one split view, as Mail.
     #expect(NavigationRules.window(destinations: 3, sidebarOnly: true, stack: orders) == .sidebarListDetail)
     #expect(NavigationRules.window(destinations: 3, sidebarOnly: true, stack: inbox) == .sidebarListDetail)
-    // A destination that is one stack keeps the system's tab view and its sidebar.
-    #expect(NavigationRules.window(destinations: 3, sidebarOnly: true, stack: dashboard) == .tabs)
+    // A destination that is one stack has the same sidebar, its stack beside it.
+    #expect(NavigationRules.window(destinations: 3, sidebarOnly: true, stack: dashboard) == .sidebarStack)
     // An iPad's destinations are a tab bar that may turn into a sidebar: the
     // tab view stays at every width, with the split view inside its tab.
     #expect(NavigationRules.window(destinations: 3, sidebarOnly: false, stack: orders) == .tabs)
