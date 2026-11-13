@@ -975,7 +975,7 @@ async fn stamped(
         .try_get::<crate::pages::PagesOptions>()
         .await
         .map(|options| options.sign_in.clone());
-    let parts = shell_parts(ctx, &native.client).await;
+    let parts = shell_parts(ctx, Some(&native.client)).await;
     match Arc::try_unwrap(native) {
         Ok(mut request) => {
             request.stamp = (*stamp).clone();
@@ -990,14 +990,14 @@ async fn stamped(
 /// What the app's modules say of the shell document for `client`.
 pub(crate) async fn shell_parts(
     ctx: &navree_kernel::AppContext,
-    client: &navree_native::Client,
+    client: Option<&navree_native::Client>,
 ) -> crate::NativeShellParts {
     use navree_native::Platform as P;
-    let who = crate::NativeClient::new(match client.platform {
-        P::Ios | P::Ipados | P::Macos | P::Watchos | P::Tvos | P::Visionos => {
+    let who = crate::NativeClient::new(match client.map(|client| client.platform) {
+        Some(P::Ios | P::Ipados | P::Macos | P::Watchos | P::Tvos | P::Visionos) => {
             crate::NativeFamily::Apple
         }
-        P::Android | P::Wearos => crate::NativeFamily::Android,
+        Some(P::Android | P::Wearos) => crate::NativeFamily::Android,
         _ => crate::NativeFamily::Other,
     });
     let mut parts = crate::NativeShellParts::default();

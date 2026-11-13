@@ -129,10 +129,7 @@ async fn document(ctx: &AppContext, parts: &Parts) -> Response {
         }
         _ => None,
     };
-    let contributed = match &client {
-        Some(client) => super::swap::shell_parts(ctx, client).await,
-        None => crate::NativeShellParts::default(),
-    };
+    let contributed = super::swap::shell_parts(ctx, client.as_ref()).await;
     let document = match shell_of(ctx, parts).await {
         Some(shell) => shell.native_document(sign_in.as_deref(), &contributed),
         None => {

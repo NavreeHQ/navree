@@ -271,6 +271,39 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
         });
     #[cfg(feature = "ui")]
     m.controller::<crate::ui::NotificationBellController>();
+    // A native app learns where its device's push token goes from the shell document, once
+    // the routes are on.
+    #[cfg(feature = "ui")]
+    m.multi(
+        Factory::<dyn navree_ui::NativeShellPart>::new(|r: Resolver| async move {
+            let notifier = r.get::<Notifier>().await?;
+            let api_prefix = match r.app().try_get::<navree_http::HttpOptions>().await {
+                Some(http) => http.api_prefix.clone(),
+                None => String::new(),
+            };
+            Ok(Arc::new(NativeRoutes {
+                on: notifier.options().routes,
+                part: crate::ui::PushShellPart::new(&api_prefix),
+            }) as Arc<dyn navree_ui::NativeShellPart>)
+        })
+        .deps(vec![ProviderKey::of::<Notifier>()]),
+    );
+}
+
+/// The push route in the shell document, only while the notification routes are on.
+#[cfg(feature = "ui")]
+struct NativeRoutes {
+    on: bool,
+    part: crate::ui::PushShellPart,
+}
+
+#[cfg(feature = "ui")]
+impl navree_ui::NativeShellPart for NativeRoutes {
+    fn contribute(&self, shell: &mut navree_ui::NativeShellParts, client: &navree_ui::NativeClient) {
+        if self.on {
+            self.part.contribute(shell, client);
+        }
+    }
 }
 
 /// The scheduled `notify:release`: skipped with

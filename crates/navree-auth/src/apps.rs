@@ -390,6 +390,16 @@ impl AppsOptions {
         }
     }
 
+    /// The callback of the first app of `platform` (`apple` or `android`) that has one: what
+    /// a native client of that family is told to come back on.
+    pub(crate) fn first_callback(&self, platform: &str) -> Option<String> {
+        match platform {
+            "apple" => self.apple.values().find_map(|app| app.callback.clone()),
+            "android" => self.android.values().find_map(|app| app.callback.clone()),
+            _ => None,
+        }
+    }
+
     /// Whether any app has a hand-over callback.
     pub(crate) fn has_hand_over(&self) -> bool {
         self.apple.values().any(|app| app.callback.is_some())

@@ -602,6 +602,32 @@ impl Module for App {
         m.factory(Factory::<Shell>::new(|_| async { Ok(Arc::new(shell())) }))
             .exports::<Shell>();
         m.controller::<Pages>();
+        // A module of the app says where signing in and push go.
+        m.multi(Factory::<dyn navree_ui::NativeShellPart>::new(|_| async {
+            Ok(Arc::new(Routes) as Arc<dyn navree_ui::NativeShellPart>)
+        }));
+    }
+}
+
+/// What an authentication module and a notification module say of the shell document.
+struct Routes;
+
+impl navree_ui::NativeShellPart for Routes {
+    fn contribute(
+        &self,
+        shell: &mut navree_ui::NativeShellParts,
+        client: &navree_ui::NativeClient,
+    ) {
+        let mut routes =
+            navree_ui::NativeSignIn::new("/auth/app/sign-in", "/api/auth/app/exchange")
+                .second_step("/sign-in/two-factor");
+        // The callback is the app's own: each family of systems has its own.
+        if client.family == navree_ui::NativeFamily::Android {
+            routes = routes.callback("https://orders.example.in/app/android");
+        }
+        shell
+            .sign_in(routes)
+            .push_register("/api/notifications/push-devices");
     }
 }
 
@@ -1017,7 +1043,15 @@ async fn the_web_view_of_a_native_client_gets_the_page_without_the_chrome() {
 #[tokio::test]
 async fn the_shell_is_answered_as_a_document() {
     let app = app().await;
-    let response = app.client().get("/_navree/native/shell").send().await;
+    // A client says who it is when it fetches the shell: what the app's modules say of it
+    // depends on its system.
+    let response = app
+        .client()
+        .get("/_navree/native/shell")
+        .header(NATIVE, "1")
+        .header(CLIENT, PHONE)
+        .send()
+        .await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         response.header("content-type"),
@@ -1475,6 +1509,53 @@ async fn an_option_query_is_a_choice_for_a_native_client() {
     assert_eq!(choice.more.as_deref(), Some("/agents/options?page=2"));
     let web = app.client().get("/agents/options?q=kaur").send().await;
     assert!(web.text().contains(r#"data-slot="option-page""#));
+}
+
+#[tokio::test]
+async fn the_shell_document_holds_what_the_apps_modules_say_for_the_client_that_asks() {
+    let app = app().await;
+    let ask = |client: &'static str| {
+        let app = &app;
+        async move {
+            let response = app
+                .client()
+                .get(navree_native::SHELL_PATH)
+                .header(NATIVE, "1")
+                .header(CLIENT, client)
+                .send()
+                .await;
+            serde_json::from_str::<navree_native::Shell>(&response.text()).expect("a shell")
+        }
+    };
+    let android = ask(PHONE).await;
+    let sign_in = android.sign_in.as_ref().expect("a hand-over");
+    assert_eq!(sign_in.start.as_str(), "/auth/app/sign-in");
+    assert_eq!(sign_in.exchange.as_str(), "/api/auth/app/exchange");
+    assert_eq!(
+        sign_in.callback.as_deref(),
+        Some("https://orders.example.in/app/android")
+    );
+    assert_eq!(
+        sign_in.second_step.as_ref().map(|path| path.as_str()),
+        Some("/sign-in/two-factor")
+    );
+    assert_eq!(
+        android
+            .device
+            .as_ref()
+            .and_then(|device| device.push.as_ref())
+            .map(|push| push.register.as_str()),
+        Some("/api/notifications/push-devices")
+    );
+    // An Apple client has no callback of its own here.
+    let apple = ask(
+        "platform=ios; os=26; form=phone; app=0.1.0; vocab=0; locale=en-IN; tz=Asia/Kolkata",
+    )
+    .await;
+    assert_eq!(apple.sign_in.as_ref().and_then(|s| s.callback.clone()), None);
+    // The pages a client is sent carry the stamp of the document it fetched.
+    let screen = ask_native(&app, Method::GET, "/orders/1", &[], "").await.1;
+    assert_eq!(screen.shell, android.stamp);
 }
 
 #[tokio::test]
