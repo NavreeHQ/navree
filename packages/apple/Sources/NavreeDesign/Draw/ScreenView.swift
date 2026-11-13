@@ -6,14 +6,14 @@ import SwiftUI
 /// a toast.
 public struct Notice: Sendable, Equatable, Identifiable {
     public var id: String
-    public var tone: Tone
+    public var tone: Navree.Tone
     public var title: String?
     public var text: String
     /// What the message offers to do next: a link, or a button that posts.
-    public var action: Action?
+    public var action: Navree.Action?
     public var actionLabel: String?
 
-    public init(id: String, tone: Tone, title: String?, text: String, action: Action? = nil, actionLabel: String? = nil) {
+    public init(id: String, tone: Navree.Tone, title: String?, text: String, action: Navree.Action? = nil, actionLabel: String? = nil) {
         self.id = id
         self.tone = tone
         self.title = title
@@ -28,7 +28,7 @@ public struct Notice: Sendable, Equatable, Identifiable {
 /// actions in the toolbar by role, its search under the title or in the
 /// toolbar by width, and its sheets and dialogs presented when they open.
 public struct ScreenView: View {
-    let screen: Screen
+    let screen: Navree.Screen
     let depth: ScreenDepth
     let appName: String
     let notice: Notice?
@@ -37,7 +37,7 @@ public struct ScreenView: View {
     @Environment(\.navree) private var context
     @Environment(\.horizontalSizeClass) private var sizeClass
 
-    public init(screen: Screen, depth: ScreenDepth, appName: String = "", notice: Notice? = nil, failure: Notice? = nil) {
+    public init(screen: Navree.Screen, depth: ScreenDepth, appName: String = "", notice: Notice? = nil, failure: Notice? = nil) {
         self.screen = screen
         self.depth = depth
         self.appName = appName
@@ -76,7 +76,7 @@ public struct ScreenView: View {
             }
     }
 
-    @ViewBuilder private func content(sections: [ListSection], width: WidthClass, table: Node.Table?) -> some View {
+    @ViewBuilder private func content(sections: [ListSection], width: WidthClass, table: Navree.Table?) -> some View {
         if let empty = Self.wholeEmpty(screen.body) {
             EmptyPart(empty: empty)
         } else if let table, sections.count == 1, ContentRules.table(table, width: width) == .columns {
@@ -102,13 +102,13 @@ public struct ScreenView: View {
         }
     }
 
-    static func isDestructive(_ node: Node) -> Bool {
+    static func isDestructive(_ node: Navree.Node) -> Bool {
         if case .button(let button) = node { return button.role == .destructive || button.standard == .delete }
         return false
     }
 
     /// The empty state, when it is all the screen holds.
-    static func wholeEmpty(_ body: Node) -> Node.Empty? {
+    static func wholeEmpty(_ body: Navree.Node) -> Navree.Empty? {
         switch body {
         case .empty(let empty): return empty
         case .stack(let stack):
@@ -121,7 +121,7 @@ public struct ScreenView: View {
 }
 
 extension OverlayPresenter {
-    static func isOverlay(_ node: Node) -> Bool {
+    static func isOverlay(_ node: Navree.Node) -> Bool {
         switch node {
         case .sheet, .dialog, .popover: true
         default: false
@@ -196,28 +196,28 @@ struct QueryForm {
     var searchName: String?
     var searchValue: String
     var searchPrompt: String?
-    var filters: [Node.Field]
-    var source: Node.Form?
-    var sorts: [Node.Column]
+    var filters: [Navree.Field]
+    var source: Navree.Form?
+    var sorts: [Navree.Column]
     var region: String?
 
     var hasFilters: Bool { !filters.isEmpty }
 
     /// The query form holding only its filters: what the filters sheet draws.
-    var filtersForm: Node.Form {
-        guard var form = source else { return Node.Form.empty }
-        form.children = filters.map(Node.field)
+    var filtersForm: Navree.Form {
+        guard var form = source else { return Navree.Form() }
+        form.children = filters.map(Navree.Node.field)
         return form
     }
 
     /// From the screen's own search, or the query form of its table.
-    init?(screen: Screen, table: Node.Table?, region: String?) {
+    init?(screen: Navree.Screen, table: Navree.Table?, region: String?) {
         self.region = region
         sorts = table?.columns.filter { $0.sort != nil } ?? []
         if let query = table?.query {
             form = FormRef(query)
             source = query
-            var filters: [Node.Field] = []
+            var filters: [Navree.Field] = []
             var name: String?
             var value = ""
             var prompt: String?
@@ -255,7 +255,7 @@ struct QueryForm {
     /// A choice of how many rows a page holds: lists load by cursor here, so
     /// it means nothing natively. Read from its shape: a single choice whose
     /// options are all numbers.
-    static func isPageSize(_ field: Node.Field) -> Bool {
+    static func isPageSize(_ field: Navree.Field) -> Bool {
         guard case .choice(let choice) = field.input, !choice.options.isEmpty else { return false }
         return choice.options.allSatisfy { Int($0.value) != nil }
     }
@@ -274,7 +274,7 @@ struct QueryButtons: View {
                     ForEach(Array(query.sorts.enumerated()), id: \.offset) { _, column in
                         Button {
                             if let href = column.sort?.href {
-                                context.send(.act(.navigate(href: href, present: .replace), Place()))
+                                context.send(.act(.navigate(Navree.Action.Navigate(href: href, present: .replace)), Place()))
                             }
                         } label: {
                             if let dir = column.sort?.dir {
@@ -324,7 +324,7 @@ struct FiltersSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) {
-                        context.send(.act(.submit(form: query.form.key, href: nil, with: nil), Place(form: query.form)))
+                        context.send(.act(.submit(Navree.Action.Submit(form: query.form.key)), Place(form: query.form)))
                         dismiss()
                     } label: {
                         Label("Apply", systemImage: "checkmark")
@@ -433,10 +433,3 @@ struct ListLook: ViewModifier {
     }
 }
 
-extension Node.Form {
-    /// A form with nothing in it.
-    static let empty: Node.Form = {
-        // Decoding is the one way to make a protocol value outside its module.
-        try! WireDecoder.decode(Node.Form.self, from: Data("{}".utf8))
-    }()
-}

@@ -3,21 +3,21 @@ import NavreeProtocol
 /// One row of a screen's list, as the design layer reads the tree.
 public enum RowItem: Sendable, Equatable {
     /// A part drawn as it is, in a row of its own.
-    case part(Node)
+    case part(Navree.Node)
     /// A table's record, or a row of the tree, read as a row of a list.
     case record(RecordRow)
     /// A row of the tree.
-    case row(Node.Row)
+    case row(Navree.Row)
     /// A button as a row of a grouped list.
-    case button(Node.Button, form: Node.Form?)
+    case button(Navree.Button, form: Navree.Form?)
     /// A label and its value.
-    case fact(Node.Fact)
+    case fact(Navree.Fact)
     /// Two words side by side, the first naming the second (`Subtotal ₹7,848`).
     case labeled(label: String, value: String, muted: Bool)
     /// A field of a form.
-    case field(Node.Field, form: Node.Form)
+    case field(Navree.Field, form: Navree.Form)
     /// One option of a field that takes any of several: a row with a checkmark.
-    case option(Node.Field, ChoiceOption, form: Node.Form)
+    case option(Navree.Field, Navree.ChoiceOption, form: Navree.Form)
     /// A region that came empty: fetched when it shows.
     case pending(region: String)
     /// The end of a list or table, which fetches what comes after when it shows.
@@ -33,7 +33,7 @@ public struct ListSection: Sendable, Equatable, Identifiable {
     public var rows: [RowItem]
     /// The table the rows come from, when they are its records: what a wide
     /// window draws as columns and what search and filters act on.
-    public var table: Node.Table?
+    public var table: Navree.Table?
     /// The region the section stands in, when it is one: what its table's
     /// query and more answer into.
     public var region: String?
@@ -45,7 +45,7 @@ public struct ListSection: Sendable, Equatable, Identifiable {
 /// own), facts are labelled values, a form is its fields. Sheets and dialogs
 /// are left out: they are presented, not drawn in place.
 public enum SectionRules {
-    public static func sections(_ body: Node) -> [ListSection] {
+    public static func sections(_ body: Navree.Node) -> [ListSection] {
         var builder = Builder()
         builder.read(body, region: nil)
         builder.flushLater()
@@ -57,7 +57,7 @@ public enum SectionRules {
     }
 
     /// The sections of several parts read one after another.
-    public static func sections(_ nodes: [Node]) -> [ListSection] {
+    public static func sections(_ nodes: [Navree.Node]) -> [ListSection] {
         var builder = Builder()
         for node in nodes { builder.read(node, region: nil) }
         builder.flushLater()
@@ -69,8 +69,8 @@ public enum SectionRules {
     }
 
     /// The sheets, dialogs and popovers anywhere in the tree.
-    public static func overlays(_ body: Node) -> [Node] {
-        var found: [Node] = []
+    public static func overlays(_ body: Navree.Node) -> [Navree.Node] {
+        var found: [Navree.Node] = []
         body.walk { node in
             switch node {
             case .sheet, .dialog, .popover: found.append(node)
@@ -102,7 +102,7 @@ public enum SectionRules {
             current.rows.append(item)
         }
 
-        mutating func read(_ node: Node, region: String?) {
+        mutating func read(_ node: Navree.Node, region: String?) {
             switch node {
             case .sheet, .dialog, .popover:
                 return
@@ -165,12 +165,17 @@ public enum SectionRules {
                 }
             case .unknown(let part):
                 if let alt = part.alt { read(alt, region: region) }
+            case .toolbar, .gauge, .figure, .timeline, .feedRow, .message, .pane, .ring, .rings, .dayClock, .dayPager,
+                .meter, .columns, .strip, .range, .calendarHeatmap, .matrixHeatmap, .scatter, .card, .layers, .shape,
+                .carousel, .adaptive:
+                // Kinds this client does not draw yet: no row stands empty for them.
+                return
             default:
                 row(.part(node))
             }
         }
 
-        mutating func readListChild(_ node: Node, region: String?) {
+        mutating func readListChild(_ node: Navree.Node, region: String?) {
             switch node {
             case .row(let part): row(.row(part))
             default: read(node, region: region)
@@ -180,7 +185,7 @@ public enum SectionRules {
         /// A vertical stack: its parts one after another. A row of buttons with
         /// a line of text after it reads as the buttons and the text as their
         /// footer.
-        mutating func readVertical(_ children: [Node], region: String?) {
+        mutating func readVertical(_ children: [Navree.Node], region: String?) {
             var index = 0
             while index < children.count {
                 let child = children[index]
@@ -200,8 +205,8 @@ public enum SectionRules {
 
         /// The buttons of a horizontal stack that holds only buttons, however
         /// deep in horizontal stacks they are.
-        static func buttons(in stack: Node.Stack) -> [Node.Button]? {
-            var found: [Node.Button] = []
+        static func buttons(in stack: Navree.Stack) -> [Navree.Button]? {
+            var found: [Navree.Button] = []
             for child in stack.children {
                 switch child {
                 case .button(let button): found.append(button)
@@ -214,7 +219,7 @@ public enum SectionRules {
             return found.isEmpty ? nil : found
         }
 
-        mutating func readButtons(_ buttons: [Node.Button], note: String?) {
+        mutating func readButtons(_ buttons: [Navree.Button], note: String?) {
             let plain = buttons.filter { $0.role != .destructive }
             let destructive = buttons.filter { $0.role == .destructive }
             if !plain.isEmpty {
@@ -234,7 +239,7 @@ public enum SectionRules {
         /// A horizontal stack: two words spread apart are a label and its
         /// value; one holding a link or a button and words is a row that
         /// leads somewhere; anything else is drawn as it is.
-        mutating func readHorizontal(_ stack: Node.Stack, region: String?) {
+        mutating func readHorizontal(_ stack: Navree.Stack, region: String?) {
             if stack.justify == .between, stack.children.count == 2,
                 case .text(let label) = stack.children[0], case .text(let value) = stack.children[1]
             {
@@ -259,8 +264,8 @@ public enum SectionRules {
             row(.part(.stack(stack)))
         }
 
-        mutating func readForm(_ form: Node.Form, region: String?) {
-            var buttons: [Node.Button] = []
+        mutating func readForm(_ form: Navree.Form, region: String?) {
+            var buttons: [Navree.Button] = []
             form.walkFields { node in
                 switch node {
                 case .field(let field):
@@ -281,11 +286,11 @@ public enum SectionRules {
     }
 }
 
-extension Node.Form {
+extension Navree.Form {
     /// The form's fields and buttons, through the stacks that lay them out on
     /// the web, and any other part as it is.
-    func walkFields(_ visit: (Node) -> Void) {
-        func each(_ nodes: [Node]) {
+    func walkFields(_ visit: (Navree.Node) -> Void) {
+        func each(_ nodes: [Navree.Node]) {
             for node in nodes {
                 switch node {
                 case .stack(let stack) where !stack.hidden: each(stack.children)

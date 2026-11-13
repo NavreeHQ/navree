@@ -46,14 +46,16 @@ struct RowView: View {
 /// Opens the screen at `address` the way the shell's rules present it: a push
 /// with the system's own disclosure, or a tap that asks the runtime.
 struct Opening<Label: View>: View {
-    let action: Action?
+    let action: Navree.Action?
     let place: Place
     @ViewBuilder let label: () -> Label
     @Environment(\.navree) private var context
 
     var body: some View {
-        if case .navigate(let href, let present)? = action, present == .push, context.presentation(href) == .push {
-            NavigationLink(value: Step(address: href, depth: context.depth + 1)) {
+        if case .navigate(let link)? = action, link.present == .auto || link.present == .push,
+            context.presentation(link.href) == .push
+        {
+            NavigationLink(value: Step(address: link.href, depth: context.depth + 1)) {
                 label()
             }
         } else if let action {
@@ -114,7 +116,7 @@ struct RecordRowView: View {
             var found: [ActionForm] = []
             cell.walk { node in
                 if case .form(let form) = node {
-                    var submit: Node.Button?
+                    var submit: Navree.Button?
                     var fields = 0
                     form.walkFields { inner in
                         if case .button(let button) = inner, submit == nil { submit = button }
@@ -143,8 +145,8 @@ struct RecordRowView: View {
 
 /// A control of a record and the form it stands in.
 struct ActionForm: Identifiable {
-    let button: Node.Button
-    let form: Node.Form?
+    let button: Navree.Button
+    let form: Navree.Form?
     let fields: Int
     var id: String { (form?.action ?? "") + button.label }
 }
@@ -204,7 +206,7 @@ struct RecordContent: View {
 /// A row of the tree: what leads it, its name and lines, what stands at its
 /// end, its swipe actions and its context menu.
 struct TreeRowView: View {
-    let row: Node.Row
+    let row: Navree.Row
     @Environment(\.navree) private var context
     @Environment(\.navreeOverlay) private var overlay
 
@@ -229,7 +231,7 @@ struct TreeRowView: View {
 
 /// The parts of a row of the tree.
 struct RowContent: View {
-    let row: Node.Row
+    let row: Navree.Row
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
@@ -262,7 +264,7 @@ struct RowContent: View {
         .accessibilityElement(children: .combine)
     }
 
-    static func symbol(_ state: RowState) -> String {
+    static func symbol(_ state: Navree.RowState) -> String {
         switch state {
         case .done: "checkmark.circle.fill"
         case .current: "circle.inset.filled"
@@ -274,7 +276,7 @@ struct RowContent: View {
 /// A button as a row of a grouped list: its words in the tint, in red when it
 /// destroys, a spinner beside them while it waits.
 struct ButtonRow: View {
-    let button: Node.Button
+    let button: Navree.Button
     @Environment(\.navree) private var context
     @Environment(\.navreeForm) private var form
     @Environment(\.navreeOverlay) private var overlay
@@ -298,7 +300,7 @@ struct ButtonRow: View {
 /// A label and its value, as Settings shows one; a fact with lines under its
 /// value stacks them under its label, as Contacts shows a contact's details.
 struct FactContent: View {
-    let fact: Node.Fact
+    let fact: Navree.Fact
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private var value: String {
@@ -340,8 +342,8 @@ struct FactContent: View {
 
 /// One option of a field that takes any of several, as a row with a checkmark.
 struct OptionRow: View {
-    let field: Node.Field
-    let option: ChoiceOption
+    let field: Navree.Field
+    let option: Navree.ChoiceOption
     let form: FormRef
     @Environment(\.navree) private var context
 

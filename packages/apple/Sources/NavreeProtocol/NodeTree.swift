@@ -1,5 +1,5 @@
-extension Node {
-    /// The kind's name on the wire: `stack`, `table`, `field`.
+extension Navree.Node {
+    /// The kind's name on the wire: `stack`, `table`, `feed_row`.
     public var kind: String {
         switch self {
         case .stack: "stack"
@@ -36,7 +36,30 @@ extension Node {
         case .popover: "popover"
         case .native: "native"
         case .web: "web"
-        case .unknown(let part): part.kind
+        case .toolbar: "toolbar"
+        case .gauge: "gauge"
+        case .figure: "figure"
+        case .timeline: "timeline"
+        case .feedRow: "feed_row"
+        case .message: "message"
+        case .pane: "pane"
+        case .ring: "ring"
+        case .rings: "rings"
+        case .dayClock: "day_clock"
+        case .dayPager: "day_pager"
+        case .meter: "meter"
+        case .columns: "columns"
+        case .strip: "strip"
+        case .range: "range"
+        case .calendarHeatmap: "calendar_heatmap"
+        case .matrixHeatmap: "matrix_heatmap"
+        case .scatter: "scatter"
+        case .card: "card"
+        case .layers: "layers"
+        case .shape: "shape"
+        case .carousel: "carousel"
+        case .adaptive: "adaptive"
+        case .unknown(let part): part.tag
         }
     }
 
@@ -77,12 +100,36 @@ extension Node {
         case .popover(let n): n.id
         case .native(let n): n.id
         case .web(let n): n.id
+        case .toolbar(let n): n.id
+        case .gauge(let n): n.id
+        case .figure(let n): n.id
+        case .timeline(let n): n.id
+        case .feedRow(let n): n.id
+        case .message(let n): n.id
+        case .pane(let n): n.id
+        case .ring(let n): n.id
+        case .rings(let n): n.id
+        case .dayClock(let n): n.id
+        case .dayPager(let n): n.id
+        case .meter(let n): n.id
+        case .columns(let n): n.id
+        case .strip(let n): n.id
+        case .range(let n): n.id
+        case .calendarHeatmap(let n): n.id
+        case .matrixHeatmap(let n): n.id
+        case .scatter(let n): n.id
+        case .card(let n): n.id
+        case .layers(let n): n.id
+        case .shape(let n): n.id
+        case .carousel(let n): n.id
+        case .adaptive(let n): n.id
         case .unknown(let n): n.id
         }
     }
 
-    /// The nodes directly inside this one, in the order a reader meets them.
-    public var children: [Node] {
+    /// The nodes directly inside this one, in the order a reader meets them:
+    /// the same nodes, in the same order, as the protocol crate's own walk.
+    public var children: [Navree.Node] {
         switch self {
         case .stack(let n): n.children
         case .grid(let n): n.children
@@ -97,25 +144,37 @@ extension Node {
         case .empty(let n): n.actions
         case .facts(let n): n.items.flatMap(\.value)
         case .table(let n):
-            (n.query?.children ?? []) + n.rows.flatMap(\.cells) + [n.empty].compactMap { $0 }
+            (n.query?.children ?? []) + n.rows.flatMap { $0.cells + $0.actions + $0.detail } + [n.empty].compactMap { $0 }
         case .link(let n): n.children
+        case .figure(let n): [n.aside, n.chart].compactMap { $0 }
+        case .dayPager(let n): [n.scores].compactMap { $0 }
         case .menu(let n): n.items
         case .form(let n): n.children
         case .sheet(let n): n.children + n.actions
         case .dialog(let n): n.children + n.actions
         case .popover(let n): n.children
         case .native(let n): [n.alt].compactMap { $0 }
+        case .toolbar(let n): n.items.flatMap(\.menu)
+        case .timeline(let n): n.items.flatMap(\.detail)
+        case .feedRow(let n): n.detail
+        case .message(let n): n.body
+        case .pane(let n): n.children
+        case .card(let n): n.children + n.menu
+        case .layers(let n): n.children
+        case .carousel(let n): n.children
+        case .adaptive(let n): n.compact + n.wide
         case .unknown(let n): [n.alt].compactMap { $0 }
         case .divider, .spacer, .text, .rich, .image, .icon, .avatar, .badge, .progress, .chart, .code,
-            .button, .field, .web:
+            .button, .field, .web, .gauge, .ring, .rings, .dayClock, .meter, .columns, .strip, .range,
+            .calendarHeatmap, .matrixHeatmap, .scatter, .shape:
             []
         }
     }
 
     /// Visits this node and every node inside it, depth first, without
     /// recursion so a deep tree can't overflow the stack.
-    public func walk(_ visit: (Node) -> Void) {
-        var pending: [Node] = [self]
+    public func walk(_ visit: (Navree.Node) -> Void) {
+        var pending: [Navree.Node] = [self]
         while let node = pending.popLast() {
             visit(node)
             pending.append(contentsOf: node.children.reversed())
@@ -123,8 +182,8 @@ extension Node {
     }
 
     /// The first node, here or inside, that matches.
-    public func first(where matches: (Node) -> Bool) -> Node? {
-        var pending: [Node] = [self]
+    public func first(where matches: (Navree.Node) -> Bool) -> Navree.Node? {
+        var pending: [Navree.Node] = [self]
         while let node = pending.popLast() {
             if matches(node) { return node }
             pending.append(contentsOf: node.children.reversed())
@@ -135,7 +194,33 @@ extension Node {
     /// The first node with this id among the given kinds (all kinds when none
     /// are given). Ids are not unique in real pages: a dialog and the form in it
     /// may share one, so a caller names the kinds it means.
-    public func find(_ id: String, kinds: Set<String> = []) -> Node? {
+    public func find(_ id: String, kinds: Swift.Set<String> = []) -> Navree.Node? {
         first { $0.id == id && (kinds.isEmpty || kinds.contains($0.kind)) }
+    }
+}
+
+extension Navree.Shell {
+    /// Every destination, in order, groups flattened.
+    public var destinations: [Navree.NavItem] {
+        nav.groups.flatMap(\.items)
+    }
+}
+
+extension Navree.Input {
+    /// The value the control holds as the screen arrives, as a form sends it.
+    /// A range sends its two ends under names of their own, which a field's
+    /// one name does not hold, and a control this build does not know sends
+    /// nothing.
+    public var initialValues: [String] {
+        switch self {
+        case .text(let input): [input.value]
+        case .toggle(let input): input.on ? [input.value ?? "on"] : []
+        case .choice(let input): input.value.map { [$0] } ?? []
+        case .choices(let input): input.values
+        case .date(let input): [input.value]
+        case .slider(let input): [input.value]
+        case .colour(let input): [input.value]
+        case .file, .range, .unknown: []
+        }
     }
 }

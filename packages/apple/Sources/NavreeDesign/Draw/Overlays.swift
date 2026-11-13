@@ -3,7 +3,7 @@ import SwiftUI
 
 /// A sheet or a dialog of the tree that is open now.
 struct OpenOverlay: Identifiable, Equatable {
-    let node: Node
+    let node: Navree.Node
     var id: String { node.id ?? "" }
 }
 
@@ -11,7 +11,7 @@ struct OpenOverlay: Identifiable, Equatable {
 /// way Apple's guidelines present that kind: an alert, an action sheet from
 /// its source, or a sheet; one at a time.
 struct OverlayPresenter: ViewModifier {
-    let tree: Node
+    let tree: Navree.Node
     @Environment(\.navree) private var context
 
     func body(content: Content) -> some View {
@@ -56,7 +56,7 @@ struct OverlayPresenter: ViewModifier {
             }
     }
 
-    static func isOpen(_ node: Node) -> Bool {
+    static func isOpen(_ node: Navree.Node) -> Bool {
         switch node {
         case .sheet(let sheet): sheet.open
         case .dialog(let dialog): dialog.open
@@ -64,16 +64,16 @@ struct OverlayPresenter: ViewModifier {
         }
     }
 
-    private func dialog(_ node: Node?) -> Node.Dialog? {
+    private func dialog(_ node: Navree.Node?) -> Navree.Dialog? {
         if case .dialog(let dialog)? = node { return dialog }
         return nil
     }
 
-    private func title(_ node: Node?) -> String {
+    private func title(_ node: Navree.Node?) -> String {
         dialog(node)?.title ?? ""
     }
 
-    private func presented(_ node: Node?) -> Binding<Bool> {
+    private func presented(_ node: Navree.Node?) -> Binding<Bool> {
         Binding(get: { node != nil }, set: { shown in
             if !shown, let id = node?.id { context.send(.dismissed(overlay: id)) }
         })
@@ -89,7 +89,7 @@ struct OverlayPresenter: ViewModifier {
 /// A dialog's answers as an alert's or an action sheet's buttons: the
 /// destructive one first, Cancel last, as the system orders them.
 struct DialogButtons: View {
-    let dialog: Node.Dialog
+    let dialog: Navree.Dialog
     @Environment(\.navree) private var context
 
     var body: some View {
@@ -108,7 +108,7 @@ struct DialogButtons: View {
 /// submit (or the confirming action) at the top trailing corner, and its
 /// parts as a grouped list. A medium sheet rests at half height.
 struct OverlaySheet: View {
-    let node: Node
+    let node: Navree.Node
     @Environment(\.navree) private var context
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -143,15 +143,15 @@ struct OverlaySheet: View {
         var title: String
         var subtitle: String?
         var text: String?
-        var body: [Node]
-        var actions: [Node]
-        var form: Node.Form?
+        var body: [Navree.Node]
+        var actions: [Navree.Node]
+        var form: Navree.Form?
         var detents: Set<PresentationDetent>
         var hasCancel: Bool
     }
 
     /// The first form in `node` that is not inside another sheet or dialog.
-    static func ownForm(_ node: Node) -> Node.Form? {
+    static func ownForm(_ node: Navree.Node) -> Navree.Form? {
         switch node {
         case .form(let form): return form
         case .sheet, .dialog, .popover: return nil
@@ -162,7 +162,7 @@ struct OverlaySheet: View {
     /// The parts of a sheet or a form dialog. A form's submit button leaves
     /// the content for the toolbar: there is no submit button at the foot of a
     /// form on iOS.
-    static func parts(of node: Node) -> Parts {
+    static func parts(of node: Navree.Node) -> Parts {
         var parts = Parts(id: node.id ?? "", title: "", body: [], actions: [], detents: [.large], hasCancel: false)
         switch node {
         case .sheet(let sheet):
@@ -186,7 +186,7 @@ struct OverlaySheet: View {
             parts.form = form
             form.walkFields { field in
                 if case .button(var button) = field, case .submit? = button.action {
-                    if button.role == .plain || button.role == .primary { button.role = .confirm }
+                    if button.role == Navree.Role.none || button.role == .primary { button.role = .confirm }
                     parts.actions.append(.button(button))
                 }
             }
@@ -234,8 +234,8 @@ struct OverlayContent: View {
 struct FormSheet: View {
     let title: String
     let subtitle: String?
-    let form: Node.Form
-    let confirm: Node.Button
+    let form: Navree.Form
+    let confirm: Navree.Button
     @Environment(\.dismiss) private var dismiss
     @Environment(\.navree) private var context
     @Environment(\.dynamicTypeSize) private var typeSize

@@ -6,7 +6,7 @@ import SwiftUI
 /// means the same where there is one, and its own shape where there is not.
 public enum Symbols {
     /// The symbol Apple's guidelines give each standard action.
-    public static func standard(_ action: StandardAction) -> String? {
+    public static func standard(_ action: Navree.Standard) -> String? {
         switch action {
         case .share: "square.and.arrow.up"
         case .delete: "trash"
@@ -16,12 +16,11 @@ public enum Symbols {
         case .done: "checkmark"
         case .cancel: "xmark"
         case .more: "ellipsis"
-        case .unrecognized: nil
         }
     }
 
     /// The symbol a role implies when the action has no icon of its own.
-    public static func forRole(_ role: Role) -> String? {
+    public static func forRole(_ role: Navree.Role) -> String? {
         switch role {
         case .create: "plus"
         case .cancel: "xmark"
@@ -37,7 +36,7 @@ public enum Symbols {
 
     /// The symbol to draw for `icon`: its system symbol, or `nil` when its
     /// shape must be drawn.
-    public static func symbol(for icon: Node.Icon) -> String? {
+    public static func symbol(for icon: Navree.Icon) -> String? {
         icon.name.flatMap(system(for:))
     }
 
@@ -115,7 +114,7 @@ public enum Symbols {
 /// The system colours and symbols a tone stands for. System colours adapt to
 /// dark mode and increased contrast by themselves.
 public enum Tones {
-    public static func color(_ tone: Tone?) -> Color {
+    public static func color(_ tone: Navree.Tone?) -> Color {
         switch tone {
         case .success: .green
         case .warning: .orange
@@ -127,7 +126,7 @@ public enum Tones {
     }
 
     /// The symbol that says the tone's meaning without its colour.
-    public static func symbol(_ tone: Tone?) -> String {
+    public static func symbol(_ tone: Navree.Tone?) -> String {
         switch tone {
         case .success: "checkmark.circle.fill"
         case .warning: "exclamationmark.triangle.fill"

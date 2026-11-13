@@ -3,13 +3,13 @@ import SwiftUI
 
 /// Actions placed by ``PlacementRules``, as toolbar items.
 struct PlacedActions: ToolbarContent {
-    let actions: [Node]
+    let actions: [Navree.Node]
     let depth: ScreenDepth
     let overlay: String?
     let form: FormRef?
 
     var body: some ToolbarContent {
-        let slots = PlacementRules.place(actions.map { ActionTraits($0) ?? ActionTraits(role: .plain) }, depth: depth)
+        let slots = PlacementRules.place(actions.map { ActionTraits($0) ?? ActionTraits(role: Navree.Role.none) }, depth: depth)
         let placed = Array(zip(actions, slots))
         ToolbarItemGroup(placement: .cancellationAction) {
             ForEach(Array(placed.filter { $0.1 == .cancel }.enumerated()), id: \.offset) { _, entry in
@@ -42,7 +42,7 @@ struct PlacedActions: ToolbarContent {
 /// One action in a toolbar: a symbol where the guidelines ask for one, the
 /// system's roles for cancel and confirm, one prominent item at most.
 struct ToolbarAction: View {
-    let node: Node
+    let node: Navree.Node
     let slot: Slot
     let overlay: String?
     let form: FormRef?

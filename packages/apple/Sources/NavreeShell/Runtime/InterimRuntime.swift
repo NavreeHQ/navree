@@ -22,11 +22,11 @@ public struct InterimRuntime: Sendable {
         base = configuration.base
         deepLinks = DeepLinks(origin: configuration.origin, scheme: configuration.urlScheme)
         restoration = configuration.restoration
-        signInPaths = RouteRules(configuration.signInPaths.map { Route(match: $0, present: .external) })
+        signInPaths = RouteRules(configuration.signInPaths.map { Navree.Route(match: $0, present: .external) })
     }
 
     /// How a link to `address` is presented, by the shell's route rules.
-    public func presentation(of address: String) -> Present {
+    public func presentation(of address: String) -> Navree.Present {
         rules.presentation(of: address)
     }
 
@@ -117,7 +117,7 @@ public struct InterimRuntime: Sendable {
         return effects
     }
 
-    mutating func navigate(_ href: String, present asked: Present, from ref: PageRef) -> [Effect] {
+    mutating func navigate(_ href: String, present asked: Navree.Present, from ref: PageRef) -> [Effect] {
         let pageURL = state.page(ref).flatMap { URL(string: $0.address, relativeTo: base) }
         switch origin.destination(of: href, from: pageURL) {
         case .refused:
@@ -129,7 +129,7 @@ public struct InterimRuntime: Sendable {
                 return [.signIn(url)]
             }
             switch rules.presentation(of: address, asked: asked) {
-            case .push:
+            case .push, .auto:
                 return place(address, in: ref.container, at: ref.index + 1)
             case .replace:
                 update(ref) { $0.address = address }
@@ -142,7 +142,7 @@ public struct InterimRuntime: Sendable {
                     return ensureRoot(address)
                 }
                 return place(address, in: ref.container, at: 0)
-            case .sheet:
+            case .sheet, .task:
                 return place(address, in: .sheet, at: 0)
             case .full:
                 return place(address, in: .cover, at: 0)
@@ -195,7 +195,7 @@ public struct InterimRuntime: Sendable {
             update(ref) { $0.values[form.key, default: [:]][name] = [text] }
             return submit(form, with: nil, href: nil, at: ref, query: true)
         case .dismissed(let overlay):
-            editTree(ref) { $0.edit(overlay, kinds: Node.openable) { $0.setOpen(false) } }
+            editTree(ref) { $0.edit(overlay, kinds: Navree.Node.openable) { $0.setOpen(false) } }
             return []
         case .refresh:
             return reload(ref)
@@ -208,21 +208,22 @@ public struct InterimRuntime: Sendable {
         }
     }
 
-    mutating func act(_ action: Action, place: Place, at ref: PageRef) -> [Effect] {
+    mutating func act(_ action: Navree.Action, place: Place, at ref: PageRef) -> [Effect] {
         switch action {
-        case .navigate(let href, let present):
-            return navigate(href, present: present, from: ref)
-        case .submit(let formID, let href, let with):
+        case .navigate(let link):
+            return navigate(link.href, present: link.present, from: ref)
+        case .submit(let submit):
+            let formID = submit.form
             let form = place.form.flatMap { $0.key == formID || formID == nil ? $0 : nil }
                 ?? formID.flatMap { id in formRef(id, at: ref) }
             guard let form else { return [] }
-            return submit(form, with: with, href: href, at: ref, query: isQuery(form, at: ref))
-        case .request(let method, let href, let fields):
+            return self.submit(form, with: submit.with, href: submit.href, at: ref, query: isQuery(form, at: ref))
+        case .request(let call):
             guard let page = state.page(ref) else { return [] }
-            let request = OriginRequest(method: method, address: href, form: fields)
+            let request = OriginRequest(method: call.method, address: call.href, form: call.fields)
             return [fetch(.action(ref, address: page.address), request)]
         case .commands(let commands):
-            return commands.flatMap { run($0, place: place, at: ref) }
+            return commands.list.flatMap { run($0, place: place, at: ref) }
         case .back:
             if ref.index == 0, ref.container == .sheet || ref.container == .cover {
                 state.stacks[ref.container] = []
@@ -234,23 +235,30 @@ public struct InterimRuntime: Sendable {
             return reload(ref)
         case .dismiss:
             if let overlay = place.overlay {
-                editTree(ref) { $0.edit(overlay, kinds: Node.openable) { $0.setOpen(false) } }
+                editTree(ref) { $0.edit(overlay, kinds: Navree.Node.openable) { $0.setOpen(false) } }
             } else if ref.container == .sheet || ref.container == .cover {
                 state.stacks[ref.container] = []
             }
             return []
-        case .unrecognized:
+        case .device, .unknown:
             return []
         }
     }
 
-    mutating func run(_ command: Command, place: Place, at ref: PageRef) -> [Effect] {
+    mutating func run(_ command: Navree.Command, place: Place, at ref: PageRef) -> [Effect] {
         switch command {
-        case .open(let id):
-            editTree(ref) { $0.edit(id, kinds: Node.openable) { $0.setOpen(true) } }
-        case .close(let id):
-            editTree(ref) { $0.edit(id, kinds: Node.openable) { $0.setOpen(false) } }
-        case .toggle(let id), .show(let id), .hide(let id):
+        case .open(let open):
+            editTree(ref) { $0.edit(open.id, kinds: Navree.Node.openable) { $0.setOpen(true) } }
+        case .close(let close):
+            editTree(ref) { $0.edit(close.id, kinds: Navree.Node.openable) { $0.setOpen(false) } }
+        case .toggle, .show, .hide:
+            let id: String
+            switch command {
+            case .show(let show): id = show.id
+            case .hide(let hide): id = hide.id
+            case .toggle(let toggle): id = toggle.id
+            default: return []
+            }
             editTree(ref) { tree in
                 tree.edit(id, kinds: ["stack"]) { node in
                     guard case .stack(var stack) = node else { return }
@@ -262,30 +270,30 @@ public struct InterimRuntime: Sendable {
                     node = .stack(stack)
                 }
             }
-        case .copy(let text):
-            return [.copy(text), .announce("Copied")]
-        case .toast(let tone, let text):
-            return notice(Toast(tone: tone, text: text), at: ref)
-        case .submit(let id):
-            guard let form = formRef(id, at: ref) else { return [] }
-            return submit(form, with: nil, href: nil, at: ref, query: isQuery(form, at: ref))
-        case .text(let id, let text):
+        case .copy(let copy):
+            return [.copy(copy.text), .announce("Copied")]
+        case .toast(let toast):
+            return notice(Navree.Toast(text: toast.text, tone: toast.tone), at: ref)
+        case .submit(let submit):
+            guard let form = formRef(submit.id, at: ref) else { return [] }
+            return self.submit(form, with: nil, href: nil, at: ref, query: isQuery(form, at: ref))
+        case .text(let change):
             editTree(ref) { tree in
-                tree.edit(id, kinds: ["text"]) { node in
+                tree.edit(change.id, kinds: ["text"]) { node in
                     guard case .text(var part) = node else { return }
-                    part.value = text
+                    part.value = change.text
                     node = .text(part)
                 }
             }
-        case .value(let id, let value):
+        case .value(let change):
             editTree(ref) { tree in
                 tree.walkForms { form in
-                    for index in form.hidden.indices where form.hidden[index].id == id {
-                        form.hidden[index].value = value
+                    for index in form.hidden.indices where form.hidden[index].id == change.id {
+                        form.hidden[index].value = change.value
                     }
                 }
             }
-        case .set, .flip, .focus, .count, .unrecognized:
+        case .set, .flip, .focus, .count, .unknown:
             break
         }
         return []
@@ -294,7 +302,7 @@ public struct InterimRuntime: Sendable {
     // MARK: - Forms
 
     /// The form with this id (or `@` and its address) on the screen at `ref`.
-    func form(_ key: String, at ref: PageRef) -> Node.Form? {
+    func form(_ key: String, at ref: PageRef) -> Navree.Form? {
         guard let page = state.page(ref), case .screen(let screen) = page.content else { return nil }
         let match = screen.body.first { node in
             if case .form(let form) = node { return (form.id ?? "@" + form.action) == key }
@@ -319,28 +327,28 @@ public struct InterimRuntime: Sendable {
 
     /// The pairs a form sends, as a browser sends them: its hidden values,
     /// then each field's values under its name, then the pressed button's own.
-    func pairs(_ form: FormRef, with extra: Pair?, at ref: PageRef) -> [Pair] {
+    func pairs(_ form: FormRef, with extra: Navree.Pair?, at ref: PageRef) -> [Navree.Pair] {
         let page = state.page(ref)
         let values = page?.values[form.key] ?? [:]
         var pairs = form.hidden
         if let node = self.form(form.key, at: ref) {
-            Node.form(node).walk { part in
+            Navree.Node.form(node).walk { part in
                 guard case .field(let field) = part else { return }
                 if case .file = field.input { return }
                 for value in values[field.name] ?? field.input.initialValues {
-                    pairs.append(Pair(name: field.name, value: value))
+                    pairs.append(Navree.Pair(name: field.name, value: value))
                 }
             }
         } else {
             for (name, list) in values.sorted(by: { $0.key < $1.key }) {
-                pairs += list.map { Pair(name: name, value: $0) }
+                pairs += list.map { Navree.Pair(name: name, value: $0) }
             }
         }
         if let extra { pairs.append(extra) }
         return pairs
     }
 
-    mutating func submit(_ form: FormRef, with extra: Pair?, href: String?, at ref: PageRef, query: Bool) -> [Effect] {
+    mutating func submit(_ form: FormRef, with extra: Navree.Pair?, href: String?, at ref: PageRef, query: Bool) -> [Effect] {
         guard let page = state.page(ref) else { return [] }
         let address = href ?? (form.action.isEmpty ? page.address : form.action)
         let request = OriginRequest(method: form.method, address: address, form: pairs(form, with: extra, at: ref))
@@ -356,7 +364,7 @@ public struct InterimRuntime: Sendable {
         var found: String?
         screen.body.walk { node in
             guard found == nil, case .region(let region) = node else { return }
-            let holds = Node.region(region).first { inner in
+            let holds = Navree.Node.region(region).first { inner in
                 if case .table(let table) = inner, let query = table.query { return FormRef(query).key == form.key }
                 return false
             } != nil
@@ -469,7 +477,7 @@ public struct InterimRuntime: Sendable {
         }
     }
 
-    mutating func receive(_ envelope: Envelope, for ticket: Ticket, at ref: PageRef) -> [Effect] {
+    mutating func receive(_ envelope: Navree.Envelope, for ticket: Ticket, at ref: PageRef) -> [Effect] {
         if let upgrade = envelope.upgrade {
             update(ref) { $0.content = .upgrade(upgrade) }
             return []
@@ -496,7 +504,7 @@ public struct InterimRuntime: Sendable {
                     update(ref) { $0.content = .screen(screen) }
                 }
             case .region(_, _, let id):
-                let children: [Node]
+                let children: [Navree.Node]
                 if case .region(let inner)? = screen.body.find(id, kinds: ["region"]) {
                     children = inner.children
                 } else {
@@ -520,7 +528,7 @@ public struct InterimRuntime: Sendable {
 
     /// The next records of a table come as a whole screen: their table's rows
     /// join the ones on screen, and its address of more takes the old one's place.
-    mutating func appendMore(from screen: Screen, target: String, at ref: PageRef) {
+    mutating func appendMore(from screen: Navree.Screen, target: String, at ref: PageRef) {
         let fresh = screen.body.first { node in
             if case .table = node { return true }
             return false
@@ -546,9 +554,11 @@ public struct InterimRuntime: Sendable {
 
     // MARK: - Ops
 
-    mutating func apply(_ op: Op, at ref: PageRef) -> [Effect] {
+    mutating func apply(_ op: Navree.Op, at ref: PageRef) -> [Effect] {
         switch op {
-        case .morph(let target, let node):
+        case .morph(let morph):
+            let target = morph.target
+            let node = morph.node
             editTree(ref) { tree in
                 let found = tree.edit(target, kinds: [node.kind]) { old in
                     let wasOpen = OverlayState.isOpen(old)
@@ -557,41 +567,45 @@ public struct InterimRuntime: Sendable {
                 }
                 if !found { tree.edit(target) { $0 = node } }
             }
-        case .replace(let target, let node):
+        case .replace(let replace):
+            let target = replace.target
+            let node = replace.node
             editTree(ref) { tree in
                 if !tree.edit(target, kinds: [node.kind], { $0 = node }) { tree.edit(target) { $0 = node } }
             }
-        case .append(let target, let nodes, let more):
-            editTree(ref) { $0.edit(target) { $0.insert(nodes, atStart: false, more: more) } }
-        case .prepend(let target, let nodes):
-            editTree(ref) { $0.edit(target) { $0.insert(nodes, atStart: true) } }
-        case .remove(let target):
-            editTree(ref) { $0.remove(target) }
-        case .errors(let form, let fields):
-            editTree(ref) { $0.edit(form, kinds: ["form"]) { $0.setErrors(fields) } }
+        case .append(let append):
+            editTree(ref) { $0.edit(append.target) { $0.insert(append.nodes, atStart: false, more: append.more) } }
+        case .prepend(let prepend):
+            editTree(ref) { $0.edit(prepend.target) { $0.insert(prepend.nodes, atStart: true) } }
+        case .remove(let remove):
+            editTree(ref) { $0.remove(remove.target) }
+        case .errors(let errors):
+            let fields = errors.fields
+            editTree(ref) { $0.edit(errors.form, kinds: ["form"]) { $0.setErrors(fields) } }
             let first = fields.sorted { $0.key < $1.key }.first?.value.first
             return first.map { message -> [Effect] in [.haptic(.error), .announce(message)] } ?? []
         case .toast(let toast):
             return notice(toast, at: ref)
-        case .open(let target):
-            editTree(ref) { $0.edit(target, kinds: Node.openable) { $0.setOpen(true) } }
-        case .close(let target):
-            editTree(ref) { $0.edit(target, kinds: Node.openable) { $0.setOpen(false) } }
-        case .url(let href, _):
-            update(ref) { $0.address = href }
-        case .navigate(let href):
-            return navigate(href, present: .push, from: ref)
-        case .navigateExternal(let href):
-            guard let url = URL(string: href), case .external = origin.destination(of: url) else { return [] }
+        case .open(let open):
+            editTree(ref) { $0.edit(open.target, kinds: Navree.Node.openable) { $0.setOpen(true) } }
+        case .close(let close):
+            editTree(ref) { $0.edit(close.target, kinds: Navree.Node.openable) { $0.setOpen(false) } }
+        case .url(let url):
+            update(ref) { $0.address = url.href }
+        case .navigate(let link):
+            return navigate(link.href, present: .push, from: ref)
+        case .navigateExternal(let link):
+            guard let url = URL(string: link.href), case .external = origin.destination(of: url) else { return [] }
             return [.openExternal(url)]
         case .reload:
             return reload(ref)
-        case .invalidate(let target):
+        case .invalidate(let invalidate):
+            let target = invalidate.target
             guard let page = state.page(ref), case .screen(let screen) = page.content,
                 case .region(let region)? = screen.body.find(target, kinds: ["region"])
             else { return [] }
             return [fetch(.region(ref, address: page.address, id: target), OriginRequest(address: region.src))]
-        case .focus, .unrecognized:
+        case .focus, .merge, .rows, .row, .device, .signedOut, .unknown:
             break
         }
         return []
@@ -599,9 +613,11 @@ public struct InterimRuntime: Sendable {
 
     /// What the web shows as a toast: a line of status in the screen, or an
     /// alert when something failed; and a haptic and VoiceOver's words.
-    mutating func notice(_ toast: Toast, at ref: PageRef) -> [Effect] {
-        let next: Action? = toast.action.map { action in
-            action.post ? .request(method: .post, href: action.href, fields: []) : .navigate(href: action.href, present: .push)
+    mutating func notice(_ toast: Navree.Toast, at ref: PageRef) -> [Effect] {
+        let next: Navree.Action? = toast.action.map { action in
+            action.post
+                ? .request(Navree.Action.Request(href: action.href, method: .post))
+                : .navigate(Navree.Action.Navigate(href: action.href, present: .push))
         }
         let notice = Notice(
             id: toast.id ?? "notice", tone: toast.tone, title: toast.title, text: toast.text,
@@ -616,7 +632,7 @@ public struct InterimRuntime: Sendable {
         return effects
     }
 
-    mutating func editTree(_ ref: PageRef, _ change: (inout Node) -> Void) {
+    mutating func editTree(_ ref: PageRef, _ change: (inout Navree.Node) -> Void) {
         update(ref) { page in
             guard case .screen(var screen) = page.content else { return }
             change(&screen.body)
@@ -626,7 +642,7 @@ public struct InterimRuntime: Sendable {
 }
 
 enum OverlayState {
-    static func isOpen(_ node: Node) -> Bool {
+    static func isOpen(_ node: Navree.Node) -> Bool {
         switch node {
         case .sheet(let sheet): sheet.open
         case .dialog(let dialog): dialog.open
@@ -636,7 +652,7 @@ enum OverlayState {
     }
 }
 
-extension Node {
+extension Navree.Node {
     /// Sets the messages at the fields of a form, or clears them.
     mutating func setErrors(_ fields: [String: [String]]) {
         if case .field(var field) = self {
@@ -649,7 +665,7 @@ extension Node {
     }
 
     /// Changes every table here or inside.
-    mutating func forEachTable(_ change: (inout Node.Table) -> Void) {
+    mutating func forEachTable(_ change: (inout Navree.Table) -> Void) {
         if case .table(var table) = self {
             change(&table)
             self = .table(table)
@@ -659,7 +675,7 @@ extension Node {
     }
 
     /// Changes every form here or inside.
-    mutating func walkForms(_ change: (inout Node.Form) -> Void) {
+    mutating func walkForms(_ change: (inout Navree.Form) -> Void) {
         if case .form(var form) = self {
             change(&form)
             self = .form(form)

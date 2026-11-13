@@ -1,11 +1,11 @@
-extension Node {
-    /// Calls `body` on each node directly inside this one, in place, in the
-    /// order a reader meets them.
-    public mutating func forEachChild(_ body: (inout Node) -> Void) {
-        func each(_ nodes: inout [Node]) {
+extension Navree.Node {
+    /// Calls `body` on each node directly inside this one, in place: the same
+    /// nodes, in the same order, as ``children``.
+    public mutating func forEachChild(_ body: (inout Navree.Node) -> Void) {
+        func each(_ nodes: inout [Navree.Node]) {
             for index in nodes.indices { body(&nodes[index]) }
         }
-        func one(_ node: inout Node?) {
+        func one(_ node: inout Navree.Node?) {
             if var inner = node {
                 body(&inner)
                 node = inner
@@ -33,19 +33,39 @@ extension Node {
                 each(&query.children)
                 n.query = query
             }
-            for index in n.rows.indices { each(&n.rows[index].cells) }
+            for index in n.rows.indices {
+                each(&n.rows[index].cells)
+                each(&n.rows[index].actions)
+                each(&n.rows[index].detail)
+            }
             one(&n.empty)
             self = .table(n)
         case .link(var n): each(&n.children); self = .link(n)
+        case .figure(var n): one(&n.aside); one(&n.chart); self = .figure(n)
+        case .dayPager(var n): one(&n.scores); self = .dayPager(n)
         case .menu(var n): each(&n.items); self = .menu(n)
         case .form(var n): each(&n.children); self = .form(n)
         case .sheet(var n): each(&n.children); each(&n.actions); self = .sheet(n)
         case .dialog(var n): each(&n.children); each(&n.actions); self = .dialog(n)
         case .popover(var n): each(&n.children); self = .popover(n)
         case .native(var n): one(&n.alt); self = .native(n)
+        case .toolbar(var n):
+            for index in n.items.indices { each(&n.items[index].menu) }
+            self = .toolbar(n)
+        case .timeline(var n):
+            for index in n.items.indices { each(&n.items[index].detail) }
+            self = .timeline(n)
+        case .feedRow(var n): each(&n.detail); self = .feedRow(n)
+        case .message(var n): each(&n.body); self = .message(n)
+        case .pane(var n): each(&n.children); self = .pane(n)
+        case .card(var n): each(&n.children); each(&n.menu); self = .card(n)
+        case .layers(var n): each(&n.children); self = .layers(n)
+        case .carousel(var n): each(&n.children); self = .carousel(n)
+        case .adaptive(var n): each(&n.compact); each(&n.wide); self = .adaptive(n)
         case .unknown(var n): one(&n.alt); self = .unknown(n)
         case .divider, .spacer, .text, .rich, .image, .icon, .avatar, .badge, .progress, .chart, .code,
-            .button, .field, .web:
+            .button, .field, .web, .gauge, .ring, .rings, .dayClock, .meter, .columns, .strip, .range,
+            .calendarHeatmap, .matrixHeatmap, .scatter, .shape:
             break
         }
     }
@@ -54,7 +74,7 @@ extension Node {
     /// `kinds` (any kind when none are given). Returns whether there was one: an
     /// op whose target is gone is passed over, as a browser does.
     @discardableResult
-    public mutating func edit(_ id: String, kinds: Set<String> = [], _ change: (inout Node) -> Void) -> Bool {
+    public mutating func edit(_ id: String, kinds: Swift.Set<String> = [], _ change: (inout Navree.Node) -> Void) -> Bool {
         if self.id == id && (kinds.isEmpty || kinds.contains(kind)) {
             change(&self)
             return true
@@ -70,12 +90,12 @@ extension Node {
 
     /// Takes out the first node with `id` among `kinds`. Returns whether there was one.
     @discardableResult
-    public mutating func remove(_ id: String, kinds: Set<String> = []) -> Bool {
+    public mutating func remove(_ id: String, kinds: Swift.Set<String> = []) -> Bool {
         var found = false
-        func matches(_ node: Node) -> Bool {
+        func matches(_ node: Navree.Node) -> Bool {
             !found && node.id == id && (kinds.isEmpty || kinds.contains(node.kind))
         }
-        func filter(_ nodes: inout [Node]) {
+        func filter(_ nodes: inout [Navree.Node]) {
             if let index = nodes.firstIndex(where: matches) {
                 nodes.remove(at: index)
                 found = true
@@ -110,8 +130,8 @@ extension Node {
 
     /// Adds `nodes` at the end (or the start) of this node's children. A list
     /// also takes the address of the rows after these.
-    public mutating func insert(_ nodes: [Node], atStart: Bool, more: String? = nil) {
-        func put(_ children: inout [Node]) {
+    public mutating func insert(_ nodes: [Navree.Node], atStart: Bool, more: String? = nil) {
+        func put(_ children: inout [Navree.Node]) {
             if atStart { children.insert(contentsOf: nodes, at: 0) } else { children.append(contentsOf: nodes) }
         }
         switch self {
@@ -146,5 +166,5 @@ extension Node {
     }
 
     /// The kinds an `open` or a `close` means.
-    public static let openable: Set<String> = ["sheet", "dialog", "popover", "disclosure"]
+    public static let openable: Swift.Set<String> = ["sheet", "dialog", "popover", "disclosure"]
 }

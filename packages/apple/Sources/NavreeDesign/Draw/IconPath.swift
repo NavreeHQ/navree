@@ -275,7 +275,7 @@ public struct IconShapeView: View {
 /// tab bar item, a sidebar row. It is a template, so it takes the tint.
 @MainActor
 public enum IconImage {
-    public static func image(_ icon: Node.Icon, icons: [String: IconShape] = [:]) -> Image? {
+    public static func image(_ icon: Navree.Icon, icons: [String: Navree.IconShape] = [:]) -> Image? {
         let shape = icon.name.flatMap { icons[$0] }
         let paths = icon.paths.isEmpty ? shape?.paths ?? [] : icon.paths
         let fills = icon.fills.isEmpty ? shape?.fills ?? [] : icon.fills

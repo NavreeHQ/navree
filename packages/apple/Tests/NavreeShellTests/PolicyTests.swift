@@ -38,15 +38,21 @@ import Testing
 
 @Test func aRouteMatchesBySegmentAndDecidesHowALinkIsPresented() {
     let rules = RouteRules([
-        Route(match: "/orders/new", present: .sheet),
-        Route(match: "/orders/*/edit", present: .sheet),
-        Route(match: "/sign-in", present: .full, chrome: false),
+        Navree.Route(match: "/orders/new", present: .sheet),
+        Navree.Route(match: "/orders/*/edit", present: .sheet),
+        Navree.Route(chrome: false, match: "/sign-in", present: .full),
+        Navree.Route(match: "/orders/*/peek", present: .auto),
     ])
     #expect(rules.presentation(of: "/orders/new") == .sheet)
     #expect(rules.presentation(of: "/orders/42/edit?from=list") == .sheet)
     #expect(rules.presentation(of: "/orders/42") == .push)
     #expect(rules.presentation(of: "/orders/42/edit/more") == .push)
     #expect(rules.presentation(of: "/orders/new", asked: .replace) == .replace)
+    // A link that leaves it to the app is a push the rules may change, and a
+    // rule that leaves it to the app is a push.
+    #expect(rules.presentation(of: "/orders/new", asked: .auto) == .sheet)
+    #expect(rules.presentation(of: "/orders/42", asked: .auto) == .push)
+    #expect(rules.presentation(of: "/orders/42/peek") == .push)
     #expect(rules.keepsChrome("/sign-in") == false)
     #expect(rules.keepsChrome("/orders") == true)
 }
@@ -54,7 +60,7 @@ import Testing
 @Test func aDeepLinkOpensOnlyWhatTheShellNamesWithAGet() throws {
     let origin = try #require(Origin("https://store.example.com"))
     let links = DeepLinks(origin: origin, scheme: "charkha")
-    let shell = try WireDecoder.decode(ShellDocument.self, from: Data(#"""
+    let shell = try WireDecoder.decode(Navree.Shell.self, from: Data(#"""
         {"navree":1,"build":"b","name":"Store","home":"/","nav":{"groups":[{"items":[{"label":"Orders","href":"/orders"}]}]},
          "routes":[{"match":"/orders/*"}]}
         """#.utf8))
@@ -71,8 +77,8 @@ import Testing
 
 @Test func aFormIsEncodedAsABrowserEncodesIt() {
     let pairs = [
-        Pair(name: "amount", value: "7,848.00"), Pair(name: "reason", value: "late delivery"),
-        Pair(name: "filter[status][in]", value: "open"), Pair(name: "note", value: "₹ & ok"),
+        Navree.Pair(name: "amount", value: "7,848.00"), Navree.Pair(name: "reason", value: "late delivery"),
+        Navree.Pair(name: "filter[status][in]", value: "open"), Navree.Pair(name: "note", value: "₹ & ok"),
     ]
     #expect(
         FormEncoding.encode(pairs)
@@ -136,7 +142,7 @@ import Testing
     #expect(post.value(forHTTPHeaderField: "Accept") == "application/vnd.navree.native+json")
     #expect(post.value(forHTTPHeaderField: "Content-Type") == "application/x-www-form-urlencoded")
     #expect(post.httpMethod == "POST")
-    let get = try #require(transport.urlRequest(for: OriginRequest(address: "/orders", form: [Pair(name: "search", value: "Kaur")])))
+    let get = try #require(transport.urlRequest(for: OriginRequest(address: "/orders", form: [Navree.Pair(name: "search", value: "Kaur")])))
     #expect(get.url?.absoluteString == "https://store.example.com/orders?search=Kaur")
     #expect(transport.urlRequest(for: OriginRequest(address: "https://evil.example/")) == nil)
 }

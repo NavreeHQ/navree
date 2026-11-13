@@ -8,7 +8,7 @@ import Testing
 
 @Test func onAScreenTheCreateActionIsATrailingSymbolAndTheRestOverflow() {
     let slots = PlacementRules.place(
-        [ActionTraits(role: .secondary), ActionTraits(role: .create, prominence: .high), ActionTraits(role: .plain)],
+        [ActionTraits(role: .secondary), ActionTraits(role: .create, prominence: .high), ActionTraits(role: Navree.Role.none)],
         depth: .root
     )
     #expect(slots == [.overflow, .create, .overflow])
@@ -36,21 +36,21 @@ import Testing
         depth: .pushed
     )
     #expect(slots == [.destructiveSection, .primary])
-    #expect(PlacementRules.place([ActionTraits(role: .plain, standard: .delete)], depth: .root) == [.destructiveSection])
+    #expect(PlacementRules.place([ActionTraits(role: Navree.Role.none, standard: .delete)], depth: .root) == [.destructiveSection])
 }
 
 @Test func aStandardActionIsPlacedByWhatItIsWhateverItsRole() {
     let slots = PlacementRules.place(
-        [ActionTraits(role: .plain, standard: .add), ActionTraits(role: .plain, standard: .done)],
+        [ActionTraits(role: Navree.Role.none, standard: .add), ActionTraits(role: Navree.Role.none, standard: .done)],
         depth: .pushed
     )
     #expect(slots == [.create, .primary])
 }
 
 @Test func aDestructiveActionThatCanBeUndoneAsksNothingFirst() throws {
-    let undoable = try decode(Node.self, #"{"t":"button","label":"Archive","role":"destructive","undoable":true}"#)
-    let final = try decode(Node.self, #"{"t":"button","label":"Delete","role":"destructive"}"#)
-    let plain = try decode(Node.self, #"{"t":"button","label":"Save","role":"primary"}"#)
+    let undoable = try decode(Navree.Node.self, #"{"t":"button","label":"Archive","role":"destructive","undoable":true}"#)
+    let final = try decode(Navree.Node.self, #"{"t":"button","label":"Delete","role":"destructive"}"#)
+    let plain = try decode(Navree.Node.self, #"{"t":"button","label":"Save","role":"primary"}"#)
     guard case .button(let a) = undoable, case .button(let b) = final, case .button(let c) = plain else {
         Issue.record("not buttons")
         return
@@ -102,7 +102,7 @@ import Testing
 
 @Test func thereIsNoToastAFailureIsAnAlertAndAnythingElseAnInlineStatus() {
     #expect(PresentationRules.message(.danger) == .alert)
-    for tone in [Tone.success, .info, .warning, .neutral, .accent] {
+    for tone in [Navree.Tone.success, .info, .warning, .neutral, .accent] {
         #expect(PresentationRules.message(tone) == .inlineStatus)
     }
     #expect(PresentationRules.haptic(.success) == .success)
@@ -125,13 +125,13 @@ import Testing
 }
 
 @Test func iOSHasNoCheckboxesOrRadioButtons() throws {
-    let checkbox = try decode(Input.self, #"{"t":"toggle","kind":"checkbox"}"#)
-    let radio = try decode(Input.self, #"{"t":"choice","kind":"radio","options":[{"value":"a","label":"A"},{"value":"b","label":"B"}]}"#)
-    let many = try decode(Input.self, #"{"t":"choices","options":[{"value":"a","label":"A"}]}"#)
+    let checkbox = try decode(Navree.Input.self, #"{"t":"toggle","kind":"checkbox"}"#)
+    let radio = try decode(Navree.Input.self, #"{"t":"choice","kind":"radio","options":[{"value":"a","label":"A"},{"value":"b","label":"B"}]}"#)
+    let many = try decode(Navree.Input.self, #"{"t":"choices","options":[{"value":"a","label":"A"}]}"#)
     #expect(ContentRules.control(checkbox) == .toggle)
     #expect(ContentRules.control(radio) == .inlinePicker)
     #expect(ContentRules.control(many) == .multipleChoice)
-    let password = try decode(Input.self, #"{"t":"text","kind":"password","autofill":"new-password"}"#)
+    let password = try decode(Navree.Input.self, #"{"t":"text","kind":"password","autofill":"new-password"}"#)
     #expect(ContentRules.control(password) == .secureField)
     guard case .text(let text) = password else { return }
     #expect(ContentRules.keyboard(text).content == .newPassword)
@@ -166,7 +166,7 @@ import Testing
 }
 
 @Test func aRowOfButtonsBecomesRowsOfAGroupedList() throws {
-    let group = try decode([Node].self, #"[{"t":"button","label":"Refund"},{"t":"button","label":"Cancel order","role":"destructive"}]"#)
+    let group = try decode([Navree.Node].self, #"[{"t":"button","label":"Refund"},{"t":"button","label":"Cancel order","role":"destructive"}]"#)
     #expect(ContentRules.isButtonGroup(group))
     #expect(!ContentRules.isButtonGroup(Array(group.prefix(1))))
 }
@@ -192,15 +192,15 @@ import Testing
 
 // MARK: - Helpers
 
-func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
+func decode<T: Decodable & Sendable>(_ type: T.Type, _ json: String) throws -> T {
     try WireDecoder.decode(type, from: Data(json.utf8))
 }
 
-func recordedScreen(_ name: String) throws -> Screen {
+func recordedScreen(_ name: String) throws -> Navree.Screen {
     let root = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let data = try Data(contentsOf: root.appendingPathComponent("Demo/NavreeDemo/Recorded/\(name)"))
-    return try #require(try WireDecoder.decode(Envelope.self, from: data).screen)
+    return try #require(try WireDecoder.decode(Navree.Envelope.self, from: data).screen)
 }
 
 @Test func aRecordsValueAtTheEndIsItsLastNumberAndOtherNumbersKeepTheirNames() throws {
