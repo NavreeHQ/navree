@@ -191,7 +191,7 @@ public final class CookieJar {
     /// other host the jar held. What waits for that waits `wipeLimit` at most.
     @discardableResult
     public func forget(_ store: WKWebsiteDataStore?) -> Task<Void, Never> {
-        let hosts = self.hosts.union(site.map { Set([$0.host]) } ?? Set())
+        let hosts = Self.wiped(held: self.hosts, site: site)
         records = []
         session += 1
         keychain?.delete()
@@ -204,6 +204,19 @@ public final class CookieJar {
         return done
     }
 
+    /// The hosts whose cookies and data a wipe takes from the web view's
+    /// store: the configured origin's always, whatever the jar still held,
+    /// and the hosts the jar held.
+    nonisolated static func wiped(held: Set<String>, site: Origin?) -> Set<String> {
+        held.union(site.map { Set([$0.host]) } ?? Set())
+    }
+
+    /// Whether a record of the web view's store, named by the site it
+    /// belongs to (`shop.example` for `eu.shop.example`), is one of `hosts`'.
+    nonisolated static func holds(_ displayName: String, of hosts: Set<String>) -> Bool {
+        hosts.contains { host in displayName == host || host.hasSuffix("." + displayName) }
+    }
+
     /// Takes out of the web view's store every cookie and all stored data of `hosts`.
     static func wipe(_ store: WKWebsiteDataStore, hosts: Set<String>) async {
         for cookie in await store.httpCookieStore.allCookies() {
@@ -214,9 +227,7 @@ public final class CookieJar {
         }
         let kinds = WKWebsiteDataStore.allWebsiteDataTypes()
         let found = await store.dataRecords(ofTypes: kinds)
-        let ours = found.filter { record in
-            hosts.contains { host in record.displayName == host || host.hasSuffix("." + record.displayName) }
-        }
+        let ours = found.filter { holds($0.displayName, of: hosts) }
         await store.removeData(ofTypes: kinds, for: ours)
     }
 
