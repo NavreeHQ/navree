@@ -38,7 +38,7 @@ fun addressCases(text: String): List<AddressCase> =
 class OriginsTest {
     @Test
     fun every_address_of_the_table_is_ours_or_not_as_it_says() {
-        val cases = addressCases(Fixtures.text("addresses.json"))
+        val cases = addressCases(Fixtures.text("addresses/ours.json"))
         assertTrue("the table has its cases", cases.size > 40)
         val wrong = cases.filter { Origins(it.origin, it.also, it.loopbackHttp).ours(it.address) != it.ours }
         assertEquals("addresses answered wrongly: ${wrong.map { it.address }}", emptyList<AddressCase>(), wrong)
