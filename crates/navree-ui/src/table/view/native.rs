@@ -51,7 +51,7 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
             .iter()
             .filter(|(_, role)| *role == ColumnRole::Subtitle)
             .filter_map(|(name, _)| R::COLUMNS.iter().position(|column| column.name == *name))
-            .filter(|at| !state.cols.contains(at))
+            .filter(|at| !state.cols.contains(at) && !state.withdrawn.contains(at))
             .collect();
         let span = self.span();
         let mut rows = Vec::with_capacity(self.data.rows.len());

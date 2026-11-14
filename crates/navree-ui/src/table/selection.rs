@@ -126,6 +126,24 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> BulkRequest<R, F> {
 }
 
 impl<R: TableRow, F: FilterBar> BulkRequest<R, F> {
+    /// Takes columns away from the person asking, as
+    /// [`TableQuery::without_columns`] does for the table they were drawn in: "all that
+    /// match" then selects by the search and filters the table was allowed to have, and
+    /// the count it is held to is that of the same rows. Call it with the same names.
+    #[must_use]
+    pub fn without_columns<S: AsRef<str>>(mut self, names: impl IntoIterator<Item = S>) -> Self {
+        self.query = self.query.without_columns(names);
+        self
+    }
+
+    /// Lets the person asking use only these columns, as [`TableQuery::only_columns`]
+    /// does for the table they were drawn in.
+    #[must_use]
+    pub fn only_columns<S: AsRef<str>>(mut self, names: impl IntoIterator<Item = S>) -> Self {
+        self.query = self.query.only_columns(names);
+        self
+    }
+
     /// Which action.
     pub fn action(&self) -> &str {
         &self.action

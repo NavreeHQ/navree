@@ -33,6 +33,19 @@ every `@navree/*` package carries the same version.
   verified (the verification link, a magic link or an emailed code), the next sign-in with the
   provider links. A user that a social sign-in created has a verified address when the provider
   verified it, and connecting a provider from a signed-in session works as before.
+- An agent's conversation, and the assistant's run of it, now record the workspace they began in
+  (the `ai` migration set adds a nullable `workspace_id` to `ai_conversations` and `ai_runs`).
+  Every lookup of a conversation (its page, items, messages, stop, approvals, a component's
+  button, its state, deleting it, `Conversations::list_for`, and a run that continues it) needs
+  the workspace of the request to match, and another workspace's conversation is a 404 like one
+  that isn't there. A conversation with no workspace (started before this, or in an app without
+  workspaces) opens only in a request that is in no workspace. `AssistantConfig::guard` runs a
+  route guard, such as `InWorkspace::guard()`, before each of the assistant's routes.
+- `TableQuery::without_columns` and `only_columns` (and the same two on `BulkRequest` and
+  `ViewPost`) take columns away from the person asking, for one request. A column taken away is
+  not shown, not in the column menu, not filtered on, sorted by or searched, not in a saved view
+  that is applied, not in a row's cells and not in the CSV export. `#[col(hidden)]` still only
+  says how a column starts: the docs now say so.
 
 ## [1.2.0] - 2026-11-13
 

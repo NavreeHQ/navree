@@ -984,6 +984,9 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         (0..self.query.columns().len())
             .map(|at| {
                 let column = self.query.column(at);
+                if self.query.is_withdrawn(at) {
+                    return false;
+                }
                 let Some(kind) = kind_code(column.kind) else {
                     return false;
                 };
@@ -1006,8 +1009,14 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// The default order, spelled as the URL spells a sort.
     fn default_sort(&self) -> String {
         let mut out = String::new();
-        for (at, (name, direction)) in self.query.config().sort.iter().enumerate() {
-            if at > 0 {
+        // A column taken away from the reader is not named, here or anywhere else.
+        for (name, direction) in self.query.config().sort.iter().filter(|(name, _)| {
+            self.query
+                .shape
+                .index_of(name)
+                .is_none_or(|at| !self.query.is_withdrawn(at))
+        }) {
+            if !out.is_empty() {
                 out.push(',');
             }
             if *direction == Direction::Desc {
@@ -1662,7 +1671,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let labels = &self.labels;
         let state = &self.query.state;
         let form = self.form_id();
-        let searchable = self.query.columns().iter().any(|column| column.search);
+        let searchable = self.query.searchable();
         let search = searchable.then(|| {
             let input = Input::search("search")
                 .placeholder(labels.search.to_string())
@@ -1688,7 +1697,10 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let order: Vec<usize> = shown
             .iter()
             .copied()
-            .chain((0..self.query.columns().len()).filter(|at| !shown.contains(at)))
+            .chain(
+                (0..self.query.columns().len())
+                    .filter(|at| !shown.contains(at) && !self.query.is_withdrawn(*at)),
+            )
             .collect();
         let column_rows: Vec<Element> = order
             .iter()
@@ -1761,7 +1773,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     .columns()
                     .iter()
                     .enumerate()
-                    .filter(|(_, column)| !column.hidden)
+                    .filter(|(at, column)| !column.hidden && !state.withdrawn.contains(at))
                     .map(|(at, _)| at)
                     .collect();
                 state.widths.clear();
@@ -1889,7 +1901,9 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
 
     /// The columns with a filter, in the bar's order, then the rest.
     fn bar_columns(&self) -> Vec<usize> {
-        let filterable = |at: &usize| self.query.column(*at).filter != FilterKind::None;
+        let filterable = |at: &usize| {
+            self.query.column(*at).filter != FilterKind::None && !self.query.is_withdrawn(*at)
+        };
         match &self.query.state.bar {
             Some(bar) => bar.clone(),
             None => (0..self.query.columns().len()).filter(filterable).collect(),
@@ -1946,7 +1960,9 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .iter()
             .copied()
             .chain((0..self.query.columns().len()).filter(|at| {
-                self.query.column(*at).filter != FilterKind::None && !shown.contains(at)
+                self.query.column(*at).filter != FilterKind::None
+                    && !shown.contains(at)
+                    && !self.query.is_withdrawn(*at)
             }))
             .collect();
         let rows: Vec<Element> = order

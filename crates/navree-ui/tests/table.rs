@@ -1346,6 +1346,151 @@ fn the_browser_sorts_only_values_it_can_read_as_the_store_does() {
     assert!(!html.contains(r#"data-v="Agra""#), "{html}");
 }
 
+/// The names of the columns shown, in order.
+fn shown(query: &Q) -> Vec<&'static str> {
+    query.visible_columns().iter().map(|at| name(*at)).collect()
+}
+
+#[test]
+fn hidden_is_how_a_column_starts_and_not_who_may_use_it() {
+    let query = q("cols=title,company&filter[company][in]=7");
+    assert_eq!(shown(&query), ["title", "company", "owner"]);
+    assert!(query.filter_on("company").is_some());
+}
+
+#[test]
+fn a_column_taken_away_is_in_no_part_of_the_state() {
+    let url = "cols=title,amount,company&sort=-amount,title&filter[amount][gte]=500\
+               &filter[stage][in]=won&filter[company][in]=7&w=amount:200,title:300\
+               &fb=amount,stage&search=sutlej";
+    assert_eq!(
+        shown(&q(url)),
+        ["title", "amount", "company", "owner"],
+        "all there until one is taken away"
+    );
+    let query = q(url).without_columns(["amount", "company"]);
+    assert_eq!(shown(&query), ["title", "owner"]);
+    assert_eq!(query.sorts().len(), 1);
+    assert_eq!(query.sort(), Some(("title", Direction::Asc)));
+    assert_eq!(query.filters().len(), 1);
+    assert!(query.filter_on("stage").is_some());
+    assert!(query.filter_on("amount").is_none());
+    assert!(query.filter_on("company").is_none());
+    assert_eq!(query.search(), Some("sutlej"), "a search column is left");
+    for text in [query.href(), query.filter_key()] {
+        assert!(
+            !text.contains("amount") && !text.contains("company"),
+            "{text}"
+        );
+    }
+    assert!(query.href().contains("fb=stage"), "{}", query.href());
+    // What the table writes never names them, so reading it back is the same.
+    let again = TableQuery::<Deal, NoFilter>::parse("/deals", &query.query_string());
+    assert_eq!(shown(&again), ["title", "owner"]);
+    assert_eq!(again.filters(), query.filters());
+}
+
+#[test]
+fn taking_columns_away_adds_up_and_unknown_names_are_ignored() {
+    let query = q("cols=title,amount,hot")
+        .without_columns(["amount", "no such column"])
+        .without_columns(vec![String::from("hot")]);
+    assert_eq!(shown(&query), ["title", "owner"]);
+}
+
+#[test]
+fn only_columns_lets_in_what_it_names_and_nothing_else() {
+    let query = q("cols=title,amount,hot&sort=-amount&filter[hot]=true&filter[stage][in]=won")
+        .only_columns(["title", "hot", "no such column"]);
+    assert_eq!(shown(&query), ["title", "hot"]);
+    assert!(query.sorts().is_empty());
+    assert_eq!(query.filters().len(), 1);
+    assert!(query.filter_on("hot").is_some());
+    // A hidden column can be the one that is left.
+    assert_eq!(shown(&q("").only_columns(["company"])), ["company"]);
+}
+
+#[test]
+fn a_default_order_on_a_column_taken_away_is_not_in_the_urls() {
+    let query = q("").without_columns(["amount"]);
+    assert_eq!(query.sort(), Some(("title", Direction::Asc)));
+    assert_eq!(query.sorts().len(), 1);
+    assert_eq!(query.href(), "/deals", "what is left is the default");
+}
+
+#[test]
+fn a_search_with_no_column_left_to_search_is_ignored() {
+    let query = q("search=sutlej&filter[title][contains]=anu").without_columns(["title"]);
+    assert_eq!(query.search(), None);
+    assert!(query.filters().is_empty());
+    assert!(!query.is_filtered());
+    let rows = [deal(1)];
+    assert!(draw(&q(""), &rows, 1).contains(r#"name="search""#));
+    let html = draw(&query, &rows, 1);
+    assert!(!html.contains(r#"name="search""#), "no search box: {html}");
+}
+
+#[test]
+fn a_column_taken_away_is_not_drawn_offered_or_filterable() {
+    let rows = [deal(1)];
+    let tokens = |column: &str| {
+        [
+            format!(r#"data-col="{column}""#),
+            format!(r#"value="{column}""#),
+            format!(r#"name="filter[{column}][null]""#),
+        ]
+    };
+    let before = draw(&q(""), &rows, 1);
+    for token in tokens("amount") {
+        assert!(before.contains(&token), "{token} in {before}");
+    }
+    assert!(before.contains(r#"value="company""#), "{before}");
+    let query = q("cols=title,amount,company&filter[amount][gte]=5&sort=-amount")
+        .without_columns(["amount", "company"]);
+    let html = draw(&query, &rows, 1);
+    for column in ["amount", "company"] {
+        for token in tokens(column) {
+            assert!(!html.contains(&token), "{token} in {html}");
+        }
+        assert!(!html.contains(&format!("filter[{column}]")), "{html}");
+        assert!(!html.contains(&format!("filter%5B{column}")), "{html}");
+    }
+    assert!(html.contains(r#"data-col="title""#), "{html}");
+    assert!(html.contains(r#"name="cols" value="stage""#), "{html}");
+}
+
+#[test]
+fn a_saved_view_applied_by_default_leaves_the_columns_taken_away_out() {
+    use navree_ui::table::SavedView;
+    let views = [SavedView {
+        id: "v1".to_owned(),
+        name: "Big deals".to_owned(),
+        query: "sort=-amount&filter[amount][gte]=500&cols=title,amount".to_owned(),
+        is_default: true,
+    }];
+    let opened = q("").or_default_view(&views);
+    assert!(opened.filter_on("amount").is_some(), "the view applies");
+    assert!(shown(&opened).contains(&"amount"));
+    for query in [
+        q("").without_columns(["amount"]).or_default_view(&views),
+        q("").or_default_view(&views).without_columns(["amount"]),
+    ] {
+        assert!(query.filter_on("amount").is_none());
+        assert!(query.sorts().iter().all(|term| name(term.column) != "amount"));
+        assert!(!shown(&query).contains(&"amount"));
+    }
+}
+
+#[test]
+fn a_bulk_request_holds_the_same_columns_back() {
+    let body = b"action=archive&_mode=all&_expected=3&_q=filter%5Bamount%5D%5Bgte%5D%3D500%26filter%5Bstage%5D%5Bin%5D%3Dwon";
+    let request = navree_ui::BulkRequest::<Deal, NoFilter>::parse(body).unwrap();
+    assert_eq!(request.query().filters().len(), 2);
+    let request = request.without_columns(["amount"]);
+    assert_eq!(request.query().filters().len(), 1);
+    assert!(request.query().filter_on("stage").is_some());
+}
+
 #[test]
 fn a_columns_alignment_is_for_its_cells_not_for_a_row_drawn_inside_one() {
     // A cell may hold a `Row` centred on its cross axis, which writes the same
