@@ -1,6 +1,7 @@
 //! [`ViewModule`] and [`ModuleBuilderViewExt`].
 
 use std::collections::{BTreeSet, HashMap};
+use std::path::Path;
 use std::sync::Arc;
 
 use navree_config::{Config, ModuleBuilderConfigExt};
@@ -120,6 +121,7 @@ fn register(m: &mut ModuleBuilder, options: Option<ViewOptions>) {
                     let names: Vec<String> =
                         takeovers.iter().map(|taken| taken.name.clone()).collect();
                     let wants_files = !plugin_names.is_empty();
+                    let first_dir = options.dirs.first().cloned();
                     // Reads template files: keep it off the async workers.
                     let (mut views, provided, files) = tokio::task::spawn_blocking(move || {
                         let views = Views::with_templates(&options, templates)?;
@@ -132,7 +134,7 @@ fn register(m: &mut ModuleBuilder, options: Option<ViewOptions>) {
                         Ok::<_, ViewError>((views, provided, files))
                     })
                     .await??;
-                    errors.extend(settle(takeovers, &provided));
+                    errors.extend(settle(takeovers, &provided, first_dir.as_deref()));
                     errors.extend(stem_errors(&plugin_names, &app_names, &files));
                     errors.extend(configure_environment(&r.app(), &mut views));
                     if !errors.is_empty() {
@@ -418,8 +420,10 @@ fn say_duplicate(
 
 /// The errors of the takeovers no template file settles. `provided` holds the
 /// names a template file provides, which win over an embedded template: a
-/// takeover of such a name is said at `info` instead.
-fn settle(takeovers: Vec<Takeover>, provided: &[String]) -> Vec<String> {
+/// takeover of such a name is said at `info` instead. The error names where the
+/// file goes in the first of the app's template folders (`first_dir`, the first
+/// of `view.dirs`), when it has one.
+fn settle(takeovers: Vec<Takeover>, provided: &[String], first_dir: Option<&Path>) -> Vec<String> {
     let mut errors = Vec::new();
     for Takeover {
         name,
@@ -434,8 +438,14 @@ fn settle(takeovers: Vec<Takeover>, provided: &[String]) -> Vec<String> {
                 "embedded template `{name}` of `{first}` is replaced by `{second}`'s, a module of the plugin `{plugin}`; the file `{name}` in a template folder is used"
             );
         } else {
+            let folder = match first_dir {
+                Some(dir) => {
+                    format!(" ({})", dir.join(&name).to_string_lossy().replace('\\', "/"))
+                }
+                None => String::new(),
+            };
             errors.push(format!(
-                "embedded template `{name}` of `{first}` cannot be replaced by `{second}`, a module of the plugin `{plugin}`; to use the plugin's version, copy it to resources/views/{name} or register it from a module of the app"
+                "embedded template `{name}` of `{first}` cannot be replaced by `{second}`, a module of the plugin `{plugin}`; to settle it, put the template you want, the plugin's or your own, in a template folder of the app{folder}, or register it from a module of the app that comes after `{second}`"
             ));
         }
     }

@@ -337,7 +337,7 @@ async fn a_plugin_replacing_an_app_document_file_fails_until_the_app_takes_it() 
     };
     assert!(
         error.to_string().contains(&format!(
-            "document file `invoices/standard.html` of `CrmDocuments` cannot be replaced by `PluginAfterImport`, a module of the plugin `navree-plugin-announcements`; to use the plugin's version, put it in a documents.templates folder ({}/invoices/standard.html) or embed it from a module of the app",
+            "document file `invoices/standard.html` of `CrmDocuments` cannot be replaced by `PluginAfterImport`, a module of the plugin `navree-plugin-announcements`; to settle it, put the file you want, the plugin's or your own, in a documents.templates folder ({}/invoices/standard.html), or embed it from a module of the app that comes after `PluginAfterImport`",
             shown(dir.path())
         )),
         "{error}"
