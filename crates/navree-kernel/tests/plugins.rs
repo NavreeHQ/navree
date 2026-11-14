@@ -327,6 +327,12 @@ fn an_unsafe_publish_path_fails_the_boot() {
             vec!["list.html", "List.html"],
             ("views", "List.html"),
         ),
+        // Equal only once upper-cased (`ß` is `SS`).
+        (
+            PublishTag::Views,
+            vec!["straße.html", "STRASSE.html"],
+            ("views", "STRASSE.html"),
+        ),
         (
             PublishTag::Locales,
             vec!["announcements.ftl"],
@@ -361,8 +367,9 @@ fn an_unsafe_publish_path_fails_the_boot() {
 
 /// A value the report counts; nothing reads its text.
 #[allow(dead_code)]
-pub struct Notice(&'static str);
-pub struct Costly;
+struct Notice(&'static str);
+/// A provider the report and the `plugins` built-in must not build.
+struct Costly;
 
 /// The plugin the report and the `plugins` built-in are tried on.
 struct Announcements {
