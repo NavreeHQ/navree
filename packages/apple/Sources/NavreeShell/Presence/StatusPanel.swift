@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import NavreeDesign
 import SwiftUI
 
 /// The shell an item in the menu bar holds, told whether it stands in the
@@ -10,15 +11,28 @@ struct HeldShell: View {
     var body: some View {
         AppShell(configuration: configuration)
             .environment(\.navreeCompactWindow, PresenceModel.shared.shellUnderItem)
+            // Any size the window is given: the hosting view otherwise shrinks
+            // the window to a screen whose content has a size of its own (a
+            // page the server could not find).
+            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
     }
 }
 
 /// The window an item in the menu bar opens with the whole app in it. It
 /// takes the keyboard, so forms can be typed in, and holds the app's sheets
-/// and questions as any window does.
+/// and questions as any window does. Escape closes it, as it closes the
+/// system's own items' windows, once nothing in it takes the key first (a
+/// field's words, a menu, a sheet's Cancel).
 final class StatusPanel: NSPanel {
+    /// What Escape does when nothing in the window took it.
+    var escape: (@MainActor () -> Void)?
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    override func cancelOperation(_ sender: Any?) {
+        if let escape { escape() } else { super.cancelOperation(sender) }
+    }
 }
 
 /// An item in the menu bar holding the whole app, for an app in the menu bar
@@ -53,7 +67,8 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
     }
 
     /// Puts the item in the menu bar or takes it out, as the place says, draws
-    /// its button, and opens the panel at launch when the app asks.
+    /// its button, starts the app's shell with the app, and opens the panel at
+    /// launch when the app asks.
     func apply(_ model: PresenceModel) {
         let wanted = StatusRules.inserted(style: .window, item: model.presence.statusItem, place: model.place)
         guard wanted else {
@@ -65,8 +80,23 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         StatusButton.draw(item, model)
         if !openedAtLaunch {
             openedAtLaunch = true
+            prepare()
             if options.opensAtLaunch { show() }
         }
+    }
+
+    /// The app's shell made at launch and laid out in the panel, which stays
+    /// hidden: its core starts with the app, so what the server says before
+    /// the person first opens the panel (the count beside the item) arrives,
+    /// and the panel opens on the app already there. No window shows and the
+    /// app stays out of the Dock.
+    private func prepare() {
+        guard let shell = shell() else { return }
+        let panel = self.panel ?? makePanel()
+        if panel.contentViewController == nil { panel.contentViewController = shell }
+        panel.setFrame(CGRect(origin: panel.frame.origin, size: options.size), display: false)
+        keepSmallest(panel)
+        shell.view.layoutSubtreeIfNeeded()
     }
 
     private func make() -> NSStatusItem {
@@ -126,26 +156,65 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         }
         guard let button = item?.button, let place = button.window, let shell = shell() else { return }
         let panel = self.panel ?? makePanel()
-        if panel.contentViewController == nil { panel.contentViewController = shell }
+        if panel.contentViewController == nil {
+            panel.contentViewController = shell
+            keepSmallest(panel)
+        }
         let screen = (place.screen ?? NSScreen.main)?.visibleFrame ?? .zero
+        // A panel the person may resize opens at the size they left it.
         let size = options.resizable && panel.frame.width > 1 ? panel.frame.size : options.size
         panel.setFrame(StatusRules.windowFrame(item: place.frame, size: size, screen: screen), display: true)
+        fitSheet()
         NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
-        button.highlight(true)
         shown = true
+        pressed(true)
         PresenceModel.shared.statusWindowChanged(shown: true)
         watchOutside()
     }
 
-    /// Closes the panel; the app's shell and its session stay as they were.
+    /// The item shown pressed while the panel is open, as the system's own
+    /// items show theirs. A click's own tracking lets the button go when it
+    /// ends, after its action has run, so the pressed look is set again once
+    /// that is over.
+    private func pressed(_ on: Bool) {
+        item?.button?.highlight(on)
+        guard on else { return }
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.shown else { return }
+                self.item?.button?.highlight(true)
+            }
+        }
+    }
+
+    /// Closes the panel; the app's shell and its session stay as they were,
+    /// so it opens again where the person left it.
     func hide() {
         guard shown else { return }
         unwatch()
         panel?.orderOut(nil)
-        item?.button?.highlight(false)
         shown = false
+        pressed(false)
         PresenceModel.shared.statusWindowChanged(shown: false)
+    }
+
+    /// Closes the panel for what happened outside it (a click elsewhere, the
+    /// app going to the background), unless one of the system's own sheets
+    /// stands over it (signing in): that sheet answers to the panel, and
+    /// closing the panel under it would leave it nowhere.
+    private func hideForOutside() {
+        guard PresenceModel.shared.systemSheets == 0 else { return }
+        hide()
+    }
+
+    /// The window the system's own sheets (signing in) stand over while the
+    /// app is held by its item: its full window when the person opened one,
+    /// else the panel, opened for it so the person sees what it asks.
+    func windowForSystemSheets() -> NSWindow? {
+        if let window, window.isVisible { return window }
+        show()
+        return shown ? panel : nil
     }
 
     /// The app's shell, made once: one session for the process, wherever it shows.
@@ -178,11 +247,64 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
         panel.level = options.pinned ? .floating : .statusBar
-        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
-        panel.contentMinSize = options.minimumSize
+        // As the system's own items' windows: on the space in use, beside an
+        // app in full screen, never in the Window menu or among the windows
+        // ⌘` steps through.
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .ignoresCycle]
+        panel.isExcludedFromWindowsMenu = true
+        panel.minSize = options.minimumSize
         panel.animationBehavior = .utilityWindow
+        panel.escape = { [weak self] in self?.hide() }
+        // The panel's size, or its sheet's as the sheet follows the room the
+        // panel has.
+        resizing = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: nil, queue: .main) { [weak self] note in
+            let window = note.object as? NSWindow
+            MainActor.assumeIsolated {
+                guard window is StatusPanel || window?.sheetParent is StatusPanel else { return }
+                self?.fitSheet()
+            }
+        }
         self.panel = panel
         return panel
+    }
+
+    private var resizing: (any NSObjectProtocol)?
+
+    /// The smallest the person may make the panel, as its options say. The
+    /// hosted shell sets the window's smallest size anew as it lays out, so
+    /// the panel's delegate holds it too, as the person drags its edges.
+    private func keepSmallest(_ panel: StatusPanel) {
+        panel.minSize = options.minimumSize
+        panel.delegate = self
+    }
+
+    /// The person's drag stops at the panel's smallest size, and at the full
+    /// window's smallest content.
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        let smallest: CGSize
+        if sender === panel {
+            smallest = options.minimumSize
+        } else if sender === window {
+            let content = configuration?.windows.minimumSize ?? CGSize(width: 480, height: 400)
+            smallest = sender.frameRect(forContentRect: CGRect(origin: .zero, size: content)).size
+        } else {
+            return frameSize
+        }
+        return NSSize(width: max(frameSize.width, smallest.width), height: max(frameSize.height, smallest.height))
+    }
+
+    /// A sheet up in the panel stays within it as the panel changes size or
+    /// place: as a sheet opened in it then would
+    /// (``PresentationRules/sheetSize(form:room:)``), centred on the panel,
+    /// its top where it stands and its content scrolling.
+    private func fitSheet() {
+        guard let panel, let sheet = panel.attachedSheet else { return }
+        let size = PresentationRules.sheetSize(form: sheet.frame.size, room: panel.contentLayoutRect.size)
+        let frame = CGRect(
+            x: (panel.frame.midX - size.width / 2).rounded(), y: sheet.frame.maxY - size.height, width: size.width, height: size.height
+        )
+        guard frame != sheet.frame else { return }
+        sheet.setFrame(frame, display: true)
     }
 
     /// Unless pinned, a click anywhere but the panel, its sheets, its menus and
@@ -191,7 +313,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         unwatch()
         guard !options.pinned else { return }
         let elsewhere = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
-            MainActor.assumeIsolated { self?.hide() }
+            MainActor.assumeIsolated { self?.hideForOutside() }
         }
         let inside = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             let window = event.window
@@ -201,7 +323,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         monitors = [elsewhere, inside].compactMap(\.self)
         watching = [
             NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.hide() }
+                MainActor.assumeIsolated { self?.hideForOutside() }
             },
         ]
     }
@@ -209,7 +331,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
     private func clicked(in window: NSWindow?) {
         guard let panel, let window else { return }
         if window === panel || window.sheetParent === panel || window === item?.button?.window || window.level >= .popUpMenu { return }
-        hide()
+        hideForOutside()
     }
 
     private func unwatch() {
