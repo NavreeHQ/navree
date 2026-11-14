@@ -270,3 +270,79 @@ async fn helm_draws_the_same_menu_and_dashboard_when_no_link_or_card_is_for_the_
     assert_eq!(html, dashboard(&same_rep).await);
     assert!(!html.contains("Danger zone"), "{html}");
 }
+
+/// What the latest announcement's cards are given: a title someone typed, holding a script.
+fn latest() -> serde_json::Value {
+    json!({ "title": "<script>alert(1)</script>" })
+}
+
+/// A card that names a `.txt` template.
+fn text_template(m: &mut ModuleBuilder) {
+    m.helm_widget(
+        HelmWidget::new("latest", "Latest announcement")
+            .template("admin/widgets/latest.txt")
+            .data(|_ctx| async { Ok(latest()) }),
+    );
+}
+
+/// Two cards whose data holds a script: `latest` names its template without an extension,
+/// and only a `.txt` file of that name exists; `latest-html` names an `.html` template.
+struct LatestCards;
+
+impl Module for LatestCards {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.templates(&[
+            ("admin/widgets/latest.txt", "Latest: {{ data.title }}"),
+            (
+                "admin/widgets/latest-html.html",
+                "<p class=\"latest\">Latest: {{ data.title }}</p>",
+            ),
+        ])
+        .helm_widget(
+            HelmWidget::new("latest", "Latest announcement")
+                .template("admin/widgets/latest")
+                .data(|_ctx| async { Ok(latest()) }),
+        )
+        .helm_widget(
+            HelmWidget::new("latest-html", "Latest announcement")
+                .template("admin/widgets/latest-html.html")
+                .data(|_ctx| async { Ok(latest()) }),
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_card_writes_only_through_an_html_template_whatever_its_data_holds() {
+    // A template that is not HTML stops the boot.
+    let error = boot_error(
+        builder()
+            .module(ViewModule::for_root(ViewOptions::default()))
+            .module(Adds(text_template)),
+    )
+    .await;
+    assert!(
+        error.contains(
+            "Helm widget `latest` names the template `admin/widgets/latest.txt`, which is not HTML: name an .html template, such as .template(\"admin/widgets/latest\")"
+        ),
+        "{error}"
+    );
+
+    // A name without an extension is its `.html` template and never a `.txt` file of that
+    // name: with no `.html` one, the card fails, is left out, and the dashboard is drawn.
+    let app = builder()
+        .module(ViewModule::for_root(ViewOptions::default()))
+        .module(LatestCards)
+        .build()
+        .await;
+    let (_, rep) = user(&app, "rep").await;
+    let html = dashboard(&rep).await;
+    assert!(!html.contains(r#"data-helm-widget="latest""#), "{html}");
+    assert!(!html.contains("Latest: <"), "{html}");
+    // The `.html` template escapes the same data.
+    assert!(html.contains(r#"data-helm-widget="latest-html""#), "{html}");
+    assert!(
+        html.contains("<p class=\"latest\">Latest: &lt;script&gt;"),
+        "{html}"
+    );
+    assert!(!html.contains("<script>alert(1)"), "{html}");
+}
