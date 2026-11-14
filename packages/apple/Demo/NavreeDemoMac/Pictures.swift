@@ -11,6 +11,9 @@ import SwiftUI
 /// `menus.txt`); `menu:<Menu>/<Item>` (chooses that command);
 /// `key:<cmd|opt|shift>-...-<key>` (presses that shortcut on the menu bar,
 /// as the keyboard would); `picture:<name>` (each window as `<name>-<n>.png`);
+/// `composed:<name>` (the window in front as the window server composes it,
+/// as `<name>.png`, with the glass and the floating sidebar that `picture`
+/// leaves out);
 /// `views:<name>` (the window's views, their appearance and materials);
 /// `toolbar:<name>` (the toolbar's items, their words and the column each
 /// stands over);
@@ -87,6 +90,8 @@ enum WindowPictures {
                 log.append("type \(argument): window \"\(before)\" became \"\(windows.first?.title ?? "")\"")
             case "picture":
                 log.append(contentsOf: pictures(argument, out: out))
+            case "composed":
+                log.append(composed(argument, out: out))
             case "tree":
                 write(tree(), to: out.appendingPathComponent("\(argument).txt"))
                 log.append("tree \(argument).txt")
@@ -169,6 +174,25 @@ enum WindowPictures {
             try? png.write(to: file)
             return "picture \(file.lastPathComponent) \(Int(frame.bounds.width))x\(Int(frame.bounds.height)) \"\(window.title)\""
         }
+    }
+
+    /// The window in front as the window server composes it, its glass and
+    /// a sidebar floating on it included: an app may always picture its own
+    /// windows, with no screen recording.
+    static func composed(_ name: String, out: URL) -> String {
+        typealias Capture = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
+        guard let window = windows.first else { return "composed \(name): no window" }
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") else {
+            return "composed \(name): the window server cannot picture a window here"
+        }
+        let capture = unsafeBitCast(symbol, to: Capture.self)
+        // Only this window, its frame's shadow left out, at the screen's scale.
+        guard let image = capture(.null, 1 << 3, UInt32(window.windowNumber), (1 << 0) | (1 << 3))?.takeRetainedValue(),
+            let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+        else { return "composed \(name): no picture" }
+        let file = out.appendingPathComponent("\(name).png")
+        try? png.write(to: file)
+        return "composed \(file.lastPathComponent) \(image.width)x\(image.height) pixels \"\(window.title)\""
     }
 
     /// What the window in front says to VoiceOver, element by element: what
