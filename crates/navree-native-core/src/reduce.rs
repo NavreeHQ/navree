@@ -2581,7 +2581,10 @@ mod tests {
         // Its kind, and never its path: a path can hold a token.
         assert_eq!(reports(&update), ["link: a path"]);
         let update = core.send(tap("https://user@evil.example/reset/s3cret?x=1"));
-        assert_eq!(reports(&update), ["link: https://user@evil.example"]);
+        assert_eq!(reports(&update), ["link: https://evil.example"]);
+        // Nor a name or a password before the host.
+        let update = core.send(tap("https://ravneet:s3cret@evil.example/x"));
+        assert_eq!(reports(&update), ["link: https://evil.example"]);
         let update = core.send(tap("javascript:alert(1)"));
         assert_eq!(reports(&update), ["link: javascript:"]);
         // A redirect that does not read.
