@@ -674,6 +674,140 @@ pub fn selector_error(field: &str, slot: &DriverSlot) -> String {
     )
 }
 
+/// What a selector's hand-written `Deserialize` reads in place of a
+/// `String`: a string, as it is written (the kind judges it), or a table
+/// whose one key is a built-in name of `slot` (`{ memory = {} }`), as that
+/// name, whatever its value. A table never names a registered driver.
+/// Anything else (a table of another key, of no key or of two, a list, a
+/// number, a boolean) is the error of [`selector_error`], which never
+/// repeats the value. A format that is not human-readable is read for a
+/// string only.
+///
+/// Not public API: what the driver kinds of Navree call.
+#[doc(hidden)]
+pub fn selector_name<'de, D: Deserializer<'de>>(
+    deserializer: D,
+    field: &str,
+    slot: &DriverSlot,
+) -> Result<String, D::Error> {
+    let tables = deserializer.is_human_readable();
+    let visitor = SelectorName {
+        field,
+        slot,
+        tables,
+    };
+    if tables {
+        deserializer.deserialize_any(visitor)
+    } else {
+        deserializer.deserialize_str(visitor)
+    }
+}
+
+/// What [`selector_name`] reads: a string, or, with `tables`, a table whose
+/// one key is a built-in name of `slot`. Every other value is the
+/// selector's error.
+struct SelectorName<'a> {
+    field: &'a str,
+    slot: &'a DriverSlot,
+    tables: bool,
+}
+
+impl SelectorName<'_> {
+    /// The selector's error, which never repeats the value.
+    fn refuse<E: de::Error>(&self) -> E {
+        E::custom(selector_error(self.field, self.slot))
+    }
+}
+
+impl<'de> de::Visitor<'de> for SelectorName<'_> {
+    type Value = String;
+
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let what = self.slot.what();
+        write!(f, "the name of {} {what}", article(what))
+    }
+
+    fn visit_str<E: de::Error>(self, value: &str) -> Result<String, E> {
+        Ok(value.to_owned())
+    }
+
+    fn visit_string<E: de::Error>(self, value: String) -> Result<String, E> {
+        Ok(value)
+    }
+
+    /// Bytes that are UTF-8 are a string, as `String` reads them.
+    fn visit_bytes<E: de::Error>(self, value: &[u8]) -> Result<String, E> {
+        std::str::from_utf8(value)
+            .map(str::to_owned)
+            .map_err(|_| self.refuse())
+    }
+
+    fn visit_map<A: de::MapAccess<'de>>(self, mut map: A) -> Result<String, A::Error> {
+        if !self.tables {
+            return Err(self.refuse());
+        }
+        let Some(key) = map.next_key::<String>()? else {
+            return Err(self.refuse());
+        };
+        if !self.slot.built_in().contains(&key.as_str()) {
+            return Err(self.refuse());
+        }
+        map.next_value::<de::IgnoredAny>()?;
+        if map.next_key::<de::IgnoredAny>()?.is_some() {
+            return Err(self.refuse());
+        }
+        Ok(key)
+    }
+
+    fn visit_bool<E: de::Error>(self, _: bool) -> Result<String, E> {
+        Err(self.refuse())
+    }
+
+    fn visit_i64<E: de::Error>(self, _: i64) -> Result<String, E> {
+        Err(self.refuse())
+    }
+
+    fn visit_i128<E: de::Error>(self, _: i128) -> Result<String, E> {
+        Err(self.refuse())
+    }
+
+    fn visit_u64<E: de::Error>(self, _: u64) -> Result<String, E> {
+        Err(self.refuse())
+    }
+
+    fn visit_u128<E: de::Error>(self, _: u128) -> Result<String, E> {
+        Err(self.refuse())
+    }
+
+    fn visit_f64<E: de::Error>(self, _: f64) -> Result<String, E> {
+        Err(self.refuse())
+    }
+
+    fn visit_none<E: de::Error>(self) -> Result<String, E> {
+        Err(self.refuse())
+    }
+
+    fn visit_some<D: Deserializer<'de>>(self, _: D) -> Result<String, D::Error> {
+        Err(self.refuse())
+    }
+
+    fn visit_unit<E: de::Error>(self) -> Result<String, E> {
+        Err(self.refuse())
+    }
+
+    fn visit_newtype_struct<D: Deserializer<'de>>(self, _: D) -> Result<String, D::Error> {
+        Err(self.refuse())
+    }
+
+    fn visit_seq<A: de::SeqAccess<'de>>(self, _: A) -> Result<String, A::Error> {
+        Err(self.refuse())
+    }
+
+    fn visit_enum<A: de::EnumAccess<'de>>(self, _: A) -> Result<String, A::Error> {
+        Err(self.refuse())
+    }
+}
+
 /// Every driver the modules of `app` registered.
 fn registered(app: &AppContext) -> Vec<RegisteredDriver> {
     app.contributions::<RegisteredDriver>()
@@ -883,8 +1017,9 @@ fn failing_sections(errors: &[ConfigError]) -> Vec<String> {
 }
 
 /// What [`CheckReport::with_drivers`] adds: an error for each configured
-/// driver name of `slots` that is neither built in nor registered (not for
-/// a slot whose section already has an error), and no unknown key at or
+/// driver name of `slots`, read trimmed and in lower case (as search reads
+/// `search.engine`), that is neither built in nor registered (not for a
+/// slot whose section already has an error), and no unknown key at or
 /// below a table a registered driver reads.
 pub(crate) fn check_names(
     report: &mut CheckReport,
@@ -908,6 +1043,7 @@ pub(crate) fn check_names(
             continue;
         }
         for (key, name) in configured(&config, slot) {
+            let name = name.trim().to_lowercase();
             if DriverName::is_valid(&name)
                 && !slot.built_in().contains(&name.as_str())
                 && !is_registered(slot, &name, drivers)
@@ -992,6 +1128,7 @@ pub(crate) fn close_choices(root: &mut Json, slots: &[(&'static str, Vec<String>
 #[cfg(test)]
 mod tests {
     use navree_kernel::{ModuleId, ModuleInfo};
+    use serde::de::Visitor;
 
     use super::*;
 
@@ -1168,5 +1305,98 @@ mod tests {
             selector_error("store", &cache),
             "the store must be `memory`, `redis` or the name of a cache store registered with m.cache_store (a lower-case letter, then lower-case letters, digits or _)"
         );
+    }
+
+    /// A format that is not human-readable (as bincode or postcard are),
+    /// holding one string: it reads only through `deserialize_str`.
+    struct Compact(&'static str);
+
+    impl<'de> Deserializer<'de> for Compact {
+        type Error = de::value::Error;
+
+        fn deserialize_any<V: Visitor<'de>>(self, _: V) -> Result<V::Value, Self::Error> {
+            Err(de::Error::custom("this format reads a string only"))
+        }
+
+        fn deserialize_str<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+            visitor.visit_borrowed_str(self.0)
+        }
+
+        fn is_human_readable(&self) -> bool {
+            false
+        }
+
+        serde::forward_to_deserialize_any! {
+            bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char string
+            bytes byte_buf option unit unit_struct newtype_struct seq tuple
+            tuple_struct map struct enum identifier ignored_any
+        }
+    }
+
+    #[test]
+    fn selector_name_reads_a_string_or_a_one_key_table_of_a_built_in_name() {
+        let read = |value: Json| selector_name(value, "kind", &SLOT).map_err(|e| e.to_string());
+        assert_eq!(
+            read(serde_json::json!("chest")),
+            Ok("chest".to_owned()),
+            "a string is returned as written; the kind judges it"
+        );
+        for table in [
+            serde_json::json!({"memory": {}}),
+            serde_json::json!({"memory": null}),
+            serde_json::json!({"memory": {"size": 3}}),
+        ] {
+            assert_eq!(read(table.clone()), Ok("memory".to_owned()), "{table}");
+        }
+        let refused = selector_error("kind", &SLOT);
+        for value in [
+            // A table never names a registered driver.
+            serde_json::json!({"chest": {}}),
+            serde_json::json!({"memory": {}, "chest": {}}),
+            serde_json::json!({}),
+            serde_json::json!(["memory"]),
+            serde_json::json!(5),
+            serde_json::json!(true),
+        ] {
+            let error = read(value.clone()).unwrap_err();
+            assert_eq!(error, refused, "{value}");
+            assert!(!error.contains("chest"), "{error}");
+        }
+        // A format that is not human-readable is read for a string only.
+        assert_eq!(
+            selector_name(Compact("memory"), "kind", &SLOT).unwrap(),
+            "memory"
+        );
+    }
+
+    /// A section whose selector is read as the driver kinds read theirs.
+    #[derive(Deserialize)]
+    struct Vault {
+        #[serde(deserialize_with = "vault_kind")]
+        kind: String,
+    }
+
+    fn vault_kind<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+        selector_name(deserializer, "kind", &SLOT)
+    }
+
+    #[test]
+    fn the_configuration_reads_a_selector_written_as_a_one_key_table_as_before() {
+        let read = |kind: Json| {
+            let sources = ConfigSources::new().set("vault", serde_json::json!({"kind": kind}));
+            Config::load(&sources)
+                .unwrap()
+                .section::<Vault>("vault")
+                .map(|vault| vault.kind)
+                .map_err(|error| error.to_string())
+        };
+        assert_eq!(read(serde_json::json!("chest")), Ok("chest".to_owned()));
+        assert_eq!(
+            read(serde_json::json!({"memory": {"size": 3}})),
+            Ok("memory".to_owned())
+        );
+        let error = read(serde_json::json!({"chest": {"size": 3}})).unwrap_err();
+        assert!(error.contains(&selector_error("kind", &SLOT)), "{error}");
+        assert!(!error.contains("chest"), "{error}");
     }
 }
