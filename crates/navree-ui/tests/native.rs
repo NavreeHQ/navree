@@ -2135,6 +2135,30 @@ fn a_table_says_its_column_roles_and_what_a_row_opens() {
 }
 
 #[test]
+fn a_column_taken_away_from_the_reader_is_not_sent_as_a_subtitle() {
+    let page = TestNative::build(phone(), || {
+        let query: TableQuery<CustomerRow, NoFilter> =
+            TableQuery::parse("/customers", "").without_columns(["city"]);
+        let page = TablePage::new(customers(), 2);
+        View::new("Customers").body(DataTable::new("customers", &query, &page))
+    });
+    assert!(page.is_native(), "{:?}", page.why());
+    let Some(N::Region(region)) = page.find("customers") else {
+        panic!("no table");
+    };
+    let [N::Table(table)] = region.children.as_slice() else {
+        panic!("not one table");
+    };
+    let labels: Vec<&str> = table
+        .columns
+        .iter()
+        .map(|column| column.label.as_str())
+        .collect();
+    assert_eq!(labels, ["Name", "State", "Spent"]);
+    assert_eq!(table.rows[0].cells.len(), 3, "no cell holds the city");
+}
+
+#[test]
 fn hints_never_change_the_html() {
     // Built for a browser, a page with every hint is the page without them.
     let with = customers_view(true, true).to_html();

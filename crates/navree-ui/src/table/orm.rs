@@ -353,7 +353,12 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     /// The search and filters, on `builder`.
     pub fn apply<M: Model>(&self, mut builder: Builder<M>) -> Builder<M> {
         if let Some(q) = &self.state.q {
-            let searched = R::COLUMNS.iter().filter(|column| column.search);
+            // Only the columns marked `search` that this person may use.
+            let searched = R::COLUMNS
+                .iter()
+                .enumerate()
+                .filter(|(at, column)| column.search && !self.is_withdrawn(*at))
+                .map(|(_, column)| column);
             match self.search_mode {
                 SearchMode::Contains => {
                     let searches: Vec<Filter> = searched
@@ -374,11 +379,26 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
             }
         }
         for active in &self.state.filters {
+            if self.is_withdrawn(active.column) {
+                continue;
+            }
             if let Some(filter) = filter_of(&R::COLUMNS[active.column], &active.value) {
                 builder = builder.where_(filter);
             }
         }
         builder
+    }
+
+    /// The key as a term of the order.
+    fn key_term<M: Model>(direction: Direction) -> Term {
+        let key = M::meta().key_column();
+        Term {
+            source: key,
+            field: key,
+            kind: R::CONFIG.key_kind,
+            nullable: false,
+            direction,
+        }
     }
 
     /// The order's terms, the key last.
@@ -387,6 +407,7 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
             .state
             .sort
             .iter()
+            .filter(|term| !self.is_withdrawn(term.column))
             .map(|SortTerm { column, direction }| {
                 let column = &R::COLUMNS[*column];
                 Term {
@@ -401,13 +422,7 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         let key = M::meta().key_column();
         let last = terms.last().map_or(Direction::Asc, |term| term.direction);
         if !terms.iter().any(|term| term.field == key) {
-            terms.push(Term {
-                source: key,
-                field: key,
-                kind: R::CONFIG.key_kind,
-                nullable: false,
-                direction: last,
-            });
+            terms.push(Self::key_term::<M>(last));
         }
         terms
     }

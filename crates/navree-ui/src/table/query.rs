@@ -61,6 +61,11 @@ impl Shape {
             config: R::CONFIG,
         }
     }
+
+    /// The index of the column called `name`.
+    pub(crate) fn index_of(&self, name: &str) -> Option<usize> {
+        self.columns.iter().position(|column| column.name == name)
+    }
 }
 
 /// The longest text a search or text filter keeps, in bytes.
@@ -131,6 +136,9 @@ pub(crate) struct State {
     pub(crate) open: Vec<String>,
     /// The filter bar's choice of filters, in order; `None` is every filter.
     pub(crate) bar: Option<Vec<usize>>,
+    /// The columns taken away from whoever asked: indexes of `COLUMNS`, in order. They
+    /// are in no other field, and no state made from this one has them.
+    pub(crate) withdrawn: Vec<usize>,
 }
 
 /// A table's state as the URL states it.
@@ -243,6 +251,18 @@ pub(crate) const fn size_param(cursor: bool) -> &'static str {
 fn allowed(column: &Column, value: &str) -> bool {
     (column.options.is_empty() || column.options.iter().any(|(option, _)| *option == value))
         && column.kind.accepts(value)
+}
+
+/// The columns a table starts with: those that are not `hidden`, but for the
+/// `withdrawn` ones.
+fn default_cols_of(shape: &Shape, withdrawn: &[usize]) -> Vec<usize> {
+    shape
+        .columns
+        .iter()
+        .enumerate()
+        .filter(|(at, column)| !column.hidden && !withdrawn.contains(at))
+        .map(|(at, _)| at)
+        .collect()
 }
 
 /// The filters of a list query that the columns allow, in the order of the columns
@@ -384,6 +404,7 @@ impl State {
             density: TableDensity::Default,
             open: Vec::new(),
             bar: None,
+            withdrawn: Vec::new(),
         };
         let mut rest = Vec::new();
         let mut sort_seen = false;
@@ -516,8 +537,59 @@ impl State {
         (state, rest)
     }
 
+    /// Takes the columns `gone` (indexes of `COLUMNS`) away from whoever asked, on top of
+    /// those already taken: they are no longer shown, in the column menu, filtered on,
+    /// sorted by or searched, and a state made from this one never has them. Taking away
+    /// is one way: a column that is withdrawn stays withdrawn.
+    pub(crate) fn withdraw(&mut self, shape: &Shape, gone: impl IntoIterator<Item = usize>) {
+        for at in gone {
+            if at < shape.columns.len() && !self.withdrawn.contains(&at) {
+                self.withdrawn.push(at);
+            }
+        }
+        self.withdrawn.sort_unstable();
+        let withdrawn = self.withdrawn.clone();
+        self.cols.retain(|at| !withdrawn.contains(at));
+        // A table is not left with no column by what was taken away: it starts over from
+        // the columns it starts with, or from the first column there is left.
+        if self.cols.is_empty() {
+            self.cols = default_cols_of(shape, &withdrawn);
+            if self.cols.is_empty()
+                && let Some(first) = (0..shape.columns.len()).find(|at| !withdrawn.contains(at))
+            {
+                self.cols.push(first);
+            }
+        }
+        self.filters
+            .retain(|filter| !withdrawn.contains(&filter.column));
+        self.sort.retain(|term| !withdrawn.contains(&term.column));
+        self.widths.retain(|(at, _)| !withdrawn.contains(at));
+        if let Some(bar) = &mut self.bar {
+            bar.retain(|at| !withdrawn.contains(at));
+        }
+        // The search reads the columns marked `search`: with none left, there is none.
+        let searchable = shape
+            .columns
+            .iter()
+            .enumerate()
+            .any(|(at, column)| column.search && !withdrawn.contains(&at));
+        if !searchable {
+            self.q = None;
+        }
+    }
+
     pub(crate) fn is_default_sort_in(&self, shape: &Shape) -> bool {
-        let config = shape.config.sort;
+        // A default sort on a column that is withdrawn is not part of the default.
+        let config: Vec<&(&'static str, Direction)> = shape
+            .config
+            .sort
+            .iter()
+            .filter(|(name, _)| {
+                shape
+                    .index_of(name)
+                    .is_none_or(|at| !self.withdrawn.contains(&at))
+            })
+            .collect();
         self.sort.len() == config.len()
             && self
                 .sort
@@ -531,7 +603,7 @@ impl State {
     fn is_default_cols_in(&self, shape: &Shape) -> bool {
         let mut at = 0;
         for (index, column) in shape.columns.iter().enumerate() {
-            if !column.hidden {
+            if !column.hidden && !self.withdrawn.contains(&index) {
                 if self.cols.get(at) != Some(&index) {
                     return false;
                 }
@@ -717,7 +789,11 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> TableQuery<R, F> {
         if self.query_string().is_empty()
             && let Some(view) = views.iter().find(|view| view.is_default)
         {
-            return Self::parse_shaped(self.path, &view.query, self.shape);
+            // What was taken away from this person stays taken away from the view.
+            let withdrawn = self.state.withdrawn.clone();
+            let mut opened = Self::parse_shaped(self.path, &view.query, self.shape);
+            opened.state.withdraw(&opened.shape, withdrawn);
+            return opened;
         }
         self
     }
@@ -760,6 +836,106 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     /// The mode the search box matches in.
     pub fn search_mode_in_use(&self) -> SearchMode {
         self.search_mode
+    }
+
+    /// Takes columns away from the person asking. `#[col(hidden)]` only says how a
+    /// column starts: a URL can still show it, filter on it and sort by it. This is the
+    /// way to say, for one request, that the person may not use a column at all: call it
+    /// where the handler knows what they may do.
+    ///
+    /// A withdrawn column is gone from every part of the table: the columns shown and the
+    /// column menu, filters (a filter on it is ignored as one on a column the table does
+    /// not have is), the sort, the search, the filter bar, widths, saved views when they
+    /// are applied, the rows' cells and the export. Names that are not columns of this
+    /// table are ignored, so one list can serve several tables. Calls add to each other:
+    /// a column taken away stays taken away.
+    ///
+    /// ```
+    /// # // In navree-ui's own examples the derive names the crate `crate`: this is its path.
+    /// # use navree_ui::table;
+    /// use navree_ui::{TableQuery, TableRow};
+    ///
+    /// #[derive(Clone, TableRow)]
+    /// struct Employee {
+    ///     #[col(skip)]
+    ///     id: i64,
+    ///     #[col(sortable, search)]
+    ///     name: String,
+    ///     #[col(sortable, numeric)]
+    ///     salary: i64,
+    /// }
+    ///
+    /// # fn main() {
+    /// let may_see_pay = false;
+    /// let mut query = TableQuery::<Employee>::parse("/staff", "sort=-salary&cols=name,salary");
+    /// if !may_see_pay {
+    ///     query = query.without_columns(["salary"]);
+    /// }
+    /// assert_eq!(query.visible_columns(), [0]);
+    /// assert!(query.sorts().is_empty(), "a sort on a column that is gone is ignored");
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn without_columns<S: AsRef<str>>(mut self, names: impl IntoIterator<Item = S>) -> Self {
+        let gone: Vec<usize> = names
+            .into_iter()
+            .filter_map(|name| self.shape.index_of(name.as_ref()))
+            .collect();
+        self.state.withdraw(&self.shape, gone);
+        self
+    }
+
+    /// Lets the person asking use only these columns: [`without_columns`](Self::without_columns)
+    /// for every other one. A name that is not a column of this table lets nothing in.
+    ///
+    /// ```
+    /// # // In navree-ui's own examples the derive names the crate `crate`: this is its path.
+    /// # use navree_ui::table;
+    /// use navree_ui::{TableQuery, TableRow};
+    ///
+    /// #[derive(Clone, TableRow)]
+    /// struct Employee {
+    ///     #[col(skip)]
+    ///     id: i64,
+    ///     #[col(sortable)]
+    ///     name: String,
+    ///     #[col(sortable)]
+    ///     city: String,
+    ///     #[col(sortable, numeric)]
+    ///     salary: i64,
+    /// }
+    ///
+    /// # fn main() {
+    /// let query = TableQuery::<Employee>::parse("/staff", "cols=salary,city,name")
+    ///     .only_columns(["name", "city"]);
+    /// assert_eq!(query.visible_columns(), [1, 0]);
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn only_columns<S: AsRef<str>>(mut self, names: impl IntoIterator<Item = S>) -> Self {
+        let kept: Vec<usize> = names
+            .into_iter()
+            .filter_map(|name| self.shape.index_of(name.as_ref()))
+            .collect();
+        let gone: Vec<usize> = (0..self.shape.columns.len())
+            .filter(|at| !kept.contains(at))
+            .collect();
+        self.state.withdraw(&self.shape, gone);
+        self
+    }
+
+    /// Whether the column at `index` is taken away from the person asking.
+    pub(crate) fn is_withdrawn(&self, index: usize) -> bool {
+        self.state.withdrawn.contains(&index)
+    }
+
+    /// Whether a column marked `search` is left to search.
+    pub(crate) fn searchable(&self) -> bool {
+        self.shape
+            .columns
+            .iter()
+            .enumerate()
+            .any(|(at, column)| column.search && !self.is_withdrawn(at))
     }
 
     /// The first sort term: its column's name, and which way.

@@ -63,6 +63,53 @@ Keep a table paged. 25 rows to a page is the default, and `per_pages` lets a rea
 | `#[table(capped = 10000)]`, `#[table(no_count)]` | count no further than this; or don't count, with Previous and Next only |
 | `#[table(version = "col")]` | a column that changes with a row, compared before a bulk action |
 
+## Columns a person may not use
+
+`#[col(hidden)]` says how a column starts. It is not a permission. The table reads every column its definition lists, so a URL can show a hidden column with `cols=pay`, filter on it with `filter[pay][gte]=1`, sort by it with `sort=pay` and search it, and what comes back tells the person about a column the page never drew.
+
+Where the handler knows what the person may do, take the column away for that request with `TableQuery::without_columns`, or name the columns they may use with `only_columns`:
+
+```rust title="src/staff/pages.rs"
+use navree::ui::{TableQuery, TableRow};
+
+#[derive(Clone, TableRow)]
+pub struct Employee {
+    #[col(skip)]
+    pub id: i64,
+    #[col(sortable, search)]
+    pub name: String,
+    #[col(sortable)]
+    pub city: String,
+    #[col(sortable, numeric, hidden, label = "Pay (₹)")]
+    pub pay: i64,
+}
+
+/// What a person may use of the staff table.
+fn for_person(query: TableQuery<Employee>, may_see_pay: bool) -> TableQuery<Employee> {
+    if may_see_pay {
+        query
+    } else {
+        query.without_columns(["pay"])
+    }
+}
+```
+
+A column taken away is gone from every part of the table for that request: the columns shown and the column menu, the filters (a filter on it is ignored, as one on a column the table does not have is), the sort, the search, the filter bar, the widths, a saved view when it is applied, the cells of each row and the CSV export. The table never writes its name into a link it makes. Names that are not columns of the table are ignored, so one list of sensitive names can serve several tables, and calls add up: a column that was taken away stays taken away. With `only_columns` a misspelt name lets nothing in, where with `without_columns` it takes nothing away.
+
+Make the same call on the `BulkRequest` of the table's bulk action, so that "all that match" selects by the filters the table was drawn with, and on the `ViewPost` before a view is saved:
+
+```rust title="src/staff/pages.rs"
+use navree::ui::BulkRequest;
+
+fn bulk_for_person(request: BulkRequest<Employee>, may_see_pay: bool) -> BulkRequest<Employee> {
+    if may_see_pay {
+        request
+    } else {
+        request.without_columns(["pay"])
+    }
+}
+```
+
 ## The URL
 
 A table reads and writes the same list-query names as the API, so a link to a table and a request to the API are written alike. What each operator means, and how a Rust endpoint reads the query, is on the [list queries](/docs/basics/list-queries/) page. The [typed client](/docs/frontend/typed-client/#list-queries) page covers the JavaScript side.

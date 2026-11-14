@@ -50,6 +50,23 @@ pub struct ViewPost<R, F = NoFilter> {
 }
 
 impl<R: TableRow, F: FilterBar> ViewPost<R, F> {
+    /// Takes columns away from the person asking, as [`TableQuery::without_columns`]
+    /// does for the table they were drawn in, so that a view they save holds nothing
+    /// they could not have set.
+    #[must_use]
+    pub fn without_columns<S: AsRef<str>>(mut self, names: impl IntoIterator<Item = S>) -> Self {
+        self.query = self.query.without_columns(names);
+        self
+    }
+
+    /// Lets the person asking use only these columns, as [`TableQuery::only_columns`]
+    /// does for the table they were drawn in.
+    #[must_use]
+    pub fn only_columns<S: AsRef<str>>(mut self, names: impl IntoIterator<Item = S>) -> Self {
+        self.query = self.query.only_columns(names);
+        self
+    }
+
     /// What's asked.
     pub fn op(&self) -> ViewOp {
         self.op
