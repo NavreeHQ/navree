@@ -141,7 +141,7 @@ final class SignInSession {
 
 /// `ASWebAuthenticationSession` over the app's key window.
 @MainActor
-final class SystemSignInOpener: NSObject, SignInOpener, ASWebAuthenticationPresentationContextProviding {
+final class SystemSignInOpener: NSObject, SignInOpener {
     func open(_ url: URL, returning: SignInReturn, ephemeral: Bool, done: @escaping @MainActor (URL?) -> Void)
         -> (any SignInHandle)?
     {
@@ -149,7 +149,6 @@ final class SystemSignInOpener: NSObject, SignInOpener, ASWebAuthenticationPrese
             // Closed by the person, refused or failed: nobody signed in.
             Task { @MainActor in done(returned) }
         }
-        session.presentationContextProvider = self
         session.prefersEphemeralWebBrowserSession = ephemeral
         let handle = Handle(session)
         #if canImport(UIKit)
@@ -164,7 +163,7 @@ final class SystemSignInOpener: NSObject, SignInOpener, ASWebAuthenticationPrese
                 }
                 guard let handle, !Task.isCancelled else { return }
                 handle.waiting = nil
-                if !handle.session.start() {
+                if !handle.start() {
                     SignInSession.log.error("the system would not open a sign-in session")
                     done(nil)
                 }
@@ -172,21 +171,31 @@ final class SystemSignInOpener: NSObject, SignInOpener, ASWebAuthenticationPrese
             return handle
         }
         #endif
-        guard session.start() else { return nil }
+        guard handle.start() else { return nil }
         return handle
-    }
-
-    nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        MainActor.assumeIsolated { Windows.key ?? ASPresentationAnchor() }
     }
 
     final class Handle: SignInHandle {
         let session: ASWebAuthenticationSession
         /// Waiting for the app to come to the front before it opens.
         var waiting: Task<Void, Never>?
+        /// The window its sheet stands over, kept here while the session is
+        /// open: the session holds it weakly.
+        private var anchor: SheetAnchor?
 
         init(_ session: ASWebAuthenticationSession) {
             self.session = session
+        }
+
+        /// Opens the session over the app's window; false where the app has
+        /// no window yet or the system will not open it.
+        @MainActor
+        func start() -> Bool {
+            guard let window = Windows.anchor else { return false }
+            let anchor = SheetAnchor(window)
+            self.anchor = anchor
+            session.presentationContextProvider = anchor
+            return session.start()
         }
 
         func cancel() {
@@ -216,9 +225,44 @@ enum Windows {
     static var scene: UIWindowScene? {
         key?.windowScene
     }
+
+    /// What a system sheet stands over: the key window, else a window in the
+    /// app's first scene; none before the app has a scene to show it in.
+    static var anchor: UIWindow? {
+        if let key { return key }
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        return scene.map { UIWindow(windowScene: $0) }
+    }
     #else
     static var key: NSWindow? {
         NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first
     }
+
+    /// What a system sheet stands over: the key window, else a window of its own.
+    static var anchor: NSWindow? {
+        key ?? NSWindow()
+    }
     #endif
+}
+
+/// The window one system sheet stands over, chosen as the sheet opens: a
+/// session or a controller asks its provider for it, and holds the provider
+/// weakly.
+@MainActor
+final class SheetAnchor: NSObject, ASWebAuthenticationPresentationContextProviding,
+    ASAuthorizationControllerPresentationContextProviding
+{
+    let window: ASPresentationAnchor
+
+    init(_ window: ASPresentationAnchor) {
+        self.window = window
+    }
+
+    nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        MainActor.assumeIsolated { window }
+    }
+
+    nonisolated func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        MainActor.assumeIsolated { window }
+    }
 }
