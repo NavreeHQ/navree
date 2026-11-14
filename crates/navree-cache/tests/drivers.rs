@@ -156,7 +156,11 @@ async fn a_registered_cache_store_is_selected_by_name() {
         )
     };
     let module = TwoTierModule::default();
-    let (store, locks, seen) = (module.store.clone(), module.locks.clone(), module.seen.clone());
+    let (store, locks, seen) = (
+        module.store.clone(),
+        module.locks.clone(),
+        module.seen.clone(),
+    );
     let app = Navree::app()
         .module(ConfigModule::for_root(sources()))
         .module(CacheModule::from_config())
@@ -227,7 +231,8 @@ async fn a_registered_cache_store_is_selected_by_name() {
 }
 
 #[tokio::test]
-async fn an_unregistered_or_doubly_registered_or_built_in_cache_store_fails_the_boot_naming_m_cache_store() {
+async fn an_unregistered_or_doubly_registered_or_built_in_cache_store_fails_the_boot_naming_m_cache_store()
+ {
     let unregistered = "cache.store is `kulfi`, but no module registers a cache store under that name with m.cache_store (known: memory, redis, two_tier)";
     let sources = || ConfigSources::new().set("cache", json!({"store": "kulfi"}));
     let add = |app: AppBuilder| {
@@ -259,7 +264,10 @@ async fn an_unregistered_or_doubly_registered_or_built_in_cache_store_fails_the_
     );
 
     let built_in = "m.cache_store(\"redis\") in `RedisLikeModule`: `redis` is a built-in cache store; register yours under another name";
-    let add = |app: AppBuilder| app.module(CacheModule::from_config()).module(RedisLikeModule);
+    let add = |app: AppBuilder| {
+        app.module(CacheModule::from_config())
+            .module(RedisLikeModule)
+    };
     assert!(boot(sources(), add).await.contains(built_in));
     assert!(
         check_text(sources(), add)
@@ -291,8 +299,7 @@ async fn a_failing_or_misnamed_cache_store_registration_fails_the_boot() {
     );
 
     let text = boot(memory(), |app| {
-        app.module(CacheModule::from_config())
-            .module(PrefixModule)
+        app.module(CacheModule::from_config()).module(PrefixModule)
     })
     .await;
     assert!(
@@ -302,8 +309,7 @@ async fn a_failing_or_misnamed_cache_store_registration_fails_the_boot() {
 
     let failing = ConfigSources::new().set("cache", json!({"store": "failing"}));
     let text = boot(failing, |app| {
-        app.module(CacheModule::from_config())
-            .module(FailingModule)
+        app.module(CacheModule::from_config()).module(FailingModule)
     })
     .await;
     assert!(

@@ -14,8 +14,8 @@ use navree_config::{
     ModuleBuilderConfigExt, RegisteredDriver, SectionRegistration,
 };
 use navree_kernel::{
-    AppBuilder, CommandSpec, ConfiguredModule, Factory, Module, ModuleBuilder, Navree,
-    ProviderKey, Resolver,
+    AppBuilder, CommandSpec, ConfiguredModule, Factory, Module, ModuleBuilder, Navree, ProviderKey,
+    Resolver,
 };
 use serde::{Deserialize, Deserializer};
 use serde_json::json;
@@ -25,9 +25,13 @@ const SLOT: DriverSlot = DriverSlot::new("vault.kind", &["memory"], "m.vault_kin
 
 /// The boxes of the vault (`[vault.boxes.{name}]`), each naming its driver,
 /// or named after it.
-const BOX_SLOT: DriverSlot =
-    DriverSlot::new("vault.boxes.*.driver", &["memory"], "m.vault_box", "vault box")
-        .defaults_to_table_name();
+const BOX_SLOT: DriverSlot = DriverSlot::new(
+    "vault.boxes.*.driver",
+    &["memory"],
+    "m.vault_box",
+    "vault box",
+)
+.defaults_to_table_name();
 
 /// What the `chest` vault kind reads from its settings.
 #[derive(Default, Deserialize)]
@@ -416,7 +420,10 @@ async fn config_check_fails_on_an_unregistered_driver_as_the_boot_does() {
             "almari": { "driver": "tijori" },
         },
     }));
-    let text = check_text(sources, |app| app.module(VaultModule).module(BoxChestModule)).await;
+    let text = check_text(sources, |app| {
+        app.module(VaultModule).module(BoxChestModule)
+    })
+    .await;
     assert!(
         text.contains("error    vault.boxes.almari.driver is `tijori`, but no module registers a vault box under that name with m.vault_box (known: memory, chest)"),
         "{text}"

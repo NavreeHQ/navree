@@ -105,15 +105,13 @@ fn register(m: &mut ModuleBuilder, sources: ConfigSources) {
                 );
                 // A table a registered driver reads (`storage.disks.uploads`)
                 // is read whole by that driver.
+                let config = r.get::<Config>().await?;
                 claims.extend(crate::driver::registered_tables(
-                    &r.get::<Config>().await?,
+                    &config,
                     &commands::slots(&app),
                     &commands::drivers(&app),
                 ));
-                Ok(Arc::new(ConfigDiagnostics {
-                    config: r.get::<Config>().await?,
-                    claims,
-                }))
+                Ok(Arc::new(ConfigDiagnostics { config, claims }))
             })
             .deps(vec![ProviderKey::of::<Config>()]),
         )

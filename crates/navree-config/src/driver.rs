@@ -85,9 +85,7 @@ impl Names {
     }
 
     /// The stored name equal to `name`, or a copy of it, stored once.
-    // Interns a name: a method of the set, not a constructor.
-    #[allow(clippy::new_ret_no_self)]
-    fn new(&mut self, name: &str) -> Result<&'static str, DriverNameError> {
+    fn intern(&mut self, name: &str) -> Result<&'static str, DriverNameError> {
         if !DriverName::is_valid(name) {
             return Err(DriverNameError::Invalid);
         }
@@ -169,7 +167,7 @@ impl DriverName {
     /// (the first time, as a copy). Only configuration values come through
     /// here.
     pub fn new(name: &str) -> Result<DriverName, DriverNameError> {
-        names().new(name).map(DriverName)
+        names().intern(name).map(DriverName)
     }
 
     /// The name equal to `name` that the process already holds, if any. It
@@ -521,13 +519,13 @@ impl<X: ?Sized> Clone for DriverFactory<X> {
 ///
 /// Not public API: what the driver kinds of Navree call.
 #[doc(hidden)]
-pub fn register_driver<X, F, Fut>(
-    m: &mut ModuleBuilder,
+pub fn register_driver<'m, X, F, Fut>(
+    m: &'m mut ModuleBuilder,
     slot: &DriverSlot,
     settings: Option<&'static str>,
     name: &'static str,
     factory: F,
-) -> &mut ModuleBuilder
+) -> &'m mut ModuleBuilder
 where
     X: ?Sized + Send + Sync + 'static,
     F: Fn(DriverContext) -> Fut + Send + Sync + 'static,
@@ -578,7 +576,10 @@ pub fn registration_problems(
 ) -> Vec<String> {
     let mut problems = Vec::new();
     let mut accepted: BTreeMap<&'static str, Vec<&'static str>> = BTreeMap::new();
-    for record in records.iter().filter(|record| record.value.slot == slot.key()) {
+    for record in records
+        .iter()
+        .filter(|record| record.value.slot == slot.key())
+    {
         let (name, module) = (record.value.name, record.module.name);
         match record.value.refused {
             Some(DriverNameError::Invalid) => problems.push(not_a_name(slot, name, module)),
@@ -927,7 +928,13 @@ pub(crate) fn section_keys(registry: &ConfigRegistry, slot: &DriverSlot) -> Vec<
     registry
         .section(section_of(slot.key()))
         .and_then(|section| section.schema.as_ref())
-        .map(|schema| schema.fields.iter().map(|field| field.name.clone()).collect())
+        .map(|schema| {
+            schema
+                .fields
+                .iter()
+                .map(|field| field.name.clone())
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -1038,11 +1045,14 @@ mod tests {
         // A set of its own, so the process's names are not used up.
         let mut names = Names::with_limit(LIMIT);
         for i in 0..LIMIT {
-            names.new(&format!("ludhiana_{i}")).unwrap();
+            names.intern(&format!("ludhiana_{i}")).unwrap();
         }
-        assert_eq!(names.new("ludhiana_extra"), Err(DriverNameError::TooMany));
         assert_eq!(
-            names.new("ludhiana_7").map(str::len),
+            names.intern("ludhiana_extra"),
+            Err(DriverNameError::TooMany)
+        );
+        assert_eq!(
+            names.intern("ludhiana_7").map(str::len),
             Ok(10),
             "a known name is still found"
         );
@@ -1066,7 +1076,10 @@ mod tests {
             let error = serde_json::from_value::<DriverName>(serde_json::json!(bad))
                 .unwrap_err()
                 .to_string();
-            assert!(error.contains("not the name of a registered driver"), "{error}");
+            assert!(
+                error.contains("not the name of a registered driver"),
+                "{error}"
+            );
             assert!(!error.contains(bad), "{error}");
         }
         assert_eq!(
