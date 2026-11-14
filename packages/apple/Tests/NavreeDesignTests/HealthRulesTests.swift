@@ -413,10 +413,24 @@ import Testing
     #expect(PagerRules.lifted(later) == later)
 }
 
-@Test func aScreenWithItsDayControlInTheBarHasItsTitleInline() {
+@Test func aDayControlNeverTakesTheTitlesPlaceItStandsUnderALargeTitleOrHeadsTheContent() {
     let pager = Navree.DayPager(date: "2026-11-12", day: "Yesterday")
-    #expect(PagerRules.titleMode(.root, pager: pager) == .inline)
+    // The screen's name stays, large at a destination's root, inline when pushed.
+    #expect(PagerRules.titleMode(.root, pager: pager) == .large)
+    #expect(PagerRules.titleMode(.pushed, pager: pager) == .inline)
     #expect(PagerRules.titleMode(.root, pager: nil) == NavigationRules.titleMode(.root))
+    // Under a large title, in the bar; under an inline one, at the head of the content.
+    #expect(PagerRules.place(.root) == .underTitle)
+    #expect(PagerRules.place(.pushed) == .headOfContent)
+    #expect(PagerRules.place(.sheet) == .headOfContent)
+    let text = Navree.Node.text(Navree.Text(value: "Hello"))
+    let screen = Navree.Screen(body: .stack(Navree.Stack(children: [text])), pager: pager, title: "Sleep")
+    #expect(PagerRules.placed(screen, .underTitle) == screen)
+    let headed = PagerRules.placed(screen, .headOfContent)
+    #expect(headed.pager == nil)
+    #expect(headed.title == "Sleep")
+    #expect(headed.body == .stack(Navree.Stack(children: [.dayPager(pager), text])))
+    #expect(PagerRules.words(pager).hasPrefix("Yesterday, "))
 }
 
 // MARK: Symbols and sections

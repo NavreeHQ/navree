@@ -17,35 +17,71 @@ public struct DayPagerView: View {
     }
 
     public var body: some View {
+        #if os(iOS)
+        // Under the title or at the head of the content, the day leads at the
+        // column's edge, as the title's words do, and the steps stand at the
+        // trailing end.
+        HStack(spacing: 0) {
+            day
+            Spacer(minLength: 8)
+            step(pager.previous, symbol: "chevron.backward", words: pager.words?.previous ?? "Previous day")
+            step(pager.next, symbol: "chevron.forward", words: pager.words?.next ?? "Next day")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sheet(isPresented: $choosing) {
+            DayChooser(pager: pager)
+        }
+        #else
         HStack(spacing: 4) {
             step(pager.previous, symbol: "chevron.backward", words: pager.words?.previous ?? "Previous day")
-            Button {
-                choosing = true
-            } label: {
-                HStack(spacing: 8) {
-                    if let scores = pager.scores { NodeView(scores) }
-                    VStack(spacing: 0) {
-                        Text(pager.day).font(.headline)
-                        Text(PagerWords.date(pager.date))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .lineLimit(1)
-                    .fixedSize()
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(pager.pick == nil)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(pager.day), \(PagerWords.date(pager.date))")
-            .accessibilityHint(pager.words?.choose ?? "")
+            day
             step(pager.next, symbol: "chevron.forward", words: pager.words?.next ?? "Next day")
         }
         .sheet(isPresented: $choosing) {
             DayChooser(pager: pager)
         }
+        #endif
     }
+
+    /// The day's rings and its name over its date; a tap opens the calendar.
+    private var day: some View {
+        Button {
+            choosing = true
+        } label: {
+            HStack(spacing: 8) {
+                if let scores = pager.scores { NodeView(scores) }
+                VStack(alignment: Self.wordsAlignment, spacing: 0) {
+                    Text(pager.day).font(.headline)
+                    Text(PagerWords.date(pager.date))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .lineLimit(1)
+                .fixedSize()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(pager.pick == nil)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(pager.day), \(PagerWords.date(pager.date))")
+        .accessibilityHint(pager.words?.choose ?? "")
+    }
+
+    /// The day's words lead with the control on iPhone and iPad; centred in a Mac's bar.
+    #if os(iOS)
+    private static let wordsAlignment = HorizontalAlignment.leading
+    #else
+    private static let wordsAlignment = HorizontalAlignment.center
+    #endif
+
+    /// The side of a step's target: on iPhone and iPad the 44 points Apple
+    /// gives every control a finger taps; on a Mac a pointer's smaller one.
+    #if os(iOS)
+    private static let stepSide: CGFloat = 44
+    #else
+    private static let stepSide: CGFloat = 32
+    #endif
 
     private func step(_ href: String?, symbol: String, words: String) -> some View {
         Button {
@@ -54,7 +90,7 @@ public struct DayPagerView: View {
             Label(words, systemImage: symbol)
                 .labelStyle(.iconOnly)
                 .fontWeight(.semibold)
-                .frame(minWidth: 32, minHeight: 32)
+                .frame(minWidth: Self.stepSide, minHeight: Self.stepSide)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
@@ -127,37 +163,61 @@ enum PagerWords {
     }
 }
 
-/// The screen's day control in the navigation bar: the bar's principal item,
-/// with the screen's title inline for the back stack and VoiceOver, and a
-/// "today" step at the trailing end when another day is shown.
+/// The screen's day control in the navigation bar, beside the screen's
+/// title, never in its place. On iPhone and iPad, under a large title, where
+/// the title's subtitle stands, with the day in words beside the title once
+/// it folds inline; under an inline title the control heads the content
+/// instead (the screen draws it there). On a Mac, the bar's principal item.
+/// A "today" step stands at the trailing end when another day is shown.
 public struct PagerInBar: ViewModifier {
     let pager: Navree.DayPager?
+    let place: PagerPlace
     @Environment(\.navree) private var context
 
-    public init(pager: Navree.DayPager?) {
+    public init(pager: Navree.DayPager?, place: PagerPlace = .underTitle) {
         self.pager = pager
+        self.place = place
     }
 
     public func body(content: Content) -> some View {
         if let pager {
+            #if os(iOS)
+            content
+                .toolbar {
+                    if place == .underTitle {
+                        ToolbarItem(placement: .largeSubtitle) {
+                            DayPagerView(pager: pager)
+                        }
+                        ToolbarItem(placement: .subtitle) {
+                            Text(PagerRules.words(pager))
+                        }
+                    }
+                    today(pager)
+                }
+            #else
             content
                 .navigationBarTitleDisplayModeInline()
                 .toolbar {
                     ToolbarItem(placement: .principal) {
                         DayPagerView(pager: pager)
                     }
-                    if let today = pager.today {
-                        ToolbarItem(placement: .primaryAction) {
-                            Button {
-                                context.send(.act(.navigate(Navree.Action.Navigate(href: today)), Place()))
-                            } label: {
-                                Label("Today", systemImage: "calendar.badge.clock")
-                            }
-                        }
-                    }
+                    today(pager)
                 }
+            #endif
         } else {
             content
+        }
+    }
+
+    @ToolbarContentBuilder private func today(_ pager: Navree.DayPager) -> some ToolbarContent {
+        if let today = pager.today {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    context.send(.act(.navigate(Navree.Action.Navigate(href: today)), Place()))
+                } label: {
+                    Label("Today", systemImage: "calendar.badge.clock")
+                }
+            }
         }
     }
 }
