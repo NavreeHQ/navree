@@ -32,7 +32,9 @@ struct ColumnsStack<Sidebar: View>: View {
                     path: path(StackPath.path(stack), stack: stack),
                     compactColumn: SplitRules.compactColumn(panes),
                     inspectorTitle: panes.inspector?.title,
-                    choose: { action, place in client.perform(.act(SplitRules.choice(action), place), on: root) },
+                    choose: Choice(key: "panes \(root)") { [client] action, place in
+                        client.perform(.act(SplitRules.choice(action), place), on: root)
+                    },
                     sidebar: sidebar,
                     list: {
                         ColumnPage(id: root, part: .list, client: client, configuration: configuration)
@@ -49,7 +51,9 @@ struct ColumnsStack<Sidebar: View>: View {
                 SplitColumns(
                     path: path(StackPath.path(detail), stack: detail),
                     compactColumn: detail.isEmpty ? .list : .detail,
-                    choose: { action, place in choose(action, place, root: root, open: detail.first) },
+                    choose: Choice(key: "list \(root) \(detail.first.map(String.init) ?? "")") { [client] action, place in
+                        Self.choose(action, place, root: root, open: detail.first, client: client)
+                    },
                     sidebar: sidebar,
                     list: {
                         PageView(id: root, depth: 0, modal: nil, client: client, configuration: configuration)
@@ -86,25 +90,22 @@ struct ColumnsStack<Sidebar: View>: View {
 
     /// The detail column's path over its root, as the core's stack has it;
     /// a link tapped in the detail asks the core, the system's back pops.
-    private func path(_ shown: [PathEntry], stack: [ScreenID]) -> Binding<[PathEntry]> {
-        Binding(
-            get: { shown },
-            set: { next in
-                switch StackPath.change(stack, to: next) {
-                case .tap(let action, let place, let screen)?:
-                    client.perform(.act(action, place), on: screen)
-                case .popTo(let screen)?:
-                    client.send(.popTo(screen: screen))
-                case nil:
-                    break
-                }
+    private func path(_ shown: [PathEntry], stack: [ScreenID]) -> ColumnPath {
+        ColumnPath(entries: shown, key: "\(stack)") { [client] next in
+            switch StackPath.change(stack, to: next) {
+            case .tap(let action, let place, let screen)?:
+                client.perform(.act(action, place), on: screen)
+            case .popTo(let screen)?:
+                client.send(.popTo(screen: screen))
+            case nil:
+                break
             }
-        )
+        }
     }
 
     /// A row chosen in the list: the screen open beside it goes, and the one
     /// the row opens takes its place. Choosing the row already open does nothing.
-    private func choose(_ action: Navree.Action, _ place: Place, root: ScreenID, open: ScreenID?) {
+    private static func choose(_ action: Navree.Action, _ place: Place, root: ScreenID, open: ScreenID?, client: NativeClient) {
         if let open, case .navigate(let link) = action, let shown = client.screen(open),
             ColumnRules.same(link.href, shown.url)
         {

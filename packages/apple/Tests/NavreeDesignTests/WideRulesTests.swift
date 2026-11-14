@@ -252,3 +252,23 @@ private func go(_ href: String, _ present: Navree.Present = .auto) -> Navree.Act
     ]))
     #expect(SplitRules.openRow(in: mail, opened: "/inbox/88") == "88")
 }
+
+// What a split view hands its rows and its detail's stack is compared by what
+// it acts on, never by its code: drawn again with the same list and stack, it
+// hands down the same values, so nothing under it is drawn again for them.
+
+@Test func aChoiceIsTheSameForTheSameListWhateverItsCode() {
+    let first = Choice(key: "panes 1") { _, _ in }
+    let again = Choice(key: "panes 1") { _, _ in }
+    let other = Choice(key: "panes 2") { _, _ in }
+    #expect(first == again)
+    #expect(first != other)
+}
+
+@Test func aColumnsPathIsTheSameForTheSameEntriesOfTheSameStack() {
+    let first = ColumnPath(entries: [.screen(2)], key: "[1, 2]") { _ in }
+    let again = ColumnPath(entries: [.screen(2)], key: "[1, 2]") { _ in }
+    #expect(first == again)
+    #expect(first != ColumnPath(entries: [], key: "[1, 2]") { _ in })
+    #expect(first != ColumnPath(entries: [.screen(2)], key: "[1, 3]") { _ in })
+}
