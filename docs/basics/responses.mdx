@@ -40,7 +40,7 @@ async fn stats(&self) -> Json<Value> {
 
 Other types work too: a `String` or `&'static str` is a `200` with `text/plain; charset=utf-8`, and a bare `StatusCode` is an empty response with that status (an error status gets the [error format](/docs/basics/errors/) body).
 
-Responses are compressed with gzip when the client accepts it (`Accept-Encoding`), except `text/event-stream`, images other than SVG, gRPC other than gRPC-Web (media types in any case), responses that already have a `Content-Encoding` or a `Content-Range`, partial responses (206: a `multipart/byteranges` body has no `Content-Range` of its own), responses with `Cache-Control: no-transform`, routes that opt out, statuses without a body (204, 205, 304) and bodies under 32 bytes. A compressed response loses its `Content-Length` and `Accept-Ranges`, and a strong `ETag` becomes a weak one (`"v1"` becomes `W/"v1"`), because its bytes are not those the tag promised; `If-None-Match` still matches it. A `HEAD` response has the headers of the `GET` response, compressed or not, and no body, and a 304 carries `Vary: accept-encoding` like the 200 it stands in for (unless the route opts out or the response says `no-transform`). A streamed body stays a stream: whatever the handler has sent reaches the client as soon as the handler waits. Turn compression off with `http.compression = false`.
+Responses are compressed with gzip when the client accepts it (`Accept-Encoding`), except `text/event-stream`, images other than SVG, gRPC other than gRPC-Web (media types in any case), responses that already have a `Content-Encoding` or a `Content-Range`, partial responses (206: a `multipart/byteranges` body has no `Content-Range` of its own), responses with `Cache-Control: no-transform`, routes that opt out, statuses without a body (204, 205, 304) and bodies under 32 bytes. A compressed response loses its `Content-Length` and `Accept-Ranges`, and a strong `ETag` becomes a weak one (`"v1"` becomes `W/"v1"`), because its bytes are not those the tag promised; `If-None-Match` still matches it. A `HEAD` response has the headers of the `GET` response, compressed or not, and no body, and a 304 carries `Vary: accept-encoding` like the 200 it stands in for (unless the route opts out or the response says `no-transform`). A streamed body stays a stream: whatever the handler has sent reaches the client as soon as the handler waits. Turn compression off with `http.compression = false`. With the UI toolkit, pages and ops answers may go out in brotli instead (see [the UI overview](/docs/ui/overview/)); the same opt-outs hold for it: a route that opts out, a response with `Cache-Control: no-transform` and `http.compression = false` leave the body uncompressed by either.
 
 ### Compression and secrets (BREACH)
 
@@ -60,6 +60,8 @@ RouteDef::on(Method::GET, "/search", search).no_compression();
 // On one response, from anywhere.
 ([(header::CACHE_CONTROL, "no-transform")], page)
 ```
+
+Each of these holds for every compressor of the app: the HTTP pipeline's gzip and the UI toolkit's brotli for pages and ops answers.
 
 Keeping the secret out of pages that reflect input, or masking it with fresh random bytes on each response, works too. JSON APIs that authenticate with a bearer token in a header aren't exposed: a cross-site request can't add the header.
 

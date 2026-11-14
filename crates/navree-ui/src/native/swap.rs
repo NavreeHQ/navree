@@ -1204,7 +1204,7 @@ async fn embedded(mut request: Request, next: Next) -> Response {
     // Made current again where the handler runs: see `context_layer`.
     request.extensions_mut().insert(Asked::Embed);
     let from_runtime = request.headers().contains_key(UI_HEADER);
-    let accept = compress::accept_of(request.headers());
+    let accept = compress::accept_of(&request);
     let method = request.method().clone();
     let mut response = scope::scope(Asked::Embed, next.run(request)).await;
     if let Some(PendingOps(envelope, status)) = response.extensions_mut().remove::<PendingOps>() {
@@ -1225,7 +1225,7 @@ async fn answer(native: Arc<scope::Request>, mut request: Request, next: Next) -
     request
         .extensions_mut()
         .insert(Asked::Native(native.clone()));
-    let accept = compress::accept_of(request.headers());
+    let accept = compress::accept_of(&request);
     // Recorded as the runtime's requests are: each is an operation of the app.
     let operation = (!is_prefetch(request.headers()))
         .then(|| crate::module::operation_kind(request.method(), request.headers()));
@@ -1309,13 +1309,17 @@ async fn answer(native: Arc<scope::Request>, mut request: Request, next: Next) -
 }
 
 /// Sends an envelope in brotli to a client that takes it, when it is big
-/// enough to be worth it.
+/// enough to be worth it and may be compressed at all (its route didn't opt
+/// out, and it doesn't say `no-transform`).
 async fn squeeze(accept: &str, response: Response) -> Response {
     let ours = response
         .headers()
         .get(CONTENT_TYPE)
         .is_some_and(|value| value.as_bytes() == NATIVE_TYPE.as_bytes());
-    if !ours || response.headers().contains_key(CONTENT_ENCODING) {
+    if !ours
+        || response.headers().contains_key(CONTENT_ENCODING)
+        || !navree_http::may_compress(&response)
+    {
         return response;
     }
     let (mut parts, body) = response.into_parts();

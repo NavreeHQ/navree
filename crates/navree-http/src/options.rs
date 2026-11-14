@@ -56,10 +56,11 @@ pub struct HttpOptions {
     pub rate_limit_ipv6_prefix: u8,
     /// Send the default security headers (default `true`).
     pub security_headers: bool,
-    /// Compress responses with gzip (default `true`). Brotli is not built in.
-    /// A route opts out with [`no_compression`](crate::RouteDef::no_compression)
-    /// and a response with `Cache-Control: no-transform`: see the BREACH note on
-    /// [`CompressionLayer`](crate::CompressionLayer).
+    /// Compress responses (default `true`): with gzip, and the pages and ops of
+    /// navree-ui with brotli. Off, no response is compressed by either. A route
+    /// opts out with [`no_compression`](crate::RouteDef::no_compression) and a
+    /// response with `Cache-Control: no-transform`, from both: see the BREACH
+    /// note on [`CompressionLayer`](crate::CompressionLayer).
     pub compression: bool,
     /// While this file exists the app answers 503 (default `storage/framework/down`).
     pub maintenance_file: PathBuf,

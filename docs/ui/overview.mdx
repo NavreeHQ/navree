@@ -74,7 +74,7 @@ The files on this version of Navree, measured from the files themselves. The sit
 
 <UiAssets />
 
-The files are embedded in your binary with their brotli and gzip forms, and served at content-hash URLs under `/_navree/ui/` as immutable. A page of 32 KiB or more goes out in brotli quality 5, with a window that holds the whole page, to a client that takes brotli; a smaller one goes through the HTTP pipeline's gzip. Geist is the one web font, preloaded, with `font-display: optional`; monospace text uses the system's font.
+The files are embedded in your binary with their brotli and gzip forms, and served at content-hash URLs under `/_navree/ui/` as immutable. A page or an ops answer of 32 KiB or more goes out in brotli quality 5, with a window that holds the whole body, to a client that takes brotli; a smaller one goes through the HTTP pipeline's gzip, unless the client takes brotli and not gzip, when one of 256 bytes or more goes out in brotli too. Both follow the same opt-outs: a route with `no_compression`, a response with `Cache-Control: no-transform` and `http.compression = false` leave a page uncompressed (see [compression and secrets](/docs/basics/responses/#compression-and-secrets-breach)). Geist is the one web font, preloaded, with `font-display: optional`; monospace text uses the system's font.
 
 ### The budgets
 
