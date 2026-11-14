@@ -159,9 +159,12 @@ impl From<&String> for Href {
 /// host, and browsers can't read one into it: `//host`, `/\\host` and `\\\\host` all
 /// name another site, so they are refused.
 ///
-/// A redirect to a URL from a request (`?next=`) takes this type, so it can't be
-/// an open redirect. `From<&str>` and `From<String>` are for builders: a refused
-/// URL becomes `#`, which stays on the page.
+/// It is the type for addresses your own code writes: a link in a builder, a redirect
+/// to a page of the app. It also accepts relative paths and dot segments, which a URL
+/// taken from a request must not have, so for a redirect to a URL that comes from a
+/// request (`?next=`) use [`ReturnTo`](crate::pages::ReturnTo), which takes only one
+/// absolute path of this site. `From<&str>` and `From<String>` are for builders: a
+/// refused URL becomes `#`, which stays on the page.
 ///
 /// ```
 /// use navree_ui::html::LocalHref;
