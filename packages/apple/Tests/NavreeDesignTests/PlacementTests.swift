@@ -179,6 +179,31 @@ import Testing
     #expect(ContentRules.fittedColumns(columns, available: 100).first?.width == w(.title, 120).min)
 }
 
+@Test func theWordsOfTheColumnsANarrowWindowGivesUpStandUnderTheRecordsNameInTheTablesOrder() throws {
+    // An inventory table: product, category (secondary), price (secondary),
+    // in stock, level, restock, and the SKU, which the name's cell holds.
+    let table = try decode(Navree.Table.self, #"""
+    {"t":"table","columns":[{"label":"Product","role":"title"},{"label":"Category","secondary":true},
+    {"label":"Price","numeric":true,"secondary":true},{"label":"In stock","role":"trailing","numeric":true},
+    {"label":"Level","role":"status"},{"label":"Ships to","secondary":true},{"label":"SKU","role":"subtitle","secondary":true}],
+    "rows":[{"cells":[{"t":"text","value":"Chakla belan, Amritsar"},{"t":"text","value":"Kitchen"},{"t":"text","value":"₹549"},
+    {"t":"text","value":"0"},{"t":"badge","text":"Out of stock","tone":"danger","dot":true},
+    {"t":"stack","axis":"horizontal","children":[{"t":"text","value":"🇮🇳"},{"t":"text","value":"Ludhiana"}]},
+    {"t":"text","value":"KIT-307-000"}]}]}
+    """#)
+    // A width that keeps the name, the stock and the level: the category, the
+    // price and where it ships are given up; the subtitle never was a column.
+    let givenUp = ContentRules.givenUp(table, fitted: [0, 3, 4])
+    #expect(givenUp == [1, 2, 5])
+    #expect(ContentRules.givenUpLine(table.rows[0].cells, columns: givenUp) == "Kitchen · ₹549 · 🇮🇳 Ludhiana")
+    // Every column shown: nothing given up, no line.
+    #expect(ContentRules.givenUp(table, fitted: [0, 1, 2, 3, 4, 5]).isEmpty)
+    #expect(ContentRules.givenUpLine(table.rows[0].cells, columns: []) == nil)
+    // A given-up cell with no words adds nothing.
+    let empty = try decode([Navree.Node].self, #"[{"t":"text","value":"Chakla belan"},{"t":"text","value":""}]"#)
+    #expect(ContentRules.givenUpLine(empty, columns: [1]) == nil)
+}
+
 @Test func iOSHasNoCheckboxesOrRadioButtons() throws {
     let checkbox = try decode(Navree.Input.self, #"{"t":"toggle","kind":"checkbox"}"#)
     let radio = try decode(Navree.Input.self, #"{"t":"choice","kind":"radio","options":[{"value":"a","label":"A"},{"value":"b","label":"B"}]}"#)

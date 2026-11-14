@@ -42,13 +42,14 @@ struct TableColumnsView: View {
     var body: some View {
         let records = table.rows.enumerated().map { Record(id: $0.offset, cells: $0.element.cells, action: $0.element.action) }
         let columns = Self.columns(of: table, available: available)
+        let givenUp = ContentRules.givenUp(table, fitted: columns.map(\.id))
         let last = records.last?.id
         VStack(spacing: 0) {
             Group {
                 if let selection = choosing(records) {
-                    Table(records, selection: selection) { tableColumns(columns, last: last) }
+                    Table(records, selection: selection) { tableColumns(columns, givenUp: givenUp, last: last) }
                 } else {
-                    Table(records) { tableColumns(columns, last: last) }
+                    Table(records) { tableColumns(columns, givenUp: givenUp, last: last) }
                 }
             }
             .onGeometryChange(for: Double.self) { Double($0.size.width) } action: { available = $0 }
@@ -70,12 +71,13 @@ struct TableColumnsView: View {
 
     private var opening: ContentRules.TableOpening { ContentRules.tableOpening(bar: .current) }
 
-    /// A column for each shown, each cell drawing its record's part.
+    /// A column for each shown, each cell drawing its record's part; the
+    /// name's cell also holds the words of the columns the width gave up.
     @TableColumnBuilder<Record, Never>
-    private func tableColumns(_ columns: [Column], last: Record.ID?) -> some TableColumnContent<Record, Never> {
+    private func tableColumns(_ columns: [Column], givenUp: [Int], last: Record.ID?) -> some TableColumnContent<Record, Never> {
         TableColumnForEach(columns) { (column: Column) in
             TableColumn(column.label) { (record: Record) in
-                Cell(record: record, index: column.id, opening: opening)
+                Cell(record: record, index: column.id, opening: opening, givenUp: column.id == 0 ? givenUp : [])
                     .onAppear {
                         // The last record in view: the next page, once for each address.
                         if record.id == last, column.id == columns.first?.id, let more = table.more,
@@ -131,29 +133,45 @@ struct TableColumnsView: View {
         let record: Record
         let index: Int
         var opening: ContentRules.TableOpening = .firstCell
+        /// The columns the width gave up, whose words the name's cell holds.
+        var givenUp: [Int] = []
 
         var body: some View {
             if index < record.cells.count {
+                let line = ContentRules.givenUpLine(record.cells, columns: givenUp)
                 if index == 0, let words = ContentRules.nameWords(record.cells[0], opening: opening, opens: record.action != nil) {
                     // The row's click opens it: the name's own button (the web
                     // page's link to the same) is the record's name.
                     VStack(alignment: .leading, spacing: 2) {
                         Text(words[0])
-                        ForEach(Array(words.dropFirst().enumerated()), id: \.offset) { _, line in
+                        ForEach(Array((words.dropFirst() + (line.map { [$0] } ?? [])).enumerated()), id: \.offset) { _, line in
                             Text(line).foregroundStyle(.secondary)
                         }
                     }
                     .accessibilityElement(children: .combine)
                 } else if index == 0, opening == .choosing, record.action != nil {
                     // The row's click opens it: nothing in the name takes a click of its own.
-                    NodeView(record.cells[index]).allowsHitTesting(false)
+                    named(line).allowsHitTesting(false)
                 } else if index == 0 {
-                    Opening(action: record.action, place: Place()) { NodeView(record.cells[index]) }
+                    Opening(action: record.action, place: Place()) { named(line) }
                 } else if !RecordRules.controls(in: record.cells[index]).isEmpty {
                     CellControls(cell: record.cells[index], title: RecordRules.words(in: record.cells[0]).first ?? "")
                 } else {
                     NodeView(record.cells[index])
                 }
+            }
+        }
+
+        /// The name's cell, and under it the words of the columns given up.
+        @ViewBuilder private func named(_ line: String?) -> some View {
+            if let line {
+                VStack(alignment: .leading, spacing: 2) {
+                    NodeView(record.cells[index])
+                    Text(line).foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+            } else {
+                NodeView(record.cells[index])
             }
         }
     }
