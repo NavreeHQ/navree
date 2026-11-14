@@ -1635,6 +1635,7 @@ fn only_first_party_packages_name_themselves_plugins_and_from_their_own_module_t
             let names_a_plugin = text
                 .lines()
                 .filter(|line| !line.trim_start().starts_with("//"))
+                .map(without_strings)
                 .any(|line| line.contains("plugin_info!") || line.contains("PluginInfo::new("));
             if !names_a_plugin {
                 continue;
@@ -1657,6 +1658,41 @@ fn only_first_party_packages_name_themselves_plugins_and_from_their_own_module_t
         }
     }
     assert!(problems.is_empty(), "{problems:#?}");
+}
+
+/// A line of source without the text inside its string literals, so a message that tells the
+/// reader to write `plugin_info!(..)` is not read as a call of it.
+fn without_strings(line: &str) -> String {
+    let mut code = String::with_capacity(line.len());
+    let mut inside = false;
+    let mut chars = line.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if inside => {
+                chars.next();
+            }
+            '"' => inside = !inside,
+            _ if !inside => code.push(c),
+            _ => {}
+        }
+    }
+    code
+}
+
+#[test]
+fn a_message_that_mentions_the_macro_is_not_a_call_of_it() {
+    assert!(
+        !without_strings(r#"    "set another with plugin_info!(namespace = \"..\")","#)
+            .contains("plugin_info!")
+    );
+    assert!(
+        without_strings("        m.plugin(navree_kernel::plugin_info!());")
+            .contains("plugin_info!")
+    );
+    assert!(
+        without_strings(r#"let info = PluginInfo::new("navree-flags", "x");"#)
+            .contains("PluginInfo::new(")
+    );
 }
 
 /// A module that takes a first-party module type's id and names a plugin by hand.
