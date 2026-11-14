@@ -424,7 +424,8 @@ async fn a_request_workspace_is_the_one_current_workspace_resolves_and_is_left_u
         .assert_json_path("id", json!(amritsar.id))
         .assert_json_path("entered", Value::Null)
         .assert_json_path("current", json!(false));
-    // After the `CurrentWorkspace` extractor, the answer is the extractor's.
+    // After the `CurrentWorkspace` extractor, the answer is the extractor's, and the unit
+    // of work is in the workspace: what `entered` reads above does report an entered one.
     world
         .as_user(meera)
         .get("/api/which/current")
@@ -433,6 +434,7 @@ async fn a_request_workspace_is_the_one_current_workspace_resolves_and_is_left_u
         .await
         .assert_status(200)
         .assert_json_path("id", json!(ludhiana.id))
+        .assert_json_path("entered", json!(ludhiana.id))
         .assert_json_path("current", json!(true));
 }
 
