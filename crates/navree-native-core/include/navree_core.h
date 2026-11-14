@@ -24,11 +24,14 @@
  *
  * Addresses: every address in an effect that a client fetches, streams from
  * or shows in the web view is a whole address, scheme://host[:port]/path?query,
- * on the app's own origin or one it allows. A client asks "is this ours?" again
- * before it uses one, by the same rules (the README, "Addresses"), and runs
- * vectors/addresses.json to prove it reads them the same way. An open_url
- * effect holds only a whole http or https address, or a mailto, tel, sms or
- * geo one.
+ * percent-encoded as a browser sends it, on the app's own origin or one it
+ * allows. Before it uses one, a client asks "is this ours?" of what its
+ * platform's own parser reads: the text holds no white space, control
+ * character or backslash; the platform reads it as http or https with no user
+ * information; its scheme, host and port are an origin of the app. It runs the
+ * `ours` list of vectors/addresses.json to prove it (the README, "Addresses").
+ * An open_url effect holds only a whole http or https address, or a mailto,
+ * tel, sms or geo one.
  *
  * Errors: a call never crashes on bad input. navree_core_new answers NULL for
  * a configuration it can't read. navree_core_send and navree_core_view answer

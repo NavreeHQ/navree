@@ -1,5 +1,5 @@
 {
-  "about": "How an address is read, and whether a whole address is one of the app's own. `resolve`: the address `href` found on the page at `from`, for an app whose origin is `origin` and which also allows `also`; it reads as `inside` (one of the app's origins), `outside` (another site, or a scheme the system handles) or `refused`, and `address` is the whole address that leaves the core. `ours`: the question a client asks of a whole address before it fetches it, streams from it or shows it in the web view. Every client runs these.",
+  "about": "How an address is read, and whether a whole address is one of the app's own. `resolve`: the address `href` found on the page at `from`, for an app whose origin is `origin` and which also allows `also`; it reads as `inside` (one of the app's origins), `outside` (another site, or a scheme the system handles) or `refused`, and `address` is the whole address that leaves the core, its path, query and fragment percent-encoded by the URL standard's sets for http and https. `ours`: the question a client asks, of what its platform's own parser reads, before it fetches an address, streams from it or shows it: the text holds no white space, control character or backslash; it reads as `http` or `https` with no user information; and its scheme, host and port are an origin of the app (`*.name` for one label or more under `name`; plain `http` only to a loopback host when the build allows it). Every client runs these.",
   "resolve": [
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "/orders/7?tab=items#notes", "reads": "inside", "address": "https://shop.example/orders/7?tab=items"},
     {"origin": "https://shop.example", "also": [], "from": "/orders/7", "href": "edit", "reads": "inside", "address": "https://shop.example/orders/edit"},
@@ -76,21 +76,23 @@
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "/x?filter[status]=won&q=a b", "reads": "inside", "address": "https://shop.example/x?filter[status]=won&q=a%20b"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "/a^b`{c}?it's", "reads": "inside", "address": "https://shop.example/a%5Eb%60%7Bc%7D?it%27s"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "/100%?a=%41%zz", "reads": "inside", "address": "https://shop.example/100%25?a=%41%25zz"},
-    {"origin": "https://shop.example", "also": [], "from": "/", "href": "https://evil.example/ü?ü#ü", "reads": "outside", "address": "https://evil.example/%C3%BC?%C3%BC#%C3%BC"}
+    {"origin": "https://shop.example", "also": [], "from": "/", "href": "https://evil.example/ü?ü#ü", "reads": "outside", "address": "https://evil.example/%C3%BC?%C3%BC#%C3%BC"},
+    {"origin": "https://shop.example", "also": [], "from": "/", "href": "https://shop.example/.//evil.example/x", "reads": "refused"},
+    {"origin": "https://shop.example", "also": [], "from": "/", "href": "https://shop.example/a/..//evil.example/x", "reads": "refused"},
+    {"origin": "https://shop.example", "also": [], "from": "/", "href": "https://shop.example/%2e%2e//evil.example/x", "reads": "refused"}
   ],
   "ours": [
     {"origin": "https://shop.example", "also": [], "address": "https://shop.example/", "ours": true},
     {"origin": "https://shop.example", "also": [], "address": "https://shop.example", "ours": true},
     {"origin": "https://shop.example", "also": [], "address": "https://shop.example/x?a=b://c", "ours": true},
-    {"origin": "https://shop.example", "also": [], "address": "https://shop.example/उत्पाद/1", "ours": true},
+    {"origin": "https://shop.example", "also": [], "address": "https://shop.example/%E0%A4%89%E0%A4%A4%E0%A5%8D%E0%A4%AA%E0%A4%BE%E0%A4%A6/1", "ours": true},
+    {"origin": "https://shop.example", "also": [], "address": "https://shop.example/a%20b", "ours": true},
+    {"origin": "https://shop.example", "also": [], "address": "https://shop.example/x?filter[status]=won", "ours": true},
+    {"origin": "https://shop.example", "also": [], "address": "https://shop.example/a b", "ours": false},
     {"origin": "https://shop.example", "also": [], "address": "HTTPS://SHOP.EXAMPLE/x", "ours": true},
     {"origin": "https://shop.example", "also": [], "address": "https://shop.example:443/x", "ours": true},
     {"origin": "https://shop.example", "also": [], "address": "/x", "ours": false},
     {"origin": "https://shop.example", "also": [], "address": "//shop.example/x", "ours": false},
-    {"origin": "https://shop.example", "also": [], "address": "https://shop.example//evil.example/x", "ours": false},
-    {"origin": "https://shop.example", "also": [], "address": "https://shop.example/.//evil.example/x", "ours": false},
-    {"origin": "https://shop.example", "also": [], "address": "https://shop.example/a/..//evil.example/x", "ours": false},
-    {"origin": "https://shop.example", "also": [], "address": "https://shop.example/%2e%2e//evil.example/x", "ours": false},
     {"origin": "https://shop.example", "also": [], "address": "https://shop.example@evil.example/", "ours": false},
     {"origin": "https://shop.example", "also": [], "address": "https://shop.example.evil.example/", "ours": false},
     {"origin": "https://shop.example", "also": [], "address": "https://evil.example/.shop.example", "ours": false},
