@@ -132,7 +132,7 @@ use navree::ui::View;
 let page = View::new("Catalogue").cache("private, no-cache");
 ```
 
-Its native answer then carries `X-Navree-Keep: 1`. An answer without it removes what the device kept for that address. Keep only pages that show nothing of one person, such as a catalogue or a product, never an order, an inbox or an account.
+A screen written for native clients says the same on its answer: `native::Answer::in_shell(&shell).cache("private, no-cache")`. Either way, its native answer then carries `X-Navree-Keep: 1`. An answer without it removes what the device kept for that address. Keep only pages that show nothing of one person, such as a catalogue or a product, never an order, an inbox or an account.
 
 A kept page is a head start, never the answer. At the next launch it is drawn only after the shell has answered over the network and named the same person as the shell that was kept. Until then the screen shows that it is loading; with another person, or nobody signed in, everything kept is thrown away; with no network the kept page is not drawn at all, and the screen shows what any page that could not load shows. The fresh answer always takes the kept page's place.
 
