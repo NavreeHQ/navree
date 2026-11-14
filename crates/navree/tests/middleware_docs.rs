@@ -98,11 +98,17 @@ pub struct KhataTimeoutModule;
 
 impl KhataTimeoutModule {
     fn wire(&self, m: &mut ModuleBuilder) {
-        m.http_layer(GlobalLayer::new(LayerSlot::Context, "timeout", |_ctx, router| {
-            Ok(router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
-                Duration::from_millis(50),
-            ))))
-        }))
+        m.http_layer(GlobalLayer::new(
+            LayerSlot::Context,
+            "timeout",
+            |_ctx, router| {
+                Ok(
+                    router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
+                        Duration::from_millis(50),
+                    ))),
+                )
+            },
+        ))
         // The timeout's error answers 503 instead of 500.
         .map_error::<tower::timeout::error::Elapsed>(|_| {
             Some(AppError::service_unavailable("The khata took too long."))

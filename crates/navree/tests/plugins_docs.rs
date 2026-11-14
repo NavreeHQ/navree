@@ -79,9 +79,11 @@ impl Module for LedgerModule {
             LayerSlot::Context,
             "khata-timeout",
             |_ctx, router| {
-                Ok(router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
-                    Duration::from_secs(10),
-                ))))
+                Ok(
+                    router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
+                        Duration::from_secs(10),
+                    ))),
+                )
             },
         ))
         .map_error::<tower::timeout::error::Elapsed>(|_| {

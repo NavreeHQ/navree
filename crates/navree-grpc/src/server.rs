@@ -10,7 +10,9 @@ use std::sync::{Arc, OnceLock};
 use navree_contracts::{AuditSink, HealthCheck};
 use navree_db::Db;
 use navree_http::body::Body;
-use navree_http::{AccessSpec, Authenticator, ErrorMapper, HttpOptions, HttpServer, RouteAuthorizer};
+use navree_http::{
+    AccessSpec, Authenticator, ErrorMapper, HttpOptions, HttpServer, RouteAuthorizer,
+};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Injectable, KernelError, Lifecycle, ProviderKey, Resolver,
 };
@@ -444,7 +446,14 @@ mod tests {
     fn the_access_rule_reads_the_same_for_a_method_and_a_wrapped_service() {
         let label = "gRPC method `get_deal` of `crm.deals.v1.Deals` (module `DealsModule`)";
         assert_eq!(
-            access_problems(label, &AccessSpec::default(), ATTRIBUTES, "method", true, true),
+            access_problems(
+                label,
+                &AccessSpec::default(),
+                ATTRIBUTES,
+                "method",
+                true,
+                true
+            ),
             [format!(
                 "{label} has no access declaration: add #[public], #[authenticated], #[roles], #[permissions] or #[can] (deny by default)"
             )]
@@ -457,7 +466,9 @@ mod tests {
         assert_eq!(
             access_problems(label, &confused, ATTRIBUTES, "method", true, false),
             [
-                format!("{label} is public but also declares public roles:munshi; remove one of them"),
+                format!(
+                    "{label} is public but also declares public roles:munshi; remove one of them"
+                ),
                 format!(
                     "{label} declares public roles:munshi but no `dyn RouteAuthorizer` is registered (import the access module)"
                 ),
@@ -479,7 +490,14 @@ mod tests {
         let service = "gRPC service `crm.deals.v1.Deals` in `Wrapped`";
         let builder = ".public(), .authenticated(), .roles(..), .permissions(..) or .can(..)";
         assert_eq!(
-            access_problems(service, &AccessSpec::default(), builder, "service", true, true)[0],
+            access_problems(
+                service,
+                &AccessSpec::default(),
+                builder,
+                "service",
+                true,
+                true
+            )[0],
             format!(
                 "{service} has no access declaration: add .public(), .authenticated(), .roles(..), .permissions(..) or .can(..) (deny by default)"
             )

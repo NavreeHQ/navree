@@ -393,7 +393,9 @@ async fn a_mounted_service_sees_the_raw_path_under_its_prefix_with_the_pipeline_
         );
         assert!(!seen.params, "only the path as written: {path}");
     }
-    for method in ["POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD", "PROPFIND"] {
+    for method in [
+        "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD", "PROPFIND",
+    ] {
         assert_eq!(
             app.send(as_user(method, "/khata/entries", HARPREET))
                 .await
@@ -457,7 +459,10 @@ async fn dot_dot_raw_encoded_or_decoded_never_reaches_the_service() {
         let response = app.send(as_user("GET", path, HARPREET)).await;
         let body = response.assert_error(400);
         assert!(
-            body["message"].as_str().unwrap().starts_with("Invalid URL:"),
+            body["message"]
+                .as_str()
+                .unwrap()
+                .starts_with("Invalid URL:"),
             "{path}: {body}"
         );
     }
@@ -523,18 +528,16 @@ async fn an_empty_segment_after_the_prefix_is_refused() {
 async fn a_backslash_a_nul_or_bytes_that_are_not_utf8_never_reach_the_service() {
     let (ledger, app) = ledger_app(Mount::authenticated);
     let app = app.await;
-    for path in [
-        "/khata/a\\b",
-        "/khata/a%5Cb",
-        "/khata/a%00",
-        "/khata/%FF",
-    ] {
+    for path in ["/khata/a\\b", "/khata/a%5Cb", "/khata/a%00", "/khata/%FF"] {
         let body = app
             .send(as_user("GET", path, HARPREET))
             .await
             .assert_error(400);
         assert!(
-            body["message"].as_str().unwrap().starts_with("Invalid URL:"),
+            body["message"]
+                .as_str()
+                .unwrap()
+                .starts_with("Invalid URL:"),
             "{path}: {body}"
         );
     }
@@ -549,7 +552,13 @@ async fn a_backslash_a_nul_or_bytes_that_are_not_utf8_never_reach_the_service() 
 async fn only_the_prefix_itself_as_written_reaches_the_mount() {
     let (ledger, app) = ledger_app(Mount::authenticated);
     let app = app.await;
-    for path in ["/KHATA/x", "/Khata", "/%6Bhata/x", "/khatas/x", "/khata-old"] {
+    for path in [
+        "/KHATA/x",
+        "/Khata",
+        "/%6Bhata/x",
+        "/khatas/x",
+        "/khata-old",
+    ] {
         app.send(as_user("GET", path, HARPREET))
             .await
             .assert_error(404);
@@ -644,9 +653,7 @@ async fn a_mount_checks_its_access_on_every_request() {
         request
     };
     assert_eq!(app.send(as_munshi()).await.text(), "/entries");
-    let refused = app
-        .send(as_user("GET", "/khata/entries", HARPREET))
-        .await;
+    let refused = app.send(as_user("GET", "/khata/entries", HARPREET)).await;
     assert_eq!(
         refused.assert_error(403)["message"],
         "Only a munshi may open the khata."
@@ -660,13 +667,8 @@ async fn a_mount_checks_its_access_on_every_request() {
     let guard = books.clone();
     let (ledger, app) = ledger_app(move |mount| mount.authenticated().guard(guard.clone()));
     let app = app.await;
-    let closed = app
-        .send(as_user("GET", "/khata/entries", HARPREET))
-        .await;
-    assert_eq!(
-        closed.assert_error(403)["message"],
-        "The books are closed."
-    );
+    let closed = app.send(as_user("GET", "/khata/entries", HARPREET)).await;
+    assert_eq!(closed.assert_error(403)["message"], "The books are closed.");
     let mut open = as_user("GET", "/khata/entries", HARPREET);
     open.headers_mut()
         .insert("x-books", HeaderValue::from_static("open"));
@@ -776,7 +778,11 @@ async fn a_mount_is_one_route_for_its_throttle_timeout_and_body_limit() {
         app.send(streamed).await.assert_error(413)["message"],
         "Failed to buffer the request body: length limit exceeded"
     );
-    assert_eq!(reads.get(), 1, "the service read up to the limit, no further");
+    assert_eq!(
+        reads.get(),
+        1,
+        "the service read up to the limit, no further"
+    );
     let fits = http::Request::post("/khata/notes")
         .header("x-user-id", HARPREET)
         .body(Body::from("Ludhiana"))
@@ -903,7 +909,10 @@ async fn an_upgrade_or_connect_request_to_a_mount_is_refused_before_the_service(
         .body(Body::empty())
         .unwrap();
     for request in [websocket, h2c, extended, tunnel] {
-        assert_eq!(app.send(request).await.assert_error(501)["message"], refused);
+        assert_eq!(
+            app.send(request).await.assert_error(501)["message"],
+            refused
+        );
     }
     assert_eq!(ledger.calls(), 0);
     assert_eq!(
@@ -950,7 +959,11 @@ async fn an_app_without_a_mount_routes_and_answers_as_before() {
     .await;
     assert_eq!(app.get("/api/khata").await.text(), "index");
     let wrong = app
-        .send(http::Request::put("/api/khata").body(Body::empty()).unwrap())
+        .send(
+            http::Request::put("/api/khata")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await;
     wrong.assert_error(405);
     assert_eq!(wrong.header("allow"), Some("GET, HEAD, POST, OPTIONS"));
@@ -964,10 +977,18 @@ async fn an_app_without_a_mount_routes_and_answers_as_before() {
     assert_eq!(options.status, StatusCode::NO_CONTENT);
     assert_eq!(options.header("allow"), Some("GET, HEAD, POST, OPTIONS"));
     let head = app
-        .send(http::Request::head("/api/khata").body(Body::empty()).unwrap())
+        .send(
+            http::Request::head("/api/khata")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await;
     assert_eq!(
-        (head.status, head.text().as_str(), head.header("content-length")),
+        (
+            head.status,
+            head.text().as_str(),
+            head.header("content-length")
+        ),
         (StatusCode::OK, "", Some("5"))
     );
     assert_eq!(app.get("/api/files/a/b.txt").await.text(), "a/b.txt");

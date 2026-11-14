@@ -660,10 +660,16 @@ mod tests {
         assert_eq!(get.full_path, "/crm.deals.v1.Deals/GetDeal");
         assert_eq!(get.module, Some("DealsModule"));
         let typed = declared(deals.wrapped_access("/crm.deals.v1.Deals/Type"));
-        assert!(typed.access.authenticated, "`Type` is `r#type`, declared as `type`");
+        assert!(
+            typed.access.authenticated,
+            "`Type` is `r#type`, declared as `type`"
+        );
 
         let list = declared(deals.wrapped_access("/crm.deals.v1.Deals/ListDeals"));
-        assert!(list.access.authenticated && !list.access.public, "the default");
+        assert!(
+            list.access.authenticated && !list.access.public,
+            "the default"
+        );
         assert_eq!(list.full_path, "/crm.deals.v1.Deals/ListDeals");
         assert_eq!(list.module, Some("DealsModule"));
 
