@@ -131,7 +131,9 @@ impl<T: Send + Sync + 'static, O: ClientModuleOptions> ClientModule<T, O> {
 
     /// Builds the client once at boot, from the options and a resolver for
     /// the app's other providers. Required: without it the boot fails,
-    /// naming the module. An error stops the boot with that error.
+    /// naming the module. An error stops the boot with that error, which is
+    /// logged, so it must not carry the client's secrets (a password or a
+    /// token in a connection string).
     pub fn connect<F, Fut>(mut self, connect: F) -> Self
     where
         F: Fn(Arc<O>, Resolver) -> Fut + Send + Sync + 'static,
