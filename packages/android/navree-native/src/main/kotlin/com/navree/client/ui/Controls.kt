@@ -283,17 +283,18 @@ internal fun FormView(node: Navree.Form, place: Place, modifier: Modifier = Modi
     }
 }
 
-/** An image from the app's origin. Until it arrives, and if it never does, its place is kept. */
+/**
+ * An image from the app's origins. Until it arrives, and if it never does
+ * (refused, too large, not a picture, more than memory allows), its place is kept.
+ */
 @Composable
 internal fun RemoteImage(url: String, description: String?, cover: Boolean, modifier: Modifier = Modifier) {
     val ui = LocalUi.current
     var bitmap by remember(url) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(url) {
         val bytes = ui.image(url) ?: return@LaunchedEffect
-        bitmap = try {
-            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-        } catch (_: RuntimeException) {
-            null
+        bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            com.navree.client.platform.decodePicture(bytes)?.asImageBitmap()
         }
     }
     val loaded = bitmap

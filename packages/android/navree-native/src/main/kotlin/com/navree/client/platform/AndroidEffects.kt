@@ -39,12 +39,15 @@ class AndroidEffects(
     origin: HttpUrl,
     googleClientId: String?,
     push: PushProvider?,
+    /** The app's origins, asked again of every address before it is fetched, streamed or shown. */
+    val origins: Origins = Origins(origin.toString()),
+    loopbackHttp: Boolean = false,
 ) : EffectRunner {
     private val app = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     val cookies = WebViewCookies()
-    val http = CoreHttp(cookies) { post(it) }
-    private val streams = CoreStreams(http.client) { post(it) }
+    val http = CoreHttp(cookies, origins, loopbackHttp) { post(it) }
+    private val streams = CoreStreams(http.client, origins) { post(it) }
     private val cache = SealedCache(app)
     private val timers = HashMap<Long, Runnable>()
     private val push = push
@@ -173,11 +176,20 @@ class AndroidEffects(
         }
     }
 
+    /**
+     * Opens an address outside the app: only `http`, `https`, `mailto`,
+     * `tel`, `sms` and `geo` are handed to the system ([handedToSystem]); the
+     * system's browser inside the app takes only a web address ([webAddress]).
+     */
     private fun open(url: String, inside: Boolean) {
         val context = activity ?: return
+        if (!handedToSystem(url)) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "an address of a kind the system is not asked to open")
+            return
+        }
         val uri = Uri.parse(url)
         try {
-            if (inside && (uri.scheme == "https" || uri.scheme == "http")) {
+            if (inside && webAddress(url)) {
                 CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(context, uri)
             } else {
                 context.startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE))
@@ -194,6 +206,8 @@ class AndroidEffects(
      */
     private fun signIn(effect: Effect.SignIn) {
         val context = activity ?: return post(Events.signInDone(null))
+        // Only a web address opens in the sign-in session.
+        if (!webAddress(effect.url)) return post(Events.signInDone(null))
         // The address carries the challenge and the state: opened exactly as it came. A
         // session already open is replaced by this one.
         val builder = CustomTabsIntent.Builder().setShowTitle(true)

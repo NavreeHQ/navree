@@ -47,6 +47,19 @@ data class NavreeConfig(
      * or only a destination and the addresses the shell's routes name.
      */
     val openAnyLink: Boolean = false,
+    /**
+     * Other origins the app treats as its own, as whole origins
+     * (`https://pay.store.example.in`) or with a host that starts with `*.`
+     * for every host under a name. Requests, streams and the web view stay on
+     * these and [origin].
+     */
+    val also: List<String> = emptyList(),
+    /**
+     * Hosts pictures may also load from, over `https`, such as
+     * `images.store.example.in` or `*.cdn.example.in`. None by default:
+     * pictures load from the app's origins.
+     */
+    val pictureHosts: List<String> = emptyList(),
 ) {
     companion object {
         /**
@@ -119,6 +132,7 @@ fun coreConfig(config: NavreeConfig, device: Device, caps: List<String>, appId: 
     put("origin", config.origin.trimEnd('/'))
     // The package name: without it no sign-in is handed over and no push token registered.
     appId?.let { put("app_id", it) }
+    if (config.also.isNotEmpty()) put("also", buildJsonArray { config.also.forEach { add(JsonPrimitive(it)) } })
     if (config.loopbackHttp) put("loopback_http", true)
     put(
         "client",

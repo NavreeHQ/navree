@@ -26,6 +26,9 @@ import com.navree.client.core.Engine
 import com.navree.client.core.Events
 import com.navree.client.core.Width
 import com.navree.client.platform.AndroidEffects
+import com.navree.client.platform.MOST_PICTURE_BYTES
+import com.navree.client.platform.Origins
+import com.navree.client.platform.readCapped
 import com.navree.client.ui.NavreeApp
 import com.navree.client.ui.rememberWindow
 import com.navree.core.Core
@@ -50,7 +53,15 @@ class NavreeSession(
 
     /** The settings the core was last told of: dark, text size, locale. A change is told once. */
     var environment: Triple<Boolean, Int, String>? = null
-    val effects = AndroidEffects(application, driver, origin, config.googleClientId, config.push)
+    val effects = AndroidEffects(
+        application,
+        driver,
+        origin,
+        config.googleClientId,
+        config.push,
+        origins = Origins(config.origin, config.also, config.loopbackHttp, config.pictureHosts),
+        loopbackHttp = config.loopbackHttp,
+    )
 
     init {
         driver.effects = effects
@@ -70,15 +81,25 @@ class NavreeSession(
         Thread { effects.snapshots.write(SNAPSHOT, snapshot) }.start()
     }
 
-    /** Fetches an image from the app's origin, with the session's cookies. */
+    /**
+     * Fetches a picture's bytes, with the session's cookies: only from the
+     * app's origins and the picture hosts its configuration names, asking for
+     * a picture, and at most [MOST_PICTURE_BYTES]. Null for anything else.
+     */
     suspend fun image(url: String): ByteArray? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        val base = config.origin.toHttpUrlOrNull() ?: return@withContext null
-        val target = base.resolve(url)?.takeIf { it.host == base.host && it.scheme == base.scheme && it.port == base.port } ?: return@withContext null
-        runCatching {
-            effects.http.client.newCall(Request.Builder().url(target).build()).execute().use { response ->
-                if (response.isSuccessful) response.body.bytes() else null
+        val target = effects.origins.picture(url) ?: return@withContext null
+        try {
+            val request = Request.Builder().url(target).header("Accept", "image/*").build()
+            effects.http.client.newCall(request).execute().use { response ->
+                when {
+                    !response.isSuccessful -> null
+                    response.body.contentLength() > MOST_PICTURE_BYTES -> null
+                    else -> readCapped(response.body.source(), MOST_PICTURE_BYTES)
+                }
             }
-        }.getOrNull()
+        } catch (_: Exception) {
+            null
+        }
     }
 
     override fun onCleared() {
@@ -126,7 +147,7 @@ open class NavreeActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val config = config()
-        val origin = config.origin.toHttpUrlOrNull()?.takeIf { it.scheme == "https" || config.loopbackHttp }
+        val origin = config.origin.toHttpUrlOrNull()?.takeIf { Origins(config.origin, loopbackHttp = config.loopbackHttp).usable }
         if (origin == null) {
             setContent { Unusable(config.origin) }
             return
