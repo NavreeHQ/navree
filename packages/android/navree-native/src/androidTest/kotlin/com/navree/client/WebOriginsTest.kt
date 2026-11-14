@@ -22,6 +22,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.Collections
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -69,11 +70,22 @@ class WebOriginsTest {
         val base = app.url("/").toString().trimEnd('/')
         val elsewhere = other.url("/").toString().trimEnd('/')
         val namedBase = named.url("/").toString().trimEnd('/')
-        // A page elsewhere that, if any of it runs, asks the app's own server for /ran.
+        // A page elsewhere that, if any of it runs, asks the app's own server for /ran: its script
+        // comes first, then something to draw. Once in one piece, once slowly: the headers, a pause,
+        // then the body in two writes a pause apart.
+        val elsewherePage = "<script>new Image().src = '$base/ran'</script><h1>elsewhere</h1>"
         other.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 otherAsked += request.method + " " + request.url.encodedPath
-                return html("<title>Elsewhere</title><p>elsewhere</p><script>new Image().src = '$base/ran'</script>")
+                if (request.url.encodedPath != "/through-a-slow-redirect") return html(elsewherePage)
+                val whole = "<!doctype html><html><head><meta charset=\"utf-8\"></head><body>$elsewherePage</body></html>"
+                return MockResponse.Builder()
+                    .code(200)
+                    .addHeader("Content-Type", "text/html; charset=utf-8")
+                    .body(whole)
+                    .bodyDelay(700, TimeUnit.MILLISECONDS)
+                    .throttleBody((whole.length / 2 + 1).toLong(), 700, TimeUnit.MILLISECONDS)
+                    .build()
             }
         }
         // A host the app names for the web view: its frame runs, and asks its own server for /ran.
@@ -99,6 +111,8 @@ class WebOriginsTest {
                     "/script" -> html("<script>location.href = '$elsewhere/script'</script>")
                     "/frame-redirect" -> html("<p>a frame through a redirect</p><iframe src=\"/out?frame\"></iframe>")
                     "/out" -> moved(302, "$elsewhere/through-a-redirect")
+                    "/frame-redirect-slow" -> html("<p>a frame through a redirect, answered slowly</p><iframe src=\"/out-slow\"></iframe>")
+                    "/out-slow" -> moved(302, "$elsewhere/through-a-slow-redirect")
                     "/post-redirect" -> html("<form id=\"f\" method=\"post\" action=\"/keep-method\"><input name=\"a\" value=\"1\"></form><script>document.getElementById('f').submit()</script>")
                     "/keep-method" -> moved(307, "$elsewhere/posted-through-a-redirect")
                     "/named-frame" -> html("<p>a frame of a named host</p><iframe src=\"$namedBase/frame\"></iframe>")
@@ -174,6 +188,10 @@ class WebOriginsTest {
         open("/frame-redirect")
         android.util.Log.i("WebOriginsTest", "asked of the other origin through a frame's redirect: $otherAsked")
         if (guarded) assertFalse("the redirected frame ran", appAsked.any { it.endsWith(" /ran") })
+        open("/frame-redirect-slow")
+        Thread.sleep(2_000)
+        android.util.Log.i("WebOriginsTest", "asked of the other origin through a frame's slow redirect: $otherAsked")
+        if (guarded) assertFalse("the redirected frame answered slowly ran", appAsked.any { it.endsWith(" /ran") })
 
         // A form the app's own server answers 307 to elsewhere: the engine posts it there (no callback
         // sees it first); what comes back is never shown, and the screen is told the page left.

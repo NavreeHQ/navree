@@ -90,6 +90,8 @@ class WebRulesTest {
         val script = WebRules.documentScript(origins.documentOrigins())
         assertTrue(script, script.contains("""[["https","shop.example",443],["https","*.shop.example",443],["https","checkout.pay.example",443],["https","*.cdn.example",8443]]"""))
         assertTrue("it stops a document that is not one of them", script.contains("window.stop()"))
-        assertTrue("it is short: it holds up every load", script.length < 1_000)
+        assertTrue("and takes out what the parser puts in after", script.contains("new MutationObserver") && script.contains("removeChild"))
+        assertTrue("a failure of the check empties the document too", script.endsWith("catch(e){stop()}})();"))
+        assertTrue("it is short: it holds up every load", script.length < 1_500)
     }
 }

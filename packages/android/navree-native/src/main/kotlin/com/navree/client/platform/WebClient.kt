@@ -100,8 +100,15 @@ object WebRules {
      * of [origins] (as `[scheme, host, port]`, a host may start with `*.`) is
      * stopped and emptied before anything of it is drawn or run. A document
      * with no origin of its own (a sandboxed frame, a `data:` page) is
-     * stopped too. Anything the script cannot read leaves the document as it
-     * is: the request checks before it still hold.
+     * stopped too.
+     *
+     * At the start of a document its tree may not exist yet, so emptying it
+     * takes three steps: `window.stop()`, which aborts the parser and drops
+     * what it has not parsed yet; an observer of the document that takes out
+     * every node as it is put in, which runs before a script the parser has
+     * just put in is prepared, so such a script is no longer in the document
+     * and never runs; and the root element taken out if it is there already.
+     * A failure of the check itself empties the document too.
      */
     fun documentScript(origins: List<Triple<String, String, Int>>): String {
         val rules = buildJsonArray {
@@ -115,11 +122,15 @@ object WebRules {
                 )
             }
         }
-        return "(function(){function stop(){window.stop();var d=document.documentElement;if(d)d.remove()}" +
+        return "(function(){" +
+            "function stop(){try{window.stop()}catch(e){}" +
+            "try{new MutationObserver(function(l){for(var i=0;i<l.length;i++){var a=l[i].addedNodes;for(var j=0;j<a.length;j++){var n=a[j];if(n.parentNode)n.parentNode.removeChild(n)}}})" +
+            ".observe(document,{childList:true,subtree:true})}catch(e){}" +
+            "var d=document.documentElement;if(d)d.remove()}" +
             "try{var r=$rules,o=self.origin;if(o==='null'){stop();return}" +
             "var u=new URL(o),s=u.protocol.slice(0,-1),h=u.hostname,p=u.port?+u.port:(s==='http'?80:443);" +
             "for(var i=0;i<r.length;i++){var x=r[i],n=x[1];if(x[0]===s&&x[2]===p&&(n===h||(n.indexOf('*.')===0&&h.length>n.length-1&&h.slice(1-n.length)===n.slice(1))))return}" +
-            "stop()}catch(e){}})();"
+            "stop()}catch(e){stop()}})();"
     }
 
     private fun asksForDocument(accept: String?): Boolean =
