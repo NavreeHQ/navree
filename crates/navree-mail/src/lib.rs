@@ -26,7 +26,9 @@
 //!   [`ResendTransport`], [`LogTransport`] (development),
 //!   [`ArrayTransport`] (tests) and [`FailoverTransport`]. Implement
 //!   [`MailTransport`] for your own and swap it in with
-//!   `AppBuilder::override_value::<dyn MailTransport>`.
+//!   `AppBuilder::override_value::<dyn MailTransport>`, or register it
+//!   under a name that `mail.transport` selects
+//!   ([`ModuleBuilderMailTransportExt`]).
 //! - With `mail.delivery.enabled` (and `DatabaseModule`; migration set
 //!   `mail`): [`TransportResolver`] (transports per domain, workspace,
 //!   organization and platform, stored encrypted), [`Deliveries`] (the
@@ -109,6 +111,7 @@ mod commands;
 mod delivery;
 mod dkim;
 mod domains;
+mod drivers;
 mod error;
 mod fake;
 #[cfg(feature = "inbound")]
@@ -153,6 +156,7 @@ pub use domains::{
     CheckStatus, DkimCheck, DnsResolver, DomainExpectations, DomainReport, RecordCheck,
     SendingDomains, StaticResolver, SystemResolver,
 };
+pub use drivers::ModuleBuilderMailTransportExt;
 pub use error::MailError;
 pub use fake::MailFake;
 #[cfg(feature = "inbound")]

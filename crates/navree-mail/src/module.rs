@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use navree_config::__private::{check_registrations, contribute_slot};
 use navree_config::{Config, ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::{Clock, ModuleBuilderJobsExt, SystemClock};
 use navree_db::{Db, ModuleBuilderDbExt};
@@ -17,6 +18,7 @@ use crate::delivery::controller::{MailController, map_mail_error};
 use crate::delivery::migration::migrations;
 use crate::delivery::tracking::Tracking;
 use crate::delivery::{Pipeline, Store};
+use crate::drivers::{SLOT, TransportRegistrations, build_transport};
 use crate::{
     Deliveries, DnsResolver, MailError, MailOptions, MailTransport, Mailer, Outbox, SendMailJob,
     SendingDomains, Suppressions, SystemResolver, TransportResolver,
@@ -132,6 +134,7 @@ fn register(m: &mut ModuleBuilder, options: Option<MailOptions>) {
     if matches!(source, Source::Config) {
         m.config_section::<MailOptions>();
     }
+    contribute_slot(m, SLOT);
     let deps = source.deps();
     m.global()
         .factory(
@@ -142,11 +145,23 @@ fn register(m: &mut ModuleBuilder, options: Option<MailOptions>) {
             .deps(deps),
         )
         .factory(
+            // Every registration of a transport is checked, whichever is
+            // selected, also when a test swaps the transport.
+            Factory::<TransportRegistrations>::new(|r| async move {
+                check_registrations(&r.app(), &SLOT, MailOptions::schema())?;
+                Ok(Arc::new(TransportRegistrations))
+            }),
+        )
+        .factory(
             Factory::<dyn MailTransport>::new(|r| async move {
                 let options = r.get::<MailOptions>().await?;
-                Ok(options.transport.build()?)
+                r.get::<TransportRegistrations>().await?;
+                build_transport(&options.transport, &r.app(), "mail.transport").await
             })
-            .deps(vec![ProviderKey::of::<MailOptions>()]),
+            .deps(vec![
+                ProviderKey::of::<MailOptions>(),
+                ProviderKey::of::<TransportRegistrations>(),
+            ]),
         )
         .factory(
             Factory::<Store>::new(|r| async move {
@@ -190,13 +205,16 @@ fn register(m: &mut ModuleBuilder, options: Option<MailOptions>) {
                 let options = r.get::<MailOptions>().await?;
                 let transport = r.get::<dyn MailTransport>().await?;
                 let views = r.get::<Views>().await?;
+                r.get::<TransportRegistrations>().await?;
                 let telemetry = Telemetry::from_app(&r.app()).await;
                 let mut mailer = Mailer::new(transport, views, options.from.clone())
                     .queued_through(r.app().downgrade(), options.queue.clone())
                     .with_render(options.render.clone())
                     .with_telemetry(telemetry);
                 for (name, config) in &options.transports {
-                    mailer = mailer.with_transport(name.clone(), config.build()?);
+                    let key = format!("mail.transports.{name}");
+                    let built = build_transport(config, &r.app(), &key).await?;
+                    mailer = mailer.with_transport(name.clone(), built);
                 }
                 if options.delivery.enabled {
                     mailer = mailer.with_pipeline(Arc::new(pipeline(&r, &options).await?));
@@ -206,6 +224,7 @@ fn register(m: &mut ModuleBuilder, options: Option<MailOptions>) {
             .deps(vec![
                 ProviderKey::of::<MailOptions>(),
                 ProviderKey::of::<dyn MailTransport>(),
+                ProviderKey::of::<TransportRegistrations>(),
                 ProviderKey::of::<Views>(),
                 ProviderKey::of::<Store>(),
                 ProviderKey::of::<Suppressions>(),
