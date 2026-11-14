@@ -46,6 +46,11 @@ every `@navree/*` package carries the same version.
   not shown, not in the column menu, not filtered on, sorted by or searched, not in a saved view
   that is applied, not in a row's cells and not in the CSV export. `#[col(hidden)]` still only
   says how a column starts: the docs now say so.
+- A table's CSV export writes at most 100,000 rows (`DEFAULT_EXPORT_ROWS`) unless the query raises
+  the limit with `TableQuery::export_limit`, up to `MAX_EXPORT_ROWS`. A result cut at the limit says
+  so in `x-navree-truncated`, and a result of exactly the limit does not. An export always goes on
+  from the position of its last row and never pages by `OFFSET`, so a sort by a column of a joined
+  table writes the file in the order of the key. The docs say to throttle the route that serves it.
 
 ## [1.2.0] - 2026-11-13
 

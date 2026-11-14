@@ -168,6 +168,9 @@ pub struct TableQuery<R, F = NoFilter> {
     pub(crate) filter: F,
     pub(crate) search_mode: SearchMode,
     pub(crate) shape: Shape,
+    /// The most rows an export writes, when the page raised it.
+    #[cfg(feature = "orm")]
+    pub(crate) export_cap: Option<u64>,
     marker: PhantomData<fn() -> R>,
 }
 
@@ -777,6 +780,8 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> TableQuery<R, F> {
             filter,
             search_mode: SearchMode::Contains,
             shape,
+            #[cfg(feature = "orm")]
+            export_cap: None,
             marker: PhantomData,
         }
     }
@@ -793,6 +798,10 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> TableQuery<R, F> {
             let withdrawn = self.state.withdrawn.clone();
             let mut opened = Self::parse_shaped(self.path, &view.query, self.shape);
             opened.state.withdraw(&opened.shape, withdrawn);
+            #[cfg(feature = "orm")]
+            {
+                opened.export_cap = self.export_cap;
+            }
             return opened;
         }
         self

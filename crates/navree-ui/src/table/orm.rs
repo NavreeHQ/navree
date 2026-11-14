@@ -33,9 +33,13 @@ use super::{
     TablePage, TableQuery, TableRow, Total, ValueKind, write_csv_field,
 };
 
-/// The most rows one export writes. A larger result is cut, and the response says
-/// so in `x-navree-truncated`.
+/// The most rows one export can ever write, whatever [`TableQuery::export_limit`] asks.
+/// A larger result is cut, and the response says so in `x-navree-truncated`.
 pub const MAX_EXPORT_ROWS: u64 = 2_000_000;
+/// The rows an export writes unless [`TableQuery::export_limit`] raises it, up to
+/// [`MAX_EXPORT_ROWS`]. A larger result is cut, and the response says so in
+/// `x-navree-truncated`.
+pub const DEFAULT_EXPORT_ROWS: u64 = 100_000;
 /// Rows read from the database at a time while exporting.
 const EXPORT_CHUNK: u32 = 2_000;
 /// Bytes an export keeps in memory before it spills to a temporary file.
@@ -755,11 +759,59 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         })
     }
 
-    /// Walks every row of this state, a chunk at a time, however many there are, to
-    /// hand them to a file writer: `each` takes the rows of one chunk. The columns
-    /// that matter are [`TableQuery::visible_columns`]. Answers how many rows were
-    /// read, stopping at `limit`.
+    /// How many rows an export may write: [`DEFAULT_EXPORT_ROWS`] unless `rows` raises
+    /// it, and never more than [`MAX_EXPORT_ROWS`]. [`export_csv`](Self::export_csv)
+    /// stops there and says so in `x-navree-truncated` when the result has more rows.
+    /// An export reads the table once, a chunk at a time, in a request of its own: raise
+    /// the limit for a route that is throttled and that only those who must may reach.
+    ///
+    /// ```ignore
+    /// let response = query
+    ///     .export_limit(500_000)
+    ///     .export_csv(Deal::query(), &uow, "deals.csv", Record::into_inner)
+    ///     .await?;
+    /// ```
+    #[must_use]
+    pub fn export_limit(mut self, rows: u64) -> Self {
+        self.export_cap = Some(rows.clamp(1, MAX_EXPORT_ROWS));
+        self
+    }
+
+    /// The most rows an export of this query writes.
+    fn export_rows_allowed(&self) -> u64 {
+        self.export_cap
+            .unwrap_or(DEFAULT_EXPORT_ROWS)
+            .clamp(1, MAX_EXPORT_ROWS)
+    }
+
+    /// Walks the rows of this state, a chunk at a time, to hand them to a file writer:
+    /// `each` takes the rows of one chunk. The columns that matter are
+    /// [`TableQuery::visible_columns`]. Answers how many rows were read, stopping at
+    /// `limit` (never past [`MAX_EXPORT_ROWS`]): an answer of `limit` may mean that more
+    /// rows were left.
+    ///
+    /// The rows come in the state's sort order when each term of it is a column of the
+    /// table being read. When one is a column of a joined table (`source =
+    /// "companies.name"`) they come in the order of the key instead, since a position in
+    /// such an order can't be found again without reading from the start.
     pub async fn export_rows<M, E>(
+        &self,
+        builder: Builder<M>,
+        exec: &E,
+        limit: u64,
+        map: impl Fn(Record<M>) -> R,
+        each: impl AsyncChunk<R>,
+    ) -> Result<u64>
+    where
+        M: Model,
+        E: Executor + ?Sized,
+    {
+        self.walk(builder, exec, limit.min(MAX_EXPORT_ROWS), map, each)
+            .await
+    }
+
+    /// [`export_rows`](Self::export_rows) without the ceiling.
+    async fn walk<M, E>(
         &self,
         builder: Builder<M>,
         exec: &E,
@@ -773,40 +825,49 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     {
         let dialect = exec.target(Access::Read).await?.dialect();
         let filtered = self.apply(builder);
-        let terms = self.terms::<M>();
-        let keyset_ok = terms.iter().all(|term| !term.source.contains('.'));
+        let terms = walk_order(self.terms::<M>(), Self::key_term::<M>(Direction::Asc));
         let mut written: u64 = 0;
         let mut position: Option<Vec<Value>> = None;
-        loop {
-            let chunk = u64::from(EXPORT_CHUNK);
-            let rows = if keyset_ok {
-                Self::read_past(&filtered, exec, dialect, &terms, position.as_deref(), chunk)
-                    .await?
-            } else {
-                Self::ordered(&terms, dialect, filtered.clone())
-                    .offset(written)
-                    .limit(chunk)
-                    .get(exec)
-                    .await?
-                    .into_vec()
-            };
+        while written < limit {
+            let chunk = (limit - written).min(u64::from(EXPORT_CHUNK));
+            // Always by position, never by `OFFSET`: a read costs the same at the
+            // millionth row as at the first.
+            let rows = Self::read_past(&filtered, exec, dialect, &terms, position.as_deref(), chunk)
+                .await?;
             let got = rows.len() as u64;
             if let Some(last) = rows.last() {
                 position = terms.iter().map(|term| value_of(last, term)).collect();
             }
+            if got == chunk && position.is_none() && written + got < limit {
+                return Err(navree_orm::OrmError::InvalidQuery(
+                    "an export can't go on: a row has no value for a column it is ordered by"
+                        .to_owned(),
+                ));
+            }
             let rows: Vec<R> = rows.into_iter().map(&map).collect();
             each.chunk(&rows).await?;
             written += got;
-            if got < chunk || written >= limit {
-                return Ok(written);
+            if got < chunk {
+                break;
             }
         }
+        Ok(written)
     }
 
     /// The rows as a CSV file: the current search, filters, sort and columns. It's
     /// written inside the handler, so it runs in the request's unit of work under
     /// the same row-level security, reading a chunk at a time and spilling to a
     /// temporary file past 8 MiB. Nothing holds the whole result in memory.
+    ///
+    /// It writes at most [`DEFAULT_EXPORT_ROWS`] rows, or as many as
+    /// [`export_limit`](Self::export_limit) allows up to [`MAX_EXPORT_ROWS`]. A result
+    /// with more rows is cut there, and the response says so in `x-navree-truncated`.
+    /// The rows are in the sort order of the page, except that a sort by a column of a
+    /// joined table writes them in the order of the key (see
+    /// [`export_rows`](Self::export_rows)).
+    ///
+    /// Each export holds a unit of work, a read position and a temporary file for as
+    /// long as it takes. Throttle the route that serves it.
     ///
     /// Formula-looking cells are neutralised, see [`write_csv_field`].
     pub async fn export_csv<M, E>(
@@ -829,19 +890,31 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
             write_csv_field(&mut line, R::COLUMNS[*column].label);
         }
         line.push_str("\r\n");
+        let limit = self.export_rows_allowed();
         let mut sink = CsvSink {
             cols: self.state.cols.clone(),
             spool: Spool::new(),
             line,
             cell: String::new(),
+            room: limit,
         };
-        let written = self
-            .export_rows(builder, exec, MAX_EXPORT_ROWS, map, &mut sink)
+        // One row more than is written says that the result goes on.
+        let read = self
+            .walk(builder, exec, limit + 1, map, &mut sink)
             .await?;
-        Ok(sink
-            .spool
-            .into_response(file, written >= MAX_EXPORT_ROWS)
-            .await)
+        Ok(sink.spool.into_response(file, read > limit).await)
+    }
+}
+
+/// The order an export walks the rows in: the terms of the query's order while a
+/// position in it can be found again by the values of its columns, and the key alone
+/// when a term is a column of a joined table. Such a position can't be found again
+/// without reading from the start, which is what paging by `OFFSET` does.
+fn walk_order(terms: Vec<Term>, key: Term) -> Vec<Term> {
+    if terms.iter().any(|term| term.source.contains('.')) {
+        vec![key]
+    } else {
+        terms
     }
 }
 
@@ -856,11 +929,15 @@ struct CsvSink {
     spool: Spool,
     line: String,
     cell: String,
+    /// How many more rows the file takes.
+    room: u64,
 }
 
 impl<R: TableRow> AsyncChunk<R> for &mut CsvSink {
     async fn chunk(&mut self, rows: &[R]) -> Result<()> {
-        for row in rows {
+        let take = usize::try_from(self.room).unwrap_or(usize::MAX);
+        self.room = self.room.saturating_sub(rows.len() as u64);
+        for row in rows.iter().take(take) {
             for (at, column) in self.cols.iter().enumerate() {
                 if at > 0 {
                     self.line.push(',');
@@ -1273,6 +1350,31 @@ mod tests {
         assert_eq!(SavedViewDocument::meta().table(), "navree_ui_table_views");
         assert_eq!(SavedViewDocument::meta().driver_name(), Some("mongodb"));
         assert_eq!(SavedViewDocument::meta().key_column(), "_id");
+    }
+
+    #[test]
+    fn an_export_walks_in_key_order_when_a_sort_column_is_of_a_joined_table() {
+        let term = |source: &'static str, direction| Term {
+            source,
+            field: "name",
+            kind: ValueKind::Text,
+            nullable: false,
+            direction,
+        };
+        let key = Term {
+            source: "id",
+            field: "id",
+            kind: ValueKind::Int,
+            nullable: false,
+            direction: Direction::Asc,
+        };
+        let own = walk_order(vec![term("title", Direction::Desc), key], key);
+        let sources: Vec<&str> = own.iter().map(|term| term.source).collect();
+        assert_eq!(sources, ["title", "id"], "the page's own order is kept");
+        let joined = walk_order(vec![term("companies.name", Direction::Desc), key], key);
+        assert_eq!(joined.len(), 1);
+        assert_eq!(joined[0].source, "id");
+        assert_eq!(joined[0].direction, Direction::Asc);
     }
 
     #[test]
