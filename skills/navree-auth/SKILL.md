@@ -369,9 +369,11 @@ needs a real `users` row). To test sign-in itself, post to
 - Adding `SessionModule`'s authenticator next to `AuthModule`: an app has one
   `dyn Authenticator`.
 - Unverified emails aren't blocked: check `user.email_verified_at` where it matters.
-  Registering proves no address: an account someone else registered keeps their
-  password, passkeys and second factor after its owner verifies the address,
-  until the owner resets the password and removes what they didn't add.
+  Registering proves no address: an account someone else registered keeps what
+  they set after its owner verifies the address. A password reset ends their
+  password and sessions only; their passkeys, connected providers and app
+  tokens are removed one by one, and their two-factor stops the owner at every
+  sign-in until an administrator clears it.
 - Writing a "danger zone" route without `#[recent_auth]` or
   `#[not_while_impersonating]`: impersonation sessions and old tokens pass
   plain `#[authenticated]`.

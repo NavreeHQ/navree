@@ -141,9 +141,10 @@ Go through it in order; each item says how to check.
   `Origin` and has no token the session's check took.
 - [ ] Accounts: registration does not prove an address, and verifying one later
   (the verification link, a magic link, an emailed code) ends nothing the
-  registrant set: the owner resets the password and removes passkeys and a
-  second factor they didn't add. Social sign-in links to an existing user by
-  email only when the user's own address is verified too.
+  registrant set. A password reset ends their password and sessions; passkeys,
+  connected providers and app tokens go one by one; their two-factor needs an
+  administrator, since the owner can't pass its challenge. Social sign-in links
+  to an existing user by email only when the user's own address is verified too.
   Where an unverified password sign-in must not work, add a sign-in policy that
   refuses `SignInMethod::Password` while `email_verified_at` is empty.
 - [ ] Browser sign-in through `AuthPages` / `AuthService::sign_in_session`:
