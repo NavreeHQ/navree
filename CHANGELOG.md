@@ -51,6 +51,12 @@ every `@navree/*` package carries the same version.
   so in `x-navree-truncated`, and a result of exactly the limit does not. An export always goes on
   from the position of its last row and never pages by `OFFSET`, so a sort by a column of a joined
   table writes the file in the order of the key. The docs say to throttle the route that serves it.
+- A sortable's list lock and rank renewal can be scoped to the caller's own rows: a `ListScope` of
+  columns that must hold the caller's workspace or board, given to `Move::transaction_scoped`,
+  `sortable::transaction_scoped`, `lock_lists_scoped` and `renew_ranks_scoped`. A key of another
+  scope is then a list that isn't there, and a renewal leaves the ranks of a same-named list of
+  another scope alone. The existing calls are unchanged and take no scope. The drag and drop page
+  says to make list keys unique per workspace or to use the scoped forms.
 
 ## [1.2.0] - 2026-11-13
 

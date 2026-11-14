@@ -26,11 +26,12 @@ The form people use with JavaScript off sends a `position` instead, and the serv
 
 ## Checking a move
 
-Run the move in `Move::transaction`, read the lists there, and hold the move to them. The transaction locks the lists the move touches before you read anything:
+Run the move in `Move::transaction_scoped`, read the lists there, and hold the move to them. The transaction locks the lists the move touches before you read anything. The scope says whose lists those are: the lock finds each list among the rows of the caller's workspace only (see [Keys a browser names](#keys-a-browser-names)):
 
 ```rust
+let scope = ListScope::new().and(&Lane::WORKSPACE_ID, workspace.id);
 let checked = mv
-    .transaction(&db, &Column::KEY, |uow| {
+    .transaction_scoped(&db, &Lane::KEY, &scope, |uow| {
         let mv = mv.clone();
         async move {
             let lists = vec![
@@ -63,21 +64,25 @@ impl RankedLists for MyStore<'_> {
     type Error = OrmError;
 
     fn lock(&self, lists: &[&str]) -> impl Future<Output = Result<(), OrmError>> + Send {
-        let (uow, lists) = (self.uow, lists.to_vec());
-        async move { sortable::lock_lists(uow, &Column::KEY, lists).await }
+        let (uow, scope, lists) = (self.uow, self.scope.clone(), lists.to_vec());
+        async move { sortable::lock_lists_scoped(uow, &Lane::KEY, lists, &scope).await }
     }
     // spot(key), list(key, item), beside(list, anchor, rank, lower, item),
-    // nth(list, index, item), last(list, item)
+    // nth(list, index, item), last(list, item): each within the caller's workspace
 }
 
+let scope = ListScope::new().and(&Lane::WORKSPACE_ID, workspace.id);
 let placed = mv
-    .transaction(&db, &Column::KEY, |uow| {
-        let mv = mv.clone();
+    .transaction_scoped(&db, &Lane::KEY, &scope, |uow| {
+        let (mv, scope) = (mv.clone(), scope.clone());
         async move {
-            let store = MyStore { uow: &uow };
+            let store = MyStore { uow: &uow, scope: scope.clone() };
             let mut placed = mv.place(&store).await?;
             if let Ok(Placement { rank: None, to_list, .. }) = &placed {
-                sortable::renew_ranks(&uow, &Card::LIST, &Card::RANK, &Card::ID, to_list.clone()).await?;
+                sortable::renew_ranks_scoped(
+                    &uow, &Card::LIST, &Card::RANK, &Card::ID, to_list.clone(), &scope,
+                )
+                .await?;
                 placed = mv.place(&store).await?;
             }
             if let Ok(placement) = &placed {
@@ -89,11 +94,11 @@ let placed = mv
     .await?;
 ```
 
-New lists start their ranks `RANK_GAP` apart (65,536). When two neighbours have no room left between them, the placement says so and you give that list fresh ranks. `beside` reads in the list's order, by rank and then by id, so two items that share a rank (left by a writer that skipped the lock) leave no room either, and get fresh ranks too. `sortable::renew_ranks` does it in one statement: the list is numbered once by `ROW_NUMBER()` and every rank is written by one `UPDATE`, so a column of 12,000 cards takes a fraction of a second instead of 12,000 round trips. The ranks pass through repeats while it runs, so keep the index on `(list, rank, id)` not unique. A renewal rewrites the whole list under its lock: other moves into that list wait for it. It comes after about 16 moves dropped into the same gap, so a list where people work at speed renews rarely; one person dragging into one gap again and again makes it renew every 16 moves or so.
+New lists start their ranks `RANK_GAP` apart (65,536). When two neighbours have no room left between them, the placement says so and you give that list fresh ranks. `beside` reads in the list's order, by rank and then by id, so two items that share a rank (left by a writer that skipped the lock) leave no room either, and get fresh ranks too. `sortable::renew_ranks_scoped` does it in one statement (`renew_ranks` is the same with no scope; see [Keys a browser names](#keys-a-browser-names)): the list is numbered once by `ROW_NUMBER()` and every rank is written by one `UPDATE`, so a column of 12,000 cards takes a fraction of a second instead of 12,000 round trips. The ranks pass through repeats while it runs, so keep the index on `(list, rank, id)` not unique. A renewal rewrites the whole list under its lock: other moves into that list wait for it. It comes after about 16 moves dropped into the same gap, so a list where people work at speed renews rarely; one person dragging into one gap again and again makes it renew every 16 moves or so.
 
 ## Two moves at once
 
-Run the check and the write in `Move::transaction` (or `sortable::transaction` for any set of rows). It owns the transaction, so the safe order is the only one you can write:
+Run the check and the write in `Move::transaction` (or `sortable::transaction` for any set of rows; both have a `_scoped` form that takes a `ListScope`). It owns the transaction, so the safe order is the only one you can write:
 
 - it begins the transaction at READ COMMITTED on PostgreSQL and MySQL, whatever the server's or the pool's own level, and with `BEGIN IMMEDIATE` on SQLite;
 - its first statement locks the lists the move touches, with `SELECT ... FOR UPDATE` on one row per list, one list at a time in sorted order, so two moves never wait for each other;
@@ -106,9 +111,20 @@ READ COMMITTED is the level because every statement then reads what is committed
 
 Two moves at the same moment then queue, and the second is checked against what the first left: if both reach for the last place in a column, the second is refused as full; if both drop into the same gap, they get ranks of their own; if both move the same card, the second is refused as stale. The outcome depends only on the order the server takes them in. Without the lock, twenty moves racing for the one free place in a column on PostgreSQL or MySQL can all be taken; with it, one is, at every isolation level a pool can be set to.
 
-A list's key is locked across the whole table, so keep the keys to what the caller may move: look the list up within the caller's board or workspace in your store, and answer `None` from `RankedLists::list` for any other. The key column is the list's unique, indexed key: on MySQL a `FOR UPDATE` on a column with no index locks every row it reads.
+The key column is the list's unique, indexed key: on MySQL a `FOR UPDATE` on a column with no index locks every row it reads.
 
 In one page, moves go to the server one at a time, in the order they were made. A refused move puts its item back where the server last had it, and drops that item's other moves. When the sortable is in a region, the lists are then drawn again from the server, and the board says where the item really is, or that it is no longer shown here when the server has it further down a long list or out of a filter; if the keys were on it, they go to the card that took its place.
+
+## Keys a browser names
+
+A move carries the keys of its lists, and a browser can post any key it likes. The lock finds a list by that key in the whole table, and a renewal gives fresh ranks to every row whose list column holds the name, whoever's the row is. So a key that two workspaces both use (`ready`, `done`) reaches the other workspace's row: a move can lock a list that is not the caller's, and a renewal rewrites the ranks of every workspace's list of that name.
+
+Keep the keys to what the caller may move, in one of two ways:
+
+- **Keys that are unique to the workspace.** Make the key of a list one that no other workspace has, such as the workspace's id with the list's name, so that a key names one row in the whole table.
+- **The scoped forms.** Give the transaction a `ListScope` that names the caller's workspace column, as in the examples above. `Move::transaction_scoped`, `sortable::lock_lists_scoped` and `sortable::renew_ranks_scoped` then find a list only among the rows that hold those values: a key of another workspace is a list that isn't there (`is_not_found()`), and a renewal leaves the other workspaces' ranks alone. `Move::transaction`, `lock_lists` and `renew_ranks` are the same calls with no scope.
+
+Whichever you use, look the list up within the caller's board or workspace in your store too, and answer `None` from `RankedLists::list` for any other.
 
 ## When no answer comes
 

@@ -83,7 +83,7 @@ async fn moves(db: Db, mv: Move) -> Result<Reply> {
 }
 ```
 
-`Move` reads a form post and refuses forgery the way [`Submit`](/docs/ui/forms/) does. `Move::transaction` (the `orm` feature) is the transaction to check it in: it begins at READ COMMITTED, locks a row per list the move touches before anything is read, and runs again when the database asks. `check` refuses a move when the item is no longer in the list the browser saw it in, when the item it was dropped beside has left that list, when the list is full or closed to it, and when the item or list is gone. For lists too long to read whole, `Move::place` reads only the neighbours it needs and gives the item a rank between theirs. [Drag and drop](/docs/ui/drag-and-drop/) explains both.
+`Move` reads a form post and refuses forgery the way [`Submit`](/docs/ui/forms/) does. `Move::transaction` (the `orm` feature) is the transaction to check it in: it begins at READ COMMITTED, locks a row per list the move touches before anything is read, and runs again when the database asks. The keys of the lists come from the browser, so in an app with workspaces use `Move::transaction_scoped` with a `ListScope` of the caller's workspace: a key of another workspace is then a list that isn't there. `check` refuses a move when the item is no longer in the list the browser saw it in, when the item it was dropped beside has left that list, when the list is full or closed to it, and when the item or list is gone. For lists too long to read whole, `Move::place` reads only the neighbours it needs and gives the item a rank between theirs. [Drag and drop](/docs/ui/drag-and-drop/) explains both.
 
 ## Keyboard and accessibility
 
