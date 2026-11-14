@@ -115,6 +115,8 @@ class OriginsTest {
         assertFalse("another host", signInReturn("https://evil.example/app/signed-in?code=c1", callback, origins))
         assertFalse(signInReturn("https://shop.example//evil.example/app/signed-in", callback, origins))
         assertTrue("a scheme callback", signInReturn("shop://signed-in?code=c1", "shop", origins))
+        assertTrue("an address of the app's own scheme", signInReturn("com.charkha.supply:/signed-in?code=c1", "com.charkha.supply:/signed-in", origins))
+        assertFalse(signInReturn("https://shop.example/signed-in", "com.charkha.supply:/signed-in", origins))
         assertFalse(signInReturn("https://shop.example/app/signed-in", "shop", origins))
         assertTrue("no callback: a link of the origin", signInReturn("https://shop.example/app/signed-in", null, origins))
         assertFalse(signInReturn("https://evil.example/", null, origins))

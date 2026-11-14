@@ -99,14 +99,16 @@ class Driver(private val engine: Engine) {
     }
 
     /**
-     * Carries out one effect. One that fails is reported and the rest go on:
-     * no single effect, from a page the core keeps or from a live answer, ends
-     * the app. What failed is named by its kind only, never by what it held.
+     * Carries out one effect. One that fails, in any way (an error of the
+     * system included, such as running out of memory for one picture or one
+     * answer), is reported and the rest go on: no single effect, from a page
+     * the core keeps or from a live answer, ends the app. What failed is named
+     * by its kind only, never by what it held.
      */
     private fun carryOut(effect: Effect) {
         try {
             effects.run(effect)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             problems("an effect failed: ${effect::class.simpleName}: ${e::class.simpleName}")
         }
     }

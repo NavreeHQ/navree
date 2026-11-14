@@ -154,15 +154,16 @@ fun webAddress(address: String): Boolean {
 
 /**
  * Whether a link the app was opened with can be the return of the sign-in
- * session that is open: for a `callback` that is a whole address, the same
- * scheme, host, port and path (any query); for a callback that is a scheme,
- * that scheme; with no callback, an address of the app's origins. Any other
+ * session that is open: for a `callback` that is a whole web address, the
+ * same scheme, host, port and path (any query); for a callback that is a
+ * scheme, or an address of the app's own scheme, that scheme; with no callback, an address of the app's origins. Any other
  * link is an ordinary link, even while a sign-in is open.
  */
 fun signInReturn(link: String, callback: String?, origins: Origins): Boolean {
     if (link.isEmpty() || !clean(link)) return false
     if (callback.isNullOrEmpty()) return origins.ours(link)
-    if (!callback.contains("://")) return schemeOf(link) == callback.lowercase(Locale.ROOT)
+    // A scheme alone (`shop`), or an address of an app's own scheme (`com.charkha.supply:/signed-in`).
+    if (!callback.contains("://")) return schemeOf(link) == (schemeOf(callback) ?: callback.lowercase(Locale.ROOT))
     val wanted = Site.read(callback) ?: return false
     val got = Site.read(link) ?: return false
     return got.sameOrigin(wanted) && pathOf(link) == pathOf(callback)
