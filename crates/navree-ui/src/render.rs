@@ -26,6 +26,20 @@ pub struct Measure {
 /// The id of the page's one post form, which a menu's post items name with `form`.
 pub(crate) const POST_FORM: &str = "ui-post";
 
+/// What the renderer adds to an element that names the post form: the server drew it. The
+/// runtime posts the form, and takes its `formaction`, only for a button marked so, and
+/// stored markup can't carry the mark (rich text loses every `data-ui-*`).
+const POST_MARK: &str = "data-ui-post";
+
+/// Whether an element names the post form, and isn't marked already.
+fn names_post_form(element: &Element) -> bool {
+    element
+        .attrs
+        .iter()
+        .any(|attr| attr.name == "form" && attr.value.as_text().as_deref() == Some(POST_FORM))
+        && !element.attrs.iter().any(|attr| attr.name == POST_MARK)
+}
+
 /// Walks `node`.
 pub fn measure(node: &Node) -> Measure {
     let mut found = Measure::default();
@@ -58,6 +72,9 @@ fn measure_into(node: &Node, found: &mut Measure, depth: u32) {
                         AttrValue::Text(text) => text.len(),
                         AttrValue::Int(_) => 20,
                     };
+            }
+            if names_post_form(element) {
+                found.bytes += POST_MARK.len() + 1;
             }
             for child in &element.children {
                 measure_into(child, found, depth + 1);
@@ -155,6 +172,10 @@ fn write_element(out: &mut String, element: &Element, depth: u32) {
             }
         }
     }
+    if names_post_form(element) {
+        out.push(' ');
+        out.push_str(POST_MARK);
+    }
     out.push('>');
     if is_void(element.tag) {
         return;
@@ -237,6 +258,31 @@ mod tests {
             node = el("div").child(node).into();
         }
         assert!(!render(&node).contains("bottom"));
+    }
+
+    /// The runtime posts the page's post form only for a button marked as the server's, so the
+    /// renderer marks every element it draws that names the form, and nothing else.
+    #[test]
+    fn a_button_of_the_post_form_is_marked_as_the_servers() {
+        let node: Node = el("button")
+            .attr("type", "submit")
+            .attr("form", POST_FORM)
+            .attr("formaction", "/archive")
+            .into();
+        assert_eq!(
+            render(&node),
+            r#"<button type="submit" form="ui-post" formaction="/archive" data-ui-post></button>"#
+        );
+        assert!(measure(&node).bytes >= render(&node).len());
+        let marked: Node = el("button")
+            .attr("form", POST_FORM)
+            .flag("data-ui-post", true)
+            .into();
+        assert_eq!(render(&marked).matches("data-ui-post").count(), 1);
+        let other: Node = el("button").attr("form", "settings").into();
+        assert!(!render(&other).contains("data-ui-post"));
+        let raw = Node::Raw(SafeHtml::trusted(r#"<button form="ui-post">x</button>"#));
+        assert!(!render(&raw).contains("data-ui-post"));
     }
 
     #[test]
