@@ -131,6 +131,17 @@ public enum SplitRules {
         width == .expanded
     }
 
+    /// The destinations whose first screen is drawn as columns, as far as
+    /// their first screens are known: what a tab view with its bar at the top
+    /// is built anew for when it changes. Laid out round a stack (a screen
+    /// still on its way), the tab view keeps its bar in the bar's row when a
+    /// split view takes the stack's place, and the columns' own bars run under
+    /// it, a list's title cut by the tabs; built round the split view, the
+    /// tab bar stands in a row of its own above the columns' bars.
+    public static func columnDestinations(_ layouts: [StackLayout]) -> [Int] {
+        layouts.indices.filter { layouts[$0] != .stack }
+    }
+
     /// Whether a split's columns stand side by side, or fold into one stack.
     public static func sideBySide(width: WindowClass) -> Bool {
         width != .compact

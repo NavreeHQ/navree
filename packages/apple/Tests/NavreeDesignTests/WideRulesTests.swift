@@ -272,3 +272,11 @@ private func go(_ href: String, _ present: Navree.Present = .auto) -> Navree.Act
     #expect(first != ColumnPath(entries: [], key: "[1, 2]") { _ in })
     #expect(first != ColumnPath(entries: [.screen(2)], key: "[1, 3]") { _ in })
 }
+
+@Test func aTabViewIsBuiltAnewWhenADestinationFirstStandsAsColumns() throws {
+    let inbox = try corpusScreen("screen-inbox.json")
+    let panes = try #require(SplitRules.panes(inbox.body))
+    // The inbox still on its way, then come.
+    #expect(SplitRules.columnDestinations([.stack, .stack]) == [])
+    #expect(SplitRules.columnDestinations([.stack, .panes(panes), .listBesideDetail]) == [1, 2])
+}
