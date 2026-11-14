@@ -555,3 +555,36 @@ async fn a_stored_preference_naming_a_channel_no_module_registers_keeps_the_othe
     );
     assert_eq!(DriverName::lookup("kabutar_old"), None);
 }
+
+/// Registers the SMS driver `push`, the name of the table `notify.push`.
+struct PushSmsModule;
+
+impl Module for PushSmsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.sms_driver("push", |_| async {
+            Ok::<_, navree_kernel::BoxError>(Sandesh::default())
+        });
+    }
+}
+
+/// Registers the WhatsApp driver `push`.
+struct PushWhatsAppModule;
+
+impl Module for PushWhatsAppModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.whatsapp_driver("push", |_| async {
+            Ok::<_, navree_kernel::BoxError>(Sandesh::default())
+        });
+    }
+}
+
+#[tokio::test]
+async fn an_sms_or_whatsapp_driver_cannot_take_the_name_of_the_push_table() {
+    let sms = "m.sms_driver(\"push\") in `PushSmsModule`: `notify.push` is a setting of the notify section; register the SMS driver under another name";
+    let error = boot_error(configured().module(PushSmsModule)).await;
+    assert!(error.contains(sms), "{error}");
+
+    let whatsapp = "m.whatsapp_driver(\"push\") in `PushWhatsAppModule`: `notify.push` is a setting of the notify section; register the WhatsApp driver under another name";
+    let error = boot_error(configured().module(PushWhatsAppModule)).await;
+    assert!(error.contains(whatsapp), "{error}");
+}
