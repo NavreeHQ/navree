@@ -101,7 +101,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"report","what":"sign_in","detail":"a sign-in's return said it went wrong with a state that is not this sign-in's, and was not used"}
+          {"t":"report","what":"sign_in","detail":"a sign-in's return carried a state that is not this sign-in's, and was not used"}
         ]
       },
       "check": [
