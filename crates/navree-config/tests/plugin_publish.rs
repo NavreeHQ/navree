@@ -1,11 +1,15 @@
 //! `plugin:publish --tag config` and `config:publish --plugin`, end to end:
-//! an app's command line, run in a folder of its own as the current directory.
+//! an app's command line, run in a folder of its own as the current directory,
+//! and the plugin mode of `publish_section` on a folder of its own.
 
 use std::fs;
 use std::path::Path;
 use std::sync::{Mutex, PoisonError};
 
-use navree_config::{ConfigModule, ConfigSection, ConfigSources, ModuleBuilderConfigExt};
+use navree_config::{
+    ConfigModule, ConfigRegistry, ConfigSection, ConfigSources, FieldSchema, FieldType,
+    ModuleBuilderConfigExt, PublishOptions, SectionRegistration, SectionSchema, publish_section,
+};
 use navree_kernel::{Module, ModuleBuilder, Navree, plugin_info};
 use serde::Deserialize;
 
@@ -162,4 +166,95 @@ fn plugin_publish_config_runs_config_publish_for_the_plugin() {
             "config:publish: no plugin has the namespace `weather`"
         );
     });
+}
+
+/// A plugin's section that describes its keys.
+#[derive(Deserialize)]
+struct Notices;
+
+impl ConfigSection for Notices {
+    const KEY: &'static str = "announcements";
+
+    fn schema() -> Option<SectionSchema> {
+        Some(SectionSchema::new(
+            "announcements",
+            "Notices for every member of a workspace.",
+            vec![FieldSchema::new(
+                "notice_days",
+                FieldType::Integer,
+                "How long a notice stays up, in days.",
+            )],
+        ))
+    }
+}
+
+/// A plugin's section written by hand: it does not describe its keys.
+#[derive(Deserialize)]
+struct Manual;
+
+impl ConfigSection for Manual {
+    const KEY: &'static str = "announcements.manual";
+}
+
+/// A section whose key differs from `Notices`' only in case.
+#[derive(Deserialize)]
+struct Shouting;
+
+impl ConfigSection for Shouting {
+    const KEY: &'static str = "Announcements";
+
+    fn schema() -> Option<SectionSchema> {
+        Some(SectionSchema::new("Announcements", "", Vec::new()))
+    }
+}
+
+#[test]
+fn a_plugins_sections_are_written_through_the_checked_writer() {
+    let args = |list: &[&str]| list.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>();
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let config = dir.path().join("config");
+    let plugin = PublishOptions::parse(&args(&["--plugin", "announcements"])).expect("valid");
+    let registry = ConfigRegistry::new(&[
+        SectionRegistration::of::<Notices>(),
+        SectionRegistration::of::<Manual>(),
+    ]);
+    let manual = "config/announcements.manual.toml: section `announcements.manual` does not describe its keys, so it is not published\n";
+    assert_eq!(
+        publish_section(&plugin, &registry, &config).expect("written"),
+        format!("wrote config/announcements.toml\n{manual}")
+    );
+    let text = fs::read_to_string(config.join("announcements.toml")).expect("the file");
+    assert!(text.contains("# notice_days = 0"), "{text}");
+    fs::write(
+        config.join("announcements.toml"),
+        "# Gurpreet Singh's settings\n",
+    )
+    .unwrap();
+    assert_eq!(
+        publish_section(&plugin, &registry, &config).expect("kept"),
+        format!("config/announcements.toml: exists, kept (use --force to replace it)\n{manual}")
+    );
+    assert_eq!(
+        fs::read_to_string(config.join("announcements.toml")).unwrap(),
+        "# Gurpreet Singh's settings\n"
+    );
+    assert!(!config.join("announcements.manual.toml").exists());
+
+    assert_eq!(
+        publish_section(&plugin, &ConfigRegistry::new(&[]), &config).expect("nothing"),
+        "config: plugin `announcements` has nothing to publish\n"
+    );
+    let shouting = ConfigRegistry::new(&[
+        SectionRegistration::of::<Notices>(),
+        SectionRegistration::of::<Shouting>(),
+    ]);
+    assert_eq!(
+        publish_section(&plugin, &shouting, &config).expect_err("one file"),
+        "config:publish: two sections of plugin `announcements` would be written to one file, config/announcements.toml; nothing was written"
+    );
+    assert_eq!(
+        fs::read_dir(&config).unwrap().count(),
+        1,
+        "nothing was written"
+    );
 }
