@@ -2,6 +2,9 @@
 //! `m.permissions` (navree-contracts' `permission_catalog`): their names, a
 //! community plugin's namespace, and a name two modules describe. Describing
 //! a permission grants it to nobody; these checks grant nothing either.
+//! They run where the app has AccessModule: without it nothing checks the
+//! catalog and nothing reads the descriptions, while a workspace role still
+//! holds what `workspace.roles` lists.
 
 use navree_contracts::permission_catalog;
 use navree_kernel::{AppContext, ModuleId, PluginReport};

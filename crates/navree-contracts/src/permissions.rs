@@ -60,7 +60,11 @@ pub async fn permitted(
 /// A module describes its permissions with
 /// [`m.permissions(..)`](ModuleBuilderPermissionsExt::permissions) and
 /// [`permission_catalog`] lists them. Describing a permission grants it to
-/// nobody: the app's own roles and configuration decide who holds it.
+/// nobody: the app's own roles and configuration decide who holds it. The
+/// roles that hold every permission hold it too, from the moment the module
+/// is in the app: a workspace's `owner` (`all.*`) in that workspace, and the
+/// app's super-admin role. So a plugin does not guard a staff-only action
+/// with a permission a workspace's owner holds.
 ///
 /// ```
 /// use navree_contracts::{ModuleBuilderPermissionsExt, Permission};
@@ -100,7 +104,8 @@ pub trait ModuleBuilderPermissionsExt {
     /// Describes permissions; it grants none. A route that requires one says
     /// so with `RouteDef::permissions`, and a person holds one only when the
     /// app grants it: a workspace role's list under `workspace.roles` in the
-    /// app's configuration, or a role of navree-access.
+    /// app's configuration, or a role of navree-access. A workspace's owner
+    /// and the app's super-admin role hold every permission.
     ///
     /// The list is copied. A name given twice keeps its first description,
     /// and an empty list adds nothing. [`permission_catalog`] lists what
@@ -132,7 +137,9 @@ pub(crate) struct Permissions(pub(crate) Vec<Permission>);
 /// order (a module's own in the order it described them). A name one module
 /// describes twice is listed once, with its first description; a name two
 /// modules describe is listed for each (AccessModule checks the catalog at
-/// boot). The catalog grants nothing.
+/// boot; without it nothing checks the catalog and no route can require a
+/// permission, while a workspace role still holds what `workspace.roles`
+/// lists). The catalog grants nothing.
 ///
 /// ```no_run
 /// use navree_contracts::{ModuleBuilderPermissionsExt, Permission, permission_catalog};
