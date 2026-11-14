@@ -42,7 +42,8 @@ use crate::{AppOptions, Config, ConfigSources, commands};
 ///   one of them;
 /// - warns about a section that is in the configuration when its module was
 ///   given its options in code (`for_root(options)` replaces the section; only
-///   `from_config()` reads it);
+///   `from_config()` reads it). A section nested in it that is registered on
+///   its own, such as `auth.apps`, is read either way and not counted;
 /// - registers the offline commands `config:show`, `config:check`,
 ///   `config:schema` and `config:publish`.
 #[derive(Clone, Copy, Debug, Default)]
@@ -162,17 +163,18 @@ impl Lifecycle for ConfigDiagnostics {
                 );
                 problems.push(unused.message());
             }
-            // A module given its options in code does not read its section.
+            // A module given its options in code does not read its section
+            // (a section nested in it that is registered on its own, such as
+            // `auth.apps`, is read either way).
             let keys = self.config.keys();
             for configured in ctx.contributions::<CodeConfigured>() {
                 let module = configured.value.module();
                 let Some(section) = section_of(module) else {
                     continue;
                 };
-                let nested = format!("{section}.");
                 if keys
                     .iter()
-                    .any(|key| *key == section || key.starts_with(&nested))
+                    .any(|key| read_by_module(&section, key, &self.claims))
                 {
                     let message = format!(
                         "`{section}` is set in the configuration, but {module} was given its options in code (`for_root`), so the section is not read. Remove one of the two."
@@ -206,6 +208,21 @@ impl Lifecycle for ConfigDiagnostics {
             Ok(())
         })
     }
+}
+
+/// Whether `key` is one the module of `section` reads: `section` itself or a
+/// key below it, except the keys of a section nested in it that is
+/// registered on its own (`claims` holds the registered sections and the
+/// claimed keys), such as `auth.apps` in `auth` or `sso.tenants` in `sso`.
+fn read_by_module(section: &str, key: &str, claims: &[String]) -> bool {
+    let nested = format!("{section}.");
+    if key != section && !key.starts_with(&nested) {
+        return false;
+    }
+    !claims.iter().any(|claim| {
+        claim.starts_with(&nested)
+            && (key == claim.as_str() || key.starts_with(&format!("{claim}.")))
+    })
 }
 
 /// The section a module is named after: `HttpClientModule` reads
@@ -404,7 +421,25 @@ impl ModuleBuilderConfigExt for ModuleBuilder {
 
 #[cfg(test)]
 mod tests {
-    use super::section_of;
+    use super::{read_by_module, section_of};
+
+    #[test]
+    fn a_section_nested_and_registered_on_its_own_is_not_the_modules() {
+        let claims = ["sso.tenants".to_owned(), "auth.apps".to_owned()];
+        let tenants = "sso.tenants.unverified_emails";
+        assert!(read_by_module("sso", "sso", &claims));
+        assert!(read_by_module("sso", "sso.base_url", &claims));
+        assert!(read_by_module("sso", "sso.saml.clock_skew_secs", &claims));
+        assert!(!read_by_module("sso", "sso.tenants", &claims));
+        assert!(!read_by_module("sso", tenants, &claims));
+        // A sibling whose name starts the same is still the module's.
+        assert!(read_by_module("sso", "sso.tenants_x", &claims));
+        assert!(!read_by_module("sso", "ssox.base_url", &claims));
+        assert!(!read_by_module("auth", "auth.apps.paths", &claims));
+        assert!(read_by_module("auth", "auth.jwt.issuer", &claims));
+        // Without a nested registration every key below is the module's.
+        assert!(read_by_module("sso", tenants, &[]));
+    }
 
     #[test]
     fn a_module_is_named_after_its_section() {

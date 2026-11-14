@@ -7,8 +7,8 @@ use navree_contracts::{AuditEntry, AuditKind};
 use navree_db::Db;
 use navree_orm::Model as _;
 use navree_sso::{
-    Provisioning, RoleRule, SsoError, SsoFake, SsoOptions, SsoOwner, SsoProfile, SsoTenantOptions,
-    sso_connection, sso_identity,
+    Provisioning, RoleRule, SsoError, SsoFake, SsoModule, SsoOptions, SsoOwner, SsoProfile,
+    SsoTenantOptions, sso_connection, sso_identity,
 };
 use navree_workspace::{Members, NewOrganization, NewWorkspace, Organizations, Workspaces};
 use serde_json::{Value, json};
@@ -262,6 +262,33 @@ async fn the_tenants_key_lets_a_workspace_connection_create_the_account() {
         .assert_status(200)
         .json_value();
     assert_eq!(body["user"]["email_verified_at"], Value::Null);
+    assert_eq!(identities(&world).await, 1);
+    assert!(refusals(&world).is_empty());
+}
+
+#[tokio::test]
+async fn the_tenants_key_is_read_when_the_module_is_given_its_options_in_code() {
+    let options = SsoOptions {
+        base_url: Some(support::BASE.to_owned()),
+        ..SsoOptions::default()
+    };
+    let builder = support::builder_with(SsoModule::for_root(options))
+        .config("sso.tenants.unverified_emails", true);
+    let world = support::world_with(builder).await;
+    let fake = SsoFake::new();
+    let workspace = workspace_of(&world).await;
+    world
+        .saml_connection(
+            &fake,
+            SsoOwner::Workspace(workspace),
+            "ludhiana-okta",
+            open(),
+        )
+        .await;
+    world
+        .saml_sign_in(&fake, "ludhiana-okta", "simran.kaur@gmail.test", &[])
+        .await
+        .assert_status(200);
     assert_eq!(identities(&world).await, 1);
     assert!(refusals(&world).is_empty());
 }

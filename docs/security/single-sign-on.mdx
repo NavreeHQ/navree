@@ -88,7 +88,7 @@ clock_skew_secs = 120
 | `sso.oidc.clock_skew_secs` | `60` | How far a provider's clock may be off. |
 | `sso.tenants.unverified_emails` | `false` | Let a connection owned by a workspace or an organization create accounts for addresses outside its verified domains when its `allow_unverified_emails` is on. Off, only connections the app owns do. |
 
-Environment variables follow the usual pattern: `APP_SSO__BASE_URL`, `APP_SSO__SAML__ALLOW_IDP_INITIATED=true`, and `APP_SSO__OIDC__SCOPES="openid,email,groups"` (a comma-separated list). A `base_url` or `complete_url` that isn't an absolute URL, a prefix without a leading `/`, a zero time-to-live or scopes without `openid` fail the boot, naming the key. `SsoModule::for_root(SsoOptions { .. })` takes the same options in code.
+Environment variables follow the usual pattern: `APP_SSO__BASE_URL`, `APP_SSO__SAML__ALLOW_IDP_INITIATED=true`, and `APP_SSO__OIDC__SCOPES="openid,email,groups"` (a comma-separated list). A `base_url` or `complete_url` that isn't an absolute URL, a prefix without a leading `/`, a zero time-to-live or scopes without `openid` fail the boot, naming the key. `SsoModule::for_root(SsoOptions { .. })` takes the same options in code; `sso.tenants` is read from the configuration either way.
 
 ## Connections
 
