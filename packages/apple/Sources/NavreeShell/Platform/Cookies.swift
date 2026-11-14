@@ -115,8 +115,11 @@ public final class CookieJar {
         return cookie.map { $0.value.removingPercentEncoding ?? $0.value }
     }
 
-    /// Takes the `Set-Cookie` headers of an answer, a redirect's too.
-    public func take(from response: HTTPURLResponse, for url: URL) {
+    /// Takes the `Set-Cookie` headers of an answer, a redirect's too. With
+    /// `session`, the number the jar had when the request went out: an answer
+    /// that belongs to a session that has since ended is dropped.
+    public func take(from response: HTTPURLResponse, for url: URL, session: Int? = nil) {
+        if let session, session != self.session { return }
         var fields: [String: String] = [:]
         for (key, value) in response.allHeaderFields {
             if let key = key as? String, let value = value as? String { fields[key] = value }
@@ -138,8 +141,10 @@ public final class CookieJar {
         save()
     }
 
-    /// Copies the session into the web view's store, before a page loads.
+    /// Copies the session into the web view's store, before a page loads:
+    /// after the wipe of a session that ended, never before it.
     public func copy(into store: WKHTTPCookieStore) async {
+        await wiping?.value
         for record in records {
             if let cookie = record.cookie {
                 await store.setCookie(cookie)
@@ -148,11 +153,15 @@ public final class CookieJar {
     }
 
     /// Takes back what a page of `host` set in the web view's store, when
-    /// `host` is the origin's own: never another site's.
+    /// `host` is the origin's own: never another site's, and nothing that a
+    /// session which ended meanwhile left there.
     public func adopt(from store: WKHTTPCookieStore, host: String) async {
         guard let site, host.lowercased() == site.host else { return }
-        let cookies = await store.allCookies().map(CookieRecord.init).filter { $0.matches(host: host.lowercased()) }
-        let others = records.filter { !$0.matches(host: host.lowercased()) }
+        let session = self.session
+        await wiping?.value
+        let cookies = await store.allCookies().map(CookieRecord.init).filter { $0.matches(host: site.host) }
+        guard session == self.session else { return }
+        let others = records.filter { !$0.matches(host: site.host) }
         let next = others + cookies
         guard next != records else { return }
         records = next
@@ -164,14 +173,39 @@ public final class CookieJar {
         Set(records.map { $0.domain.hasPrefix(".") ? String($0.domain.dropFirst()) : $0.domain }.map { $0.lowercased() })
     }
 
-    /// Ends the session on this device: the jar and its Keychain item are
-    /// emptied, and the web view's store loses every cookie and all stored
-    /// data of the same hosts.
-    public func forget(_ store: WKWebsiteDataStore?) async {
-        let hosts = self.hosts
+    /// The number of the session the jar holds: it moves on each time a
+    /// session ends, so what an ended session's answers bring is told apart.
+    public private(set) var session = 0
+
+    /// The wipe of the web view's store still under way, if any.
+    private var wiping: Task<Void, Never>?
+
+    /// How long the wipe of the web view's store may take before what waits
+    /// for it goes on all the same.
+    static let wipeLimit: Duration = .seconds(5)
+
+    /// Ends the session on this device. At once: the jar and its Keychain
+    /// item are emptied, and what an answer of the ended session brings later
+    /// is dropped. Then, before the web view's store is used again, it loses
+    /// every cookie and all stored data of the origin's host, and of any
+    /// other host the jar held. What waits for that waits `wipeLimit` at most.
+    @discardableResult
+    public func forget(_ store: WKWebsiteDataStore?) -> Task<Void, Never> {
+        let hosts = self.hosts.union(site.map { Set([$0.host]) } ?? Set())
         records = []
+        session += 1
         keychain?.delete()
-        guard let store else { return }
+        let wipe = Task { @MainActor in
+            if let store { await Self.wipe(store, hosts: hosts) }
+        }
+        let limit = Task { _ = try? await Task.sleep(for: Self.wipeLimit) }
+        let done = Task { await Self.first(wipe, limit) }
+        wiping = done
+        return done
+    }
+
+    /// Takes out of the web view's store every cookie and all stored data of `hosts`.
+    static func wipe(_ store: WKWebsiteDataStore, hosts: Set<String>) async {
         for cookie in await store.httpCookieStore.allCookies() {
             let record = CookieRecord(cookie)
             if hosts.contains(where: { record.matches(host: $0) }) {
@@ -186,6 +220,15 @@ public final class CookieJar {
         await store.removeData(ofTypes: kinds, for: ours)
     }
 
+    /// Returns when the first of two tasks has ended; the other goes on.
+    nonisolated static func first(_ one: Task<Void, Never>, _ other: Task<Void, Never>) async {
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            let gate = Gate(done)
+            Task { await one.value; gate.open() }
+            Task { await other.value; gate.open() }
+        }
+    }
+
     private func save() {
         guard let keychain else { return }
         if records.isEmpty {
@@ -193,6 +236,24 @@ public final class CookieJar {
         } else if let data = try? JSONEncoder().encode(records) {
             keychain.write(data)
         }
+    }
+}
+
+/// Lets one waiter go the first time it is opened; later openings do nothing.
+final class Gate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var waiting: CheckedContinuation<Void, Never>?
+
+    init(_ waiting: CheckedContinuation<Void, Never>) {
+        self.waiting = waiting
+    }
+
+    func open() {
+        let waiting = lock.withLock {
+            defer { self.waiting = nil }
+            return self.waiting
+        }
+        waiting?.resume()
     }
 }
 

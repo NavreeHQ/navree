@@ -30,6 +30,11 @@ public final class SystemEffects: EffectRunner {
     let site: Origin?
     /// Other hosts pictures may come from.
     let pictureHosts: [String]
+    /// What the build is signed with.
+    let signedWith: Set<Entitlement>
+    /// The push token was given up when a session ended: it is asked for
+    /// again once somebody is signed in.
+    private(set) var pushAwaitsSignIn = false
     private var timers: [Int: Task<Void, Never>] = [:]
 
     static let log = Logger(subsystem: "com.navree.native", category: "effects")
@@ -45,6 +50,7 @@ public final class SystemEffects: EffectRunner {
         let site = site ?? transport.jar?.site
         self.site = site
         self.pictureHosts = pictureHosts
+        self.signedWith = signedWith
         signIn = SignInSession(signedWith: signedWith, origin: origin)
         devices = DeviceCalls(signedWith: signedWith, origin: origin, site: site)
     }
@@ -56,6 +62,10 @@ public final class SystemEffects: EffectRunner {
     public private(set) lazy var pictures = PictureLoader(jar: transport.jar, site: site, hosts: pictureHosts)
 
     public func run(_ effect: CoreEffect, for client: NativeClient) {
+        if pushAwaitsSignIn, client.app?.user != nil {
+            pushAwaitsSignIn = false
+            AppEvents.registerForPush()
+        }
         switch effect {
         case .fetch(let request):
             transport.fetch(request) { [weak client] response in client?.send(.response(response)) }
@@ -84,12 +94,20 @@ public final class SystemEffects: EffectRunner {
             }
             client.send(.random(request: request, bytes: bytes))
         case .forgetSession:
-            // The person signed out: what was kept of them goes with the session.
+            // The person signed out: what was kept of them goes with the
+            // session, here and now, before the next effect; the web view's
+            // store before it is used again.
             snapshots.clear()
             cache.clear()
             FileStore.shared.clear()
-            let jar = transport.jar
-            Task { await jar?.forget(WKWebsiteDataStore.default()) }
+            pictures.forget()
+            transport.jar?.forget(WKWebsiteDataStore.default())
+            // This install's token goes with the person; it is asked for again
+            // once somebody signs in.
+            if signedWith.contains(.pushNotifications) {
+                AppEvents.unregisterForPush()
+                pushAwaitsSignIn = true
+            }
         case .cacheRead(let key):
             client.send(.cache(key: key, value: cache.read(key)))
         case .cacheWrite(let key, let value):
@@ -230,6 +248,13 @@ public enum AppEvents {
     @MainActor static func registerForPush() {
         #if canImport(UIKit)
         UIApplication.shared.registerForRemoteNotifications()
+        #endif
+    }
+
+    /// Gives up this install's push token: the person signed out.
+    @MainActor static func unregisterForPush() {
+        #if canImport(UIKit)
+        UIApplication.shared.unregisterForRemoteNotifications()
         #endif
     }
 
