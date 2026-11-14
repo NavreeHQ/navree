@@ -76,18 +76,43 @@ every `@navree/*` package carries the same version.
   holds every plugin's `read` permissions.
 - `navree::http::RequestWorkspace`: the workspace a request names, resolved without entering it;
   `WorkspaceModule` provides it.
-- Drivers by name: a module registers a driver under a name of its own for every driver kind
-  (`m.cache_store`, `m.queue_store`, `m.session_store`, `m.backplane`, `m.mail_transport`,
-  `m.disk_driver`, `m.sms_driver`, `m.whatsapp_driver`, `m.notification_channel`,
-  `m.search_engine`, `m.ai_provider`, all through `navree::plugin::prelude`), and the kind's
-  setting (`cache.store`, `queue.driver`, `session.store`, `realtime.backplane`, `mail.transport`,
-  `storage.disks.{disk}.driver`, `notify.sms.driver`, `notify.whatsapp.driver`, `search.engine`,
-  `ai.providers.{name}.driver`) takes that name; the driver reads its own settings below it. A name
-  no module registers, a registration under a built-in name or under a key of the section, and one
-  name registered twice fail the boot naming the registration method, and `config:check` says the
-  same; `config:schema` lists the built-in and registered names. The new public traits
-  `DiskDriver`, `AiDriver` and `ChannelDriver` describe a disk, an AI provider and a notification
-  channel. `CustomEvent` is a telemetry event a module names itself.
+- Drivers by name: a module registers a driver under a name of its own for each driver kind, with
+  `m.cache_store`, `m.queue_store`, `m.session_store`, `m.backplane`, `m.mail_transport`,
+  `m.disk_driver`, `m.sms_driver`, `m.whatsapp_driver`, `m.search_engine` and `m.ai_provider`, all
+  through `navree::plugin::prelude`, and the kind's setting takes that name: `cache.store`,
+  `queue.driver`, `session.store`, `realtime.backplane`, `mail.transport` (also in a failover's
+  list and in `mail.transports`), `storage.disks.{disk}.driver`, `notify.sms.driver`,
+  `notify.whatsapp.driver`, `search.engine` and `ai.providers.{name}.driver`. The driver reads its
+  own settings from the table named after it (`cache.{name}`), or, for a disk or an AI provider,
+  from that disk's or provider's table; a registered backplane needs `realtime.secret`, as Redis
+  does. `m.notification_channel`, from the same prelude, adds a delivery channel instead: a
+  notification lists it with `Channel::named("..")`, renders its message with `to_channel`, and
+  the notifiable gives its address with `route_channel`. A name that is not a lower-case letter
+  followed by up to 63 lower-case letters, digits or `_`, a registration under a built-in name,
+  one name registered by two modules and, where a driver's settings sit below the kind's section,
+  a name equal to a key of that section (`cache.prefix`, `notify.push`) fail the boot, naming the
+  registration method and the module, whichever driver is selected. A setting that names a driver
+  no module registers fails the boot too, listing the names that are known (a bare
+  `mail.transport` name that the process does not know as a driver name keeps
+  `unknown mail transport (expected ..)`, and so does a bare built-in type such as `smtp`); a
+  notification that lists a channel no module adds fails that delivery, which is recorded as
+  failed. `config:check` reports the same registrations and settings in the same words without
+  booting the app (only the boot checks a channel's registration), and `config:schema` lists the
+  built-in and registered names of `cache.store`, `queue.driver`, `session.store`,
+  `realtime.backplane`, `notify.sms.driver`, `notify.whatsapp.driver` and `search.engine`. A
+  factory's error is shown as it wrote it in the boot error, so it must not contain a secret from
+  the driver's settings. The new public traits `DiskDriver`, `AiDriver` and `ChannelDriver`
+  describe a disk, an AI provider and a notification channel, with `DiskUpload`, `OpenedFile`,
+  `DiskDriverError`, `RegisteredDisk`, `AiCapabilities`, `AiDriverRequest`, `AiTool`,
+  `AiDriverAnswer`, `AiDriverChunk`, `AiDriverStream`, `AiEmbedRequest`, `AiEmbedAnswer`,
+  `Channel::named`, `Channel::from_name` and `Delivery::Registered`; `DriverName` and
+  `DriverContext` are in `navree::plugin`. A registered AI driver brings its own HTTP client, and
+  `AiModule` builds registered AI drivers also with `ai.fake = true`, so a provider table that
+  names a driver no module registers fails the boot in tests too. `CustomEvent` is a telemetry
+  event a module names itself (`TelemetryEvent::Custom`, of kind `EventKind::Custom`;
+  `EventKind::EVERY` lists all twenty kinds, `EventKind::ALL` still the nineteen); an event whose
+  name is not two or more lower-case words joined by `.` is not delivered, and the registry logs a
+  warning the first time it sees the name.
 
 ### Changed
 
@@ -155,23 +180,53 @@ every `@navree/*` package carries the same version.
   of the framework's own packages renders only an HTML template, and one that names another stops
   the boot.
 - A driver setting (`cache.store`, `queue.driver`, `session.store`, `realtime.backplane`,
-  `notify.sms.driver`, `notify.whatsapp.driver`, `search.engine`, a disk's or an AI provider's
-  `driver`) now reads any lower-case name, and a name no module registers fails the boot, naming
-  the method that registers one, instead of failing as the configuration is read; a value that is
-  not such a name fails as before, with a message that lists the built-in names and never repeats
-  the value. Values that worked before read, print and boot as before. `config:schema` describes
-  these settings as built-in names or a registered one.
+  `notify.sms.driver`, `notify.whatsapp.driver`, `search.engine`, a disk's `driver` and an AI
+  provider's `driver`) now reads any lower-case name, and a name no module registers fails the
+  boot, naming the method that registers one, where it failed as the configuration was read. A
+  value that is not such a name fails as the configuration is read, as before, with a message that
+  lists the built-in names and never repeats the value. Values that worked before read, print and
+  boot as before, and so does a table of one key that is a built-in name
+  (`cache.store = { memory = {} }`), which never selects a registered driver. `config:check` reads
+  `search.engine` trimmed and in lower case, as the boot does. `config:schema` describes
+  `cache.store`, `queue.driver`, `session.store`, `realtime.backplane`, `notify.sms.driver`,
+  `notify.whatsapp.driver` and `search.engine` as built-in names or a registered one, with
+  `x-navree-register`, and `ConfigSection::schema()` reports them as `FieldType::Driver`, where it
+  reported `Choice`.
+- `mail.transport`, the transports of a failover and `mail.transports` take the bare name of a
+  registered transport. A bare name reads as one only when the process already knows it as a
+  driver name, and the boot then fails, naming `m.mail_transport`, unless a module registered it
+  as a mail transport; any other bare name keeps `unknown mail transport (expected ..)`, and so
+  does a bare built-in type such as `smtp`. A tenant's mail transport, from a request or a stored
+  row, reads a registered name but cannot name a registered transport: saving or checking it
+  fails, and `TransportConfig::build` refuses it. Reading a name never adds one.
 - `CacheStoreKind`, `QueueDriver`, `SessionStoreKind`, `BackplaneKind`, `TransportConfig`,
   `DiskConfig`, `SmsDriverKind`, `WhatsAppDriverKind`, `Channel`, `Engine`, `EventKind`,
   `TelemetryEvent`, `Delivery`, `FieldType` and `ConfigError` gain a variant (they are
-  `#[non_exhaustive]`). `Notification::to_channel` and `Notifiable::route_channel` are new provided
-  methods: a type that also implements another trait with a method of that name in scope must call
-  it through that trait. A tenant's mail transport cannot name a registered transport.
+  `#[non_exhaustive]`). A `Registered` selector that holds a built-in name is that built-in:
+  `Engine::Registered` holding `memory` is `Engine::Memory`, as `CacheStoreKind`, `QueueDriver`,
+  `SessionStoreKind`, `BackplaneKind`, `SmsDriverKind`, `WhatsAppDriverKind` and `Channel` do.
+- `Notification::to_channel` and `Notifiable::route_channel` are new provided methods: a type that
+  also implements another trait with a method of that name in scope must call it through that
+  trait.
+- `Channel`'s error for a name it does not know is now ``unknown notification channel `{name}` ``,
+  where it said `unknown variant`. The notification preference routes answer it as they answer
+  any other bad value, with status 400 and the code `validation_failed`, the text under
+  `errors.preferences`. A stored preference that names a channel no module adds keeps its other
+  choices (the unknown one is skipped with a warning), and a held delivery of such a channel is
+  dropped with a warning. A queued `notify.send` job that names a channel the worker's process
+  does not know does not read: it fails with `not the name of a registered driver`.
+  `notify.preferences.channels` and `notify.deferred.channels` name a channel a module adds only
+  when written as a list: the comma-separated form of an environment variable reads the built-in
+  channels only.
+- `Storage::new` refuses a disk whose driver a module registers: `StorageModule` builds that
+  driver at boot.
 - `Interest::ALL` now includes `EventKind::Custom`, so a sink that takes every kind receives a
-  module's custom events. `Channel`'s error for a name it does not know is now
-  ``unknown notification channel `{name}` ``, where it said `unknown variant`; the notification
-  preference routes answer it in their 422 body. `AiOptions::check()` still reports a registered
-  driver's name as an unknown driver; only the configuration and `AiModule` accept it.
+  module's custom events. A 1.2 process cannot read a telemetry event of type `custom`, or a
+  `notify.send` job whose `via` is `registered`, so during a rolling upgrade use neither until
+  every process runs 1.3.
+- `AiOptions::check()` still reports a registered driver's name as an unknown driver, and so does
+  `Ai::new`; only the configuration and `AiModule` accept it. A provider table's `url` whose
+  driver a module registers is not added to the hosts the built-in drivers' client may reach.
 - `Channel`, `CacheStoreKind`, `QueueDriver`, `SmsDriverKind` and `WhatsAppDriverKind` serialize as
   their name in every format. 1.2's derive wrote a variant index in binary formats such as bincode
   or postcard, so a value 1.2 wrote in such a format does not read back in 1.3. JSON, TOML and the
