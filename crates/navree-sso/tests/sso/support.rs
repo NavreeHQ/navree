@@ -12,6 +12,7 @@ use navree_crypto::{CryptoModule, generate_key};
 use navree_db::{DatabaseModule, Db, Uow};
 use navree_events::EventsModule;
 use navree_http_client::{HttpClientModule, HttpClientOptions, SsrfPolicy};
+use navree_kernel::Module;
 use navree_orm::{Model as _, Record};
 use navree_sso::{
     NewConnection, Provisioning, Sso, SsoConnection, SsoDomain, SsoFake, SsoModule, SsoOwner,
@@ -68,12 +69,17 @@ fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
 /// from configuration (`sso.base_url` set), events, access and workspaces
 /// with organizations.
 pub fn builder() -> TestAppBuilder {
+    builder_with(SsoModule::from_config()).config("sso.base_url", BASE)
+}
+
+/// [`builder`] with `sso` as the single sign-on module and nothing set in
+/// the `sso` section.
+pub fn builder_with(sso: impl Module) -> TestAppBuilder {
     crate::servers::database(TestApp::builder())
         .config("app.key", generate_key())
         .config("hashing.memory_kib", 1024)
         .config("hashing.iterations", 1)
         .config("http.per_ip_rate_limit", Value::Null)
-        .config("sso.base_url", BASE)
         .config("workspace.organizations.enabled", true)
         .config("workspace.routes", false)
         .config("audit.routes", false)
@@ -94,7 +100,7 @@ pub fn builder() -> TestAppBuilder {
             },
             ..HttpClientOptions::default()
         }))
-        .module(SsoModule::from_config())
+        .module(sso)
 }
 
 /// Boots `builder` with a static DNS and a recording audit sink.
