@@ -108,12 +108,22 @@ presence: Presence(
 
 The build says `LSUIElement`. Then:
 - **A left click** opens a window under the item, centred on it and kept on
-  the screen, as the system's own items open theirs: no arrow, no window
-  buttons, the system's window material, the item shown pressed while it is
-  open. A click anywhere else, or the app going to the background, closes
-  it, unless `pinned` (then it stays open above other windows). It takes the
-  keyboard, so forms can be typed in, and holds the app's sheets, questions
-  and menus as any window does.
+  the screen whose menu bar holds the item, as the system's own items open
+  theirs: no arrow, no window buttons, the system's window material, the item
+  shown pressed while it is open. A second click on the item, or Escape once
+  nothing in the window takes it first (a field's words, a menu, a sheet's
+  Cancel), closes it; so does a click anywhere else or the app going to the
+  background, unless `pinned` (then it stays open above other windows). It
+  takes the keyboard, so forms can be typed in, and holds the app's sheets,
+  questions and menus as any window does. It is never in the Window menu nor
+  among the windows ⌘` steps through. It opens again where the person left
+  the app, and a window the person may resize at the size they left it.
+- **Its sheets fit it.** A Mac sheet takes the system's size for a form
+  (470 × 400 points) within the room the window it stands on has under its
+  bar: in the 400-point window under the item a sheet is that window's width,
+  its form whole, its content scrolling when taller, never hanging over the
+  window's edges; a sheet up while the person resizes the window stays inside
+  it, centred.
 - **It holds the whole app**: the app's one shell and session, with its
   navigation, sheets, forms, search, menus, notices, web screens and the
   person's menu. There is no second session: the window *is* the app's.
@@ -125,8 +135,18 @@ The build says `LSUIElement`. Then:
   Mac app has one), and not a segmented control in the bar: Apple's guidelines
   put navigation among an app's sections in a sidebar (Sidebars), and keep
   tab views and segmented controls for closely related content and choices
-  (Tab views, Segmented controls). The bar shows the screen's title, since the
-  window holds a whole app.
+  (Tab views, Segmented controls).
+- **The bar shows the screen's own title**, leading, with the screen's
+  actions trailing, in the system's compact toolbar: the window holds a whole
+  app, with a back button on a pushed screen, so the bar says where the person
+  is, as a narrow window of Mail or Notes titles what it shows (Windows: a
+  window's title names what it shows) and as Apple's own menu bar windows
+  (Control Center's Wi-Fi, Bluetooth and Sound) head themselves with the name
+  of what they hold, their controls trailing. The window's title is that same
+  title, so VoiceOver and the full window say what the bar says, and it is the
+  app's name only while no screen has one. `MenuBarExtra`'s window style has no
+  bar at all, so a screen's title, its back button and its actions would have
+  nowhere to stand: that is the one way this window differs from it.
 - **A right click** (or a click with Control held) opens the system's menu:
   the destinations, the person's menu, Open in Window, Settings…, About,
   Quit. `MenuBarExtra` has no right click, which is why the item is the
@@ -149,8 +169,19 @@ The build says `LSUIElement`. Then:
 - In both places (`.both`) such an item would hold a second session beside
   the Dock app's windows; until the app's cores share one session, `.both`
   is not offered for it and stands as the menu bar only.
-- The core starts when the window first opens (or at launch with
-  `opensAtLaunch`): until then the server's `set_badge` cannot arrive.
+- **The app starts with the app**, hidden: its shell and core run from
+  launch, so the server's `set_badge` count stands beside the item before the
+  person first opens the window, and the window opens on the app already
+  there. No window shows at launch and the app stays out of the Dock.
+- **Signing in**: the system's sign-in sheet (and Sign in with Apple's and a
+  passkey's) stands over the window under the item, opened for it if it was
+  closed, or over the full window while one is open; the window under the item
+  stays open while such a sheet is up, whatever is clicked.
+- **Its buttons are words.** On a Mac every sheet's Cancel reads "Cancel" (or
+  "Close" for a glance) and its confirming button the action's own words
+  ("Refund", "Restock", "Apply"), as push buttons at the sheet's foot; the
+  confirming one is the default button, which Return presses, and Escape
+  presses Cancel. iPhone and iPad keep ✕ and ✓ in the sheet's bar.
 
 ## The count on the app's icon
 
@@ -235,14 +266,22 @@ On a Mac (macOS 27.2), the demo pictures and logs itself
 (`-NavreePictures <folder> -NavreeSteps …`, steps `presence`, `place:`,
 `status:`, `statusmenu`, `statuschoose:`, `badge:`, `dockmenu`, `dockopen:`,
 `reopen`, `close`, `panel:`, `openinwindow`, `closewindow`, `typetext:`,
-`about:`, `login:`): the activation policy and the type the system lists the
-app as (`Foreground` or `UIElement`) in each place and as windows open and
-close, the item's button and its menus, the window under the item with the
-store's orders, a pushed order and a sheet with words typed in it (pictured
-as the window server composes it), the app moved into a full window and back,
-the Dock tile's count, the Dock menu, the About panel, opening at login. On an
+`about:`, `login:`, `statusclick`, `keypress:`, `deactivate`, `panelsize:`):
+the activation policy and the type the system lists the app as (`Foreground`
+or `UIElement`) in each place and as windows open and close, the item's button
+and its menus, the window under the item with the store's orders, a pushed
+order and a sheet with words typed in it (pictured as the window server
+composes it, alone and with the window it stands on), the app moved into a
+full window and back, the Dock tile's count, the Dock menu, the About panel,
+opening at login. Against the live store, with a count added to its home
+answer: the count beside the item before the window first opened; a click on
+the item and a second click, a right click and its menu, Escape, the app sent
+to the background, pinned, resized and opened at launch; the refund, restock
+and filter sheets inside the window under the item with their words, Return
+submitting and Escape cancelling; ⌘N and File > Open in Window with the full
+window open; the right-click menu's account items; Help opening a site. On an
 iPhone simulator, a UI test chose a quick action on the Home Screen and found
 its destination open, and the Home Screen showed the count a server set. What only a person
 at the screen sees: the Dock icon at launch, the Dock's own drawing of the
 count and the menu, the item in the real menu bar, and the login item after
-logging out and in.
+logging out and in. Not run: signing in from the window under the item.
