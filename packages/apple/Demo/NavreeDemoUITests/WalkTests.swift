@@ -81,6 +81,82 @@ final class WalkTests: XCTestCase {
         }
     }
 
+    /// The reply's small controls take a finger's tap across their whole
+    /// target: "Saved replies", drawn as its words alone, is 44 points tall
+    /// and opens its replies from a tap well above its words; the field and
+    /// its send button stand as one, the button no taller than the field.
+    /// Their frames, and what the system's hit-region audit finds too small,
+    /// are noted beside the pictures.
+    @MainActor
+    func test03ReplyControlsTakeATapAcrossTheirTarget() throws {
+        guard let origin = environment["NAVREE_INBOX_ORIGIN"], !origin.isEmpty else {
+            throw XCTSkip("Only with NAVREE_INBOX_ORIGIN")
+        }
+        let app = XCUIApplication()
+        app.launchEnvironment["NAVREE_ORIGIN"] = origin
+        app.launchArguments = ["-NavreeSelect", "/inbox"]
+        app.launch()
+        // The first conversation, whichever it is now: the first wide button
+        // under the list's filters.
+        let filter = app.buttons["Filter"].firstMatch
+        XCTAssertTrue(filter.waitForExistence(timeout: 90), "The conversations did not appear")
+        settle(2)
+        let row = app.buttons.allElementsBoundByIndex.first { button in
+            button.frame.minY > filter.frame.maxY + 40 && button.frame.width > 200 && button.isHittable
+        }
+        let opened = try XCTUnwrap(row, "No conversation's row under the filters")
+        opened.tap()
+        let reply = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "placeholderValue BEGINSWITH %@", "Write a reply")).firstMatch
+        XCTAssertTrue(reply.waitForExistence(timeout: 30), "The conversation's reply did not appear")
+        settle(3)
+        Shots.save("reply-controls", in: self)
+        let saved = app.buttons["Saved replies"].firstMatch
+        let send = app.buttons["Send"].firstMatch
+        XCTAssertTrue(saved.exists, "Saved replies is not there")
+        var frames = "reply \(reply.frame)\nSaved replies \(saved.frame)\nSend \(send.exists ? "\(send.frame)" : "none")\n"
+        for name in ["Reply", "Internal note", "Snooze", "Close", "Mark as read"] {
+            let control = app.buttons[name].firstMatch
+            frames += "\(name): \(control.exists ? "\(control.frame)" : "none")\n"
+        }
+        // The system's own audit of hit regions: each element it finds too small.
+        var small: [String] = []
+        try app.performAccessibilityAudit(for: .hitRegion) { issue in
+            small.append("\(issue.element?.label ?? "?") \(issue.element.map { "\($0.frame)" } ?? ""): \(issue.compactDescription)")
+            return true
+        }
+        frames += "hit region audit: \(small.isEmpty ? "nothing too small" : small.joined(separator: "; "))\n"
+        Shots.note("reply-controls", frames)
+        XCTAssertGreaterThanOrEqual(saved.frame.height, 44, "Saved replies' target is under 44 points tall")
+        if send.exists {
+            XCTAssertGreaterThanOrEqual(send.frame.height, 44, "Send's target is under 44 points tall")
+            XCTAssertGreaterThanOrEqual(send.frame.width, 44, "Send's target is under 44 points wide")
+        }
+        // Words written: the send button is the tint's, as Messages' is.
+        reply.tap()
+        reply.typeText("Thank you for writing to us.")
+        settle(2)
+        let written = app.buttons["Send"].firstMatch
+        let state = written.waitForExistence(timeout: 2) ? "\(written.frame), enabled \(written.isEnabled)" : "none"
+        // The field is found by its words now: its placeholder has gone.
+        let field = app.descendants(matching: .any).matching(NSPredicate(format: "value BEGINSWITH %@", "Thank you")).firstMatch
+        frames += "after writing: reply \(field.exists ? "\(field.frame)" : "none"), Send \(state)\n"
+        Shots.note("reply-controls", frames)
+        Shots.save("reply-written", in: self)
+        // Eighteen points above the middle of the words, which stand 20.5
+        // points tall: inside a 44-point target, outside the words alone.
+        let edge = saved.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .withOffset(CGVector(dx: 0, dy: -18))
+        frames += "tapped at \(edge.screenPoint)\n"
+        edge.tap()
+        let first = app.buttons["Looking into it"].firstMatch
+        let shown = first.waitForExistence(timeout: 10)
+        frames += "saved replies opened: \(shown)\n"
+        Shots.note("reply-controls", frames)
+        Shots.save("reply-saved-replies-opened", in: self)
+        XCTAssertTrue(shown, "A tap above the words of Saved replies, inside a 44-point target, did not open the saved replies")
+    }
+
     @MainActor
     private func settle(_ seconds: TimeInterval) {
         RunLoop.current.run(until: Date().addingTimeInterval(seconds))

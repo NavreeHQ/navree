@@ -317,20 +317,27 @@ public struct NoticeRow: View {
                 if let title = notice.title { Text(title).font(.headline) }
                 Text(notice.text).font(.subheadline).foregroundStyle(.secondary)
                 if let action = notice.action, let label = notice.actionLabel {
-                    Button(label) { context.send(.act(action, Place())) }
+                    TargetRoom {
+                        Button { context.send(.act(action, Place())) } label: {
+                            Text(label).modifier(TargetFill())
+                        }
                         .buttonStyle(.borderless)
-                        .font(.subheadline)
-                        .padding(.top, 2)
+                    }
+                    .font(.subheadline)
+                    .padding(.top, 2)
                 }
             }
             Spacer(minLength: 0)
-            Button {
-                context.send(.noticeDismissed)
-            } label: {
-                Label("Dismiss", systemImage: "xmark")
-                    .labelStyle(.iconOnly)
+            TargetRoom {
+                Button {
+                    context.send(.noticeDismissed)
+                } label: {
+                    Label("Dismiss", systemImage: "xmark")
+                        .labelStyle(.iconOnly)
+                        .modifier(TargetFill())
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.borderless)
             .tint(.secondary)
         }
         .accessibilityElement(children: .combine)

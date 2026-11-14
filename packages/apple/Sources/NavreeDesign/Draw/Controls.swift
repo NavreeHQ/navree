@@ -81,34 +81,41 @@ struct ButtonPart: View {
     @Environment(\.navreeOverlay) private var overlay
     @Environment(\.navreeRowSpeech) private var row
 
+    /// Drawn as its words or symbol alone: a low button, never the screen's main one.
+    private var borderless: Bool {
+        !prominent && !(button.prominence == .high && button.role != .destructive) && button.prominence == .low
+    }
+
     var body: some View {
         let control = Button(role: buttonRole(button.role)) {
             if let action = button.action {
                 context.send(.act(action, Place(form: form, overlay: overlay, ask: PresentationRules.question(button))))
             }
         } label: {
-            if button.pending {
-                HStack(spacing: 6) {
-                    ProgressView()
-                    ButtonLabel(button: button, mode: .title)
+            Group {
+                if button.pending {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                        ButtonLabel(button: button, mode: .title)
+                    }
+                } else {
+                    ButtonLabel(button: button)
                 }
-            } else {
-                ButtonLabel(button: button)
             }
+            .modifier(TargetFill(active: borderless))
         }
         .disabled(button.disabled || button.pending)
         .modifier(PopoverAnchor(action: button.action))
         VStack(alignment: .leading, spacing: 4) {
             Group {
                 if prominent || (button.prominence == .high && button.role != .destructive) {
-                    control.buttonStyle(.borderedProminent)
-                } else if button.prominence == .low {
-                    control.buttonStyle(.borderless)
+                    control.buttonStyle(.borderedProminent).modifier(FingerTarget())
+                } else if borderless {
+                    TargetRoom { control.buttonStyle(.borderless) }
                 } else {
-                    control.buttonStyle(.bordered)
+                    control.buttonStyle(.bordered).modifier(FingerTarget())
                 }
             }
-            .modifier(FingerTarget())
             if let reason = ActionRules.reason(button) {
                 Text(reason).font(.footnote).foregroundStyle(.secondary)
             }
@@ -132,6 +139,49 @@ struct FingerTarget: ViewModifier {
     }
 }
 
+/// A control that draws only its words or its symbol (a borderless button, a
+/// link, a menu in the content), given the target a finger needs on iPhone
+/// and iPad (``HitRules/target(drawn:bar:)``): the layout round it is told
+/// the size it draws, so it looks as before and the line it stands on keeps
+/// its spacing, and the control itself is placed as large as its target,
+/// centred on what it draws. Its label fills what it is given
+/// (``TargetFill``), so the whole target takes the tap and VoiceOver's frame
+/// is the target. A Mac's pointer needs only what is drawn.
+struct TargetRoom: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let control = subviews.first else { return .zero }
+        // What it draws: its own size, or wrapped to a narrower width offered.
+        let ideal = control.sizeThatFits(.unspecified)
+        guard let width = proposal.width, width < ideal.width else { return ideal }
+        return control.sizeThatFits(ProposedViewSize(width: width, height: nil))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let control = subviews.first else { return }
+        let target = HitRules.target(drawn: (Double(bounds.width), Double(bounds.height)), bar: .current)
+        control.place(
+            at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center,
+            proposal: ProposedViewSize(width: target.width, height: target.height)
+        )
+    }
+}
+
+/// The label of a control in a ``TargetRoom``: as large as the target it is
+/// given, what it draws centred in it, the whole of it taking the tap.
+struct TargetFill: ViewModifier {
+    var active = true
+
+    func body(content: Content) -> some View {
+        if active, ActionBar.current == .navigation {
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+        } else {
+            content
+        }
+    }
+}
+
 /// A link: words that lead somewhere, in the app's tint.
 struct LinkPart: View {
     let link: Navree.Link
@@ -141,12 +191,14 @@ struct LinkPart: View {
 
     var body: some View {
         if link.children.isEmpty {
-            Button {
-                context.send(.act(link.action, Place(overlay: overlay, from: link.id)))
-            } label: {
-                Text(link.label)
+            TargetRoom {
+                Button {
+                    context.send(.act(link.action, Place(overlay: overlay, from: link.id)))
+                } label: {
+                    Text(link.label).modifier(TargetFill())
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.borderless)
         } else if inControl {
             drawn
         } else {
@@ -182,20 +234,25 @@ struct MenuPart: View {
     @Environment(\.navree) private var context
 
     var body: some View {
-        Menu {
-            MenuItems(items: menu.items)
-        } label: {
-            switch (ContentRules.menuLabel(menu), menu.icon) {
-            case (.titleAndIcon, let icon?):
-                label(icon).labelStyle(.titleAndIcon)
-            case (.icon, let icon?):
-                label(icon).labelStyle(.iconOnly)
-            default:
-                Text(menu.label)
+        TargetRoom {
+            Menu {
+                MenuItems(items: menu.items)
+            } label: {
+                Group {
+                    switch (ContentRules.menuLabel(menu), menu.icon) {
+                    case (.titleAndIcon, let icon?):
+                        label(icon).labelStyle(.titleAndIcon)
+                    case (.icon, let icon?):
+                        label(icon).labelStyle(.iconOnly)
+                    default:
+                        Text(menu.label)
+                    }
+                }
+                .modifier(TargetFill())
             }
+            .accessibilityLabel(Text(menu.label))
         }
         .fixedSize()
-        .accessibilityLabel(Text(menu.label))
     }
 
     @ViewBuilder private func label(_ icon: Navree.Icon) -> some View {

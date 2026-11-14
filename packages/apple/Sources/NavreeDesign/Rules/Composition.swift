@@ -481,6 +481,16 @@ public enum HitRules {
     public static func outset(glyph: Double) -> Double {
         max(0, ((least - glyph) / 2).rounded(.up))
     }
+
+    /// The target of a control that draws only its words or its symbol (a
+    /// borderless button, a link), `drawn` wide and tall as drawn: at least
+    /// ``least`` each way round what it draws, centred on it, on iPhone and
+    /// iPad; on a Mac, where a pointer points, what it draws. The layout round
+    /// the control keeps the drawn size either way, so it looks as before.
+    public static func target(drawn: (width: Double, height: Double), bar: ActionBar) -> (width: Double, height: Double) {
+        guard bar == .navigation else { return drawn }
+        return (max(drawn.width, least), max(drawn.height, least))
+    }
 }
 
 /// More about a part, on request.

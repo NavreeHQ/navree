@@ -97,6 +97,11 @@ public enum ComposerRules {
         return parts
     }
 
+    /// The symbol of the reply's send button, inside the field's trailing
+    /// end: the filled arrow Messages and Mail send with, whatever icon the
+    /// page gives its button (its words stay its name for VoiceOver).
+    public static let sendSymbol = "arrow.up.circle.fill"
+
     /// Whether the reply can be sent: when it holds words, as Messages' send
     /// button waits for them.
     public static func canSend(_ text: String) -> Bool {

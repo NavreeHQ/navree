@@ -5,7 +5,8 @@ import SwiftUI
 /// keeps its field: above the tab bar and the keyboard, the conversation
 /// scrolling under it with the system's edge effect. Its other parts (how it
 /// is sent, saved replies) stand in a row over the field; the field grows
-/// with what is written, and the send button beside it waits for words.
+/// with what is written, and the send button at its trailing end waits for
+/// words.
 struct ComposerBar: View {
     let found: ComposerRules.Found
     @Environment(\.navree) private var context
@@ -30,7 +31,10 @@ struct ComposerBar: View {
                     Spacer(minLength: 0)
                 }
             }
-            HStack(alignment: .bottom, spacing: 8) {
+            // The field and its send button as one rounded field, the button
+            // at its trailing end as Messages and Mail send: a filled arrow no
+            // taller than a line of the field, its target the full 44 points.
+            HStack(alignment: .bottom, spacing: 4) {
                 ZStack(alignment: .topLeading) {
                     // The words as they would wrap (one line to six) set the
                     // field's height: a field that grows by lines takes all the
@@ -50,22 +54,29 @@ struct ComposerBar: View {
                     .accessibilityLabel(label)
                 }
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 12)
+                .padding(.leading, 12)
                 .padding(.vertical, 7)
-                .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                Button {
-                    if let action = found.send.action {
-                        context.send(.act(action, Place(form: ref, overlay: overlay, ask: PresentationRules.question(found.send))))
+                TargetRoom {
+                    Button {
+                        if let action = found.send.action {
+                            context.send(.act(action, Place(form: ref, overlay: overlay, ask: PresentationRules.question(found.send))))
+                        }
+                    } label: {
+                        Image(systemName: ComposerRules.sendSymbol)
+                            .font(.title2)
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, sendable ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary))
+                            .accessibilityLabel(found.send.label)
+                            .modifier(TargetFill())
                     }
-                } label: {
-                    ButtonLabel(button: found.send, mode: .icon)
+                    .buttonStyle(.borderless)
+                    .disabled(!sendable)
+                    .keyboardShortcut(.return, modifiers: .command)
                 }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.circle)
-                .modifier(FingerTarget())
-                .disabled(!ComposerRules.canSend(text) || found.send.disabled || found.send.pending)
-                .keyboardShortcut(.return, modifiers: .command)
+                .padding(.trailing, 4)
+                .padding(.bottom, 4)
             }
+            .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             let error = (context.errors(ref, field.name) ?? field.error.map { [$0] } ?? []).joined(separator: " ")
             if !error.isEmpty {
                 Label(error, systemImage: "exclamationmark.circle.fill")
@@ -76,6 +87,11 @@ struct ComposerBar: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .environment(\.navreeForm, ref)
+    }
+
+    /// Whether the reply can go: words written, and the button neither off nor waiting.
+    private var sendable: Bool {
+        ComposerRules.canSend(text) && !found.send.disabled && !found.send.pending
     }
 
     private var placeholder: String? {
