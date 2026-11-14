@@ -22,6 +22,14 @@
  * memory; it does not make the order of two racing events meaningful. The
  * thread needs about 1 MiB of stack.
  *
+ * Freeing: navree_core_free may be called while a call is in progress on
+ * another thread. It waits for that call, which finishes with its answer,
+ * then drops the core. A call that comes during or after the free answers
+ * {"error":"the core was freed"}, and a second free does nothing: the
+ * handle's own few bytes (a lock and a mark) are kept for the life of the
+ * process, so no call reads memory that was given back. A client still frees
+ * each core once, when it is done with it.
+ *
  * Addresses: every address in an effect that a client fetches, streams from
  * or shows in the web view is a whole address, scheme://host[:port]/path?query,
  * percent-encoded as a browser sends it, on the app's own origin or one it
@@ -79,7 +87,8 @@ NavreeBytes navree_core_view(const NavreeCore *core, const uint8_t *query, size_
 /* Gives bytes back to the core. */
 void navree_bytes_free(NavreeBytes bytes);
 
-/* Ends a core. NULL is allowed. No other call may be using it. */
+/* Ends a core. NULL is allowed. A call in progress on another thread finishes
+ * first; later calls on the handle answer an error. */
 void navree_core_free(NavreeCore *core);
 
 #ifdef __cplusplus

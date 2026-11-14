@@ -13,7 +13,15 @@
 //!   here costs order, never memory.
 //! - Bytes passed in stay valid for the call. The core copies what it keeps.
 //! - Every [`NavreeBytes`] that comes back is given to [`navree_bytes_free`]
-//!   exactly once, and a handle is not used after [`navree_core_free`].
+//!   exactly once.
+//!
+//! What a client may assume of the handle: freeing it while a call is in
+//! progress on another thread waits for that call to finish, and a call that
+//! comes during or after the free answers `{"error":"..."}`. The core inside
+//! is dropped at the free; the handle's own few bytes (a lock and a mark) are
+//! never given back to the allocator, so no call can read memory that was
+//! freed. That costs a few bytes for every core made in a process, and there
+//! is one core for each run of an app.
 //!
 //! No call panics across the boundary. A panic inside the core is caught, the
 //! call answers `{"error":"..."}`, and the core stops for good: what it held
@@ -26,7 +34,8 @@ use std::sync::Mutex;
 
 use crate::{Config, Core, Event, Query};
 
-/// A core behind the C interface.
+/// A core behind the C interface. The handle itself lives as long as the
+/// process; [`navree_core_free`] drops the core inside it.
 pub struct NavreeCore {
     core: Mutex<Slot>,
 }
@@ -38,10 +47,16 @@ enum Slot {
     /// A core that failed inside a call. Its state, and every effect it had
     /// queued, were thrown away; every later call answers [`STOPPED`].
     Stopped,
+    /// A handle given to [`navree_core_free`]. Every later call answers
+    /// [`FREED`].
+    Freed,
 }
 
 /// What every call answers once the core has stopped.
 const STOPPED: &str = "the core stopped after a failure inside it and can't be used again";
+
+/// What every call answers once the handle was freed.
+const FREED: &str = "the core was freed";
 
 /// Bytes the core owns: UTF-8 JSON, `len` bytes at `ptr`, not ended by a
 /// zero. An empty answer has a null `ptr` and a `len` of zero.
@@ -108,8 +123,10 @@ fn using(
         .core
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let Slot::Live(core) = &mut *slot else {
-        return error(STOPPED);
+    let core = match &mut *slot {
+        Slot::Live(core) => core,
+        Slot::Stopped => return error(STOPPED),
+        Slot::Freed => return error(FREED),
     };
     match catch_unwind(AssertUnwindSafe(|| call(core))) {
         Ok(Ok(bytes)) => bytes,
@@ -163,7 +180,7 @@ pub unsafe extern "C" fn navree_core_new(config: *const u8, len: usize) -> *mut 
 /// JSON, or `{"error":"..."}`.
 ///
 /// # Safety
-/// `core` came from [`navree_core_new`] and was not freed. `event` is null, or
+/// `core` is null or came from [`navree_core_new`] (freed or not). `event` is null, or
 /// points to `len` bytes that stay valid for the call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn navree_core_send(
@@ -171,8 +188,10 @@ pub unsafe extern "C" fn navree_core_send(
     event: *const u8,
     len: usize,
 ) -> NavreeBytes {
-    // SAFETY: the caller says `core` is a live handle; it is only read here,
-    // and the lock inside it is what gives the core to one call at a time.
+    // SAFETY: the caller says `core` came from `navree_core_new`; a handle is
+    // never given back to the allocator, so it is there even after a free. It
+    // is only read here, and the lock inside it is what gives the core to one
+    // call at a time.
     let Some(handle) = (unsafe { core.as_ref() }) else {
         return give(error("no core"));
     };
@@ -184,7 +203,7 @@ pub unsafe extern "C" fn navree_core_send(
 /// nothing for all of it. Answers the part, as JSON, or `{"error":"..."}`.
 ///
 /// # Safety
-/// `core` came from [`navree_core_new`] and was not freed. `query` is null, or
+/// `core` is null or came from [`navree_core_new`] (freed or not). `query` is null, or
 /// points to `len` bytes that stay valid for the call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn navree_core_view(
@@ -213,18 +232,28 @@ pub unsafe extern "C" fn navree_bytes_free(bytes: NavreeBytes) {
     }
 }
 
-/// Ends a core.
+/// Ends a core. A call in progress on another thread finishes first; a call
+/// that comes later, and a second free, answer an error or do nothing.
 ///
 /// # Safety
-/// `core` is null, or came from [`navree_core_new`] and was not freed, and no
-/// other call is using it.
+/// `core` is null, or came from [`navree_core_new`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn navree_core_free(core: *mut NavreeCore) {
-    if !core.is_null() {
-        // SAFETY: `navree_core_new` made this with `Box::into_raw`, and the
-        // caller says it has not been freed and is not in use.
-        drop(unsafe { Box::from_raw(core) });
-    }
+    // SAFETY: the caller says `core` came from `navree_core_new`, and the
+    // handle is never given back to the allocator, so it is still there
+    // however many times it was freed. It is only read here; the lock inside
+    // it waits for a call in progress.
+    let Some(handle) = (unsafe { core.as_ref() }) else {
+        return;
+    };
+    let mut slot = handle
+        .core
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let held = std::mem::replace(&mut *slot, Slot::Freed);
+    drop(slot);
+    // As in `using`: a failure while dropping stays on this side.
+    let _ = catch_unwind(AssertUnwindSafe(|| drop(held)));
 }
 
 /// The glue for the Kotlin class `com.navree.core.Core`, whose four static
@@ -297,7 +326,7 @@ pub mod jni {
     ///
     /// # Safety
     /// Called by the Java runtime with a live environment; `handle` came from
-    /// `nativeNew` and was not freed.
+    /// `nativeNew` (freed or not).
     #[unsafe(no_mangle)]
     pub unsafe extern "system" fn Java_com_navree_core_Core_nativeSend(
         env: *mut JNIEnv,
@@ -305,8 +334,8 @@ pub mod jni {
         handle: jlong,
         event: jbyteArray,
     ) -> jbyteArray {
-        // SAFETY: the runtime passes a live environment; the class keeps the
-        // handle alive until `nativeFree`.
+        // SAFETY: the runtime passes a live environment; the handle came from
+        // `nativeNew`, and a handle is never given back to the allocator.
         unsafe {
             let event = read(env, event);
             let out = match (handle as *const NavreeCore).as_ref() {
@@ -342,8 +371,7 @@ pub mod jni {
     /// `private external fun nativeFree(handle: Long)`.
     ///
     /// # Safety
-    /// `handle` is zero, or came from `nativeNew` and was not freed, and no
-    /// other call is using it.
+    /// `handle` is zero, or came from `nativeNew`.
     #[unsafe(no_mangle)]
     pub unsafe extern "system" fn Java_com_navree_core_Core_nativeFree(
         _env: *mut JNIEnv,
@@ -445,6 +473,74 @@ mod tests {
             let nav = br#"{"part":"nav"}"#;
             assert!(text(navree_core_view(core, nav.as_ptr(), nav.len())).contains("stopped"));
             navree_core_free(core);
+        }
+    }
+
+    #[test]
+    fn freeing_a_core_while_another_thread_is_in_a_call_waits_for_the_call_and_refuses_later_ones()
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::{Arc, mpsc};
+        use std::time::Duration;
+
+        // SAFETY: as above.
+        let core = unsafe { navree_core_new(CONFIG.as_ptr(), CONFIG.len()) } as usize;
+        let (inside, is_inside) = mpsc::channel();
+        let (go, wait) = mpsc::channel::<()>();
+        let call = std::thread::spawn(move || {
+            on_next_send(move |_| {
+                inside.send(()).unwrap();
+                wait.recv_timeout(Duration::from_secs(10)).unwrap();
+            });
+            let start = br#"{"t":"start"}"#;
+            // SAFETY: the handle is live when the call starts; freeing it is
+            // what is being tested.
+            text(unsafe { navree_core_send(core as *mut NavreeCore, start.as_ptr(), start.len()) })
+        });
+        is_inside.recv_timeout(Duration::from_secs(10)).unwrap();
+
+        let freed = Arc::new(AtomicBool::new(false));
+        let free = std::thread::spawn({
+            let freed = Arc::clone(&freed);
+            move || {
+                // SAFETY: freed once, while the other thread's call is in progress.
+                unsafe { navree_core_free(core as *mut NavreeCore) };
+                freed.store(true, Ordering::SeqCst);
+            }
+        });
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(
+            !freed.load(Ordering::SeqCst),
+            "the free did not wait for the call in progress"
+        );
+        go.send(()).unwrap();
+
+        // The call in progress finishes with its answer.
+        let answer = call.join().unwrap();
+        assert!(answer.contains(r#""t":"fetch""#), "{answer}");
+        free.join().unwrap();
+        assert!(freed.load(Ordering::SeqCst));
+
+        // A call that comes after the free is refused, and a second free does
+        // nothing.
+        // SAFETY: what is being tested: the interface answers these itself.
+        unsafe {
+            let start = br#"{"t":"start"}"#;
+            let late = text(navree_core_send(
+                core as *mut NavreeCore,
+                start.as_ptr(),
+                start.len(),
+            ));
+            assert!(late.contains("freed"), "{late}");
+            assert!(
+                text(navree_core_view(
+                    core as *const NavreeCore,
+                    std::ptr::null(),
+                    0
+                ))
+                .contains("freed")
+            );
+            navree_core_free(core as *mut NavreeCore);
         }
     }
 
