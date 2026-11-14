@@ -327,3 +327,28 @@ private func labels(_ nodes: [Navree.Node]) -> [String] {
     #expect(SplitRules.detailRoom(window: 1200, sidebar: true) == 620)
     #expect(SplitRules.detailRoom(window: 1440, sidebar: true) == 860)
 }
+
+@Test func aRowsFormInADisclosureIsACommandOfTheRowOnAMac() {
+    #expect(RowRules.rowFormDisclosure(bar: .window) == .command)
+    #expect(RowRules.rowFormDisclosure(bar: .navigation) == .inline)
+    let move = Navree.Node.disclosure(Navree.Disclosure(children: [.form(Navree.Form(action: "/cards/1/move", children: []))], label: "Move"))
+    let words = Navree.Node.text(Navree.Text(value: "Neha"))
+    let detail = [Navree.Node.stack(Navree.Stack(children: [words, move]))]
+    // A Mac draws the words, and Move… as the row's command (a button and its context menu).
+    guard case .stack(let mac)? = RowRules.drawnDetail(detail, title: "Card", bar: .window).first else { Issue.record("no stack"); return }
+    #expect(mac.children == [words])
+    // iPhone and iPad keep the disclosure in the row.
+    guard case .stack(let phone)? = RowRules.drawnDetail(detail, title: "Card", bar: .navigation).first else { Issue.record("no stack"); return }
+    #expect(phone.children == [words, move])
+}
+
+@Test func theAccountStandsInTheToolbarWhereAWindowHasNoSidebar() {
+    // A Mac window of several destinations keeps it at the sidebar's foot.
+    #expect(NavigationRules.accountPlace(bar: .window, destinations: 3) == .sidebarFoot)
+    // One destination has no sidebar: the toolbar's trailing person button.
+    #expect(NavigationRules.accountPlace(bar: .window, destinations: 1) == .toolbar)
+    #expect(NavigationRules.accountPlace(bar: .navigation, destinations: 3) == .toolbar)
+    // And one destination is that destination's screen, with no sidebar.
+    #expect(NavigationRules.window(destinations: 1, sidebarOnly: true, stack: .stack) == .tabs)
+    #expect(NavigationRules.structure(destinations: 1, width: .regular) == .single)
+}

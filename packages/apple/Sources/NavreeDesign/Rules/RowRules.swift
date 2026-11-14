@@ -21,21 +21,53 @@ public enum RowRules {
     /// click anywhere on it and by VoiceOver's default action
     /// (``SpeechRules/offers(_:)``), so its title is not drawn a second time.
     public static func withoutTitleButton(_ detail: [Navree.Node], title: String) -> [Navree.Node] {
-        detail.compactMap { part in strip(part, title: title) }
+        drawnDetail(detail, title: title, bar: .navigation)
     }
 
-    private static func strip(_ node: Navree.Node, title: String) -> Navree.Node? {
+    /// What a row draws of its detail: never the button repeating its title
+    /// (``withoutTitleButton(_:title:)``), and on a Mac not a disclosure that
+    /// holds a form either (a board card's Move), which the row draws as its
+    /// command instead (``rowFormDisclosure(bar:)``).
+    public static func drawnDetail(_ detail: [Navree.Node], title: String, bar: ActionBar) -> [Navree.Node] {
+        detail.compactMap { part in strip(part, title: title, disclosures: rowFormDisclosure(bar: bar) == .command) }
+    }
+
+    private static func strip(_ node: Navree.Node, title: String, disclosures: Bool) -> Navree.Node? {
         switch node {
         case .button(let button) where SpeechRules.repeatsTitle(button, of: title):
             return nil
         case .form(let form) where SpeechRules.formOnlyRepeats(form, title: title):
             return nil
+        case .disclosure(let disclosure) where disclosures && holdsForm(disclosure):
+            return nil
         case .stack(var stack):
-            stack.children = stack.children.compactMap { strip($0, title: title) }
+            stack.children = stack.children.compactMap { strip($0, title: title, disclosures: disclosures) }
             return stack.children.isEmpty ? nil : .stack(stack)
         default:
             return node
         }
+    }
+
+    private static func holdsForm(_ disclosure: Navree.Disclosure) -> Bool {
+        var found = false
+        for child in disclosure.children { child.walk { if case .form = $0 { found = true } } }
+        return found
+    }
+
+    /// Where a disclosure that holds a form in a row (a board card's Move)
+    /// stands. On a Mac it is one of the row's commands: the Mac's borderless
+    /// button in the accent at the row's foot ("Move…"), the same command in
+    /// the row's context menu (a secondary click), each opening its form in a
+    /// sheet, and an action VoiceOver offers; never grey words that read as
+    /// neither. On iPhone and iPad it stays in the row, a disclosure the
+    /// finger opens, and is offered to VoiceOver too.
+    public enum FormDisclosure: Sendable, Equatable {
+        case inline
+        case command
+    }
+
+    public static func rowFormDisclosure(bar: ActionBar) -> FormDisclosure {
+        bar == .window ? .command : .inline
     }
 
     /// How a row whose detail holds a button saying its title again opens
