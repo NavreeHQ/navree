@@ -63,6 +63,7 @@ mod service;
 mod status;
 #[cfg(feature = "testing")]
 pub mod testing;
+mod tonic_service;
 
 pub use call::{CallError, RecordKey};
 pub use channels::{GrpcChannel, GrpcChannels};

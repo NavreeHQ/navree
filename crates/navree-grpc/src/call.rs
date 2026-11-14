@@ -26,6 +26,7 @@ use tonic::{Request, Response, Status};
 use crate::context::CallContext;
 use crate::service::GrpcMethod;
 use crate::status::status_from_error;
+use crate::tonic_service::rust_name;
 
 /// What every call shares: the app and the providers the pipeline uses,
 /// resolved once at boot.
@@ -85,6 +86,9 @@ fn log_chain(error: &AppError) -> String {
 pub(crate) struct ServiceRuntime {
     pub(crate) name: &'static str,
     pub(crate) methods: HashMap<&'static str, MethodRuntime>,
+    /// The access and guards of every method without its own: a wrapped
+    /// tonic server's service default. `None` for a `#[grpc_service]`.
+    pub(crate) default: Option<RouteMeta>,
 }
 
 impl ServiceRuntime {
@@ -109,7 +113,56 @@ impl ServiceRuntime {
                 )
             })
             .collect();
-        Self { name, methods }
+        Self {
+            name,
+            methods,
+            default: None,
+        }
+    }
+
+    /// The service with `default` as the access of every method without its
+    /// own, as a method of `module`.
+    pub(crate) fn with_default(
+        mut self,
+        default: Option<RouteMeta>,
+        module: ModuleId,
+        module_name: &'static str,
+    ) -> Self {
+        self.default = default.map(|mut meta| {
+            meta.module = Some(module_name);
+            meta.module_id = Some(module);
+            meta
+        });
+        self
+    }
+
+    /// What a call to `path` on a wrapped tonic server may do: the metadata
+    /// of the method its last segment names, matched by the Rust name of
+    /// that segment (`GetDeal` is `get_deal`) against the declared names
+    /// (kept without a leading `r#`), or else the service default. Each call
+    /// gets its own metadata with its own path: several spellings of a
+    /// segment read as one Rust name, and a server answers only its own.
+    pub(crate) fn wrapped_access(&self, path: &str) -> WrappedAccess {
+        let Some(segment) = path
+            .strip_prefix('/')
+            .and_then(|rest| rest.strip_prefix(self.name))
+            .and_then(|rest| rest.strip_prefix('/'))
+        else {
+            return WrappedAccess::NoMethod;
+        };
+        if segment.is_empty() || segment.contains('/') {
+            return WrappedAccess::NoMethod;
+        }
+        let name = rust_name(segment);
+        let name = name.strip_prefix("r#").unwrap_or(&name);
+        let template = match (self.methods.get(name), &self.default) {
+            (Some(method), _) => &method.template,
+            (None, Some(default)) => default,
+            (None, None) => return WrappedAccess::Undeclared,
+        };
+        let mut meta = template.clone();
+        meta.full_path = path.to_owned();
+        WrappedAccess::Declared(Arc::new(meta))
     }
 
     /// The metadata of `method`, its full path set from the call's.
@@ -130,6 +183,16 @@ pub(crate) struct MethodRuntime {
     resolved: OnceLock<Arc<RouteMeta>>,
 }
 
+/// What a call to a wrapped tonic server may do, by the method in its path.
+pub(crate) enum WrappedAccess {
+    /// The method's own declaration, or the service default.
+    Declared(Arc<RouteMeta>),
+    /// Neither: the call is refused before the server sees it.
+    Undeclared,
+    /// The path names no method (an empty segment, or one holding `/`).
+    NoMethod,
+}
+
 /// The call's state, inserted into the request extensions by the edge.
 #[derive(Clone)]
 pub(crate) struct CallInfo {
@@ -139,8 +202,9 @@ pub(crate) struct CallInfo {
     /// When the method must have returned: the client's `grpc-timeout`, up
     /// to `grpc.timeout_secs`.
     pub(crate) deadline: Instant,
-    /// Set when [`call`] takes over: from then on it keeps the deadline, and
-    /// rolls back what the method opened.
+    /// Set when the call pipeline takes over ([`call`], or [`call_as`] for a
+    /// wrapped tonic server): from then on it keeps the deadline, and rolls
+    /// back what the method opened.
     pub(crate) in_the_pipeline: Arc<AtomicBool>,
 }
 
@@ -245,17 +309,28 @@ where
             info.service.name
         )));
     };
+    call_as(&info, &ctx, meta, request, record_key, body).await
+}
+
+/// Runs one call through the pipeline with the metadata `meta` its caller
+/// found (the method's declaration), then `body` inside the unit of work,
+/// all by the call's deadline.
+pub(crate) async fn call_as<Req, Res, F, Fut>(
+    info: &CallInfo,
+    ctx: &AppContext,
+    meta: Arc<RouteMeta>,
+    request: Request<Req>,
+    record_key: Option<RecordKeyFn<Req>>,
+    body: F,
+) -> Result<Response<Res>, Status>
+where
+    Req: Send,
+    F: FnOnce(Request<Req>, Parts) -> Fut + Send,
+    Fut: Future<Output = Result<Response<Res>, CallError>> + Send,
+{
     let request_id = request.extensions().get::<RequestId>().cloned();
     let opened: Arc<Mutex<Option<Uow>>> = Arc::default();
-    let run = run(
-        &info,
-        &ctx,
-        meta.clone(),
-        request,
-        record_key,
-        body,
-        opened.clone(),
-    );
+    let run = run(info, ctx, meta, request, record_key, body, opened.clone());
     let result = match tokio::time::timeout_at(info.deadline, run).await {
         Ok(result) => result,
         Err(_) => {
@@ -542,4 +617,73 @@ pub fn finish<Res, E: Into<CallError>>(
     result: Result<Response<Res>, E>,
 ) -> Result<Response<Res>, CallError> {
     result.map_err(Into::into)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The deals service with `get_deal` public, `type` for signed-in
+    /// callers, and `default` for every other method.
+    fn deals_service(default: Option<RouteMeta>) -> ServiceRuntime {
+        let module = ModuleId::named::<ServiceRuntime>("DealsModule");
+        let methods = vec![
+            GrpcMethod::new("get_deal").public(),
+            GrpcMethod::new("type").authenticated(),
+        ];
+        ServiceRuntime::new("crm.deals.v1.Deals", module, "DealsModule", methods).with_default(
+            default,
+            module,
+            "DealsModule",
+        )
+    }
+
+    fn declared(access: WrappedAccess) -> Arc<RouteMeta> {
+        match access {
+            WrappedAccess::Declared(meta) => meta,
+            WrappedAccess::Undeclared => panic!("expected a declaration, got none"),
+            WrappedAccess::NoMethod => panic!("expected a declaration, got no method"),
+        }
+    }
+
+    #[test]
+    fn a_wrapped_service_finds_a_call_by_the_rust_name_of_its_method() {
+        let mut signed_in = RouteMeta {
+            method: "GRPC".into(),
+            ..RouteMeta::default()
+        };
+        signed_in.access.authenticated = true;
+        let deals = deals_service(Some(signed_in));
+
+        let get = declared(deals.wrapped_access("/crm.deals.v1.Deals/GetDeal"));
+        assert!(get.access.public && !get.access.authenticated, "its own");
+        assert_eq!(get.full_path, "/crm.deals.v1.Deals/GetDeal");
+        assert_eq!(get.module, Some("DealsModule"));
+        let typed = declared(deals.wrapped_access("/crm.deals.v1.Deals/Type"));
+        assert!(typed.access.authenticated, "`Type` is `r#type`, declared as `type`");
+
+        let list = declared(deals.wrapped_access("/crm.deals.v1.Deals/ListDeals"));
+        assert!(list.access.authenticated && !list.access.public, "the default");
+        assert_eq!(list.full_path, "/crm.deals.v1.Deals/ListDeals");
+        assert_eq!(list.module, Some("DealsModule"));
+
+        for path in [
+            "/crm.deals.v1.Deals/",
+            "/crm.deals.v1.Deals/Get/Deal",
+            "/crm.deals.v1.Deals",
+        ] {
+            assert!(
+                matches!(deals.wrapped_access(path), WrappedAccess::NoMethod),
+                "{path}"
+            );
+        }
+
+        let without_default = deals_service(None);
+        assert!(matches!(
+            without_default.wrapped_access("/crm.deals.v1.Deals/ListDeals"),
+            WrappedAccess::Undeclared
+        ));
+        let get = declared(without_default.wrapped_access("/crm.deals.v1.Deals/GetDeal"));
+        assert!(get.access.public);
+    }
 }

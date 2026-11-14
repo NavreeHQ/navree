@@ -10,7 +10,7 @@ use std::sync::{Arc, OnceLock};
 use navree_contracts::{AuditSink, HealthCheck};
 use navree_db::Db;
 use navree_http::body::Body;
-use navree_http::{Authenticator, ErrorMapper, HttpOptions, HttpServer, RouteAuthorizer};
+use navree_http::{AccessSpec, Authenticator, ErrorMapper, HttpOptions, HttpServer, RouteAuthorizer};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Injectable, KernelError, Lifecycle, ProviderKey, Resolver,
 };
@@ -212,34 +212,18 @@ async fn build(
             continue;
         }
         for method in &resolved.methods {
-            let access = &method.meta.access;
             let label = format!(
                 "gRPC method `{}` of `{}` (module `{module}`)",
                 method.name, resolved.name
             );
-            if !access.is_declared() {
-                problems.push(format!(
-                    "{label} has no access declaration: add #[public], #[authenticated], #[roles], #[permissions] or #[can] (deny by default)"
-                ));
-                continue;
-            }
-            if access.public && (access.authenticated || access.needs_authorizer()) {
-                problems.push(format!(
-                    "{label} is public but also declares {}; remove one of them",
-                    access.describe()
-                ));
-            }
-            if !access.public && authenticator.is_none() {
-                problems.push(format!(
-                    "{label} requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the method public)"
-                ));
-            }
-            if access.needs_authorizer() && authorizer.is_none() {
-                problems.push(format!(
-                    "{label} declares {} but no `dyn RouteAuthorizer` is registered (import the access module)",
-                    access.describe()
-                ));
-            }
+            problems.extend(access_problems(
+                &label,
+                &method.meta.access,
+                "#[public], #[authenticated], #[roles], #[permissions] or #[can]",
+                "method",
+                authenticator.is_some(),
+                authorizer.is_some(),
+            ));
         }
         names.push(resolved.name);
         services.insert(
@@ -340,6 +324,48 @@ async fn build(
     Ok((edge, names))
 }
 
+/// The access rule a `#[grpc_service]` method and a wrapped tonic server
+/// are both checked by, in this order: no access declaration (and then
+/// nothing else), public with another declaration, no [`Authenticator`] for
+/// a declaration that needs a user, and no [`RouteAuthorizer`] for roles,
+/// permissions or an ability. `label` names the method or service,
+/// `declare` lists what declares access (`#[public], ..` or
+/// `.public(), ..`), and `noun` (`method`, `service`) is what the
+/// authenticator text tells the developer to mark public.
+pub(crate) fn access_problems(
+    label: &str,
+    access: &AccessSpec,
+    declare: &str,
+    noun: &str,
+    authenticator: bool,
+    authorizer: bool,
+) -> Vec<String> {
+    if !access.is_declared() {
+        return vec![format!(
+            "{label} has no access declaration: add {declare} (deny by default)"
+        )];
+    }
+    let mut problems = Vec::new();
+    if access.public && (access.authenticated || access.needs_authorizer()) {
+        problems.push(format!(
+            "{label} is public but also declares {}; remove one of them",
+            access.describe()
+        ));
+    }
+    if !access.public && !authenticator {
+        problems.push(format!(
+            "{label} requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the {noun} public)"
+        ));
+    }
+    if access.needs_authorizer() && !authorizer {
+        problems.push(format!(
+            "{label} declares {} but no `dyn RouteAuthorizer` is registered (import the access module)",
+            access.describe()
+        ));
+    }
+    problems
+}
+
 /// Serves the edge on its own listener, on the HTTP server with the
 /// `http.server` limits, until `token` is cancelled, then lets open calls
 /// finish for up to `http.shutdown_grace_secs`.
@@ -369,4 +395,65 @@ async fn listen(
     served?;
     tracing::info!(target: "navree::grpc", "gRPC listener stopped");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use navree_http::AccessSpec;
+
+    use super::access_problems;
+
+    const ATTRIBUTES: &str = "#[public], #[authenticated], #[roles], #[permissions] or #[can]";
+
+    #[test]
+    fn the_access_rule_reads_the_same_for_a_method_and_a_wrapped_service() {
+        let label = "gRPC method `get_deal` of `crm.deals.v1.Deals` (module `DealsModule`)";
+        assert_eq!(
+            access_problems(label, &AccessSpec::default(), ATTRIBUTES, "method", true, true),
+            [format!(
+                "{label} has no access declaration: add #[public], #[authenticated], #[roles], #[permissions] or #[can] (deny by default)"
+            )]
+        );
+        let confused = AccessSpec {
+            public: true,
+            roles: vec!["munshi".into()],
+            ..AccessSpec::default()
+        };
+        assert_eq!(
+            access_problems(label, &confused, ATTRIBUTES, "method", true, false),
+            [
+                format!("{label} is public but also declares public roles:munshi; remove one of them"),
+                format!(
+                    "{label} declares public roles:munshi but no `dyn RouteAuthorizer` is registered (import the access module)"
+                ),
+            ]
+        );
+        let signed_in = AccessSpec {
+            authenticated: true,
+            ..AccessSpec::default()
+        };
+        assert_eq!(
+            access_problems(label, &signed_in, ATTRIBUTES, "method", false, true),
+            [format!(
+                "{label} requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the method public)"
+            )]
+        );
+        assert!(access_problems(label, &signed_in, ATTRIBUTES, "method", true, false).is_empty());
+
+        // A wrapped server's default, with the builder's words.
+        let service = "gRPC service `crm.deals.v1.Deals` in `Wrapped`";
+        let builder = ".public(), .authenticated(), .roles(..), .permissions(..) or .can(..)";
+        assert_eq!(
+            access_problems(service, &AccessSpec::default(), builder, "service", true, true)[0],
+            format!(
+                "{service} has no access declaration: add .public(), .authenticated(), .roles(..), .permissions(..) or .can(..) (deny by default)"
+            )
+        );
+        assert_eq!(
+            access_problems(service, &signed_in, builder, "service", false, true)[0],
+            format!(
+                "{service} requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the service public)"
+            )
+        );
+    }
 }
