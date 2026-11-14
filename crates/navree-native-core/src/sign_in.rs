@@ -160,9 +160,13 @@ impl Core {
     /// the session opens at `url`, an address inside.
     pub(crate) fn sign_in_session(&mut self, url: &str, ephemeral: bool) {
         if self.inner.sign_in.is_none() {
+            // A session opens only at an address on one of the app's origins.
+            let Some(url) = self.inner.origin.absolute(url) else {
+                return self.notice(Notice::Failed, self.front());
+            };
             self.inner.signing_in = true;
             self.effects.push(Effect::SignIn {
-                url: self.inner.origin.absolute(url),
+                url,
                 callback: self.config.sign_in.callback.clone(),
                 ephemeral,
             });
@@ -240,7 +244,13 @@ impl Core {
         if let Some(callback) = &routes.callback {
             said.push(text("redirect_uri", callback));
         }
-        let start = self.inner.origin.absolute(routes.start.as_str());
+        let Some(start) = self.inner.origin.absolute(routes.start.as_str()) else {
+            self.notice(Notice::Failed, self.front());
+            return self.report(
+                "sign_in",
+                "the shell's start of a hand-over is not on the app's origins".to_owned(),
+            );
+        };
         let url = format!(
             "{start}{}{}",
             if start.contains('?') { '&' } else { '?' },

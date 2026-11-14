@@ -27,7 +27,7 @@ use crate::Core;
 use crate::decode::{self, Answer, Read};
 use crate::effect::{Body, Change, Effect, Request, Update, Verb};
 use crate::event::{Event, Response, StreamState, TransportError};
-use crate::origin::{Target, path_of, route_matches};
+use crate::origin::{Target, https_address, openable, path_of, route_matches};
 use crate::state::{
     App, Asked, Content, Destination, Failure, Goes, Held, Message, MessageInner, Modal, Notice,
     Pending, ScreenId, ScreenInner, ScreenView, Stage, TimerFor,
@@ -44,6 +44,29 @@ const REGION_HEADER: &str = "x-navree-region";
 const MOST_REDIRECTS: u8 = 5;
 /// How long the answer to a form or a button may take.
 pub(crate) const SEND_LIMIT: u32 = 60_000;
+
+/// A value a server chose, written so it can go in a header: every byte of its
+/// UTF-8 outside `!` to `~`, and `%`, as `%` and two hex digits. A plain ASCII
+/// id without `%` goes out as it is.
+pub(crate) fn header_safe(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if (0x21..=0x7e).contains(&byte) && byte != b'%' {
+            out.push(char::from(byte));
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
+}
+
+/// What an answer that asks for a newer app gives: its address only when it
+/// is a whole `https` address that reads. Any other is dropped, as if none had
+/// been given, and the app offers nothing to open.
+fn newer_app(mut upgrade: navree_native::envelope::Upgrade) -> navree_native::envelope::Upgrade {
+    upgrade.url = https_address(&upgrade.url).unwrap_or_default();
+    upgrade
+}
 
 /// What an answer gives a screen to show.
 pub(crate) enum Shown {
@@ -292,9 +315,14 @@ impl Core {
                 }
             }
             Event::OpenUpgrade => {
-                if let Some(upgrade) = &self.view.upgrade {
-                    let url = upgrade.url.clone();
-                    self.effects.push(Effect::OpenUrl { url, inside: false });
+                if let Some(url) = self
+                    .view
+                    .upgrade
+                    .as_ref()
+                    .map(|upgrade| upgrade.url.clone())
+                    .filter(|url| !url.is_empty())
+                {
+                    self.open_outside(&url, false);
                 }
             }
         }
@@ -357,8 +385,9 @@ impl Core {
             headers.push(("content-type".to_owned(), JSON.to_owned()));
         }
         if let Some(region) = region {
-            // The part of the screen this asks for, so the server answers that part.
-            headers.push((REGION_HEADER.to_owned(), region.to_owned()));
+            // The part of the screen this asks for, so the server answers that
+            // part. The id is the server's own, so it is written header-safe.
+            headers.push((REGION_HEADER.to_owned(), header_safe(region)));
         }
         if form {
             headers.push((
@@ -436,21 +465,67 @@ impl Core {
     pub(crate) fn ask(&mut self, asked: Asked) {
         self.inner.next.request += 1;
         let request = self.inner.next.request;
-        let headers = self.headers(asked.body.as_ref(), asked.region.as_deref());
-        self.effects.push(Effect::Fetch(Request {
-            request,
-            method: if asked.delete {
-                Verb::Delete
-            } else {
-                asked.method.into()
-            },
-            url: self.inner.origin.absolute(&asked.url),
-            headers,
-            body: asked.body.clone(),
-            timeout_ms: asked.limit,
-            xsrf: asked.method == Method::Post,
-        }));
+        match self.inner.origin.absolute(&asked.url) {
+            Some(url) => {
+                let headers = self.headers(asked.body.as_ref(), asked.region.as_deref());
+                self.effects.push(Effect::Fetch(Request {
+                    request,
+                    method: if asked.delete {
+                        Verb::Delete
+                    } else {
+                        asked.method.into()
+                    },
+                    url,
+                    headers,
+                    body: asked.body.clone(),
+                    timeout_ms: asked.limit,
+                    xsrf: asked.method == Method::Post,
+                }));
+            }
+            // An address that is not on one of the app's origins is never
+            // asked: the request fails as one whose redirect led nowhere.
+            None => self.inner.unsent.push(request),
+        }
         self.inner.pending.insert(request, asked);
+    }
+
+    /// Fails the requests that were never sent, each as an answer of 502.
+    /// What their failure asks for in turn is failed the same way, a few
+    /// rounds at most.
+    fn fail_unsent(&mut self) {
+        for _ in 0..MOST_REDIRECTS {
+            let unsent = std::mem::take(&mut self.inner.unsent);
+            if unsent.is_empty() {
+                return;
+            }
+            for request in unsent {
+                self.answered(Response {
+                    request,
+                    status: 502,
+                    ..Response::default()
+                });
+            }
+        }
+        for request in std::mem::take(&mut self.inner.unsent) {
+            self.inner.pending.remove(&request);
+        }
+    }
+
+    /// Asks the client to open an address outside the app: the one way an
+    /// `open_url` effect is made. Only a whole `http` or `https` address that
+    /// reads, written again from its parts, or an address of a scheme the
+    /// system handles, is ever opened; anything else is dropped.
+    pub(crate) fn open_outside(&mut self, url: &str, inside: bool) {
+        if let Some(url) = openable(url) {
+            self.effects.push(Effect::OpenUrl { url, inside });
+        }
+    }
+
+    /// Opens an address of the app's own outside it, as a whole address.
+    pub(crate) fn open_ours_outside(&mut self, url: &str) {
+        if let Some(url) = self.inner.origin.absolute(url) {
+            self.open_outside(&url, false);
+        }
     }
 
     /// Follows a redirect the transport handed over: asks again where it
@@ -701,7 +776,7 @@ impl Core {
             .cloned()
             .and_then(|upgrade| serde_json::from_value(upgrade).ok())
         {
-            self.view.upgrade = Some(upgrade);
+            self.view.upgrade = Some(newer_app(upgrade));
             self.view.stage = Stage::Upgrade;
             return self.touch(Change::Nav);
         }
@@ -977,7 +1052,7 @@ impl Core {
             self.report(what, read.missing.join(" "));
         }
         if let Some(upgrade) = read.envelope.upgrade.take() {
-            self.view.upgrade = Some(upgrade);
+            self.view.upgrade = Some(newer_app(upgrade));
             self.view.stage = Stage::Upgrade;
             self.touch(Change::Nav);
             return true;
@@ -1012,9 +1087,7 @@ impl Core {
     pub(crate) fn session_ended(&mut self, under: ScreenId, href: &str) {
         let url = match self.resolve(href, under) {
             Target::Inside(url) => url,
-            Target::Outside(url) => {
-                return self.effects.push(Effect::OpenUrl { url, inside: false });
-            }
+            Target::Outside(url) => return self.open_outside(&url, false),
             Target::Refused => return,
         };
         if let (Some(view), Some(inner)) = (
@@ -1157,10 +1230,7 @@ impl Core {
                     count: None,
                 });
             }
-            Call::OpenUrl(open) => self.effects.push(Effect::OpenUrl {
-                url: open.url.as_str().to_owned(),
-                inside: open.inside,
-            }),
+            Call::OpenUrl(open) => self.open_outside(open.url.as_str(), open.inside),
             Call::AuthSession(session) => {
                 self.sign_in_session(session.start.as_str(), session.ephemeral);
             }
@@ -1717,8 +1787,17 @@ impl Core {
         title: Option<String>,
         why: Vec<String>,
     ) {
+        let whole = self.inner.origin.absolute(page);
         let Some(view) = self.view.screens.get_mut(&id) else {
             return;
+        };
+        let Some(whole) = whole else {
+            // A page that is not on one of the app's origins is never shown:
+            // the screen failed, as one whose answer could not be read.
+            view.loading = false;
+            view.refreshing = false;
+            view.failure = Some(Failure::Protocol);
+            return self.touch_screen(id);
         };
         self.inner.next.web += 1;
         view.url = url.to_owned();
@@ -1726,7 +1805,7 @@ impl Core {
             view.title.clone_from(&title);
         }
         view.content = Content::Web {
-            url: self.inner.origin.absolute(page),
+            url: whole,
             title,
             why,
             serial: self.inner.next.web,
@@ -1990,7 +2069,7 @@ impl Core {
             }
             Answer::Left(url) => {
                 // The page moved to another site: it opens there.
-                self.effects.push(Effect::OpenUrl { url, inside: false });
+                self.open_outside(&url, false);
                 if blank {
                     self.remove(id);
                 } else {
@@ -2079,6 +2158,7 @@ impl Core {
     }
 
     fn settle(&mut self) -> Update {
+        self.fail_unsent();
         self.ensure_front();
         let front = self.front();
         let stacked = self.view.front_stack().len() > 1;
@@ -2215,5 +2295,150 @@ mod tests {
             )
         );
         assert!(post.xsrf);
+    }
+
+    #[test]
+    fn a_value_a_server_chose_goes_in_a_header_as_visible_ascii() {
+        assert_eq!(header_safe("figures"), "figures");
+        assert_eq!(header_safe("orders-items_2.x~!"), "orders-items_2.x~!");
+        assert_eq!(header_safe("a b%c\r\nd"), "a%20b%25c%0D%0Ad");
+        assert_eq!(header_safe("é"), "%C3%A9");
+        let id = "आंकड़े";
+        let safe = header_safe(id);
+        assert!(safe.bytes().all(|byte| (0x21..=0x7e).contains(&byte)));
+        // Read back byte by byte, it is the id it was.
+        let bytes: Vec<u8> = safe
+            .split('%')
+            .skip(1)
+            .map(|hex| u8::from_str_radix(hex, 16).unwrap())
+            .collect();
+        assert_eq!(String::from_utf8(bytes).unwrap(), id);
+    }
+
+    #[test]
+    fn the_newer_app_is_offered_only_at_an_https_address() {
+        let upgrade = |url: &str| {
+            newer_app(navree_native::envelope::Upgrade {
+                min_app: "2.0.0".to_owned(),
+                url: url.to_owned(),
+            })
+            .url
+        };
+        assert_eq!(
+            upgrade("https://store.example/app?id=com.charkha.supply"),
+            "https://store.example/app?id=com.charkha.supply"
+        );
+        for dropped in [
+            "javascript:alert(1)",
+            "http://store.example/app",
+            "market://details?id=com.charkha.supply",
+            "intent://x",
+            "/app",
+            " https://store.example/app",
+            "https://shop.example@store.example/",
+        ] {
+            assert_eq!(upgrade(dropped), "", "{dropped:?}");
+        }
+    }
+
+    /// A core that started against a server with no shell: one destination,
+    /// its first page asked for.
+    fn started() -> Core {
+        let mut core = Core::new(Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        ));
+        core.send(Event::Start);
+        core.send(Event::Response(Response {
+            request: 1,
+            status: 404,
+            ..Response::default()
+        }));
+        core
+    }
+
+    #[test]
+    fn a_request_for_an_address_not_on_the_app_s_origins_is_never_sent_and_fails() {
+        let mut core = Core::new(Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        ));
+        for address in [
+            "https://evil.example/x",
+            "//evil.example/x",
+            "https://shop.example//evil.example/x",
+        ] {
+            core.fetch(Pending::Shell, Method::Get, address, None, PAGE_LIMIT);
+        }
+        let update = core.settle();
+        assert!(
+            !update
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Fetch(_))),
+            "{update:?}"
+        );
+        assert!(core.inner.pending.is_empty() && core.inner.unsent.is_empty());
+        // The shell failed as one whose answer was a 502.
+        assert_eq!(core.view.stage, Stage::Failed);
+        assert_eq!(core.view.failure, Some(Failure::Server));
+    }
+
+    #[test]
+    fn a_page_not_on_the_app_s_origins_is_never_shown_in_the_web_view() {
+        let mut core = started();
+        core.show_web(1, "/", "https://evil.example/x", None, Vec::new());
+        let view = &core.view.screens[&1];
+        assert!(!matches!(view.content, Content::Web { .. }), "{view:?}");
+        assert_eq!(view.failure, Some(Failure::Protocol));
+        core.show_web(1, "/", "/", None, Vec::new());
+        assert!(matches!(
+            &core.view.screens[&1].content,
+            Content::Web { url, .. } if url == "https://shop.example/"
+        ));
+    }
+
+    #[test]
+    fn a_stream_not_on_the_app_s_origins_is_never_opened() {
+        let mut core = started();
+        let stream = crate::state::Stream {
+            id: 1,
+            url: "//evil.example/stream".to_owned(),
+            open: false,
+            failures: 0,
+            reopen: None,
+            stopped: false,
+            missed: false,
+        };
+        assert!(!core.open_stream(&stream));
+        assert!(core.open_stream(&crate::state::Stream {
+            url: "/stream?topics=stats".to_owned(),
+            ..stream
+        }));
+        let opened: Vec<&Effect> = core
+            .effects
+            .iter()
+            .filter(|effect| matches!(effect, Effect::StreamOpen { .. }))
+            .collect();
+        assert!(
+            matches!(opened[..], [Effect::StreamOpen { url, .. }] if url == "https://shop.example/stream?topics=stats"),
+            "{opened:?}"
+        );
+    }
+
+    /// Every `open_url` effect is made in one place, and no address is
+    /// judged by whether `://` appears in it.
+    #[test]
+    fn an_address_opens_outside_one_way() {
+        let mut made = 0;
+        let search = ["contains(\"", "://\")"].concat();
+        for entry in std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/src")).unwrap() {
+            let path = entry.unwrap().path();
+            let text = std::fs::read_to_string(&path).unwrap();
+            let code = text.split("#[cfg(test)]").next().unwrap_or("");
+            made += code.matches("Effect::OpenUrl {").count();
+            assert!(!code.contains(&search), "{}", path.display());
+        }
+        assert_eq!(made, 1);
     }
 }
