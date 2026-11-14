@@ -152,12 +152,16 @@ public enum SplitRules {
     }
 
     /// Whether the inspector is a sheet the person opens rather than a
-    /// column: in a compact window, where the system's inspector is a sheet
-    /// too. The sheet is there only while it is open, so nothing of it (its
-    /// title, "Customer") can stand in the bar of the detail under it, as the
-    /// system's inspector kept out of sight let happen about one launch in six.
+    /// column: wherever it does not stand beside the detail from the start
+    /// (``showsInspector(width:)``), as in a compact window, where the
+    /// system's inspector is a sheet too. The sheet is there only while it is
+    /// open, so nothing of it waits out of sight in the window: kept out of
+    /// sight as a column, the system's inspector put its title ("Customer")
+    /// in the detail's bar about one launch in six on iPhone, and on an iPad
+    /// held upright pushed the columns' bars 54 points below the tab bar on a
+    /// first launch.
     public static func inspectorIsSheet(width: WindowClass) -> Bool {
-        width == .compact
+        !showsInspector(width: width)
     }
 
     /// The destinations whose first screen is drawn as columns, as far as
