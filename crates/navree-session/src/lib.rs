@@ -25,7 +25,9 @@
 //!   [`DatabaseStore`] (table [`SESSIONS_TABLE`], created by the `session`
 //!   migration set the module contributes); `store = "redis"` uses the
 //!   `dyn SessionStore` provider named `redis` (navree-redis's
-//!   `RedisModule`). Override the store with
+//!   `RedisModule`). A module can register a store under a name of its own
+//!   with [`m.session_store`](ModuleBuilderSessionExt::session_store), which
+//!   `session.store` then selects. Override the store with
 //!   `AppBuilder::override_value::<dyn SessionStore>(..)`.
 //! - `GET /csrf-cookie` (public; [`CSRF_COOKIE_PATH`]) answers 204 and sets the
 //!   [`XSRF_COOKIE`] cookie (readable by JavaScript).
@@ -123,6 +125,7 @@
 
 mod controller;
 mod database;
+mod drivers;
 mod layer;
 mod memory;
 mod module;
@@ -132,6 +135,7 @@ mod session;
 
 pub use controller::{CSRF_COOKIE_PATH, CSRF_COOKIE_ROUTE};
 pub use database::{DatabaseStore, SESSIONS_TABLE};
+pub use drivers::ModuleBuilderSessionExt;
 pub use layer::CSRF_FIELD;
 pub use memory::MemoryStore;
 pub use module::SessionModule;

@@ -56,7 +56,7 @@ csrf_except = ["/webhooks/*"]
 
 | Key | Default | What it does |
 |---|---|---|
-| `session.store` | `memory` | where session data lives; see [stores](#stores) |
+| `session.store` | `memory` | where session data lives: `memory`, `database`, `redis`, or the name of a store a module registers with `m.session_store`; see [stores](#stores) |
 | `session.cookie` | `navree_session` | the session cookie's name (letters, digits, `-`, `_`, `.`; not `XSRF-TOKEN`, and without a `__Host-` or `__Secure-` prefix: see `host_prefix`) |
 | `session.lifetime_minutes` | `120` | how long an idle session lives (1 minute to about a year) |
 | `session.secure` | `true` | the cookies' `Secure` attribute; browsers accept `Secure` cookies from `http://localhost` |
@@ -166,6 +166,52 @@ set-cookie: XSRF-TOKEN=PONeR2ziCPrjirwcliGhp5dkEkcwsWp5ZW2MhsOG; SameSite=Lax; S
 Run your migrations to create the `sessions` table (`migrate`, or `database.migrate_on_boot`). The memory and database stores delete expired sessions on every hundredth save; `prune_expired()` on either does it on demand. The module exports its store only as `dyn SessionStore`, which has no `prune_expired`, so to prune the database store from a [scheduled task](/docs/digging-deeper/scheduling/), build one on the app's `Db` with `DatabaseStore::new(db)`. The database store writes outside the request's unit of work: it loads the session before the transaction starts and saves it after the commit.
 
 To use another store, implement `navree::contracts::SessionStore` and replace the module's store with `AppBuilder::override_value::<dyn SessionStore>(Arc::new(MyStore))`.
+
+### A store a module registers
+
+A module can also register a store under a name of its own, and `session.store` selects it by that name, as it selects `memory`, `database` or `redis`. `m.session_store` comes with `use navree::plugin::prelude::*;`. Its factory gets a `DriverContext` (the store's name, the app and its settings) and returns your `SessionStore`:
+
+```rust title="src/modules/vault/mod.rs"
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+use serde::Deserialize;
+
+/// The store's settings: `[session.tijori]`.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct TijoriSettings {
+    shelf: String,
+}
+
+pub struct VaultModule;
+
+impl Module for VaultModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.session_store("tijori", |ctx| async move {
+            let settings: TijoriSettings = ctx.settings()?;
+            Ok(TijoriStore::connect(&settings.shelf).await?)
+        });
+    }
+}
+```
+
+Add the module to the app beside `SessionModule`, and select the store in the configuration. Its settings are the table below its name:
+
+```toml title="config/app.toml"
+[session]
+store = "tijori"
+
+[session.tijori]
+shelf = "Doaba"
+```
+
+Environment variables reach the settings too: `APP_SESSION__TIJORI__SHELF=Doaba`. In code, `SessionModule::for_root(SessionOptions { store: SessionStoreKind::Registered(DriverName::from_static("tijori")), ..SessionOptions::default() })` selects the same store (`DriverName` is in `navree::plugin`).
+
+A store's name is a lower-case letter followed by up to 63 lower-case letters, digits or `_`. `ctx.settings()` reads `[session.tijori]` into your type (its `Default` when the table is missing), and an error names the key, never a value; `ctx.settings_key()` is `session.tijori`. The module loads and saves records by session id, as it does for every store, and a cookie that names a session your store does not hold starts a new session.
+
+These fail the boot, naming `m.session_store` and the module that registered the name: a name that is not such a word, a built-in name (`memory`, `database`, `redis`), a name equal to a key of `[session]` (`store`, `cookie`, `lifetime_minutes`, `secure`, `same_site`, `domain`, `host_prefix`, `csrf_except`), and one name registered by two modules, even when another store is selected and when a test replaces the store with `override_value`. So does `session.store` naming a store no module registers (the message lists the stores that are known), and a factory that returns an error.
+
+`config:check` reports the same problems, in the same words, without booting the app, and `config:schema` lists the registered stores beside the built-in ones.
 
 ### The Redis store
 

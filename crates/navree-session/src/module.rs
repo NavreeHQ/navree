@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 
-use navree_config::ModuleBuilderConfigExt;
+use navree_config::__private::{build_driver, check_registrations, contribute_slot};
+use navree_config::{ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::SessionStore;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
@@ -10,13 +11,16 @@ use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKe
 
 use crate::controller::CsrfCookieController;
 use crate::database;
+use crate::drivers::{CheckedStores, SLOT};
 use crate::layer::{SessionManager, clock_of, session_layer};
 use crate::{DatabaseStore, MemoryStore, SessionOptions, SessionStoreKind};
 
 /// The session module. Global; provides and exports [`SessionOptions`] and
 /// the `dyn SessionStore` its options select ([`MemoryStore`],
 /// [`DatabaseStore`], or for `store = "redis"` the provider named `redis`
-/// that navree-redis's `RedisModule` registers); contributes the session and CSRF layer
+/// that navree-redis's `RedisModule` registers, or a store a module registers
+/// with [`m.session_store`](crate::ModuleBuilderSessionExt::session_store));
+/// contributes the session and CSRF layer
 /// ([`LayerSlot::Session`](navree_http::LayerSlot::Session)), the public route
 /// `GET /csrf-cookie` and the `session` migration set (the
 /// `sessions` table, used by the database store).
@@ -70,6 +74,7 @@ impl Module for SessionModule {
 
 fn register(m: &mut ModuleBuilder, options: Option<SessionOptions>) {
     m.global();
+    contribute_slot(m, SLOT);
     match options {
         Some(options) => m.factory(Factory::<SessionOptions>::new(move |_| {
             let options = options.clone();
@@ -82,10 +87,21 @@ fn register(m: &mut ModuleBuilder, options: Option<SessionOptions>) {
     };
     m.exports::<SessionOptions>()
         .factory(
+            // Every registration of a session store is checked, whichever is
+            // selected and whether or not `dyn SessionStore` is replaced.
+            Factory::<CheckedStores>::new(|r: Resolver| async move {
+                r.get::<SessionOptions>().await?;
+                check_registrations(&r.app(), &SLOT, SessionOptions::schema())?;
+                Ok(Arc::new(CheckedStores))
+            })
+            .deps(vec![ProviderKey::of::<SessionOptions>()]),
+        )
+        .factory(
             Factory::<dyn SessionStore>::new(|r: Resolver| async move {
                 let options = r.get::<SessionOptions>().await?;
+                r.get::<CheckedStores>().await?;
                 let clock = clock_of(&r).await;
-                let store: Arc<dyn SessionStore> = match options.store {
+                let store: Arc<dyn SessionStore> = match options.store.resolved() {
                     SessionStoreKind::Memory => Arc::new(MemoryStore::new().with_clock(clock)),
                     SessionStoreKind::Database => {
                         let db = r.get::<Db>().await.map_err(|error| {
@@ -102,10 +118,24 @@ fn register(m: &mut ModuleBuilder, options: Option<SessionOptions>) {
                             )
                         })?
                     }
+                    SessionStoreKind::Registered(name) => {
+                        build_driver::<dyn SessionStore>(
+                            &r.app(),
+                            &SLOT,
+                            "session.store",
+                            name,
+                            format!("session.{name}"),
+                            None,
+                        )
+                        .await?
+                    }
                 };
                 Ok(store)
             })
-            .deps(vec![ProviderKey::of::<SessionOptions>()]),
+            .deps(vec![
+                ProviderKey::of::<SessionOptions>(),
+                ProviderKey::of::<CheckedStores>(),
+            ]),
         )
         .exports::<dyn SessionStore>()
         .provider::<SessionManager>()
