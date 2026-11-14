@@ -168,8 +168,11 @@ impl AppShell {
         sign_in: Option<&str>,
         parts: &crate::NativeShellParts,
     ) -> navree_native::Shell {
+        // The shell the request's pages are drawn in: the line below the app's name and the
+        // links of other modules are the request's, so the document's stamp is its pages'.
+        let shell = self.drawn_shell();
         let mut document = document(
-            &self.shell,
+            &shell,
             self.user_menu.as_ref(),
             self.csrf.as_deref(),
             &self.appearance(),

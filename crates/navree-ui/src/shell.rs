@@ -1464,13 +1464,18 @@ pub struct AppShell {
     user_theme: Option<ThemeSetting>,
     user_menu: Option<UserMenu>,
     header_slot: Option<Node>,
+    /// The links other modules add that this request's reader may open, drawn after the
+    /// shell's own groups.
+    links: Vec<NavGroup>,
+    /// The line below the app's name for this request, in place of the shell's.
+    context: Option<Cow<'static, str>>,
 }
 
 impl AppShell {
     /// A page titled `title`.
     pub fn page(&self, title: impl Into<Cow<'static, str>>) -> AppPage {
         let mut page = AppPage::new(
-            self.shell.clone(),
+            self.drawn_shell(),
             title.into(),
             self.path.clone(),
             self.collapsed,
@@ -1524,6 +1529,43 @@ impl AppShell {
     pub fn user_menu(mut self, menu: UserMenu) -> Self {
         self.user_menu = Some(menu);
         self
+    }
+
+    /// Sets the line below the app's name for this request (a workspace, a plan), in place
+    /// of the shell's [`context`](Shell::context). The app's one shell stays as it is.
+    ///
+    /// ```
+    /// use http::HeaderMap;
+    /// use navree_ui::Shell;
+    ///
+    /// let html = Shell::new("Agra")
+    ///     .context("Customer desk")
+    ///     .for_request("/", &HeaderMap::new())
+    ///     .context("Ludhiana office")
+    ///     .page("Home")
+    ///     .to_view()
+    ///     .to_html();
+    /// assert!(html.contains("Ludhiana office") && !html.contains("Customer desk"));
+    /// ```
+    #[must_use]
+    pub fn context(mut self, context: impl Into<Cow<'static, str>>) -> AppShell {
+        self.context = Some(context.into());
+        self
+    }
+
+    /// The shell this request's pages are drawn in: the app's own, or, when the request has
+    /// links of other modules or a line of its own below the app's name, a copy with the
+    /// links after its groups and the request's line in place of the shell's.
+    fn drawn_shell(&self) -> Arc<Shell> {
+        if self.links.is_empty() && self.context.is_none() {
+            return self.shell.clone();
+        }
+        let mut shell = Shell::clone(&self.shell);
+        shell.groups.extend(self.links.iter().cloned());
+        if let Some(context) = &self.context {
+            shell.context = Some(context.clone());
+        }
+        Arc::new(shell)
     }
 
     /// Puts `slot` in the sidebar's header for this request, in place of the shell's
@@ -1618,6 +1660,8 @@ impl AppShell {
             user_theme: None,
             user_menu: None,
             header_slot: None,
+            links: Vec::new(),
+            context: None,
         }
     }
 }
@@ -1627,12 +1671,21 @@ impl FromRequestParts for AppShell {
 
     async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let Scoped(shell) = Scoped::<Shell>::from_request_parts(parts).await?;
-        Ok(Self::read(
+        // The links other modules add, those this request's reader may open: decided on the
+        // server for this request, only for a shell that asks for them.
+        let drawn = if shell.contributed {
+            links::drawn(parts).await
+        } else {
+            Vec::new()
+        };
+        let mut applied = Self::read(
             shell,
             parts.uri.path().to_owned(),
             parts.uri.query().map(str::to_owned),
             &parts.headers,
-        ))
+        );
+        applied.links = drawn;
+        Ok(applied)
     }
 }
 
@@ -2091,5 +2144,62 @@ mod tests {
         let html = render(&Avatar::placeholder("Anu").into());
         assert!(!html.contains(">A<"));
         assert!(html.contains("<svg"));
+    }
+
+    #[test]
+    fn contributed_draws_nothing_without_a_request() {
+        use http::header::HeaderMap;
+        assert_eq!(
+            shell().contributed().page("Deals", "/deals").to_view().to_html(),
+            shell().page("Deals", "/deals").to_view().to_html()
+        );
+        let applied = |shell: Shell| {
+            shell
+                .for_request("/deals", &HeaderMap::new())
+                .page("Deals")
+                .to_view()
+                .to_html()
+        };
+        assert_eq!(applied(shell().contributed()), applied(shell()));
+    }
+
+    #[test]
+    fn app_shell_context_replaces_the_shells_line_for_one_request() {
+        use http::header::HeaderMap;
+        let shell = Shell::new("Agra").context("Customer desk");
+        let html = shell
+            .for_request("/", &HeaderMap::new())
+            .context("Ludhiana office")
+            .page("Home")
+            .to_view()
+            .to_html();
+        assert!(
+            html.contains("Ludhiana office") && !html.contains("Customer desk"),
+            "{html}"
+        );
+        // The app's one shell is as it was.
+        let html = shell
+            .for_request("/", &HeaderMap::new())
+            .page("Home")
+            .to_view()
+            .to_html();
+        assert!(
+            html.contains("Customer desk") && !html.contains("Ludhiana office"),
+            "{html}"
+        );
+        // The document a native client draws its chrome from has the request's line too.
+        #[cfg(feature = "native-preview")]
+        {
+            let parts = NativeShellParts::default();
+            let document = shell
+                .for_request("/", &HeaderMap::new())
+                .context("Ludhiana office")
+                .native_document(None, &parts);
+            assert_eq!(document.context, Some("Ludhiana office".to_owned()));
+            let document = shell
+                .for_request("/", &HeaderMap::new())
+                .native_document(None, &parts);
+            assert_eq!(document.context, Some("Customer desk".to_owned()));
+        }
     }
 }
