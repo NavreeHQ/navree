@@ -146,9 +146,9 @@
       ]
     },
     {
-      "note": "The shell, asked again at once since the session may have changed unseen, names the person again.",
+      "note": "The shell, asked again at once since a page went to the web view, says who: Ravneet, signed in.",
       "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
-      "body": "made/shell-app-nobody.json",
+      "body": "made/shell-app.json",
       "expect": {
         "changed": [
           {"t":"app"},
@@ -158,14 +158,11 @@
       }
     },
     {
-      "note": "The shell says who.",
+      "note": "The shell asked before that answers late: it is dropped whole.",
       "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/shell-app.json",
       "expect": {
-        "changed": [
-          {"t":"app"},
-          {"t":"nav"}
-        ],
+        "changed": [],
         "effects": []
       },
       "check": [

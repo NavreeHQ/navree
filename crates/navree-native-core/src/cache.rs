@@ -459,6 +459,8 @@ impl Core {
     pub(crate) fn forget_all(&mut self) {
         self.inner.cache = Cache {
             owner: Owner::Empty,
+            // A shell asked before the session became unsure stays unwanted.
+            fresh_from: self.inner.cache.fresh_from,
             ..Cache::default()
         };
         if self.config.cache.persist {

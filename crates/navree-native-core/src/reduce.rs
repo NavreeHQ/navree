@@ -779,6 +779,12 @@ impl Core {
     }
 
     fn shell_answered(&mut self, response: Response) {
+        // An answer asked before the point from which a fresh one is needed
+        // (the session may have changed since) is dropped whole: not
+        // installed, not shown, not kept. The fresh one is on its way.
+        if response.request < self.inner.cache.fresh_from {
+            return;
+        }
         if let Some(error) = response.error {
             return self.shell_failed(match error {
                 TransportError::Timeout => Failure::Timeout,
@@ -839,10 +845,7 @@ impl Core {
                 // The person is the server's word now: what is kept is read
                 // only when it is theirs, and emptied when it is not.
                 let person = self.inner.user.clone();
-                // A shell asked before the session became unsure names nobody.
-                if response.request >= self.inner.cache.fresh_from {
-                    self.shell_named(person);
-                }
+                self.shell_named(person);
                 self.remember_shell(response.body);
                 self.inner.shell_stamp = stamp;
                 self.inner.seen_stamp = None;
