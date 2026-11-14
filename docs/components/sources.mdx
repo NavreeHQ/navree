@@ -15,7 +15,7 @@ Sources::new()
     .source("Income Tax Department", "https://www.incometax.gov.in/")
 ```
 
-A source is `.source(title, url)`. The list is numbered, named "Sources" for assistive technology (`.label(..)` replaces the name), and a link to another site carries `rel="noopener noreferrer nofollow"`. A URL that a link cannot take, such as `javascript:...`, keeps its title as text and has no link. A title is cut at 200 characters.
+A source is `.source(title, url)`. The list is numbered, named "Sources" for assistive technology (`.label(..)` replaces the name), and a link to another site carries `rel="noopener noreferrer nofollow"`. A URL that a link cannot take, such as `javascript:...`, keeps its title as text and has no link. So does one that goes to another site whose host can't be read, such as `https:example.com` or `https://`, since a reader would have no way to tell where it goes. The host shown is the one a browser goes to: a backslash is a slash, and a user name and a port are left out, so `https:/\other.example/page` shows `other.example`. A title is cut at 200 characters.
 
 Put a `Sources` below the words of a message with [ChatMessage::with](/docs/components/chat-message/#reasoning-and-sources).
 

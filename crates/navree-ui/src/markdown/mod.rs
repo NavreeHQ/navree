@@ -635,7 +635,8 @@ mod tests {
     fn the_host_shown_is_the_one_the_browser_goes_to() {
         for (url, host) in [
             ("https://google.com@evil.example/x", "evil.example"),
-            ("https://user:pass@evil.example:8443/x", "evil.example:8443"),
+            ("https://user:pass@evil.example:8443/x", "evil.example"),
+            ("https:/\\evil.example/x", "evil.example"),
             ("//evil.example/x", "evil.example"),
             ("HTTPS://EVIL.example", "evil.example"),
             ("https://evil.example?x=1", "evil.example"),

@@ -628,23 +628,23 @@ impl Sources {
             .into_iter()
             .map(|(title, href)| {
                 let title = cut(&title, 200);
-                let line: Node = match href {
-                    Some(href) => {
-                        let host = host_of(href.as_str());
-                        let link = el("a").href(href).child(title);
-                        let link = if host.is_some() {
-                            link.attr("rel", "noopener noreferrer nofollow")
-                        } else {
-                            link
-                        };
-                        el("span")
-                            .children((
-                                link,
-                                host.map(|host| Text::muted(format!(" ({host})")).inline()),
-                            ))
-                            .into()
-                    }
-                    None => Node::Text(title.into()),
+                // A link that leaves the site shows where it goes. One whose host can't be
+                // read is not drawn as a link: a reader would have no way to tell where it
+                // goes, so its title stays as text.
+                let line: Node = match href.map(|href| (goes_to(href.as_str()), href)) {
+                    Some((Goes::Away(host), href)) => el("span")
+                        .children((
+                            el("a")
+                                .href(href)
+                                .attr("rel", "noopener noreferrer nofollow")
+                                .child(title),
+                            Text::muted(format!(" ({host})")).inline(),
+                        ))
+                        .into(),
+                    Some((Goes::Here, href)) => el("span")
+                        .children(el("a").href(href).child(title))
+                        .into(),
+                    Some((Goes::Unreadable, _)) | None => Node::Text(title.into()),
                 };
                 el("li").child(line).into()
             })
@@ -663,15 +663,59 @@ impl Default for Sources {
     }
 }
 
-/// The host of an absolute `http` or `https` URL.
-fn host_of(url: &str) -> Option<String> {
+/// Where a source's link goes.
+enum Goes {
+    /// To a path on this site, or a mail or phone address: there is no host to show.
+    Here,
+    /// To another site, whose host is this.
+    Away(String),
+    /// To another site, but no host can be read from the address.
+    Unreadable,
+}
+
+/// Where the link `url` goes. A path on this site and a `mailto:` or `tel:` address
+/// leave nothing to show; anything else goes to a host, which is read the way a browser
+/// reads it, or is unreadable.
+fn goes_to(url: &str) -> Goes {
     let lower = url.to_ascii_lowercase();
-    let rest = lower
-        .strip_prefix("https://")
-        .or_else(|| lower.strip_prefix("http://"))?;
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    let host = authority.rsplit('@').next().unwrap_or(authority);
-    Some(host.to_owned()).filter(|host| !host.is_empty())
+    if LocalHref::parse(url).is_ok() || lower.starts_with("mailto:") || lower.starts_with("tel:") {
+        return Goes::Here;
+    }
+    host_of(url).map_or(Goes::Unreadable, Goes::Away)
+}
+
+/// The host of an absolute `http` or `https` URL, or of one that begins with slashes
+/// and no scheme, read the way a browser reads it: no user name or password, no port,
+/// no path, in lower case. A backslash is a slash, and any run of slashes follows the
+/// scheme, so `https:/\host` and `https:///host` go to `host`. `None` when no host can
+/// be read: a scheme that is not `http` or `https`, no slash after the scheme, a single
+/// slash before a name that has no scheme, or an empty host.
+fn host_of(url: &str) -> Option<String> {
+    let slash = |c: char| c == '/' || c == '\\';
+    let (rest, slashes_needed) = match url.find([':', '/', '\\', '?', '#']) {
+        Some(end) if url.as_bytes()[end] == b':' => {
+            let scheme = &url[..end];
+            if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+                return None;
+            }
+            (&url[end + 1..], 1)
+        }
+        _ => (url, 2),
+    };
+    let after = rest.trim_start_matches(slash);
+    if rest.len() - after.len() < slashes_needed {
+        return None;
+    }
+    let authority = after.split(['/', '\\', '?', '#']).next()?;
+    // The user name and password end at the last `@`.
+    let at_host = authority.rsplit('@').next()?;
+    let host = if at_host.starts_with('[') {
+        // An address in brackets keeps its colons: `[::1]:8080` is `[::1]`.
+        &at_host[..=at_host.find(']')?]
+    } else {
+        at_host.split(':').next()?
+    };
+    (!host.is_empty()).then(|| host.to_ascii_lowercase())
 }
 
 /// A numbered reference in an answer to one of its sources: `[2]`.
@@ -1273,6 +1317,50 @@ mod tests {
             host_of("https://navree.com@evil.example/x").as_deref(),
             Some("evil.example")
         );
+    }
+
+    #[test]
+    fn a_source_shows_the_host_a_browser_goes_to() {
+        for (url, host) in [
+            ("https:/\\evil.example/x", "evil.example"),
+            ("https:\\\\evil.example", "evil.example"),
+            ("https:///evil.example", "evil.example"),
+            ("//evil.example/x", "evil.example"),
+            ("/\\evil.example", "evil.example"),
+            ("HTTPS://User:Pw@Evil.Example:8443/x", "evil.example"),
+            ("https://[::1]:8080/x", "[::1]"),
+        ] {
+            assert_eq!(host_of(url).as_deref(), Some(host), "{url}");
+            let html = render(&Sources::new().source("Doc", url).into());
+            assert!(html.contains(&format!("({host})")), "{url}: {html}");
+            assert!(
+                html.contains(r#"rel="noopener noreferrer nofollow""#),
+                "{url}: {html}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_source_whose_host_cannot_be_read_is_only_its_title() {
+        for url in [
+            "https:evil.example",
+            "\\evil.example",
+            "https://",
+            "https:///",
+            "https://@",
+            "https://[::1/x",
+        ] {
+            assert_eq!(host_of(url), None, "{url}");
+            let html = render(&Sources::new().source("Doc", url).into());
+            assert!(html.contains("<li>Doc</li>"), "{url}: {html}");
+            assert!(!html.contains("<a "), "{url}: {html}");
+        }
+        // A path on this site, and a mail address, are links with nothing to show.
+        for url in ["/orders", "mailto:accounts@example.com", "tel:+919876543210"] {
+            let html = render(&Sources::new().source("Doc", url).into());
+            assert!(html.contains("<a "), "{url}: {html}");
+            assert!(!html.contains("nofollow"), "{url}: {html}");
+        }
     }
 
     #[test]
