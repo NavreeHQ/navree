@@ -31,6 +31,8 @@ every `@navree/*` package carries the same version.
   authenticated in the browser session the code came from, and ends when a "remember me" sign-in
   made at that time would. The exchange asks the sign-in policies about the new
   `SignInMethod::AppHandOver { platform, app }`.
+- A connection that enforces single sign-on lets `SignInMethod::AppHandOver` through: the people of
+  its domains can hand a browser sign-in over to a native app as everyone else can.
 - The app sign-in hand-over hands over only a sign-in that came back with the hand-over's own
   `attempt`, for every callback: a sign-in made in that browser for anything else while the
   hand-over waits ends it with `400 invalid_hand_over`. A browser that was already signed in when

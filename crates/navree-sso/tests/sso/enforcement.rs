@@ -3,12 +3,12 @@
 //! session (password, magic link, emailed code, passkey, token exchange, a
 //! two-factor challenge started before enforcement, another connection) is
 //! refused with 403 `sso_required`; domains that don't enforce are
-//! unaffected.
+//! unaffected. Handing a browser's sign-in over to a native app goes on.
 
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use navree_auth::testing::VirtualAuthenticator;
-use navree_auth::{AuthService, ClientMeta, User};
+use navree_auth::{AuthError, AuthService, ClientMeta, SignInAttempt, SignInMethod, User};
 use navree_mail::{MailModule, MailOptions, Mailer, TransportConfig};
 use navree_sso::{Provisioning, SsoConnection, SsoFake, SsoOwner};
 use navree_testing::{TestAppBuilder, TestResponse};
@@ -450,6 +450,37 @@ async fn the_enforcing_connection_still_signs_in() {
         .await
         .assert_status(200)
         .assert_json_path("user.email", json!("nat@acme.test"));
+}
+
+// The hand-over routes need navree-session, which this crate's test app
+// doesn't mount: the app's exchange asks the sign-in policies about the
+// hand-over as below.
+#[tokio::test]
+async fn a_person_who_signed_in_through_their_organizations_connection_can_sign_an_app_in() {
+    let s = Enforced::new().await;
+    s.enforce().await;
+    s.world
+        .saml_sign_in(&s.fake, "acme", "ann@acme.test", &[])
+        .await
+        .assert_status(200);
+    let auth = s.world.app.get::<AuthService>().await;
+    let meta = ClientMeta::default();
+    let hand_over = SignInMethod::AppHandOver {
+        platform: "android".to_owned(),
+        app: "test.acme.field".to_owned(),
+    };
+    auth.check_sign_in(&SignInAttempt::of(&s.ann, hand_over), &meta)
+        .await
+        .expect("the hand-over of Ann's sign-in goes on");
+    // Every other way in stays closed to the domain.
+    let refused = auth
+        .check_sign_in(&SignInAttempt::of(&s.ann, SignInMethod::Password), &meta)
+        .await
+        .expect_err("a password is refused");
+    assert!(
+        matches!(&refused, AuthError::SignInRefused { code, .. } if code == "sso_required"),
+        "{refused:?}"
+    );
 }
 
 #[tokio::test]

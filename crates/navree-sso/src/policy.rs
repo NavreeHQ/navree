@@ -16,7 +16,8 @@ pub(crate) const SSO_REQUIRED: &str = "sso_required";
 /// an email whose domain is a verified domain of an enabled connection
 /// that enforces single sign-on (`enforce`, or
 /// `sso.enforce_for_verified_domains`), with a 403 whose code is
-/// `sso_required`; a single sign-on through that connection goes on.
+/// `sso_required`; a single sign-on through that connection goes on, and so
+/// does handing a browser's sign-in over to a native app.
 pub(crate) struct SsoSignInPolicy {
     sso: Arc<Sso>,
 }
@@ -46,6 +47,12 @@ impl SignInPolicy for SsoSignInPolicy {
             let Some((id, name)) = enforcing else {
                 return Ok(());
             };
+            // An app's session continues a browser session that was itself
+            // asked when it was made, and keeps that session's sign-in time
+            // and end: it carries no more than the browser session has.
+            if matches!(attempt.method, SignInMethod::AppHandOver { .. }) {
+                return Ok(());
+            }
             if let SignInMethod::Sso { connection } = &attempt.method
                 && *connection == id.to_string()
             {
