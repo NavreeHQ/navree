@@ -3,92 +3,92 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "592468275693";
+pub const BUILD: &str = "7277e4db1693";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-ae0bd75a3181.js";
+pub const CORE_URL: &str = "/_navree/ui/core-3dcd36535bc2.js";
 
 /// The URL of `sidebar.js`.
-pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-0b3d2a049896.js";
+pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-555764e6416c.js";
 
 /// The URL of `overlay.js`.
-pub const OVERLAY_URL: &str = "/_navree/ui/overlay-4b639096a0c5.js";
+pub const OVERLAY_URL: &str = "/_navree/ui/overlay-2a7611c102e9.js";
 
 /// The URL of `table.js`.
-pub const TABLE_URL: &str = "/_navree/ui/table-8e8ef1d44084.js";
+pub const TABLE_URL: &str = "/_navree/ui/table-a32b1c0c5469.js";
 
 /// The URL of `live.js`.
-pub const LIVE_URL: &str = "/_navree/ui/live-2bb7c20f2b40.js";
+pub const LIVE_URL: &str = "/_navree/ui/live-40d2d60cffa0.js";
 
 /// The URL of `select.js`.
-pub const SELECT_URL: &str = "/_navree/ui/select-d32f01c3cb82.js";
+pub const SELECT_URL: &str = "/_navree/ui/select-9d4e3cd64065.js";
 
 /// The URL of `dates.js`.
-pub const DATES_URL: &str = "/_navree/ui/dates-a32dc4b50332.js";
+pub const DATES_URL: &str = "/_navree/ui/dates-1da852fcdcea.js";
 
 /// The URL of `date-text.js`.
-pub const DATE_TEXT_URL: &str = "/_navree/ui/date-text-3569ca1652a3.js";
+pub const DATE_TEXT_URL: &str = "/_navree/ui/date-text-65d2182a2c11.js";
 
 /// The URL of `time.js`.
-pub const TIME_URL: &str = "/_navree/ui/time-656ce7566103.js";
+pub const TIME_URL: &str = "/_navree/ui/time-3ac9f307022f.js";
 
 /// The URL of `menus.js`.
-pub const MENUS_URL: &str = "/_navree/ui/menus-ee8886fb1f12.js";
+pub const MENUS_URL: &str = "/_navree/ui/menus-b6bf70e3054f.js";
 
 /// The URL of `slider.js`.
-pub const SLIDER_URL: &str = "/_navree/ui/slider-c8371d9bf092.js";
+pub const SLIDER_URL: &str = "/_navree/ui/slider-5a68ba907d0b.js";
 
 /// The URL of `tree.js`.
-pub const TREE_URL: &str = "/_navree/ui/tree-767b8d4c0534.js";
+pub const TREE_URL: &str = "/_navree/ui/tree-bd3fabf0b96a.js";
 
 /// The URL of `toolbar.js`.
-pub const TOOLBAR_URL: &str = "/_navree/ui/toolbar-e60a19d33383.js";
+pub const TOOLBAR_URL: &str = "/_navree/ui/toolbar-6880cc75368d.js";
 
 /// The URL of `split.js`.
-pub const SPLIT_URL: &str = "/_navree/ui/split-cf448a39d956.js";
+pub const SPLIT_URL: &str = "/_navree/ui/split-137f24de73bb.js";
 
 /// The URL of `keys.js`.
-pub const KEYS_URL: &str = "/_navree/ui/keys-75b046ab0299.js";
+pub const KEYS_URL: &str = "/_navree/ui/keys-cb756a2b6106.js";
 
 /// The URL of `lazy.js`.
-pub const LAZY_URL: &str = "/_navree/ui/lazy-a111137a3306.js";
+pub const LAZY_URL: &str = "/_navree/ui/lazy-393be15981b3.js";
 
 /// The URL of `sortable.js`.
-pub const SORTABLE_URL: &str = "/_navree/ui/sortable-2b10ff2779e3.js";
+pub const SORTABLE_URL: &str = "/_navree/ui/sortable-04d2a9b1b6c2.js";
 
 /// The URL of `sortable-grid.js`.
-pub const SORTABLE_GRID_URL: &str = "/_navree/ui/sortable-grid-e5b811d608a8.js";
+pub const SORTABLE_GRID_URL: &str = "/_navree/ui/sortable-grid-eaf169ce84a6.js";
 
 /// The URL of `upload.js`.
-pub const UPLOAD_URL: &str = "/_navree/ui/upload-086affd6558b.js";
+pub const UPLOAD_URL: &str = "/_navree/ui/upload-9d7f2ca5115b.js";
 
 /// The URL of `otp.js`.
-pub const OTP_URL: &str = "/_navree/ui/otp-4949532cc8ce.js";
+pub const OTP_URL: &str = "/_navree/ui/otp-edb1575d6ac5.js";
 
 /// The URL of `carousel.js`.
-pub const CAROUSEL_URL: &str = "/_navree/ui/carousel-01e1c5e01f4b.js";
+pub const CAROUSEL_URL: &str = "/_navree/ui/carousel-7b09b16316b0.js";
 
 /// The URL of `menubar.js`.
-pub const MENUBAR_URL: &str = "/_navree/ui/menubar-04b53cf0a7f3.js";
+pub const MENUBAR_URL: &str = "/_navree/ui/menubar-23970a4cc4de.js";
 
 /// The URL of `charts.js`.
-pub const CHARTS_URL: &str = "/_navree/ui/charts-dbdd27b89feb.js";
+pub const CHARTS_URL: &str = "/_navree/ui/charts-803f2f250ec5.js";
 
 /// The URL of `count-up.js`.
-pub const COUNT_UP_URL: &str = "/_navree/ui/count-up-71f1aeba8a18.js";
+pub const COUNT_UP_URL: &str = "/_navree/ui/count-up-bdb42670676f.js";
 
 /// The URL of `islands.js`.
-pub const ISLANDS_URL: &str = "/_navree/ui/islands-6050cc86d1c0.js";
+pub const ISLANDS_URL: &str = "/_navree/ui/islands-ef7aeb40a27f.js";
 
 /// The URL of `parts.js`.
-pub const PARTS_URL: &str = "/_navree/ui/parts-112d84f9879c.js";
+pub const PARTS_URL: &str = "/_navree/ui/parts-12dc2c8376c5.js";
 
 /// The URL of `genui.js`.
-pub const GENUI_URL: &str = "/_navree/ui/genui-466804f5e4ea.js";
+pub const GENUI_URL: &str = "/_navree/ui/genui-23e3c91c85e6.js";
 
 /// The URL of `phone.js`.
 #[cfg(feature = "phone")]
-pub const PHONE_URL: &str = "/_navree/ui/phone-645e05858e21.js";
+pub const PHONE_URL: &str = "/_navree/ui/phone-ee9159bb6f87.js";
 
 /// The URL of `phone-data.json`.
 #[cfg(feature = "phone")]
@@ -193,7 +193,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "ae0bd75a3181",
+        hash: "3dcd36535bc2",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -202,7 +202,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "sidebar",
         ext: "js",
-        hash: "0b3d2a049896",
+        hash: "555764e6416c",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/sidebar.js"),
         gzip: Some(include_bytes!("../dist/sidebar.js.gz")),
@@ -211,7 +211,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "overlay",
         ext: "js",
-        hash: "4b639096a0c5",
+        hash: "2a7611c102e9",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/overlay.js"),
         gzip: Some(include_bytes!("../dist/overlay.js.gz")),
@@ -220,7 +220,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "table",
         ext: "js",
-        hash: "8e8ef1d44084",
+        hash: "a32b1c0c5469",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/table.js"),
         gzip: Some(include_bytes!("../dist/table.js.gz")),
@@ -229,7 +229,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "live",
         ext: "js",
-        hash: "2bb7c20f2b40",
+        hash: "40d2d60cffa0",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/live.js"),
         gzip: Some(include_bytes!("../dist/live.js.gz")),
@@ -238,7 +238,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "select",
         ext: "js",
-        hash: "d32f01c3cb82",
+        hash: "9d4e3cd64065",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/select.js"),
         gzip: Some(include_bytes!("../dist/select.js.gz")),
@@ -247,7 +247,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "dates",
         ext: "js",
-        hash: "a32dc4b50332",
+        hash: "1da852fcdcea",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/dates.js"),
         gzip: Some(include_bytes!("../dist/dates.js.gz")),
@@ -256,7 +256,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "date-text",
         ext: "js",
-        hash: "3569ca1652a3",
+        hash: "65d2182a2c11",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/date-text.js"),
         gzip: Some(include_bytes!("../dist/date-text.js.gz")),
@@ -265,7 +265,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "time",
         ext: "js",
-        hash: "656ce7566103",
+        hash: "3ac9f307022f",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/time.js"),
         gzip: Some(include_bytes!("../dist/time.js.gz")),
@@ -274,7 +274,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "menus",
         ext: "js",
-        hash: "ee8886fb1f12",
+        hash: "b6bf70e3054f",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/menus.js"),
         gzip: Some(include_bytes!("../dist/menus.js.gz")),
@@ -283,7 +283,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "slider",
         ext: "js",
-        hash: "c8371d9bf092",
+        hash: "5a68ba907d0b",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/slider.js"),
         gzip: Some(include_bytes!("../dist/slider.js.gz")),
@@ -292,7 +292,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "tree",
         ext: "js",
-        hash: "767b8d4c0534",
+        hash: "bd3fabf0b96a",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/tree.js"),
         gzip: Some(include_bytes!("../dist/tree.js.gz")),
@@ -301,7 +301,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "toolbar",
         ext: "js",
-        hash: "e60a19d33383",
+        hash: "6880cc75368d",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/toolbar.js"),
         gzip: Some(include_bytes!("../dist/toolbar.js.gz")),
@@ -310,7 +310,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "split",
         ext: "js",
-        hash: "cf448a39d956",
+        hash: "137f24de73bb",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/split.js"),
         gzip: Some(include_bytes!("../dist/split.js.gz")),
@@ -319,7 +319,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "keys",
         ext: "js",
-        hash: "75b046ab0299",
+        hash: "cb756a2b6106",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/keys.js"),
         gzip: Some(include_bytes!("../dist/keys.js.gz")),
@@ -328,7 +328,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "lazy",
         ext: "js",
-        hash: "a111137a3306",
+        hash: "393be15981b3",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/lazy.js"),
         gzip: Some(include_bytes!("../dist/lazy.js.gz")),
@@ -337,7 +337,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "sortable",
         ext: "js",
-        hash: "2b10ff2779e3",
+        hash: "04d2a9b1b6c2",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/sortable.js"),
         gzip: Some(include_bytes!("../dist/sortable.js.gz")),
@@ -346,7 +346,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "sortable-grid",
         ext: "js",
-        hash: "e5b811d608a8",
+        hash: "eaf169ce84a6",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/sortable-grid.js"),
         gzip: Some(include_bytes!("../dist/sortable-grid.js.gz")),
@@ -355,7 +355,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "upload",
         ext: "js",
-        hash: "086affd6558b",
+        hash: "9d7f2ca5115b",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/upload.js"),
         gzip: Some(include_bytes!("../dist/upload.js.gz")),
@@ -364,7 +364,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "otp",
         ext: "js",
-        hash: "4949532cc8ce",
+        hash: "edb1575d6ac5",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/otp.js"),
         gzip: Some(include_bytes!("../dist/otp.js.gz")),
@@ -373,7 +373,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "carousel",
         ext: "js",
-        hash: "01e1c5e01f4b",
+        hash: "7b09b16316b0",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/carousel.js"),
         gzip: Some(include_bytes!("../dist/carousel.js.gz")),
@@ -382,7 +382,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "menubar",
         ext: "js",
-        hash: "04b53cf0a7f3",
+        hash: "23970a4cc4de",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/menubar.js"),
         gzip: Some(include_bytes!("../dist/menubar.js.gz")),
@@ -391,7 +391,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "charts",
         ext: "js",
-        hash: "dbdd27b89feb",
+        hash: "803f2f250ec5",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/charts.js"),
         gzip: Some(include_bytes!("../dist/charts.js.gz")),
@@ -400,7 +400,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "count-up",
         ext: "js",
-        hash: "71f1aeba8a18",
+        hash: "bdb42670676f",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/count-up.js"),
         gzip: Some(include_bytes!("../dist/count-up.js.gz")),
@@ -409,7 +409,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "islands",
         ext: "js",
-        hash: "6050cc86d1c0",
+        hash: "ef7aeb40a27f",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/islands.js"),
         gzip: Some(include_bytes!("../dist/islands.js.gz")),
@@ -418,7 +418,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "parts",
         ext: "js",
-        hash: "112d84f9879c",
+        hash: "12dc2c8376c5",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/parts.js"),
         gzip: Some(include_bytes!("../dist/parts.js.gz")),
@@ -427,7 +427,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "genui",
         ext: "js",
-        hash: "466804f5e4ea",
+        hash: "23e3c91c85e6",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/genui.js"),
         gzip: Some(include_bytes!("../dist/genui.js.gz")),
@@ -437,7 +437,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "phone",
         ext: "js",
-        hash: "645e05858e21",
+        hash: "ee9159bb6f87",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/phone.js"),
         gzip: Some(include_bytes!("../dist/phone.js.gz")),
