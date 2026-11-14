@@ -2,7 +2,7 @@
 // `data-ui-form`, a fetch whose answer is ops or a page.
 import { applyEnvelope } from "./ops.js";
 import { forget, go, pageSwaps, showPage, startRegions, whileWriting } from "./nav.js";
-import { active, all, attr, body, byId, closest, cookies, emit, has, make, on, sameOrigin, set, stored, unset, toggle } from "./dom.js";
+import { active, all, attr, body, byId, closest, cookies, emit, every, has, make, on, sameOrigin, set, stored, unset, toggle } from "./dom.js";
 import { toast } from "./ui.js";
 
 const OPS = "application/vnd.navree.ops+json";
@@ -219,15 +219,31 @@ export function startForms() {
     body().append(form);
   }, true);
   on(document, "submit", (e) => {
-    const form = /** @type {HTMLFormElement} */ (e.target);
+    let form = /** @type {HTMLFormElement} */ (e.target);
     if (e.defaultPrevented) return;
     const submitter = /** @type {HTMLElement | null} */ (e.submitter);
+    const planted = !!submitter && stored(submitter);
+    // A button the server drew for the post form posts through the form the server drew, the last `ui-post`
+    // that is not stored content, whichever form the browser took it to: a form in stored content with that
+    // id stands ahead of it, and is the form the button's `form` attribute names.
+    if (submitter && !planted && has(submitter, "data-ui-post") && attr(submitter, "form") === "ui-post") {
+      const post = every("form#ui-post").pop();
+      if (form !== post) {
+        e.preventDefault();
+        if (!post) return;
+        form = /** @type {HTMLFormElement} */ (post);
+      }
+    }
     // A form in stored content is the browser's to send, with nothing of the runtime's: no token in a
-    // header. A button in stored content sends nothing: the form it is in, the page's, holds the token.
+    // header. But not for a button of the page's own that was taken to it by a `form` attribute naming its id.
+    // A button in stored content sends nothing: the form it is in, the page's, holds the token.
     // The page's post form sends only for a button the server drew for it (`data-ui-post`), whose
     // `formaction` it takes: any other that names the form would post with the page's token.
-    if (stored(form)) return;
-    if ((submitter && stored(submitter)) || (attr(form, "id") === "ui-post" && !has(submitter || form, "data-ui-post"))) {
+    if (stored(form)) {
+      if (submitter && !planted) e.preventDefault();
+      return;
+    }
+    if (planted || (attr(form, "id") === "ui-post" && !has(submitter || form, "data-ui-post"))) {
       e.preventDefault();
       return;
     }

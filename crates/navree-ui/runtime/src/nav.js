@@ -42,9 +42,11 @@ function drop() {
   emit(new Event("ui:stale"));
 }
 if (tabs) tabs.onmessage = drop;
-/** Who the page was drawn for, as of when it was last left. */
+/**
+ * Who the page was drawn for: noted as it loads and as each page is swapped in, never as it is left (by
+ * then the next document's cookies are stored, and a person who signed out would be taken for who the page was for).
+ */
 let person = who();
-on(window, "pagehide", () => (person = who()));
 // A page kept for the back button that comes back to another person (one signed out, another in) is
 // theirs no more: it loads again, for whoever is signed in now.
 on(window, "pageshow", (/** @type {PageTransitionEvent} */ e) => {
@@ -258,6 +260,8 @@ export async function showPage(response, how = {}) {
   }
   takeLook(doc);
   morph(body(), body(doc), { reset: !id && !how.keep });
+  // The page is drawn for whoever is signed in now.
+  person = who();
   // The title changes with what it names, never ahead of it.
   setTitle(titleOf(doc));
   dropSheets(sheets);
@@ -302,8 +306,12 @@ function tablePending(table, on) {
 /** The fetches that show the page as loading, each as its `stale` test: it shows so while one is still current. @type {Set<() => boolean>} */
 const loads = new Set();
 
-/** Goes to `url` like a boosted link. @param {string} url @param {{region?: string, push?: boolean}} [how] */
-export async function go(url, how = {}) {
+/**
+ * Goes to `url` like a boosted link. An answer that was on its way while something was written is fetched
+ * again, twice at most (`tried`): a page that is written to as often as it is asked for shows what came.
+ * @param {string} url @param {{region?: string, push?: boolean}} [how] @param {number} [tried]
+ */
+export async function go(url, how = {}, tried = 0) {
   // Leaving the site is said by name: `leave`.
   if (!sameOrigin(url)) return;
   const id = how.region;
@@ -327,11 +335,11 @@ export async function go(url, how = {}) {
   tablePending(table, true);
   // As a region's refresh: an answer fetched before a write, a sign-out or another tab's change is from
   // before it, and is fetched again (a write began here overtakes this outright: see `whileWriting`).
-  const since = epoch;
+  const since = epoch, more = tried < 2;
   try {
     const response = await fetchPage(url);
     if (stale()) return;
-    if (epoch !== since) return go(url, how);
+    if (more && epoch !== since) return go(url, how, tried + 1);
     if (table && !response.ok) {
       tableFailed(table, url, response.status);
       return;
@@ -340,7 +348,7 @@ export async function go(url, how = {}) {
       location.assign(url);
       return;
     }
-    if ((await showPage(response, { ...how, url: response.url || url, since })) && !stale()) return go(url, how);
+    if ((await showPage(response, { ...how, url: response.url || url, since: more ? since : undefined })) && !stale()) return go(url, how, tried + 1);
   } catch {
     if (stale()) return;
     if (table) tableFailed(table, url, 0);
@@ -562,10 +570,24 @@ async function feed(el, src, current) {
   if (cursor) el.setAttribute("data-ui-after", cursor);
 }
 
-/** Refetches a region. `polled`: the poll asked, which says nothing it has said before. @param {string} id @param {boolean} [polled] */
-export async function refresh(id, polled = false) {
+/**
+ * Where a region fetches from, or null. A region with no source (the server leaves `data-ui-src` out for an
+ * address it refuses, or writes `#`) has nowhere to fetch from: it is never read as this page.
+ * @param {Element | null} el
+ */
+const sourceOf = (el) => {
+  const src = el && attr(el, "data-ui-src");
+  return src && src !== "#" ? src : null;
+};
+
+/**
+ * Refetches a region. `polled`: the poll asked, which says nothing it has said before. An answer fetched
+ * while something was written is fetched again, twice at most (`tried`), then drawn.
+ * @param {string} id @param {boolean} [polled] @param {number} [tried]
+ */
+export async function refresh(id, polled = false, tried = 0) {
   const el = byId(id);
-  const src = el?.getAttribute("data-ui-src");
+  const src = sourceOf(el);
   if (!el || !src) return;
   // A lazy list fetches what changed since its revision, not its first page again.
   if (el.hasAttribute("data-ui-lazy-list")) {
@@ -585,10 +607,10 @@ export async function refresh(id, polled = false) {
   // Whether something was written since this fetch began, here or in another tab, or the page was shown again from
   // the back-forward cache: the answer may be from before the write, and drawn after the page was drawn again for
   // it, it would put back what the write changed. Asked wherever `old` is.
-  const late = () => epoch !== since;
+  const late = () => tried < 2 && epoch !== since;
   // An answer that is old or late is not drawn. A late one is asked for again, unless a newer fetch is on its way to
   // draw the region: polled or not, a region is left showing what came after the last write, never before it.
-  const again = () => (old() ? undefined : refresh(id, polled));
+  const again = () => (old() ? undefined : refresh(id, polled, tried + 1));
   try {
     if (el.hasAttribute("data-ui-feed")) {
       await feed(el, src, () => !old() && !late());
@@ -672,13 +694,14 @@ function failed(el, status) {
 export function startRegions() {
   for (const el of every("[data-ui-lazy]")) refresh(el.id);
   for (const el of every("[data-ui-poll]")) {
-    if (/** @type {any} */ (el).uiPoll) continue;
+    // A region with no source has nothing to ask.
+    if (/** @type {any} */ (el).uiPoll || !sourceOf(el)) continue;
     // Once a second at the most, whatever the page asks.
-    const every = Math.max(1000, Number(el.getAttribute("data-ui-poll")) || 5000);
+    const ms = Math.max(1000, Number(el.getAttribute("data-ui-poll")) || 5000);
     /** @type {any} */ (el).uiPoll = setInterval(() => {
       if (!el.isConnected) clearInterval(/** @type {any} */ (el).uiPoll);
       else if (!hidden() && (trouble.get(el)?.until || 0) < Date.now()) refresh(el.id, true);
-    }, every);
+    }, ms);
   }
 }
 

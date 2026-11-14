@@ -60,10 +60,8 @@ test("a palette's recent items are the person's who chose them", () => {
 
 test("a page kept for the back button that comes back to another person loads again", () => {
   signIn("harleen-token");
-  dispatchEvent(new Event("pagehide"));
   dispatchEvent(new Event("pageshow", { persisted: true }));
   assert.equal(page.reloaded, 0);
-  dispatchEvent(new Event("pagehide"));
   signIn("gurpreet-token");
   dispatchEvent(new Event("pageshow", { persisted: true }));
   assert.equal(page.reloaded, 1);

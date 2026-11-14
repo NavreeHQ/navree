@@ -4,15 +4,13 @@
 // so a morph needs no wiring and a name in stored markup can't shadow a method. The limits in
 // the markup are hints; the server holds every file to them. Text from the server goes in with
 // textContent, never as markup.
-import { D, E, T, all, attr, cookie, has, holds, on, set, unset } from "./dom.js";
+import { D, E, T, all, attr, byId, cookie, has, holds, on, set, unset } from "./dom.js";
 
-// Unlike dom.js's, these find what is in stored content too, which costs nothing here: an upload area there is
+// Unlike dom.js's, this finds what is in stored content too, which costs nothing here: an upload area there is
 // never made ready (`every` leaves stored content out), and every listener below acts only on a ready area or on
 // a file it is sending.
 /** @param {any} node @param {string} selector @returns {Element | null} */
 const closest = (node, selector) => (node instanceof Element ? E.closest.call(node, selector) : null);
-/** @param {string} id */
-const byId = (id) => D.getElementById.call(document, id);
 
 /** Whether `url` is on this site. One no browser can read throws, and its send fails. @param {string} url */
 const here = (url) => new URL(url, location.href).origin === location.origin;
@@ -215,8 +213,8 @@ async function run(job) {
   waiting.set(root, left);
   // When the last file is over, the region that lists the files draws them again.
   const region = attr(root, "data-refresh");
-  const target = !left && region ? byId(region) : null;
-  if (target) T.dispatchEvent.call(target, new CustomEvent("ui:refresh", { bubbles: true }));
+  const list = !left && region && byId(region);
+  if (list) T.dispatchEvent.call(list, new CustomEvent("ui:refresh", { bubbles: true }));
 }
 
 /** Puts `job` at the end of its root's line. @param {Job} job */
@@ -247,8 +245,7 @@ function chosen(root) {
 function take(root, list, native) {
   const input = field(root);
   if (!input || has(root, "data-disabled")) return;
-  let files = [...list];
-  if (!has(input, "multiple")) files = files.slice(0, 1);
+  const files = [...list].slice(0, has(input, "multiple") ? undefined : 1);
   if (auto(root)) {
     start(root, files);
     input.value = "";

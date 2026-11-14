@@ -4,6 +4,7 @@
 // page, the address bar, submenus, typeahead and closing after a choice. It is
 // delegated from `document`, so a morph needs no wiring, and it reads every
 // element through the prototypes, so a name in stored markup can't shadow a method.
+import { byId as lookup } from "./dom.js";
 
 const E = Element.prototype;
 /** @param {any} node @param {string} selector @returns {Element | null} */
@@ -22,8 +23,8 @@ const set = (node, name, value) => E.setAttribute.call(node, name, value);
 const unset = (node, name) => E.removeAttribute.call(node, name);
 /** @param {EventTarget} target @param {string} type @param {(e: any) => void} listener @param {boolean | AddEventListenerOptions} [options] */
 const on = (target, type, listener, options) => EventTarget.prototype.addEventListener.call(target, type, listener, options);
-/** @param {string | null} id @returns {HTMLElement | null} */
-const byId = (id) => (id ? Document.prototype.getElementById.call(document, id) : null);
+/** The element with this id that is not stored content: an id in stored content stands for nothing here. @param {string | null} id @returns {HTMLElement | null} */
+const byId = (id) => (id ? lookup(id) : null);
 /** The document's own members, through the prototypes: a form named like one can't stand in for it. */
 const D = Document.prototype;
 const gRoot = /** @type {() => HTMLElement} */ (Object.getOwnPropertyDescriptor(D, "documentElement")?.get);

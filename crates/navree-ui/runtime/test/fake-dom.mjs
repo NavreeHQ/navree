@@ -659,8 +659,17 @@ class FakeTemplate extends FakeHTMLElement {
     this.content = new FakeFragment();
   }
 }
-class FakeTableRow extends FakeHTMLElement {}
-class FakeTableCell extends FakeHTMLElement {}
+class FakeTableRow extends FakeHTMLElement {
+  /** The row's cells, as `row.cells` lists them. */
+  get cells() {
+    return this.children.filter((el) => el instanceof FakeTableCell);
+  }
+}
+class FakeTableCell extends FakeHTMLElement {
+  get cellIndex() {
+    return this.parentNode ? this.parentNode.children.filter((el) => el instanceof FakeTableCell).indexOf(this) : -1;
+  }
+}
 
 const KINDS = { a: FakeAnchor, input: FakeInput, textarea: FakeTextArea, select: FakeSelect, button: FakeButton, dialog: FakeDialog, form: FakeForm, template: FakeTemplate, tr: FakeTableRow, td: FakeTableCell, th: FakeTableCell };
 
