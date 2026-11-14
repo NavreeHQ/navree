@@ -33,10 +33,43 @@ pub struct Region {
 
 /// What a region's source fetches with: what [`Region::src`] and a lazy part's source
 /// write. An address that is not on this site, or `#` (which is what a refused address
-/// becomes), fetches nothing the region can draw, so the region gets no source.
+/// becomes), fetches nothing the region can draw, so the region gets no source. An address
+/// refused here is named in the log.
 pub(crate) fn region_source(src: &Href) -> Option<Href> {
-    let local = LocalHref::parse(src.as_str()).ok()?.into_href();
+    let Ok(local) = LocalHref::parse(src.as_str()) else {
+        say_refused(src.as_str());
+        return None;
+    };
+    let local = local.into_href();
     (local.as_str() != "#").then_some(local)
+}
+
+/// How many refused sources the log names, each once: a page that builds a source from what
+/// a request gave can fill neither the log nor the memory with them.
+const REFUSED_SAID: usize = 32;
+
+/// Says in the log, once for each address, that a source was refused. The part is still
+/// drawn, only never fetched, which is easy to miss: a whole address of the site's own
+/// (`https://example.com/fragments/kpis`) is refused like any other, and is written as a path.
+fn say_refused(src: &str) {
+    static SAID: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    let src = src
+        .char_indices()
+        .nth(200)
+        .map_or(src, |(at, _)| &src[..at]);
+    {
+        let Ok(mut said) = SAID.lock() else {
+            return;
+        };
+        if said.len() >= REFUSED_SAID || said.iter().any(|known| known == src) {
+            return;
+        }
+        said.push(src.to_owned());
+    }
+    tracing::warn!(
+        source = src,
+        "a region, a lazy tab or a lazy sidebar group was given a source that is not an address on this site (a path, a query or a fragment): it is drawn once and never fetched"
+    );
 }
 
 /// The attributes a region has only with a source: they are left out with it.
@@ -82,7 +115,9 @@ impl Region {
     /// The source is on this site. An address that is not a [`LocalHref`], or that is `#`,
     /// gives the region no source at all: it is drawn once, as it is, and never fetched, so
     /// what goes with a source (fetching after paint, a poll, a feed, a stream) is left out
-    /// with it. A region never names another site, nor fetches the page it stands on.
+    /// with it. A region never names another site, nor fetches the page it stands on. A
+    /// whole address of the site's own (`https://example.com/fragments/kpis`) is refused like
+    /// any other: write the path. A refused address is named in the log as a warning, once.
     ///
     /// ```
     /// use std::time::Duration;
