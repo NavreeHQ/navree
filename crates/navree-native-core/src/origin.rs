@@ -413,6 +413,20 @@ impl Origin {
             && split(address).is_some_and(|parts| self.holds(&parts.site))
     }
 
+    /// Whether `callback`, where a sign-in session comes back, may be handed
+    /// to the system: an `https` address on one of the app's origins, or a
+    /// link of the scheme the app was built with (`own`).
+    pub(crate) fn callback_allowed(&self, callback: &str, own: Option<&str>) -> bool {
+        if !readable(callback) || callback.contains(' ') {
+            return false;
+        }
+        match scheme_of(callback).as_deref() {
+            Some("https") => self.ours(callback),
+            Some(scheme) => own.is_some_and(|own| own.eq_ignore_ascii_case(scheme)),
+            None => false,
+        }
+    }
+
     /// The whole address of something inside, built from its parts: what a
     /// request, a stream or the web view is given. `None` for anything that
     /// is not on one of the app's origins: it never leaves the core. What it
@@ -974,6 +988,32 @@ mod tests {
         // The page an address stands on is held to the same rules.
         for from in [" /orders", "/orders\n", "/a\u{3000}b"] {
             assert_eq!(origin.resolve("edit", from), Target::Refused, "{from:?}");
+        }
+    }
+
+    #[test]
+    fn a_sign_in_comes_back_only_to_the_app_s_own_link_or_scheme() {
+        let origin = origin();
+        for allowed in [
+            ("https://shop.example/app/signed-in", None),
+            ("https://patiala.shop.example/app/signed-in", None),
+            ("shop://signed-in", Some("shop")),
+            ("SHOP:/signed-in", Some("shop")),
+        ] {
+            assert!(origin.callback_allowed(allowed.0, allowed.1), "{allowed:?}");
+        }
+        for refused in [
+            ("https://evil.example/app/signed-in", Some("shop")),
+            ("http://shop.example/app/signed-in", Some("shop")),
+            ("https://shop.example@evil.example/", None),
+            ("evil://signed-in", Some("shop")),
+            ("shop://signed-in", None),
+            ("javascript:1", Some("javascript:1")),
+            (" shop://signed-in", Some("shop")),
+            ("/app/signed-in", Some("shop")),
+            ("", Some("shop")),
+        ] {
+            assert!(!origin.callback_allowed(refused.0, refused.1), "{refused:?}");
         }
     }
 

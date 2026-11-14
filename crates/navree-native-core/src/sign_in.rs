@@ -241,6 +241,25 @@ impl Core {
             text("code_challenge_method", "S256"),
             text("state", &state),
         ];
+        // Where the session comes back is handed to the system: only the
+        // app's own link or the scheme it was built with.
+        let callback = routes
+            .callback
+            .clone()
+            .or_else(|| self.config.sign_in.callback.clone());
+        if routes.callback.as_deref().is_some_and(|callback| {
+            !self
+                .inner
+                .origin
+                .callback_allowed(callback, self.config.sign_in.callback.as_deref())
+        }) {
+            self.notice(Notice::Failed, self.front());
+            return self.report(
+                "sign_in",
+                "the shell's callback of a hand-over is neither the app's own link nor its scheme"
+                    .to_owned(),
+            );
+        }
         if let Some(callback) = &routes.callback {
             said.push(text("redirect_uri", callback));
         }
@@ -259,9 +278,7 @@ impl Core {
         self.inner.hand_over = Some(HandOver::Open { state, verifier });
         self.effects.push(Effect::SignIn {
             url,
-            callback: routes
-                .callback
-                .or_else(|| self.config.sign_in.callback.clone()),
+            callback,
             ephemeral,
         });
     }
