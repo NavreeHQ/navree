@@ -73,7 +73,7 @@ public struct ScreenView: View {
         let width = WidthClass(sizeClass)
         let table = sections.compactMap(\.table).first
         let query = QueryForm(screen: screen, table: table, region: sections.first { $0.table != nil }?.region)
-        content(drawn, sections: sections, width: width, table: table)
+        content(drawn, sections: sections, width: width, table: table, searched: query?.searchName != nil)
             .modifier(ComposerDock(found: composer))
             .navigationTitle(NavigationRules.title(screen.title, appName: appName))
             .modifier(Subtitle(text: screen.subtitle, underLargeTitle: screen.pager == nil))
@@ -118,7 +118,9 @@ public struct ScreenView: View {
             }
     }
 
-    @ViewBuilder private func content(_ body: Navree.Node, sections: [ListSection], width: WidthClass, table: Navree.Table?) -> some View {
+    @ViewBuilder private func content(
+        _ body: Navree.Node, sections: [ListSection], width: WidthClass, table: Navree.Table?, searched: Bool
+    ) -> some View {
         let panes = PaneRules.panes(in: body)
         if let empty = Self.wholeEmpty(body) {
             EmptyPart(empty: empty)
@@ -137,6 +139,7 @@ public struct ScreenView: View {
             SectionsList(
                 tree: body, sections: sections, notice: notice, table: table,
                 heading: NavigationRules.titleInContent(bar: .current, besideList: besideList) ? screen.title : nil,
+                waitsForAppearance: searched && PresentationRules.listWaitsForFirstAppearance(PresentationRules.search(width: width)),
                 key: table.flatMap { $0.id } ?? sections.first { $0.table != nil }?.region ?? "",
                 // On a Mac, what destroys is a command of the menu bar only.
                 destructive: ActionBar.current == .window ? [] : actions.filter(Self.isDestructive).compactMap { node -> Navree.Button? in
@@ -193,8 +196,13 @@ struct SectionsList: View {
     let table: Navree.Table?
     /// The screen's title, where its content says it at its head.
     let heading: String?
+    /// Whether the list joins the screen only once it has appeared (see
+    /// ``PresentationRules/listWaitsForFirstAppearance(_:)``).
+    var waitsForAppearance = false
     let key: String
     let destructive: [Navree.Button]
+    /// Whether the screen has appeared, for a list that waits for it.
+    @State private var appeared = false
     @Environment(\.navree) private var context
     @Environment(\.navreeChoose) private var choose
     @Environment(\.navreeOpen) private var open
@@ -203,6 +211,17 @@ struct SectionsList: View {
     #endif
 
     var body: some View {
+        if waitsForAppearance, !appeared {
+            Color.clear.onAppear {
+                // After the bar's first layout, not within it.
+                DispatchQueue.main.async { appeared = true }
+            }
+        } else {
+            list
+        }
+    }
+
+    private var list: some View {
         List(selection: selection) {
             if let heading {
                 Text(heading)
@@ -490,17 +509,10 @@ struct SearchModifier: ViewModifier {
     let query: QueryForm?
     let placement: SearchPlacement
     @State private var text: String?
-    /// Whether the screen has appeared, for a field that waits for it.
-    @State private var appeared = false
     @Environment(\.navree) private var context
 
     func body(content: Content) -> some View {
-        if query?.searchName != nil, PresentationRules.searchWaitsForFirstAppearance(placement), !appeared {
-            content.onAppear {
-                // After the bar's first layout, not within it.
-                DispatchQueue.main.async { appeared = true }
-            }
-        } else if let query, let name = query.searchName {
+        if let query, let name = query.searchName {
             let binding = Binding(get: { text ?? query.searchValue }, set: { text = $0 })
             content
                 .searchable(text: binding, placement: Self.placement(placement), prompt: query.searchPrompt ?? "Search")
