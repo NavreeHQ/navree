@@ -2,21 +2,27 @@
 //! them, and answered as JSON. A test binary of its own, because it reads the
 //! warnings the boot logs.
 
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 
-use http::Method;
 use http::request::Parts;
+use http::{Method, StatusCode};
+use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{
     BoxError, ModuleBuilderPermissionsExt, Permission, PermissionCheck, Principal,
 };
-use navree_http::{Controller, ModuleBuilderHttpExt, RequestWorkspace, RouteDef};
+use navree_http::{
+    Controller, HttpModule, ModuleBuilderHttpExt, RequestWorkspace, RouteDef, RouteKind,
+};
 use navree_kernel::{
-    BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, PluginInfo, Resolver,
+    BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, Navree, PluginInfo,
+    Resolver,
 };
 use navree_testing::{TestApp, TestAppBuilder, principal};
 use navree_ui::{
     AppShell, ModuleBuilderShellExt, NavGroup, NavItem, Shell, ShellNavItem, UiModule, icons,
 };
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 /// The warnings logged on this thread while the guard lives (the tests run on a
@@ -584,4 +590,170 @@ async fn a_reader_who_may_open_no_contributed_link_gets_the_page_drawn_without_t
     let page = home(&contributed, Some(kuldeep), None).await;
     assert_eq!(page, home(&plain, Some(kuldeep), None).await);
     assert!(!page.contains("sidebar-group-label"), "{page}");
+}
+
+/// Where the links a caller may open are answered as JSON.
+const NAVIGATION: &str = "/_navree/ui/navigation";
+
+/// What a guest gets there in an app with the announcements plugin: the one link that
+/// needs no permission.
+fn guest_items() -> Value {
+    json!({
+        "items": [
+            {
+                "label": "Notice board",
+                "href": "/notice-board",
+                "group": "Announcements",
+                "order": 0,
+                "icon": null,
+            },
+        ],
+    })
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_navigation_endpoint_answers_a_guest_the_links_that_need_no_permission() {
+    let grants = Grants::default();
+    let (harpreet, kuldeep) = (Uuid::now_v7(), Uuid::now_v7());
+    grants.grant(harpreet, "announcements.read", None);
+    let app = builder(Shell::new("Kesar").contributed())
+        .module(Announcements)
+        .module(grants.clone())
+        .build()
+        .await;
+
+    let guest = app.client().get(NAVIGATION).send().await;
+    assert_eq!(guest.status(), StatusCode::OK, "{}", guest.text());
+    assert!(
+        guest
+            .header("content-type")
+            .is_some_and(|kind| kind.starts_with("application/json")),
+        "{:?}",
+        guest.headers()
+    );
+    assert_eq!(guest.header("cache-control"), Some("private, no-store"));
+    let vary: Vec<String> = guest
+        .headers()
+        .get_all("vary")
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .map(|name| name.trim().to_ascii_lowercase())
+        .collect();
+    assert!(
+        vary.iter().any(|name| name == "cookie") && vary.iter().any(|name| name == "authorization"),
+        "{vary:?}"
+    );
+    let body = guest.json_value();
+    assert_eq!(body, guest_items());
+    assert_eq!(body.as_object().map(|object| object.len()), Some(1));
+
+    let theirs = app
+        .acting_as(principal(harpreet))
+        .get(NAVIGATION)
+        .send()
+        .await;
+    assert_eq!(
+        theirs.json_value(),
+        json!({
+            "items": [
+                {
+                    "label": "Announcements",
+                    "href": "/announcements",
+                    "group": "Announcements",
+                    "order": 0,
+                    "icon": { "view_box": "0 0 24 24", "shapes": icons::MEGAPHONE.shapes() },
+                },
+                {
+                    "label": "Notice board",
+                    "href": "/notice-board",
+                    "group": "Announcements",
+                    "order": 0,
+                    "icon": null,
+                },
+            ],
+        })
+    );
+    // Kuldeep may open none of the links with a permission: the guest's bytes, no more.
+    let none = app
+        .acting_as(principal(kuldeep))
+        .get(NAVIGATION)
+        .send()
+        .await;
+    assert_eq!(none.status(), StatusCode::OK);
+    assert_eq!(none.bytes(), guest.bytes());
+
+    let routes = navree_http::route_table(app.ctx()).await.unwrap();
+    let route = routes
+        .iter()
+        .find(|route| route.name.as_deref() == Some("ui.navigation"))
+        .expect("the navigation route");
+    assert_eq!(route.method, "GET");
+    assert_eq!(route.full_path, NAVIGATION);
+    assert!(route.access.public);
+    assert_eq!(route.kind, RouteKind::Json);
+    let api = route.api.as_ref().expect("documented");
+    assert!(api.summary.is_some());
+    assert_eq!(api.tags, ["UI"]);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn an_app_without_authentication_boots_with_contributed_links() {
+    use tower::ServiceExt;
+
+    let app = Navree::app()
+        .module(ConfigModule::for_root(ConfigSources::default()))
+        .module(HttpModule)
+        .module(UiModule)
+        .module(Announcements)
+        .module(Desk(Shell::new("Kesar").contributed()))
+        .boot()
+        .await
+        .expect("an app with no authenticator boots");
+    let router = navree_http::build_router(app.ctx())
+        .await
+        .expect("its router builds");
+    let mut request = http::Request::builder()
+        .method(Method::GET)
+        .uri(NAVIGATION)
+        .body(navree_http::body::Body::empty())
+        .unwrap();
+    let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 49152);
+    request
+        .extensions_mut()
+        .insert(navree_http::serve::ConnectInfo(peer));
+    let response = router
+        .oneshot(request)
+        .await
+        .unwrap_or_else(|never| match never {});
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = navree_http::body::to_bytes(response.into_body(), 64 * 1024)
+        .await
+        .unwrap();
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body, guest_items());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn an_app_with_no_contributed_links_has_no_navigation_route() {
+    let app = builder(Shell::new("Kesar").contributed()).build().await;
+
+    let routes = navree_http::route_table(app.ctx()).await.unwrap();
+    assert!(
+        !routes
+            .iter()
+            .any(|route| route.name.as_deref() == Some("ui.navigation"))
+    );
+    let toolkit = routes
+        .iter()
+        .filter(|route| {
+            route
+                .name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("ui."))
+        })
+        .count();
+    assert_eq!(toolkit, 5);
+    let response = app.client().get(NAVIGATION).send().await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
