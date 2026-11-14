@@ -148,6 +148,7 @@ public struct ScreenView: View {
                 }
             )
             .modifier(ListLook(layout: ContentRules.list(body)))
+            .sheetListFits(depth == .sheet)
             .modifier(Editing(table: table, region: sections.first { $0.table != nil }?.region, tree: body, reorders: sections.contains { $0.list?.reorder != nil }))
         }
     }
@@ -479,6 +480,7 @@ struct FiltersSheet: View {
                 }
             }
             .modifier(ListLook(layout: .insetGrouped))
+            .sheetListFits()
             .navigationTitle("Filters")
             .navigationBarTitleDisplayModeInline()
             .toolbar {

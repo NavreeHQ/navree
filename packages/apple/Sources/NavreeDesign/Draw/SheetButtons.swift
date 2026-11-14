@@ -50,22 +50,91 @@ public enum SheetKeyRole: Sendable, Equatable {
 extension View {
     /// The key a sheet's button answers where the system's sheets have words
     /// (a Mac's): Return presses the confirming one, the default button, and
-    /// Escape presses Cancel. iPhone and iPad sheets keep their own.
-    public func sheetKey(_ role: SheetKeyRole) -> some View {
-        modifier(SheetKey(role: role))
+    /// Escape presses Cancel, also on its first press while a field is being
+    /// typed in (`action` is what Cancel does). iPhone and iPad sheets keep
+    /// their own.
+    public func sheetKey(_ role: SheetKeyRole, action: (() -> Void)? = nil) -> some View {
+        modifier(SheetKey(role: role, action: action))
     }
 }
 
 struct SheetKey: ViewModifier {
     let role: SheetKeyRole
+    var action: (() -> Void)?
 
     func body(content: Content) -> some View {
         switch PresentationRules.sheetButtons(bar: .current) {
         case .symbols: content
-        case .words: content.keyboardShortcut(role == .confirm ? .defaultAction : .cancelAction)
+        case .words:
+            #if os(macOS)
+            if role == .cancel, let action {
+                content.keyboardShortcut(.cancelAction).background(EscapeWhileTyping(action: action))
+            } else {
+                content.keyboardShortcut(role == .confirm ? .defaultAction : .cancelAction)
+            }
+            #else
+            content.keyboardShortcut(role == .confirm ? .defaultAction : .cancelAction)
+            #endif
         }
     }
 }
+
+#if os(macOS)
+import AppKit
+
+/// Escape while a field of the sheet is being typed in presses the sheet's
+/// Cancel, as in the system's own form sheets
+/// (``PresentationRules/escapeWhileTyping(bar:composing:)``): a field in a
+/// list row would otherwise take the first press to end its editing, and only
+/// a second press would reach Cancel. It looks at the keys of its own window
+/// only, and only while a field's editor has the keyboard; otherwise the
+/// button's own shortcut answers Escape.
+struct EscapeWhileTyping: NSViewRepresentable {
+    let action: () -> Void
+
+    func makeNSView(context: Context) -> Watcher { Watcher() }
+
+    func updateNSView(_ view: Watcher, context: Context) { view.action = action }
+
+    static func dismantleNSView(_ view: Watcher, coordinator: ()) { view.stop() }
+
+    final class Watcher: NSView {
+        var action: (() -> Void)?
+        private var monitor: Any?
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            stop()
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                let key = event.keyCode
+                let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+                let number = event.windowNumber
+                let taken = MainActor.assumeIsolated { self?.takes(key: key, modifiers: modifiers, window: number) ?? false }
+                return taken ? nil : event
+            }
+        }
+
+        /// Escape, alone, in this window, while a field's editor has the keyboard.
+        private func takes(key: UInt16, modifiers: NSEvent.ModifierFlags, window number: Int) -> Bool {
+            guard key == 53, modifiers.isEmpty, let window, window.windowNumber == number,
+                let editor = window.firstResponder as? NSTextView, editor.isFieldEditor,
+                PresentationRules.escapeWhileTyping(bar: .window, composing: editor.hasMarkedText()) == .cancelsSheet,
+                let action
+            else { return false }
+            action()
+            return true
+        }
+
+        func stop() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
+    }
+}
+#endif
 
 /// A sheet's Cancel (what was typed is lost) or Close (nothing is), as the
 /// system's sheets have it: ✕ in the bar of an iPhone's or iPad's, its word
@@ -83,10 +152,10 @@ public struct SheetDismissButton: View {
         switch dismissal {
         case .cancel:
             Button(role: .cancel, action: action) { SheetButtonLabel("Cancel", systemImage: "xmark") }
-                .sheetKey(.cancel)
+                .sheetKey(.cancel, action: action)
         case .close:
             Button(role: .close, action: action) { SheetButtonLabel("Close", systemImage: "xmark") }
-                .sheetKey(.cancel)
+                .sheetKey(.cancel, action: action)
         }
     }
 }
