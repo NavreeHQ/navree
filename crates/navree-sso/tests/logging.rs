@@ -13,7 +13,7 @@ mod support;
 use std::sync::{Arc, Mutex};
 
 use navree_sso::{Provisioning, SsoFake, SsoOwner};
-use navree_workspace::{NewWorkspace, Workspaces};
+use navree_workspace::{NewOrganization, NewWorkspace, Organizations, Workspaces};
 use uuid::Uuid;
 
 use crate::support::World;
@@ -86,6 +86,67 @@ async fn workspace_of(world: &World) -> Uuid {
         .id
 }
 
+/// The lines of `lines` that contain every one of `parts`.
+fn lines_with<'a>(lines: &'a [String], parts: &[&str]) -> Vec<&'a String> {
+    lines
+        .iter()
+        .filter(|line| parts.iter().all(|part| line.contains(*part)))
+        .collect()
+}
+
+/// Boots an app on the SQLite database at `url` and saves four connections
+/// in it: a workspace's (`ludhiana-okta`), an organization's
+/// (`punjab-entra`) and the app's (`staff-okta`) with
+/// `allow_unverified_emails` on, and the app's `plain-okta` without it.
+async fn seed(url: &str) {
+    let world = support::world_with(support::builder().config("database.url", url)).await;
+    let fake = SsoFake::new();
+    let owner = world
+        .create_verified_user("Gurpreet Singh", "gurpreet@ludhiana.test")
+        .await
+        .id;
+    let workspaces = world.app.get::<Workspaces>().await;
+    let workspace = world
+        .write(|uow| async move {
+            workspaces
+                .create(&uow, owner, NewWorkspace::named("Ludhiana Traders"))
+                .await
+        })
+        .await
+        .expect("the workspace is created");
+    let organizations = world.app.get::<Organizations>().await;
+    let organization = world
+        .write(|uow| async move {
+            organizations
+                .create(&uow, owner, NewOrganization::named("Punjab Group"))
+                .await
+        })
+        .await
+        .expect("the organization is created");
+    world
+        .saml_connection(
+            &fake,
+            SsoOwner::Workspace(workspace.id),
+            "ludhiana-okta",
+            open(),
+        )
+        .await;
+    world
+        .saml_connection(
+            &fake,
+            SsoOwner::Organization(organization.id),
+            "punjab-entra",
+            open(),
+        )
+        .await;
+    world
+        .saml_connection(&fake, SsoOwner::App, "staff-okta", open())
+        .await;
+    world
+        .saml_connection(&fake, SsoOwner::App, "plain-okta", Provisioning::default())
+        .await;
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn repeated_refusals_through_one_connection_log_one_line() {
     let capture = LogCapture::default();
@@ -121,4 +182,64 @@ async fn repeated_refusals_through_one_connection_log_one_line() {
     assert_eq!(refused.len(), 1, "{refused:?}");
     assert!(refused[0].contains("refusals=1"));
     assert!(refused[0].contains("sso.tenants.unverified_emails"));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_boot_names_customer_connections_with_the_flag() {
+    if servers::Server::current() != servers::Server::Sqlite {
+        return;
+    }
+    // One SQLite file for two boots.
+    let (url, _database) = navree_testing::temp_sqlite_url();
+    seed(&url).await;
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let builder = support::builder().config("database.url", url.as_str());
+    let world = support::world_with(builder).await;
+    let lines = capture.lines();
+    let warnings = lines_with(&lines, &["WARN", "allow_unverified_emails on"]);
+    let warn = warnings.first().expect("a warning");
+    assert!(warn.contains("ludhiana-okta (workspace "), "{warn}");
+    assert!(warn.contains("punjab-entra (organization "), "{warn}");
+    assert!(!warn.contains("staff-okta"), "{warn}");
+    assert!(!warn.contains("plain-okta"), "{warn}");
+    let app = lines_with(&lines, &["INFO", "staff-okta owned by the app"]);
+    assert!(!app.is_empty(), "{lines:#?}");
+    drop(world);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn with_the_tenants_key_the_boot_says_so_at_info() {
+    if servers::Server::current() != servers::Server::Sqlite {
+        return;
+    }
+    let (url, _database) = navree_testing::temp_sqlite_url();
+    seed(&url).await;
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let builder = support::builder()
+        .config("database.url", url.as_str())
+        .config("sso.tenants.unverified_emails", true);
+    let _world = support::world_with(builder).await;
+    let lines = capture.lines();
+    assert!(lines_with(&lines, &["WARN", "ludhiana-okta"]).is_empty());
+    let allowed = "(sso.tenants.unverified_emails = true)";
+    assert!(!lines_with(&lines, &["INFO", allowed]).is_empty());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_boot_says_nothing_without_the_flag_and_boots_when_the_scan_fails() {
+    if servers::Server::current() != servers::Server::Sqlite {
+        return;
+    }
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let _plain = support::world().await;
+    let lines = capture.lines();
+    assert!(lines_with(&lines, &["allow_unverified_emails"]).is_empty());
+    // Without migrations the scan fails, and the app still boots.
+    let unmigrated = support::builder().config("database.migrate_on_boot", false);
+    let _unmigrated = support::world_with(unmigrated).await;
+    let failed = "could not check the single sign-on connections at boot";
+    assert!(!lines_with(&capture.lines(), &["WARN", failed]).is_empty());
 }

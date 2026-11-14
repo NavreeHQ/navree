@@ -14,6 +14,7 @@ use crate::controller::SsoController;
 use crate::error::map_sso_error;
 use crate::migration::migrations;
 use crate::policy::SsoSignInPolicy;
+use crate::tenants::TenantScan;
 use crate::{DohResolver, Sso, SsoError, SsoOptions, SsoTenantOptions, TxtResolver};
 
 /// Single sign-on. Global; provides and exports [`Sso`], [`SsoOptions`]
@@ -132,6 +133,8 @@ fn register(m: &mut ModuleBuilder, options: Option<SsoOptions>) {
             ]),
         )
         .exports::<Sso>()
+        .provider::<TenantScan>()
+        .lifecycle::<TenantScan>()
         .sign_in_policy::<SsoSignInPolicy>()
         .controller::<SsoController>()
         .migrations(migrations())
