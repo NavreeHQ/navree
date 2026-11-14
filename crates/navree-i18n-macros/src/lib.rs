@@ -3,7 +3,8 @@
 //! `embed_locales!("locales")`: embeds every Fluent file under
 //! `locales/<locale>/` in the binary, for navree-i18n's
 //! `I18nOptions::files`. Use it through `navree_i18n::embed_locales` (or
-//! `navree::i18n::embed_locales`).
+//! `navree::i18n::embed_locales`), or as `navree::embed_locales!`, which
+//! needs no `i18n` feature.
 //!
 //! The directory is relative to the crate's `Cargo.toml` (an absolute path
 //! also works). Each subdirectory is a locale (`en`, `fr`, `pt-BR`), and

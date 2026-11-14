@@ -13,17 +13,28 @@ every `@navree/*` package carries the same version.
   each plugin's crate, version and namespace, and tells the framework's own packages from others
   by itself. `plugins [--json]` lists an app's plugins and what each module adds without starting
   the app, and `plugin:publish <plugin>` copies a plugin's templates, translations and files into
-  the app's folders and writes its configuration sections, commented out, refusing any path that
-  could leave them; `--dry-run` shows what it would write. `config:publish --plugin <namespace>`
-  publishes every section of a plugin. `navree::embed_locales!` works without the `i18n` feature.
+  the app's folders and writes its configuration sections, commented out. It checks every file
+  before it writes one and refuses any path that could leave those folders or two files that would
+  be one, so a refusal leaves nothing written; `--dry-run` shows what it would write.
+  `config:publish --plugin <namespace>` publishes every section of a plugin.
+  `navree::embed_locales!` works without the `i18n` feature.
 
 ### Changed
 
 - `introspect --json` gives each module its `type` and lists the plugins under `plugins`; its
   `commands` list includes `plugins` and `plugin:publish` unless a module registers a command of
-  that name, which then runs instead. `ModuleBuilder::plugin`, `AppContext::plugin` and
-  `AppContext::plugins` are inherent methods: an app that defined a method of one of these names
-  on its own extension trait calls it through the trait (`MyExt::plugin(m, ..)`).
+  that name, which then runs instead, so a tool that reads the commands by position finds two more
+  entries before the app's own. `help` lists the two among the built-in commands, so its first
+  column is wider.
+- Six inherent methods are new on existing types: `ModuleBuilder::plugin`, `AppContext::plugin`,
+  `AppContext::plugins`, `AppBuilder::plugin_report`, `ModuleId::named` and `ModuleId::type_name`.
+  An app whose own extension trait gives these types a method named `plugin`, `plugins`,
+  `plugin_report`, `named` or `type_name` no longer reaches it with method syntax, because Rust
+  picks the inherent method first: call it through the trait (`MyExt::plugin(m, ..)`).
+- `config:publish <section>` writes through the same checked writer as `plugin:publish`: a section
+  key that is not a safe file name, or a link in the file's place, is refused, also with `--force`,
+  and an existing file is replaced by a rename instead of being written through. Its usage line and
+  description name `--plugin <namespace>`.
 
 ## [1.2.1] - 2026-11-14
 

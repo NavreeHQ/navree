@@ -40,7 +40,9 @@ settings (no `app.key`, a SQLite `database.url`, `mail.transport = "log"`).
 Both run without booting the app. `navree config:schema [--out <file>]`
 writes a JSON Schema of the whole tree for the editor, and
 `navree config:publish <section> [--force] [--stdout]` writes
-`config/<section>.toml` with every key commented out beside its default.
+`config/<section>.toml` with every key commented out beside its default, and
+`navree config:publish --plugin <namespace> [--force]` writes one for every
+section a plugin registers.
 `navree gate` and `navree deploy` run `config:check`, and
 `app.strict_config = true` makes the boot refuse an unknown key or a failed
 setting instead of logging it.

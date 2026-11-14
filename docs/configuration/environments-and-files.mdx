@@ -33,7 +33,7 @@ This file sets `mail.from`, `mail.transport` and `mail.render.inline_css`. `conf
 
 Split a file out when different people own different parts: the billing plans, the workspace roles and the mail settings of a large app need not share one file. Set each key in one place. A key set in both `config/app.toml` and a section file is reported (the section file wins), as is a key set in both `.env` and a file.
 
-To start a section's file from its defaults, run `navree config:publish mail`. It writes `config/mail.toml` with every key commented out beside its default and its description, and says which environment variable sets each credential. It never replaces a file that exists unless you pass `--force`, and `--stdout` prints the text instead.
+To start a section's file from its defaults, run `navree config:publish mail`. It writes `config/mail.toml` with every key commented out beside its default and its description, and says which environment variable sets each credential. It never replaces a file that exists unless you pass `--force`, and `--stdout` prints the text instead. `navree config:publish --plugin announcements` does the same for every section the plugin with that namespace registers, one file each, keeping the files that exist unless you pass `--force`.
 
 ## A file per environment
 
@@ -61,7 +61,7 @@ Two commands read the configuration without starting the app: they open no datab
 | `navree config:show --fallbacks` | Lists the environment variables a key falls back to when nothing else sets it (`REDIS_URL`, the `AWS_*` variables) and whether each is set. It never prints a value. |
 | `navree config:check [--env production]` | Reads every section and prints all the problems together: sections that do not read or validate, keys nothing reads, keys set in two places. With `--env production`, or when the app runs in `production` or `staging`, it also fails on a missing `app.key`, a SQLite database, mail that goes to the log and `session.secure = false`. |
 | `navree config:schema [--out <file>]` | Writes a JSON Schema of the whole tree. Point your editor's TOML support at it for completion and type checks in `config/app.toml`. |
-| `navree config:publish <section>` | Writes a section's file, as above. |
+| `navree config:publish <section>`, `navree config:publish --plugin <namespace>` | Writes a section's file, or one for every section of a plugin, as above. |
 
 A module reads a fallback through `Config::fallback`, so the variable `config:show --fallbacks` lists is the one read.
 
