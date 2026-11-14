@@ -117,6 +117,7 @@ struct Modals: ViewModifier {
                 .interactiveDismissDisabled(!ModalRules.dismissible(modal, unsaved: unsaved(modal)))
                 .presentationDetents(height == .half ? [.medium, .large] : [.large])
                 .presentationDragIndicator(height == .half ? .visible : .automatic)
+                .modifier(SheetSizing())
         }
     }
 

@@ -472,6 +472,7 @@ struct FiltersSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .modifier(SheetSizing())
     }
 }
 

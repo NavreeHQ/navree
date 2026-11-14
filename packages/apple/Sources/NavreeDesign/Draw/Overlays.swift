@@ -157,6 +157,7 @@ struct OverlaySheet: View {
         }
         .presentationDetents(typeSize.isAccessibilitySize ? [.large] : parts.detents)
         .presentationDragIndicator(parts.detents.count > 1 && !typeSize.isAccessibilitySize ? .visible : .automatic)
+        .modifier(SheetSizing())
     }
 
     /// What a sheet is made of, read once.
@@ -302,6 +303,22 @@ struct FormSheet: View {
         }
         .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.medium, .large])
         .presentationDragIndicator(.visible)
+        .modifier(SheetSizing())
+    }
+}
+
+/// A sheet's size where the window gives it none of its own: on a Mac, the
+/// system's size for a form, so a sheet whose content is a list (which has no
+/// height of its own) shows it rather than shrinking to its bar. iPhone and
+/// iPad size a sheet by its detents.
+public struct SheetSizing: ViewModifier {
+    public init() {}
+
+    public func body(content: Content) -> some View {
+        switch PresentationRules.sheetSizing(bar: .current) {
+        case .detents: content
+        case .form: content.presentationSizing(.form)
+        }
     }
 }
 
