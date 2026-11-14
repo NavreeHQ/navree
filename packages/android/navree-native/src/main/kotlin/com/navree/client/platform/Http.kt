@@ -11,6 +11,7 @@ import okhttp3.Callback
 import okhttp3.ConnectionSpec
 import okhttp3.Cookie
 import okhttp3.CookieJar
+import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
@@ -160,6 +161,16 @@ fun fetchRequest(
 }
 
 /**
+ * The headers of an answer the core is given, names in lower case and values
+ * as they came: every `x-navree-*` header, and `cache-control`, by which the
+ * core decides whether a page may be kept on the device. No other header.
+ */
+fun passedHeaders(headers: Headers): List<Pair<String, String>> =
+    headers.names()
+        .filter { it.startsWith("x-navree-", ignoreCase = true) || it.equals("cache-control", ignoreCase = true) }
+        .flatMap { name -> headers.values(name).map { name.lowercase() to it } }
+
+/**
  * The bytes of a body, or null when it has more than [most]: read only as far
  * as one byte past the limit, so a body that never ends costs no more.
  */
@@ -185,7 +196,7 @@ class OriginGuard(private val allowed: (String) -> Boolean) : Interceptor {
  * Carries out the core's `fetch` effects with OkHttp: exactly the headers it
  * gives, the cookie store's cookies, no redirect followed (a 3xx goes back to
  * the core as it came, after its cookies are stored), and the answer handed
- * back whatever its status, with the `x-navree-*` headers.
+ * back whatever its status, with the `x-navree-*` headers and `cache-control`.
  *
  * The core decides which addresses are asked; the platform checks each again
  * ([Origins.ours]) and answers one it refuses, or a request that cannot be
@@ -270,9 +281,7 @@ class CoreHttp(
     }
 
     private fun read(request: Long, response: Response): JsonObject {
-        val headers = response.headers.names()
-            .filter { it.startsWith("x-navree-", ignoreCase = true) }
-            .flatMap { name -> response.headers.values(name).map { name.lowercase() to it } }
+        val headers = passedHeaders(response.headers)
         val redirect = response.code in REDIRECTS
         val body = if (redirect) {
             ""
