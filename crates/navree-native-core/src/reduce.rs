@@ -894,10 +894,14 @@ impl Core {
         self.inner.user = user;
         self.inner.has_shell = true;
         if !shell.build.is_empty() && self.inner.build.as_deref() != Some(&shell.build) {
-            if self.inner.build.is_some() {
+            let first = self.inner.build.is_none();
+            if !first {
                 self.forget_pages();
             }
             self.inner.build = Some(shell.build.clone());
+            if first {
+                let _ = self.build_known();
+            }
         }
         self.inner.routes = shell.routes;
         let mut items: Vec<(Option<String>, NavItem)> = Vec::new();
@@ -1044,7 +1048,9 @@ impl Core {
         }
         let first = self.inner.build.is_none();
         self.inner.build = Some(stamp.to_owned());
-        if !first {
+        if first {
+            let _ = self.build_known();
+        } else {
             self.forget_pages();
             // A server that stamps no shell: a new app may bring a new one.
             if self.inner.shell_stamp.is_none() && self.inner.seen_stamp.is_none() {

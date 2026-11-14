@@ -60,6 +60,12 @@ pub(crate) struct Cache {
     /// The person this launch's shell named, when it answered over the
     /// network as a shell. An answer that is not a shell never sets it.
     pub named: Option<Person>,
+    /// The pages taken away before what was kept had been read: they stay
+    /// away when the list is read.
+    removed: Vec<String>,
+    /// The build the pages kept were answered by, as `boot` said, until this
+    /// launch's own build is known.
+    kept_build: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -71,6 +77,9 @@ struct Boot {
     /// build, and is not used.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     owner: Option<Kept>,
+    /// The build the pages were answered by: another build empties them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    build: Option<String>,
 }
 
 /// The owner of the pages kept, as `boot` holds it.
@@ -153,9 +162,12 @@ impl Core {
             return;
         }
         let key = self.key_of(url);
-        let listed = self.inner.cache.disk.iter().any(|kept| *kept == key);
+        let listed = self.inner.cache.disk.contains(&key);
         if !listed && !always {
             return;
+        }
+        if self.inner.cache.owner == Owner::Unread && !self.inner.cache.removed.contains(&key) {
+            self.inner.cache.removed.push(key.clone());
         }
         self.inner.cache.disk.retain(|kept| *kept != key);
         self.effects.push(Effect::CacheWrite {
@@ -184,6 +196,7 @@ impl Core {
             shell,
             pages: self.inner.cache.disk.clone(),
             owner: Some(Kept { person }),
+            build: self.inner.build.clone(),
         };
         self.effects.push(Effect::CacheWrite {
             key: "boot".to_owned(),
@@ -244,14 +257,38 @@ impl Core {
     }
 
     /// Empties the pages kept: something was written, or the build changed.
+    /// The device's store is emptied whatever the list in memory holds, and
+    /// a list read after this is not taken.
     pub(crate) fn forget_pages(&mut self) {
-        let had = !self.inner.cache.disk.is_empty();
         self.inner.cache.pages.clear();
         self.inner.cache.disk.clear();
-        if had && self.config.cache.persist {
-            self.effects.push(Effect::CacheClear);
+        if !self.config.cache.persist {
+            return;
+        }
+        self.effects.push(Effect::CacheClear);
+        if self.inner.cache.owner == Owner::Unread {
+            self.inner.cache.owner = Owner::Empty;
+            self.owner_settles();
+        } else {
             self.boot();
         }
+    }
+
+    /// This launch's build is known now: pages kept under another empty.
+    /// True when they were emptied.
+    pub(crate) fn build_known(&mut self) -> bool {
+        let Some(kept) = self.inner.cache.kept_build.take() else {
+            return false;
+        };
+        let other = self
+            .inner
+            .build
+            .as_deref()
+            .is_some_and(|build| build != kept);
+        if other {
+            self.forget_pages();
+        }
+        other
     }
 
     /// Empties everything kept: the person changed, or signed out. What the
@@ -294,7 +331,7 @@ impl Core {
         let key = self.key_of(url);
         if self.config.cache.persist
             && self.inner.cache.readable()
-            && self.inner.cache.disk.iter().any(|kept| *kept == key)
+            && self.inner.cache.disk.contains(&key)
         {
             self.effects.push(Effect::CacheRead {
                 key: format!("page:{key}"),
@@ -381,8 +418,8 @@ impl Core {
         };
         let boot = serde_json::from_str::<Boot>(&value)
             .ok()
-            .and_then(|boot| Some((boot.owner?.person, boot.pages, boot.shell)));
-        let Some((owner, pages, shell)) = boot else {
+            .and_then(|boot| Some((boot.owner?.person, boot.pages, boot.shell, boot.build)));
+        let Some((owner, mut pages, shell, build)) = boot else {
             // Not readable, or written by an older build with no owner.
             self.disown();
             return self.owner_settles();
@@ -392,8 +429,18 @@ impl Core {
             self.disown();
             return self.owner_settles();
         }
+        // What was taken away before the list was read stays away.
+        let removed = std::mem::take(&mut self.inner.cache.removed);
+        let before = pages.len();
+        pages.retain(|kept| !removed.contains(kept));
         self.inner.cache.disk = pages;
         self.inner.cache.owner = Owner::Of(owner);
+        self.inner.cache.kept_build = build;
+        // This launch's build may be known before the list was read.
+        let emptied = self.inner.build.is_some() && self.build_known();
+        if !emptied && self.inner.cache.disk.len() != before {
+            self.boot();
+        }
         self.owner_settles();
     }
 
