@@ -6,6 +6,8 @@
 //     <div data-slot="island-body" data-ui-keep>…</div>
 //   </div>
 //
+// A plugin's script is named under its namespace: `{namespace}.{name}-{hash}.js`.
+//
 // This imports the script, one of the app's own and nothing else, and calls its
 // `mount(body, props, island)` once. A morph never touches the body (it is kept), so
 // what the script drew stays. What `mount` returns (or resolves to) says the rest: a
@@ -14,8 +16,11 @@
 // `update`, new props mount the island again. Props are JSON: data, never markup or code.
 import { attr, every, on } from "./dom.js";
 
-/** An island script's address: this origin, under the mount, named by its content hash. */
-const SCRIPT = /^\/_navree\/ui\/island\/[a-z0-9-]{1,64}-[0-9a-f]{12}\.js$/;
+/**
+ * An island script's address: this origin, under the mount, named by its content hash, with
+ * a plugin's namespace and a dot before the name when the script is a plugin's.
+ */
+const SCRIPT = /^\/_navree\/ui\/island\/(?:[a-z][a-z0-9_]{0,63}\.)?[a-z0-9-]{1,64}-[0-9a-f]{12}\.js$/;
 
 /**
  * Every island the page has mounted or is mounting: its script, its props as written,
