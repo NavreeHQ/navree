@@ -163,6 +163,10 @@ public struct SplitColumns<Sidebar: View, ListColumn: View, DetailRoot: View, In
     }
 
     private var detailColumn: some View {
+        detailStack.navigationSplitViewColumnWidth(min: NavigationRules.detailMinimumWidth, ideal: 760)
+    }
+
+    private var detailStack: some View {
         NavigationStack(path: Binding(get: { path.entries }, set: { [path] next in path.follow(next) })) {
             detail
                 .navigationDestination(for: PathEntry.self, destination: pushed)

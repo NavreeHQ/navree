@@ -7,7 +7,8 @@ import SwiftUI
 ///     Charkha -NavreePictures <folder> -NavreeSteps "wait:4;menus;picture:orders;key:cmd-2;wait:2;picture:inventory;quit"
 ///
 /// Steps, in order: `wait:<seconds>`; `size:<width>x<height>` (the window in
-/// front); `menus` (every menu, its items and their shortcuts, to
+/// front); `drag:<width>x<height>` (the window in front made that size as a
+/// drag of its edge makes it, no smaller than it allows); `menus` (every menu, its items and their shortcuts, to
 /// `menus.txt`); `menu:<Menu>/<Item>` (chooses that command);
 /// `key:<cmd|opt|shift>-...-<key>` (presses that shortcut on the menu bar,
 /// as the keyboard would); `picture:<name>` (each window as `<name>-<n>.png`);
@@ -68,6 +69,10 @@ enum WindowPictures {
             case "size":
                 resize(argument)
                 log.append("size \(argument)")
+            case "drag":
+                // The window in front made that size as a person's drag of its
+                // edge makes it: no smaller than it allows, its top kept.
+                log.append("drag \(argument): \(drag(argument))")
             case "move":
                 let numbers = argument.split(separator: ",").compactMap { Double($0) }
                 if numbers.count == 2, let window = windows.first {
@@ -160,6 +165,21 @@ enum WindowPictures {
         // The window under an item in the menu bar is a panel the ordered list leaves out.
         let panels = NSApp.windows.filter { $0 is NSPanel && $0.isVisible && $0.frame.width > 100 && !ordered.contains($0) }
         return ordered + panels
+    }
+
+    static func drag(_ size: String) -> String {
+        let numbers = size.split(separator: "x").compactMap { Double($0) }
+        guard numbers.count == 2, let window = windows.first else { return "no window" }
+        var asked = CGSize(width: numbers[0], height: numbers[1])
+        let content = window.frameRect(forContentRect: CGRect(origin: .zero, size: window.contentMinSize)).size
+        asked.width = max(asked.width, window.minSize.width, content.width)
+        asked.height = max(asked.height, window.minSize.height, content.height)
+        let allowed = window.delegate?.windowWillResize?(window, to: asked) ?? asked
+        var frame = window.frame
+        frame.origin.y += frame.height - allowed.height
+        frame.size = allowed
+        window.setFrame(frame, display: true)
+        return "\(Int(window.frame.width))x\(Int(window.frame.height)), smallest \(Int(max(window.minSize.width, content.width)))x\(Int(max(window.minSize.height, content.height)))"
     }
 
     static func resize(_ size: String) {

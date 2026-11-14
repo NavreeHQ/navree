@@ -441,6 +441,9 @@ struct Chrome: View {
                     .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
             } detail: {
                 StackView(stack: shown, client: client, configuration: configuration)
+                    // In the window under an item in the menu bar the sidebar is
+                    // folded and the window keeps its own least size.
+                    .navigationSplitViewColumnWidth(min: compactWindow ? 0 : NavigationRules.detailMinimumWidth, ideal: 760)
             }
             .onChange(of: compactWindow, initial: true) { _, compact in columns = compact ? .detailOnly : .automatic }
         case .tabs:
