@@ -77,7 +77,10 @@ impl PublishOptions {
 /// Publishes the section `options.section` of `registry` into `dir`
 /// (`dir/<section>.toml`), or returns the text when `options.stdout` is set.
 /// The result is what the command prints. A file that exists is not
-/// replaced without `force`.
+/// replaced without `force`. The file goes through the checked writer of
+/// `plugin:publish`, with `dir` as its root: `<section>.toml` must be a safe
+/// relative path, a link in its place is refused, and an existing file is
+/// replaced by a rename, never written through.
 ///
 /// With `options.plugin` set, `registry` holds the sections of that plugin
 /// only, and each of them that describes its keys is published as
@@ -113,7 +116,8 @@ pub fn run(
     if options.stdout {
         return Ok(text);
     }
-    let path = dir.join(format!("{}.toml", options.section));
+    let file = format!("{}.toml", options.section);
+    let path = dir.join(&file);
     if path.exists() && !options.force {
         return Err(format!(
             "{} already exists; --force replaces it",
@@ -121,9 +125,24 @@ pub fn run(
         ));
     }
     std::fs::create_dir_all(dir)
-        .and_then(|()| std::fs::write(&path, &text))
         .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
-    Ok(format!("wrote {}\n", path.display()))
+    // The checked writer, with `dir` as its root: the file's name is checked
+    // (a section key comes from any crate), a link in its place is refused,
+    // and an existing file is replaced by a rename, never written through.
+    let published = publish_files(
+        dir,
+        &[(file.as_str(), text.as_bytes())],
+        options.force,
+        false,
+    )
+    .map_err(|refused| format!("config:publish: {refused}"))?;
+    match published.first() {
+        Some((_, Published::Kept)) => Err(format!(
+            "{} already exists; --force replaces it",
+            path.display()
+        )),
+        _ => Ok(format!("wrote {}\n", path.display())),
+    }
 }
 
 /// [`run`] with `--plugin <namespace>`: every section of `registry` (the
