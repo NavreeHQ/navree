@@ -435,13 +435,39 @@ fn fallback_only(name: &HeaderName) -> bool {
         || name == "speculation-rules"
 }
 
+/// Whether a `Cache-Control` value of `headers` holds `no-transform`, in any case: an
+/// answer that says so is sent as it is, never compressed on the way.
+pub(crate) fn says_no_transform(headers: &HeaderMap) -> bool {
+    headers
+        .get_all(header::CACHE_CONTROL)
+        .iter()
+        .flat_map(|value| value.as_bytes().split(|byte| *byte == b','))
+        .any(|directive| directive.trim_ascii().eq_ignore_ascii_case(b"no-transform"))
+}
+
+/// The `Cache-Control` of an answer sent in place of the handler's own (its ops, or a
+/// native client's envelope): `no-store`, with the handler's `no-transform` kept, so
+/// neither compressor squeezes what the handler asked to be sent as it is.
+pub(crate) fn replaced_cache(answered: &HeaderMap) -> &'static str {
+    if says_no_transform(answered) {
+        "no-store, no-transform"
+    } else {
+        "no-store"
+    }
+}
+
 /// The reply's ops, in place of its fallback. Headers set on the fallback stay,
 /// so a cookie survives whichever side of this layer it was set on. A toast is
 /// on its way as an op, so the cookie that would show it on the next page isn't.
+/// A fallback that says `no-transform` keeps it on the ops.
 pub(crate) fn to_ops(fallback: Response, envelope: Envelope, status: StatusCode) -> Response {
     let (parts, _) = fallback.into_parts();
     let mut response = (status, envelope).into_response();
     let headers = response.headers_mut();
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static(replaced_cache(&parts.headers)),
+    );
     for (name, value) in &parts.headers {
         let flash = *name == header::SET_COOKIE
             && value
