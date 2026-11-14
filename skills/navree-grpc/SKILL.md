@@ -318,6 +318,40 @@ apply first). A `Status` you return is sent unchanged. `?` on a `Status` in
 an HTTP handler or a gRPC method gives the AppError of the same meaning
 (`error_from_status`).
 
+## A server built elsewhere
+
+A tonic server a crate already built (the generated `DealsServer` around its
+own `Deals` implementation, no `#[grpc_service]`) is served with
+`TonicService`, behind the same call pipeline:
+
+```rust,ignore
+use navree::grpc::{GrpcMethod, TonicService};
+use navree::plugin::prelude::*; // brings `m.tonic_service`
+
+impl Module for KhataDealsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.tonic_service(
+            TonicService::new(DealsServer::new(KhataDeals))
+                .authenticated()                              // the service default
+                .method(GrpcMethod::new("get_deal").public()), // replaces it for one method
+        );
+    }
+}
+```
+
+- Name methods as the generated trait spells them (`get_deal`, not
+  `GetDeal`): another spelling fails the boot. A typo in that form can't be
+  detected, so make the default the strictest access and loosen per method.
+- A method with neither its own declaration nor a default is refused with
+  `PERMISSION_DENIED` before the server reads a message.
+- Boot fails with no access declaration, a method without access or declared
+  twice, a `can` that names a message field, or the name of `GrpcModule`'s
+  own health or reflection service while it is on.
+- The unit of work commits when the head is HTTP 200 with no error
+  `grpc-status`. `grpc.max_message_bytes` doesn't apply: set the server's own
+  limits (`.max_decoding_message_size(..)`) before wrapping it.
+- Details: https://navree.com/docs/plugins/existing-crates/
+
 ## Checks
 
 - `cargo build` and `cargo test`; a method without access fails to compile.

@@ -17,7 +17,7 @@
 //! | [`config`] | navree-config | always | `ConfigModule`, `.env`, TOML, JSON and `APP_*` sources |
 //! | [`embed_locales!`] | navree-i18n-macros | always | Fluent files embedded in a binary, for any crate's translations (also `navree::i18n::embed_locales`) |
 //! | [`embed_templates!`] | navree-macros | always | a folder of templates embedded in a plugin's binary, for `m.plugin_templates(..)` (feature `view`) |
-//! | [`plugin`] | navree-kernel | always | what a plugin names: `PluginInfo`, `Publishable`, `PublishTag`, the plugins report, and `navree::plugin::prelude` |
+//! | [`plugin`] | navree-kernel, navree-config | always | what a plugin names: `PluginInfo`, `Publishable`, `PublishTag`, the plugins report, `ClientModule`, and `navree::plugin::prelude` |
 //! | `telemetry` | navree-telemetry | `telemetry` | typed telemetry events, sinks, W3C trace context |
 //! | `http` | navree-http | `http` | `HttpModule`, controllers, `AppError` (JSON errors) |
 //! | `log` | navree-log | `log` | `LoggerModule` (tracing) |
