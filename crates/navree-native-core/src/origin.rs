@@ -320,15 +320,17 @@ pub(crate) fn route_matches(pattern: &str, url: &str) -> bool {
             .all(|(want, have)| *want == "*" || want == have)
 }
 
-/// What an address says of where it leads, and nothing of its path: its
-/// scheme and its host as written (`https://shop.example`, `javascript:`,
-/// `//shop.example`), or `a path`. A path, a query or a fragment can hold a
-/// token, so a report says this, never the address.
+/// What an address says of where it leads, and nothing of its path or of a
+/// name or password before its host: its scheme and its host as written
+/// (`https://shop.example`, `javascript:`, `//shop.example`), or `a path`. A
+/// path, a query, a fragment or what stands before an `@` can hold a token,
+/// so a report says this, never the address.
 pub(crate) fn site_of(address: &str) -> String {
     let host = |rest: &str| {
-        rest.split(['/', '?', '#', '\\'])
-            .next()
-            .unwrap_or("")
+        let authority = rest.split(['/', '?', '#', '\\']).next().unwrap_or("");
+        authority
+            .rsplit_once('@')
+            .map_or(authority, |(_, host)| host)
             .to_owned()
     };
     match (scheme_of(address), address.strip_prefix("//")) {

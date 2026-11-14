@@ -85,7 +85,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"report","what":"address","detail":"link: https://shop.example@evil.example"}
+          {"t":"report","what":"address","detail":"link: https://evil.example"}
         ]
       }
     },
