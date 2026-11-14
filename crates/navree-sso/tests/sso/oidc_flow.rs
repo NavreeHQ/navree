@@ -126,6 +126,61 @@ async fn connection(
     connection
 }
 
+/// The connection `acme` of a workspace of Gurpreet Singh's, with the
+/// verified domain `acme.test`.
+async fn workspace_connection(
+    world: &World,
+    provider: &Provider,
+    provisioning: Provisioning,
+) -> SsoConnection {
+    let owner = world
+        .create_verified_user("Gurpreet Singh", "gurpreet@ludhiana.test")
+        .await;
+    let workspaces = world.app.get::<Workspaces>().await;
+    let workspace = world
+        .write(|uow| async move {
+            workspaces
+                .create(&uow, owner.id, NewWorkspace::named("Ludhiana Traders"))
+                .await
+        })
+        .await
+        .unwrap();
+    let sso = world.sso().await;
+    let input = NewConnection::oidc(
+        SsoOwner::Workspace(workspace.id),
+        "Ludhiana Login",
+        provider.issuer(),
+        CLIENT_ID,
+        CLIENT_SECRET,
+    )
+    .slug("acme")
+    .provisioning(provisioning);
+    let connection = world
+        .write(|uow| async move { sso.create_connection(&uow, input).await })
+        .await
+        .unwrap();
+    world.verified_domain(&connection, "acme.test").await;
+    connection
+}
+
+/// Provisioning that creates accounts for addresses the identity provider
+/// doesn't vouch for.
+fn open() -> Provisioning {
+    Provisioning {
+        allow_unverified_emails: true,
+        ..Provisioning::default()
+    }
+}
+
+/// Answers the next code exchange with an ID token of `claims`, over the
+/// standard ones.
+async fn token_with(provider: &Provider, query: &HashMap<String, String>, claims: Value) {
+    let id_token = provider.id_token(&query["nonce"], claims);
+    provider
+        .token_response(json!({ "id_token": id_token }))
+        .await;
+}
+
 /// The query of the authorization URL the login route gave.
 async fn authorize(world: &World) -> HashMap<String, String> {
     let url = world.login_url("acme", Some("/home")).await;
@@ -335,47 +390,78 @@ async fn an_unverified_provider_email_never_links_an_account() {
 async fn a_workspace_connection_refuses_an_address_outside_its_domains_through_openid_connect() {
     let world = support::world().await;
     let provider = Provider::start().await;
-    let owner = world
-        .create_verified_user("Gurpreet Singh", "gurpreet@ludhiana.test")
-        .await;
-    let workspaces = world.app.get::<Workspaces>().await;
-    let workspace = world
-        .write(|uow| async move {
-            workspaces
-                .create(&uow, owner.id, NewWorkspace::named("Ludhiana Traders"))
-                .await
-        })
-        .await
-        .unwrap();
-    let open = Provisioning {
-        allow_unverified_emails: true,
-        ..Provisioning::default()
-    };
-    let sso = world.sso().await;
-    let input = NewConnection::oidc(
-        SsoOwner::Workspace(workspace.id),
-        "Ludhiana Login",
-        provider.issuer(),
-        CLIENT_ID,
-        CLIENT_SECRET,
-    )
-    .slug("acme")
-    .provisioning(open);
-    let connection = world
-        .write(|uow| async move { sso.create_connection(&uow, input).await })
-        .await
-        .unwrap();
-    world.verified_domain(&connection, "acme.test").await;
+    workspace_connection(&world, &provider, open()).await;
 
     let query = authorize(&world).await;
-    let id_token = provider.id_token(
-        &query["nonce"],
+    token_with(
+        &provider,
+        &query,
         json!({ "email": "simran.kaur@gmail.test" }),
-    );
-    provider
-        .token_response(json!({ "id_token": id_token }))
-        .await;
+    )
+    .await;
     callback(&world, &[("code", "the-code"), ("state", &query["state"])])
         .await
         .assert_error_code(403, "unverified_domain");
+}
+
+#[tokio::test]
+async fn a_workspace_connection_treats_an_unverified_address_in_its_domains_as_before() {
+    let world = support::world().await;
+    let provider = Provider::start().await;
+    workspace_connection(&world, &provider, open()).await;
+
+    // In the verified domain, a token that doesn't vouch for the address
+    // creates the account, with an unverified email.
+    let query = authorize(&world).await;
+    token_with(
+        &provider,
+        &query,
+        json!({ "email": "simran@acme.test", "email_verified": false }),
+    )
+    .await;
+    let body = callback(&world, &[("code", "c"), ("state", &query["state"])])
+        .await
+        .assert_status(200)
+        .assert_json_path("user.email", json!("simran@acme.test"))
+        .json_value();
+    assert_eq!(body["user"]["email_verified_at"], Value::Null);
+    let actions = world.audit.actions();
+    assert!(!actions.contains(&"sso.login_refused".to_owned()));
+
+    // Outside it, the same kind of token is refused, and the refusal audited.
+    let query = authorize(&world).await;
+    token_with(
+        &provider,
+        &query,
+        json!({
+            "sub": "user-456",
+            "email": "simran.kaur@gmail.test",
+            "email_verified": false,
+        }),
+    )
+    .await;
+    callback(&world, &[("code", "c"), ("state", &query["state"])])
+        .await
+        .assert_error_code(403, "unverified_domain");
+    let actions = world.audit.actions();
+    assert!(actions.contains(&"sso.login_refused".to_owned()));
+}
+
+#[tokio::test]
+async fn without_the_setting_a_workspace_connection_refuses_an_unverified_address_as_before() {
+    let world = support::world().await;
+    let provider = Provider::start().await;
+    workspace_connection(&world, &provider, Provisioning::default()).await;
+    let query = authorize(&world).await;
+    token_with(
+        &provider,
+        &query,
+        json!({ "email": "simran@acme.test", "email_verified": false }),
+    )
+    .await;
+    callback(&world, &[("code", "c"), ("state", &query["state"])])
+        .await
+        .assert_error_code(403, "unverified_domain");
+    let actions = world.audit.actions();
+    assert!(!actions.contains(&"sso.login_refused".to_owned()));
 }
