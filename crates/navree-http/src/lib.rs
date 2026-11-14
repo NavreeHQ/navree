@@ -133,6 +133,7 @@ mod router;
 pub mod routing;
 pub mod serve;
 mod signed;
+mod workspace;
 pub mod ws;
 
 pub use app::AppRouter;
@@ -164,3 +165,4 @@ pub use router::{RouteErrors, build_router, route_table};
 pub use routing::PathParams;
 pub use serve::serve;
 pub use signed::{UrlSigner, ValidSignature};
+pub use workspace::RequestWorkspace;
