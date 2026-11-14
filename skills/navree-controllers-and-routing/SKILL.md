@@ -245,7 +245,11 @@ impl Module for LedgerModule {
   `/a%2Fb`), nothing decoded, the query kept. `//` below the prefix is a 400.
 - Boot fails for a mount without access, a prefix under `/_` or not a plain
   path, and a route or another mount at, under or above the prefix.
-- A request with `Upgrade` or `CONNECT` is a 501 that never reaches it.
+- A request with `Upgrade` or `CONNECT` never reaches it: the mount answers
+  501 after the access check, or the router 405 first when `.methods(..)`
+  leaves the method out, as for a route.
+- The service's own answers, error statuses included, go out as it wrote
+  them.
 - Details: https://navree.com/docs/plugins/existing-crates/
 
 ## A layer whose service can fail
@@ -253,7 +257,9 @@ impl Module for LedgerModule {
 `router.layer(..)` and `Endpoint::layer(..)` take layers whose service
 can't fail. Wrap one whose service can (a timeout, a load shedder) in
 `FallibleLayer`: its error answers as a 500 `AppError` with the error as its
-source, which `m.map_error` can turn into another answer.
+source, which `m.map_error` can turn into another answer in any slot but
+`LayerSlot::Edge` (outside error rendering: there it is neither mapped nor
+logged).
 
 ```rust,ignore
 use std::time::Duration;

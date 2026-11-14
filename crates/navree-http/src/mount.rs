@@ -65,11 +65,15 @@ const EMPTY_SEGMENT: &str = "Invalid URL: the path has an empty segment";
 /// as `/`) with 400. `/khata/` and the prefix in another case are not found.
 /// A service that decodes its own path still treats it as untrusted input.
 ///
-/// A request with an `Upgrade` header (a WebSocket or h2c handshake) and a
-/// `CONNECT` are answered 501 after the access check and never reach the
-/// service: a mounted service answers requests, it does not take over the
-/// connection. The body is cut off at the mount's limit also when it comes
-/// without a length. A panic in the service answers 500, as in a handler. An
+/// A request with an `Upgrade` header (a WebSocket or h2c handshake) or the
+/// method `CONNECT` never reaches the service: a mounted service answers
+/// requests, it does not take over the connection. One that reaches the mount
+/// is answered 501 after the access check; with [`methods`](Mount::methods),
+/// a method the list leaves out (`CONNECT` among them) is the router's 405
+/// before it, as for a route.
+///
+/// The body is cut off at the mount's limit also when it comes without a
+/// length. A panic in the service answers 500, as in a handler. An
 /// error of the service answers 500 with the error as its source, which the
 /// app's error mappings (`m.map_error`) see and the log records; one that
 /// comes from the body's limit or the server's read timeout answers 413 or

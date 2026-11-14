@@ -25,7 +25,10 @@ use crate::response::{IntoResponse, Response};
 /// The service is cloned for each request and asked first whether it is
 /// ready: an error there (a load shedder's, say) answers like an error of
 /// the call. Without a mapping the client sees `"Internal server error"`,
-/// and the error is logged, never sent.
+/// and the error is logged, never sent. That holds in every
+/// [`LayerSlot`](crate::LayerSlot) but `Edge`, which sits outside the app's
+/// error rendering: there the error answers as a 500 in the JSON error
+/// shape, neither mapped nor logged.
 ///
 /// ```
 /// use std::time::Duration;

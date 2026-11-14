@@ -66,7 +66,7 @@ Add the module to the app like any other: `.module(khata_client())`.
 
 ## Tower middleware
 
-A tower layer whose service can fail (its `Error` is not `Infallible`), such as `tower::timeout::TimeoutLayer`, goes on the app with `FallibleLayer::new(layer)`: in a `GlobalLayer` with `AppRouter::layer`, on one hand-written route with `Endpoint::layer`, or on a router with `Router::route_layer`. The service's error answers as a 500 `AppError` with the error as its source, so the client sees `Internal server error`, the log records the error, and `m.map_error::<E>(..)` turns it into another answer. A service that is not ready answers the same way. The ledger's module puts a timeout on every request:
+A tower layer whose service can fail (its `Error` is not `Infallible`), such as `tower::timeout::TimeoutLayer`, goes on the app with `FallibleLayer::new(layer)`: in a `GlobalLayer` with `AppRouter::layer`, on one hand-written route with `Endpoint::layer`, or on a router with `Router::route_layer`. The service's error answers as a 500 `AppError` with the error as its source, so the client sees `Internal server error`, and in any slot but `Edge` the log records the error and `m.map_error::<E>(..)` turns it into another answer; the `Edge` slot sits outside the app's error rendering, so there the error is neither mapped nor logged. A service that is not ready answers the same way. The ledger's module puts a timeout on every request:
 
 ```rust title="src/ledger.rs"
 m.http_layer(GlobalLayer::new(
@@ -150,11 +150,13 @@ With no `.methods(..)`, every method reaches the service, extension methods such
 
 Every request to a mount passes what a route's request passes, in the same order: the request id, the request context and the client address, the app's global layers (sessions and their CSRF check among them), authentication, then on every request the mount's access check, guards, throttle, timeout and body limit. A mount is one route for these: `.throttle(60, ..)` is one budget for every path and method under the prefix. The body is cut off at the mount's limit, also when it comes without a length.
 
-A request with an `Upgrade` header (a WebSocket or h2c handshake) or the method `CONNECT` is answered `501 Not Implemented`, after the access check, without reaching the service:
+A request with an `Upgrade` header (a WebSocket or h2c handshake) or the method `CONNECT` never reaches the service. One that reaches the mount is answered `501 Not Implemented`, after the access check:
 
 ```text wrap
 A mounted service answers requests; it does not take over the connection.
 ```
+
+With `.methods(..)`, a method the list leaves out, `CONNECT` among them, is answered `405 Method Not Allowed` by the router before the access check, as for a route.
 
 gRPC, gRPC-Web and Connect calls on the HTTP port go to `GrpcModule` before any mount.
 
@@ -209,7 +211,7 @@ impl Module for KhataDealsModule {
 - **Access**: the service default (`.public()`, `.authenticated()`, `.roles(..)`, `.permissions(..)`, `.can(action, subject)` and `.guard(..)`) covers every method without its own declaration; `.method(GrpcMethod::new(..))` gives one method its own, which replaces the default, guards included. A call to a method with neither is refused with `PERMISSION_DENIED`, and a path that names no method with `UNIMPLEMENTED`; neither reaches the server.
 - **Method names**: name a method as the generated server trait spells it, `get_deal` for `GetDeal` and `get_http_status` for `GetHTTPStatus` (a leading `r#` is set aside). Another spelling fails the boot: ``gRPC method `GetDeal` of `crm.deals.v1.Deals` (module `KhataDealsModule`) is not a Rust method name: write `get_deal` (the name the generated server trait spells)``. A name in that form that matches no method of the server, a typo, can't be detected, so give the service default the strictest access and loosen it per method.
 - **Checked at boot**: a service with no access declaration at all (a guard alone is none), a method of its own without one, a method declared twice, a method whose `can` names a field of the message (a wrapped server's messages aren't read before it runs: write the service with `#[grpc_service]` for a check on a record), and a service named like `GrpcModule`'s own health or reflection service while that one is on (set `grpc.health = false` to serve your own) each fail the boot, as do two services of one name.
-- **Before the server reads a message** the call passes authentication, the access check, guards, the route authorizer and the deadline, so a refused call is answered without reading its messages. The server then runs in a unit of work, which commits when its response head is HTTP 200 with no error `grpc-status` and rolls back otherwise. A method that answers with a stream commits when its head is sent, and its messages run outside the unit of work. A head that is not HTTP 200 is answered with the gRPC status the gRPC specification gives its HTTP status, so a 503 stays `UNAVAILABLE`.
+- **Before the server reads a message** the call passes authentication, the access check, guards, the route authorizer and the deadline, so a refused call is answered without reading its messages. The server then runs in a unit of work, which commits when its response head is HTTP 200 with no error `grpc-status` and rolls back otherwise. A method that answers with a stream commits when its head is sent, and its messages run outside the unit of work. A head that carries an error `grpc-status` is answered with that status; one that is not HTTP 200 and carries no error `grpc-status` is answered with the gRPC status the gRPC specification gives its HTTP status, so a 503 stays `UNAVAILABLE`.
 - **Streams**: once a call is let in, its request body is no longer held to the read pace of an upload, so a client or two-way stream may sit silent between messages. A unary call stays bounded by its deadline and the server's message limit.
 - **Message limits**: `grpc.max_message_bytes` doesn't reach a server built elsewhere. Set its limits on the server before wrapping it (`DealsServer::new(..).max_decoding_message_size(..)`); tonic's own default decodes at most 4 MiB a message.
 
