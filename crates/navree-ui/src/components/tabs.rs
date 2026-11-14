@@ -142,8 +142,11 @@ impl Tab {
     /// what it got. `src` answers the panel's content as a fragment, or a page
     /// holding an element with the panel's id. With script off the tab is a link
     /// to the page, so give the tab that is open its [`panel`](Self::panel) too.
+    ///
+    /// `src` is on this site: an address that is not a path, a query or a fragment of it,
+    /// or `#`, leaves the panel as it is, never fetched.
     pub fn lazy(mut self, src: impl Into<Href>) -> Self {
-        self.src = Some(src.into());
+        self.src = crate::table::region::region_source(&src.into());
         self
     }
 
@@ -637,6 +640,27 @@ mod tests {
         assert!(!tag.contains("data-ui-lazy"), "waits for its tab: {tag}");
         assert!(!tag.contains("data-ui-loaded"), "{tag}");
         assert!(out.contains("data-slot=\"skeleton\""), "{out}");
+    }
+
+    #[test]
+    fn a_tab_whose_source_is_refused_is_drawn_as_it_is_and_never_fetched() {
+        for src in [
+            "https://other.example/b",
+            "//other.example/b",
+            "javascript:x",
+            "#",
+        ] {
+            let out = html(
+                Tabs::new("t", "T")
+                    .tab(Tab::new("a", "A").lazy(src).panel("Ready"))
+                    .tab(Tab::new("b", "B").lazy(src)),
+            );
+            assert!(!out.contains("data-ui-src"), "{src}: {out}");
+            assert!(!out.contains("data-ui-region"), "{src}: {out}");
+            assert!(!out.contains("data-ui-lazy"), "{src}: {out}");
+            assert!(!out.contains("aria-busy"), "{src}: {out}");
+            assert!(out.contains("Ready"), "{src}: {out}");
+        }
     }
 
     #[test]

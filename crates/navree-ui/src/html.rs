@@ -70,10 +70,11 @@ impl SafeHtml {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum HrefError {
-    /// A control character, whitespace at the start or the end, or whitespace
-    /// other than a plain space before the path: browsers strip some of those
-    /// before reading the scheme, so `java\tscript:` would still run, and a
-    /// native client trims the rest.
+    /// A control character, whitespace or an invisible format character (a zero-width
+    /// space, a direction mark, a byte order mark) at the start or the end, or any of
+    /// those other than a plain space before the path: browsers strip some of those
+    /// before reading the scheme, so `java\tscript:` would still run, and other
+    /// clients trim or pass over the rest.
     Control,
     /// A scheme other than `http`, `https`, `mailto` or `tel`.
     Scheme,
@@ -119,12 +120,18 @@ impl Href {
     /// assert!(Href::parse("/deals\u{2028}").is_err());
     /// assert!(Href::parse("https\u{a0}://evil.example").is_err());
     /// assert!(Href::parse(" /deals").is_err());
+    /// // So is an invisible format character, which some clients drop or pass over.
+    /// assert!(Href::parse("\u{200b}//evil.example/x").is_err());
+    /// assert!(Href::parse("java\u{ad}script:alert(1)").is_err());
+    /// assert!(Href::parse("/deals\u{feff}").is_err());
     /// assert!(Href::parse("tel:+91 98140 12345").is_ok());
+    /// assert!(Href::parse("/ਗਾਹਕ?ਸ਼ਹਿਰ=ਲੁਧਿਆਣਾ").is_ok());
     /// ```
     pub fn parse(url: &str) -> Result<Self, HrefError> {
         // Browsers strip a space or a control at the ends; a native client trims every kind of
-        // whitespace. Either way the address read is not the one checked here.
-        let trimmed = |c: char| c.is_whitespace() || c.is_control();
+        // whitespace, and some trimmers and parsers drop the invisible format characters too.
+        // Either way the address read is not the one checked here.
+        let trimmed = |c: char| c.is_whitespace() || c.is_control() || invisible(c);
         // Before the path, a line or paragraph separator, a no-break or ideographic space is
         // nothing a browser reads as part of a scheme or a host.
         let foreign = |c: char| !c.is_ascii() && trimmed(c);
@@ -157,6 +164,25 @@ impl Href {
     pub(crate) fn into_inner(self) -> Box<str> {
         self.0
     }
+}
+
+/// The invisible format characters some clients trim from an address or pass over in it: the
+/// soft hyphen, the Arabic letter mark, the Mongolian vowel separator, the zero-width space,
+/// joiners and direction marks, the direction embeddings, overrides and isolates, the word
+/// joiner and the invisible operators, and the byte order mark. None of them is ever needed at
+/// either end of an address or before its path.
+fn invisible(c: char) -> bool {
+    matches!(
+        c,
+        '\u{ad}'
+            | '\u{61c}'
+            | '\u{180e}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{feff}'
+    )
 }
 
 impl From<&str> for Href {
@@ -198,6 +224,9 @@ impl From<&String> for Href {
 /// // A client that trims whitespace would read another site here.
 /// assert!(LocalHref::parse("\u{3000}//evil.example/x").is_err());
 /// assert!(LocalHref::parse("\u{2029}/\\evil.example").is_err());
+/// assert!(LocalHref::parse("\u{feff}//evil.example/x").is_err());
+/// assert!(LocalHref::parse("\u{2066}/deals\u{2069}").is_err());
+/// assert!(LocalHref::parse("ਰਿਪੋਰਟ?ਮਹੀਨਾ=ਕੱਤਕ").is_ok());
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalHref(Href);
@@ -372,6 +401,37 @@ mod tests {
             assert_eq!(LocalHref::parse(url), Err(HrefError::Control), "{url:?}");
             assert_eq!(LocalHref::from(url).as_str(), "#", "{url:?}");
         }
+        // Each invisible format character, at either end and before the path.
+        let invisible = [
+            '\u{ad}', '\u{61c}', '\u{180e}', '\u{200b}', '\u{200c}', '\u{200d}', '\u{200e}',
+            '\u{200f}', '\u{202a}', '\u{202b}', '\u{202c}', '\u{202d}', '\u{202e}', '\u{2060}',
+            '\u{2061}', '\u{2062}', '\u{2063}', '\u{2064}', '\u{2066}', '\u{2067}', '\u{2068}',
+            '\u{2069}', '\u{feff}',
+        ];
+        for c in invisible {
+            for url in [
+                format!("{c}//evil.example/x"),
+                format!("{c}/\\evil.example"),
+                format!("/deals{c}"),
+                format!("https{c}://evil.example"),
+                format!("java{c}script:alert(1)"),
+                format!("deals{c}list?x=1"),
+                format!("#top{c}"),
+            ] {
+                assert_eq!(Href::parse(&url), Err(HrefError::Control), "{url:?}");
+                assert_eq!(LocalHref::parse(&url), Err(HrefError::Control), "{url:?}");
+                assert_eq!(LocalHref::from(url.as_str()).as_str(), "#", "{url:?}");
+            }
+            // Inside the path, the query or the fragment, one stays.
+            for url in [
+                format!("/deals/{c}x"),
+                format!("/search?q=a{c}b"),
+                format!("#a{c}b"),
+            ] {
+                assert!(Href::parse(&url).is_ok(), "{url:?}");
+                assert!(LocalHref::parse(&url).is_ok(), "{url:?}");
+            }
+        }
         // Inside the path, the query or the fragment, and a plain space before them, stay.
         for url in [
             "/deals/\u{3000}x",
@@ -380,6 +440,8 @@ mod tests {
             "tel:+91 98140 12345",
             "/ਪੰਜਾਬ/ਲੁਧਿਆਣਾ",
             "ਰਿਪੋਰਟ?x=1",
+            "/ਗਾਹਕ?ਸ਼ਹਿਰ=ਲੁਧਿਆਣਾ#ਸੂਚੀ",
+            "?ਨਾਮ=ਗੁਰਪ੍ਰੀਤ",
         ] {
             assert!(Href::parse(url).is_ok(), "{url:?}");
         }

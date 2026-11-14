@@ -26,7 +26,35 @@ pub struct Region {
     failed: Option<Node>,
     /// Whether `failed` shows only when nothing could be reached at all.
     offline: bool,
+    /// Whether the address given to [`src`](Self::src) was refused: the region then has no
+    /// source, and nothing that needs one.
+    refused: bool,
 }
+
+/// What a region's source fetches with: what [`Region::src`] and a lazy part's source
+/// write. An address that is not on this site, or `#` (which is what a refused address
+/// becomes), fetches nothing the region can draw, so the region gets no source.
+pub(crate) fn region_source(src: &Href) -> Option<Href> {
+    let local = LocalHref::parse(src.as_str()).ok()?.into_href();
+    (local.as_str() != "#").then_some(local)
+}
+
+/// The attributes a region has only with a source: they are left out with it.
+const SOURCED: [&str; 13] = [
+    "data-ui-src",
+    "data-ui-lazy",
+    "aria-busy",
+    "data-ui-poll",
+    "data-ui-feed",
+    "data-ui-after",
+    "data-ui-feed-empty",
+    "data-ui-feed-max",
+    "data-ui-feed-say",
+    "data-ui-feed-say-one",
+    "data-ui-live-src",
+    "data-ui-live-event",
+    "data-ui-live-catch-up",
+];
 
 impl Region {
     /// A region named `id`.
@@ -40,6 +68,7 @@ impl Region {
             placeholder: false,
             failed: None,
             offline: false,
+            refused: false,
         }
     }
 
@@ -50,18 +79,34 @@ impl Region {
     /// the runtime that lacks this id and isn't marked so (one a proxy serves), or a
     /// redirect, is somewhere else: the user goes there, as when a session has ended.
     ///
-    /// The source is on this site: an address that is not a [`LocalHref`] becomes `#`, as
-    /// `LocalHref::from` makes it, so a region never names another site.
+    /// The source is on this site. An address that is not a [`LocalHref`], or that is `#`,
+    /// gives the region no source at all: it is drawn once, as it is, and never fetched, so
+    /// what goes with a source (fetching after paint, a poll, a feed, a stream) is left out
+    /// with it. A region never names another site, nor fetches the page it stands on.
     ///
     /// ```
+    /// use std::time::Duration;
+    ///
     /// use navree_ui::{Region, render};
     ///
-    /// let html = render(&Region::new("kpis").src("https://other.example/kpis").into());
-    /// assert!(html.contains(r##"data-ui-src="#""##));
+    /// let html = render(
+    ///     &Region::new("kpis")
+    ///         .src("https://other.example/kpis")
+    ///         .poll(Duration::from_secs(10))
+    ///         .into(),
+    /// );
+    /// assert!(html.contains(r#"id="kpis""#));
+    /// assert!(!html.contains("data-ui-src"), "{html}");
+    /// assert!(!html.contains("data-ui-poll"), "{html}");
     /// ```
     pub fn src(mut self, src: impl Into<Href>) -> Self {
-        let local = LocalHref::from(src.into().as_str());
-        self.el = self.el.attr("data-ui-src", local.into_href());
+        match region_source(&src.into()) {
+            Some(local) => {
+                self.el = self.el.attr("data-ui-src", local);
+                self.refused = false;
+            }
+            None => self.refused = true,
+        }
         self
     }
 
@@ -241,7 +286,12 @@ impl Region {
         self
     }
 
-    fn into_node(self) -> Node {
+    fn into_node(mut self) -> Node {
+        if self.refused {
+            // No source: drawn once, as it is, and never fetched.
+            self.el.attrs.retain(|attr| !SOURCED.contains(&attr.name));
+            self.placeholder = false;
+        }
         let offline = self.offline;
         let failed = self.failed.map(|state| {
             el("div")
@@ -278,5 +328,53 @@ pub(crate) fn valid_event_name(name: &str) -> bool {
 impl From<Region> for Node {
     fn from(region: Region) -> Self {
         region.into_node()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::render;
+
+    #[test]
+    fn a_region_whose_source_is_refused_is_drawn_once_and_never_fetched() {
+        for src in [
+            "https://other.example/kpis",
+            "//other.example/kpis",
+            "/\\other.example/kpis",
+            "javascript:x",
+            "#",
+        ] {
+            // Whichever order the source and what goes with it are given in.
+            let before = Region::new("kpis")
+                .lazy()
+                .poll(Duration::from_secs(10))
+                .feed("rows", "0", Some("none"))
+                .live_from("/events")
+                .src(src);
+            let after = Region::new("kpis")
+                .src(src)
+                .lazy()
+                .poll(Duration::from_secs(10))
+                .feed_limit(50)
+                .live_event("kpis");
+            for region in [before, after] {
+                let html = render(&region.into());
+                assert!(html.contains(r#"id="kpis""#), "{src}: {html}");
+                for name in SOURCED {
+                    assert!(!html.contains(name), "{src}: {name} in {html}");
+                }
+                assert!(!html.contains("data-slot=\"skeleton\""), "{src}: {html}");
+            }
+        }
+        // An address on this site is the source, and what goes with it stays.
+        let html = render(
+            &Region::new("kpis")
+                .src("/fragments/kpis")
+                .poll(Duration::from_secs(10))
+                .into(),
+        );
+        assert!(html.contains(r#"data-ui-src="/fragments/kpis""#), "{html}");
+        assert!(html.contains(r#"data-ui-poll="10000""#), "{html}");
     }
 }
