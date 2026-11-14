@@ -265,9 +265,11 @@ struct TextPart: View {
         return text.tabular ? font.monospacedDigit() : font
     }
 
-    private var colour: Color {
-        if let colour = text.colour { return Hues.text(colour, scheme: scheme) }
-        return text.tone.map(Tones.color) ?? (text.muted ? Color.secondary : Color.primary)
+    /// Words in a colour or a tone are as dark as reads on their ground.
+    private var colour: AnyShapeStyle {
+        if let colour = text.colour { return AnyShapeStyle(ReadableWords(Hues.text(colour, scheme: scheme))) }
+        if let tone = text.tone, tone != .neutral { return AnyShapeStyle(ReadableWords(Tones.color(tone))) }
+        return AnyShapeStyle(text.muted ? Color.secondary : Color.primary)
     }
 }
 

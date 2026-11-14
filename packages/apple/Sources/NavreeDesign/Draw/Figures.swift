@@ -61,7 +61,7 @@ struct FigurePart: View {
                     }
                     if figure.status != nil || figure.trend != nil {
                         Flow(spacing: 8, lineSpacing: 4) {
-                            if let status = figure.status { StatusLabel(badge: status).foregroundStyle(Hues.color(status.tone)) }
+                            if let status = figure.status { StatusLabel(badge: status).foregroundStyle(ReadableWords(Hues.color(status.tone))) }
                             if let trend = figure.trend { TrendLabel(trend: trend) }
                         }
                         .font(.footnote.weight(.medium))

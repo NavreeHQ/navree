@@ -151,14 +151,12 @@ public enum CompositionRules {
         return Swift.max(1, count >= Double(Int.max) ? Int.max : Int(count))
     }
 
-    /// The text sizes a row of tiles may be set in, the first that keeps every
-    /// word whole winning: the person's own, then one and two sizes smaller,
-    /// for the whole row at once. At the accessibility sizes only the
-    /// person's own: there the row reflows into fewer columns instead.
+    /// The text sizes a row of tiles may be set in: the person's own, at
+    /// every size. Words follow the text size the person chose (Apple's
+    /// audit counts a smaller size set by the app as Dynamic Type not
+    /// followed); a row whose words do not fit reflows into fewer columns.
     public static func rowTypeSizes(_ size: DynamicTypeSize) -> [DynamicTypeSize] {
-        guard !size.isAccessibilitySize, let index = DynamicTypeSize.allCases.firstIndex(of: size) else { return [size] }
-        let all = DynamicTypeSize.allCases
-        return (0...2).compactMap { step in index - step >= all.startIndex ? all[index - step] : nil }
+        [size]
     }
 
     /// The width of each column of a grid of `count` columns.
@@ -392,6 +390,23 @@ public enum ZoomRules {
             if let source = source(from: from, under: under, reduceMotion: reduceMotion) { return source }
         }
         return nil
+    }
+}
+
+/// How far a small control's target reaches round what it draws.
+public enum HitRules {
+    /// The least side of a target Apple asks for on iPhone and iPad (HIG,
+    /// Accessibility and Buttons: 44 by 44 points).
+    public static let least = 44.0
+
+    /// The smallest an info button's symbol is drawn: a footnote's line.
+    public static let smallestGlyph = 16.0
+
+    /// What the target reaches past each side of a symbol `glyph` points
+    /// wide, so the whole is at least ``least``: nothing for a symbol that
+    /// is that big already.
+    public static func outset(glyph: Double) -> Double {
+        max(0, ((least - glyph) / 2).rounded(.up))
     }
 }
 

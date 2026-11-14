@@ -137,7 +137,9 @@ struct RingPart: View {
                 .font(.system(size: diameter * 0.3, weight: .semibold))
                 .foregroundStyle(colour)
         } else {
-            let big = diameter * 0.3
+            let big = RingRules.centreSize(
+                diameter: diameter, textScale: scale.full, ringScale: scale.capped(RingRules.growth(ring.prominence))
+            )
             HStack(alignment: .firstTextBaseline, spacing: 1) {
                 Text(RingRules.centre(ring))
                     .font(.system(size: big, weight: .bold, design: .rounded))

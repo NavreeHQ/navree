@@ -20,7 +20,7 @@ struct StatusCapsule: View {
             Text(badge.text)
         }
         .font(.subheadline.weight(.semibold))
-        .foregroundStyle(color)
+        .foregroundStyle(ReadableWords(color))
         .padding(.horizontal, 10)
         .padding(.vertical, 3)
         .background(color.opacity(0.15), in: Capsule())
@@ -44,7 +44,7 @@ struct TrendLabel: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .foregroundStyle(TrendRules.hue(trend).color)
+        .foregroundStyle(ReadableWords(TrendRules.hue(trend).color))
     }
 }
 
@@ -58,17 +58,25 @@ struct HintButton: View {
     var open: Binding<Bool>? = nil
     @State private var shown = false
     @Environment(\.navreeInControl) private var inControl
+    /// The smallest the symbol is drawn, at the person's text size.
+    @ScaledMetric(relativeTo: .footnote) private var glyph: CGFloat = HitRules.smallestGlyph
 
     var body: some View {
         let isOpen = open ?? $shown
+        let outset = CGFloat(HitRules.outset(glyph: Double(glyph)))
         if !inControl {
             Button {
                 isOpen.wrappedValue = true
             } label: {
                 Label(HintRules.actionName(hint), systemImage: hint.mark == .question ? "questionmark.circle" : "info.circle")
                     .labelStyle(.iconOnly)
+                    // The target reaches the least Apple asks, round the
+                    // symbol; the line it stands on keeps its spacing.
+                    .padding(outset)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
+            .padding(-outset)
             .popover(isPresented: isOpen) {
                 HintWords(hint: hint)
             }
@@ -230,6 +238,9 @@ struct TextScale: DynamicProperty {
     func capped(_ cap: Double) -> CGFloat {
         min(unit, CGFloat(cap))
     }
+
+    /// The scale of the person's text, whatever it is.
+    var full: CGFloat { unit }
 }
 
 extension EnvironmentValues {
