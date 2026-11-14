@@ -32,6 +32,7 @@ import okhttp3.HttpUrl
 import java.security.SecureRandom
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
+import kotlin.concurrent.thread
 
 /**
  * Empties what the system's web views keep for the app: what the page's
@@ -213,8 +214,15 @@ class AndroidEffects(
             }
             try {
                 cookies.clear {
-                    state.always { cookies.flush() }
-                    done()
+                    // Written to disk before the wipe is done, off the main thread: nothing after it,
+                    // the end of the session's thread included, comes first.
+                    thread(name = "navree-cookie-flush", isDaemon = true) {
+                        try {
+                            cookies.flush()
+                        } finally {
+                            done()
+                        }
+                    }
                 }
             } catch (_: Throwable) {
                 done()
@@ -222,10 +230,14 @@ class AndroidEffects(
         }
     }
 
-    /** The session is gone for good: the store's thread ends once the work already asked for is done. */
+    /**
+     * The session is gone for good. The store's thread is ended through its
+     * own queue, in its turn: a wipe already asked for, and the cookie flush
+     * that follows it, run first.
+     */
     fun close() {
         streams.closeAll()
-        storeThread.shutdown()
+        state.always { storeThread.shutdown() }
     }
 
     /** The app left the front: streams close (the core opens them again when it comes back). */
