@@ -21,7 +21,8 @@
 //!    taken from another attempt or made for another app is refused.
 //! 4. The person is signed in by [`Social::sign_in`], exactly as after the
 //!    web callback: the same linking rules (an unverified email never links
-//!    to an existing account), sign-in policies, two-factor challenge,
+//!    to an existing account, and an account whose own address is not
+//!    verified is never linked), sign-in policies, two-factor challenge,
 //!    session, events and audit entries.
 //!
 //! Sign in with Apple's authorization code, when the app sends it, is
@@ -512,11 +513,7 @@ impl Social {
                 .check_sign_in(&SignInAttempt::new(email, method.clone()), meta)
                 .await?;
         }
-        let user = self
-            .write(rt, meta.request_id.clone(), |uow| async move {
-                self.resolve_user(rt, &uow, entry, social_user).await
-            })
-            .await?;
+        let user = self.resolve(rt, entry, social_user, meta).await?;
         let metadata = json!({ "provider": entry.key, "via": "session", "remember": remember });
         if two_factor_enabled(&user) && rt.options.two_factor == TwoFactorPolicy::Require {
             rt.auth

@@ -39,7 +39,7 @@ It covers the whole flow:
 - **Providers:** Google, GitHub, Apple, Microsoft, GitLab (including self-hosted), Slack, LinkedIn, Discord and X built in, any OpenID Connect provider by its issuer URL, and your own through a trait.
 - **A safe redirect:** the state parameter is sealed with your application key and carries a PKCE verifier and, for OpenID Connect, a nonce. It expires after 10 minutes and works once.
 - **Verified identities:** ID tokens are checked against the provider's published keys (signature, issuer, audience, expiry and nonce) before Navree trusts them.
-- **Linked accounts:** one user can sign in with a password, GitHub and Google. Accounts are linked automatically only when the provider has verified the email address.
+- **Linked accounts:** one user can sign in with a password, GitHub and Google. Accounts are linked automatically only when the provider has verified the email address and the user's own address is verified too.
 - **Navree tokens:** the callback answers exactly like `POST /api/auth/login`, two-factor challenge included.
 - **Native apps:** Sign in with Apple and Google from the system's own sheet on iPhone and Android, with a one-time nonce per attempt, and Apple's tokens revoked when the account is deleted, as the App Store requires.
 - **Provider tokens** (optional), encrypted at rest and refreshed for you, for apps that call the provider's API later, such as syncing meetings from Google Calendar into CRM activities.
@@ -194,7 +194,7 @@ What can go wrong:
 | 400 `GitHub did not share an email address` | `missing_email` | A new user would be created, but the provider shared no email |
 | 403 | `sign_in_not_allowed` | Another Google Workspace or Slack workspace, or an email outside `allowed_email_domains` |
 | 403 `Registration is closed` | `registration_closed` | No matching user, and registration is off |
-| 409 | `email_taken` | The email belongs to a user and linking doesn't apply (see below) |
+| 409 | `email_taken` | The email belongs to a user and linking doesn't apply: `link_by_email = "never"`, an address the provider didn't verify, or a user whose own address isn't verified yet (see [linking accounts](#linking-accounts)) |
 | 403 | `sso_required` | The address or the account belongs to a domain that enforces [single sign-on](/docs/security/single-sign-on/#enforcement) (or another [sign-in policy](/docs/security/authentication/#sign-in-policies) refused it) |
 | 429 | `too_many_login_attempts` | Too many callbacks from this address, or from this IPv6 network, a /64 by default (`auth.login_throttle_per_minute`, with `Retry-After`; see [IPv6 clients](/docs/basics/rate-limiting/#ipv6-clients)) |
 | 502 | `provider_unavailable` | The provider couldn't be reached |
@@ -270,7 +270,7 @@ The attempt is used up first (sealed by this app, for this provider, not expired
 - its expiry, and that it was issued after the attempt started and not in the future, with a minute's tolerance;
 - its nonce: the attempt's (Apple's in the hashed form). A token taken from one attempt can't be posted with another, and an attempt can't be posted twice.
 
-Each failure is a 400 `invalid_id_token` (or `invalid_state` for the attempt), and the post counts against `auth.login_throttle_per_minute` like the callback. A malformed post is a 400 `validation_failed` naming the fields. Then the [linking rules](#linking-accounts) apply as they are: an unverified email never links to an existing account. Apple's private relay addresses (`...@privaterelay.appleid.com`) are verified ones.
+Each failure is a 400 `invalid_id_token` (or `invalid_state` for the attempt), and the post counts against `auth.login_throttle_per_minute` like the callback. A malformed post is a 400 `validation_failed` naming the fields. Then the [linking rules](#linking-accounts) apply as they are: an unverified email never links to an existing account, and an account whose own address isn't verified is never linked. Apple's private relay addresses (`...@privaterelay.appleid.com`) are verified ones.
 
 `Social::native_nonce(provider)` and `Social::native_user(provider, &NativeSignIn)` are the routes' two steps, for your own routes: pass the user to `sign_in` (or `sign_in_session` with the feature `session`).
 
@@ -318,9 +318,9 @@ Each emits `SocialProviderNotice` and is audited (`social.consent_revoked`, `soc
 When someone signs in with a provider, Navree looks for their user in this order:
 
 1. **A linked account.** A `social_accounts` row for this provider and provider user id signs in its user, and is updated with what the provider reported this time.
-2. **The same verified email.** With `link_by_email = "verified"` (the default), a user whose email matches an email the provider has **verified** gets the account linked, and is signed in. An unverified email never links: anyone can type any address into some providers.
+2. **The same verified email.** With `link_by_email = "verified"` (the default), a user whose email matches an email the provider has **verified** gets the account linked, and is signed in, as long as the user's own address is verified too (`email_verified_at` is set). An unverified email never links: anyone can type any address into some providers. Neither does an account whose own address was never verified: someone may have registered it with a password before its owner came, and linking would sign the owner in to that account. The sign-in is refused with the 409 below and audited as `social.link_refused`. The owner proves the address first (the [verification link](/docs/security/account-flows/#email-verification), a [magic link or an emailed code](/docs/security/passwordless/)) and signs in with the provider again. A user that a social sign-in created has a verified address when the provider verified it, so a second provider with that address links.
 3. **A new user.** With `social.registration` on (it defaults to `auth.registration`), Navree creates the user with the provider's name and email, marks the email as verified when the provider did, links the account and signs them in. The user has no password until they set one through [password reset](/docs/security/account-flows/#password-reset). A provider that shares no email address can't create a user (400).
-4. **Otherwise** the callback answers 409, so the person signs in with their password and connects the provider from their settings:
+4. **Otherwise** the callback answers 409, so the person signs in with their password and connects the provider from their settings (a person whose address is not verified yet verifies it first):
 
 ```json
 { "statusCode": 409, "message": "An account with this email already exists. Sign in, then connect GitHub in your settings.", "error": "Conflict", "code": "email_taken" }
@@ -346,7 +346,7 @@ Signed-in users manage their providers with three routes:
 | `POST /api/auth/social/{provider}/link` | `{code, state}` from a flow started with `GET .../redirect?intent=link`; links the account to the signed-in user (201) |
 | `DELETE /api/auth/social/accounts/{provider}` | Disconnects the provider (204), revoking its stored tokens at Apple or Google first |
 
-`GET .../redirect?intent=link` needs the user's access token too (401 without it): the state is sealed for that user, so only they can finish the link, and a link state can't sign anyone in. Linking an account that already belongs to another user is a 409 (`account_already_linked`), and so is connecting a second account of a provider the user has already connected (`provider_already_connected`). Disconnecting the last way a user can sign in (no password and no other provider) is a 409 too (`last_sign_in_method`), so nobody locks themselves out; disconnecting a provider that isn't connected is a 404 (`provider_not_connected`).
+`GET .../redirect?intent=link` needs the user's access token too (401 without it): the state is sealed for that user, so only they can finish the link, and a link state can't sign anyone in. A signed-in user can connect a provider whether or not their own address is verified: the rule about verified addresses in [linking accounts](#linking-accounts) is for sign-ins that find a user by address. Linking an account that already belongs to another user is a 409 (`account_already_linked`), and so is connecting a second account of a provider the user has already connected (`provider_already_connected`). Disconnecting the last way a user can sign in (no password and no other provider) is a 409 too (`last_sign_in_method`), so nobody locks themselves out; disconnecting a provider that isn't connected is a 404 (`provider_not_connected`).
 
 ## Using the Social service
 
@@ -510,7 +510,7 @@ Register it with `.module(SocialModule::for_feature::<Zoho>())` and configure it
 
 All carry `user_id`, `provider` and `provider_user_id`, and are emitted after the change commits, when `EventsModule` is in the app.
 
-With the [audit log](/docs/security/audit-log/), sign-ins are recorded as `auth.login` with `metadata.provider` (`auth.two_factor_challenge` when a second factor is due; `metadata.via = "session"` on the session cookie), new users as `auth.register` with `metadata.provider`, links as `social.linked` and `social.unlinked`, a stored token the provider would not revoke as `social.token_revocation_refused`, and Apple's notifications as `social.consent_revoked`, `social.account_deleted`, `social.email_disabled` and `social.email_enabled`. Provider tokens, identity tokens, authorization codes and the Apple key are never recorded, logged or put in an error.
+With the [audit log](/docs/security/audit-log/), sign-ins are recorded as `auth.login` with `metadata.provider` (`auth.two_factor_challenge` when a second factor is due; `metadata.via = "session"` on the session cookie), new users as `auth.register` with `metadata.provider`, links as `social.linked` and `social.unlinked`, a link refused because the account's own address is not verified as `social.link_refused` (with `metadata.provider` and `metadata.reason = "email_unverified"`), a stored token the provider would not revoke as `social.token_revocation_refused`, and Apple's notifications as `social.consent_revoked`, `social.account_deleted`, `social.email_disabled` and `social.email_enabled`. Provider tokens, identity tokens, authorization codes and the Apple key are never recorded, logged or put in an error.
 
 ## Testing
 
@@ -590,7 +590,7 @@ A code the fake doesn't know is refused with `invalid_grant`, as a provider woul
 | `social.redirect_base` | none | Callback URLs are `{redirect_base}/{provider}`; required |
 | `social.routes` | `true` | Mounts the `/api/auth/social` routes |
 | `social.registration` | `auth.registration` | Creates users on a first sign-in |
-| `social.link_by_email` | `verified` | `verified` links matching verified emails; `never` doesn't |
+| `social.link_by_email` | `verified` | `verified` links a user whose own address is verified when the provider verified the same address; `never` doesn't link |
 | `social.allowed_email_domains` | `[]` | When not empty, only verified addresses of these domains may sign in or sign up |
 | `social.two_factor` | `require` | `require` or `skip` for users with two-factor authentication |
 | `social.state_ttl_secs` | `600` | Lifetime of a sealed state |

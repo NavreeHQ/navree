@@ -14,7 +14,8 @@ use navree_testing::TestApp;
 use serde_json::{Value, json};
 
 use crate::support::{
-    PASSWORD, RecordingSink, access_token, callback, create_user, fake_app, redirect, sign_in,
+    PASSWORD, RecordingSink, access_token, callback, create_user, create_verified_user, fake_app,
+    redirect, sign_in, verify_email,
 };
 
 fn github(id: &str, email: Option<&str>, verified: bool) -> SocialUser {
@@ -88,7 +89,7 @@ async fn a_verified_email_links_the_existing_user() {
     })
     .await;
     let mut linked = app.get::<EventBus>().await.subscribe_json("social.linked");
-    let ada = create_user(&app, "Anu", "anu@example.com").await;
+    let ada = create_verified_user(&app, "Anu", "anu@example.com").await;
     fake.on_code(
         "github",
         "code",
@@ -163,6 +164,117 @@ async fn link_by_email_never_asks_the_user_to_connect_from_settings() {
     create_user(&app, "Anu", "anu@example.com").await;
     fake.on_code("github", "code", github("1", Some("anu@example.com"), true));
     sign_in(&app, "github", "code").await.assert_status(409);
+}
+
+#[tokio::test]
+async fn an_account_whose_own_address_is_not_verified_is_not_linked() {
+    let sink = RecordingSink::default();
+    let (app, fake) = fake_app(|b| b.override_value::<dyn AuditSink>(Arc::new(sink.clone()))).await;
+    // Registered with a password; nobody has proved the address yet.
+    let registered = create_user(&app, "Anu", "anu@example.com").await;
+    fake.on_code(
+        "github",
+        "code",
+        github("583231", Some("anu@example.com"), true),
+    );
+    fake.on_code(
+        "github",
+        "again",
+        github("583231", Some("anu@example.com"), true),
+    );
+
+    sign_in(&app, "github", "code")
+        .await
+        .assert_error(
+            409,
+            "An account with this email already exists. Sign in, then connect GitHub in your settings.",
+        )
+        .assert_error_code(409, "email_taken");
+    assert!(accounts(&app).await.is_empty());
+    assert_eq!(users(&app).await.len(), 1, "no second user is made");
+    let actions = sink.actions();
+    assert!(!actions.contains(&"auth.login".to_owned()), "{actions:?}");
+    let refused = sink
+        .entries()
+        .into_iter()
+        .find(|e| e.action == "social.link_refused")
+        .expect("the refusal is audited");
+    assert_eq!(refused.actor_id, Some(registered.id));
+    assert_eq!(refused.metadata["provider"], "github");
+    assert_eq!(refused.metadata["reason"], "email_unverified");
+
+    // Once the address is proved, the same sign-in links the account.
+    verify_email(&app, registered.id).await;
+    sign_in(&app, "github", "again")
+        .await
+        .assert_status(200)
+        .assert_json_path("user.id", json!(registered.id));
+    assert_eq!(accounts(&app).await.len(), 1);
+}
+
+#[tokio::test]
+async fn a_user_made_by_a_sign_in_links_a_second_provider_with_the_same_address() {
+    let (app, fake) =
+        fake_app(|b| b.config("social.providers.google.client_id", "google-client")).await;
+    fake.on_code("github", "code", github("1", Some("anu@example.com"), true));
+    fake.on_code(
+        "google",
+        "code",
+        SocialUser::new("google", "g-1").email(Some("anu@example.com"), true),
+    );
+    let first = sign_in(&app, "github", "code")
+        .await
+        .assert_status(200)
+        .json_value();
+    assert!(first["user"]["email_verified_at"].is_string(), "{first}");
+    let second = sign_in(&app, "google", "code")
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(first["user"]["id"], second["user"]["id"]);
+    assert_eq!(users(&app).await.len(), 1);
+    assert_eq!(accounts(&app).await.len(), 2);
+}
+
+#[tokio::test]
+async fn a_user_made_with_an_address_no_provider_verified_is_not_linked_by_another_provider() {
+    let (app, fake) =
+        fake_app(|b| b.config("social.providers.google.client_id", "google-client")).await;
+    fake.on_code(
+        "github",
+        "code",
+        SocialUser::new("github", "2").email(Some("gauri@example.com"), false),
+    );
+    fake.on_code(
+        "google",
+        "code",
+        SocialUser::new("google", "g-2").email(Some("gauri@example.com"), true),
+    );
+    sign_in(&app, "github", "code")
+        .await
+        .assert_status(200)
+        .assert_json_path("user.email_verified_at", Value::Null);
+    sign_in(&app, "google", "code")
+        .await
+        .assert_error_code(409, "email_taken");
+    assert_eq!(accounts(&app).await.len(), 1);
+}
+
+#[tokio::test]
+async fn a_signed_in_user_connects_a_provider_whose_address_their_own_account_has_not_verified() {
+    let (app, fake) = fake_app(|b| b).await;
+    let anu = create_user(&app, "Anu", "anu@example.com").await;
+    let token = access_token(&app, &anu).await;
+    fake.on_code(
+        "github",
+        "code",
+        github("583231", Some("anu@example.com"), true),
+    );
+    let state = link_state(&app, "github", &token).await;
+    link(&app, "github", &token, "code", &state)
+        .await
+        .assert_status(201);
+    assert_eq!(accounts(&app).await.len(), 1);
 }
 
 #[tokio::test]
@@ -301,7 +413,7 @@ async fn turn_on_two_factor(app: &TestApp, id: uuid::Uuid) {
 #[tokio::test]
 async fn two_factor_users_get_the_login_challenge() {
     let (app, fake) = fake_app(|b| b).await;
-    let ada = create_user(&app, "Anu", "anu@example.com").await;
+    let ada = create_verified_user(&app, "Anu", "anu@example.com").await;
     turn_on_two_factor(&app, ada.id).await;
     fake.on_code("github", "code", github("1", Some("anu@example.com"), true));
     let body = sign_in(&app, "github", "code")
@@ -330,7 +442,7 @@ async fn two_factor_users_get_the_login_challenge() {
 #[tokio::test]
 async fn two_factor_skip_trusts_the_provider() {
     let (app, fake) = fake_app(|b| b.config("social.two_factor", "skip")).await;
-    let ada = create_user(&app, "Anu", "anu@example.com").await;
+    let ada = create_verified_user(&app, "Anu", "anu@example.com").await;
     turn_on_two_factor(&app, ada.id).await;
     fake.on_code("github", "code", github("1", Some("anu@example.com"), true));
     sign_in(&app, "github", "code")

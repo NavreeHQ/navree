@@ -22,7 +22,8 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::support::{
-    APPLE_P8, Idp, RecordingSink, builder, create_user, fake_app, form_field, http_client_module,
+    APPLE_P8, Idp, RecordingSink, builder, create_user, create_verified_user, fake_app, form_field,
+    http_client_module, verify_email,
 };
 
 /// The bundle id of the site's iPhone app (`auth.apps.apple.main`).
@@ -309,7 +310,7 @@ async fn google_links_the_existing_user_with_a_verified_email_and_signs_it_in_ag
         .get::<EventBus>()
         .await
         .subscribe_json("social.linked");
-    let harpreet = create_user(&native.app, "Harpreet Kaur", "harpreet@example.in").await;
+    let harpreet = create_verified_user(&native.app, "Harpreet Kaur", "harpreet@example.in").await;
 
     let (nonce, state) = native.nonce("google").await;
     let token = native
@@ -354,6 +355,47 @@ async fn an_unverified_email_never_takes_over_an_account() {
         .await
         .assert_error_code(409, "email_taken");
     assert!(native.accounts().await.is_empty());
+}
+
+#[tokio::test]
+async fn an_account_whose_own_address_is_not_verified_is_not_linked_from_an_app() {
+    let sink = RecordingSink::default();
+    let native = Native::start(|b| b.override_value::<dyn AuditSink>(Arc::new(sink.clone()))).await;
+    // Registered with a password; nobody has proved the address yet.
+    let registered = create_user(&native.app, "Harpreet Kaur", "harpreet@example.in").await;
+
+    let (nonce, state) = native.nonce("google").await;
+    let token = native
+        .idp
+        .rs256(&native.google_claims(&nonce, "harpreet@example.in", true));
+    native
+        .post("google", json!({ "id_token": token, "state": state }))
+        .await
+        .assert_error_code(409, "email_taken");
+    assert!(native.accounts().await.is_empty());
+    let refused = sink
+        .entries()
+        .into_iter()
+        .find(|e| e.action == "social.link_refused")
+        .expect("the refusal is audited");
+    assert_eq!(refused.actor_id, Some(registered.id));
+    assert_eq!(refused.metadata["provider"], "google");
+
+    // Apple's address is the same case: its first sign-in does not link
+    // either, until the address of the account is verified.
+    let relay = create_user(&native.app, "Simran Gill", RELAY).await;
+    native
+        .apple_sign_in()
+        .await
+        .assert_error_code(409, "email_taken");
+    assert!(native.accounts().await.is_empty());
+    verify_email(&native.app, relay.id).await;
+    native
+        .apple_sign_in()
+        .await
+        .assert_status(200)
+        .assert_json_path("user.id", json!(relay.id));
+    assert_eq!(native.accounts().await.len(), 1);
 }
 
 /// Posts a Google token whose claims `change` made, on a fresh attempt.
@@ -1055,4 +1097,38 @@ async fn an_app_on_the_session_cookie_is_signed_in_on_its_session() {
         .await
         .assert_status(200)
         .assert_json_path("email", json!(RELAY));
+}
+
+#[tokio::test]
+async fn a_session_sign_in_does_not_link_an_account_whose_own_address_is_not_verified() {
+    let native = Native::start(|b| {
+        b.module(navree_session::SessionModule::for_root(
+            navree_session::SessionOptions::default(),
+        ))
+    })
+    .await;
+    create_user(&native.app, "Simran Gill", RELAY).await;
+    let phone = native.app.client();
+    phone.csrf_cookie().await;
+    native.mount_apple_code(APPLE_SUB).await;
+    let body = phone
+        .post("/api/auth/social/apple/native/nonce")
+        .xsrf()
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    let nonce = body["nonce"].as_str().unwrap();
+    phone
+        .post("/api/auth/social/apple/native/session")
+        .xsrf()
+        .json(&json!({
+            "id_token": native.idp.es256(&native.apple_claims(nonce)),
+            "state": body["state"],
+            "authorization_code": "c.apple-code",
+        }))
+        .send()
+        .await
+        .assert_error_code(409, "email_taken");
+    assert!(native.accounts().await.is_empty());
 }

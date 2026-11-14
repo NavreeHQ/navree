@@ -8,11 +8,13 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
+use chrono::Utc;
 use navree_auth::{AuthModule, AuthService, ClientMeta, User};
 use navree_contracts::{AuditEntry, AuditSink, BoxError, BoxFuture};
 use navree_crypto::{CryptoModule, generate_key};
-use navree_db::DatabaseModule;
+use navree_db::{DatabaseModule, Db};
 use navree_http_client::{HttpClientModule, HttpClientOptions, SsrfPolicy};
+use navree_orm::Model as _;
 use navree_social::{Social, SocialFake, SocialModule};
 use navree_testing::{TestApp, TestAppBuilder, TestResponse};
 use ring::rand::SystemRandom;
@@ -121,6 +123,26 @@ pub async fn create_user(app: &TestApp, name: &str, email: &str) -> User {
         .create_user(name, email, PASSWORD)
         .await
         .expect("the user is created")
+}
+
+/// Marks the email address of user `id` verified, as following the
+/// verification link does.
+pub async fn verify_email(app: &TestApp, id: uuid::Uuid) {
+    let db = app.get::<Db>().await;
+    User::query()
+        .where_key(id)
+        .update(&*db, [User::EMAIL_VERIFIED_AT.set(Some(Utc::now()))])
+        .await
+        .expect("the email is marked verified");
+}
+
+/// Creates a user with a password whose email address was verified, as a
+/// person who followed the verification link has.
+pub async fn create_verified_user(app: &TestApp, name: &str, email: &str) -> User {
+    let mut user = create_user(app, name, email).await;
+    verify_email(app, user.id).await;
+    user.email_verified_at = Some(Utc::now());
+    user
 }
 
 /// An access token for `user`.

@@ -4,14 +4,14 @@ use navree_db::Db;
 use navree_orm::Model as _;
 use navree_social::{SocialUser, social_account};
 
-use crate::support::{create_user, fake_app, sign_in};
+use crate::support::{create_verified_user, fake_app, sign_in};
 
 type Account = social_account::Model;
 
 #[tokio::test]
 async fn linked_accounts_are_orm_models() {
     let (app, fake) = fake_app(|b| b).await;
-    let ada = create_user(&app, "Anu", "anu@example.com").await;
+    let ada = create_verified_user(&app, "Anu", "anu@example.com").await;
     fake.on_code(
         "github",
         "code",
