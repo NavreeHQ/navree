@@ -81,10 +81,11 @@ const EMPTY_SEGMENT: &str = "Invalid URL: the path has an empty segment";
 /// 408, as the body extractors do. A response below 500 the service writes
 /// goes out as written, a 4xx included: its status, headers and body are the
 /// service's (a 422 with a plain-text body stays a 422 with that body). A 5xx
-/// with no body or a plain-text one takes the app's JSON error shape, its text
-/// logged, never sent; a 5xx with a body of another type goes out as written.
-/// The pipeline adds `X-Request-Id`, and the default security headers where
-/// the service set none.
+/// with no body or a short plain-text one (of known length, up to 16 KiB)
+/// takes the app's JSON error shape, its text logged, never sent; any other
+/// 5xx body (JSON, a longer or streamed text) goes out as written. The
+/// pipeline adds `X-Request-Id`, and the default security headers where the
+/// service set none.
 ///
 /// The service is built in `register`; it reaches the app's providers through
 /// the `AppContext` in each request's extensions.

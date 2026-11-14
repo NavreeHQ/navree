@@ -251,7 +251,8 @@ impl Module for LedgerModule {
   runs the `GET` answer when `GET` is listed, `OPTIONS` is a 204 with
   `Allow`.
 - A 4xx the service writes goes out as written; a 5xx with no body or a
-  plain-text one takes the app's error shape, its text logged, never sent.
+  short plain-text one takes the app's error shape, its text logged, never
+  sent.
 - Details: https://navree.com/docs/plugins/existing-crates/
 
 ## A layer whose service can fail

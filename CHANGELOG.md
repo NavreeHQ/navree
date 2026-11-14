@@ -40,12 +40,12 @@ every `@navree/*` package carries the same version.
   prefix inside the app's pipeline: request id, context, client address, session and CSRF,
   authentication, the mount's access check on every request, throttle, timeout and body limit.
   The service sees the rest of the path, as received, below `/`. A 4xx it writes goes out as
-  written; a 5xx with no body or a plain-text one takes the app's error shape, its text logged,
-  never sent. A mount without an access declaration, a prefix under `/_`, and a prefix that a
-  route or another mount reaches fail the boot. A request with an `Upgrade` header or `CONNECT`
-  never reaches the service: the mount answers it 501. With `.methods(..)`, a method the list
-  leaves out is the router's 405, as for a route; `HEAD` runs the `GET` answer when `GET` is
-  listed, and `OPTIONS` is a 204 with `Allow`. `routes` lists mounts.
+  written; a 5xx with no body or a short plain-text one takes the app's error shape, its text
+  logged, never sent. A mount without an access declaration, a prefix under `/_`, and a prefix
+  that a route or another mount reaches fail the boot. A request with an `Upgrade` header or
+  `CONNECT` never reaches the service: the mount answers it 501. With `.methods(..)`, a method
+  the list leaves out is the router's 405, as for a route; `HEAD` runs the `GET` answer when
+  `GET` is listed, and `OPTIONS` is a 204 with `Allow`. `routes` lists mounts.
   `use navree::plugin::prelude::*;` brings `m.mount`.
 - `TonicService` (`navree::grpc::TonicService`) serves a tonic server built elsewhere, such as a
   crate's generated `DealsServer`, through `GrpcModule` with the authentication, access checks,
