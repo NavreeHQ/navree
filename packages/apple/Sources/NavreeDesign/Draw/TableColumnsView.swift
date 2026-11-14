@@ -144,9 +144,10 @@ struct TableColumnsView: View {
                     // page's link to the same) is the record's name.
                     VStack(alignment: .leading, spacing: 2) {
                         Text(words[0])
-                        ForEach(Array((words.dropFirst() + (line.map { [$0] } ?? [])).enumerated()), id: \.offset) { _, line in
+                        ForEach(Array(words.dropFirst().enumerated()), id: \.offset) { _, line in
                             Text(line).foregroundStyle(.secondary)
                         }
+                        if let line { GivenUpLine(words: line) }
                     }
                     .accessibilityElement(children: .combine)
                 } else if index == 0, opening == .choosing, record.action != nil {
@@ -167,13 +168,27 @@ struct TableColumnsView: View {
             if let line {
                 VStack(alignment: .leading, spacing: 2) {
                     NodeView(record.cells[index])
-                    Text(line).foregroundStyle(.secondary)
+                    GivenUpLine(words: line)
                 }
                 .accessibilityElement(children: .combine)
             } else {
                 NodeView(record.cells[index])
             }
         }
+    }
+}
+
+/// The words of the columns a narrow table gave up, under the record's name:
+/// secondary, wrapped within the name's column to
+/// ``ContentRules/givenUpLines`` lines, the row as tall as they need.
+struct GivenUpLine: View {
+    let words: String
+
+    var body: some View {
+        Text(words)
+            .foregroundStyle(.secondary)
+            .lineLimit(ContentRules.givenUpLines)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

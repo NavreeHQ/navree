@@ -236,6 +236,12 @@ public enum ContentRules {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
+    /// The most lines the line under a record's name takes: words longer
+    /// than the name's column (a city with its state) go on to a second line
+    /// rather than being cut at the column's edge, and only words longer
+    /// still end in an ellipsis.
+    public static let givenUpLines = 2
+
     /// How a record of a wide table opens what it opens.
     public enum TableOpening: Sendable, Equatable {
         /// A tap on its first cell, its name (iPad: a table's rows are

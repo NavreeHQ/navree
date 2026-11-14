@@ -202,6 +202,8 @@ import Testing
     // A given-up cell with no words adds nothing.
     let empty = try decode([Navree.Node].self, #"[{"t":"text","value":"Chakla belan"},{"t":"text","value":""}]"#)
     #expect(ContentRules.givenUpLine(empty, columns: [1]) == nil)
+    // Longer than the name's column, the line goes on to a second rather than being cut.
+    #expect(ContentRules.givenUpLines == 2)
 }
 
 @Test func iOSHasNoCheckboxesOrRadioButtons() throws {
