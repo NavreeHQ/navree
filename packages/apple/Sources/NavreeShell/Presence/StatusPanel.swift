@@ -241,7 +241,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
             panel.standardWindowButton(button)?.isHidden = true
         }
         panel.title = PresenceModel.appName
-        panel.toolbarStyle = .unifiedCompact
+        panel.toolbarStyle = StatusRules.windowBar == .compact ? .unifiedCompact : .unified
         panel.isMovable = false
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
@@ -335,6 +335,24 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         PresenceModel.shared.shellUnderItem = false
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
+        Self.layOutToolbarAgain(window)
+    }
+
+    /// The shell's toolbar, made while it stood in the window under the item
+    /// (its sidebar folded away), laid out again against the window it now
+    /// stands in once the shell has laid out there: its sidebar button over
+    /// the sidebar and the screen's title over the content, as the window's
+    /// own toolbar stands from its start. Otherwise it keeps the other
+    /// window's places until the person resizes the window.
+    static func layOutToolbarAgain(_ window: NSWindow) {
+        DispatchQueue.main.async { [weak window] in
+            MainActor.assumeIsolated {
+                guard let window, let toolbar = window.toolbar else { return }
+                window.contentView?.layoutSubtreeIfNeeded()
+                window.toolbar = nil
+                window.toolbar = toolbar
+            }
+        }
     }
 
     private func makeWindow() -> NSWindow {
@@ -360,6 +378,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         window.contentViewController = nil
         panel?.contentViewController = app
         PresenceModel.shared.shellUnderItem = true
+        if let panel { Self.layOutToolbarAgain(panel) }
     }
 }
 #endif

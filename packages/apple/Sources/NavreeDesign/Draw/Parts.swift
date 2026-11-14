@@ -115,6 +115,7 @@ public struct NodeView: View {
 struct StackPart: View {
     let stack: Navree.Stack
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.navreeOnGround) private var onGround
     @Environment(\.navreeParentAxis) private var parentAxis
     private let room = Room()
 
@@ -187,7 +188,14 @@ struct StackPart: View {
     }
 
     private var spacing: CGFloat? {
-        CompositionRules.spacing(stack.gap).map { CGFloat($0) }
+        // A column of parts on the ground (cards, sections, figures) on a Mac
+        // takes the grouped form's room between sections.
+        if onGround, let between = CompositionRules.blockRoom(bar: .current).between,
+            CompositionRules.axis(stack, wide: room.wide) == .vertical, CompositionRules.isBlockColumn(stack)
+        {
+            return CGFloat(between)
+        }
+        return CompositionRules.spacing(stack.gap).map { CGFloat($0) }
     }
 
     private var horizontal: HorizontalAlignment {
@@ -249,9 +257,9 @@ struct TextPart: View {
             .fontWeight(text.weight.map(Typography.weight))
             .foregroundStyle(colour)
             .lineLimit(whole ? 1 : text.lines)
-            // Alone, a figure too wide for its place shrinks a little; among
-            // tiles it keeps its size and the grid gives it room.
-            .minimumScaleFactor(whole && !inTiles ? 0.5 : 1)
+            // Alone, a figure too wide for its place shrinks rather than being
+            // cut; among tiles it keeps its size and the grid gives it room.
+            .minimumScaleFactor(CompositionRules.shrinkLimit(whole: whole, display: text.style == .display, inTiles: inTiles))
             .fixedSize(horizontal: whole && inTiles, vertical: text.lines == nil && !whole)
             .multilineTextAlignment(Typography.alignment(text.align))
             .frame(maxWidth: text.align == .center || text.align == .end ? .infinity : nil, alignment: Typography.frame(text.align))

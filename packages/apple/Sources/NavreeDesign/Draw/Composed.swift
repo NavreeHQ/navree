@@ -54,7 +54,7 @@ public struct ComposedContent: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .modifier(ReadableWidth(width: readable))
             .padding(.horizontal, CGFloat(margin))
-            .padding(.top, 8)
+            .padding(.top, CGFloat(CompositionRules.blockRoom(bar: .current).top))
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity)
             .environment(\.navreeRoomWidth, width.map { CompositionRules.room(width: $0, readable: readable) })
@@ -294,7 +294,9 @@ struct GroupHeading: View {
                     if section.title != nil || section.hint != nil {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             if let title = section.title {
-                                Text(title).font(.title3.weight(.bold)).accessibilityAddTraits(.isHeader)
+                                Text(title)
+                                    .font(CompositionRules.groupHeading(bar: .current) == .headline ? .headline : .title3.weight(.bold))
+                                    .accessibilityAddTraits(.isHeader)
                             }
                             if let hint = section.hint { HintButton(hint: hint) }
                         }
@@ -310,6 +312,7 @@ struct GroupHeading: View {
                 }
             }
             .modifier(GroundWords())
+            .padding(.top, CGFloat(CompositionRules.blockRoom(bar: .current).overHeading))
         }
     }
 }
@@ -320,7 +323,7 @@ struct GroupPart: View {
     let section: Navree.Section
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: CGFloat(CompositionRules.blockRoom(bar: .current).underHeading)) {
             GroupHeading(section: section)
             Parts(nodes: section.children + section.footer)
         }
@@ -336,7 +339,7 @@ struct GroundSectionPart: View {
 
     var body: some View {
         let footer = CompositionRules.footer(section.footer)
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: CGFloat(CompositionRules.blockRoom(bar: .current).underHeading)) {
             GroupHeading(section: section)
             if section.style == .inset || section.style == .card {
                 Surface {
@@ -407,9 +410,10 @@ struct ListPart: View {
 struct LayersPart: View {
     let layers: Navree.Layers
     @ScaledMetric(relativeTo: .body) private var unit: CGFloat = 1
+    @Environment(\.navreeRowPicture) private var rowPicture
 
     var body: some View {
-        let factor = layers.size?.scaled == true ? unit : 1
+        let factor = self.factor
         let width = layers.size?.width.map { CGFloat($0) * factor }
         let height = layers.size?.height.map { CGFloat($0) * factor }
         Group {
@@ -435,6 +439,16 @@ struct LayersPart: View {
 
     private var holdsFillers: Bool {
         layers.children.contains(where: Self.fills)
+    }
+
+    /// How much the layers' own size is grown with the person's text, and
+    /// shrunk where a row's picture stands at a Mac list's picture size.
+    private var factor: CGFloat {
+        let factor = layers.size?.scaled == true ? unit : 1
+        guard let cap = rowPicture, let side = layers.size.flatMap({ [$0.width, $0.height].compactMap(\.self).max() }),
+            Double(side) > cap
+        else { return factor }
+        return factor * CGFloat(cap / Double(side))
     }
 
     /// A shape with no size fills the box it stands in.
@@ -839,4 +853,7 @@ extension EnvironmentValues {
     /// siblings that share their type size: a word kept whole there is never
     /// shrunk, the grid gives it room.
     @Entry var navreeInTiles: Bool = false
+    /// The most a row's leading picture with a size of its own takes, where
+    /// the system's rows are smaller than the page's (a Mac's).
+    @Entry var navreeRowPicture: Double? = nil
 }
