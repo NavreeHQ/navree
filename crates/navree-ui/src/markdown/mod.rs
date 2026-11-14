@@ -200,8 +200,11 @@ impl Markdown {
 
     fn into_node(self) -> Node {
         let untrusted = self.trust == MarkdownTrust::Untrusted;
+        // Stored text: the browser runtime acts on no hook inside it, and finds none of the
+        // page's own elements there. A code block's copy button is the toolkit's own part.
         el("div")
             .slot("markdown")
+            .flag("data-ui-stored", true)
             .flag("data-untrusted", untrusted)
             .uses(Uses::MARKDOWN)
             .child(self.content())
@@ -274,8 +277,10 @@ fn code_block(language: &str, code: &str, copy: bool, labels: &MarkdownLabels) -
             .size(Size::Sm)
             .on_click(Cmd::copy(shown.to_owned()))
     });
+    // The bar is the toolkit's own (`data-ui-own`): its copy button works inside stored text.
+    let own = button.is_some();
     let bar = (!language.is_empty() || button.is_some()).then(|| {
-        el("div").slot("code-block-bar").children((
+        el("div").slot("code-block-bar").flag("data-ui-own", own).children((
             el("span")
                 .slot("code-block-language")
                 .child(language.to_owned()),
@@ -891,11 +896,31 @@ mod tests {
         assert!(crate::render::measure(&node).uses.has(Uses::MARKDOWN));
         let out = render(&node);
         assert!(
-            out.starts_with(r#"<div data-slot="markdown" data-untrusted>"#),
+            out.starts_with(r#"<div data-slot="markdown" data-ui-stored data-untrusted>"#),
             "{out}"
         );
         let node: Node = Markdown::trusted("x").into();
         assert!(!render(&node).contains("data-untrusted"));
+    }
+
+    /// The runtime acts on no hook inside the element, trusted text or not; the copy button's
+    /// bar is the toolkit's own part, the one place inside where a hook works.
+    #[test]
+    fn markdown_is_stored_content_and_its_copy_button_is_the_toolkits_own() {
+        for node in [Markdown::new("x"), Markdown::trusted("x")] {
+            let out = render(&node.into());
+            assert!(out.contains("data-ui-stored"), "{out}");
+        }
+        let out = Markdown::new("```sh\ncargo build\n```\n")
+            .copy_code()
+            .to_html();
+        assert!(
+            out.contains(r#"<div data-slot="code-block-bar" data-ui-own>"#),
+            "{out}"
+        );
+        assert_eq!(out.matches("data-ui-own").count(), 1, "{out}");
+        let plain = Markdown::new("```sh\ncargo build\n```\n").to_html();
+        assert!(!plain.contains("data-ui-own"), "{plain}");
     }
 
     #[test]

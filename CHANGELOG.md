@@ -133,6 +133,9 @@ every `@navree/*` package carries the same version.
   screens write a different string each time, and the session's check takes the token as it is or
   any mask of it, in the `_csrf` field and in both headers. The `XSRF-TOKEN` cookie still holds the
   token as it is.
+- The UI runtime acts on no hook inside an element marked `data-ui-stored`, and an op or command that
+  names an id never finds an element there. `Markdown` carries the mark; wrap rich text you show from
+  the database in it too. A code block's copy button, marked `data-ui-own`, still works inside.
 
 ## [1.2.0] - 2026-11-13
 

@@ -55,12 +55,22 @@ export const hidden = () => gHidden.call(document);
 export const titleOf = (doc = document) => gTitle.call(doc);
 /** @param {string} title */
 export const setTitle = (title) => sTitle?.call(document, title);
-/** @param {string} id @param {Document} [doc] @returns {HTMLElement | null} */
-export const byId = (id, doc = document) => D.getElementById.call(doc, id);
+/**
+ * Whether `el` is stored content: inside what the server marks `data-ui-stored` (rich text, Markdown),
+ * and not in a part it draws there for itself (`data-ui-own`, a code block's copy button). No hook in
+ * stored content drives the runtime, and no element in it stands in for one of the page's own. Neither
+ * mark can be written from inside: stored markup loses every `data-ui-*` when it is cleaned.
+ * @param {Element} el
+ */
+export const stored = (el) => E.matches.call(el, "[data-ui-stored] :not([data-ui-own],[data-ui-own] *)");
+/** @param {Element | null} el */
+const own = (el) => (el && !stored(el) ? el : null);
+/** The element with this id, unless it is stored content. @param {string} id @param {Document} [doc] @returns {HTMLElement | null} */
+export const byId = (id, doc = document) => own(D.getElementById.call(doc, id));
 /** @param {string} selector @returns {Element | null} */
-export const one = (selector) => D.querySelector.call(document, selector);
-/** @param {string} selector @param {Document} [doc] @returns {NodeListOf<Element>} */
-export const every = (selector, doc = document) => D.querySelectorAll.call(doc, selector);
+export const one = (selector) => own(D.querySelector.call(document, selector));
+/** The elements that match, stored content left out. @param {string} selector @param {Document} [doc] @returns {Element[]} */
+export const every = (selector, doc = document) => [...D.querySelectorAll.call(doc, selector)].filter((el) => !stored(el));
 /** @param {string} tag @returns {HTMLElement} */
 export const make = (tag) => D.createElement.call(document, tag);
 /** @param {string} text @returns {Text} */
@@ -122,8 +132,12 @@ export const ownModule = (url) => {
 
 /** @param {Element} el @param {string} name */
 export const attr = (el, name) => E.getAttribute.call(el, name);
-/** The nearest ancestor of `node` (or itself) that matches, or null: safe on anything an event can name. @param {any} node @param {string} selector @returns {Element | null} */
-export const closest = (node, selector) => (node instanceof Element ? E.closest.call(node, selector) : null);
+/**
+ * The nearest ancestor of `node` (or itself) that matches, or null: safe on anything an event can name.
+ * One in stored content is none: what a hook looks for there is not found.
+ * @param {any} node @param {string} selector @returns {Element | null}
+ */
+export const closest = (node, selector) => own(node instanceof Element ? E.closest.call(node, selector) : null);
 /** Whether `a` holds `b`. @param {Node | null | undefined} a @param {Node | null | undefined} b */
 export const holds = (a, b) => !!(a && b) && Node.prototype.contains.call(a, b);
 /** @param {Element} el @param {string} name */

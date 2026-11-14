@@ -2,6 +2,7 @@
 // form, and work without this. Here: the selection across pages, dragging and
 // keying column widths and order, the grid keys, and keeping the address bar and
 // the form's controls true to what the server drew.
+import { closest } from "./dom.js";
 
 const STICKY_SELECT = "[data-sticky=s]";
 
@@ -525,7 +526,8 @@ document.addEventListener("click", (e) => {
     sortHere(/** @type {HTMLElement} */ (root), new URL(link.href));
     return;
   }
-  const row = target.closest("tr[data-ui-row-href]");
+  // A row in stored content is no row of the table's.
+  const row = closest(target, "tr[data-ui-row-href]");
   if (row && !target.closest("a,button,input,select,label,[popover]") && !getSelection()?.toString()) visit(document.body, row.getAttribute("data-ui-row-href") || "");
 }, true);
 
