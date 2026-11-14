@@ -147,6 +147,8 @@ final class Session {
     /// scene it ended, else plainly (and what was kept is let go).
     func begin(restoring: Bool, scene: String = "") {
         guard let client, let effects, !client.began else { return }
+        // Each scene runs a core of its own: its pages and its snapshot are kept apart.
+        effects.keep(for: scene)
         kept = scene.isEmpty ? Self.snapshot : Self.snapshot + "-" + scene
         let snapshot = restoring ? effects.snapshots.readData(kept) : nil
         if snapshot == nil { effects.snapshots.writeData(kept, nil) }

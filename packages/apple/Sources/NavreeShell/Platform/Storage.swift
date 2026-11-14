@@ -22,6 +22,16 @@ public final class KeptFiles: Sendable {
         self.folder = folder
     }
 
+    /// A folder of its own inside this one, named for `name` (its letters,
+    /// digits and `-` kept, anything else a `-`): what a scene keeps apart
+    /// from the others. Emptying it leaves the others as they are.
+    public func within(_ name: String) -> KeptFiles {
+        let safe = String(name.unicodeScalars.map { scalar -> Character in
+            scalar.isASCII && (CharacterSet.alphanumerics.contains(scalar) || scalar == "-") ? Character(scalar) : "-"
+        })
+        return KeptFiles(folder: folder.appendingPathComponent("scene-" + safe, isDirectory: true))
+    }
+
     public func read(_ key: String) -> String? {
         guard let data = try? Data(contentsOf: file(key)) else { return nil }
         return String(data: data, encoding: .utf8)
@@ -47,6 +57,15 @@ public final class KeptFiles: Sendable {
             try value.write(to: file, options: [.atomic, .completeFileProtection])
         } catch {
             try? FileManager.default.removeItem(at: file)
+        }
+    }
+
+    /// Deletes the files kept in this folder itself, leaving the folders
+    /// within it: what a build that kept one store for every scene left.
+    public func clearLoose() {
+        let items = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
+        for item in items where (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory != true {
+            try? FileManager.default.removeItem(at: item)
         }
     }
 

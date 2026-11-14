@@ -21,9 +21,9 @@ public final class SystemEffects: EffectRunner {
     /// What answers the core's requests.
     public let transport: any Transport
     /// The core's key-value cache, kept between launches.
-    let cache: KeptFiles
+    private(set) var cache: KeptFiles
     /// What is kept of a launch the system may end.
-    let snapshots: KeptFiles
+    private(set) var snapshots: KeptFiles
     let signIn: SignInSession
     let devices: DeviceCalls
     /// The origin addresses are checked against.
@@ -57,6 +57,18 @@ public final class SystemEffects: EffectRunner {
 
     /// The cookie store the web view shares.
     public var jar: CookieJar? { transport.jar }
+
+    /// Gives the core of one scene (a window, on iPad and the Mac) a cache
+    /// and a snapshot folder of its own inside the app's, before it starts:
+    /// the core serving another scene, perhaps for another person, never
+    /// reads or writes them, and they are emptied with this scene's session.
+    func keep(for scene: String) {
+        guard !scene.isEmpty else { return }
+        cache.clearLoose()
+        snapshots.clearLoose()
+        cache = cache.within(scene)
+        snapshots = snapshots.within(scene)
+    }
 
     /// What loads the pictures of a screen, with the session's cookies.
     public private(set) lazy var pictures = PictureLoader(jar: transport.jar, site: site, hosts: pictureHosts)
