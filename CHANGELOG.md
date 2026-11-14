@@ -7,17 +7,38 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
-### Changed
-
-- `@navree/nuxt` asks for Nuxt 4.6.4 or newer (`nuxt` peer `^4.6.4`, the module's own
-  compatibility check too): 4.6.3 has two advisories against `@nuxt/nitro-server` and
-  `@nuxt/schema` that 4.6.4 fixes.
-- Social sign-in fetches a provider's key set with no lock held on the cached key sets: a token
-  signed with a key the cached set has is verified without waiting for a fetch that another token
-  started, and the tokens that need a fetch share one, still at most once every 30 seconds for a
-  key id the set lacks. How long a key set is kept is unchanged.
 ### Security
 
+- Social sign-in links a provider account to an existing user by email address only when the
+  provider verified the address and the user's own address is verified too. A user whose address
+  was never verified is refused as an app set to `link_by_email = "never"` refuses it (409
+  `email_taken`), and the refusal is audited as `social.link_refused`; once the address is
+  verified, the next sign-in with the provider links. A user that a social sign-in created has a
+  verified address when the provider verified it, and connecting a provider from a signed-in
+  session works as before.
+- The app sign-in hand-over hands over only a sign-in that came back with the hand-over's own
+  `attempt`, for every callback: a sign-in made in that browser for anything else while the
+  hand-over waits ends it with `400 invalid_hand_over`. A browser that was already signed in when
+  the hand-over began gets a small page of the framework's own first ("<app> wants to sign in as
+  <person>", Continue or Cancel), answered with `POST /auth/app/confirm`; Cancel sends the app's
+  callback `error=access_denied`. Opening `GET /auth/app/sign-in` no longer signs the browser out:
+  for an app with a custom-scheme callback, the browser is signed out only once the person
+  continues on that page. The `attempt` and the confirmation's value work once, also for requests
+  sent at the same time. One client starts 30 hand-overs a minute (`429` after that).
+- The session an app gets from `POST /auth/app/exchange` keeps the time the person last
+  authenticated in the browser session the code came from. After a sign-in made for the hand-over
+  it ends when a "remember me" sign-in made at that time would; after a browser that was already
+  signed in was confirmed, it ends when that browser session was due to end as the hand-over
+  finished, at the latest (signing the browser out afterwards does not end the app's session). A
+  confirmed hand-over's code is refused once that browser session has ended. The exchange asks
+  the sign-in policies about the new `SignInMethod::AppHandOver { platform, app }`, and a
+  connection that enforces single sign-on lets it through. A code issued before the upgrade is
+  refused; codes live a minute.
+- With an `https` `app.url` set, an `https` app callback (`auth.apps.*.*.callback`) on another host
+  fails the boot. A callback's scheme is read in any case, so `HTTPS://` is an `https` callback.
+  With `auth.apps.callback_page = true` (off by default) the site answers `GET` on the path of
+  each `https` callback with an empty page (`Cache-Control: no-store`,
+  `Referrer-Policy: no-referrer`) for a browser the system did not hand to the app.
 - `AuthService::confirm_action` approves its action only: it no longer records the confirmation as
   the session's `authenticated_at`, so `#[recent_auth]` routes and refreshed tokens keep the
   sign-in time they had. `POST /auth/confirm` and `POST /auth/confirm/passkey` still step up.
@@ -27,55 +48,39 @@ every `@navree/*` package carries the same version.
 - Call tickets (`SealedTickets`) are sealed with a key derived from the application key for tickets
   alone, so no other value sealed with the application key opens as a ticket. Tickets issued
   before the upgrade no longer redeem; they live minutes.
-- The session an app gets from `POST /auth/app/exchange` keeps the time the person last
-  authenticated in the browser session the code came from, and ends when a "remember me" sign-in
-  made at that time would. The exchange asks the sign-in policies about the new
-  `SignInMethod::AppHandOver { platform, app }`.
-- A connection that enforces single sign-on lets `SignInMethod::AppHandOver` through: the people of
-  its domains can hand a browser sign-in over to a native app as everyone else can.
-- The app sign-in hand-over hands over only a sign-in that came back with the hand-over's own
-  `attempt`, for every callback: a sign-in made in that browser for anything else while the
-  hand-over waits ends it with `400 invalid_hand_over`. A browser that was already signed in when
-  the hand-over began gets a small page of the framework's own first ("<app> wants to sign in as
-  <person>", Continue or Cancel), answered with `POST /auth/app/confirm`; Cancel sends the app's
-  callback `error=access_denied`. Opening `GET /auth/app/sign-in` no longer signs the browser out:
-  for an app with a custom-scheme callback, the browser is signed out only once the person
-  continues on that page.
-- With an `https` `app.url` set, an `https` app callback (`auth.apps.*.*.callback`) on another host
-  fails the boot. The site answers `GET` on the path of each `https` callback with an empty page
-  (`Cache-Control: no-store`, `Referrer-Policy: no-referrer`) for a browser the system did not hand
-  to the app; `auth.apps.callback_page = false` turns it off for an app that serves that path.
-
-### Fixed
-
-- A chart picture put in a page with `ChartImage::svg_node` marked the ids of its drawing with the
-  picture's tag, which holds the toolkit's version: the same drawing got other ids, and the page
-  other HTML, with every release. The ids now come from the drawing and its size alone. A picture's
-  `ETag` still changes with a release, since its pixels may.
-- A region whose id is not in Latin letters (Gurmukhi, Devanagari) can refresh: the runtime sends
-  the id percent-encoded in the `x-navree-region` header, which a browser refused before.
-
-### Security
-
-- Social sign-in links a provider account to an existing user by email address only when the
-  provider verified the address and the user's own address is verified too. A user whose address
-  was never verified is refused as an app set to `link_by_email = "never"` refuses it (409
-  `email_taken`), and the refusal is audited as `social.link_refused`; once the address is
-  verified (the verification link, a magic link or an emailed code), the next sign-in with the
-  provider links. A user that a social sign-in created has a verified address when the provider
-  verified it, and connecting a provider from a signed-in session works as before.
-- An agent's conversation, and the assistant's run of it, now record the workspace they began in
-  (the `ai` migration set adds a nullable `workspace_id` to `ai_conversations` and `ai_runs`).
-  Every lookup of a conversation (its page, items, messages, stop, approvals, a component's
-  button, its state, deleting it, `Conversations::list_for`, and a run that continues it) needs
-  the workspace of the request to match, and another workspace's conversation is a 404 like one
-  that isn't there. A conversation with no workspace (started before this, or in an app without
-  workspaces) opens only in a request that is in no workspace. `AssistantConfig::guard` runs a
-  route guard, such as `InWorkspace::guard()`, before each of the assistant's routes.
+- A page carries the session's CSRF token masked afresh in every answer
+  (`navree_http::csrf::page_token`): Navree UI's forms and post form, the auth pages, Helm's pages
+  and native screens write a different string each time, and the session's check takes the token
+  as it is or any mask of it, in the `_csrf` field and in both headers. The `XSRF-TOKEN` cookie
+  still holds the token as it is. A form whose method is `get` writes no token.
+- The UI toolkit's brotli for pages and ops answers follows the same opt-outs as the HTTP
+  pipeline's gzip: a route with `no_compression`, a response with `Cache-Control: no-transform` and
+  `http.compression = false` leave the body uncompressed (`navree_http::may_compress` is the rule
+  both read). A `Reply` whose handler says `no-transform` keeps it when it is answered as ops or
+  as a native envelope.
+- A form's `Submit` (and a table's bulk form, a move, a grid order) refuses a post that carries a
+  cookie, sends neither `Sec-Fetch-Site` nor `Origin`, and has no CSRF token the session's check
+  compared and took (`navree_http::csrf::TokenChecked`); the appearance route, which takes no
+  token, refuses one with a cookie other than its own. A post with no cookie is still taken, and
+  so is one whose token the session's check took, as a test client or a native app sends it. A
+  form compares the `Origin` as the session layer does (host and port) and, when the request
+  carries its own scheme, the scheme too. In an app with no session layer, a test that posts a
+  form with a cookie sends `sec-fetch-site: same-origin`, as a browser does.
+- A form's file field takes a file key only from the person it was made for, for a file directly
+  in the folder of its own `Uploads`, as long as the file is still within that upload's size and
+  kind limits. The route a field's upload sends its file to answers with
+  `Received::into_keyed_response_for(&signer, owner)`, where `UploadOwner` (an extractor) is the
+  signed-in person's id and nothing for a guest. `file_key_for` and `file_path_for` make and read
+  these keys; a key from `file_key` is no longer taken by a form's file field, and the person
+  chooses the file again.
+- A form's file field stores the first file posted under its name; a later part under the same
+  name is not stored. A part of a chunked upload sent while its upload is being finished waits for
+  that, and the finished file starts with the first part as it was checked.
 - `TableQuery::without_columns` and `only_columns` (and the same two on `BulkRequest` and
   `ViewPost`) take columns away from the person asking, for one request. A column taken away is
   not shown, not in the column menu, not filtered on, sorted by or searched, not in a saved view
-  that is applied, not in a row's cells and not in the CSV export. `#[col(hidden)]` still only
+  that is applied, not in a row's cells and not in the CSV export; a full-text search with a
+  searched column taken away reads the columns left as plain text. `#[col(hidden)]` still only
   says how a column starts: the docs now say so.
 - A table's CSV export writes at most 100,000 rows (`DEFAULT_EXPORT_ROWS`) unless the query raises
   the limit with `TableQuery::export_limit`, up to `MAX_EXPORT_ROWS`. A result cut at the limit says
@@ -85,9 +90,53 @@ every `@navree/*` package carries the same version.
 - A sortable's list lock and rank renewal can be scoped to the caller's own rows: a `ListScope` of
   columns that must hold the caller's workspace or board, given to `Move::transaction_scoped`,
   `sortable::transaction_scoped`, `lock_lists_scoped` and `renew_ranks_scoped`. A key of another
-  scope is then a list that isn't there, and a renewal leaves the ranks of a same-named list of
-  another scope alone. The existing calls are unchanged and take no scope. The drag and drop page
-  says to make list keys unique per workspace or to use the scoped forms.
+  scope is then a list that isn't there, a renewal leaves the ranks of a same-named list of
+  another scope alone, and a scope whose value is `None` holds the rows whose column is NULL. The
+  existing calls are unchanged and take no scope. The drag and drop page says to make list keys
+  unique per workspace or to use the scoped forms.
+- An owner keeps at most 50 saved views of one table (`MAX_SAVED_VIEWS`): `save_view` refuses
+  another with `TooManyViews` and writes nothing, and `ViewPost::refused` answers the form with the
+  reason. The data table page says that an app with workspaces puts the workspace into the owner
+  string, and shows it.
+- An `HtmlPolicy` that allows an attribute the page acts on (`data-ui-*`, `data-genui*`, `form`,
+  `formaction`, `formmethod`, `formenctype`, `formtarget`, `popover`, `popovertarget`,
+  `popovertargetaction`, `command`, `commandfor`, `autofocus`, `accesskey`, `contenteditable`) is
+  refused at boot, and the sanitizer drops these from rich text whatever the policy says.
+- The UI runtime acts on no hook inside an element marked `data-ui-stored`, and an op, a command
+  or a button that names an id never finds an element there, nor submits through a form there.
+  `Markdown` carries the mark, and so does a record's HTML in Helm; wrap rich text you show from
+  the database in it too. A code block's copy button, in a part marked `data-ui-own`, still works
+  inside.
+- The page's post form (`ui-post`) posts only for a button the toolkit drew for it, which the
+  renderer marks `data-ui-post`, and a button in stored content sends no form.
+- Every request of the UI runtime goes through one check: an address on another origin is refused
+  before anything is sent, and an answer redirected to another origin is a failure (a page loads
+  its own address for real). A region, a lazy tab or a lazy sidebar group whose source is not a
+  `LocalHref` (or is `#`) has no source: it is drawn once and never fetched, and a poll, feed or
+  stream given with it is left out. A whole address of the site's own
+  (`https://example.com/fragments/kpis`) is refused like any other, so write the path; a refused
+  source is named in the log as a warning, once. A region is polled once a second at the most,
+  whatever its `poll` says.
+- Every `View` answers with `X-Navree-Page: 1`, and the UI runtime takes an answer into the page
+  only when it carries it (the build is checked as before): a page without it loads for real, and
+  a region's answer without it is not drawn. A region's source answers with a `View`, or with
+  `pages::region_answer(node)` for a part of a page alone; Helm's menu counts and Lighthouse's
+  overview region answer that way.
+- A boosted navigation fetched before a write, a sign-out or another tab's change is fetched again
+  rather than shown (twice at the most, then the page loads for real); a navigation that
+  began before a form's post never replaces the form's answer; a region's fetch begun on one page
+  never lands in the next page's region of the same id; and a page dropped as overtaken adds no
+  history entry.
+- A table's selection kept in the tab is cleared when another person signs in, a palette's recent
+  items are kept for the person signed in, so the next person in the same browser starts with none,
+  and a page restored from the back-forward cache for someone else loads again.
+- `Href::parse`, and `LocalHref::parse` with it, refuses an address that starts with white space
+  of any kind, a control character or an invisible format character (`\u{3000}`, `\u{a0}`,
+  `\u{2028}`, `\u{85}`, `\u{200b}`, `\u{feff}` and the like), which some clients trim and others
+  don't, so every client reads the same site in an address. It refused a plain space there
+  already. After its first character an address is kept as it is written, as before.
+- `.attr(..)` on `Select`, `Combobox` and `MultiSelect` refuses `style`, `srcdoc` and `on*` and
+  checks URL attributes, as it does on any element.
 - The host shown beside a link to another site, in rendered Markdown and in an assistant's
   `Sources`, is read the way a browser reads the address: a backslash is a slash, any run of
   slashes follows the scheme, and a user name, a password and a port are left out, so
@@ -97,70 +146,73 @@ every `@navree/*` package carries the same version.
 - A chart picture served with `ChartImage::respond` answers `Cache-Control: private, no-cache`
   unless the route sets another with `.cache_control(...)`, so a shared cache keeps no copy of a
   picture of someone's own data. It was `no-cache`.
-- An owner keeps at most 50 saved views of one table (`MAX_SAVED_VIEWS`): `save_view` refuses
-  another with `TooManyViews` and writes nothing, and `ViewPost::refused` answers the form with the
-  reason. The data table page says that an app with workspaces puts the workspace into the owner
-  string, and shows it.
-- A form's file field takes a file key only from the person it was made for, for a file directly
-  in the folder of its own `Uploads`, as long as the file is still within that upload's size and
-  kind limits. The route a field's upload sends its file to answers with
-  `Received::into_keyed_response_for(&signer, owner)`, where `UploadOwner` (an extractor) is the
-  signed-in person's id and nothing for a guest. `file_key_for` and `file_path_for` make and read
-  these keys; a key from `file_key` is no longer taken by a form's file field, and the person
-  chooses the file again.
-- A form's file field stores the first file posted under its name; a later part under the same
-  name is not stored.
-- A part of a chunked upload sent while its upload is being finished waits for that, and the
-  finished file starts with the first part as it was checked.
-- `.attr(..)` on `Select`, `Combobox` and `MultiSelect` refuses `style`, `srcdoc` and `on*` and
-  checks URL attributes, as it does on any element.
-- A form's `Submit` (and a table's bulk form, a move, a grid order) refuses a post that carries a
-  cookie, sends neither `Sec-Fetch-Site` nor `Origin`, and has no CSRF token the session's check
-  compared and took (`navree_http::csrf::TokenChecked`); the appearance route, which takes no
-  token, refuses one with a cookie other than its own. A post with no cookie is still taken, and
-  so is one whose token the session's check took, as a test client or a native app sends it. A
-  form compares the `Origin` as the session layer does (host and port) and, when the request
-  carries its own scheme, the scheme too.
 - An app with no configuration shows the "Development only" details of an error page only when
   the code turns them on with `PagesOptions::debug(true)`: a build with debug assertions alone no
   longer does, since such an app cannot say it is not production. An app with a configuration is
   unchanged: on in a debug build, off in a release build, always off in `production` and
   `staging`.
-- The UI toolkit's brotli for pages and ops answers follows the same opt-outs as the HTTP
-  pipeline's gzip: a route with `no_compression`, a response with `Cache-Control: no-transform` and
-  `http.compression = false` leave the body uncompressed. `navree_http::may_compress` is the rule
-  both read.
-- A page carries the session's CSRF token masked afresh in every answer
-  (`navree_http::csrf::page_token`): Navree UI's forms and post form, Helm's pages and native
-  screens write a different string each time, and the session's check takes the token as it is or
-  any mask of it, in the `_csrf` field and in both headers. The `XSRF-TOKEN` cookie still holds the
-  token as it is.
-- An `HtmlPolicy` that allows an attribute the page acts on (`data-ui-*`, `data-genui*`, `form`,
-  `formaction`, `formmethod`, `formenctype`, `formtarget`, `popover`, `popovertarget`,
-  `popovertargetaction`, `command`, `commandfor`, `autofocus`, `accesskey`, `contenteditable`) is
-  refused at boot, and the sanitizer drops these from rich text whatever the policy says.
-- The UI runtime acts on no hook inside an element marked `data-ui-stored`, and an op or command that
-  names an id never finds an element there. `Markdown` carries the mark; wrap rich text you show from
-  the database in it too. A code block's copy button, marked `data-ui-own`, still works inside.
-- The page's post form (`ui-post`) posts only for a button the toolkit drew for it, which the renderer
-  marks `data-ui-post`, and a button in stored content sends no form.
-- A region is polled once a second at the most, whatever its `poll` says.
-- Every request of the UI runtime goes through one check: an address on another origin is refused
-  before anything is sent, and an answer redirected to another origin is a failure (a page loads its
-  own address for real). `Region::src` turns an address that is not a `LocalHref` into `#`.
-- Every `View` answers with `X-Navree-Page: 1`, and the UI runtime takes an answer into the page only
-  when it carries it (the build is checked as before): a page without it loads for real, and a
-  region's answer without it is not drawn. A region's source must answer with a `View`.
-- A boosted navigation fetched before a write, a sign-out or another tab's change is fetched again
-  rather than shown; a navigation that began before a form's post never replaces the form's answer;
-  a region's fetch begun on one page never lands in the next page's region of the same id; and a
-  page dropped as overtaken adds no history entry.
-- A table's selection kept in the tab is cleared when another person signs in, a palette's recent
-  items are kept for the person signed in, so the next person in the same browser starts with none,
-  and a page restored from the back-forward cache for someone else loads again.
-- `Href::parse`, and `LocalHref::parse` with it, refuses an address with whitespace or a control
-  character at either end, or whitespace other than a plain space before its path (`\u{3000}`,
-  `\u{a0}`, `\u{2028}` and the like), so a native client that trims it reads the same address.
+
+### Added
+
+- `pages::region_answer(node)` answers a region with a part of a page alone, and
+  `pages::region_asked(&headers)` reads the region a request names.
+- Navree Native: the Android client's `NavreeConfig` gains `also`, `pictureHosts`, `webHosts`,
+  `screen` (`hidden_in_recents`, `no_capture`) and `filterObscuredTouches`;
+  `navree_notification_lock_screen` (`nothing`) keeps the notifications the library draws off a
+  secure locked screen; the library leaves its web view folder out of backups and device
+  transfers; the client hands an answer's `cache-control` to the core.
+
+### Changed
+
+- `@navree/nuxt` asks for Nuxt 4.6.4 or newer (`nuxt` peer `^4.6.4`, the module's own
+  compatibility check too): 4.6.3 has two advisories against `@nuxt/nitro-server` and
+  `@nuxt/schema` that 4.6.4 fixes.
+- The UI runtime sends a region's id percent-encoded in the `x-navree-region` header, whatever the
+  id. A handler that reads the header itself reads it with `pages::region_asked`.
+- Social sign-in fetches a provider's key set with no lock held on the cached key sets: a token
+  signed with a key the cached set has is verified without waiting for a fetch that another token
+  started, and the tokens that need a fetch share one, still at most once every 30 seconds for a
+  key id the set lacks. How long a key set is kept is unchanged.
+
+### Fixed
+
+- A chart picture put in a page with `ChartImage::svg_node` marked the ids of its drawing with the
+  picture's tag, which holds the toolkit's version: the same drawing got other ids, and the page
+  other HTML, with every release. The ids now come from the drawing and its size alone. A picture's
+  `ETag` still changes with a release, since its pixels may.
+- A region whose id is not in Latin letters (Gurmukhi, Devanagari) can refresh: a browser refused
+  to send such an id in a header as it was.
+- A table names its own columns with their table (the key, the order, the filters, the search,
+  the version column, a bulk request's keys), so a table over a join with another table that has
+  a column of the same name is not ambiguous, on a page, in an export and in a bulk action.
+  `TableQuery::apply`, which is given no database, still writes each column as its `source` says.
+  An export sorted by a column that holds no value in some rows writes every row once.
+- Navree Native: the runtime core reads an address as it is written and never trims or repairs it.
+  An address with white space around it, a control character, a backslash, a name before its
+  host, a host that is not ASCII, or a path that starts with `//` once its dot segments are taken
+  out leads nowhere.
+- Navree Native: every address a client is asked to fetch, to stream from or to show in the web
+  view is a whole address on one of the app's origins.
+  `crates/navree-native-core/vectors/addresses.json` holds the addresses every client must read
+  the same way.
+- Navree Native: an address opens outside the app only when it is a whole `http` or `https`
+  address or a `mailto`, `tel`, `sms` or `geo` one, and a newer app is offered only at an `https`
+  address.
+- Navree Native: the id of a region or a list may be in any script. The core writes it into
+  `x-navree-region` percent-encoded and the server reads it back; a plain ASCII id is unchanged.
+- Navree Native: the Android client checks every address it is handed against the app's origins,
+  uses modern TLS only, and caps answer bodies, event-stream lines and pictures. A request it
+  cannot build is answered as a failed request, and an effect that fails is reported while the
+  rest are carried out.
+- Navree Native: the Android web view keeps its page on the app's origins and loads what a page
+  holds only from them and from `NavreeConfig.webHosts`; where the system's web view supports it,
+  a document of any other origin is emptied before it runs; a page taken off the origins is shown
+  as a failed screen; the web view recovers when its process ends.
+- Navree Native: signing out on Android removes, in order, the page cache, the launch snapshot,
+  the web view's data, cache, history and form data, the app's notifications, the cookies and the
+  push token; the cookie store's cookies go only to the app's own origins.
+- Navree Native: an Android app that shrinks its code keeps the core's native methods and the
+  protocol's serializers.
 
 ## [1.2.0] - 2026-11-13
 
