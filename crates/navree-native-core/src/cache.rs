@@ -46,6 +46,16 @@ pub(crate) enum Who {
     Named(String, Option<String>),
 }
 
+impl Who {
+    /// The id the app's sign-in gives them, when the server said it.
+    pub(crate) fn id(&self) -> Option<&str> {
+        match self {
+            Self::Id { id } => Some(id),
+            Self::Named(..) => None,
+        }
+    }
+}
+
 /// A person as the core compares people. `None` is a visitor, signed in as
 /// nobody.
 pub(crate) type Person = Option<Who>;
@@ -176,8 +186,55 @@ impl Core {
             // list in memory says; another request's address only when listed.
             let page = matches!(asked.purpose, Pending::Page { .. });
             self.forget_kept(&asked.url, page);
+            return response;
+        }
+        // The person the answer was made for is the one the shell named, or
+        // the session changed under the app: nothing of the answer is kept,
+        // what is kept is emptied, and the shell is asked again.
+        if let Some(named) = self.inner.cache.named.clone() {
+            let made_for = response
+                .header(navree_native::PERSON_HEADER)
+                .filter(|id| !id.is_empty());
+            let same = match (named.as_ref().and_then(Who::id), made_for) {
+                (Some(named), Some(made_for)) => named == made_for,
+                (None, None) => true,
+                _ => false,
+            };
+            if !same {
+                response
+                    .headers
+                    .retain(|(name, _)| !name.eq_ignore_ascii_case(navree_native::KEEP_HEADER));
+                self.disown();
+                self.who_may_have_changed(true);
+            }
         }
         response
+    }
+
+    /// Who is signed in may have changed (a sign-in finished, a session
+    /// ended): the person this launch's shell named holds no more, and
+    /// nothing is read or written until a shell asked from here on answers.
+    /// A shell request on its way was asked before, so it is dropped and,
+    /// like the shell when `ask`, asked again.
+    pub(crate) fn who_may_have_changed(&mut self, ask: bool) {
+        self.inner.cache.named = None;
+        // Only a request asked before the event that brought this: one asked
+        // while it is handled was asked as things are now.
+        let before = self.inner.event_start;
+        let stale: Vec<u64> = self
+            .inner
+            .pending
+            .iter()
+            .filter(|(request, asked)| asked.purpose == Pending::Shell && **request < before)
+            .map(|(request, _)| *request)
+            .collect();
+        for request in &stale {
+            self.inner.pending.remove(request);
+            self.effects.push(Effect::Cancel { request: *request });
+        }
+        if ask || !stale.is_empty() {
+            self.fetch_shell();
+        }
     }
 
     /// Takes away what the client keeps for `url`: always when `always`, else

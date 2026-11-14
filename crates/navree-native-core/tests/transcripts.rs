@@ -663,6 +663,7 @@ const REQUIRED: &[&str] = &[
     "keep-reads",
     "keep-cache-control",
     "keep-person",
+    "keep-sign-in",
 ];
 
 #[test]

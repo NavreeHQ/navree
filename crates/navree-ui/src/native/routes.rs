@@ -124,7 +124,7 @@ async fn shell_of(ctx: &AppContext, parts: &Parts) -> Option<crate::shell::AppSh
 /// it outside `!` to `~`, and `%`, as `%` and two hex digits. `None` when
 /// nobody is signed in. It is the person's own id, in an answer only their
 /// own session gets, on their own device, so it is not hidden.
-fn person(user: Option<uuid::Uuid>) -> Option<HeaderValue> {
+pub(crate) fn person(user: Option<uuid::Uuid>) -> Option<HeaderValue> {
     let id = user?.to_string();
     let mut out = String::with_capacity(id.len());
     for byte in id.bytes() {

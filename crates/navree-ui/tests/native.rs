@@ -907,6 +907,8 @@ async fn only_an_answer_to_a_read_says_its_page_may_be_kept_on_the_device() {
         .await;
     assert_eq!(read.status(), StatusCode::OK);
     assert_eq!(read.header("x-navree-keep"), Some("1"));
+    // Nobody is signed in: the answer names nobody.
+    assert_eq!(read.header("x-navree-person"), None);
     let posted = app
         .client()
         .post("/catalogue")

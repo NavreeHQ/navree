@@ -94,6 +94,7 @@ impl Core {
         if !self.inner.usable {
             return Update::default();
         }
+        self.inner.event_start = self.inner.next.request + 1;
         match event {
             Event::Start => self.start(),
             Event::Response(response) => self.answered(response),
@@ -1165,6 +1166,8 @@ impl Core {
             inner.stale = true;
             self.touch_screen(under);
         }
+        // Nobody may be signed in any more.
+        self.who_may_have_changed(false);
         let route = self.route(&url);
         let present = match route.and_then(|route| route.present) {
             Some(present @ (Present::Sheet | Present::Full | Present::Task)) => present,
