@@ -45,8 +45,10 @@
 //!      `attempt`), it lasts as a "remember me" sign-in made at that time
 //!      would: the person has just signed in for the app;
 //!    - after a browser that was already signed in was confirmed on the
-//!      framework's page, it ends when that browser session ends, and never
-//!      later than a "remember me" sign-in made at that time would.
+//!      framework's page, it ends when that browser session was due to end
+//!      as the hand-over finished, and never later than a "remember me"
+//!      sign-in made at that time would. Signing the browser out afterwards
+//!      does not end the app's session.
 //!
 //!    The code is worth only what its browser session still is: a confirmed
 //!    hand-over's code is refused once that browser session has ended
@@ -733,8 +735,9 @@ impl AuthService {
     /// me", that keeps the time the person last authenticated in the browser
     /// session the code came from. After a sign-in made for the hand-over it
     /// ends when a "remember me" sign-in made then would; after a confirmed
-    /// hand-over it ends when the browser session ends, and never later than
-    /// that ([`start_handed_over_session`](AuthService::start_handed_over_session)).
+    /// hand-over it ends when the browser session was due to end as the
+    /// hand-over finished, and never later than that
+    /// ([`start_handed_over_session`](AuthService::start_handed_over_session)).
     /// Audited as `auth.login` with `metadata.method = "app_hand_over"`;
     /// refusals as `auth.app_sign_in_refused` with the reason.
     pub(crate) async fn exchange_app_code(
@@ -989,6 +992,9 @@ impl Controller for AppSignInController {
         routes.push(
             RouteDef::on(Method::GET, format!("!{APP_SIGN_IN_PATH}"), start)
                 .public()
+                // Any site can send a browser here, and each start is kept until it is
+                // finished or runs out.
+                .throttle(STARTS_PER_MINUTE, Duration::from_secs(60))
                 .name("auth.app.sign_in")
                 .api(ApiMeta {
                     description: Some(
@@ -998,7 +1004,7 @@ impl Controller for AppSignInController {
                          in, to the app's callback with a one-time code."
                             .to_owned(),
                     ),
-                    ..api("Start handing a sign-in over to an app", &[303, 400])
+                    ..api("Start handing a sign-in over to an app", &[303, 400, 429])
                 }),
         );
 
@@ -1169,6 +1175,9 @@ fn callback_page() -> Response {
 
 /// Exchanges one client may attempt per minute.
 const EXCHANGES_PER_MINUTE: u32 = 30;
+
+/// Hand-overs one client may start per minute.
+const STARTS_PER_MINUTE: u32 = 30;
 
 /// The answer of the finish and of the confirmation: a redirect to the
 /// sign-in page or to the app's callback, or the confirmation page. The

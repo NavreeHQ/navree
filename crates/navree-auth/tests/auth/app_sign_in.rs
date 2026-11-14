@@ -723,6 +723,21 @@ async fn opening_the_start_address_signs_no_one_out() {
     assert!(sink.with_action("auth.logout").is_empty());
 }
 
+// One client starts thirty hand-overs a minute, and the next is told to wait.
+#[tokio::test]
+async fn one_client_starts_thirty_hand_overs_a_minute() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    let browser = app.client();
+    let (_, challenge) = pkce("many");
+    for n in 0..30 {
+        start(&browser, &challenge, &format!("s-{n}"))
+            .await
+            .assert_status(303);
+    }
+    start(&browser, &challenge, "s-30").await.assert_status(429);
+}
+
 // The confirmation page's answer is bound to its own hand-over and works
 // once; a post without the session's CSRF token does nothing.
 #[tokio::test]
