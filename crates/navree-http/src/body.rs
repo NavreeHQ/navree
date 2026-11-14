@@ -252,20 +252,22 @@ pub async fn read_body(body: Body, limit: usize) -> Result<Bytes, BodyError> {
     match Limited::new(body, limit).collect().await {
         Ok(collected) => Ok(collected.to_bytes()),
         Err(error) => {
-            let chain = || {
-                std::iter::successors(
-                    Some(&*error as &(dyn std::error::Error + 'static)),
-                    |error| error.source(),
-                )
-            };
-            Err(if chain().any(|error| error.is::<LengthLimitError>()) {
-                BodyError::TooLarge
-            } else if chain().any(|error| error.is::<BodyReadTimeout>()) {
-                BodyError::TimedOut
-            } else {
-                BodyError::Read(error.to_string())
-            })
+            Err(body_error_in(&*error).unwrap_or_else(|| BodyError::Read(error.to_string())))
         }
+    }
+}
+
+/// What an error from reading a request body says, when its chain holds the
+/// body's limit ([`BodyError::TooLarge`]) or the server's read timeout
+/// ([`BodyError::TimedOut`]); `None` for any other error.
+pub(crate) fn body_error_in(error: &(dyn std::error::Error + 'static)) -> Option<BodyError> {
+    let chain = || std::iter::successors(Some(error), |error| error.source());
+    if chain().any(|error| error.is::<LengthLimitError>()) {
+        Some(BodyError::TooLarge)
+    } else if chain().any(|error| error.is::<BodyReadTimeout>()) {
+        Some(BodyError::TimedOut)
+    } else {
+        None
     }
 }
 

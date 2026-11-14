@@ -378,44 +378,62 @@ fn validate(routes: &[Mounted], authenticator: bool, authorizer: bool) -> Result
                 }
             }
         }
-        let access = &meta.access;
-        if !access.is_declared() {
-            errors.push(format!(
-                "{label} has no access declaration: add .public(), .authenticated(), .roles(..), .permissions(..) or .can(..) (deny by default)"
-            ));
-            continue;
-        }
-        if access.public && (access.authenticated || access.needs_authorizer()) {
-            errors.push(format!(
-                "{label} is public but also declares {}; remove one of them",
-                access.describe()
-            ));
-        }
-        if !access.public && !authenticator {
-            errors.push(format!(
-                "{label} requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the route public)"
-            ));
-        }
-        if access.needs_authorizer() && !authorizer {
-            errors.push(format!(
-                "{label} declares {} but no `dyn RouteAuthorizer` is registered (import the access module)",
-                access.describe()
-            ));
-        }
-        if let Some(throttle) = meta.throttle
-            && (throttle.limit == 0 || throttle.per.is_zero())
-        {
-            errors.push(format!(
-                "{label} has a throttle of {} per {:?}; both must be non-zero",
-                throttle.limit, throttle.per
-            ));
-        }
+        errors.extend(access_problems(&label, "route", meta, authenticator, authorizer));
     }
     if errors.is_empty() {
         Ok(())
     } else {
         Err(RouteErrors(errors))
     }
+}
+
+/// The access rule a route and a mount are both checked by, in this order: no
+/// access declaration (and then nothing else), public with another
+/// declaration, no [`Authenticator`] for a declaration that needs a user, no
+/// [`RouteAuthorizer`] for roles, permissions or an ability, and a throttle
+/// with a zero. `label` names the route or mount; `noun` (`route`, `mount`)
+/// is what the authenticator text tells the developer to mark public.
+pub(crate) fn access_problems(
+    label: &str,
+    noun: &str,
+    meta: &RouteMeta,
+    authenticator: bool,
+    authorizer: bool,
+) -> Vec<String> {
+    let mut problems = Vec::new();
+    let access = &meta.access;
+    if !access.is_declared() {
+        problems.push(format!(
+            "{label} has no access declaration: add .public(), .authenticated(), .roles(..), .permissions(..) or .can(..) (deny by default)"
+        ));
+        return problems;
+    }
+    if access.public && (access.authenticated || access.needs_authorizer()) {
+        problems.push(format!(
+            "{label} is public but also declares {}; remove one of them",
+            access.describe()
+        ));
+    }
+    if !access.public && !authenticator {
+        problems.push(format!(
+            "{label} requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the {noun} public)"
+        ));
+    }
+    if access.needs_authorizer() && !authorizer {
+        problems.push(format!(
+            "{label} declares {} but no `dyn RouteAuthorizer` is registered (import the access module)",
+            access.describe()
+        ));
+    }
+    if let Some(throttle) = meta.throttle
+        && (throttle.limit == 0 || throttle.per.is_zero())
+    {
+        problems.push(format!(
+            "{label} has a throttle of {} per {:?}; both must be non-zero",
+            throttle.limit, throttle.per
+        ));
+    }
+    problems
 }
 
 /// Values every per-route pipeline shares.
@@ -872,6 +890,7 @@ fn cors_layer(options: &CorsOptions) -> Result<Option<CorsLayer>, BoxError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Throttle;
 
     #[test]
     fn full_paths_join_prefix_version_and_path() {
@@ -910,6 +929,53 @@ mod tests {
     fn short_names_drop_the_module_path() {
         assert_eq!(short_name("app::deals::DealController"), "DealController");
         assert_eq!(short_name("Plain"), "Plain");
+    }
+
+    #[test]
+    fn the_access_rule_reads_the_same_for_a_route_and_a_mount() {
+        let route = "route `GET /api/x` (LedgerController in module `LedgerModule`)";
+        assert_eq!(
+            access_problems(route, "route", &RouteMeta::default(), true, true),
+            [format!(
+                "{route} has no access declaration: add .public(), .authenticated(), .roles(..), .permissions(..) or .can(..) (deny by default)"
+            )]
+        );
+        let mut confused = RouteMeta::default();
+        confused.access.public = true;
+        confused.access.roles = vec!["munshi".into()];
+        assert_eq!(
+            access_problems(route, "route", &confused, true, false),
+            [
+                format!(
+                    "{route} is public but also declares public roles:munshi; remove one of them"
+                ),
+                format!(
+                    "{route} declares public roles:munshi but no `dyn RouteAuthorizer` is registered (import the access module)"
+                ),
+            ]
+        );
+        let mut signed_in = RouteMeta::default();
+        signed_in.access.authenticated = true;
+        signed_in.throttle = Some(Throttle {
+            limit: 0,
+            per: Duration::from_secs(60),
+        });
+        assert_eq!(
+            access_problems(route, "route", &signed_in, false, true),
+            [
+                format!(
+                    "{route} requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the route public)"
+                ),
+                format!("{route} has a throttle of 0 per 60s; both must be non-zero"),
+            ]
+        );
+        let mount = "mount `/khata` in `LedgerModule`";
+        assert_eq!(
+            access_problems(mount, "mount", &signed_in, false, true)[0],
+            format!(
+                "{mount} requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the mount public)"
+            )
+        );
     }
 }
 
