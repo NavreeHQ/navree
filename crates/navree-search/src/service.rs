@@ -7,6 +7,8 @@ use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
+use navree_config::ConfigSection;
+use navree_config::__private::{build_driver, check_registrations};
 use navree_contracts::{Dispatcher, JobEnvelope, JobOptions};
 use navree_db::{Backend, Db, Uow};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle, WeakAppContext};
@@ -16,6 +18,7 @@ use serde::Serialize;
 use tokio::sync::{Notify, mpsc};
 use uuid::Uuid;
 
+use crate::drivers::SLOT;
 use crate::engine::{
     DatabaseEngine, MeilisearchEngine, MemoryEngine, SearchEngine, TypesenseEngine,
 };
@@ -109,17 +112,37 @@ pub struct IndexStatus {
 }
 
 impl Search {
-    /// Builds the service for `app`: the engine from `options`, and every
-    /// model registered with `SearchModule::for_feature`.
+    /// Builds the service for `app`: the engine from `options` (a module's
+    /// registered engine, built from its registration), and every model
+    /// registered with `SearchModule::for_feature`. Every registration of
+    /// an engine is checked first, whichever engine is selected.
     pub(crate) async fn build(
         app: &AppContext,
         options: SearchOptions,
     ) -> Result<Search, BoxError> {
+        let options = SearchOptions {
+            engine: options.engine.resolved(),
+            ..options
+        };
         options
             .check()
             .map_err(|message| format!("invalid search options: {message}"))?;
+        check_registrations(app, &SLOT, SearchOptions::schema())?;
         let db = app.try_get::<Db>().await.map(|db| (*db).clone());
-        let engine = make_engine(&options, db.as_ref())?;
+        let engine = match &options.engine {
+            Engine::Registered(name) => {
+                build_driver::<dyn SearchEngine>(
+                    app,
+                    &SLOT,
+                    "search.engine",
+                    *name,
+                    format!("search.{name}"),
+                    None,
+                )
+                .await?
+            }
+            _ => make_engine(&options, db.as_ref())?,
+        };
         let mut entries: Vec<Arc<Entry>> = Vec::new();
         for contributed in app.contributions::<IndexRegistration>() {
             let ops = contributed.value.ops.clone();
@@ -851,6 +874,9 @@ fn make_engine(
         }
         Engine::Memory => Arc::new(MemoryEngine::new()),
         Engine::Custom(engine) => engine.clone(),
+        Engine::Registered(_) => {
+            return Err("a search engine a module registers is built by SearchModule at boot".into());
+        }
     })
 }
 
