@@ -52,14 +52,18 @@ The words are set in Geist, the toolkit's own typeface, built into the binary wi
 
 ## Serving a picture
 
-`ChartImage::respond` answers a request for the picture. Its `ETag` is a hash of the resolved drawing, the size and the renderer, made before anything is drawn: a request whose `If-None-Match` holds it gets `304 Not Modified` and no drawing at all. The answer says `Cache-Control: no-cache` unless you set `.cache_control(...)`; a picture of someone's own data should say `private, no-cache`.
+`ChartImage::respond` answers a request for the picture. Its `ETag` is a hash of the resolved drawing, the size and the renderer, made before anything is drawn: a request whose `If-None-Match` holds it gets `304 Not Modified` and no drawing at all. The answer says `Cache-Control: private, no-cache` unless you set `.cache_control(...)`: a shared cache, such as a proxy or a CDN, keeps no copy of a picture that may hold someone's own data, and the client asks each time and gets the `304`. A picture that is the same for everyone can say `no-cache` instead.
 
 ```rust
 use navree::ui::image::{ChartImage, Tile};
 
 fn widget_picture(tile: Tile, request: &http::HeaderMap) -> navree::http::response::Response {
+    ChartImage::for_tile(&tile).respond(&tile.into(), request)
+}
+
+fn shared_picture(tile: Tile, request: &http::HeaderMap) -> navree::http::response::Response {
     ChartImage::for_tile(&tile)
-        .cache_control("private, no-cache")
+        .cache_control("no-cache")
         .respond(&tile.into(), request)
 }
 ```

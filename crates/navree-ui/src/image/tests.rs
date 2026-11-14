@@ -427,6 +427,26 @@ fn a_tiles_words_are_text_and_long_ones_are_cut() {
 }
 
 #[test]
+fn a_picture_is_kept_out_of_shared_caches_unless_the_route_says_otherwise() {
+    let node = ring();
+    let image = ChartImage::new(120, 120);
+    let response = image.respond(&node, &HeaderMap::new());
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[CACHE_CONTROL], "private, no-cache");
+
+    let tag = image.etag(&node).unwrap();
+    let mut held = HeaderMap::new();
+    held.insert(IF_NONE_MATCH, tag.parse().unwrap());
+    let response = image.respond(&node, &held);
+    assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+    assert_eq!(response.headers()[CACHE_CONTROL], "private, no-cache");
+
+    let shared = ChartImage::new(120, 120).cache_control("no-cache");
+    let response = shared.respond(&node, &HeaderMap::new());
+    assert_eq!(response.headers()[CACHE_CONTROL], "no-cache");
+}
+
+#[test]
 fn a_route_answers_304_for_the_picture_it_holds_and_the_picture_otherwise() {
     let image = ChartImage::new(120, 120).cache_control("private, no-cache");
     let node = ring();

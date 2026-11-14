@@ -63,6 +63,9 @@ every `@navree/*` package carries the same version.
   `https:/\other.example` shows `other.example`. A link that leaves the site with no host to read
   still counts as off-site and shows no host in Markdown; a source like it is shown as its title,
   not as a link.
+- A chart picture served with `ChartImage::respond` answers `Cache-Control: private, no-cache`
+  unless the route sets another with `.cache_control(...)`, so a shared cache keeps no copy of a
+  picture of someone's own data. It was `no-cache`.
 
 ## [1.2.0] - 2026-11-13
 
