@@ -24,6 +24,11 @@ const ATTEMPTS: usize = 3;
 /// reaches. [`lock_lists_scoped`], [`renew_ranks_scoped`], [`transaction_scoped`] and
 /// [`Move::transaction_scoped`] apply it to both.
 ///
+/// A scope's columns are of the one table it is used on: the lock's are of the lists'
+/// table, the renewal's of the items' table, and a column of another table is refused
+/// with [`OrmError::InvalidQuery`]. Where lists and items are tables of their own, each
+/// takes a scope of its own. A value of `None` takes the rows where the column is NULL.
+///
 /// ```ignore
 /// let scope = ListScope::new().and(&Lane::WORKSPACE_ID, workspace.id);
 /// let landed = mv
@@ -95,12 +100,19 @@ impl ListScope {
             .collect()
     }
 
-    /// The conditions as filters for a read of `table`.
+    /// The conditions as filters for a read of `table`. A condition on NULL is `IS NULL`,
+    /// as in [`renew_ranks_scoped`]: `= NULL` matches no row.
     fn filters(&self, table: &str) -> Result<Vec<Filter>> {
         Ok(self
             .checked(table)?
             .into_iter()
-            .map(|(column, value)| col(column.to_owned()).eq(value))
+            .map(|(column, value)| {
+                if matches!(value, Value::Null(_)) {
+                    col(column.to_owned()).is_null()
+                } else {
+                    col(column.to_owned()).eq(value)
+                }
+            })
             .collect())
     }
 }
@@ -158,7 +170,7 @@ where
 /// to move: lists of a workspace or a board, on a table that holds those of others.
 ///
 /// ```ignore
-/// let scope = ListScope::new().and(&Card::WORKSPACE_ID, workspace.id);
+/// let scope = ListScope::new().and(&Column::WORKSPACE_ID, workspace.id);
 /// let landed = sortable::transaction_scoped(&db, &Column::KEY, mv.lists(), &scope, |uow| {
 ///     let mv = mv.clone();
 ///     async move { Ok(mv.check(&read_lists(&uow).await?)) }
@@ -488,11 +500,18 @@ where
 /// [`renew_ranks`], for the items of `list` among the rows of `scope` only: where lists
 /// of several workspaces or boards share a name, the rows of the others keep their ranks.
 /// Without a scope, a list named `backlog` is every row of the table whose list column
-/// holds `backlog`, whoever's it is. Use the same scope as the move's transaction.
+/// holds `backlog`, whoever's it is.
+///
+/// The scope's columns are of the items' table, the one this renews. When the lists are
+/// rows of another table (the table the move's transaction locks), its scope names that
+/// table's columns: give the renewal a scope of its own with the same values, on the
+/// items' columns. A scope value of `None` takes the rows where the column is NULL.
 ///
 /// ```ignore
-/// let scope = ListScope::new().and(&Card::WORKSPACE_ID, workspace.id);
-/// sortable::renew_ranks_scoped(&uow, &Card::LIST, &Card::RANK, &Card::ID, "backlog", &scope)
+/// // The transaction locks lanes; the renewal numbers cards.
+/// let lanes = ListScope::new().and(&Lane::WORKSPACE_ID, workspace.id);
+/// let cards = ListScope::new().and(&Card::WORKSPACE_ID, workspace.id);
+/// sortable::renew_ranks_scoped(&uow, &Card::LIST, &Card::RANK, &Card::ID, "backlog", &cards)
 ///     .await?;
 /// ```
 ///

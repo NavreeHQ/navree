@@ -180,6 +180,51 @@ async fn a_column_taken_away_is_not_filtered_sorted_or_searched_by_the_database(
     done(db, dir).await;
 }
 
+/// A full-text index covers every searched column: with one taken away, none covers the
+/// rest, so they are searched for the text in them, as with no full-text mode set.
+#[tokio::test]
+async fn a_full_text_search_with_a_searched_column_taken_away_reads_the_rest_as_text() {
+    use navree::orm::Dialect;
+    use navree::ui::table::SearchMode;
+
+    let words = || query("search=Amritsar&per_page=100").search_mode(SearchMode::Words);
+    let sql = |query: &TableQuery<Staff, NoFilter>, dialect: Dialect| {
+        query
+            .apply(Staff::query())
+            .to_sql(dialect)
+            .expect("the statement")
+            .sql
+    };
+    for dialect in [Dialect::MySql, Dialect::Postgres] {
+        let whole = sql(&words(), dialect);
+        assert!(
+            whole.contains("MATCH") || whole.contains("to_tsvector"),
+            "{dialect:?}: every searched column, through the index: {whole}"
+        );
+        let reduced = sql(&words().without_columns(["name"]), dialect);
+        assert!(
+            !reduced.contains("MATCH") && !reduced.contains("to_tsvector"),
+            "{dialect:?}: no full-text condition over a list no index covers: {reduced}"
+        );
+        assert_eq!(
+            reduced,
+            sql(
+                &query("search=Amritsar&per_page=100").without_columns(["name"]),
+                dialect
+            ),
+            "{dialect:?}: the columns left, read as text"
+        );
+    }
+
+    // On SQLite, which has no full-text condition, the search runs and finds the city.
+    let (db, dir) = staff().await;
+    assert_eq!(
+        names(&words().without_columns(["name"]), &db).await.len(),
+        2
+    );
+    done(db, dir).await;
+}
+
 #[tokio::test]
 async fn an_export_stops_at_its_limit_and_says_so_only_when_it_cut_the_result() {
     let (db, dir) = staff().await;
