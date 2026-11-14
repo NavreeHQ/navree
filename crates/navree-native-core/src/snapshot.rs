@@ -7,12 +7,15 @@
 //! into forms and not sent, and which sheets were open. It holds nothing the
 //! server gives again: no tree,
 //! no page, no message. And nothing secret: no cookie, no token of a form or
-//! of a push service, no ticket, no verifier of a sign-in, nothing typed into
-//! a password field, and no file.
+//! of a push service, no ticket, no verifier of a sign-in, and no file; what
+//! was typed only for kinds on a short list of what is safe to keep (never a
+//! password, a one-time code, a card's number or security code, or a kind
+//! this build does not know).
 //!
 //! Starting from one (`restore`, in place of `start`) fetches the shell as
-//! any start does. Only when the shell names the same person as the snapshot
-//! was taken for are the stacks put back, each screen with its address and
+//! any start does. Only when this launch's shell (not one kept on the
+//! device) names the same person as the snapshot was taken for, told by id
+//! where there is one, are the stacks put back, each screen with its address and
 //! title and nothing else; the one in front is fetched at once and the others
 //! as they come to the front. What was typed goes back into a screen when its
 //! page arrives, into the fields that are still there and still of the same
@@ -110,10 +113,88 @@ fn person_of(user: Option<&crate::cache::Who>) -> Option<String> {
     })
 }
 
-/// Whether what a field holds may be kept: never a password, never a file.
+/// What a system may fill a field with, by the web's names, that a snapshot
+/// may keep: a person's name, their address, how to reach them. Anything
+/// else a field names (a card, a password, a one-time code, a name this
+/// build does not know) is not kept.
+const SAFE_AUTOFILL: [&str; 30] = [
+    "name",
+    "honorific-prefix",
+    "given-name",
+    "additional-name",
+    "family-name",
+    "honorific-suffix",
+    "nickname",
+    "organization-title",
+    "organization",
+    "street-address",
+    "address-line1",
+    "address-line2",
+    "address-line3",
+    "address-level4",
+    "address-level3",
+    "address-level2",
+    "address-level1",
+    "country",
+    "country-name",
+    "postal-code",
+    "language",
+    "url",
+    "email",
+    "tel",
+    "tel-country-code",
+    "tel-national",
+    "tel-area-code",
+    "tel-local",
+    "tel-extension",
+    "off",
+];
+
+/// Whether what a system may fill a field with says it may be kept: every
+/// word of it a section, a part of an address (`shipping`, `home`), or a
+/// name on the short list.
+fn safe_autofill(autofill: Option<&str>) -> bool {
+    autofill.is_none_or(|autofill| {
+        autofill.split_ascii_whitespace().all(|word| {
+            let word = word.to_ascii_lowercase();
+            word.starts_with("section-")
+                || matches!(
+                    word.as_str(),
+                    "shipping" | "billing" | "home" | "work" | "mobile" | "fax" | "pager"
+                )
+                || SAFE_AUTOFILL.contains(&word.as_str())
+        })
+    })
+}
+
+/// Whether what a field holds may be kept: only a kind on the short list of
+/// what is safe to keep. Never a password, a one-time code, a card's number
+/// or security code, a file, or a kind this build does not know.
 fn may_keep(input: &Input, value: &FieldValue) -> bool {
-    let secret = matches!(input, Input::Text(text) if text.kind == TextKind::Password);
-    !secret && !matches!(input, Input::File(_)) && !matches!(value, FieldValue::Files { .. })
+    let safe = match input {
+        Input::Text(text) => {
+            matches!(
+                text.kind,
+                TextKind::Plain
+                    | TextKind::Email
+                    | TextKind::Number
+                    | TextKind::Decimal
+                    | TextKind::Phone
+                    | TextKind::Url
+                    | TextKind::Search
+                    | TextKind::Multiline
+            ) && safe_autofill(text.autofill.as_deref())
+        }
+        Input::Toggle(_)
+        | Input::Choice(_)
+        | Input::Choices(_)
+        | Input::Date(_)
+        | Input::Slider(_)
+        | Input::Colour(_)
+        | Input::Range(_) => true,
+        _ => false,
+    };
+    safe && !matches!(value, FieldValue::Files { .. })
 }
 
 /// What a screen holds that only the person knew.
@@ -362,5 +443,78 @@ impl Core {
         for target in restored.open {
             self.set_open(id, &target, true);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cache::Who;
+    use navree_native::input::{TextInput, ToggleInput};
+
+    fn text(kind: TextKind, autofill: Option<&str>) -> Input {
+        Input::Text(TextInput {
+            kind,
+            autofill: autofill.map(str::to_owned),
+            ..TextInput::default()
+        })
+    }
+
+    #[test]
+    fn only_a_kind_on_the_short_list_is_kept() {
+        let typed = FieldValue::Text {
+            text: "x".to_owned(),
+        };
+        for safe in [
+            text(TextKind::Plain, None),
+            text(TextKind::Multiline, None),
+            text(TextKind::Email, Some("email")),
+            text(
+                TextKind::Plain,
+                Some("section-gift shipping address-level2"),
+            ),
+            text(TextKind::Phone, Some("work tel")),
+        ] {
+            assert!(may_keep(&safe, &typed), "{safe:?}");
+        }
+        assert!(may_keep(
+            &Input::Toggle(ToggleInput::default()),
+            &FieldValue::Flag { on: true }
+        ));
+        for secret in [
+            text(TextKind::Password, None),
+            text(TextKind::OneTimeCode, None),
+            text(TextKind::Plain, Some("one-time-code")),
+            text(TextKind::Plain, Some("current-password")),
+            text(TextKind::Number, Some("cc-number")),
+            text(TextKind::Number, Some("billing cc-csc")),
+            text(TextKind::Plain, Some("cc-name")),
+            text(TextKind::Plain, Some("transaction-amount")),
+            text(TextKind::Plain, Some("username webauthn")),
+            Input::Unknown,
+        ] {
+            assert!(!may_keep(&secret, &typed), "{secret:?}");
+        }
+    }
+
+    #[test]
+    fn the_person_a_snapshot_is_for_is_told_by_id_where_there_is_one() {
+        let who = |id: Option<&str>, name: &str| Who {
+            id: id.map(str::to_owned),
+            name: name.to_owned(),
+            email: None,
+        };
+        let ravneet = person_of(Some(&who(Some("u-ra01"), "Ravneet Kaur")));
+        // A new name is the same person; the same name with another id is not.
+        assert_eq!(
+            ravneet,
+            person_of(Some(&who(Some("u-ra01"), "Ravneet Kaur Sidhu")))
+        );
+        assert_ne!(
+            ravneet,
+            person_of(Some(&who(Some("u-ra02"), "Ravneet Kaur")))
+        );
+        assert_ne!(ravneet, person_of(Some(&who(None, "Ravneet Kaur"))));
+        assert_ne!(ravneet, person_of(None));
     }
 }
