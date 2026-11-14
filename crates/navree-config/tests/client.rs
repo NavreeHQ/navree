@@ -230,7 +230,10 @@ async fn two_client_modules_of_one_type_are_two_modules() {
     let ludhiana = app.ctx().get_named::<Forecasts>("ludhiana").await.unwrap();
     assert_eq!(
         (delhi.feed.as_str(), ludhiana.feed.as_str()),
-        ("https://mausam.example/delhi", "http://mausam.example/ludhiana")
+        (
+            "https://mausam.example/delhi",
+            "http://mausam.example/ludhiana"
+        )
     );
     app.shutdown().await.unwrap();
     assert!(
