@@ -13,9 +13,10 @@ use http::{HeaderMap, HeaderValue, Method};
 use navree_contracts::{
     AuditEntry, AuditKind, AuditSink, Clock, RequestId, SessionRecord, SessionStore, SystemClock,
 };
-use navree_crypto::{Encrypter, constant_time_eq};
+use navree_crypto::Encrypter;
 use navree_glob::Glob;
 use navree_http::body::Body;
+use navree_http::csrf::token_matches;
 use navree_http::extract::Request;
 use navree_http::middleware::{Next, State, from_fn_with_state};
 use navree_http::response::{IntoResponse, Response};
@@ -462,13 +463,14 @@ impl FormBody {
     }
 }
 
-/// Whether `given` (trimmed) is the session's CSRF token, compared in constant
-/// time. A session without a token has none to match.
+/// Whether `given` (trimmed) stands for the session's CSRF token: the token, or
+/// a mask of it as a page carries it ([`navree_http::csrf::token_matches`]),
+/// compared in constant time. A session without a token has none to match.
 fn is_session_token(session: &Session, given: &str) -> bool {
     let state = session.lock();
     state
         .token()
-        .is_some_and(|expected| constant_time_eq(given.trim().as_bytes(), expected.as_bytes()))
+        .is_some_and(|expected| token_matches(given, expected))
 }
 
 /// Whether the request body is `application/x-www-form-urlencoded`.
@@ -568,8 +570,9 @@ async fn take_multipart_token(
     Ok(Request::from_parts(parts, body))
 }
 
-/// Whether `X-CSRF-TOKEN`, or the URL-decoded `X-XSRF-TOKEN`, equals the
-/// session's CSRF token (compared in constant time).
+/// Whether `X-CSRF-TOKEN`, or the URL-decoded `X-XSRF-TOKEN`, stands for the
+/// session's CSRF token: equals it, or is a mask of it (compared in constant
+/// time).
 fn check_csrf(request: &Request, session: &Session) -> Result<(), CsrfFailure> {
     let headers = request.headers();
     let plain = headers
@@ -591,7 +594,7 @@ fn check_csrf(request: &Request, session: &Session) -> Result<(), CsrfFailure> {
     let matches = given
         .iter()
         .flatten()
-        .any(|given| constant_time_eq(given.trim().as_bytes(), expected.as_bytes()));
+        .any(|given| token_matches(given, expected));
     if matches {
         Ok(())
     } else {

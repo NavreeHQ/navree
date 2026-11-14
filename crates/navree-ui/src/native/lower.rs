@@ -1413,14 +1413,14 @@ impl Cx {
                     let Some(href) = attr(element, "formaction") else {
                         return fail("a post with no address");
                     };
-                    // The session's token goes only with a post to this site.
+                    // The session's token goes only with a post to this site, masked.
                     let mut fields: Vec<Pair> = self
                         .csrf
                         .iter()
                         .filter(|_| super::swap::on_this_site(&href))
                         .map(|token| Pair {
                             name: crate::form::CSRF_FIELD.to_owned(),
-                            value: token.clone(),
+                            value: navree_http::csrf::page_token(token),
                         })
                         .collect();
                     fields.extend(attr(element, "name").map(|name| {

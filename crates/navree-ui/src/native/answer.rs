@@ -359,8 +359,9 @@ fn finish(screen: &mut Screen, token: Option<&str>) {
 /// Gives a part what its function could not know: the shapes of each icon it
 /// names from the toolkit's set, with the system symbol that means the same,
 /// and the session's token in every post it makes to this site (a form that
-/// posts, a control that posts on its own) that does not carry one already.
-/// A post to another site never carries the token.
+/// posts, a control that posts on its own) that does not carry one already,
+/// masked afresh for each ([`navree_http::csrf::page_token`]). A post to
+/// another site never carries the token.
 fn finish_part(part: &mut Part, token: Option<&str>) {
     let mut stack = vec![part];
     while let Some(node) = stack.pop() {
@@ -375,7 +376,7 @@ fn finish_part(part: &mut Part, token: Option<&str>) {
             {
                 form.hidden.push(n::Hidden {
                     name: CSRF_FIELD.to_owned(),
-                    value: token.to_owned(),
+                    value: navree_http::csrf::page_token(token),
                     id: None,
                 });
             }
@@ -391,7 +392,7 @@ fn finish_part(part: &mut Part, token: Option<&str>) {
                 {
                     fields.push(Pair {
                         name: CSRF_FIELD.to_owned(),
-                        value: token.to_owned(),
+                        value: navree_http::csrf::page_token(token),
                     });
                 }
             }
@@ -719,6 +720,34 @@ mod tests {
                 ("https://pay.example.in/pay".to_owned(), false),
             ]
         );
+    }
+
+    /// A screen carries the session's token as a page does: masked, a fresh mask for
+    /// each post, each of which holds the token.
+    #[test]
+    fn a_screen_carries_the_sessions_token_masked() {
+        let token = "Agra4Pune7Kota2Surat9Patna1Ranchi8Mysore";
+        let mut screen = Screen::titled("Pay").body(Stack::down().parts((
+            Form::post("/orders/1/refund").id("one"),
+            Form::post("/orders/1/note").id("two"),
+        )));
+        finish(&mut screen, Some(token));
+        let carried = |id: &str| {
+            let Some(Part::Form(form)) = screen.body.find(id) else {
+                panic!("no form {id}");
+            };
+            let hidden = form.hidden.iter().find(|hidden| hidden.name == CSRF_FIELD);
+            hidden.expect("the token").value.clone()
+        };
+        let (one, two) = (carried("one"), carried("two"));
+        assert_ne!(one, two);
+        for value in [&one, &two] {
+            assert_ne!(value, token);
+            assert_eq!(
+                navree_http::csrf::unmask_token(value).as_deref(),
+                Some(token)
+            );
+        }
     }
 
     #[test]

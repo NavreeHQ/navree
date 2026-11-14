@@ -646,13 +646,18 @@ pub(crate) async fn custom_page(
         let base = cx.core.options.base();
         let frame = Frame::new(&panel, &headers, format!("{base}/pages/{}", page.slug));
         let template = page.template.as_deref().unwrap_or_default();
+        // The session's token, masked afresh for this page.
+        let csrf_token = frame
+            .csrf()
+            .map(navree_http::csrf::page_token)
+            .unwrap_or_default();
         let content = views
             .render(
                 template,
                 json!({
                     "title": page.title,
                     "user": user_json(cx).await,
-                    "csrf_token": frame.csrf().unwrap_or_default(),
+                    "csrf_token": csrf_token,
                     "path": base,
                     "data": data,
                 }),

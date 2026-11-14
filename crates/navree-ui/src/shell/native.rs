@@ -284,7 +284,7 @@ fn user_of(user: &UserMenu, csrf: Option<&str>) -> s::User {
                         .iter()
                         .map(|token| Pair {
                             name: CSRF_FIELD.to_owned(),
-                            value: (*token).to_owned(),
+                            value: navree_http::csrf::page_token(token),
                         })
                         .collect(),
                 }),

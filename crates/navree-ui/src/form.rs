@@ -1568,11 +1568,18 @@ impl<T: Form> FormView<T> {
 pub const CSRF_FIELD: &str = navree_http::csrf::CSRF_FIELD;
 
 /// The hidden field that carries `token`, for a form that is not a [`FormView`].
+/// The session's token goes in masked afresh each time
+/// ([`navree_http::csrf::page_token`]), so no two pages carry the same string
+/// and a compressed page says nothing of it; the session's check takes it back.
 pub fn csrf_field(token: impl Into<crate::node::AttrValue>) -> Element {
+    let token = token.into();
+    let masked = token
+        .as_text()
+        .map(|text| navree_http::csrf::page_token(&text));
     el("input")
         .attr("type", "hidden")
         .attr("name", CSRF_FIELD)
-        .attr("value", token)
+        .attr("value", masked.map_or(token, crate::node::AttrValue::from))
 }
 
 /// An already checked URL, as an attribute value.

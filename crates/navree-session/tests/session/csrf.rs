@@ -927,3 +927,89 @@ async fn a_same_origin_only_path_takes_a_post_from_this_site_without_the_token()
         .await
         .assert_error(403, "Invalid CSRF token");
 }
+
+/// A page writes the session's token masked afresh in every answer, so no two
+/// pages carry the same string; each of them posts, as the cookie's value does,
+/// for as long as the session keeps its token.
+mod masked_tokens {
+    use navree_http::csrf::mask_token;
+    use navree_testing::TestClient;
+
+    use super::plain_forms::signed_in;
+    use crate::support;
+
+    /// The token the form page at `/api/probe/form` carries this time.
+    async fn drawn(client: &TestClient) -> String {
+        let html = client
+            .get("/api/probe/form")
+            .send()
+            .await
+            .assert_status(200)
+            .text();
+        let marker = r#"name="_csrf" value=""#;
+        let start = html.find(marker).expect("a token field") + marker.len();
+        let token = html[start..].split('"').next();
+        token.unwrap_or_default().to_owned()
+    }
+
+    /// Posts `token` in a form's `_csrf` field and in each header.
+    async fn post_all_ways(client: &TestClient, token: &str, status: u16) {
+        let response = client
+            .post("/api/probe/echo")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(format!("_csrf={token}&title=Agra"))
+            .send()
+            .await;
+        assert_eq!(response.status().as_u16(), status, "the field: {token}");
+        if status == 200 {
+            assert_eq!(response.text(), "title=Agra");
+        }
+        for header in ["x-csrf-token", "x-xsrf-token"] {
+            let response = client
+                .post("/api/probe/write")
+                .header(header, token)
+                .send()
+                .await;
+            assert_eq!(response.status().as_u16(), status, "{header}: {token}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_form_drawn_twice_carries_two_tokens_and_both_post() {
+        let (_app, client, token) = signed_in().await;
+        let first = drawn(&client).await;
+        let second = drawn(&client).await;
+        assert_ne!(first, second, "a fresh mask for every page");
+        assert!(!first.contains(&token) && !second.contains(&token));
+        // The page drawn first still posts after the second was drawn, and so does the
+        // cookie's value.
+        for given in [&first, &second, &token] {
+            post_all_ways(&client, given, 200).await;
+        }
+        // The same page again, after posts: the token is the session's until it changes.
+        post_all_ways(&client, &first, 200).await;
+    }
+
+    #[tokio::test]
+    async fn a_wrong_token_fails_masked_or_not() {
+        let (_app, client, token) = signed_in().await;
+        let page = drawn(&client).await;
+        let mut wrong = token.clone();
+        let last = wrong.pop().unwrap();
+        wrong.push(if last == 'a' { 'b' } else { 'a' });
+        // Another session's page.
+        let other_app = support::app().await;
+        let other = other_app.client();
+        other.csrf_cookie().await;
+        let other_page = drawn(&other).await;
+        for given in [
+            mask_token(&wrong),
+            mask_token(&token[..39]),
+            page[..page.len() - 1].to_owned(),
+            format!("{page}A"),
+            other_page,
+        ] {
+            post_all_ways(&client, &given, 403).await;
+        }
+    }
+}

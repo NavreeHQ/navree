@@ -651,9 +651,17 @@ async fn the_switcher_lists_the_users_workspaces() {
         html[current..].contains("Gulati"),
         "the current one is Gulati: {html}"
     );
+    // The page carries the session's token masked: the cookie's token, once unmasked.
     let token = client.cookie("XSRF-TOKEN").expect("the token cookie");
-    assert!(
-        html.contains(&format!(r#"name="_csrf" value="{token}""#)),
+    let marker = r#"name="_csrf" value=""#;
+    let carried = html
+        .find(marker)
+        .and_then(|at| html[at + marker.len()..].split('"').next())
+        .expect("a token field");
+    assert_ne!(carried, token);
+    assert_eq!(
+        navree_http::csrf::unmask_token(carried).as_deref(),
+        Some(token.as_str()),
         "{html}"
     );
     assert!(
