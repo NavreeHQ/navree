@@ -656,7 +656,7 @@ struct ReadableList: ViewModifier {
     func body(content: Content) -> some View {
         if let width {
             content
-                .contentMargins(.horizontal, max(0, (room - CGFloat(width)) / 2), for: .scrollContent)
+                .safeAreaPadding(.horizontal, max(0, (room - CGFloat(width)) / 2))
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { room = $0 }
         } else {
             content
