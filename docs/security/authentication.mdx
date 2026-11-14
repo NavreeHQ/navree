@@ -1019,7 +1019,7 @@ impl SignInPolicy for PasskeysForContractors {
 }
 ```
 
-Register it in a module with `m.sign_in_policy::<PasskeysForContractors>()`. [Single sign-on](/docs/security/single-sign-on/#enforcement) registers the policy that sends the verified domains of an enforcing connection through that connection only (`sso_required`).
+Register it in a module with `m.sign_in_policy::<PasskeysForContractors>()`. A policy that keeps some people to one method also sees `SignInMethod::AppHandOver` when one of them [hands a browser sign-in over to a native app](/docs/security/passwordless/#signing-an-app-in-through-the-systems-sign-in-session). That browser sign-in was asked about its own method when it was made, and the app's session keeps its sign-in time and end, so let `AppHandOver` through unless the rule is about the apps themselves. [Single sign-on](/docs/security/single-sign-on/#enforcement) registers the policy that sends the verified domains of an enforcing connection through that connection only (`sso_required`).
 
 Your own sign-in flows end with `AuthService::sign_in(&user, method, &meta)`, which asks the policies and then starts the session, or call `check_sign_in(&attempt, &meta)` first and `issue_tokens` after. `check_password_sign_in(email)` asks about `Password` without an audit entry. `issue_tokens` alone asks nothing: keep it for tests and seeders. A two-factor challenge from `two_factor_challenge(&user, &method)` remembers the method, and `POST /api/auth/2fa/verify` asks the policies about it again, so a domain that came to enforce single sign-on between the two steps is refused.
 
