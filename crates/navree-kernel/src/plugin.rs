@@ -184,10 +184,12 @@ impl PublishTag {
 /// (also once placed in its folder), or with a segment longer than 128 bytes;
 /// an empty, `.` or `..` segment, a leading `/`, a `\`, a `:` or a control
 /// character; one of `<>"|?*`; a segment ending in `.` or a space; a segment
-/// named after a Windows device (`con`, `prn`, `aux`, `nul`, `com0` to `com9`,
-/// `lpt0` to `lpt9`, in any case, with or without an extension); two paths of
-/// one plugin under one tag that differ only in case. Under `locales` the
-/// first segment is the locale.
+/// named after a Windows device (`con`, `prn`, `aux`, `nul`, `conin$`,
+/// `conout$`, `com0` to `com9`, `lpt0` to `lpt9`, `com¹` to `com³`, `lpt¹` to
+/// `lpt³`, in any case, with or without an extension); two paths of one
+/// plugin under one tag that differ only in case (their lower-case forms or
+/// their upper-case forms are equal). Under `locales` the first segment is
+/// the locale.
 ///
 /// ```
 /// use navree_kernel::{PublishTag, Publishable};
