@@ -26,8 +26,9 @@ import NavreeShell
 ///   for a right click, the menu that opened (closed again a moment later);
 /// - `keypress:<escape|return>`: that key sent to the key window, then the
 ///   key window and the panel's state; `panelstate`: that state alone;
-/// - `panelsize:<width>x<height>`: the open panel made that size as a drag
-///   makes it (no smaller than it allows), its top kept;
+/// - `panelsize:<width>x<height>`, `windowsize:<width>x<height>`: the open
+///   panel, or the full window, made that size as a drag makes it (no
+///   smaller than it allows), its top kept;
 /// - `deactivate`: the app sent to the background (the Finder brought
 ///   forward), then the panel's state;
 /// - `openinwindow`, `closewindow`: that app in a full window and back, each
@@ -154,6 +155,18 @@ enum PresenceSteps {
             panel.setFrame(frame, display: true)
             try? await Task.sleep(for: .seconds(1))
             return ["panelsize \(argument): \(Int(panel.frame.width))x\(Int(panel.frame.height)), asked \(argument), resizable \(panel.styleMask.contains(.resizable))"]
+        case "windowsize":
+            // The full window made that size as a person drags its edge, its top kept.
+            let numbers = argument.split(separator: "x").compactMap { Double($0) }
+            guard numbers.count == 2, let window = model.statusWindows.window, window.isVisible else { return ["windowsize \(argument): no full window"] }
+            let asked = CGSize(width: numbers[0], height: numbers[1])
+            let size = window.delegate?.windowWillResize?(window, to: asked) ?? asked
+            var frame = window.frame
+            frame.origin.y += frame.height - size.height
+            frame.size = size
+            window.setFrame(frame, display: true)
+            try? await Task.sleep(for: .seconds(1))
+            return ["windowsize \(argument): \(Int(window.frame.width))x\(Int(window.frame.height)), content \(Int(window.contentLayoutRect.width))x\(Int(window.frame.height - (window.frame.height - window.contentRect(forFrameRect: window.frame).height))), asked \(argument)"]
         case "composedwindow":
             // The app's full window, as the window server composes it.
             guard let window = model.statusWindows.window, window.isVisible else { return ["composedwindow \(argument): no full window"] }
