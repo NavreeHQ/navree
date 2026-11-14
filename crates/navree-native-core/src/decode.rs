@@ -296,9 +296,17 @@ impl Sources<'_> {
     /// A picture's source as a client is given it: a source on one of the
     /// app's origins as its whole address, a whole `https` address of
     /// another host written again from its parts (a client loads it or not
-    /// by its own list of picture hosts), and anything else as nothing,
-    /// which a client draws as its placeholder.
+    /// by its own list of picture hosts), a `data:image/` source as it came,
+    /// and anything else as nothing, which a client draws as its placeholder.
     fn source(&self, src: &str) -> String {
+        // A picture written into the page itself (a QR code, a small chart) is
+        // no address and nothing is fetched for it: it stays as it came.
+        if src
+            .get(..11)
+            .is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:image/"))
+        {
+            return src.to_owned();
+        }
         match self.origin.resolve(src, self.from) {
             Target::Inside(url) => self.origin.absolute(&url).unwrap_or_default(),
             Target::Outside(url) if url.starts_with("https://") => url,
@@ -753,7 +761,17 @@ mod tests {
             ("/\\evil.example/a.png", ""),
             ("//evil.example\\a.png", ""),
             (" /a.png", ""),
-            ("data:image/png;base64,AAAA", ""),
+            // A picture written into the page itself is no address: it stays as it came.
+            (
+                "data:image/png;base64,iVBORw0KGgo=",
+                "data:image/png;base64,iVBORw0KGgo=",
+            ),
+            (
+                "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'/%3E",
+                "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'/%3E",
+            ),
+            ("data:text/html,<p>x</p>", ""),
+            ("data:,x", ""),
             ("javascript:1", ""),
             ("file:///etc/hosts", ""),
             ("https://user@cdn.example/a.png", ""),
