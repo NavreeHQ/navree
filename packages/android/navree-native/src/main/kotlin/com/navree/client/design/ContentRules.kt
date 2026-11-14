@@ -196,7 +196,11 @@ enum class PickerMode {
 
 /** What the keyboard should be for a text field. */
 data class KeyboardPlan(
-    /** `text`, `email`, `password`, `number`, `decimal`, `phone` or `uri`. */
+    /**
+     * `text`, `email`, `password`, `number`, `decimal`, `phone`, `uri`, or
+     * `secret_number`: digits the keyboard keeps no memory of (a one-time
+     * code, a card's number or security code), shown as typed.
+     */
     val type: String,
     /** `none`, `words` or `sentences`. */
     val capitalise: String,
@@ -243,13 +247,29 @@ object FormRules {
 
     fun picker(window: WindowInfo): PickerMode = if (window.height == HeightClass.Compact) PickerMode.Input else PickerMode.Picker
 
-    fun keyboard(kind: Navree.TextKind): KeyboardPlan = when (kind) {
+    /**
+     * The keyboard for a text field. What the keyboard must not learn (a
+     * password, a one-time code, a card's number or security code, named by
+     * the field's autofill hint) gets a keyboard of the password kind, which
+     * keyboards do not learn from or suggest.
+     */
+    fun keyboard(kind: Navree.TextKind, autofill: String? = null): KeyboardPlan =
+        if (kind != Navree.TextKind.PASSWORD && autofill?.trim()?.lowercase() in SECRET_NUMBERS) {
+            KeyboardPlan("secret_number", "none", autoCorrect = false, singleLine = true)
+        } else {
+            keyboardOf(kind)
+        }
+
+    /** Autofill hints of numbers the keyboard must not learn. */
+    private val SECRET_NUMBERS = setOf("one-time-code", "cc-number", "cc-csc")
+
+    private fun keyboardOf(kind: Navree.TextKind): KeyboardPlan = when (kind) {
         Navree.TextKind.PLAIN -> KeyboardPlan("text", "sentences", autoCorrect = true, singleLine = true)
         Navree.TextKind.MULTILINE -> KeyboardPlan("text", "sentences", autoCorrect = true, singleLine = false)
         Navree.TextKind.EMAIL -> KeyboardPlan("email", "none", autoCorrect = false, singleLine = true)
         Navree.TextKind.PASSWORD -> KeyboardPlan("password", "none", autoCorrect = false, singleLine = true)
         Navree.TextKind.NUMBER -> KeyboardPlan("number", "none", autoCorrect = false, singleLine = true)
-        Navree.TextKind.ONE_TIME_CODE -> KeyboardPlan("number", "none", autoCorrect = false, singleLine = true)
+        Navree.TextKind.ONE_TIME_CODE -> KeyboardPlan("secret_number", "none", autoCorrect = false, singleLine = true)
         Navree.TextKind.DECIMAL -> KeyboardPlan("decimal", "none", autoCorrect = false, singleLine = true)
         Navree.TextKind.PHONE -> KeyboardPlan("phone", "none", autoCorrect = false, singleLine = true)
         Navree.TextKind.URL -> KeyboardPlan("uri", "none", autoCorrect = false, singleLine = true)
