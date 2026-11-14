@@ -469,6 +469,58 @@ async fn password_and_code_still_confirm_an_action() {
 }
 
 #[tokio::test]
+async fn confirming_an_action_does_not_make_the_sign_in_recent() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    let client = app.client();
+    let (_, access, refresh) = signed_in(&app, "simran@example.com").await;
+    let phone = VirtualAuthenticator::new(RP_ID, ORIGIN);
+    register(&client, &access, &phone).await;
+    let auth = app.get::<AuthService>().await;
+    let claims = support::claims_of(auth.jwt(), &access);
+    // Past the probe's ten minutes of recent sign-in, inside the access
+    // token's fifteen.
+    clock.advance(Duration::from_secs(11 * 60));
+
+    // The payment is approved with the passkey, and another with the
+    // password.
+    let assertion = phone
+        .get(&challenge(&client, &access, "PAY-2024", LAKH).await)
+        .unwrap();
+    approve(&client, &access, "PAY-2024", LAKH, &assertion)
+        .await
+        .assert_status(200);
+    auth.confirm_action(
+        &claims,
+        &approval("PAY-2025", HUNDRED),
+        ConfirmProof::Password(PASSWORD.to_owned()),
+        &ClientMeta::default(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(sink.with_action("auth.confirmed").len(), 2);
+
+    // Neither counts as a step-up: a token refreshed afterwards still
+    // carries the sign-in of eleven minutes ago.
+    let fresh = tokens(
+        &support::refresh(&client, &refresh)
+            .await
+            .assert_status(200),
+    )
+    .0;
+    assert_eq!(
+        support::claims_of(auth.jwt(), &fresh).auth_time,
+        claims.auth_time
+    );
+    client
+        .post("/api/probe/sensitive")
+        .bearer(&fresh)
+        .send()
+        .await
+        .assert_status(403);
+}
+
+#[tokio::test]
 async fn a_passkey_steps_up_through_post_auth_confirm_passkey() {
     let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
     let app = app(&clock, &sink).await;

@@ -216,7 +216,7 @@ async fn approve(
 }
 ```
 
-The challenge is `SHA-256("navree-confirm-v1" ‖ nonce ‖ digest)`, where the digest covers the action's name and every field. `confirm_action` computes the digest again from the action the handler built from its own record, so a confirmation of ₹100 posted to the approval of ₹1,00,000 is refused, and so is a confirmation of another payment. Get the challenge for an action with `AuthService::confirmation_options(user_id, session_id, &action)`, or let the page hand the client a ticket for it (below). `confirm_action` also takes `ConfirmProof::Password` and `ConfirmProof::Code`, for clients without passkeys; those prove the person, not the action. A confirmed action is audited as `auth.confirmed` with `metadata.action`, and counts as a step-up.
+The challenge is `SHA-256("navree-confirm-v1" ‖ nonce ‖ digest)`, where the digest covers the action's name and every field. `confirm_action` computes the digest again from the action the handler built from its own record, so a confirmation of ₹100 posted to the approval of ₹1,00,000 is refused, and so is a confirmation of another payment. Get the challenge for an action with `AuthService::confirmation_options(user_id, session_id, &action)`, or let the page hand the client a ticket for it (below). `confirm_action` also takes `ConfirmProof::Password` and `ConfirmProof::Code`, for clients without passkeys; those prove the person, not the action. A confirmed action is audited as `auth.confirmed` with `metadata.action`. It approves that action only and is not a step-up: the session's `authenticated_at` stays as it was, so `#[recent_auth]` routes see the same sign-in time as before.
 
 ## Tickets for results posted back
 
@@ -279,7 +279,7 @@ impl SessionInfoController {
 | `revoke_session(user_id, session_id, &meta)` | Ends one session; `AuthError::SessionNotFound` when it isn't the user's |
 | `confirm(&claims, proof, &meta)` | Step-up confirmation with `ConfirmProof::Password(..)`, `ConfirmProof::Code(..)` or `ConfirmProof::Passkey(..)`: a `ConfirmedToken` |
 | `confirmation_options(user_id, session_id, &action)` | The `publicKey` request options of a passkey confirmation of `action` |
-| `confirm_action(&claims, &action, proof, &meta)` | Confirms `action` (a passkey bound to it, or the password or a code); the new `auth_time` |
+| `confirm_action(&claims, &action, proof, &meta)` | Confirms `action` (a passkey bound to it, or the password or a code); the time of the confirmation. The session's `auth_time` does not change |
 | `live_sessions(user_id, &ids)` | Which of the session ids are live |
 
 `JwtService::sign_session(user_id, typ, ttl, SessionClaims { session_id, auth_time, impersonator })` signs a token with session claims yourself; `verify_any(token, &[types])` verifies a token of any of several types.
@@ -300,7 +300,7 @@ Three columns of `refresh_tokens` hold the session's state, copied from token to
 
 | Column | |
 |---|---|
-| `authenticated_at` | The session's last sign-in or confirmation: the `auth_time` of its tokens |
+| `authenticated_at` | The session's last sign-in or step-up confirmation (not the confirmation of an action): the `auth_time` of its tokens |
 | `impersonator_id` | For an impersonation session, the impersonating user |
 | `audience` | `platform` for a platform session; null for the app |
 
