@@ -456,7 +456,7 @@ Environment variables reach the settings too: `APP_CACHE__TWO_TIER__CAPACITY=500
 
 A store's name is a lower-case letter followed by up to 63 lower-case letters, digits or `_`. `ctx.settings()` reads `[cache.two_tier]` into your type (its `Default` when the table is missing), and an error names the key, never a value; `ctx.settings_key()` is `cache.two_tier`.
 
-These fail the boot, naming `m.cache_store` and the module that registered the name: a name that is not such a word, a built-in name (`memory`, `redis`), a name equal to a key of `[cache]` (`store`, `prefix`, `default_ttl_secs`), and one name registered by two modules, even when another store is selected. So does `cache.store` naming a store no module registers (the message lists the stores that are known), and a factory that returns an error.
+These fail the boot, naming `m.cache_store` and the module that registered the name: a name that is not such a word, a built-in name (`memory`, `redis`), a name equal to a key of `[cache]` (`store`, `prefix`, `default_ttl_secs`), and one name registered by two modules, even when another store is selected. So does `cache.store` naming a store no module registers (the message lists the stores that are known), and a factory that returns an error. A factory's error is shown in the boot error as written, so it must not contain a secret from the driver's settings.
 
 `config:check` reports the same problems, in the same words, without booting the app, and `config:schema` lists the registered stores beside the built-in ones.
 

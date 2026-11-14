@@ -62,7 +62,9 @@ pub trait ModuleBuilderSearchExt {
     /// of the `search` section (`prefix`) and a name two modules register
     /// fail the boot, naming `m.search_engine` and the module, also when
     /// another engine is selected; `config:check` says the same. A factory
-    /// that fails fails the boot, naming the engine and the module.
+    /// that fails fails the boot, naming the engine and the module. A
+    /// factory's error is shown in the boot error as written, so it must not
+    /// contain a secret from the driver's settings.
     fn search_engine<E, F, Fut>(&mut self, name: &'static str, factory: F) -> &mut Self
     where
         E: SearchEngine,

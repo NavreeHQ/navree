@@ -100,7 +100,9 @@ pub trait ModuleBuilderCacheExt {
     /// a key of the `cache` section (`prefix`) and a name two modules
     /// register fail the boot, naming `m.cache_store` and the module, also
     /// when another store is selected; `config:check` says the same. A
-    /// factory that fails fails the boot, naming the store and the module.
+    /// factory that fails fails the boot, naming the store and the module. A
+    /// factory's error is shown in the boot error as written, so it must not
+    /// contain a secret from the driver's settings.
     fn cache_store<F, Fut>(&mut self, name: &'static str, factory: F) -> &mut Self
     where
         F: Fn(DriverContext) -> Fut + Send + Sync + 'static,

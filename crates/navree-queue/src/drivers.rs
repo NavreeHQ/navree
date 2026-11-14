@@ -59,7 +59,8 @@ pub trait ModuleBuilderQueueExt {
     /// modules register fail the boot, naming `m.queue_store` and the
     /// module, also when another store is selected; `config:check` says the
     /// same. A factory that fails fails the boot, naming the store and the
-    /// module.
+    /// module. A factory's error is shown in the boot error as written, so it
+    /// must not contain a secret from the driver's settings.
     fn queue_store<S, F, Fut>(&mut self, name: &'static str, factory: F) -> &mut Self
     where
         S: QueueStore,

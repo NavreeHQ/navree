@@ -97,8 +97,10 @@ pub trait ModuleBuilderMailTransportExt {
     /// modules register fail the boot, naming `m.mail_transport` and the
     /// module, also when another transport is selected; `config:check`
     /// says the same. A factory that fails fails the boot, naming the
-    /// transport and the module. A tenant's stored transport cannot name a
-    /// registered transport.
+    /// transport and the module. A factory's error is shown in the boot error
+    /// as written, so it must not contain a secret from the driver's
+    /// settings. A tenant's stored transport cannot name a registered
+    /// transport.
     fn mail_transport<T, F, Fut>(&mut self, name: &'static str, factory: F) -> &mut Self
     where
         T: MailTransport,

@@ -63,7 +63,9 @@ pub trait ModuleBuilderBackplaneExt {
     /// key of the `realtime` section (`secret`) and a name two modules
     /// register fail the boot, naming `m.backplane` and the module, also when
     /// another backplane is selected; `config:check` says the same. A factory
-    /// that fails fails the boot, naming the backplane and the module.
+    /// that fails fails the boot, naming the backplane and the module. A
+    /// factory's error is shown in the boot error as written, so it must not
+    /// contain a secret from the driver's settings.
     fn backplane<B, F, Fut>(&mut self, name: &'static str, factory: F) -> &mut Self
     where
         B: Backplane,

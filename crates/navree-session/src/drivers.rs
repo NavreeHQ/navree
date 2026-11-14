@@ -75,7 +75,8 @@ pub trait ModuleBuilderSessionExt {
     /// name two modules register fail the boot, naming `m.session_store` and
     /// the module, also when another store is selected; `config:check` says
     /// the same. A factory that fails fails the boot, naming the store and
-    /// the module.
+    /// the module. A factory's error is shown in the boot error as written,
+    /// so it must not contain a secret from the driver's settings.
     fn session_store<S, F, Fut>(&mut self, name: &'static str, factory: F) -> &mut Self
     where
         S: SessionStore,
