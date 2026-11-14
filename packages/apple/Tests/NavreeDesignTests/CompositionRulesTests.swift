@@ -108,12 +108,10 @@ private let navigate = Navree.Action.navigate(Navree.Action.Navigate(href: "/sle
     #expect(CompositionRules.wholeColumns(most: 0, cuts: { _ in true }) == 1)
 }
 
-@Test func aRowOfTilesShrinksAsOneAndNeverAtTheAccessibilitySizes() {
-    #expect(CompositionRules.rowTypeSizes(.large) == [.large, .medium, .small])
-    #expect(CompositionRules.rowTypeSizes(.xxxLarge) == [.xxxLarge, .xxLarge, .xLarge])
-    #expect(CompositionRules.rowTypeSizes(.xSmall) == [.xSmall])
-    #expect(CompositionRules.rowTypeSizes(.small) == [.small, .xSmall])
-    #expect(CompositionRules.rowTypeSizes(.accessibility2) == [.accessibility2])
+@Test func aRowOfTilesKeepsThePersonsTextSizeAtEverySizeAndReflowsInstead() {
+    for size in DynamicTypeSize.allCases {
+        #expect(CompositionRules.rowTypeSizes(size) == [size])
+    }
 }
 
 @Test func aGridWithALeastWidthDrawsAsManyAsFitAndNoMoreThanItsCount() {

@@ -70,3 +70,31 @@ extension Color {
         opacity(scheme == .dark ? 0.26 : 0.18)
     }
 }
+
+/// Words in a colour that means something (a tone, a measure's hue), as dark
+/// as they need to be to read on a light ground (``ContrastRules``): the
+/// system's colour as the environment resolves it (its dark form in the dark,
+/// its darker form with Increase Contrast), then darkened as little as reads.
+struct ReadableWords: ShapeStyle {
+    let base: Color
+
+    init(_ base: Color) {
+        self.base = base
+    }
+
+    func resolve(in environment: EnvironmentValues) -> Color {
+        let resolved = base.resolve(in: environment)
+        guard environment.colorScheme == .light, let rgb = Self.rgb(resolved) else { return Color(resolved) }
+        let words = ContrastRules.words(rgb, dark: false)
+        return Color(.sRGB, red: words.red, green: words.green, blue: words.blue, opacity: Double(resolved.opacity))
+    }
+
+    /// A resolved colour in sRGB, as its stored components are drawn.
+    static func rgb(_ resolved: Color.Resolved) -> ContrastRules.RGB? {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+            let converted = resolved.cgColor.converted(to: space, intent: .defaultIntent, options: nil),
+            let parts = converted.components, parts.count >= 3
+        else { return nil }
+        return ContrastRules.RGB(Double(parts[0]), Double(parts[1]), Double(parts[2]))
+    }
+}

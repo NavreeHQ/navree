@@ -113,6 +113,14 @@ public enum RingRules {
         }
     }
 
+    /// The size of the number in a ring's middle: 0.3 of the ring at the
+    /// text size the ring was drawn for, and growing on with the person's
+    /// text past the size the ring stops growing at (the number then fits
+    /// itself into the ring), so it follows every text size.
+    public static func centreSize(diameter: Double, textScale: Double, ringScale: Double) -> Double {
+        diameter * 0.3 * max(textScale, 0.1) / max(ringScale, 0.1)
+    }
+
     /// Whether words go in the middle: a small ring says its value to VoiceOver only.
     public static func showsCentre(_ prominence: Navree.Prominence, centre: Navree.Centre) -> Bool {
         prominence != .low && centre != .nothing
