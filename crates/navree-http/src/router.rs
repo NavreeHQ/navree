@@ -14,7 +14,7 @@ use http::request::Parts;
 use http::{Method, StatusCode};
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
-use navree_kernel::{AppContext, BoxError, BoxFuture};
+use navree_kernel::{AppContext, BoxError, BoxFuture, Contributed, ModuleId, PluginReport};
 use navree_telemetry::{EventKind, Telemetry, TracePolicy, TracePolicySection};
 use tower::Service;
 use tower::util::BoxCloneSyncService;
@@ -83,17 +83,16 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
         ipv6_prefix: options.rate_limit_ipv6_prefix,
         rate_limits,
     };
-    // The module that answers errors with pages, if any.
-    let pages = ctx
-        .contributions::<crate::ErrorPagesHandle>()
-        .into_iter()
-        .next()
-        .map(|c| (*c.value).clone());
+    // The module that answers errors with pages, if any. Only the app chooses it: pages
+    // from a module of a plugin the kernel does not find first-party stop the boot,
+    // wherever that module is in the order.
+    let contributed = ctx.contributions::<crate::ErrorPagesHandle>();
+    let mut errors = error_pages_of_plugins(ctx, &contributed);
+    let pages = contributed.into_iter().next().map(|c| (*c.value).clone());
     let mut routes_router = routing::Router::new();
     // With such a module, a second router with the same paths that finds a request's route
     // without running it, for an error raised before the route did.
     let mut finder = pages.is_some().then(RouteFinder::new);
-    let mut errors = Vec::new();
     for route in routes {
         if let Err(error) = mount(&mut routes_router, finder.as_mut(), route, &shared) {
             errors.push(error);
@@ -187,6 +186,39 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
     });
     router = with_stages(router, &mut stages);
     apply_edge(ctx, router)
+}
+
+/// The refusal of each [`ErrorPages`](crate::ErrorPages) in `contributed` that a module of
+/// a plugin the kernel does not find first-party registered, in module order: only the app
+/// chooses what answers its errors, so it registers such a plugin's pages from a module of
+/// its own. A module of the app, a module that names no plugin and a first-party plugin's
+/// module are not refused.
+fn error_pages_of_plugins(
+    ctx: &AppContext,
+    contributed: &[Contributed<crate::ErrorPagesHandle>],
+) -> Vec<String> {
+    if contributed.is_empty() {
+        return Vec::new();
+    }
+    let plugins = ctx.plugins().plugins;
+    contributed
+        .iter()
+        .filter_map(|pages| {
+            let plugin = community_plugin(&plugins, pages.module.id)?;
+            Some(format!(
+                "plugin `{}` answers the app's errors (m.error_pages in `{}`); only the app chooses that: register the plugin's pages from a module of the app",
+                plugin.info.name, pages.module.name
+            ))
+        })
+        .collect()
+}
+
+/// The plugin the kernel does not find first-party that `module` belongs to, if it
+/// belongs to one.
+fn community_plugin(plugins: &[PluginReport], module: ModuleId) -> Option<&PluginReport> {
+    plugins.iter().find(|plugin| {
+        !plugin.first_party && plugin.modules.iter().any(|member| member.id == module)
+    })
 }
 
 /// The store `http.rate_limit_store` names, where the per-IP limit and route

@@ -175,6 +175,9 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
                     }
                 }
             }
+            // Only the app chooses the shell of its error pages: one from a module of a
+            // plugin the kernel does not find first-party stops the boot.
+            error_shells_of_plugins(&ctx)?;
             // The links modules add with `m.nav_item`, checked once: an address that is not
             // a path of this app stops the boot.
             let links = crate::shell::links::check(&ctx)?;
@@ -248,6 +251,32 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
         )
         .stdio(),
     );
+}
+
+/// Refuses an [`ErrorShell`](crate::ErrorShell) that a module of a plugin the kernel does
+/// not find first-party contributes, wherever that module is in the order: the first one
+/// contributed builds the shell of every error page, so only the app chooses it, from a
+/// module of its own. A module of the app, a module that names no plugin and a first-party
+/// plugin's module contribute one as before.
+fn error_shells_of_plugins(ctx: &AppContext) -> Result<(), String> {
+    let contributed = ctx.contributions::<crate::ErrorShell>();
+    if contributed.is_empty() {
+        return Ok(());
+    }
+    let plugins = ctx.plugins().plugins;
+    for shell in &contributed {
+        let module = shell.module.id;
+        let plugin = plugins.iter().find(|plugin| {
+            !plugin.first_party && plugin.modules.iter().any(|member| member.id == module)
+        });
+        if let Some(plugin) = plugin {
+            return Err(format!(
+                "plugin `{}` builds the shell of the app's error pages (an ErrorShell in `{}`); only the app chooses that: contribute it from a module of the app",
+                plugin.info.name, shell.module.name
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// The most of a page `ui:render` reads.

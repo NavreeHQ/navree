@@ -154,6 +154,10 @@ pub const STATE_HEADER: &str = "x-navree-state";
 /// It runs only for an error, and it has one second: a builder that is slower, that panics or
 /// that returns `None` leaves the page on its own, with no sidebar.
 ///
+/// A module of a plugin that is not one of the framework's own packages may not contribute
+/// one: `UiModule` stops the boot if one does, and the app contributes such a plugin's shell
+/// from a module of its own.
+///
 /// ```
 /// use navree_http::ErrorContext;
 /// use navree_kernel::ModuleBuilder;
