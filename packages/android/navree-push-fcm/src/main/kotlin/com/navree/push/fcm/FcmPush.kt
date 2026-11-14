@@ -41,6 +41,17 @@ class FcmPush(context: Context) : PushProvider {
             .addOnFailureListener { done(null) }
     }
 
+    /** Deletes this install's token at Firebase; the next one asked for is a new token. */
+    override fun forget(done: () -> Unit) {
+        firebase(app) ?: return done()
+        try {
+            @Suppress("DEPRECATION")
+            FirebaseMessaging.getInstance().deleteToken().addOnCompleteListener { done() }
+        } catch (_: Exception) {
+            done()
+        }
+    }
+
     companion object {
         /** The app's Firebase project, made from its resources, or null when the app names none. */
         fun firebase(context: Context): FirebaseApp? {

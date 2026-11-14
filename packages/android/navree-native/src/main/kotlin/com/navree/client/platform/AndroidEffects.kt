@@ -14,6 +14,8 @@ import android.os.PersistableBundle
 import android.util.Log
 import android.view.HapticFeedbackConstants
 import android.webkit.WebStorage
+import android.webkit.WebView
+import android.webkit.WebViewDatabase
 import androidx.activity.ComponentActivity
 import androidx.browser.customtabs.CustomTabsIntent
 import com.navree.client.BuildConfig
@@ -26,6 +28,29 @@ import com.navree.client.core.Notice
 import kotlinx.serialization.json.JsonObject
 import okhttp3.HttpUrl
 import java.security.SecureRandom
+import java.util.concurrent.Executors
+
+/**
+ * Empties what the system's web views keep for the app: what the page's
+ * scripts stored ([WebStorage.deleteAllData]), the resource cache on disk,
+ * the back and forward list, the form data and the saved sign-ins for sites.
+ * Cookies are the cookie store's ([WebViewCookies.clear]). Call on the main
+ * thread.
+ */
+fun clearWebViews(context: Context) {
+    WebStorage.getInstance().deleteAllData()
+    val database = WebViewDatabase.getInstance(context)
+    @Suppress("DEPRECATION")
+    database.clearFormData()
+    database.clearHttpAuthUsernamePassword()
+    // The cache is the app's, shared by every web view; clearing it needs one.
+    WebView(context).apply {
+        clearCache(true)
+        clearFormData()
+        clearHistory()
+        destroy()
+    }
+}
 
 /**
  * Carries out the core's effects with Android's own means. Effects that need
@@ -46,8 +71,12 @@ class AndroidEffects(
     private val app = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     val cookies = WebViewCookies()
-    val http = CoreHttp(cookies, origins, loopbackHttp) { post(it) }
-    private val streams = CoreStreams(http.client, origins) { post(it) }
+
+    /** Everything that touches what is kept on the device runs here, in order, one piece at a time. */
+    private val storeThread = Executors.newSingleThreadExecutor { work -> Thread(work, "navree-store").apply { isDaemon = true } }
+    val state = StoredState { storeThread.execute(it) }
+    val http = CoreHttp(cookies, origins, loopbackHttp, state) { post(it) }
+    private val streams = CoreStreams(http.client, origins, cookies, state) { post(it) }
     private val cache = SealedCache(app)
     private val timers = HashMap<Long, Runnable>()
     private val push = push
@@ -84,18 +113,16 @@ class AndroidEffects(
             is Effect.Show -> Unit
             is Effect.Haptic -> haptic(effect.kind)
             is Effect.Device -> devices.run(activity, effect)
+            // A page read for a session that has ended is answered as none kept.
             is Effect.CacheRead -> {
                 val key = effect.key
-                Thread {
-                    val value = cache.read(key)
-                    post(Events.cache(key, value))
-                }.start()
+                state.read { current -> post(Events.cache(key, if (current) cache.read(key) else null)) }
             }
             is Effect.CacheWrite -> {
                 val (key, value) = effect.key to effect.value
-                Thread { cache.write(key, value) }.start()
+                state.write { cache.write(key, value) }
             }
-            Effect.CacheClear -> Thread { cache.clear() }.start()
+            Effect.CacheClear -> state.always { cache.clear() }
             is Effect.Announce -> announce(effect)
             is Effect.Copy -> copy(effect.text, effect.sensitive)
             is Effect.Timer -> {
@@ -136,13 +163,37 @@ class AndroidEffects(
     }
 
     /**
-     * The person signed out: every cookie of the one store the web view
-     * shares, the web view's storage, and the stored snapshot go.
+     * The session ended on this device. In the store's turn, after whatever
+     * was asked before: the sealed page cache and the snapshot go; then, on
+     * the main thread, the web view's storage, its cache, history, form data
+     * and saved sign-ins for sites; then every cookie of the one store the
+     * web view shares. Nothing kept for the session after runs before the
+     * cookie store says its cookies are gone (or five seconds have passed),
+     * and no write of the session that ended runs at all. The push service's
+     * token for this install is deleted and a new one asked for.
      */
     private fun forget() {
-        cookies.clear()
-        WebStorage.getInstance().deleteAllData()
-        Thread { snapshots.clear() }.start()
+        state.end { done ->
+            cache.clear()
+            snapshots.clear()
+            main.post {
+                try {
+                    clearWebViews(app)
+                } catch (_: Exception) {
+                    // No web view on this device: nothing of it to clear.
+                }
+                try {
+                    cookies.clear {
+                        state.always { cookies.flush() }
+                        done()
+                    }
+                } catch (_: Exception) {
+                    done()
+                }
+                main.postDelayed({ done() }, WIPE_WAIT_MS)
+            }
+        }
+        push?.forget { askToken() }
     }
 
     /** The app left the front: streams close (the core opens them again when it comes back). */
@@ -264,5 +315,8 @@ class AndroidEffects(
 
     private companion object {
         const val TAG = "Navree"
+
+        /** The longest the store waits for the cookie store to say its cookies are gone. */
+        const val WIPE_WAIT_MS = 5_000L
     }
 }

@@ -28,6 +28,7 @@ import com.navree.client.core.Width
 import com.navree.client.platform.AndroidEffects
 import com.navree.client.platform.MOST_PICTURE_BYTES
 import com.navree.client.platform.Origins
+import com.navree.client.platform.cookieHeader
 import com.navree.client.platform.readCapped
 import com.navree.client.ui.NavreeApp
 import com.navree.client.ui.rememberWindow
@@ -70,15 +71,19 @@ class NavreeSession(
         engine.core = Core(coreConfig(config, device, effects.caps, application.packageName).toString().encodeToByteArray())
         // The core checks the snapshot itself and starts plainly when it is not for this launch.
         val snapshot = if (restoring) effects.snapshots.read(SNAPSHOT)?.let { runCatching { CoreJson.parseToJsonElement(it) }.getOrNull() } else null
-        if (snapshot == null) Thread { effects.snapshots.clear() }.start()
+        if (snapshot == null) effects.state.always { effects.snapshots.clear() }
         driver.send(if (snapshot != null) Events.restore(snapshot) else Events.start)
         effects.askToken()
     }
 
-    /** The app went to the background: what the core keeps for a launch the system may end is stored. */
+    /**
+     * The app went to the background: what the core keeps for a launch the
+     * system may end is stored, in the store's turn, and only while the
+     * session it belongs to is still the one on the device.
+     */
     fun keep() {
         val snapshot = driver.snapshot() ?: return
-        Thread { effects.snapshots.write(SNAPSHOT, snapshot) }.start()
+        effects.state.write { effects.snapshots.write(SNAPSHOT, snapshot) }
     }
 
     /**
@@ -89,7 +94,8 @@ class NavreeSession(
     suspend fun image(url: String): ByteArray? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val target = effects.origins.picture(url) ?: return@withContext null
         try {
-            val request = Request.Builder().url(target).header("Accept", "image/*").build()
+            val bare = Request.Builder().url(target).header("Accept", "image/*").build()
+            val request = cookieHeader(effects.cookies, bare.url)?.let { bare.newBuilder().header("Cookie", it).build() } ?: bare
             effects.http.client.newCall(request).execute().use { response ->
                 when {
                     !response.isSuccessful -> null

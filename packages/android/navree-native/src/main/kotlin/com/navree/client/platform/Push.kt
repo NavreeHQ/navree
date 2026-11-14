@@ -15,6 +15,16 @@ interface PushProvider {
 
     /** Asks the service for this install's token; `done(null)` when it cannot give one. */
     fun token(done: (String?) -> Unit)
+
+    /**
+     * The session on this device ended: the service's token for this install
+     * is deleted, so nothing sent to it reaches the device, and [done] runs
+     * when that has finished (or failed). A provider with nothing to delete
+     * answers at once.
+     */
+    fun forget(done: () -> Unit) {
+        done()
+    }
 }
 
 /**

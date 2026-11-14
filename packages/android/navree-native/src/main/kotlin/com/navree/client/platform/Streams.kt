@@ -4,6 +4,7 @@ import com.navree.client.core.Effect
 import com.navree.client.core.Events
 import kotlinx.serialization.json.JsonObject
 import okhttp3.Call
+import okhttp3.CookieJar
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -26,13 +27,14 @@ const val MOST_LINE_BYTES: Long = 256L * 1024
  * made: an address that is not one of the app's origins, or a header value
  * HTTP cannot carry.
  */
-fun streamRequest(effect: Effect.StreamOpen, origins: Origins): Request? = try {
+fun streamRequest(effect: Effect.StreamOpen, origins: Origins, cookies: CookieJar = CookieJar.NO_COOKIES): Request? = try {
     val url = effect.url.takeIf(origins::ours)?.toHttpUrlOrNull()
     if (url == null) {
         null
     } else {
         val builder = Request.Builder().url(url).header("Accept", "text/event-stream")
         for ((name, value) in effect.headers) builder.header(name, value)
+        cookieHeader(cookies, url)?.let { builder.header("Cookie", it) }
         builder.build()
     }
 } catch (_: Exception) {
@@ -45,14 +47,30 @@ fun streamRequest(effect: Effect.StreamOpen, origins: Origins): Request? = try {
  * status. It never reads an event's data, and never reconnects by itself:
  * the core asks again when it wants to.
  */
-class CoreStreams(base: OkHttpClient, private val origins: Origins, private val answer: (JsonObject) -> Unit) {
+class CoreStreams(
+    base: OkHttpClient,
+    private val origins: Origins,
+    private val cookies: CookieJar = CookieJar.NO_COOKIES,
+    private val state: StoredState = StoredState { it.run() },
+    private val answer: (JsonObject) -> Unit,
+) {
     // A stream may be quiet for as long as it likes.
     private val client = base.newBuilder().readTimeout(0, TimeUnit.MILLISECONDS).build()
     private val calls = ConcurrentHashMap<Long, Call>()
 
+    /** Streams the core closed before their turn came. */
+    private val closed = ConcurrentHashMap.newKeySet<Long>()
+
+    /** Opens a stream in the store's turn, so it carries the cookies of the session it was asked for. */
     fun open(effect: Effect.StreamOpen) {
+        state.always {
+            if (!closed.remove(effect.stream)) start(effect)
+        }
+    }
+
+    private fun start(effect: Effect.StreamOpen) {
         val call = try {
-            streamRequest(effect, origins)?.let(client::newCall)
+            streamRequest(effect, origins, cookies)?.let(client::newCall)
         } catch (_: Exception) {
             null
         }
@@ -65,7 +83,8 @@ class CoreStreams(base: OkHttpClient, private val origins: Origins, private val 
     }
 
     fun close(stream: Long) {
-        calls.remove(stream)?.cancel()
+        val call = calls.remove(stream)
+        if (call == null) closed.add(stream) else call.cancel()
     }
 
     fun closeAll() {
