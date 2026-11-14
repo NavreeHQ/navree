@@ -111,7 +111,10 @@ struct ButtonPart: View {
                 if prominent || (button.prominence == .high && button.role != .destructive) {
                     control.buttonStyle(.borderedProminent).modifier(FingerTarget())
                 } else if borderless {
-                    TargetRoom { control.buttonStyle(.borderless) }
+                    TargetRoom {
+                        control.buttonStyle(.borderless)
+                        DrawnTwin { ButtonLabel(button: button) }
+                    }
                 } else {
                     control.buttonStyle(.bordered).modifier(FingerTarget())
                 }
@@ -147,13 +150,24 @@ struct FingerTarget: ViewModifier {
 /// centred on what it draws. Its label fills what it is given
 /// (``TargetFill``), so the whole target takes the tap and VoiceOver's frame
 /// is the target. A Mac's pointer needs only what is drawn.
+///
+/// The control may be followed by what it draws alone, hidden: its size and
+/// the room a stack keeps round it are then that of the words, as a stack
+/// set them before (a label that fills its target asks a stack for the
+/// standard room, where words ask for less).
 struct TargetRoom: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        guard let control = subviews.first else { return .zero }
+        guard let drawn = subviews.count > 1 ? subviews[1] : subviews.first else { return .zero }
         // What it draws: its own size, or wrapped to a narrower width offered.
-        let ideal = control.sizeThatFits(.unspecified)
+        let ideal = drawn.sizeThatFits(.unspecified)
         guard let width = proposal.width, width < ideal.width else { return ideal }
-        return control.sizeThatFits(ProposedViewSize(width: width, height: nil))
+        return drawn.sizeThatFits(ProposedViewSize(width: width, height: nil))
+    }
+
+    /// The room round the control as what it draws asks for it, so a stack
+    /// sets it as far from its neighbours as before.
+    func spacing(subviews: Subviews, cache: inout ()) -> ViewSpacing {
+        (subviews.count > 1 ? subviews[1] : subviews.first)?.spacing ?? ViewSpacing()
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
@@ -163,6 +177,22 @@ struct TargetRoom: Layout {
             at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center,
             proposal: ProposedViewSize(width: target.width, height: target.height)
         )
+        if subviews.count > 1 {
+            subviews[1].place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+        }
+    }
+}
+
+/// What a control in a ``TargetRoom`` draws, hidden: what the layout round it
+/// measures and spaces.
+struct DrawnTwin<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .hidden()
+            .accessibilityHidden(true)
+            .allowsHitTesting(false)
     }
 }
 
@@ -198,6 +228,7 @@ struct LinkPart: View {
                     Text(link.label).modifier(TargetFill())
                 }
                 .buttonStyle(.borderless)
+                DrawnTwin { Text(link.label) }
             }
         } else if inControl {
             drawn
