@@ -28,7 +28,7 @@ use crate::cache::Who;
 use crate::decode::{self, Answer, Read};
 use crate::effect::{Body, Change, Effect, Request, Update, Verb};
 use crate::event::{Event, Response, StreamState, TransportError};
-use crate::origin::{Target, https_address, openable, path_of, route_matches};
+use crate::origin::{Target, https_address, openable};
 use crate::state::{
     App, Asked, Content, Destination, Failure, Goes, Held, Message, MessageInner, Modal, Notice,
     Pending, ScreenId, ScreenInner, ScreenView, Stage, TimerFor,
@@ -376,7 +376,7 @@ impl Core {
         self.inner
             .routes
             .iter()
-            .find(|route| route_matches(&route.matches, url))
+            .find(|route| self.inner.origin.on_route(&route.matches, url))
     }
 
     fn headers(&self, body: Option<&Body>, region: Option<&str>) -> Vec<(String, String)> {
@@ -1227,7 +1227,10 @@ impl Core {
             _ => Present::Full,
         };
         let chrome = route.is_some_and(|route| route.chrome);
-        let name = route.map_or_else(|| path_of(&url), |route| route.matches.clone());
+        let name = route.map_or_else(
+            || self.inner.origin.where_of(&url),
+            |route| route.matches.clone(),
+        );
         // One way in for one session's end, however many requests it failed.
         let up = self.view.modals.iter().any(|modal| {
             modal
@@ -1816,7 +1819,8 @@ impl Core {
         ) else {
             return;
         };
-        let same = path_of(&view.url) == path_of(url) && view.screen().is_some();
+        let same = self.inner.origin.where_of(&view.url) == self.inner.origin.where_of(url)
+            && view.screen().is_some();
         // A question the screen asked was about what it showed before.
         view.question = None;
         inner.held = None;
@@ -1883,7 +1887,7 @@ impl Core {
                 .inner
                 .routes
                 .iter()
-                .find(|route| route_matches(&route.matches, url))
+                .find(|route| self.inner.origin.on_route(&route.matches, url))
                 .is_none_or(|route| route.chrome);
         }
         view.title = Some(screen.title.clone()).filter(|title| !title.is_empty());
@@ -1956,7 +1960,7 @@ impl Core {
             .inner
             .routes
             .iter()
-            .find(|route| route_matches(&route.matches, url))
+            .find(|route| self.inner.origin.on_route(&route.matches, url))
             .is_none_or(|route| route.chrome);
         self.drop_pending(|purpose| matches!(purpose, Pending::Region { screen, .. } | Pending::More { screen, .. } if *screen == id));
         self.touch_screen(id);
@@ -2134,7 +2138,7 @@ impl Core {
     /// a screen the shell presents over the app: the sign-in a session that
     /// ended is sent to.
     pub(crate) fn covers(&self, asked: &str, url: &str) -> Option<(String, Present)> {
-        if path_of(asked) == path_of(url) {
+        if self.inner.origin.where_of(asked) == self.inner.origin.where_of(url) {
             return None;
         }
         let route = self.route(url)?;

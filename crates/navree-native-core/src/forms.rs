@@ -1349,7 +1349,9 @@ impl Core {
                         }
                     }
                 } else if cover.as_ref().is_some_and(|route| {
-                    write && worked && leaves(route, &url, shown.is_some(), &ops)
+                    write
+                        && worked
+                        && leaves(&self.inner.origin, route, &url, shown.is_some(), &ops)
                 }) {
                     // The way in the session's end put up has done its work: the
                     // person is back where they were. Who is signed in may have
@@ -1423,13 +1425,19 @@ impl Core {
 
 /// Whether an answer leads away from the route `pattern`: it navigates to
 /// an address the route does not name, or brings a screen from one.
-fn leaves(pattern: &str, url: &str, showed: bool, ops: &[navree_native::Op]) -> bool {
+fn leaves(
+    origin: &crate::origin::Origin,
+    pattern: &str,
+    url: &str,
+    showed: bool,
+    ops: &[navree_native::Op],
+) -> bool {
     let away = ops.iter().any(|op| match op {
-        navree_native::Op::Navigate { href, .. } => !crate::origin::route_matches(pattern, href),
+        navree_native::Op::Navigate { href, .. } => !origin.on_route(pattern, href),
         navree_native::Op::NavigateExternal { .. } => true,
         _ => false,
     });
-    away || (showed && !crate::origin::route_matches(pattern, url))
+    away || (showed && !origin.on_route(pattern, url))
 }
 
 /// What a field holds when a tree first says so.
