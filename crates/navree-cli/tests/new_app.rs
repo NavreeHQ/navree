@@ -1509,3 +1509,24 @@ fn ui_navree_shell_draws_the_person_and_the_workspace_of_the_request() {
         "the app's own hub is gone"
     );
 }
+
+/// The shell of a new app takes the links other modules add, and its pages are
+/// drawn from the `AppShell` extractor, which draws those links for each request.
+#[test]
+fn the_ui_kit_shell_takes_contributed_links() {
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let root = create_app(dir.path(), &app("demo", Ui::Navree), now()).unwrap();
+    let shell = read(&root, "src/ui/shell.rs");
+    assert!(
+        shell.contains(
+            "Shell::new(\"Demo\")\n        .contributed()\n        .context(\"Customer desk\")"
+        ),
+        "{shell}"
+    );
+    assert!(shell.contains("AppShell::from_request_parts"), "{shell}");
+    assert!(shell.contains(".context(workspace.name.clone())"), "{shell}");
+    assert!(!shell.contains("for_request("), "{shell}");
+}

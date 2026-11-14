@@ -6,7 +6,6 @@ use http::request::Parts;
 use navree::contracts::Impersonator;
 use navree::http::AppError;
 use navree::http::extract::FromRequestParts;
-use navree::prelude::Scoped;
 use navree::session::Session;
 use navree::ui::{AppPage, AppShell, NavGroup, NavItem, Shell, UserMenu, icons};
 use navree::workspace::{CurrentWorkspace, WorkspaceSwitcher};
@@ -19,9 +18,11 @@ use super::auth::CurrentAccount;
 /// workspace they are in.
 ///
 /// Add a link by adding a `NavItem` to a group; give every top-level item an
-/// icon, since the folded sidebar shows only that.
+/// icon, since the folded sidebar shows only that. Links other modules add
+/// (`m.nav_item`) come after these groups, each shown only to who may open it.
 pub fn shell() -> Shell {
     Shell::new("{{ title }}")
+        .contributed()
         .context("Customer desk")
         .group(NavGroup::plain().item(NavItem::new("Home", "/").icon(icons::HOUSE)))
         .group(
@@ -81,7 +82,6 @@ impl FromRequestParts for Desk {
         let account = CurrentAccount::from_request_parts(parts).await?;
         let workspace = CurrentWorkspace::from_request_parts(parts).await?;
         let switcher = WorkspaceSwitcher::from_request_parts(parts).await?;
-        let Scoped(base) = Scoped::<Shell>::from_request_parts(parts).await?;
         let csrf = parts
             .extensions
             .get::<Session>()
@@ -93,15 +93,12 @@ impl FromRequestParts for Desk {
         if parts.extensions.get::<Impersonator>().is_some() {
             menu = menu.action("Stop impersonating", "/impersonate/stop");
         }
-        let shell = Shell::clone(&base)
+        let shell = AppShell::from_request_parts(parts)
+            .await?
             .context(workspace.name.clone())
-            .user(menu.action("Sign out", "/sign-out"));
-        let here = parts
-            .uri
-            .path_and_query()
-            .map_or_else(|| parts.uri.path().to_owned(), |found| found.as_str().to_owned());
+            .user_menu(menu.action("Sign out", "/sign-out"));
         Ok(Desk {
-            shell: shell.for_request(here, &parts.headers),
+            shell,
             account,
             workspace,
             switcher,
