@@ -143,6 +143,10 @@ Routes (when `i18n.routes`): `GET /api/i18n/locales` (public, `{data:
   `validation.messages`, then the default locale's, then the English
   template. `navree i18n:publish validation [--force]` copies the shipped
   files into `locales/`.
+- Plugins: a plugin's Fluent files (`m.locales(..)`) load after yours, so your
+  message wins, and its message ids start with its namespace.
+  `navree i18n:publish <plugin> [--force]` copies a plugin's translations into
+  `i18n.dir/<locale>/<namespace>/`.
 - Templates: `{{ t("deal-won", owner=o.name, title=d.title) }}`,
   `<html lang="{{ locale() }}">`, `{{ cents | money("EUR") }}`,
   `{{ value | date }}` (locale medium) or `| date("%d/%m/%Y")`.

@@ -61,6 +61,8 @@ Only a script of your app's own runs. The `islands` module imports an address on
 
 `IslandScript::new` takes the script's ceiling in bytes. A script that grows past it fails the app's build, so each island has a budget of its own, checked by the compiler.
 
+A plugin's script takes `.namespace("announcements")`, as a plugin's [stylesheet does](/docs/ui/app-styles/#files-of-a-plugin): it is served as `/_navree/ui/island/announcements.depots-1a2b3c4d5e6f.js`, and its `name()` stays `depots`.
+
 ## With no script
 
 With JavaScript off, or before the script has run, the island shows its fallback: the same numbers as a table, a picture, a link. Write one that says what the island would show.

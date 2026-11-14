@@ -18,6 +18,14 @@ every `@navree/*` package carries the same version.
   be one, so a refusal leaves nothing written; `--dry-run` shows what it would write.
   `config:publish --plugin <namespace>` publishes every section of a plugin.
   `navree::embed_locales!` works without the `i18n` feature.
+- Plugins ship templates, translations and static files. `m.plugin_templates(navree::embed_templates!("views"))`
+  embeds a folder of templates in the plugin's binary under its namespace (`announcements/list.html`);
+  a file of that name in the app's template folders (`resources/views/announcements/list.html`)
+  still wins. `m.locales(navree::embed_locales!("locales"))` adds a plugin's Fluent files after the
+  app's own, whose message wins; the message ids of a plugin that is not one of the framework's own
+  start with its namespace, and a plugin needs no `i18n` feature. `i18n:publish <plugin>` copies a
+  plugin's translations into `i18n.dir`. `AppSheet`, `AppFont`, `AppImage` and `IslandScript` take
+  `.namespace(..)` and are then served as `{namespace}.{name}`.
 
 ### Changed
 
@@ -35,6 +43,23 @@ every `@navree/*` package carries the same version.
   key that is not a safe file name, or a link in the file's place, is refused, also with `--force`,
   and an existing file is replaced by a rename instead of being written through. Its usage line and
   description name `--plugin <namespace>`.
+- Two modules that give one name to two different things say so at boot: an embedded template, a
+  static file, a job and a configuration section read by two types each log a warning
+  (`config:check` lists the section too). The boot fails instead when one of the two modules
+  belongs to a plugin that is not one of the framework's own; for a static file it also fails when
+  one of the two is under a plugin's namespace and comes from a module that is not one of the
+  framework's own plugins. Which one is used does not change. A module that replaces a template of
+  a module it imports is still only an `info` line, except a module of a plugin that is not one of
+  the framework's own: that is a warning when the template is another plugin's, and fails the boot
+  for any other template while the plugin's version is the one rendered. It is not when the app
+  has a file of that name in a template folder, or a module of the app registers the template
+  after the plugin's module; an `info` line then says so. `i18n:publish validation` writes through
+  the same checked writer as `plugin:publish`: a link in a file's place, or in the place of one of
+  its folders, is refused, and a file that `--force` replaces is replaced by a rename; its usage
+  line names `<plugin>`, and the text for an unknown name lists the plugins that ship translations.
+  `AppSheet`, `AppFont`, `AppImage` and `IslandScript` have a new inherent method `namespace`: an
+  app whose own extension trait gives them a method of that name calls it through the trait
+  (`MyExt::namespace(sheet, ..)`).
 
 ## [1.2.2] - 2026-11-14
 

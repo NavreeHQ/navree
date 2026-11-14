@@ -87,7 +87,7 @@ m.schedule(|s| {
 });
 ```
 
-The task is named after the job's `NAME`. `m.schedule` registers the job type with the queue for you, so you don't need `m.job::<J>()` as well (registering it twice is harmless). In an app without a queue, the job runs inline on the scheduler.
+The task is named after the job's `NAME`. `m.schedule` registers the job type with the queue for you, so you don't need `m.job::<J>()` as well in the same module (registering it twice there is harmless; a job type scheduled in one module and registered in another logs a warning at boot). In an app without a queue, the job runs inline on the scheduler.
 
 ### Scheduling functions
 

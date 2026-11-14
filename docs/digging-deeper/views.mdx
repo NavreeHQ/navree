@@ -87,9 +87,32 @@ When the same name is defined more than once:
 
 1. the first directory in `view.dirs` holding the name wins;
 2. any file wins over an embedded template, so an app overrides a module's mail by dropping a file with the same name into `resources/views`;
-3. among embedded templates, a module's template replaces one with the same name from a module it imports.
+3. among embedded templates, a module's template replaces one with the same name from a module it imports;
+4. two other modules that embed one name with different text both log a warning, and the later one's is used; when one of them belongs to a plugin that is not one of the framework's own, the boot fails;
+5. a module of such a plugin may replace a template of a module it imports when that template is another plugin's, with a warning. Replacing a template of the app or of the framework fails the boot while the plugin's version is the one rendered. Put a file of that name in `resources/views/`, or register the template from a module of your own after the plugin's module, and the boot goes on with an `info` line saying which one is used.
 
 Every template is read and compiled when the app boots, off the async workers. A syntax error fails the boot and names the template.
+
+## Templates a plugin ships
+
+A plugin embeds its own templates in its binary, under its namespace, with `m.plugin_templates(navree::embed_templates!("views"))` from `navree::plugin::prelude`. The macro embeds every file in the plugin crate's `views/` folder, at any depth and without hidden entries. A symbolic link in the folder, or a file name that is not safe to publish (a backslash or a Windows device name such as `con`, say), fails the build.
+
+```rust title="crates/announcements/src/lib.rs"
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+
+pub struct AnnouncementsModule;
+
+impl Module for AnnouncementsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        // views/list.html is registered as announcements/list.html.
+        m.plugin(navree::plugin_info!(namespace = "announcements"))
+            .plugin_templates(navree::embed_templates!("views"));
+    }
+}
+```
+
+A file of the same name in a template folder wins, so the app changes a plugin's template by putting a file at `resources/views/announcements/list.html`. `plugin:publish announcements --tag views` copies the plugin's templates there to start from. It writes into `resources/views/<namespace>/` below the app's folder whatever `view.dirs` says; with `view.dirs` moved, copy the files into the first folder yourself.
 
 ## Rendering templates
 
