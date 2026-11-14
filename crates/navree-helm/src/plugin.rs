@@ -82,11 +82,12 @@ impl HelmLink {
 /// The template (a navree-view template; the app needs `ViewModule`) gets `title`, `user`
 /// (`{id, name, email}`), `path` (the panel's path) and `data` (what
 /// [`data`](HelmWidget::data) returns, else `null`). It is always an HTML template, so
-/// navree-view escapes what it writes: see [`template`](HelmWidget::template). Cards are drawn while `helm.dashboard` is on, by [`order`](HelmWidget::order),
-/// then in the order they were added. Without [`can`](HelmWidget::can) every panel user
-/// sees the card; with it, only those who pass the check, and the data function runs only
-/// for them. A card whose data function or template fails is left out and logged, and the
-/// dashboard is drawn without it.
+/// navree-view escapes what it writes: see [`template`](HelmWidget::template). Cards are
+/// drawn while `helm.dashboard` is on, by [`order`](HelmWidget::order), then in the order
+/// they were added. Without [`can`](HelmWidget::can) every panel user sees the card; with
+/// it, only those who pass the check, and the data function runs only for them. A card
+/// whose data function or template fails is left out and logged, and the dashboard is drawn
+/// without it.
 ///
 /// ```
 /// use navree_helm::HelmWidget;
