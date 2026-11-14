@@ -113,6 +113,7 @@ struct ButtonPart: View {
                 } else if borderless {
                     TargetRoom {
                         control.buttonStyle(.borderless)
+                            .modifier(LowProminenceLook())
                         DrawnTwin { ButtonLabel(button: button) }
                     }
                 } else {
@@ -338,6 +339,20 @@ struct MenuItems: View {
             Menu(inner.label) { MenuItems(items: inner.items) }
         default:
             EmptyView()
+        }
+    }
+}
+
+/// A borderless button's words as the system writes them where it is read as
+/// a control (``ContentRules/lowProminenceWords(bar:)``): in the accent on a
+/// Mac.
+struct LowProminenceLook: ViewModifier {
+    @Environment(\.isEnabled) private var enabled
+
+    func body(content: Content) -> some View {
+        switch ContentRules.lowProminenceWords(bar: .current) {
+        case .accent where enabled: content.foregroundStyle(.tint)
+        default: content
         }
     }
 }
