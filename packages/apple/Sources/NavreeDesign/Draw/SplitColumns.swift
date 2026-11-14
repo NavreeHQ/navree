@@ -191,7 +191,7 @@ public struct SplitColumns<Sidebar: View, ListColumn: View, DetailRoot: View, In
                     }
                 }
         }
-        .modifier(InspectorColumn(content: inspector, shown: inspectorBinding))
+        .modifier(InspectorColumn(content: inspector, shown: inspectorBinding, sheet: SplitRules.inspectorIsSheet(width: window)))
         .modifier(DetailMinimum())
     }
 
@@ -240,9 +240,21 @@ extension SplitColumns where Sidebar == EmptyView, Inspector == EmptyView {
 struct InspectorColumn<Inspector: View>: ViewModifier {
     let content: Inspector?
     let shown: Binding<Bool>
+    /// A sheet rather than a column (``SplitRules/inspectorIsSheet(width:)``).
+    var sheet = false
 
     func body(content view: Content) -> some View {
-        if let content {
+        if let content, sheet {
+            view.sheet(isPresented: shown) {
+                NavigationStack {
+                    content
+                }
+                // As the system's inspector rests in a compact window: half
+                // height first, pulled up to full, swiped away.
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        } else if let content {
             view.inspector(isPresented: shown) {
                 NavigationStack {
                     content

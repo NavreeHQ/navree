@@ -64,6 +64,11 @@ private func go(_ href: String, _ present: Navree.Present = .auto) -> Navree.Act
     #expect(SplitRules.showsInspector(width: .expanded))
     #expect(!SplitRules.showsInspector(width: .medium))
     #expect(!SplitRules.showsInspector(width: .compact))
+    // In a compact window the inspector is a sheet the person opens, never a
+    // column kept out of sight.
+    #expect(SplitRules.inspectorIsSheet(width: .compact))
+    #expect(!SplitRules.inspectorIsSheet(width: .medium))
+    #expect(!SplitRules.inspectorIsSheet(width: .expanded))
     #expect(SplitRules.sideBySide(width: .medium))
     #expect(!SplitRules.sideBySide(width: .compact))
 }
