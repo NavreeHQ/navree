@@ -271,6 +271,8 @@ In code, `HtmlPolicy` has builders: `HtmlPolicy::default().allow_tags(["img"]).a
 
 A policy can't allow `script` or `style`, an `on*` event handler, `srcdoc` (it holds a whole document for an `iframe`) or `http-equiv` (it makes a `meta` redirect the page), and can't allow a `rel` attribute while `link_rel` is set (set `link_rel = ""` to let links keep their own). `ValidationModule` refuses to boot with such a policy and names the key: ``validation.html.tags: `script` can't be allowed (scripts and styles are always removed)``. `link_rel` goes on every `a` and `area`.
 
+Nor can it allow an attribute the page's own scripts act on, or that makes an element act for the page with no script: the [UI runtime's](/docs/ui/overview/#security) hooks (`data-ui-*`, `data-genui*`), `form`, `formaction`, `formmethod`, `formenctype`, `formtarget`, `popover`, `popovertarget`, `popovertargetaction`, `command`, `commandfor`, `autofocus`, `accesskey` and `contenteditable`. The sanitizer drops these whatever the policy says, so text cleaned under a policy written before they were refused is safe as well. `id` and `name` can be allowed: a document needs its anchors.
+
 A scheme list is about schemes: a relative URL stays, whatever the list says. A URL with a host of its own and no scheme (`//evil.test`, and `/\evil.test` or `\\evil.test`, which a browser reads the same) leaves the site with the page's scheme, so it stays only when both `http` and `https` are allowed. So `url_schemes = ["https"]` removes `//evil.test` and keeps `https://evil.test`, and `url_schemes = []` keeps every link on the site. The URL lists `srcset`, `imagesrcset` and `ping` are checked URL by URL.
 
 ### Limits on rich text

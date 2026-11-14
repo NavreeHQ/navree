@@ -378,6 +378,25 @@ mod tests {
     use crate::cmd::Cmd;
     use crate::render;
 
+    /// Everything rich text may never keep because the page acts on it, a generated body never
+    /// keeps either: this list is the wider one.
+    #[test]
+    fn a_body_drops_every_attribute_rich_text_may_never_keep() {
+        for name in navree_validation::HtmlPolicy::PAGE_ATTRIBUTES {
+            assert!(dropped_attr(name), "{name}");
+            assert!(dropped_attr(&name.to_ascii_uppercase()), "{name}");
+        }
+        for prefix in navree_validation::HtmlPolicy::PAGE_ATTRIBUTE_PREFIXES {
+            for name in [
+                format!("{prefix}click"),
+                format!("{prefix}stored"),
+                format!("{prefix}x"),
+            ] {
+                assert!(dropped_attr(&name), "{name}");
+            }
+        }
+    }
+
     #[test]
     fn what_could_act_is_taken_out() {
         let body: Node = el("div")
