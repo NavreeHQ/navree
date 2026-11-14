@@ -72,6 +72,7 @@ pub mod __private {
         FIRST_PARTY, RESERVED_NAMESPACES, default_namespace, is_namespace, namespace_text,
     };
     pub use crate::publish::is_safe_relative_path;
+    pub use crate::publish::{PublishRefused, Published, publish_files};
 }
 
 /// A boxed error that can cross module and task boundaries.
