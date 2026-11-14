@@ -17,7 +17,9 @@ every `@navree/*` package carries the same version.
   before it writes one and refuses any path that could leave those folders or two files that would
   be one, so a refusal leaves nothing written; `--dry-run` shows what it would write.
   `config:publish --plugin <namespace>` publishes every section of a plugin.
-  `navree::embed_locales!` works without the `i18n` feature.
+  `navree::embed_locales!` works without the `i18n` feature. A plugin that is not one of the
+  framework's own packages may not answer the app's errors, build the shell of its error pages or
+  register the panel's staff policies; a dashboard card renders only an `.html` template.
 - Plugins ship templates, translations and static files. `m.plugin_templates(navree::embed_templates!("views"))`
   embeds a folder of templates in the plugin's binary under its namespace (`announcements/list.html`);
   a file of that name in the app's template folders (`resources/views/announcements/list.html`)
@@ -66,11 +68,12 @@ every `@navree/*` package carries the same version.
   (`navree::contracts`, also `navree::plugin::Permission`); `permission_catalog` lists them and
   `access:explain` prints a permission's description. Describing a permission grants it to nobody.
   A plugin's permissions and its own subjects' permission prefixes start with its namespace, and
-  its namespace may not be another module's permission prefix. A plugin that reads a configuration section outside its namespace is warned
-  about at boot. Without `AccessModule` the permissions modules describe are not checked, and a
-  route cannot require one. The roles that already hold every permission hold a plugin's too: a
-  workspace's owner, an organization's owner in each of its workspaces, the app's super-admin role
-  and any role granted `all.*`; a role granted `all.read` holds every plugin's `read` permissions.
+  its namespace may not be another module's permission prefix. A plugin that reads a configuration
+  section outside its namespace is warned about at boot. Without `AccessModule` the permissions
+  modules describe are not checked, and a route cannot require one. The roles that already hold
+  every permission hold a plugin's too: a workspace's owner, an organization's owner in each of its
+  workspaces, the app's super-admin role and any role granted `all.*`; a role granted `all.read`
+  holds every plugin's `read` permissions.
 - `navree::http::RequestWorkspace`: the workspace a request names, resolved without entering it;
   `WorkspaceModule` provides it.
 
