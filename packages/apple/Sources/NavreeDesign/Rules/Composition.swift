@@ -564,6 +564,13 @@ public enum HitRules {
         max(0, ((least - glyph) / 2).rounded(.up))
     }
 
+    /// The size of a bordered button in the content: the system's regular
+    /// size, as Apple's own apps draw one in their content (a capsule about
+    /// 34 points tall on iPhone and iPad), never the large one (about 50),
+    /// which reads heavier than theirs. Its target still reaches 44 points
+    /// round it (``target(drawn:bar:)``).
+    public static let borderedSize: ControlSize = .regular
+
     /// The target of a control that draws only its words or its symbol (a
     /// borderless button, a link), `drawn` wide and tall as drawn: at least
     /// ``least`` each way round what it draws, centred on it, on iPhone and
