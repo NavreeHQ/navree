@@ -85,6 +85,16 @@ Go through it in order; each item says how to check.
   with `navree::crypto::jose` against a configured key or the provider's
   JWKS, never a key the token itself names, and their `exp`, `aud` and
   `iss` are checked (skill `navree-jose`).
+- [ ] A page that lets a workspace's or an organization's administrators
+  manage their single sign-on connection sets `owner` itself, never passes
+  the request's `provisioning` through, checks the connection's owner
+  before `update_connection`, `delete_connection` and `add_domain` (and
+  that a domain id is among `domains(key)` of a connection it owns before
+  `verify_domain` and `remove_domain`), and never calls
+  `mark_domain_verified` for a customer. `sso.manage` is granted app-wide
+  only to staff. `sso.tenants.unverified_emails` stays `false` unless every
+  customer's identity provider may create accounts for any address (skill
+  `navree-sso`).
 
 ## 5. Rate limits and client addresses
 
