@@ -106,4 +106,14 @@ public enum PresentationRules {
     public static func search(width: WidthClass) -> SearchPlacement {
         width == .compact ? .underTitle : .toolbar
     }
+
+    /// Whether the search field joins the bar only once the screen has first
+    /// appeared. A field under the title does: given with a list that is there
+    /// from the bar's very first layout (a screen kept from the last launch,
+    /// drawn as the app opens), iOS lays the bar out with its large title
+    /// already folded, though nothing was scrolled. Joining a moment later, the
+    /// bar grows under the large title, as when the list comes from the server.
+    public static func searchWaitsForFirstAppearance(_ placement: SearchPlacement) -> Bool {
+        placement == .underTitle
+    }
 }
