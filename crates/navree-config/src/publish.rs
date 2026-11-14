@@ -82,9 +82,10 @@ impl PublishOptions {
 /// With `options.plugin` set, `registry` holds the sections of that plugin
 /// only, and each of them that describes its keys is published as
 /// `<dir name>/<key>.toml` below `dir`'s parent, all through the checked
-/// writer of `plugin:publish`: every path is checked before the first write,
-/// an existing file is kept without `force` and the others are still written,
-/// and each file is written beside its place and renamed over it. The result
+/// writer of `plugin:publish`: every path is checked before the first write
+/// (two sections that would be one file are refused), an existing file is
+/// kept without `force` and the others are still written, and each file is
+/// written beside its place and renamed over it. The result
 /// has one line per file, in path order (`wrote config/<key>.toml`, or
 /// `config/<key>.toml: exists, kept (use --force to replace it)`), then one
 /// per section that does not describe its keys.
@@ -162,11 +163,9 @@ fn run_plugin(
             )),
         }
     }
-    if let Some(path) = shared_file(&files) {
-        return Err(format!(
-            "config:publish: two sections of plugin `{namespace}` would be written to one file, {path}; nothing was written"
-        ));
-    }
+    // Two sections in one file (one key read by two types, or two keys that
+    // differ only in case) are refused by the writer before anything is
+    // written.
     let listed: Vec<(&str, &[u8])> = files
         .iter()
         .map(|(path, text)| (path.as_str(), text.as_bytes()))
@@ -185,22 +184,6 @@ fn run_plugin(
         let _ = writeln!(out, "{line}");
     }
     Ok(out)
-}
-
-/// The first path of `files` that names the same file as an earlier one on a
-/// disk that ignores case: one key read by two types, or two keys that differ
-/// only in case (their lower-case forms or their upper-case forms are equal).
-/// The writer takes distinct paths.
-fn shared_file(files: &[(String, String)]) -> Option<&str> {
-    let mut seen: Vec<(String, String)> = Vec::new();
-    files.iter().map(|(path, _)| path.as_str()).find(|path| {
-        let (lower, upper) = (path.to_lowercase(), path.to_uppercase());
-        let shared = seen
-            .iter()
-            .any(|(seen_lower, seen_upper)| *seen_lower == lower || *seen_upper == upper);
-        seen.push((lower, upper));
-        shared
-    })
 }
 
 /// The text of the file of `schema`: every key commented out, with its

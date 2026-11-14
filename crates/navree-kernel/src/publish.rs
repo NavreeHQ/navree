@@ -101,6 +101,29 @@ pub(crate) fn first_case_collision<'a>(
     })
 }
 
+/// The first of `paths` that another of them needs as a folder (`admin` and
+/// `admin/edit.html`), with that other path. Case is ignored as
+/// [`first_case_collision`] ignores it: `Admin` is the folder of
+/// `admin/edit.html` on a disk that ignores case.
+pub(crate) fn first_file_and_folder<'a>(paths: &[&'a str]) -> Option<(&'a str, &'a str)> {
+    let folded: Vec<(String, String)> = paths
+        .iter()
+        .map(|path| {
+            (
+                format!("{}/", path.to_lowercase()),
+                format!("{}/", path.to_uppercase()),
+            )
+        })
+        .collect();
+    paths.iter().zip(&folded).find_map(|(&file, (lower, upper))| {
+        paths.iter().find_map(|&inside| {
+            (inside.to_lowercase().starts_with(lower.as_str())
+                || inside.to_uppercase().starts_with(upper.as_str()))
+            .then_some((file, inside))
+        })
+    })
+}
+
 /// What [`publish_files`] did with one file, or with a dry run would do. Not
 /// public API; the commands that publish files use it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -151,16 +174,19 @@ impl std::error::Error for PublishRefused {}
 
 /// Writes `files`, each a path relative to `root` (the app's folder),
 /// `/`-separated, and its bytes, and says what happened to each, in path
-/// order. The paths are distinct (the caller makes sure of it). Not public
-/// API; `plugin:publish` and the commands that publish a plugin's
-/// configuration or translations write through it, some without the boot
-/// check, so it checks every path itself.
+/// order. Not public API; `plugin:publish` and the commands that publish a
+/// plugin's configuration or translations write through it, some without
+/// the boot check, so it checks every path itself.
 ///
 /// Nothing is written before every file has passed every check:
 ///
 /// 1. every path is a safe relative path (the rule the boot applies to the
 ///    files a plugin ships);
-/// 2. every folder below `root` on the way to a file is a folder, not a file
+/// 2. no two paths are one file on a disk that ignores case (their
+///    lower-case forms or their upper-case forms are equal, which also
+///    refuses a path given twice), and no path is also the folder of
+///    another (`admin` and `admin/edit.html`);
+/// 3. every folder below `root` on the way to a file is a folder, not a file
 ///    and not a symbolic link or a junction, and the file itself is not a
 ///    link and not a folder. `root` and the folders above it are not
 ///    checked, so an app inside a linked folder publishes.
@@ -170,8 +196,9 @@ impl std::error::Error for PublishRefused {}
 /// file beside its destination and renamed over it: an existing file is
 /// never opened for writing, so a hard link to it elsewhere keeps its
 /// content, and a link put in its place after the check is replaced, not
-/// followed. An error while writing stops at that file; the files before it
-/// are written.
+/// followed. Each folder is checked again as it is used. An error while
+/// writing stops at that file; the files before it are written, and the
+/// error says so.
 pub fn publish_files(
     root: &Path,
     files: &[(&str, &[u8])],
@@ -186,6 +213,17 @@ pub fn publish_files(
     {
         return Err(PublishRefused(format!(
             "{path} is not a safe relative path; nothing was written"
+        )));
+    }
+    let paths: Vec<&str> = files.iter().map(|&(path, _)| path).collect();
+    if let Some(path) = first_case_collision(paths.iter().copied()) {
+        return Err(PublishRefused(format!(
+            "{path} is the same file as another one on a disk that ignores case; nothing was written"
+        )));
+    }
+    if let Some((file, inside)) = first_file_and_folder(&paths) {
+        return Err(PublishRefused(format!(
+            "{file} would be both a file and the folder of {inside}; nothing was written"
         )));
     }
     let mut outcomes = Vec::with_capacity(files.len());
@@ -211,13 +249,17 @@ pub fn publish_files(
 }
 
 /// Whether the file `path` exists below `root`, once each folder on the way
-/// to it has passed [`check_folder`] and the file itself is neither a link
+/// to it has passed [`folder_problem`] and the file itself is neither a link
 /// nor a folder. The first missing folder ends the walk: the file is new.
 fn file_exists(root: &Path, path: &str) -> Result<bool, PublishRefused> {
     for (end, _) in path.match_indices('/') {
         let folder = &path[..end];
         match fs::symlink_metadata(root.join(folder)) {
-            Ok(metadata) => check_folder(folder, &metadata)?,
+            Ok(metadata) => {
+                if let Some(problem) = folder_problem(folder, &metadata) {
+                    return Err(PublishRefused(format!("{problem}; nothing was written")));
+                }
+            }
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
             Err(error) => return Err(cannot_write(path, &error)),
         }
@@ -233,18 +275,27 @@ fn file_exists(root: &Path, path: &str) -> Result<bool, PublishRefused> {
     }
 }
 
-/// Refuses `folder` (relative to the app's folder) when it is a symbolic link
-/// or a junction (`is_symlink` holds for both), or not a folder.
-fn check_folder(folder: &str, metadata: &fs::Metadata) -> Result<(), PublishRefused> {
+/// What is wrong with `folder` (relative to the app's folder) on the way to a
+/// file: `<folder> is a symbolic link or inside one` for a symbolic link or a
+/// junction (`is_symlink` holds for both), `<folder> is a file where a folder
+/// is needed` for anything that is not a folder; `None` for a folder.
+fn folder_problem(folder: &str, metadata: &fs::Metadata) -> Option<String> {
     if metadata.file_type().is_symlink() {
-        Err(inside_a_link(folder))
+        Some(format!("{folder} is a symbolic link or inside one"))
     } else if metadata.is_dir() {
-        Ok(())
+        None
     } else {
-        Err(PublishRefused(format!(
-            "{folder} is a file where a folder is needed; nothing was written"
-        )))
+        Some(format!("{folder} is a file where a folder is needed"))
     }
+}
+
+/// A refusal met while writing, when the files before `path` may already be
+/// written: `<problem>; it changed while publishing, and the files before
+/// <path> were written`.
+fn changed_while_writing(problem: &str, path: &str) -> PublishRefused {
+    PublishRefused(format!(
+        "{problem}; it changed while publishing, and the files before {path} were written"
+    ))
 }
 
 /// Writes `bytes` to `path` below `root`: creates each missing folder (one
@@ -258,7 +309,9 @@ fn write_file(root: &Path, path: &str, bytes: &[u8]) -> Result<(), PublishRefuse
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
                 let metadata = fs::symlink_metadata(root.join(folder))
                     .map_err(|error| cannot_write(path, &error))?;
-                check_folder(folder, &metadata)?;
+                if let Some(problem) = folder_problem(folder, &metadata) {
+                    return Err(changed_while_writing(&problem, path));
+                }
             }
             Err(error) => return Err(cannot_write(path, &error)),
         }
@@ -703,6 +756,73 @@ mod tests {
         assert_eq!(
             refused.to_string(),
             "resources/a/one.css is a folder where a file would be written; nothing was written"
+        );
+    }
+
+    /// Two paths that would be one file, or a file that another path needs as its folder: the
+    /// writer refuses them itself, before anything is written.
+    #[test]
+    fn the_writer_refuses_two_paths_that_would_be_one_file_or_a_file_and_its_folder() {
+        let root = TempFolder::new("writer-conflicts");
+        for (paths, refusal) in [
+            (
+                [
+                    "resources/views/announcements/list.html",
+                    "resources/views/announcements/List.html",
+                ],
+                "resources/views/announcements/list.html is the same file as another one on a disk that ignores case; nothing was written",
+            ),
+            (
+                ["config/announcements.toml", "config/announcements.toml"],
+                "config/announcements.toml is the same file as another one on a disk that ignores case; nothing was written",
+            ),
+            (
+                [
+                    "resources/views/announcements/admin",
+                    "resources/views/announcements/admin/edit.html",
+                ],
+                "resources/views/announcements/admin would be both a file and the folder of resources/views/announcements/admin/edit.html; nothing was written",
+            ),
+            (
+                [
+                    "resources/views/announcements/Admin",
+                    "resources/views/announcements/admin/edit.html",
+                ],
+                "resources/views/announcements/Admin would be both a file and the folder of resources/views/announcements/admin/edit.html; nothing was written",
+            ),
+        ] {
+            let files = [(paths[0], &b"<ul></ul>"[..]), (paths[1], &b"<form></form>"[..])];
+            for (force, dry_run) in [(false, false), (true, false), (false, true)] {
+                let refused = publish_files(&root.0, &files, force, dry_run).expect_err(refusal);
+                assert_eq!(refused.to_string(), refusal);
+            }
+            assert_eq!(
+                fs::read_dir(&root.0).unwrap().count(),
+                0,
+                "nothing was written for {paths:?}"
+            );
+        }
+        assert_eq!(
+            first_file_and_folder(&["a/b", "a/b/c.html", "a"]),
+            Some(("a/b", "a/b/c.html"))
+        );
+        assert_eq!(
+            first_file_and_folder(&["admin.html", "admin/edit.html"]),
+            None
+        );
+    }
+
+    /// A folder that became a file after the check, met while writing: the refusal says that
+    /// the files before it were written, which is what is true at that point.
+    #[test]
+    fn a_folder_that_changed_while_writing_is_refused_without_saying_nothing_was_written() {
+        let root = TempFolder::new("writer-changed");
+        fs::create_dir(root.0.join("resources")).unwrap();
+        fs::write(root.0.join("resources/a"), "a file").unwrap();
+        let refused = write_file(&root.0, "resources/a/one.css", b"x").expect_err("a file");
+        assert_eq!(
+            refused.to_string(),
+            "resources/a is a file where a folder is needed; it changed while publishing, and the files before resources/a/one.css were written"
         );
     }
 

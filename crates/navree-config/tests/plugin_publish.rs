@@ -250,7 +250,7 @@ fn a_plugins_sections_are_written_through_the_checked_writer() {
     ]);
     assert_eq!(
         publish_section(&plugin, &shouting, &config).expect_err("one file"),
-        "config:publish: two sections of plugin `announcements` would be written to one file, config/announcements.toml; nothing was written"
+        "config:publish: config/announcements.toml is the same file as another one on a disk that ignores case; nothing was written"
     );
     assert_eq!(
         fs::read_dir(&config).unwrap().count(),
