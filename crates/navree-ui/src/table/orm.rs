@@ -60,6 +60,16 @@ fn own_table<M: Model>(source: &str, dialect: Option<Dialect>) -> Option<&'stati
     (dialect.is_some() && !source.contains('.') && own).then(|| meta.table())
 }
 
+/// `source` as a query names it: with `M`'s table when [`own_table`] finds one, so a join
+/// with a table that has a column of the same name is not ambiguous, and as it is written
+/// otherwise.
+fn named<M: Model>(source: &'static str, dialect: Option<Dialect>) -> Cow<'static, str> {
+    match own_table::<M>(source, dialect) {
+        Some(table) => Cow::Owned(format!("{table}.{source}")),
+        None => Cow::Borrowed(source),
+    }
+}
+
 /// A value from a URL, bound as what the column holds.
 fn bind(kind: ValueKind, text: &str) -> Option<Value> {
     match kind {
@@ -84,15 +94,17 @@ fn bind(kind: ValueKind, text: &str) -> Option<Value> {
     }
 }
 
-/// The filter of one column.
-fn filter_of(column: &'static Column, value: &FilterValue) -> Option<Filter> {
-    let source = col(column.source);
+/// The filter of one column, which the query names `named`.
+fn filter_of(
+    named: Cow<'static, str>,
+    column: &'static Column,
+    value: &FilterValue,
+) -> Option<Filter> {
+    let source = col(named.clone());
     match value {
         FilterValue::Empty => Some(source.is_null()),
         FilterValue::Bool(flag) => Some(source.eq(Value::Bool(*flag))),
-        FilterValue::Text(text) => {
-            Some(col_as::<String>(column.source).contains_ignore_case(text.clone()))
-        }
+        FilterValue::Text(text) => Some(col_as::<String>(named).contains_ignore_case(text.clone())),
         FilterValue::Values(values) => {
             let bound: Vec<Value> = values
                 .iter()
@@ -419,7 +431,18 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     /// of them is taken away from the person ([`without_columns`](Self::without_columns)),
     /// no index covers the columns left, so it reads those the way
     /// [`SearchMode::Contains`] does.
-    pub fn apply<M: Model>(&self, mut builder: Builder<M>) -> Builder<M> {
+    ///
+    /// Each column is written as its `source` says. [`load`](Self::load),
+    /// [`load_as`](Self::load_as), the exports and a bulk request know the database they
+    /// read, and on a SQL database they name a column of the table being read with that
+    /// table, so a join with a table that has a column of the same name is not ambiguous.
+    /// With `apply` on such a join, give the column a `source` with its table.
+    pub fn apply<M: Model>(&self, builder: Builder<M>) -> Builder<M> {
+        self.apply_on(builder, None)
+    }
+
+    /// [`apply`](Self::apply), each column named as a query on `dialect` names it.
+    fn apply_on<M: Model>(&self, mut builder: Builder<M>, dialect: Option<Dialect>) -> Builder<M> {
         if let Some(q) = &self.state.q {
             // Only the columns marked `search` that this person may use.
             let searched = R::COLUMNS
@@ -442,7 +465,8 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
                 SearchMode::Contains => {
                     let searches: Vec<Filter> = searched
                         .map(|column| {
-                            col_as::<String>(column.source).contains_ignore_case(q.clone())
+                            col_as::<String>(named::<M>(column.source, dialect))
+                                .contains_ignore_case(q.clone())
                         })
                         .collect();
                     if !searches.is_empty() {
@@ -450,7 +474,9 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
                     }
                 }
                 SearchMode::Words => {
-                    let sources: Vec<&'static str> = searched.map(|column| column.source).collect();
+                    let sources: Vec<String> = searched
+                        .map(|column| named::<M>(column.source, dialect).into_owned())
+                        .collect();
                     if !sources.is_empty() {
                         builder = builder.where_full_text(sources, q.clone());
                     }
@@ -461,7 +487,10 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
             if self.is_withdrawn(active.column) {
                 continue;
             }
-            if let Some(filter) = filter_of(&R::COLUMNS[active.column], &active.value) {
+            let column = &R::COLUMNS[active.column];
+            if let Some(filter) =
+                filter_of(named::<M>(column.source, dialect), column, &active.value)
+            {
                 builder = builder.where_(filter);
             }
         }
@@ -548,10 +577,10 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         E: Executor + ?Sized,
     {
         let dialect = exec.target(Access::Read).await?.dialect();
-        let filtered = self.apply(builder);
+        let filtered = self.apply_on(builder, dialect);
         let terms = self.terms::<M>(dialect);
         let total = self.count_rows(filtered.clone(), exec, dialect).await?;
-        let version = self.version_of(filtered.clone(), exec).await?;
+        let version = self.version_of(filtered.clone(), exec, dialect).await?;
         let mut page = if R::CONFIG.cursor {
             self.cursor_page(filtered, exec, dialect, &terms, total, map)
                 .await?
@@ -599,11 +628,15 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         &self,
         filtered: Builder<M>,
         exec: &E,
+        dialect: Option<Dialect>,
     ) -> Result<Option<String>> {
         let Some(column) = R::CONFIG.version else {
             return Ok(None);
         };
-        let value: Option<Value> = filtered.reorder().max(exec, col(column)).await?;
+        let value: Option<Value> = filtered
+            .reorder()
+            .max(exec, col(named::<M>(column, dialect)))
+            .await?;
         Ok(value.as_ref().and_then(text_of))
     }
 
@@ -912,7 +945,7 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         E: Executor + ?Sized,
     {
         let dialect = exec.target(Access::Read).await?.dialect();
-        let filtered = self.apply(builder);
+        let filtered = self.apply_on(builder, dialect);
         let terms = walk_order(
             self.terms::<M>(dialect),
             Self::key_term::<M>(Direction::Asc, dialect),
@@ -1094,19 +1127,23 @@ impl<R: TableRow, F: FilterBar> BulkRequest<R, F> {
         M: Model,
         E: Executor + ?Sized,
     {
-        let key = M::meta().key_column();
+        let dialect = exec.target(Access::Read).await?.dialect();
+        let key = || col(named::<M>(M::meta().key_column(), dialect));
         let kind = R::CONFIG.key_kind;
         let values = |list: &[String]| -> Vec<Value> {
             list.iter().filter_map(|id| bind(kind, id)).collect()
         };
         if *self.mode() == BulkMode::Ids {
-            return Ok(Ok(builder.where_(col(key).is_in(values(self.ids())))));
+            return Ok(Ok(builder.where_(key().is_in(values(self.ids())))));
         }
-        let matching = self.query().apply(builder);
+        let matching = self.query().apply_on(builder, dialect);
         let version = match R::CONFIG.version {
             Some(column) => {
-                let value: Option<Value> =
-                    matching.clone().reorder().max(exec, col(column)).await?;
+                let value: Option<Value> = matching
+                    .clone()
+                    .reorder()
+                    .max(exec, col(named::<M>(column, dialect)))
+                    .await?;
                 value.as_ref().and_then(text_of)
             }
             None => None,
@@ -1114,7 +1151,7 @@ impl<R: TableRow, F: FilterBar> BulkRequest<R, F> {
         let selected = if self.excluded().is_empty() {
             matching
         } else {
-            matching.where_(col(key).not_in(values(self.excluded())))
+            matching.where_(key().not_in(values(self.excluded())))
         };
         let now = selected.clone().count(exec).await?;
         let shown = self.expected().unwrap_or(0);
