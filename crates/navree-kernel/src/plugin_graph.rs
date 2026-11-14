@@ -9,7 +9,9 @@ use crate::plugin::{
     FIRST_PARTY, PluginInfo, PublishTag, Publishable, RESERVED_NAMESPACES, destination,
     is_first_party, is_namespace, names_crate,
 };
-use crate::publish::{first_case_collision, is_locale_path, is_safe_relative_path};
+use crate::publish::{
+    first_case_collision, first_file_and_folder, is_locale_path, is_safe_relative_path,
+};
 use crate::report::{PluginModuleReport, PluginReport, PluginsReport};
 
 /// A module that names a plugin and passed the checks of its own plugin info.
@@ -48,7 +50,8 @@ impl Graph {
     ///    whose place in the app, is not a safe relative path (or, under
     ///    `locales`, does not start with a locale): `UnsafePublishPath`; per
     ///    plugin and tag, the first safe path that differs from an earlier one
-    ///    only in case: `UnsafePublishPath`.
+    ///    only in case, else the first that another path needs as a folder
+    ///    (`admin` beside `admin/edit.html`): `UnsafePublishPath`.
     pub(crate) fn check_plugins(&mut self, errors: &mut Vec<KernelError>) {
         let version = env!("CARGO_PKG_VERSION");
         // Each plugin's modules, plugins in first-seen order.
@@ -201,11 +204,14 @@ impl Graph {
         }
         for (members, paths) in plugins.iter().zip(&safe_paths) {
             for &tag in PublishTag::ALL {
-                let of_tag = paths
+                let of_tag: Vec<&str> = paths
                     .iter()
                     .filter(|(of, _)| *of == tag)
-                    .map(|&(_, path)| path);
-                if let Some(path) = first_case_collision(of_tag) {
+                    .map(|&(_, path)| path)
+                    .collect();
+                let conflict = first_case_collision(of_tag.iter().copied())
+                    .or_else(|| first_file_and_folder(&of_tag).map(|(file, _)| file));
+                if let Some(path) = conflict {
                     errors.push(KernelError::UnsafePublishPath {
                         plugin: members[0].info.name,
                         tag: tag.as_str(),

@@ -188,8 +188,9 @@ impl PublishTag {
 /// `conout$`, `com0` to `com9`, `lpt0` to `lpt9`, `com¹` to `com³`, `lpt¹` to
 /// `lpt³`, in any case, with or without an extension); two paths of one
 /// plugin under one tag that differ only in case (their lower-case forms or
-/// their upper-case forms are equal). Under `locales` the first segment is
-/// the locale.
+/// their upper-case forms are equal), or a path that another of them needs
+/// as its folder (`admin` beside `admin/edit.html`). Under `locales` the
+/// first segment is the locale.
 ///
 /// ```
 /// use navree_kernel::{PublishTag, Publishable};
