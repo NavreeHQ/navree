@@ -164,7 +164,6 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         // A panel the person may resize opens at the size they left it.
         let size = options.resizable && panel.frame.width > 1 ? panel.frame.size : options.size
         panel.setFrame(StatusRules.windowFrame(item: place.frame, size: size, screen: screen), display: true)
-        fitSheet()
         NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
         shown = true
@@ -255,20 +254,9 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         panel.minSize = options.minimumSize
         panel.animationBehavior = .utilityWindow
         panel.escape = { [weak self] in self?.hide() }
-        // The panel's size, or its sheet's as the sheet follows the room the
-        // panel has.
-        resizing = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: nil, queue: .main) { [weak self] note in
-            let window = note.object as? NSWindow
-            MainActor.assumeIsolated {
-                guard window is StatusPanel || window?.sheetParent is StatusPanel else { return }
-                self?.fitSheet()
-            }
-        }
         self.panel = panel
         return panel
     }
-
-    private var resizing: (any NSObjectProtocol)?
 
     /// The smallest the person may make the panel, as its options say. The
     /// hosted shell sets the window's smallest size anew as it lays out, so
@@ -291,20 +279,6 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
             return frameSize
         }
         return NSSize(width: max(frameSize.width, smallest.width), height: max(frameSize.height, smallest.height))
-    }
-
-    /// A sheet up in the panel stays within it as the panel changes size or
-    /// place: as a sheet opened in it then would
-    /// (``PresentationRules/sheetSize(form:room:)``), centred on the panel,
-    /// its top where it stands and its content scrolling.
-    private func fitSheet() {
-        guard let panel, let sheet = panel.attachedSheet else { return }
-        let size = PresentationRules.sheetSize(form: sheet.frame.size, room: panel.contentLayoutRect.size)
-        let frame = CGRect(
-            x: (panel.frame.midX - size.width / 2).rounded(), y: sheet.frame.maxY - size.height, width: size.width, height: size.height
-        )
-        guard frame != sheet.frame else { return }
-        sheet.setFrame(frame, display: true)
     }
 
     /// Unless pinned, a click anywhere but the panel, its sheets, its menus and

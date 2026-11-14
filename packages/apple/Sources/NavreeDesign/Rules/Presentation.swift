@@ -73,6 +73,38 @@ public enum PresentationRules {
         return CGSize(width: min(form.width, room.width), height: min(form.height, room.height))
     }
 
+    /// The size a Mac sheet takes once its content has said how tall it is
+    /// (`fitting`: the sheet's height with all its content shown, its bar and
+    /// its foot included): as tall as that, never taller than a form, so a
+    /// sheet of one field is not mostly empty; and within the room of the
+    /// window it stands on, whose width it takes up to a form's. Until its
+    /// content has said (a list has no height of its own), it is the form's
+    /// size, so its list shows rather than shrinking to its bar.
+    public static func sheetSize(form: CGSize, fitting: CGFloat?, room: CGSize?) -> CGSize {
+        var size = sheetSize(form: form, room: room)
+        if let fitting, fitting > 0 { size.height = min(size.height, fitting.rounded(.up)) }
+        return size
+    }
+
+    /// What Escape does in a sheet while a field in it is being typed in.
+    public enum EscapeWhileTyping: Sendable, Equatable {
+        /// It presses the sheet's Cancel, as it does in the system's own form
+        /// sheets on a Mac (a grouped form, or an AppKit sheet's Cancel with
+        /// Escape for its key): the words typed go with the sheet.
+        case cancelsSheet
+        /// The system's own: iPhone and iPad.
+        case system
+    }
+
+    /// On a Mac, Escape cancels a sheet on its first press even while a field
+    /// is being typed in, as the system's form sheets do; a list's field
+    /// would otherwise take that first press to end its editing. While the
+    /// person is composing a character (marked text of an input method),
+    /// Escape belongs to the composition.
+    public static func escapeWhileTyping(bar: ActionBar, composing: Bool) -> EscapeWhileTyping {
+        bar == .window && !composing ? .cancelsSheet : .system
+    }
+
     /// How a sheet's Cancel and its confirming button show.
     public enum SheetButtons: Sendable, Equatable {
         /// Symbols in the sheet's bar, ✕ at its leading corner and ✓ at its

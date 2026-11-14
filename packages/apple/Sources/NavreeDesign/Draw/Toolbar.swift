@@ -94,7 +94,7 @@ struct ToolbarAction: View {
             switch slot {
             case .cancel:
                 Button(role: .cancel, action: action) { ButtonLabel(button: button, mode: Self.sheetLabel) }
-                    .sheetKey(.cancel)
+                    .sheetKey(.cancel, action: action)
             case .confirm:
                 Button(role: .confirm, action: action) { ButtonLabel(button: button, mode: Self.sheetLabel) }
                     .disabled(button.disabled || button.pending)

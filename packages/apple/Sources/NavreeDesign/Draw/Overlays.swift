@@ -238,6 +238,7 @@ struct OverlayContent: View {
             }
         }
         .modifier(ListLook(layout: .insetGrouped))
+        .sheetListFits()
     }
 
     static func withoutSubmits(_ section: ListSection) -> ListSection {
@@ -270,6 +271,7 @@ struct FormSheet: View {
                 }
             }
             .modifier(ListLook(layout: .insetGrouped))
+            .sheetListFits()
             .navigationTitle(title)
             .modifier(Subtitle(text: subtitle))
             .navigationBarTitleDisplayModeInline()
@@ -302,6 +304,9 @@ struct FormSheet: View {
 /// edges. iPhone and iPad size a sheet by its detents.
 public struct SheetSizing: ViewModifier {
     @Environment(\.navreeSheetRoom) private var room
+    /// How much taller than its room the sheet's list is (shorter when
+    /// negative), once the list has been laid out.
+    @State private var overflow: CGFloat?
 
     public init() {}
 
@@ -311,13 +316,131 @@ public struct SheetSizing: ViewModifier {
             content
         case .form:
             #if os(macOS)
-            content.presentationSizing(RoomFormSizing(room: room))
+            content
+                .presentationSizing(RoomFormSizing(room: room))
+                .onPreferenceChange(SheetOverflow.self) { value in overflow = value }
+                .background(SheetWindowFit(overflow: overflow, room: room))
             #else
             content.presentationSizing(.form)
             #endif
         }
     }
 }
+
+/// How much taller than the room it is shown in a sheet's list is, said by
+/// the list itself once laid out: a list has no height of its own to offer
+/// the sheet, so the sheet learns it this way.
+struct SheetOverflow: PreferenceKey {
+    static let defaultValue: CGFloat? = nil
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
+        value = value ?? nextValue()
+    }
+}
+
+extension View {
+    /// A list that is a Mac sheet's content says how tall it is, so the sheet
+    /// fits it (``PresentationRules/sheetSize(form:fitting:room:)``).
+    @ViewBuilder func sheetListFits(_ inSheet: Bool = true) -> some View {
+        #if os(macOS)
+        if inSheet, PresentationRules.sheetSizing(bar: .current) == .form {
+            modifier(SheetListFits())
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+}
+
+#if os(macOS)
+struct SheetListFits: ViewModifier {
+    @State private var overflow: CGFloat?
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                (geometry.contentSize.height + geometry.contentInsets.top + geometry.contentInsets.bottom - geometry.containerSize.height)
+                    .rounded()
+            } action: { _, value in
+                overflow = value
+            }
+            .preference(key: SheetOverflow.self, value: overflow)
+    }
+}
+
+/// Keeps a Mac sheet at the size ``PresentationRules/sheetSize(form:fitting:room:)``
+/// gives it: a form's width within the window it stands on, as tall as its
+/// content up to a form's height. It follows the sheet's content as it is
+/// laid out, the window under it as that window changes size, and a new
+/// window when the app's shell moves into another (the window under an item
+/// in the menu bar into a full window): the sheet takes the room it now has.
+/// The sheet stays centred on its window, its top where it stands.
+struct SheetWindowFit: NSViewRepresentable {
+    let overflow: CGFloat?
+    let room: CGSize?
+
+    func makeNSView(context: Context) -> Fitter { Fitter() }
+
+    func updateNSView(_ view: Fitter, context: Context) {
+        view.overflow = overflow
+        view.fit()
+    }
+
+    static func dismantleNSView(_ view: Fitter, coordinator: ()) { view.stop() }
+
+    final class Fitter: NSView {
+        var overflow: CGFloat?
+        private var watching: [any NSObjectProtocol] = []
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            stop()
+            guard let window else { return }
+            let center = NotificationCenter.default
+            // The window under it changing size, or the sheet coming into a new window.
+            watching = [
+                center.addObserver(forName: NSWindow.didResizeNotification, object: nil, queue: .main) { [weak self] note in
+                    let resized = note.object as? NSWindow
+                    MainActor.assumeIsolated {
+                        guard let self, let resized, resized === self.window?.sheetParent else { return }
+                        self.fit()
+                    }
+                },
+                center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.fit() }
+                },
+            ]
+            DispatchQueue.main.async { [weak self] in MainActor.assumeIsolated { self?.fit() } }
+        }
+
+        func stop() {
+            for token in watching { NotificationCenter.default.removeObserver(token) }
+            watching = []
+        }
+
+        func fit() {
+            guard let sheet = window, let parent = sheet.sheetParent else { return }
+            let content = sheet.contentRect(forFrameRect: sheet.frame)
+            let fitting = overflow.map { content.height + $0 }
+            let size = PresentationRules.sheetSize(
+                form: PresentationRules.formSize, fitting: fitting, room: parent.contentLayoutRect.size
+            )
+            let frame = sheet.frameRect(forContentRect: CGRect(origin: .zero, size: size))
+            let target = CGRect(
+                x: (parent.frame.midX - frame.width / 2).rounded(), y: sheet.frame.maxY - frame.height,
+                width: frame.width, height: frame.height
+            )
+            guard abs(target.width - sheet.frame.width) > 0.5 || abs(target.height - sheet.frame.height) > 0.5
+                || abs(target.minX - sheet.frame.minX) > 0.5
+            else { return }
+            sheet.setFrame(target, display: true)
+        }
+    }
+}
+#endif
 
 extension View {
     /// An inline title, where the system has a choice of title modes.

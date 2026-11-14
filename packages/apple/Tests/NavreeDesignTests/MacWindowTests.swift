@@ -207,6 +207,36 @@ private func labels(_ nodes: [Navree.Node]) -> [String] {
     #expect(PresentationRules.sheetSize(form: form, room: .zero) == form)
 }
 
+@Test func aMacSheetIsAsTallAsItsContentUpToAFormAndWithinItsWindow() {
+    let form = PresentationRules.formSize
+    // A sheet of one field (its bar, one row, its buttons) is that tall, not a form's 400.
+    #expect(PresentationRules.sheetSize(form: form, fitting: 212, room: CGSize(width: 960, height: 628)) == CGSize(width: 470, height: 212))
+    // Content taller than a form: the form's height, the content scrolling.
+    #expect(PresentationRules.sheetSize(form: form, fitting: 900, room: CGSize(width: 960, height: 628)) == form)
+    // In the window under an item in the menu bar: its width, the content's height.
+    #expect(PresentationRules.sheetSize(form: form, fitting: 212, room: CGSize(width: 400, height: 508)) == CGSize(width: 400, height: 212))
+    // A window shorter than the content: the window's room.
+    #expect(PresentationRules.sheetSize(form: form, fitting: 380, room: CGSize(width: 400, height: 300)) == CGSize(width: 400, height: 300))
+    // Until a list has said how tall it is (it has no height of its own), the
+    // form's size, so the list shows rather than the sheet shrinking to its bar.
+    #expect(PresentationRules.sheetSize(form: form, fitting: nil, room: CGSize(width: 960, height: 628)) == form)
+    #expect(PresentationRules.sheetSize(form: form, fitting: 0, room: CGSize(width: 960, height: 628)) == form)
+    // Moved from the 400-point window under the item into a full window, the
+    // same sheet takes the full window's room: a form's width again.
+    let panel = PresentationRules.sheetSize(form: form, fitting: 300, room: CGSize(width: 400, height: 508))
+    let window = PresentationRules.sheetSize(form: form, fitting: 300, room: CGSize(width: 960, height: 628))
+    #expect(panel.width == 400 && window.width == 470)
+}
+
+@Test func escapeCancelsAMacSheetEvenWhileAFieldIsBeingTypedIn() {
+    // The system's own form sheets on a Mac cancel on the first Escape.
+    #expect(PresentationRules.escapeWhileTyping(bar: .window, composing: false) == .cancelsSheet)
+    // A character being composed with an input method keeps its Escape.
+    #expect(PresentationRules.escapeWhileTyping(bar: .window, composing: true) == .system)
+    // iPhone and iPad keep the system's own.
+    #expect(PresentationRules.escapeWhileTyping(bar: .navigation, composing: false) == .system)
+}
+
 @Test func aSheetsButtonsAreWordsOnAMacAndSymbolsOnAPhone() {
     // A Mac sheet's push buttons: "Cancel" and the action's own words, the
     // confirming one the default button.
