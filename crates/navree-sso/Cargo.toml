@@ -83,4 +83,6 @@ ring = { workspace = true }
 # digests (which the verifier itself refuses).
 sha1 = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
+# The logging tests capture the lines the module writes.
+tracing-subscriber = { workspace = true }
 wiremock = { workspace = true }

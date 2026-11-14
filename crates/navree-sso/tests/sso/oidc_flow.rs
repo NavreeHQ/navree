@@ -7,6 +7,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use navree_crypto::jose::{JwkSet, SigningKey};
 use navree_sso::{NewConnection, Provisioning, SsoConnection, SsoOwner};
+use navree_workspace::{NewWorkspace, Workspaces};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use wiremock::matchers::{method, path};
@@ -328,4 +329,53 @@ async fn an_unverified_provider_email_never_links_an_account() {
     callback(&world, &[("code", "c"), ("state", &query["state"])])
         .await
         .assert_error_code(409, "email_taken");
+}
+
+#[tokio::test]
+async fn a_workspace_connection_refuses_an_address_outside_its_domains_through_openid_connect() {
+    let world = support::world().await;
+    let provider = Provider::start().await;
+    let owner = world
+        .create_verified_user("Gurpreet Singh", "gurpreet@ludhiana.test")
+        .await;
+    let workspaces = world.app.get::<Workspaces>().await;
+    let workspace = world
+        .write(|uow| async move {
+            workspaces
+                .create(&uow, owner.id, NewWorkspace::named("Ludhiana Traders"))
+                .await
+        })
+        .await
+        .unwrap();
+    let open = Provisioning {
+        allow_unverified_emails: true,
+        ..Provisioning::default()
+    };
+    let sso = world.sso().await;
+    let input = NewConnection::oidc(
+        SsoOwner::Workspace(workspace.id),
+        "Ludhiana Login",
+        provider.issuer(),
+        CLIENT_ID,
+        CLIENT_SECRET,
+    )
+    .slug("acme")
+    .provisioning(open);
+    let connection = world
+        .write(|uow| async move { sso.create_connection(&uow, input).await })
+        .await
+        .unwrap();
+    world.verified_domain(&connection, "acme.test").await;
+
+    let query = authorize(&world).await;
+    let id_token = provider.id_token(
+        &query["nonce"],
+        json!({ "email": "simran.kaur@gmail.test" }),
+    );
+    provider
+        .token_response(json!({ "id_token": id_token }))
+        .await;
+    callback(&world, &[("code", "the-code"), ("state", &query["state"])])
+        .await
+        .assert_error_code(403, "unverified_domain");
 }
