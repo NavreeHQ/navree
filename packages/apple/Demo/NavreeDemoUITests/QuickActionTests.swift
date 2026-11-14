@@ -44,18 +44,26 @@ final class QuickActionTests: XCTestCase {
     }
 
     /// The count a server's `set_badge` sets stands on the app's icon once
-    /// the person allows notifications.
+    /// the person allows notifications; a count of none takes it away. The
+    /// Home Screen shows a count a moment after the app set it.
     @MainActor
     func testTheCountStandsOnTheAppsIcon() {
-        let app = XCUIApplication()
-        app.launchArguments = ["-NavreeRecorded", "YES", "-NavreeBadge", "3"]
-        app.launch()
-        let allow = springboard.alerts.buttons["Allow"]
-        if allow.waitForExistence(timeout: 10) { allow.tap() }
-        XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 30), "The app did not start")
-        XCUIDevice.shared.press(.home)
-        let icon = icon()
-        Shots.note("badge", "icon \(icon.label), value \(String(describing: icon.value))")
-        Shots.save("badge-home-screen", in: self)
+        var notes: [String] = []
+        for count in [0, 3] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-NavreeRecorded", "YES", "-NavreeBadge", "\(count)"]
+            app.launch()
+            let allow = springboard.alerts.buttons["Allow"]
+            if allow.waitForExistence(timeout: 10) { allow.tap() }
+            XCTAssertTrue(app.navigationBars.firstMatch.waitForExistence(timeout: 30), "The app did not start")
+            XCUIDevice.shared.press(.home)
+            let icon = icon()
+            let predicate = count == 0 ? NSPredicate(format: "NOT (value CONTAINS %@)", "3") : NSPredicate(format: "value CONTAINS %@", "3")
+            let shown = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: icon)], timeout: 15) == .completed
+            notes.append("set \(count): icon \(icon.label), value \(String(describing: icon.value)), as set \(shown)")
+            Shots.save("badge-home-screen-\(count)", in: self)
+            XCTAssertTrue(shown, "The app's icon does not show the count \(count) set")
+        }
+        Shots.note("badge", notes.joined(separator: "\n"))
     }
 }
