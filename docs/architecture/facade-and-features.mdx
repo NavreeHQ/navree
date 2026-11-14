@@ -59,6 +59,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::glob` | navree-glob | always | The glob matcher for configured patterns: `*` any run of characters, `?` one, everything else literal |
 | `navree::contracts` | navree-contracts | always | Cross-module traits: `Principal`, `Job`, `Clock`, `AuditSink`, ... |
 | `navree::config` | navree-config | always | `ConfigModule`, `.env`, TOML, JSON and `APP_*` sources |
+| `navree::plugin` | navree-kernel | always | What a plugin names: `PluginInfo`, `Publishable`, `PublishTag`, the plugins report, and `navree::plugin::prelude` for the extension traits plugins use |
 | `navree::telemetry` | navree-telemetry | `telemetry` | Typed telemetry events, sinks and W3C trace context (turned on by the modules that emit them) |
 | `navree::http` | navree-http | `http` | `HttpModule`, controllers, `AppError` |
 | `navree::log` | navree-log | `log` | `LoggerModule` |
@@ -196,7 +197,7 @@ The facade has one feature per module crate, named after it (`http-client` for `
 navree = { version = "1", default-features = false, features = ["http", "log"] }
 ```
 
-`navree-kernel`, `navree-bounded`, `navree-glob`, `navree-contracts`, `navree-config`, `navree-openapi` and `navree-macros` are always included. A module's feature also turns on the features of the modules its crate builds on, so `navree::<that module>` is always there to name their types:
+`navree-kernel`, `navree-bounded`, `navree-glob`, `navree-contracts`, `navree-config`, `navree-openapi`, `navree-macros` and `navree-i18n-macros` are always included. A module's feature also turns on the features of the modules its crate builds on, so `navree::<that module>` is always there to name their types:
 
 | Feature | Also turns on |
 |---|---|

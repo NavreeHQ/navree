@@ -16,6 +16,7 @@
 //! | [`contracts`] | navree-contracts | always | cross-module traits: `Principal`, `Job`, `Clock`, `AuditSink`, ... |
 //! | [`config`] | navree-config | always | `ConfigModule`, `.env`, TOML, JSON and `APP_*` sources |
 //! | [`embed_locales!`] | navree-i18n-macros | always | Fluent files embedded in a binary, for any crate's translations (also `navree::i18n::embed_locales`) |
+//! | [`plugin`] | navree-kernel | always | what a plugin names: `PluginInfo`, `Publishable`, `PublishTag`, the plugins report, and `navree::plugin::prelude` |
 //! | `telemetry` | navree-telemetry | `telemetry` | typed telemetry events, sinks, W3C trace context |
 //! | `http` | navree-http | `http` | `HttpModule`, controllers, `AppError` (JSON errors) |
 //! | `log` | navree-log | `log` | `LoggerModule` (tracing) |
@@ -109,7 +110,9 @@
 //! expansions name the runtime crates through this facade (`::navree::kernel`,
 //! `::navree::http`, `::navree::access`), so an app depends on `navree` alone
 //! (plus `serde`, whose derives name its own crate; `#[derive(Validate)]`
-//! names `::navree::validation`).
+//! names `::navree::validation`). [`plugin_info!`] (what a plugin says about
+//! itself) and [`embed_locales!`] (Fluent files embedded in the binary, with
+//! no `i18n` feature) sit at the root too.
 //!
 //! ```no_run
 //! # // Inside this crate's own doctests the macros name `crate::kernel` and
