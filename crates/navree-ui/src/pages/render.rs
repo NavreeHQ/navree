@@ -15,7 +15,9 @@ use std::time::Duration;
 
 use futures_util::FutureExt as _;
 
-use http::header::{CACHE_CONTROL, HeaderName, HeaderValue, LOCATION, VARY};
+use http::header::{
+    CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HeaderName, HeaderValue, LOCATION, VARY,
+};
 use http::{Method, StatusCode};
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, ErrorContext, ErrorPages, Preference, RouteKind};
@@ -56,6 +58,55 @@ pub const REGION_HEADER: &str = "x-navree-region";
 pub fn region_asked(headers: &http::HeaderMap) -> Option<String> {
     let written = headers.get(REGION_HEADER)?.to_str().ok()?;
     Some(percent_decoded(written))
+}
+
+/// The answer to a region's fetch that is `fragment` alone: what goes in the region, or the
+/// element with the region's id, written as it is with no page around it. It carries what a
+/// [`View`](crate::View) answers with: `text/html`, the page's content security policy,
+/// `Cache-Control: no-store`, and the header that says it is a page of this app, without
+/// which the runtime draws no answer. Fetched by a region (the request names one in
+/// [`REGION_HEADER`]) it is marked as that region's fragment, as a view is.
+///
+/// A region's source that answers with a part of a page rather than a whole [`View`]
+/// answers through this. Headers of your own go on after it.
+///
+/// ```
+/// use navree_ui::pages::region_answer;
+/// use navree_ui::{PAGE_CSP, el};
+///
+/// let response = region_answer(el("div").id("kpis").child("₹2,50,000"));
+/// assert_eq!(response.status(), 200);
+/// assert_eq!(response.headers()["content-type"], "text/html; charset=utf-8");
+/// assert_eq!(response.headers()["x-navree-page"], "1");
+/// assert_eq!(response.headers()["cache-control"], "no-store");
+/// assert_eq!(response.headers()["content-security-policy"], PAGE_CSP);
+/// ```
+///
+/// [`View`]: crate::View
+pub fn region_answer(fragment: impl Into<Node>) -> Response {
+    let html = crate::render::render(&fragment.into());
+    let mut response = (
+        StatusCode::OK,
+        [
+            (
+                CONTENT_TYPE,
+                HeaderValue::from_static("text/html; charset=utf-8"),
+            ),
+            (
+                CONTENT_SECURITY_POLICY,
+                HeaderValue::from_static(crate::view::PAGE_CSP),
+            ),
+            (CACHE_CONTROL, HeaderValue::from_static("no-store")),
+        ],
+        html,
+    )
+        .into_response();
+    response
+        .headers_mut()
+        .insert(crate::view::PAGE_HEADER, HeaderValue::from_static("1"));
+    // Answered to a region's fetch, the reply layer marks it as the region's fragment.
+    response.extensions_mut().insert(crate::view::ViewAnswer);
+    response
 }
 
 /// `written` with each `%XX` read as its byte, or as it is when what comes out is not
@@ -625,6 +676,25 @@ mod tests {
             ..RouteMeta::default()
         }));
         request
+    }
+
+    /// A region's source that answers with a part of a page carries what a page does, so the
+    /// runtime draws it, and is marked as the region's fragment by the reply layer.
+    #[test]
+    fn a_region_answer_is_the_fragment_alone_with_what_a_page_carries() {
+        let response = region_answer(el("div").attr("id", "kpis").child("₹2,50,000"));
+        assert_eq!(response.status(), StatusCode::OK);
+        let headers = response.headers();
+        assert_eq!(headers[crate::view::PAGE_HEADER], "1");
+        assert_eq!(headers[CONTENT_TYPE], "text/html; charset=utf-8");
+        assert_eq!(headers[CACHE_CONTROL], "no-store");
+        assert_eq!(headers[CONTENT_SECURITY_POLICY], crate::view::PAGE_CSP);
+        assert!(
+            response
+                .extensions()
+                .get::<crate::view::ViewAnswer>()
+                .is_some()
+        );
     }
 
     #[test]
