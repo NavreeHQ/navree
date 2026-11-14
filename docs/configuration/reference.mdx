@@ -171,7 +171,7 @@ More: [/docs/security/passwordless/](/docs/security/passwordless/).
 | `exclude` | list of string | `[]` | `APP_AUTH__APPS__EXCLUDE` | Paths that never open in the apps, even when `paths` match them. |
 | `apple` | table of AppleApp | `"{}"` | `APP_AUTH__APPS__APPLE` | The Apple apps (iOS, iPadOS, macOS, watchOS, visionOS), by name. |
 | `android` | table of AndroidApp | `"{}"` | `APP_AUTH__APPS__ANDROID` | The Android apps, by name. |
-| `keep_browser_signed_in` | boolean | `false` | `APP_AUTH__APPS__KEEP_BROWSER_SIGNED_IN` | Whether a browser that signed in only to hand its sign-in over to an app stays signed in afterwards (default `false`: it is signed out, and only the app holds a session). A browser that was signed in before the hand-over always stays signed in. |
+| `keep_browser_signed_in` | boolean | `false` | `APP_AUTH__APPS__KEEP_BROWSER_SIGNED_IN` | Whether a browser that signed in only to hand its sign-in over to an app stays signed in afterwards (default `false`: it is signed out, and only the app holds a session). A browser that was signed in before the hand-over stays signed in once the person confirms, unless the app's callback is a custom scheme (the browser is then signed out and the person signs in again for the app). |
 
 ## `billing`
 

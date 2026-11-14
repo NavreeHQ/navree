@@ -2,8 +2,9 @@
 //! app: `GET /auth/app/sign-in` with an S256 code challenge, the sign-in
 //! pages, `GET /auth/app/finish` to the app's callback with a one-time
 //! code, and `POST /api/auth/app/exchange` with the verifier from the app's
-//! own HTTP stack. Also: a platform sign-in waiting for its second step,
-//! finished on the two-factor page.
+//! own HTTP stack; the page that asks a browser that was already signed in
+//! first, `POST /auth/app/confirm`. Also: a platform sign-in waiting for its
+//! second step, finished on the two-factor page.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -202,16 +203,44 @@ async fn sheet_sign_in(app: &TestApp, email: &str, challenge: &str) -> (TestClie
     let started = start(&sheet, challenge, "s-1").await.assert_status(303);
     assert_eq!(location(&started), "/auth/app/finish");
     let to_sign_in = get(&sheet, "/auth/app/finish").await.assert_status(303);
-    assert_eq!(
-        location(&to_sign_in),
-        "/sign-in?next=%2Fauth%2Fapp%2Ffinish"
-    );
-    let signed_in = sign_in_form(&sheet, email, "/auth/app/finish")
+    let back = finish_with_attempt(&location(&to_sign_in));
+    let signed_in = sign_in_form(&sheet, email, &back)
         .await
         .assert_status(303);
-    assert_eq!(location(&signed_in), "/auth/app/finish");
-    let code = callback_code(&get(&sheet, "/auth/app/finish").await, "s-1");
+    assert_eq!(location(&signed_in), back);
+    let code = callback_code(&get(&sheet, &back).await, "s-1");
     (sheet, code)
+}
+
+/// The page a browser that was signed in when the hand-over began gets
+/// instead of a code: its text, and the one-time value and CSRF token its
+/// form posts back.
+fn confirmation(response: &TestResponse) -> (String, String, String) {
+    assert_eq!(response.status().as_u16(), 200, "{}", response.text());
+    assert_eq!(response.header("location"), None);
+    assert_eq!(response.header("cache-control"), Some("no-store"));
+    assert_eq!(response.header("referrer-policy"), Some("no-referrer"));
+    assert_eq!(response.header("x-frame-options"), Some("DENY"));
+    let page = response.text();
+    assert!(!page.contains("code="), "{page}");
+    let field = |name: &str| {
+        let marker = format!("name=\"{name}\" value=\"");
+        let start = page.find(&marker).expect(name) + marker.len();
+        page[start..].split('"').next().unwrap().to_owned()
+    };
+    let (token, csrf) = (field("confirm"), field("_csrf"));
+    (page, token, csrf)
+}
+
+/// Posts the confirmation page's form with the button `decision`
+/// (`continue` or `cancel`).
+async fn answer(client: &TestClient, token: &str, csrf: &str, decision: &str) -> TestResponse {
+    client
+        .post("/auth/app/confirm")
+        .header("accept", "text/html")
+        .form(&[("_csrf", csrf), ("confirm", token), ("decision", decision)])
+        .send()
+        .await
 }
 
 /// The code of a callback answer, checking where it goes and the state.
@@ -268,6 +297,18 @@ fn refused(response: TestResponse) {
     response.assert_error_code(400, "invalid_hand_over");
 }
 
+/// A refusal as the system's sign-in session shows it: a 400 page, no
+/// redirect.
+fn refused_page(response: TestResponse) {
+    assert_eq!(response.status().as_u16(), 400, "{}", response.text());
+    assert_eq!(response.header("location"), None);
+    assert!(
+        response.text().contains("invalid_hand_over"),
+        "{}",
+        response.text()
+    );
+}
+
 #[tokio::test]
 async fn a_sign_in_in_the_system_session_is_handed_to_the_app() {
     let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
@@ -316,7 +357,9 @@ async fn two_steps_and_a_browser_signed_in_before_both_hand_over() {
 
     let sheet = app.client();
     start(&sheet, &challenge, "s-2").await.assert_status(303);
-    let first = sign_in_form(&sheet, "simran@example.com", "/auth/app/finish")
+    let to_sign_in = get(&sheet, "/auth/app/finish").await.assert_status(303);
+    let back = finish_with_attempt(&location(&to_sign_in));
+    let first = sign_in_form(&sheet, "simran@example.com", &back)
         .await
         .assert_status(303);
     let second_step = location(&first);
@@ -331,22 +374,22 @@ async fn two_steps_and_a_browser_signed_in_before_both_hand_over() {
         .header("accept", "text/html")
         .form(&[
             ("code", code.as_str()),
-            ("next", "/auth/app/finish"),
+            ("next", back.as_str()),
             ("_csrf", token.as_str()),
         ])
         .send()
         .await
         .assert_status(303);
-    assert_eq!(location(&done), "/auth/app/finish");
-    let code = callback_code(&get(&sheet, "/auth/app/finish").await, "s-2");
+    assert_eq!(location(&done), back);
+    let code = callback_code(&get(&sheet, &back).await, "s-2");
     let iphone = phone(&app).await;
     exchange(&iphone, "apple", &code, &verifier)
         .await
         .assert_status(200);
     whoami(&iphone).await.assert_status(200);
 
-    // A browser that was signed in before: handed over at once, and still
-    // signed in afterwards.
+    // A browser that was signed in before: handed over once the person
+    // says so, and still signed in afterwards.
     let other = create_user(&app, "harpreet@example.com").await;
     let browser = app.client();
     sign_in_form(&browser, "harpreet@example.com", "/")
@@ -354,7 +397,11 @@ async fn two_steps_and_a_browser_signed_in_before_both_hand_over() {
         .assert_status(303);
     let (verifier, challenge) = pkce("browser");
     start(&browser, &challenge, "s-3").await.assert_status(303);
-    let code = callback_code(&get(&browser, "/auth/app/finish").await, "s-3");
+    let (_, token, csrf_token) = confirmation(&get(&browser, "/auth/app/finish").await);
+    let code = callback_code(
+        &answer(&browser, &token, &csrf_token, "continue").await,
+        "s-3",
+    );
     whoami(&browser)
         .await
         .assert_status(200)
@@ -379,7 +426,11 @@ async fn two_steps_and_a_browser_signed_in_before_both_hand_over() {
     )
     .await
     .assert_status(303);
-    let code = callback_code(&get(&browser, "/auth/app/finish").await, "s-4");
+    let (_, token, csrf_token) = confirmation(&get(&browser, "/auth/app/finish").await);
+    let code = callback_code(
+        &answer(&browser, &token, &csrf_token, "continue").await,
+        "s-4",
+    );
     let pixel = phone(&app).await;
     exchange(&pixel, "android", &code, &verifier)
         .await
@@ -600,18 +651,19 @@ async fn a_custom_scheme_app_never_gets_the_browsers_sign_in() {
         .await
         .assert_status(303);
     whoami(&browser).await.assert_status(200);
-    let (_, challenge) = pkce("scheme");
-    get(
-        &browser,
-        &format!(
-            "/auth/app/sign-in?platform=android&app=com.example.legacy\
-             &code_challenge={challenge}&code_challenge_method=S256&state=s-5"
-        ),
-    )
-    .await
-    .assert_status(303);
+    start_legacy(&browser, "s-5").await.assert_status(303);
+    // The person is asked first; continuing signs the browser out, and the
+    // person signs in again for the app.
+    let (page, token, csrf_token) = confirmation(&get(&browser, "/auth/app/finish").await);
+    assert!(
+        page.contains("Sign in again to continue to com.example.legacy"),
+        "{page}"
+    );
+    whoami(&browser).await.assert_status(200);
+    let to_sign_in = answer(&browser, &token, &csrf_token, "continue")
+        .await
+        .assert_status(303);
     whoami(&browser).await.assert_status(401);
-    let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
     let back = finish_with_attempt(&location(&to_sign_in));
     let signed_in = sign_in_form(&browser, "simran@example.com", &back)
         .await
@@ -623,8 +675,91 @@ async fn a_custom_scheme_app_never_gets_the_browsers_sign_in() {
     assert_eq!(handed.header("referrer-policy"), Some("no-referrer"));
 }
 
-/// The `next` of the sign-in page a custom-scheme hand-over sends the
-/// browser to: the finish address with the hand-over's `attempt`.
+// Any site can send a browser to the start address. For a signed-in
+// browser that changes nothing until the person answers: it is not signed
+// out, and no code leaves.
+#[tokio::test]
+async fn opening_the_start_address_signs_no_one_out() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    let user = create_user(&app, "simran@example.com").await;
+    let browser = app.client();
+    sign_in_form(&browser, "simran@example.com", "/")
+        .await
+        .assert_status(303);
+
+    // A custom-scheme app and an https app, each opened and left.
+    start_legacy(&browser, "s-10").await.assert_status(303);
+    whoami(&browser)
+        .await
+        .assert_status(200)
+        .assert_json_path("id", json!(user.id));
+    let (_, challenge) = pkce("left");
+    start(&browser, &challenge, "s-11").await.assert_status(303);
+    whoami(&browser).await.assert_status(200);
+    let (page, _, _) = confirmation(&get(&browser, "/auth/app/finish").await);
+    assert!(
+        page.contains("com.example.orders wants to sign in as Anu Lakhotia (simran@example.com)"),
+        "{page}"
+    );
+    whoami(&browser).await.assert_status(200);
+
+    // Cancel: the app hears no, and the browser stays signed in.
+    start_legacy(&browser, "s-12").await.assert_status(303);
+    let (_, token, csrf_token) = confirmation(&get(&browser, "/auth/app/finish").await);
+    let cancelled = answer(&browser, &token, &csrf_token, "cancel")
+        .await
+        .assert_status(303);
+    assert_eq!(
+        location(&cancelled),
+        "com.example.legacy:/signed-in?error=access_denied&state=s-12"
+    );
+    assert_eq!(cancelled.header("cache-control"), Some("no-store"));
+    whoami(&browser).await.assert_status(200);
+    // The hand-over is over.
+    refused_page(get(&browser, "/auth/app/finish").await);
+    assert!(sink.with_action("auth.logout").is_empty());
+}
+
+// The confirmation page's answer is bound to its own hand-over and works
+// once; a post without the session's CSRF token does nothing.
+#[tokio::test]
+async fn the_confirmation_works_once_for_its_own_hand_over() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    create_user(&app, "simran@example.com").await;
+    let browser = app.client();
+    sign_in_form(&browser, "simran@example.com", "/")
+        .await
+        .assert_status(303);
+    let (verifier, challenge) = pkce("once-more");
+
+    // A page left open from an earlier hand-over does not answer a later one.
+    start(&browser, &challenge, "s-13").await.assert_status(303);
+    let (_, stale, csrf_token) = confirmation(&get(&browser, "/auth/app/finish").await);
+    start(&browser, &challenge, "s-14").await.assert_status(303);
+    refused_page(answer(&browser, &stale, &csrf_token, "continue").await);
+    refused_page(get(&browser, "/auth/app/finish").await);
+
+    // Without the CSRF token, nothing is answered.
+    start(&browser, &challenge, "s-15").await.assert_status(303);
+    let (_, token, csrf_token) = confirmation(&get(&browser, "/auth/app/finish").await);
+    answer(&browser, &token, "not-the-token", "continue")
+        .await
+        .assert_status(403);
+    let code = callback_code(
+        &answer(&browser, &token, &csrf_token, "continue").await,
+        "s-15",
+    );
+    // Once.
+    refused_page(answer(&browser, &token, &csrf_token, "continue").await);
+    exchange(&phone(&app).await, "apple", &code, &verifier)
+        .await
+        .assert_status(200);
+}
+
+/// The `next` of the sign-in page a hand-over sends the browser to: the
+/// finish address with the hand-over's `attempt`.
 fn finish_with_attempt(sign_in: &str) -> String {
     let url = url::Url::parse(&format!("https://example.com{sign_in}")).unwrap();
     assert_eq!(url.path(), "/sign-in");
@@ -668,7 +803,7 @@ async fn a_sign_in_made_for_something_else_is_never_handed_to_a_custom_scheme_ap
     let browser = app.client();
     start_legacy(&browser, "s-6").await.assert_status(303);
     let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
-    let back = finish_with_attempt(&location(&to_sign_in));
+    let mut back = finish_with_attempt(&location(&to_sign_in));
 
     // The person signs in to the site, not for the app.
     clock.advance(Duration::from_secs(120));
@@ -679,16 +814,19 @@ async fn a_sign_in_made_for_something_else_is_never_handed_to_a_custom_scheme_ap
 
     // The finish address opened without the attempt, or with another one.
     for opened in ["/auth/app/finish", "/auth/app/finish?attempt=guessed"] {
-        let answer = get(&browser, opened).await;
-        assert_eq!(answer.status().as_u16(), 400, "{opened}");
-        assert_eq!(answer.header("location"), None, "{opened}");
+        refused_page(get(&browser, opened).await);
         // The hand-over is over: not even its own address works now.
-        let again = get(&browser, &back).await;
-        assert_eq!(again.status().as_u16(), 400, "{opened}");
-        assert_eq!(again.header("location"), None, "{opened}");
+        refused_page(get(&browser, &back).await);
+        // A new start asks the signed-in person first; continuing signs the
+        // browser out, and the person is to sign in again for the app.
         start_legacy(&browser, "s-7").await.assert_status(303);
-        // A new start signs the browser out: the person signs in afresh.
+        let (_, token, csrf_token) = confirmation(&get(&browser, "/auth/app/finish").await);
+        let to_sign_in = answer(&browser, &token, &csrf_token, "continue")
+            .await
+            .assert_status(303);
         whoami(&browser).await.assert_status(401);
+        back = finish_with_attempt(&location(&to_sign_in));
+        // The person signs in for something else again.
         sign_in_form(&browser, "simran@example.com", "/orders")
             .await
             .assert_status(303);
@@ -718,6 +856,41 @@ async fn a_sign_in_made_for_something_else_is_never_handed_to_a_custom_scheme_ap
         .assert_status(303);
     let handed = get(&browser, &back).await.assert_status(303);
     assert!(location(&handed).starts_with("com.example.legacy:/signed-in?code="));
+}
+
+// The same for an app with an https callback: while its sheet is open, a
+// sign-in made in that browser for anything else (in another tab, or one
+// another site posted) is not handed to the app.
+#[tokio::test]
+async fn a_sign_in_made_for_something_else_is_never_handed_to_an_https_app() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    create_user(&app, "simran@example.com").await;
+    let browser = app.client();
+    let (_, challenge) = pkce("elsewhere");
+    start(&browser, &challenge, "s-9").await.assert_status(303);
+    let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
+    let back = finish_with_attempt(&location(&to_sign_in));
+
+    clock.advance(Duration::from_secs(120));
+    sign_in_form(&browser, "simran@example.com", "/orders")
+        .await
+        .assert_status(303);
+    refused_page(get(&browser, "/auth/app/finish").await);
+    refused_page(get(&browser, &back).await);
+    whoami(&browser).await.assert_status(200);
+    let reasons: Vec<String> = sink
+        .with_action("auth.app_sign_in_refused")
+        .iter()
+        .map(|entry| entry.metadata["reason"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(
+        reasons,
+        [
+            "the sign-in was not made for this app sign-in",
+            "no app sign-in was started in this browser",
+        ]
+    );
 }
 
 // A platform sign-in (Sign in with Apple in the app) that needs a second
