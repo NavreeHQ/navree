@@ -35,6 +35,58 @@ use crate::shell::Shell;
 /// The request header the runtime adds to a region's fetch, naming the region.
 pub const REGION_HEADER: &str = "x-navree-region";
 
+/// The region a request asks for: the value of [`REGION_HEADER`] as the page wrote the
+/// region's id. The runtime and the native clients send an id percent-encoded, so one in
+/// any script travels in a header: each `%` followed by two hex digits is read as the byte
+/// they name. A `%` that two hex digits do not follow stays as it is, and so does a whole
+/// value that is not UTF-8 once read or that holds a control character. `None` when the
+/// request names no region.
+///
+/// ```
+/// use http::HeaderMap;
+/// use navree_ui::pages::{REGION_HEADER, region_asked};
+///
+/// let mut headers = HeaderMap::new();
+/// assert_eq!(region_asked(&headers), None);
+/// headers.insert(REGION_HEADER, "kpis".parse().unwrap());
+/// assert_eq!(region_asked(&headers).as_deref(), Some("kpis"));
+/// headers.insert(REGION_HEADER, "%E0%A8%97%E0%A8%BE%E0%A8%B9%E0%A8%95".parse().unwrap());
+/// assert_eq!(region_asked(&headers).as_deref(), Some("ਗਾਹਕ"));
+/// ```
+pub fn region_asked(headers: &http::HeaderMap) -> Option<String> {
+    let written = headers.get(REGION_HEADER)?.to_str().ok()?;
+    Some(percent_decoded(written))
+}
+
+/// `written` with each `%XX` read as its byte, or as it is when what comes out is not
+/// text a region's id can be.
+fn percent_decoded(written: &str) -> String {
+    let bytes = written.as_bytes();
+    let hex = |at: usize| {
+        bytes
+            .get(at)
+            .and_then(|byte| char::from(*byte).to_digit(16))
+    };
+    let mut read = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        match (bytes[at], hex(at + 1), hex(at + 2)) {
+            (b'%', Some(high), Some(low)) => {
+                read.push(u8::try_from(high * 16 + low).unwrap_or(b'%'));
+                at += 3;
+            }
+            (byte, ..) => {
+                read.push(byte);
+                at += 1;
+            }
+        }
+    }
+    match String::from_utf8(read) {
+        Ok(read) if !read.chars().any(char::is_control) => read,
+        _ => written.to_owned(),
+    }
+}
+
 /// The request header the runtime adds to a region's fetch and an action: the address of
 /// the page the user is on, which is where to come back to after signing in.
 pub const FROM_HEADER: &str = "x-navree-from";
@@ -573,6 +625,32 @@ mod tests {
             ..RouteMeta::default()
         }));
         request
+    }
+
+    #[test]
+    fn a_regions_id_is_read_as_the_page_wrote_it() {
+        for (sent, read) in [
+            ("kpis", "kpis"),
+            ("orders-items", "orders-items"),
+            // An id in Gurmukhi, and one with a `%` of its own, as the runtime sends them.
+            ("%E0%A8%97%E0%A8%BE%E0%A8%B9%E0%A8%95-list", "ਗਾਹਕ-list"),
+            ("%e0%a8%97", "ਗ"),
+            ("half%25off", "half%off"),
+            // What is not a byte written in hex stays as it is.
+            ("100%", "100%"),
+            ("a%zzb", "a%zzb"),
+            ("a%4", "a%4"),
+            // Not UTF-8 once read, or a control character: the whole value as written.
+            ("%FF%FE", "%FF%FE"),
+            ("a%0Ab", "a%0Ab"),
+            ("a%00", "a%00"),
+        ] {
+            assert_eq!(percent_decoded(sent), read, "{sent}");
+        }
+        let mut headers = http::HeaderMap::new();
+        assert_eq!(region_asked(&headers), None);
+        headers.insert(REGION_HEADER, "%E0%A8%97".parse().unwrap());
+        assert_eq!(region_asked(&headers).as_deref(), Some("ਗ"));
     }
 
     #[test]

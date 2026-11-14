@@ -22,7 +22,7 @@ pub use labels::{KindWords, StateKind, StateLabels};
 pub use options::{PagesOptions, UiOptions};
 pub(crate) use render::Renderer;
 pub(crate) use render::shell_of;
-pub use render::{ErrorShell, FROM_HEADER, REGION_HEADER, STATE_HEADER};
+pub use render::{ErrorShell, FROM_HEADER, REGION_HEADER, STATE_HEADER, region_asked};
 pub use return_to::ReturnTo;
 pub use state::{
     EmptyKind, EmptyState, ErrorPage, Forbidden, NotFound, SessionEnded, SignInRequired, State,
