@@ -9,17 +9,21 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Navree">
 
-        <!-- The whole app is the client's activity, told what to be by res/values/navree.xml. -->
+        <!-- The whole app is the client's activity, told what to be by res/values/navree.xml.
+             It shares its task with no other app's activity (an empty task affinity). The library
+             ignores touches while another app's window covers it. -->
         <activity
             android:name="com.navree.client.NavreeActivity"
             android:exported="true"
             android:launchMode="singleTop"
+            android:taskAffinity=""
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Links to the app's origin open in the app. The site proves the app is its own with
+            <!-- Links to the app's origin open in the app: only the paths it has screens for, and
+                 the sign-in's return. The site proves the app is its own with
                  /.well-known/assetlinks.json, which the server writes from its auth.apps section. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -27,6 +31,10 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" />
                 <data android:host="store.example.com" />
+                <data android:path="/" />
+                <data android:pathPrefix="/orders" />
+                <data android:pathPrefix="/inventory" />
+                <data android:path="/app/signed-in" />
             </intent-filter>
         </activity>
     </application>
