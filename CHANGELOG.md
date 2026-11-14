@@ -7,6 +7,32 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-14
+
+### Upgrading
+
+Most apps upgrade with no change. These are the changes that can ask something of an app:
+
+- A route that answers a region, a lazy tab or a lazy sidebar group answers with a `View` or with
+  `pages::region_answer(node)`; an answer written another way is no longer drawn. The source of
+  one is a path of the site: a whole address is refused, with a warning in the log.
+- The route a form's file field sends its file to answers with
+  `Received::into_keyed_response_for(&signer, owner)`, with `UploadOwner` as the owner; a key made
+  with `file_key` is no longer taken by a form's file field.
+- Rich text shown from the database sits inside an element marked `data-ui-stored`, and an
+  `HtmlPolicy` that allows an attribute the page acts on fails the boot.
+- A test that posts a Navree UI form with a cookie, in an app with no session layer, adds
+  `sec-fetch-site: same-origin` to its request.
+- A table's CSV export stops at 100,000 rows unless the query asks for more with `export_limit`.
+- Social sign-in no longer links to a user whose own address is not verified: it answers 409
+  `email_taken` until the address is verified.
+- `AuthService::confirm_action` approves its action only and no longer counts as a recent sign-in
+  for `#[recent_auth]`.
+- An app with no configuration shows an error page's development details only with
+  `PagesOptions::debug(true)`.
+- Hand-over codes and call tickets issued before the upgrade are refused; a code lives a minute
+  and a ticket a few minutes.
+
 ### Security
 
 - Social sign-in links a provider account to an existing user by email address only when the
