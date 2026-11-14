@@ -855,9 +855,10 @@ marketing blocks draw a public site from the same app with no script, and
 - Reading a redirect target from the request without `ReturnTo`: it is an
   open redirect. For a link or a region source that holds an address your own
   code wrote, use `LocalHref`; for one taken from a request, `ReturnTo`
-  (one absolute path of this site). Both refuse white space or a control
-  character at either end, and an address that has one becomes `#` through
-  `From`, so percent-encode what a request gave before it goes into an address.
+  (one absolute path of this site). Both refuse white space, a control or an
+  invisible character at the start, and an address that has one becomes `#`
+  through `From`, so percent-encode what a request gave before it goes into an
+  address.
 - Showing rich text from the database with no wrapper: wrap it in an element
   marked `data-ui-stored` (`el("div").flag("data-ui-stored", true)
   .child(SafeHtml::trusted(html))` with the toolkit's `SafeHtml`, on text
