@@ -697,6 +697,38 @@ fn a_palette_with_a_post_item_posts_through_the_form_runtime_and_one_without_loa
 }
 
 #[test]
+fn an_attribute_set_on_a_picker_is_checked_as_on_any_element() {
+    // A URL attribute is checked like an `Href`, on each kind of picker.
+    for out in [
+        html(stages().attr("href", "javascript:alert(1)")),
+        html(Combobox::new("owner").attr("href", "javascript:alert(1)")),
+        html(MultiSelect::new("tags").attr("href", "javascript:alert(1)")),
+    ] {
+        assert!(!out.contains("javascript"), "{out}");
+    }
+    // An ordinary attribute still reaches the root.
+    assert!(html(stages().attr("data-x", "1")).contains(r#"data-x="1""#));
+}
+
+#[test]
+#[cfg_attr(debug_assertions, should_panic(expected = "not allowed"))]
+fn a_picker_never_writes_a_handler() {
+    assert!(!html(stages().attr("onclick", "alert(1)")).contains("alert"));
+}
+
+#[test]
+#[cfg_attr(debug_assertions, should_panic(expected = "not allowed"))]
+fn a_picker_never_writes_inline_style() {
+    assert!(!html(Combobox::new("owner").attr("style", "color:red")).contains("color"));
+}
+
+#[test]
+#[cfg_attr(debug_assertions, should_panic(expected = "not allowed"))]
+fn a_picker_never_writes_a_document_in_an_attribute() {
+    assert!(!html(MultiSelect::new("tags").attr("srcdoc", "<b>x</b>")).contains("<b>"));
+}
+
+#[test]
 fn the_link_to_the_next_page_goes_on_a_query_the_path_already_has() {
     let plain = OptionQuery::parse("q=anu").next_url("/people", 20);
     assert_eq!(plain, "/people?q=anu&limit=20&after=20");
