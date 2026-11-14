@@ -8,7 +8,8 @@ use std::fmt;
 use crate::builder::{Contribution, ProviderDef};
 use crate::lifecycle::LifecycleDef;
 use crate::{
-    BootErrors, CommandSpec, KernelError, Module, ModuleBuilder, ModuleId, ProviderKey, Scope,
+    BootErrors, CommandSpec, KernelError, Module, ModuleBuilder, ModuleId, PluginInfo, ProviderKey,
+    Scope,
 };
 
 /// The validated module graph, as printed by `check --graph`.
@@ -161,6 +162,10 @@ pub(crate) struct ModuleNode {
     pub(crate) contributions: Vec<Contribution>,
     pub(crate) lifecycles: Vec<LifecycleDef>,
     pub(crate) commands: Vec<CommandSpec>,
+    /// The plugin the module names itself ([`ModuleBuilder::plugin`]).
+    pub(crate) plugin: Option<PluginInfo>,
+    /// Whether the module called `m.plugin(..)` more than once.
+    pub(crate) plugin_twice: bool,
 }
 
 /// A registered provider and the module that owns it.
@@ -218,6 +223,9 @@ pub(crate) struct Graph {
     /// The service locator's answer for every key it resolves to exactly
     /// one provider, built once at boot (see [`Graph::locate`]).
     located: HashMap<ProviderKey, usize>,
+    /// Names of the plugins the kernel finds first-party (see
+    /// [`Graph::check_plugins`]).
+    pub(crate) first_party: HashSet<&'static str>,
 }
 
 impl Graph {
@@ -239,6 +247,7 @@ impl Graph {
         let edges = graph.check_dependencies(&mut errors);
         graph.check_lifecycles(&mut errors);
         graph.check_commands(&mut errors);
+        graph.check_plugins(&mut errors);
         graph.check_scopes(&edges, &mut errors);
         graph.check_provider_cycles(&edges, &mut errors);
         if !errors.is_empty() {
@@ -490,7 +499,7 @@ impl Graph {
     }
 
     /// Modules in import post-order (imports before importers), root last.
-    fn import_order(&self) -> Vec<usize> {
+    pub(crate) fn import_order(&self) -> Vec<usize> {
         fn visit(graph: &Graph, m: usize, seen: &mut [bool], order: &mut Vec<usize>) {
             if std::mem::replace(&mut seen[m], true) {
                 return;
@@ -1013,6 +1022,8 @@ fn assemble(walked: Vec<Registered>, errors: &mut Vec<KernelError>) -> Graph {
             contributions: builder.contributions,
             lifecycles: builder.lifecycles,
             commands: builder.commands,
+            plugin: builder.plugin,
+            plugin_twice: builder.plugin_twice,
         });
     }
     Graph {
@@ -1024,6 +1035,7 @@ fn assemble(walked: Vec<Registered>, errors: &mut Vec<KernelError>) -> Graph {
         order: Vec::new(),
         multi: HashMap::new(),
         located: HashMap::new(),
+        first_party: HashSet::new(),
     }
 }
 

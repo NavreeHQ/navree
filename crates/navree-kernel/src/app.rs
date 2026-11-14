@@ -13,8 +13,8 @@ use crate::command::help_text;
 use crate::container::{AppInner, RequestScope};
 use crate::graph::{Graph, GraphReport, ROOT};
 use crate::{
-    BootErrors, BoxError, CommandSpec, KernelError, Lifecycle, Module, ModuleId, ProviderKey,
-    Resolver, Scope,
+    BootErrors, BoxError, CommandSpec, KernelError, Lifecycle, Module, ModuleId, PluginInfo,
+    ProviderKey, Resolver, Scope,
 };
 
 /// Default time allowed for each phase of a graceful shutdown.
@@ -528,6 +528,34 @@ impl AppContext {
             .filter(|&&m| m != ROOT)
             .map(|&m| self.module_info(m))
             .collect()
+    }
+
+    /// The plugin `module` names itself, if it does.
+    ///
+    /// ```no_run
+    /// use navree_kernel::{Module, ModuleBuilder, ModuleId, Navree};
+    ///
+    /// struct AnnouncementsModule;
+    ///
+    /// impl Module for AnnouncementsModule {
+    ///     fn register(&self, m: &mut ModuleBuilder) {
+    ///         m.plugin(navree_kernel::plugin_info!(title = "Announcements"));
+    ///     }
+    /// }
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), navree_kernel::BootErrors> {
+    ///     let app = Navree::app().module(AnnouncementsModule).boot().await?;
+    ///     let info = app.ctx().plugin(ModuleId::of::<AnnouncementsModule>());
+    ///     assert_eq!(info.and_then(|info| info.title), Some("Announcements"));
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn plugin(&self, module: ModuleId) -> Option<&PluginInfo> {
+        let graph = &self.inner.graph;
+        graph
+            .module_of(module)
+            .and_then(|m| graph.modules[m].plugin.as_ref())
     }
 
     /// Cancelled when the app shuts down; long-running tasks should watch it.
