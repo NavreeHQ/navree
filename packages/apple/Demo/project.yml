@@ -92,7 +92,8 @@ targets:
     platform: macOS
     sources:
       - path: NavreeDemo
-        excludes: ["*.icon"]
+        # The icon pictures are for the iPhone and iPad's choice of icon.
+        excludes: ["*.icon", "Previews.xcassets"]
       - path: NavreeDemoMac
       - path: NavreeDemo/AppIcon.icon
         type: file
@@ -136,7 +137,8 @@ targets:
     platform: macOS
     sources:
       - path: NavreeDemo
-        excludes: ["*.icon"]
+        # The icon pictures are for the iPhone and iPad's choice of icon.
+        excludes: ["*.icon", "Previews.xcassets"]
       - path: NavreeDemoMac
       - path: NavreeDemo/AppIcon.icon
         type: file

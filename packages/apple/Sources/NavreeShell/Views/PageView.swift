@@ -328,7 +328,7 @@ struct ScreenPage: View {
         }
         if depth == 0, modal == nil, state.chrome, AccountPlacement.inToolbar, let user = client.app?.user {
             ToolbarItem(placement: .primaryAction) {
-                AccountMenu(user: user, client: client).modifier(BarItemLook(.bar))
+                AccountMenu(user: user, client: client, icons: configuration.icons).modifier(BarItemLook(.bar))
             }
             ToolbarSpacer(.fixed, placement: .primaryAction)
         }
@@ -458,10 +458,14 @@ struct InlineTitle: ViewModifier {
 }
 
 /// The person signed in, at the trailing end of a destination's first
-/// screen: their name and what their menu offers (profile, sign out).
+/// screen: their name and what their menu offers (profile, sign out), and
+/// on iPhone and iPad the app's icon where the app offers a choice of icons.
 struct AccountMenu: View {
     let user: Navree.User
     let client: NativeClient
+    /// The icons the app offers the person: "App Icon" opens the choice.
+    var icons: [AppIcon] = []
+    @State private var choosingIcon = false
 
     var body: some View {
         Menu {
@@ -481,9 +485,11 @@ struct AccountMenu: View {
                     }
                 }
             }
+            AppIconMenuItem(icons: icons, choosing: $choosingIcon)
         } label: {
             Label(user.name, systemImage: "person.crop.circle")
         }
+        .modifier(AppIconChoice(icons: icons, choosing: $choosingIcon))
     }
 
     /// The account menu stands on no screen.
