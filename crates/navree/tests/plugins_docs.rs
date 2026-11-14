@@ -2,9 +2,10 @@
 //! facade.
 //!
 //! `existing-crates` ("Connecting an existing crate"): a client crate as a
-//! `ClientModule` of a plugin, a tower layer whose service can fail, and a
-//! service mounted under `/khata` behind the app's sign-in. The page's tonic
-//! example is the gRPC page's, proved in `tests/grpc.rs`.
+//! `ClientModule` of a plugin, a tower layer whose service can fail that the
+//! plugin ships and the app adds, and a service mounted under `/khata` behind
+//! the app's sign-in. The page's tonic example is the gRPC page's, proved in
+//! `tests/grpc.rs`.
 
 // The pages' examples are written as an app writes them, without doc comments.
 #![allow(missing_docs)]
@@ -68,32 +69,40 @@ async fn entries(request: Request) -> Result<String> {
     Ok(format!("{} {}", khata.base_url, request.uri().path()))
 }
 
-/// The plugin's own module: a timeout on every request, and the ledger under
-/// `/khata` for signed-in users.
+/// The ledger's timeout for every request, which the app adds.
+pub fn khata_timeout() -> GlobalLayer {
+    GlobalLayer::new(LayerSlot::Context, "khata-timeout", |_ctx, router| {
+        Ok(
+            router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
+                Duration::from_secs(10),
+            ))),
+        )
+    })
+}
+
+/// The plugin's own module: the ledger under `/khata` for signed-in users.
 pub struct LedgerModule;
 
 impl Module for LedgerModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.plugin(navree::plugin_info!(namespace = "khata"));
-        m.http_layer(GlobalLayer::new(
-            LayerSlot::Context,
-            "khata-timeout",
-            |_ctx, router| {
-                Ok(
-                    router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
-                        Duration::from_secs(10),
-                    ))),
-                )
-            },
-        ))
-        .map_error::<tower::timeout::error::Elapsed>(|_| {
-            Some(AppError::service_unavailable("The khata took too long."))
-        });
         m.mount(
             Mount::new("/khata", AppRouter::from_handler(entries))
                 .authenticated()
                 .throttle(60, Duration::from_secs(60)),
         );
+    }
+}
+
+/// A module of the app: it adds the ledger's timeout, and maps its error.
+pub struct AppModule;
+
+impl Module for AppModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.http_layer(khata_timeout())
+            .map_error::<tower::timeout::error::Elapsed>(|_| {
+                Some(AppError::service_unavailable("The khata took too long."))
+            });
     }
 }
 
@@ -103,6 +112,7 @@ async fn the_existing_crates_page_examples_mount_inside_the_pipeline() {
         .config("khata.base_url", "https://khata.example/ludhiana")
         .module(khata_client())
         .module(LedgerModule)
+        .module(AppModule)
         .build()
         .await;
     app.client()
@@ -134,6 +144,34 @@ async fn the_existing_crates_page_examples_mount_inside_the_pipeline() {
     assert!(
         modules.contains(&"khata") && modules.contains(&"LedgerModule"),
         "{modules:?}"
+    );
+    assert!(
+        !modules.contains(&"AppModule"),
+        "the app's module is not the plugin's: {modules:?}"
+    );
+    // The plugin's module contributes no app-wide layer: the app adds it.
+    let ledger = plugin
+        .modules
+        .iter()
+        .find(|module| module.id.name() == "LedgerModule")
+        .expect("the plugin's own module");
+    assert!(
+        ledger
+            .contributions
+            .iter()
+            .all(|(name, _)| *name != std::any::type_name::<GlobalLayer>()),
+        "{:?}",
+        ledger.contributions
+    );
+    let layers: Vec<&str> = app
+        .ctx()
+        .contributions::<GlobalLayer>()
+        .iter()
+        .map(|layer| layer.module.name)
+        .collect();
+    assert!(
+        layers.contains(&"AppModule") && !layers.contains(&"LedgerModule"),
+        "the app's module adds the layer: {layers:?}"
     );
 
     app.shutdown().await.unwrap();

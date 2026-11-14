@@ -5,7 +5,7 @@ description: "Make a client crate a module with ClientModule, put a tower layer 
 
 A plugin often brings a crate that already exists: a client of a service, a tower middleware, a whole service written with tower, a tonic server generated from a `.proto`. Navree connects each one in a few lines, and keeps it inside the app: its configuration section, its readiness check, the request pipeline and the access check of every request or call.
 
-The examples on this page are a ledger plugin. Its crate wraps a `KhataClient` from another crate, adds a timeout to every request, and serves the ledger under `/khata` for signed-in users.
+The examples on this page are a ledger plugin. Its crate wraps a `KhataClient` from another crate, ships a timeout that the app adds to every request, and serves the ledger under `/khata` for signed-in users.
 
 ## A client crate with ClientModule
 
@@ -68,24 +68,43 @@ Add the module to the app like any other: `.module(khata_client())`.
 
 ## Tower middleware
 
-A tower layer whose service can fail (its `Error` is not `Infallible`), such as `tower::timeout::TimeoutLayer`, goes on the app with `FallibleLayer::new(layer)`: in a `GlobalLayer` with `AppRouter::layer`, on one hand-written route with `Endpoint::layer`, or on a router with `Router::route_layer`. The service's error answers as a 500 `AppError` with the error as its source, so the client sees `Internal server error`, and in any slot but `Edge` the log records the error and `m.map_error::<E>(..)` turns it into another answer; the `Edge` slot sits outside the app's error rendering, so there the error is neither mapped nor logged. A service that is not ready answers the same way. The ledger's module puts a timeout on every request:
+A tower layer whose service can fail (its `Error` is not `Infallible`), such as `tower::timeout::TimeoutLayer`, goes on the app with `FallibleLayer::new(layer)`: in a `GlobalLayer` with `AppRouter::layer`, on one hand-written route with `Endpoint::layer`, or on a router with `Router::route_layer`. The service's error answers as a 500 `AppError` with the error as its source, so the client sees `Internal server error`, and in any slot but `Edge` the log records the error and `m.map_error::<E>(..)` turns it into another answer; the `Edge` slot sits outside the app's error rendering, so there the error is neither mapped nor logged. A service that is not ready answers the same way. The ledger ships a timeout for every request, and the app adds it:
 
-```rust title="src/ledger.rs"
-m.http_layer(GlobalLayer::new(
-    LayerSlot::Context,
-    "khata-timeout",
-    |_ctx, router| {
-        Ok(router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
-            Duration::from_secs(10),
-        ))))
-    },
-))
-.map_error::<tower::timeout::error::Elapsed>(|_| {
-    Some(AppError::service_unavailable("The khata took too long."))
-});
+```rust title="src/timeout.rs"
+use std::time::Duration;
+
+use navree::http::{FallibleLayer, GlobalLayer, LayerSlot};
+
+/// The ledger's timeout for every request, which the app adds.
+pub fn khata_timeout() -> GlobalLayer {
+    GlobalLayer::new(LayerSlot::Context, "khata-timeout", |_ctx, router| {
+        Ok(
+            router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
+                Duration::from_secs(10),
+            ))),
+        )
+    })
+}
 ```
 
-A request that takes longer than ten seconds gets a 503 with the message `The khata took too long.`. See [a layer whose service can fail](/docs/basics/middleware/#a-layer-whose-service-can-fail).
+```rust title="app/src/app.rs"
+use navree::prelude::*;
+use navree_plugin_khata::khata_timeout;
+
+/// A module of the app: it adds the ledger's timeout, and maps its error.
+pub struct AppModule;
+
+impl Module for AppModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.http_layer(khata_timeout())
+            .map_error::<tower::timeout::error::Elapsed>(|_| {
+                Some(AppError::service_unavailable("The khata took too long."))
+            });
+    }
+}
+```
+
+A plugin ships its middleware, and the app adds it with one line: only the app adds a layer that runs on every request. A plugin's own routes and mounts may carry layers of their own. With the line above, a request that takes longer than ten seconds gets a 503 with the message `The khata took too long.`. See [a layer whose service can fail](/docs/basics/middleware/#a-layer-whose-service-can-fail).
 
 ## A service under a path
 
@@ -95,7 +114,7 @@ A request that takes longer than ten seconds gets a 503 with the message `The kh
 use std::time::Duration;
 
 use navree::http::extract::Request;
-use navree::http::{AppRouter, FallibleLayer, GlobalLayer, LayerSlot, Mount};
+use navree::http::{AppRouter, Mount};
 use navree::plugin::prelude::*;
 use navree::prelude::*;
 
@@ -112,25 +131,12 @@ async fn entries(request: Request) -> Result<String> {
     Ok(format!("{} {}", khata.base_url, request.uri().path()))
 }
 
-/// The plugin's own module: a timeout on every request, and the ledger under
-/// `/khata` for signed-in users.
+/// The plugin's own module: the ledger under `/khata` for signed-in users.
 pub struct LedgerModule;
 
 impl Module for LedgerModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.plugin(navree::plugin_info!(namespace = "khata"));
-        m.http_layer(GlobalLayer::new(
-            LayerSlot::Context,
-            "khata-timeout",
-            |_ctx, router| {
-                Ok(router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
-                    Duration::from_secs(10),
-                ))))
-            },
-        ))
-        .map_error::<tower::timeout::error::Elapsed>(|_| {
-            Some(AppError::service_unavailable("The khata took too long."))
-        });
         m.mount(
             Mount::new("/khata", AppRouter::from_handler(entries))
                 .authenticated()
