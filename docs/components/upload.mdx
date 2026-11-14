@@ -154,7 +154,7 @@ async fn save(Submit(claim): Submit<Claim>) -> Reply {
 }
 ```
 
-With no script, the file goes with the form and `Submit` stores it through the app's `Uploads`: the one registered under the field's name (`m.factory(Factory::<Uploads>::new(..).named("receipt"))`), else the app's one (`m.value(Uploads::new(disk, "receipts", limits))`). The route's body limit must take the file: `.body_limit(uploads.body_limit())`. A file the upload refuses is an error under its field, in the upload's words.
+With no script, the file goes with the form and `Submit` stores it through the app's `Uploads`: the one registered under the field's name (`m.factory(Factory::<Uploads>::new(..).named("receipt"))`), else the app's one (`m.value(Uploads::new(disk, "receipts", limits))`). The route's body limit must take the file: `.body_limit(uploads.body_limit())`. A file the upload refuses is an error under its field, in the upload's words. A file field holds one file: when a post sends more than one under the field's name, the first is the field's and the others are not stored.
 
 With the `upload` module, the file can go first, as soon as it is chosen. Give the field an upload that sends it, and a route that stores it and answers with its key:
 
