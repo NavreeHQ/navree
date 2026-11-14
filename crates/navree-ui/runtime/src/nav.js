@@ -5,6 +5,8 @@ import { morph, pieces } from "./morph.js";
 import { adoptToasts, announce, noteWrite, sameUser } from "./ui.js";
 
 const HEADER = { "x-navree-ui": "1" };
+/** The header on every page the app's `View` answers. */
+const PAGE = "x-navree-page";
 // `Sec-Purpose` can't be set from `fetch`, so a prefetch says so itself.
 const PREFETCH = { ...HEADER, "x-navree-prefetch": "1" };
 const PREFETCH_MS = 65;
@@ -199,15 +201,17 @@ export async function showPage(response, how = {}) {
   // title are its to make, and this one leaves them. A toast it brought is still shown. A region is overtaken only
   // by a page or by another show of itself: two tables sorted at once each show their own answer.
   const newer = () => (id ? pageShown > ticket || shown.get(id) !== turn : ticket !== shows);
+  // A page of this app says so in a header, which no file the app serves as it is can carry.
+  const ours = response.headers.has(PAGE);
   const doc = new DOMParser().parseFromString(await response.text(), "text/html");
   if (newer()) {
     clean(body(doc));
-    adoptToasts(doc);
+    if (ours) adoptToasts(doc);
     return;
   }
   const build = root(doc).getAttribute("data-build");
-  // A page from another build, or one without the runtime, loads for real.
-  if (build !== root().getAttribute("data-build")) {
+  // Anything else, a page from another build, or one without the runtime, loads for real.
+  if (!ours || build !== root().getAttribute("data-build")) {
     location.assign(url);
     return;
   }
@@ -570,7 +574,8 @@ export async function refresh(id, polled = false) {
       tableFailed(table, src, response.status);
       return;
     }
-    if (!takes(response)) {
+    // An answer that is no page of this app (a file served as it is, a proxy's page) is not drawn.
+    if (!takes(response) || !response.headers.has(PAGE)) {
       if (!response.redirected) {
         troubled(el, response.status, response.headers.get("retry-after"));
         failed(el, response.status);

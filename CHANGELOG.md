@@ -148,6 +148,9 @@ every `@navree/*` package carries the same version.
 - Every request of the UI runtime goes through one check: an address on another origin is refused
   before anything is sent, and an answer redirected to another origin is a failure (a page loads its
   own address for real). `Region::src` turns an address that is not a `LocalHref` into `#`.
+- Every `View` answers with `X-Navree-Page: 1`, and the UI runtime takes an answer into the page only
+  when it carries it (the build is checked as before): a page without it loads for real, and a
+  region's answer without it is not drawn. A region's source must answer with a `View`.
 - `Href::parse`, and `LocalHref::parse` with it, refuses an address with whitespace or a control
   character at either end, or whitespace other than a plain space before its path (`\u{3000}`,
   `\u{a0}`, `\u{2028}` and the like), so a native client that trims it reads the same address.

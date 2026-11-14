@@ -209,6 +209,31 @@ class FakeNode extends FakeEventTarget {
     /** @type {any[]} */
     this.childNodes = [];
   }
+  // What the morph reads through `Node.prototype` lives on the prototype here too.
+  get parentNode() {
+    return this._parent ?? null;
+  }
+  set parentNode(node) {
+    this._parent = node;
+  }
+  get childNodes() {
+    return this._kids ?? [];
+  }
+  set childNodes(nodes) {
+    this._kids = nodes;
+  }
+  get nodeName() {
+    return this._name;
+  }
+  set nodeName(name) {
+    this._name = name;
+  }
+  get nodeType() {
+    return this._type;
+  }
+  set nodeType(type) {
+    this._type = type;
+  }
   get parentElement() {
     return this.parentNode instanceof FakeElement ? this.parentNode : null;
   }
@@ -236,6 +261,10 @@ class FakeNode extends FakeEventTarget {
     for (const kid of this.childNodes) kid.parentNode = null;
     this.childNodes = [];
     if (text) this.append(new FakeText(String(text)));
+  }
+  /** @param {any} other */
+  isEqualNode(other) {
+    return !!other && html(this) === html(other);
   }
   /** @param {any} other */
   contains(other) {
@@ -364,6 +393,12 @@ class FakeText extends FakeNode {
   set textContent(text) {
     this.data = text;
   }
+  get nodeValue() {
+    return this.data;
+  }
+  set nodeValue(text) {
+    this.data = text;
+  }
   cloneNode() {
     return new FakeText(this.data);
   }
@@ -387,25 +422,29 @@ class FakeElement extends FakeNode {
     this.nodeName = this.tagName = tag.toUpperCase();
     this.nodeType = 1;
     /** @type {Map<string, string>} */
-    this.attributes = new Map();
+    this._attrs = new Map();
     this.style = { setProperty() {} };
     this.dataset = {};
   }
+  /** The attributes, as a browser lists them: read through the prototype, as the morph does. */
+  get attributes() {
+    return [...this._attrs].map(([name, value]) => ({ name, value }));
+  }
   /** @param {string} name */
   getAttribute(name) {
-    return this.attributes.has(name.toLowerCase()) ? /** @type {string} */ (this.attributes.get(name.toLowerCase())) : null;
+    return this._attrs.has(name.toLowerCase()) ? /** @type {string} */ (this._attrs.get(name.toLowerCase())) : null;
   }
   /** @param {string} name @param {string} value */
   setAttribute(name, value) {
-    this.attributes.set(name.toLowerCase(), String(value));
+    this._attrs.set(name.toLowerCase(), String(value));
   }
   /** @param {string} name */
   hasAttribute(name) {
-    return this.attributes.has(name.toLowerCase());
+    return this._attrs.has(name.toLowerCase());
   }
   /** @param {string} name */
   removeAttribute(name) {
-    this.attributes.delete(name.toLowerCase());
+    this._attrs.delete(name.toLowerCase());
   }
   /** @param {string} name @param {boolean} [force] */
   toggleAttribute(name, force) {
@@ -441,7 +480,7 @@ class FakeElement extends FakeNode {
   /** @param {boolean} [deep] */
   cloneNode(deep) {
     const copy = /** @type {any} */ (make(this.localName));
-    for (const [name, value] of this.attributes) copy.attributes.set(name, value);
+    for (const [name, value] of this._attrs) copy._attrs.set(name, value);
     if (deep) for (const kid of this.childNodes) copy.append(kid.cloneNode(true));
     return copy;
   }
@@ -666,7 +705,8 @@ function parseNodes(source) {
 /** @param {any} node @returns {string} */
 function html(node) {
   if (node instanceof FakeText) return node.data.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-  const attrs = [...node.attributes].map(([n, v]) => (v === "" ? ` ${n}` : ` ${n}="${v.replace(/"/g, "&quot;")}"`)).join("");
+  if (!(node instanceof FakeElement)) return node.childNodes.map(html).join("");
+  const attrs = [...node._attrs].map(([n, v]) => (v === "" ? ` ${n}` : ` ${n}="${v.replace(/"/g, "&quot;")}"`)).join("");
   if (VOID.has(node.localName)) return `<${node.localName}${attrs}>`;
   return `<${node.localName}${attrs}>${node.childNodes.map(html).join("")}</${node.localName}>`;
 }
