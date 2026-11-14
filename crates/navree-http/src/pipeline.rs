@@ -55,9 +55,9 @@ const MAX_NORMALIZED_BODY: u64 = 16 * 1024;
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LoggedUser(pub(crate) Uuid);
 
-/// Marks a response a mounted service wrote: error rendering leaves it as
-/// written, where a handler's error status with no body or a plain-text one
-/// takes the JSON error shape.
+/// Marks a response below 500 a mounted service wrote: error rendering leaves
+/// it as written, where a handler's error status with no body or a plain-text
+/// one takes the JSON error shape. A mounted service's 5xx is not marked.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AsWritten;
 
@@ -707,7 +707,7 @@ async fn finalize(
     let error = match pending {
         Some(error) => error,
         // An error status with no body or a plain-text one takes the JSON
-        // shape; a mounted service's own answer goes out as it wrote it.
+        // shape; a mounted service's own 4xx goes out as it wrote it.
         None if needs_normalizing(&response)
             && response.extensions().get::<AsWritten>().is_none() =>
         {

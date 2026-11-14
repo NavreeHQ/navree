@@ -5,6 +5,7 @@
 #[path = "http/support.rs"]
 mod support;
 
+use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::fmt;
 use std::future::Future;
@@ -26,6 +27,9 @@ use navree_http::{
 use navree_kernel::{AppContext, BoxError, BoxFuture, Module, ModuleBuilder};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tower::util::BoxCloneSyncService;
+use tracing::field::{Field, Visit};
+use tracing::{Event, Subscriber};
+use tracing_subscriber::layer::{Context, Layer, SubscriberExt};
 
 use support::{Counter, Setup, TestApp};
 
@@ -1013,10 +1017,15 @@ async fn torn(request: Request) -> Result<http::Response<Body>, BoxError> {
 
 /// Answers by path with error statuses of its own, each marked
 /// `x-ledger: khata`: a 422 with no body, a plain-text 422, a plain-text 404,
-/// a 500 and a 422 with JSON bodies of their own shape.
+/// a plain-text 500, and a 500 and a 422 with JSON bodies of their own shape.
 async fn answers(request: Request) -> Result<http::Response<Body>, Infallible> {
     let (status, content_type, body) = match request.uri().path() {
         "/empty" => (StatusCode::UNPROCESSABLE_ENTITY, None, ""),
+        "/failed" => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Some("text/plain"),
+            "the ledger database of Ludhiana refused the connection",
+        ),
         "/plain" => (
             StatusCode::UNPROCESSABLE_ENTITY,
             Some("text/plain"),
@@ -1044,8 +1053,55 @@ async fn answers(request: Request) -> Result<http::Response<Body>, Infallible> {
     Ok(response.body(Body::from(body)).unwrap())
 }
 
+/// One captured log event: its target and fields (`message` included).
+type Captured = (String, BTreeMap<String, String>);
+
+/// Collects every log event of the thread it is the default subscriber on.
+#[derive(Clone, Default)]
+struct Capture(Arc<Mutex<Vec<Captured>>>);
+
+impl Capture {
+    fn events(&self, target: &str) -> Vec<BTreeMap<String, String>> {
+        self.0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(t, _)| t == target)
+            .map(|(_, fields)| fields.clone())
+            .collect()
+    }
+}
+
+#[derive(Default)]
+struct Fields(BTreeMap<String, String>);
+
+impl Visit for Fields {
+    fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+        self.0.insert(field.name().to_owned(), format!("{value:?}"));
+    }
+
+    fn record_str(&mut self, field: &Field, value: &str) {
+        self.0.insert(field.name().to_owned(), value.to_owned());
+    }
+}
+
+impl<S: Subscriber> Layer<S> for Capture {
+    fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
+        let mut fields = Fields::default();
+        event.record(&mut fields);
+        self.0
+            .lock()
+            .unwrap()
+            .push((event.metadata().target().to_owned(), fields.0));
+    }
+}
+
+// `#[tokio::test]` runs on one thread, so the thread's default subscriber
+// sees every event of the request.
 #[tokio::test]
-async fn a_mounted_services_own_answer_goes_out_as_it_wrote_it() {
+async fn a_mounted_services_answer_goes_out_as_written_but_a_plain_text_5xx_is_shaped() {
+    let capture = Capture::default();
+    let _guard = support::capture_logs(tracing_subscriber::registry().with(capture.clone()));
     let app = Setup::new(vec![
         // A route's own plain-text 422, for comparison.
         RouteDef::on(Method::GET, "/plain", || async {
@@ -1095,6 +1151,25 @@ async fn a_mounted_services_own_answer_goes_out_as_it_wrote_it() {
     assert_eq!(
         app.get("/api/plain").await.assert_error(400)["message"],
         "amount must be at least ₹1"
+    );
+
+    // A plain-text 500 takes the app's shape: its text is logged, never sent.
+    let failed = app.get("/khata/failed").await;
+    assert_eq!(failed.assert_error(500)["message"], "Internal server error");
+    assert!(!failed.text().contains("Ludhiana"), "{}", failed.text());
+    assert_eq!(failed.header("x-ledger"), Some("khata"));
+    let errors = capture.events("navree::error");
+    let logged = errors
+        .iter()
+        .find(|fields| {
+            fields.get("error").is_some_and(|error| {
+                error.contains("the ledger database of Ludhiana refused the connection")
+            })
+        })
+        .unwrap_or_else(|| panic!("the 500's text is logged: {errors:?}"));
+    assert_eq!(
+        logged.get("request_id").map(String::as_str),
+        failed.header("x-request-id")
     );
 }
 

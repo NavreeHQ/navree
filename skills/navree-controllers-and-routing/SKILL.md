@@ -248,8 +248,8 @@ impl Module for LedgerModule {
 - A request with `Upgrade` or `CONNECT` never reaches it: the mount answers
   501 after the access check, or the router 405 first when `.methods(..)`
   leaves the method out, as for a route.
-- The service's own answers, error statuses included, go out as it wrote
-  them.
+- A 4xx the service writes goes out as written; a 5xx with no body or a
+  plain-text one takes the app's error shape, its text logged, never sent.
 - Details: https://navree.com/docs/plugins/existing-crates/
 
 ## A layer whose service can fail
