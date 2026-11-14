@@ -1926,3 +1926,253 @@ mod own_mount {
             .expect("compiles and registers nothing");
     }
 }
+
+/// A queue store that is only registered: checking the graph never builds a driver, so no method
+/// of it runs.
+struct UnreachableQueue;
+
+impl navree::queue::QueueStore for UnreachableQueue {
+    fn insert(
+        &self,
+        _: navree::queue::NewJob,
+    ) -> navree::BoxFuture<'_, Result<String, navree::queue::QueueError>> {
+        unreachable!()
+    }
+
+    fn reserve<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a str,
+        _: i64,
+    ) -> navree::BoxFuture<'a, Result<Option<navree::queue::ReservedJob>, navree::queue::QueueError>>
+    {
+        unreachable!()
+    }
+
+    fn complete<'a>(
+        &'a self,
+        _: &'a navree::queue::ReservedJob,
+    ) -> navree::BoxFuture<'a, Result<(), navree::queue::QueueError>> {
+        unreachable!()
+    }
+
+    fn release<'a>(
+        &'a self,
+        _: &'a navree::queue::ReservedJob,
+        _: &'a str,
+        _: i64,
+    ) -> navree::BoxFuture<'a, Result<bool, navree::queue::QueueError>> {
+        unreachable!()
+    }
+
+    fn fail<'a>(
+        &'a self,
+        _: &'a navree::queue::ReservedJob,
+        _: &'a str,
+        _: &'a str,
+        _: i64,
+    ) -> navree::BoxFuture<'a, Result<bool, navree::queue::QueueError>> {
+        unreachable!()
+    }
+
+    fn failed(
+        &self,
+    ) -> navree::BoxFuture<'_, Result<Vec<navree::queue::FailedJob>, navree::queue::QueueError>>
+    {
+        unreachable!()
+    }
+
+    fn retry<'a>(
+        &'a self,
+        _: &'a navree::queue::RetryTarget,
+        _: i64,
+    ) -> navree::BoxFuture<'a, Result<u64, navree::queue::QueueError>> {
+        unreachable!()
+    }
+
+    fn flush_failed(&self) -> navree::BoxFuture<'_, Result<u64, navree::queue::QueueError>> {
+        unreachable!()
+    }
+
+    fn pending_count<'a>(
+        &'a self,
+        _: &'a str,
+    ) -> navree::BoxFuture<'a, Result<u64, navree::queue::QueueError>> {
+        unreachable!()
+    }
+}
+
+/// A disk driver that is only registered.
+struct UnreachableDisk;
+
+impl navree::storage::DiskDriver for UnreachableDisk {
+    fn describe(&self) -> String {
+        unreachable!()
+    }
+
+    fn put<'a>(
+        &'a self,
+        _: &'a str,
+        _: navree::http::body::Bytes,
+    ) -> navree::BoxFuture<'a, Result<(), navree::storage::DiskDriverError>> {
+        unreachable!()
+    }
+
+    fn begin_upload<'a>(
+        &'a self,
+        _: &'a str,
+    ) -> navree::BoxFuture<
+        'a,
+        Result<Box<dyn navree::storage::DiskUpload>, navree::storage::DiskDriverError>,
+    > {
+        unreachable!()
+    }
+
+    fn read<'a>(
+        &'a self,
+        _: &'a str,
+        _: Option<std::ops::Range<u64>>,
+    ) -> navree::BoxFuture<
+        'a,
+        Result<navree::http::body::Bytes, navree::storage::DiskDriverError>,
+    > {
+        unreachable!()
+    }
+
+    fn open<'a>(
+        &'a self,
+        _: &'a str,
+    ) -> navree::BoxFuture<'a, Result<navree::storage::OpenedFile, navree::storage::DiskDriverError>>
+    {
+        unreachable!()
+    }
+
+    fn head<'a>(
+        &'a self,
+        _: &'a str,
+    ) -> navree::BoxFuture<'a, Result<navree::storage::FileMeta, navree::storage::DiskDriverError>>
+    {
+        unreachable!()
+    }
+
+    fn delete<'a>(
+        &'a self,
+        _: &'a str,
+    ) -> navree::BoxFuture<'a, Result<(), navree::storage::DiskDriverError>> {
+        unreachable!()
+    }
+
+    fn list<'a>(
+        &'a self,
+        _: &'a str,
+    ) -> navree::BoxFuture<
+        'a,
+        Result<Vec<navree::storage::FileMeta>, navree::storage::DiskDriverError>,
+    > {
+        unreachable!()
+    }
+}
+
+/// A notification channel that is only registered; the container would build it.
+#[injectable]
+struct UnreachableChannel;
+
+impl navree::notify::ChannelDriver for UnreachableChannel {
+    const NAME: &'static str = "pune_channel";
+
+    fn send<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a Value,
+    ) -> navree::BoxFuture<
+        'a,
+        Result<navree::notify::SentMessage, navree::notify::ChannelError>,
+    > {
+        unreachable!()
+    }
+}
+
+/// An AI driver that is only registered.
+#[cfg(feature = "ai")]
+struct UnreachableAi;
+
+#[cfg(feature = "ai")]
+impl navree::ai::AiDriver for UnreachableAi {
+    fn capabilities(&self) -> navree::ai::AiCapabilities {
+        unreachable!()
+    }
+
+    fn chat<'a>(
+        &'a self,
+        _: &'a navree::ai::AiDriverRequest,
+    ) -> navree::BoxFuture<'a, Result<navree::ai::AiDriverAnswer, navree::ai::AiError>> {
+        unreachable!()
+    }
+
+    fn stream<'a>(
+        &'a self,
+        _: &'a navree::ai::AiDriverRequest,
+    ) -> navree::BoxFuture<'a, Result<navree::ai::AiDriverStream, navree::ai::AiError>> {
+        unreachable!()
+    }
+}
+
+/// `navree::plugin` names a driver's name and context as the config crate does, and
+/// `navree::plugin::prelude` alone brings the method that registers a driver of every kind. A
+/// module that registers drivers names no plugin, and registering one builds nothing.
+#[test]
+fn the_plugin_module_brings_the_driver_names_and_every_registration_method() {
+    use navree::plugin::prelude::*;
+
+    assert!(same::<navree::plugin::DriverName, navree::config::DriverName>());
+    assert!(same::<navree::plugin::DriverContext, navree::config::DriverContext>());
+
+    struct EveryDriverModule;
+
+    impl Module for EveryDriverModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.cache_store("pune_cache", |_| async {
+                Ok::<_, navree::BoxError>(navree::cache::CacheBackend::new(
+                    Arc::new(navree::cache::MemoryStore::with_capacity(100)),
+                    Arc::new(navree::cache::MemoryLockStore::new()),
+                ))
+            });
+            m.queue_store("pune_queue", |_| async {
+                Ok::<_, navree::BoxError>(UnreachableQueue)
+            });
+            m.session_store("pune_session", |_| async {
+                Ok::<_, navree::BoxError>(navree::session::MemoryStore::new())
+            });
+            m.backplane("pune_backplane", |_| async {
+                Ok::<_, navree::BoxError>(navree::realtime::MemoryBackplane::new())
+            });
+            m.mail_transport("pune_post", |_| async {
+                Ok::<_, navree::BoxError>(navree::mail::LogTransport)
+            });
+            m.disk_driver("pune_disk", |_| async {
+                Ok::<_, navree::BoxError>(UnreachableDisk)
+            });
+            m.sms_driver("pune_sms", |_| async {
+                Ok::<_, navree::BoxError>(navree::notify::LogSms::new(None))
+            });
+            m.whatsapp_driver("pune_whatsapp", |_| async {
+                Ok::<_, navree::BoxError>(navree::notify::LogWhatsApp::new())
+            });
+            m.notification_channel::<UnreachableChannel>();
+            #[cfg(feature = "search")]
+            m.search_engine("pune_search", |_| async {
+                Ok::<_, navree::BoxError>(navree::search::MemoryEngine::new())
+            });
+            #[cfg(feature = "ai")]
+            m.ai_provider("pune_ai", |_| async {
+                Ok::<_, navree::BoxError>(UnreachableAi)
+            });
+        }
+    }
+
+    let report = Navree::app()
+        .module(EveryDriverModule)
+        .plugin_report()
+        .expect("registering a driver of every kind passes the graph check");
+    assert!(report.plugins.is_empty(), "{:?}", report.plugins);
+}
