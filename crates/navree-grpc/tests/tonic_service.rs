@@ -418,11 +418,9 @@ async fn a_wrapped_method_commits_its_unit_of_work_only_when_it_answers_ok() {
     // A head that is not HTTP 200 and has no `grpc-status` rolls back and is
     // answered with the code the gRPC specification gives that HTTP status.
     let ledger = Ledger::default();
-    let app = wrapped(
-        TonicService::new(Http503(DealsServer::new(ledger.clone()))).authenticated(),
-    )
-    .build()
-    .await;
+    let app = wrapped(TonicService::new(Http503(DealsServer::new(ledger.clone()))).authenticated())
+        .build()
+        .await;
     let mut harpreet = DealsClient::new(TestChannel::new(&app).bearer(HARPREET));
     let status = harpreet.move_deal(moving("won")).await.unwrap_err();
     assert_eq!(
@@ -560,9 +558,9 @@ async fn a_tonic_service_that_cannot_honour_its_declaration_fails_the_boot() {
     assert_eq!(ledger.calls(), 0);
 
     // Two servers of one name.
-    let error = boot_error(
-        ping_app().module(Wrapped(TonicService::new(PingServer::new(PlainPing)).public())),
-    )
+    let error = boot_error(ping_app().module(Wrapped(
+        TonicService::new(PingServer::new(PlainPing)).public(),
+    )))
     .await;
     assert!(
         error.contains("gRPC service `navree.test.v1.Ping` is registered twice"),

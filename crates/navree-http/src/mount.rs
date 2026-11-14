@@ -163,10 +163,11 @@ impl Mount {
     /// Requires the permissions (checked by the
     /// [`RouteAuthorizer`](crate::RouteAuthorizer) on every request).
     pub fn permissions(mut self, permissions: &[&str]) -> Mount {
-        self.meta
-            .access
-            .permissions
-            .extend(permissions.iter().map(|permission| (*permission).to_owned()));
+        self.meta.access.permissions.extend(
+            permissions
+                .iter()
+                .map(|permission| (*permission).to_owned()),
+        );
         self
     }
 
@@ -407,7 +408,13 @@ pub(crate) fn check_mounts(
                 "{label} takes no method: leave out .methods(..) for every method, or name at least one"
             ));
         }
-        errors.extend(access_problems(&label, "mount", &mount.meta, authenticator, authorizer));
+        errors.extend(access_problems(
+            &label,
+            "mount",
+            &mount.meta,
+            authenticator,
+            authorizer,
+        ));
         for route in routes {
             // A route path that does not parse is reported with the routes.
             let Ok(pattern) = PathPattern::parse(&route.full_path) else {

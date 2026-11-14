@@ -161,10 +161,11 @@ where
 
     /// Every method without its own declaration needs all of `permissions`.
     pub fn permissions(mut self, permissions: &[&str]) -> Self {
-        self.default_meta()
-            .access
-            .permissions
-            .extend(permissions.iter().map(|permission| (*permission).to_owned()));
+        self.default_meta().access.permissions.extend(
+            permissions
+                .iter()
+                .map(|permission| (*permission).to_owned()),
+        );
         self
     }
 
@@ -496,32 +497,39 @@ where
         ..
     } = head;
     let request = tonic::Request::from_parts(MetadataMap::from_headers(headers), extensions, ());
-    let result = call_as(&info, &ctx, meta, request, None, move |request, parts| async move {
-        // Let in: a wrapped server cannot say which methods take a stream,
-        // so no call's body is held to the read pace of an upload from here.
-        lift_body_limit(&parts);
-        let (metadata, extensions, ()) = request.into_parts();
-        let mut forwarded = http::Request::new(body);
-        *forwarded.method_mut() = method;
-        *forwarded.uri_mut() = uri;
-        *forwarded.version_mut() = version;
-        *forwarded.headers_mut() = metadata.into_headers();
-        *forwarded.extensions_mut() = extensions;
-        let response = server
-            .oneshot(forwarded)
-            .await
-            .unwrap_or_else(|never| match never {});
-        // The unit of work commits only on HTTP 200 with no error
-        // `grpc-status` in the head.
-        match Status::from_header_map(response.headers()) {
-            Some(status) if status.code() != Code::Ok => Err(CallError::Status(status)),
-            _ if response.status() != StatusCode::OK => Err(CallError::Status(Status::new(
-                code_of_http_status(response.status()),
-                format!("HTTP {}", response.status().as_u16()),
-            ))),
-            _ => Ok(tonic::Response::new(response)),
-        }
-    })
+    let result = call_as(
+        &info,
+        &ctx,
+        meta,
+        request,
+        None,
+        move |request, parts| async move {
+            // Let in: a wrapped server cannot say which methods take a stream,
+            // so no call's body is held to the read pace of an upload from here.
+            lift_body_limit(&parts);
+            let (metadata, extensions, ()) = request.into_parts();
+            let mut forwarded = http::Request::new(body);
+            *forwarded.method_mut() = method;
+            *forwarded.uri_mut() = uri;
+            *forwarded.version_mut() = version;
+            *forwarded.headers_mut() = metadata.into_headers();
+            *forwarded.extensions_mut() = extensions;
+            let response = server
+                .oneshot(forwarded)
+                .await
+                .unwrap_or_else(|never| match never {});
+            // The unit of work commits only on HTTP 200 with no error
+            // `grpc-status` in the head.
+            match Status::from_header_map(response.headers()) {
+                Some(status) if status.code() != Code::Ok => Err(CallError::Status(status)),
+                _ if response.status() != StatusCode::OK => Err(CallError::Status(Status::new(
+                    code_of_http_status(response.status()),
+                    format!("HTTP {}", response.status().as_u16()),
+                ))),
+                _ => Ok(tonic::Response::new(response)),
+            }
+        },
+    )
     .await;
     match result {
         Ok(response) => response.into_inner(),

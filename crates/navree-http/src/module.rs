@@ -266,7 +266,10 @@ async fn routes(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
     let routes = route_table(&ctx).await?;
     let mounts = mount_table(&ctx);
     if args.iter().any(|a| a == "--json") {
-        println!("{}", serde_json::to_string_pretty(&routes_json(&routes, &mounts))?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&routes_json(&routes, &mounts))?
+        );
     } else {
         print!("{}", render_routes(&routes, &mounts));
     }
@@ -311,7 +314,11 @@ pub(crate) fn render_routes(routes: &[RouteMeta], mounts: &[RouteMeta]) -> Strin
     if mounts.is_empty() {
         out.push_str(&format!("\n{} routes\n", routes.len()));
     } else {
-        out.push_str(&format!("\n{} routes, {} mounts\n", routes.len(), mounts.len()));
+        out.push_str(&format!(
+            "\n{} routes, {} mounts\n",
+            routes.len(),
+            mounts.len()
+        ));
     }
     out
 }

@@ -46,7 +46,11 @@ async fn a_mount_takes_the_session_and_its_csrf_check_like_a_route() {
         .send()
         .await
         .assert_error(403, "Invalid CSRF token");
-    assert_eq!(calls.load(Ordering::SeqCst), 0, "the service never saw the post");
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        0,
+        "the service never saw the post"
+    );
     let posted = client
         .post("/khata/entries")
         .xsrf()
@@ -54,11 +58,7 @@ async fn a_mount_takes_the_session_and_its_csrf_check_like_a_route() {
         .await
         .assert_status(200);
     assert_eq!(posted.text(), "POST /entries");
-    let read = client
-        .get("/khata/entries")
-        .send()
-        .await
-        .assert_status(200);
+    let read = client.get("/khata/entries").send().await.assert_status(200);
     assert_eq!(read.text(), "GET /entries");
     assert_eq!(calls.load(Ordering::SeqCst), 2);
 }

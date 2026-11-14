@@ -65,7 +65,12 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
 
     let authenticator = ctx.try_get::<dyn Authenticator>().await;
     let authorizer = ctx.try_get::<dyn RouteAuthorizer>().await;
-    validate(&routes, &mounts, authenticator.is_some(), authorizer.is_some())?;
+    validate(
+        &routes,
+        &mounts,
+        authenticator.is_some(),
+        authorizer.is_some(),
+    )?;
     // Audit actions, and security events (rate limiting, denials no
     // `RouteAuthorizer` saw).
     let audit = ctx.try_get::<dyn AuditSink>().await;
@@ -391,7 +396,13 @@ fn validate(
                 }
             }
         }
-        errors.extend(access_problems(&label, "route", meta, authenticator, authorizer));
+        errors.extend(access_problems(
+            &label,
+            "route",
+            meta,
+            authenticator,
+            authorizer,
+        ));
     }
     let metas: Vec<&RouteMeta> = routes.iter().map(|route| &route.meta).collect();
     errors.extend(check_mounts(&metas, mounts, authenticator, authorizer));
@@ -545,12 +556,12 @@ fn mount_service(
         match &methods {
             None => router
                 .try_route_any(&pattern, || endpoint.clone())
-                .map_err(&failed)?,
+                .map_err(failed)?,
             Some(methods) => {
                 for method in methods {
                     router
                         .try_route_service(method.clone(), &pattern, || endpoint.clone())
-                        .map_err(&failed)?;
+                        .map_err(failed)?;
                 }
             }
         }
