@@ -92,6 +92,20 @@
       "send": {"t":"foreground"},
       "expect": {
         "changed": [],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell, asked again at once since the session may have changed unseen, names the person again.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
         "effects": []
       }
     },
@@ -101,13 +115,13 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/api/notifications/push-devices","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"android\",\"token\":\"fcm-Q1w2E3r4T5y6U7i8\",\"app_id\":\"com.charkha.supply\",\"environment\":\"sandbox\"}"},"timeout_ms":30000,"xsrf":true}
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/api/notifications/push-devices","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"android\",\"token\":\"fcm-Q1w2E3r4T5y6U7i8\",\"app_id\":\"com.charkha.supply\",\"environment\":\"sandbox\"}"},"timeout_ms":30000,"xsrf":true}
         ]
       }
     },
     {
       "note": "It did not get there.",
-      "send": {"t":"response","request":5,"error":"offline"},
+      "send": {"t":"response","request":6,"error":"offline"},
       "expect": {
         "changed": [],
         "effects": []
@@ -119,12 +133,25 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/api/notifications/push-devices","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"android\",\"token\":\"fcm-Q1w2E3r4T5y6U7i8\",\"app_id\":\"com.charkha.supply\",\"environment\":\"sandbox\"}"},"timeout_ms":30000,"xsrf":true}
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":8,"method":"post","url":"https://shop.example/api/notifications/push-devices","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"android\",\"token\":\"fcm-Q1w2E3r4T5y6U7i8\",\"app_id\":\"com.charkha.supply\",\"environment\":\"sandbox\"}"},"timeout_ms":30000,"xsrf":true}
         ]
       }
     },
     {
-      "send": {"t":"response","request":6,"status":201,"content_type":"application/json"},
+      "note": "The shell, asked again at once since the session may have changed unseen, names the person again.",
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"response","request":8,"status":201,"content_type":"application/json"},
       "expect": {
         "changed": [],
         "effects": []
@@ -146,12 +173,12 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":7,"method":"post","url":"https://shop.example/account/notifications","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"granted=true&_call=tk_p19&outcome=ok"},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":9,"method":"post","url":"https://shop.example/account/notifications","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"granted=true&_call=tk_p19&outcome=ok"},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },
     {
-      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/noted.json",
       "expect": {
         "changed": [

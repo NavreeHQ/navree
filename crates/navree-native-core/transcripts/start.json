@@ -61,7 +61,9 @@
         "changed": [
           {"t":"screen","id":1}
         ],
-        "effects": []
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
       },
       "check": [
         {"at":"/screens/1/content/t","is":"web"},
@@ -70,6 +72,18 @@
         {"at":"/screens/1/content/why","is":["slot:chart","hook:data-ui-feed"]},
         {"at":"/screens/1/loading","is":false}
       ]
+    },
+    {
+      "note": "The shell, asked again at once since the session may have changed unseen, names the person again.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      }
     }
   ]
 }

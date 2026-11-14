@@ -107,6 +107,20 @@
         "changed": [
           {"t":"screen","id":1}
         ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell, asked again at once since the session may have changed unseen, names the person again.",
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
         "effects": []
       }
     },
@@ -270,13 +284,13 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/api/auth/app/exchange","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"apple\",\"app\":\"com.charkha.supply\",\"code\":\"Zr5nW2p7d1\",\"code_verifier\":\"ZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5_gIGCg4Q\"}"},"timeout_ms":60000,"xsrf":true}
+          {"t":"fetch","request":7,"method":"post","url":"https://shop.example/api/auth/app/exchange","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"apple\",\"app\":\"com.charkha.supply\",\"code\":\"Zr5nW2p7d1\",\"code_verifier\":\"ZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5_gIGCg4Q\"}"},"timeout_ms":60000,"xsrf":true}
         ]
       }
     },
     {
       "note": "The exchange route answers 400: the code was used or ran out. Nobody is signed in by it: the shell is not asked for.",
-      "send": {"t":"response","request":6,"status":400,"content_type":"application/json"},
+      "send": {"t":"response","request":7,"status":400,"content_type":"application/json"},
       "body": "made/invalid-hand-over.json",
       "expect": {
         "changed": [

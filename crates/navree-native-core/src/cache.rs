@@ -483,12 +483,6 @@ impl Core {
         // Nothing kept, in memory or on the device, is drawn before a shell
         // has named the person since the session may have changed unseen.
         if self.inner.cache.named.is_none() {
-            // A shell is asked for only when there is something to draw.
-            let kept = self.inner.cache.get(url).is_some()
-                || (self.config.cache.persist && self.inner.cache.disk.contains(&self.key_of(url)));
-            if kept {
-                self.fresh_shell();
-            }
             return;
         }
         if let Some((status, body)) = self.inner.cache.get(url) {
@@ -567,12 +561,14 @@ impl Core {
     /// The session may have changed where the core is not told: a page was
     /// shown in the web view (it shares the cookies), a link came from one,
     /// or the app came back to the front. Who the shell named holds no more,
-    /// and only a shell asked from here on may name the person again; the
-    /// next head start that has something kept to draw asks for one, once.
+    /// and only a shell asked from here on may name the person again: one is
+    /// asked for at once, unless one asked since is already on its way.
     pub(crate) fn session_unsure(&mut self) {
         self.inner.cache.named = None;
         self.inner.cache.fresh_from = self.inner.next.request + 1;
         self.inner.cache.want_shell = true;
+        // Asked at once, so head starts and keeping are back as soon as it answers.
+        self.fresh_shell();
     }
 
     /// Asks for a shell after the session became unsure, when none asked
