@@ -1,4 +1,9 @@
 import Foundation
+import os
+
+#if os(macOS)
+import ServiceManagement
+#endif
 
 /// Whether the app opens when the person logs in, as the system holds it
 /// (`SMAppService.Status`).
@@ -34,3 +39,41 @@ public enum LoginItemRules {
         }
     }
 }
+
+#if os(macOS)
+/// The app as a login item, as the system holds it (`SMAppService.mainApp`).
+/// Turned on only by the person, from Settings.
+@MainActor
+public enum LoginItem {
+    static let log = Logger(subsystem: "com.navree.native", category: "presence")
+
+    /// Whether the app opens at login, as the system says now.
+    public static var status: LoginStatus {
+        switch SMAppService.mainApp.status {
+        case .enabled: .enabled
+        case .requiresApproval: .requiresApproval
+        case .notFound: .notFound
+        case .notRegistered: .notRegistered
+        @unknown default: .notRegistered
+        }
+    }
+
+    /// Turns opening at login on or off, as the person asked: nil when the
+    /// system did it, else its reason in its own words.
+    @discardableResult
+    public static func set(_ on: Bool) -> String? {
+        do {
+            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+            return nil
+        } catch {
+            log.error("the login item was not \(on ? "added" : "removed", privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return error.localizedDescription
+        }
+    }
+
+    /// System Settings > General > Login Items, where the person allows it.
+    public static func openSystemSettings() {
+        SMAppService.openSystemSettingsLoginItems()
+    }
+}
+#endif
