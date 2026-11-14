@@ -133,7 +133,8 @@ fun NavreeApp(driver: Driver, config: NavreeConfig, image: suspend (String) -> B
         SystemBars(dark)
         val window = rememberWindow()
         val snackbars = remember { SnackbarHostState() }
-        val ui = remember(driver, window) { Ui(driver, window, image, snackbars) }
+        val origins = remember(config) { com.navree.client.platform.Origins(config.origin, config.also, config.loopbackHttp, config.pictureHosts) }
+        val ui = remember(driver, window, origins) { Ui(driver, window, image, snackbars, origins) }
         CompositionLocalProvider(LocalUi provides ui) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
                 when (nav.stage) {
