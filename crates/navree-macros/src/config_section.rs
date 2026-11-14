@@ -108,6 +108,10 @@ struct FieldArgs {
     env_fallback: Option<String>,
     one_of: Option<Vec<String>>,
     default: Option<String>,
+    /// The built-in names of a driver selector (`driver = "a, b"`).
+    driver: Option<Vec<String>>,
+    /// The method that registers more names (`register = "m.cache_store"`).
+    register: Option<String>,
 }
 
 /// The field-level `#[serde(..)]` arguments the description reads.
@@ -462,11 +466,27 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldArgs> {
                     let value: LitStr = meta.value()?.parse()?;
                     out.default = Some(value.value());
                 }
+                "driver" => {
+                    let value: LitStr = meta.value()?.parse()?;
+                    out.driver = Some(
+                        value
+                            .value()
+                            .split(',')
+                            .map(|item| item.trim().to_owned())
+                            .filter(|item| !item.is_empty())
+                            .collect(),
+                    );
+                }
+                "register" => {
+                    let value: LitStr = meta.value()?.parse()?;
+                    out.register = Some(value.value());
+                }
                 _ => {
                     return Err(meta.error(format!(
                         "unknown #[config] key `{name}` on a field: expected `secret`, \
                          `public`, `table`, `skip`, `env_fallback = \"..\"`, \
-                         `one_of = \"a, b\"` or `default = \"..\"`"
+                         `one_of = \"a, b\"`, `driver = \"a, b\"` with `register = \"..\"`, \
+                         or `default = \"..\"`"
                     )));
                 }
             }
@@ -477,6 +497,19 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldArgs> {
         return Err(syn::Error::new(
             Span::call_site(),
             "a field cannot be both `secret` and `public`",
+        ));
+    }
+    if out.driver.is_some() != out.register.is_some() {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "`driver` and `register` go together: \
+             #[config(driver = \"a, b\", register = \"m.method\")]",
+        ));
+    }
+    if out.one_of.is_some() && out.driver.is_some() {
+        return Err(syn::Error::new(
+            Span::call_site(),
+            "a field has one_of or driver, not both",
         ));
     }
     Ok(out)
@@ -689,6 +722,13 @@ fn field_statement(field: &FieldInfo, config: &TokenStream) -> TokenStream {
     let doc = &field.doc;
     let ty = if field.args.table {
         quote!(#config::FieldType::Table)
+    } else if let (Some(built_in), Some(register)) = (&field.args.driver, &field.args.register) {
+        quote! {
+            #config::FieldType::Driver {
+                built_in: ::std::vec![#(::std::string::String::from(#built_in)),*],
+                register: ::std::string::String::from(#register)
+            }
+        }
     } else if let Some(values) = &field.args.one_of {
         quote!(#config::FieldType::choice(&[#(#values),*]))
     } else {
@@ -966,6 +1006,75 @@ mod tests {
             ":: navree_config :: debug_value (& self . c)",
         ] {
             assert!(has(&out, expected), "missing `{expected}` in {out}");
+        }
+    }
+
+    #[test]
+    fn the_driver_attribute_describes_an_open_choice() {
+        let out = expand_with(
+            quote! {
+                #[config(key = "cache")]
+                #[serde(default)]
+                struct CacheOptions {
+                    #[config(driver = "memory, redis", register = "m.cache_store")]
+                    store: CacheStoreKind,
+                }
+            },
+            true,
+        );
+        for expected in [
+            "FieldType :: Driver { built_in : :: std :: vec ! [:: std :: string :: String :: from (\"memory\") , :: std :: string :: String :: from (\"redis\")] , register : :: std :: string :: String :: from (\"m.cache_store\") }",
+            // The default is still the value's `Debug` text.
+            ":: navree_config :: debug_value (& self . store)",
+        ] {
+            assert!(has(&out, expected), "missing `{expected}` in {out}");
+        }
+
+        let together = "`driver` and `register` go together: #[config(driver = \"a, b\", register = \"m.method\")]";
+        for (input, message) in [
+            (
+                quote!(
+                    #[config(key = "x")]
+                    struct X {
+                        #[config(driver = "memory")]
+                        store: Kind,
+                    }
+                ),
+                together,
+            ),
+            (
+                quote!(
+                    #[config(key = "x")]
+                    struct X {
+                        #[config(register = "m.cache_store")]
+                        store: Kind,
+                    }
+                ),
+                together,
+            ),
+            (
+                quote!(
+                    #[config(key = "x")]
+                    struct X {
+                        #[config(one_of = "memory", driver = "memory", register = "m.cache_store")]
+                        store: Kind,
+                    }
+                ),
+                "a field has one_of or driver, not both",
+            ),
+            (
+                quote!(
+                    #[config(key = "x")]
+                    struct X {
+                        #[config(drivers = "memory")]
+                        store: Kind,
+                    }
+                ),
+                "unknown #[config] key `drivers` on a field: expected `secret`, `public`, `table`, `skip`, `env_fallback = \"..\"`, `one_of = \"a, b\"`, `driver = \"a, b\"` with `register = \"..\"`, or `default = \"..\"`",
+            ),
+        ] {
+            let out = expand_with(input, true);
+            assert!(out.contains(message), "expected `{message}` in {out}");
         }
     }
 

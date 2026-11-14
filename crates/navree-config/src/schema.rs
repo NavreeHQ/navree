@@ -43,6 +43,14 @@ pub enum FieldType {
     Table,
     /// A type this description does not reduce: its Rust name.
     Other(String),
+    /// One of a few built-in names, or the name of a driver a module
+    /// registers with `register`.
+    Driver {
+        /// The built-in names, in order (`memory`, `redis`).
+        built_in: Vec<String>,
+        /// The method that registers more names (`m.cache_store`).
+        register: String,
+    },
 }
 
 impl FieldType {
@@ -82,6 +90,11 @@ impl FieldType {
             }
             FieldType::Table => json!({ "type": "object" }),
             FieldType::Duration | FieldType::Any | FieldType::Other(_) => json!({}),
+            FieldType::Driver { built_in, register } => json!({
+                "type": "string",
+                "anyOf": [{ "enum": built_in }, { "pattern": "^[a-z][a-z0-9_]{0,63}$" }],
+                "x-navree-register": register,
+            }),
         }
     }
 }
@@ -100,6 +113,12 @@ impl fmt::Display for FieldType {
             FieldType::Map(value) => write!(f, "table of {value}"),
             FieldType::Table => f.write_str("table"),
             FieldType::Other(name) => f.write_str(name),
+            FieldType::Driver { built_in, register } => {
+                for name in built_in {
+                    write!(f, "{name} | ")?;
+                }
+                write!(f, "a name registered with {register}")
+            }
         }
     }
 }
@@ -710,5 +729,25 @@ mod tests {
         assert_eq!(debug_value(&Store::PerRequest), json!("per_request"));
         assert_eq!(debug_value(&Store::Redis), json!("redis"));
         assert_eq!(debug_value(&vec![1, 2]), json!("[1, 2]"));
+    }
+
+    #[test]
+    fn a_driver_field_is_an_open_choice() {
+        let ty = FieldType::Driver {
+            built_in: vec!["memory".into(), "redis".into()],
+            register: "m.cache_store".into(),
+        };
+        assert_eq!(
+            ty.to_string(),
+            "memory | redis | a name registered with m.cache_store"
+        );
+        assert_eq!(
+            ty.json_schema(),
+            json!({
+                "type": "string",
+                "anyOf": [{"enum": ["memory", "redis"]}, {"pattern": "^[a-z][a-z0-9_]{0,63}$"}],
+                "x-navree-register": "m.cache_store"
+            })
+        );
     }
 }
