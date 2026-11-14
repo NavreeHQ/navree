@@ -366,7 +366,7 @@ Then the person's membership of the connection's owner follows their groups. The
 - `default_role: null` refuses people whose groups match no rule (403 `sso_not_assigned`), which keeps everyone outside the listed groups out.
 - Groups are compared ignoring ASCII case. Entra ID sends group object ids, so write those in `group`.
 
-A sign-in that created the user or changed a membership emits `SsoUserProvisioned { connection_id, user_id, owner, role, created }` after the commit. Sign-ins are audited as `sso.login` (with `metadata.connection`), new users as `auth.register`. A first sign-in refused because a workspace's or an organization's connection may not create an account outside its verified domains is audited as `sso.login_refused` (with `metadata.connection`, `metadata.owner` and `metadata.domain`).
+A sign-in that created the user or changed a membership emits `SsoUserProvisioned { connection_id, user_id, owner, role, created }` after the commit. Sign-ins are audited as `sso.login` (with `metadata.connection`), new users as `auth.register`. A first sign-in refused because a workspace's or an organization's connection may not create an account outside its verified domains is audited as `sso.login_refused` (with `metadata.connection`, `metadata.owner`, `metadata.domain`, at most 253 characters, and `metadata.reason`), and logged under `navree::security` at most once an hour per connection in each process. Only a connection with `allow_unverified_emails` on writes these: a refusal on a connection with it off is answered the same way and, as before, not audited.
 
 ### Attribute mapping
 

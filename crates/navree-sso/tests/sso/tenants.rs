@@ -320,6 +320,38 @@ async fn sign_in_profile_is_refused_the_same_way() {
 }
 
 #[tokio::test]
+async fn the_audited_domain_is_no_longer_than_a_domain_name() {
+    let world = support::world().await;
+    let fake = SsoFake::new();
+    let workspace = workspace_of(&world).await;
+    world
+        .saml_connection(
+            &fake,
+            SsoOwner::Workspace(workspace),
+            "ludhiana-okta",
+            open(),
+        )
+        .await;
+    let sso = world.sso().await;
+    let profile = SsoProfile {
+        subject: "simran-2".to_owned(),
+        email: Some(format!("simran@{}.test", "a".repeat(300))),
+        email_verified: None,
+        name: Some("Simran Kaur".to_owned()),
+        groups: Vec::new(),
+        attributes: json!({}),
+    };
+    let result = sso
+        .sign_in_profile("ludhiana-okta", profile, &ClientMeta::default())
+        .await;
+    assert!(matches!(result, Err(SsoError::UnverifiedDomain(_))));
+    let refused = refusals(&world);
+    assert_eq!(refused.len(), 1);
+    let domain = refused[0].metadata["domain"].as_str().unwrap();
+    assert_eq!(domain.chars().count(), 253);
+}
+
+#[tokio::test]
 async fn an_app_connection_with_the_flag_still_creates_the_account() {
     let world = support::world().await;
     let fake = SsoFake::new();

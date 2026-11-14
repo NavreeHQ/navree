@@ -1445,6 +1445,8 @@ impl Sso {
     /// an hour per connection. Called after the sign-in's unit of work
     /// rolled back.
     async fn tenant_refused(&self, loaded: &Loaded, domain: &str, meta: &ClientMeta) {
+        // The identity provider's text: no longer than a domain name can be.
+        let domain: String = domain.chars().take(253).collect();
         self.audit(
             entry_for(AuditKind::Security, "sso.login_refused", meta)
                 .subject("SsoConnection", loaded.model.id.to_string())
