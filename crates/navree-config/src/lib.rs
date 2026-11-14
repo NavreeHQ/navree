@@ -86,6 +86,7 @@ extern crate self as navree_config;
 
 mod app;
 pub mod check;
+mod client;
 mod commands;
 mod config;
 mod de;
@@ -108,6 +109,7 @@ mod value;
 mod web_app;
 
 pub use app::{AppOptions, Environment};
+pub use client::{ClientModule, ClientModuleOptions};
 pub use config::Config;
 pub use dotenv::{DotenvEntryExists, parse_dotenv, set_dotenv_value};
 pub use error::ConfigError;
