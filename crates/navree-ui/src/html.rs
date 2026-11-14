@@ -70,8 +70,10 @@ impl SafeHtml {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum HrefError {
-    /// A control character, or space at the start: browsers strip those
-    /// before reading the scheme, so `java\tscript:` would still run.
+    /// A control character, whitespace at the start or the end, or whitespace
+    /// other than a plain space before the path: browsers strip some of those
+    /// before reading the scheme, so `java\tscript:` would still run, and a
+    /// native client trims the rest.
     Control,
     /// A scheme other than `http`, `https`, `mailto` or `tel`.
     Scheme,
@@ -82,7 +84,9 @@ pub enum HrefError {
 impl fmt::Display for HrefError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            Self::Control => "a URL can't hold control characters or start with a space",
+            Self::Control => {
+                "a URL can't hold control characters, start or end with whitespace, or hold whitespace other than a space before its path"
+            }
             Self::Scheme => "a URL's scheme must be http, https, mailto or tel",
             Self::OffSite => "this URL must stay on this site: a path, a query or a fragment",
         })
@@ -109,9 +113,27 @@ impl Href {
     /// assert!(Href::parse("https://navree.com").is_ok());
     /// assert!(Href::parse("JavaScript:alert(1)").is_err());
     /// assert!(Href::parse("java\tscript:alert(1)").is_err());
+    /// // Whitespace or a line break at either end, or before the path in any script: a client
+    /// // that trims it would read another address than the browser does.
+    /// assert!(Href::parse("\u{3000}//evil.example/x").is_err());
+    /// assert!(Href::parse("/deals\u{2028}").is_err());
+    /// assert!(Href::parse("https\u{a0}://evil.example").is_err());
+    /// assert!(Href::parse(" /deals").is_err());
+    /// assert!(Href::parse("tel:+91 98140 12345").is_ok());
     /// ```
     pub fn parse(url: &str) -> Result<Self, HrefError> {
-        if url.starts_with(' ') || url.bytes().any(|byte| byte < 0x20 || byte == 0x7f) {
+        // Browsers strip a space or a control at the ends; a native client trims every kind of
+        // whitespace. Either way the address read is not the one checked here.
+        let trimmed = |c: char| c.is_whitespace() || c.is_control();
+        // Before the path, a line or paragraph separator, a no-break or ideographic space is
+        // nothing a browser reads as part of a scheme or a host.
+        let foreign = |c: char| !c.is_ascii() && trimmed(c);
+        let head = &url[..url.find(['/', '?', '#']).unwrap_or(url.len())];
+        if url.starts_with(trimmed)
+            || url.ends_with(trimmed)
+            || head.contains(foreign)
+            || url.bytes().any(|byte| byte < 0x20 || byte == 0x7f)
+        {
             return Err(HrefError::Control);
         }
         let scheme_end = url.find([':', '/', '?', '#']);
@@ -173,6 +195,9 @@ impl From<&String> for Href {
 /// assert!(LocalHref::parse("//evil.example").is_err());
 /// assert!(LocalHref::parse("/\\evil.example").is_err());
 /// assert!(LocalHref::parse("https://evil.example").is_err());
+/// // A client that trims whitespace would read another site here.
+/// assert!(LocalHref::parse("\u{3000}//evil.example/x").is_err());
+/// assert!(LocalHref::parse("\u{2029}/\\evil.example").is_err());
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalHref(Href);
@@ -322,6 +347,42 @@ mod tests {
             assert!(LocalHref::parse(url).is_ok(), "{url}");
         }
         assert_eq!(LocalHref::from("//a.b").as_str(), "#");
+    }
+
+    /// A native client trims every kind of whitespace before it resolves an address; a browser
+    /// doesn't. An address that changes when trimmed, or that holds such a character before its
+    /// path, is no link, so the two never read different sites in it.
+    #[test]
+    fn whitespace_a_client_would_trim_is_no_link() {
+        for url in [
+            "\u{3000}//evil.example/x",
+            "\u{a0}//evil.example",
+            "\u{85}/\\evil.example",
+            "\u{2028}https://evil.example",
+            "\u{2029}/deals",
+            "/deals\u{3000}",
+            "/deals\u{2029}",
+            "/deals ",
+            "\u{9f}/deals",
+            "https\u{a0}://evil.example",
+            "http\u{2028}s://evil.example",
+            "deals\u{3000}list?x=1",
+        ] {
+            assert_eq!(Href::parse(url), Err(HrefError::Control), "{url:?}");
+            assert_eq!(LocalHref::parse(url), Err(HrefError::Control), "{url:?}");
+            assert_eq!(LocalHref::from(url).as_str(), "#", "{url:?}");
+        }
+        // Inside the path, the query or the fragment, and a plain space before them, stay.
+        for url in [
+            "/deals/\u{3000}x",
+            "/search?q=a\u{a0}b",
+            "#\u{2028}x",
+            "tel:+91 98140 12345",
+            "/ਪੰਜਾਬ/ਲੁਧਿਆਣਾ",
+            "ਰਿਪੋਰਟ?x=1",
+        ] {
+            assert!(Href::parse(url).is_ok(), "{url:?}");
+        }
     }
 
     #[test]

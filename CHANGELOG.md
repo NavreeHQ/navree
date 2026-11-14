@@ -143,6 +143,9 @@ every `@navree/*` package carries the same version.
 - The page's post form (`ui-post`) posts only for a button the toolkit drew for it, which the renderer
   marks `data-ui-post`, and a button in stored content sends no form.
 - A region is polled once a second at the most, whatever its `poll` says.
+- `Href::parse`, and `LocalHref::parse` with it, refuses an address with whitespace or a control
+  character at either end, or whitespace other than a plain space before its path (`\u{3000}`,
+  `\u{a0}`, `\u{2028}` and the like), so a native client that trims it reads the same address.
 
 ## [1.2.0] - 2026-11-13
 
