@@ -16,6 +16,12 @@ import NavreeShell
 ///   of the item's menu chosen, then the window in front's title;
 /// - `reopen`: the app opened again with no window showing, as the Finder does;
 /// - `close`: the window in front closed, as its close button does, then `presence`;
+/// - `panel:<name>`: the window under an item holding the whole app, opened
+///   as a click opens it and pictured as the window server composes it, as
+///   `<name>-light.png` and `<name>-dark.png`; `hidepanel` closes it;
+/// - `openinwindow`, `closewindow`: that app in a full window and back, each
+///   then `presence`;
+/// - `typetext:<words>`: words typed into the first field of the key window;
 /// - `menuimages:<App|Menu>`: each item of a menu with the description of its image;
 /// - `status:<name>`: the item's button in the menu bar as `<name>.png` (on the
 ///   menu bar's colour for the app's appearance), its words and its name for VoiceOver;
@@ -74,6 +80,52 @@ enum PresenceSteps {
                 let image = item.image.map { "\($0.name() ?? "unnamed") \"\($0.accessibilityDescription ?? "")\"" } ?? "no image"
                 return "  \(item.title): \(image)"
             }
+        case "panel":
+            // The window under the item, opened as a click opens it, pictured as
+            // the window server composes it, in light and in dark.
+            model.showStatusWindow()
+            try? await Task.sleep(for: .seconds(4))
+            guard let panel = model.statusWindows.panel, panel.isVisible else { return ["panel \(argument): no window under the item"] }
+            var lines = ["panel \(argument): \(Int(panel.frame.width))x\(Int(panel.frame.height)) at \(NSStringFromRect(panel.frame)), under the item at \(model.statusItemParts?.button?.window.map { NSStringFromRect($0.frame) } ?? "none"), key \(panel.isKeyWindow), level \(panel.level.rawValue), main windows \(model.mainWindows)"]
+            for look in ["light", "dark"] {
+                NSApp.appearance = NSAppearance(named: look == "dark" ? .darkAqua : .aqua)
+                try? await Task.sleep(for: .seconds(1.5))
+                lines.append("  " + composed(panel, name: "\(argument)-\(look)", out: out))
+                // A sheet up in it is a window of its own.
+                if let sheet = panel.attachedSheet {
+                    lines.append("  sheet: " + composed(sheet, name: "\(argument)-sheet-\(look)", out: out))
+                }
+            }
+            NSApp.appearance = nil
+            return lines
+        case "composedwindow":
+            // The app's full window, as the window server composes it.
+            guard let window = model.statusWindows.window, window.isVisible else { return ["composedwindow \(argument): no full window"] }
+            return ["composedwindow: " + composed(window, name: argument, out: out)]
+        case "hidepanel":
+            model.hideStatusWindow()
+            try? await Task.sleep(for: .seconds(1))
+            return ["hidepanel: shown \(model.statusWindowShown), panel visible \(model.statusWindows.panel?.isVisible ?? false)"]
+        case "openinwindow":
+            model.openInWindow()
+            try? await Task.sleep(for: .seconds(3))
+            let window = model.statusWindows.window
+            return ["openinwindow: window \"\(window?.title ?? "none")\" \(window.map { "\(Int($0.frame.width))x\(Int($0.frame.height))" } ?? ""), panel visible \(model.statusWindows.panel?.isVisible ?? false)"] + presence()
+        case "closewindow":
+            model.statusWindows.window?.performClose(nil)
+            try? await Task.sleep(for: .seconds(2))
+            return ["closewindow: window visible \(model.statusWindows.window?.isVisible ?? false)"] + presence()
+        case "typetext":
+            // Words typed into the first field of the key window, as the keyboard types them.
+            guard let window = NSApp.keyWindow, let field = Self.field(in: window.contentView) else {
+                return ["typetext \(argument): no field in the key window \"\(NSApp.keyWindow?.title ?? "none")\""]
+            }
+            window.makeFirstResponder(field)
+            let editor = window.firstResponder as? NSTextView
+            editor?.selectAll(nil)
+            editor?.insertText(argument, replacementRange: editor?.selectedRange() ?? NSRange(location: 0, length: 0))
+            try? await Task.sleep(for: .seconds(1))
+            return ["typetext \(argument): into \"\(field.placeholderString ?? field.accessibilityLabel() ?? "a field")\" of \"\(window.title)\", now \"\(field.stringValue)\""]
         case "close":
             let before = WindowPictures.windows.count
             WindowPictures.windows.first?.performClose(nil)
@@ -146,6 +198,32 @@ enum PresenceSteps {
         return [line + ", pictured \(name).png"]
     }
 
+    /// A window as the window server composes it, its material included: an
+    /// app may picture its own windows with no screen recording.
+    static func composed(_ window: NSWindow, name: String, out: URL) -> String {
+        typealias Capture = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") else {
+            return "\(name): the window server cannot picture a window here"
+        }
+        let capture = unsafeBitCast(symbol, to: Capture.self)
+        // Only this window, its frame's shadow left out, at the screen's scale.
+        guard let image = capture(.null, 1 << 3, UInt32(window.windowNumber), (1 << 0) | (1 << 3))?.takeRetainedValue(),
+            let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+        else { return "\(name): no picture" }
+        try? png.write(to: out.appendingPathComponent("\(name).png"))
+        return "pictured \(name).png \(image.width)x\(image.height) pixels"
+    }
+
+    /// The first field a person can type in.
+    static func field(in view: NSView?) -> NSTextField? {
+        guard let view else { return nil }
+        if let field = view as? NSTextField, field.isEditable, !field.isHidden { return field }
+        for child in view.subviews {
+            if let found = field(in: child) { return found }
+        }
+        return nil
+    }
+
     /// App > About chosen from the menu bar, the panel pictured and closed.
     static func about(_ name: String, out: URL) async -> [String] {
         let appMenu = NSApp.mainMenu?.items.first?.submenu
@@ -206,7 +284,7 @@ enum PresenceSteps {
         }
         let uiElement = Bundle.main.object(forInfoDictionaryKey: "LSUIElement").map { "\($0)" } ?? "absent"
         let item = model.presence.statusItem
-        let inserted = StatusRules.inserted(style: .menu, item: item, place: model.place)
+        let inserted = StatusRules.inserted(style: StatusRules.style(item) ?? .menu, item: item, place: model.place)
         // Every status bar window of the app, and the items the app made:
         // AppKit lists no app's items, so the one the library makes is read
         // from the library; what AppKit keeps of any item made is in the defaults.
