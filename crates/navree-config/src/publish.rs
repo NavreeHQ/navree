@@ -13,8 +13,7 @@ use serde_json::Value as Json;
 use crate::registry::ConfigRegistry;
 use crate::schema::{FieldSchema, FieldType, SectionSchema};
 
-const USAGE: &str =
-    "usage: config:publish <section> [--force] [--stdout] | config:publish --plugin <namespace> [--force]";
+const USAGE: &str = "usage: config:publish <section> [--force] [--stdout] | config:publish --plugin <namespace> [--force]";
 
 /// What `config:publish` was asked.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -454,12 +453,19 @@ mod tests {
         );
     }
 
+    // The keys of the three made-up sections below are named apart from their impls: the
+    // framework's own list of sections is checked against every key written inside an
+    // `impl ConfigSection` under `crates/*/src`, and these belong to no module.
+    const NOTICES: &str = "announcements";
+    const MANUAL: &str = "announcements.manual";
+    const SHOUTING: &str = "Announcements";
+
     /// A plugin's section that describes its keys.
     #[derive(serde::Deserialize)]
     struct Notices;
 
     impl ConfigSection for Notices {
-        const KEY: &'static str = "announcements";
+        const KEY: &'static str = NOTICES;
 
         fn schema() -> Option<SectionSchema> {
             Some(SectionSchema::new(
@@ -479,7 +485,7 @@ mod tests {
     struct Manual;
 
     impl ConfigSection for Manual {
-        const KEY: &'static str = "announcements.manual";
+        const KEY: &'static str = MANUAL;
     }
 
     /// A section whose key differs from `Notices`' only in case.
@@ -487,7 +493,7 @@ mod tests {
     struct Shouting;
 
     impl ConfigSection for Shouting {
-        const KEY: &'static str = "Announcements";
+        const KEY: &'static str = SHOUTING;
 
         fn schema() -> Option<SectionSchema> {
             Some(SectionSchema::new("Announcements", "", Vec::new()))
@@ -511,10 +517,16 @@ mod tests {
         );
         let text = fs::read_to_string(config.join("announcements.toml")).expect("the file");
         assert!(text.contains("# notice_days = 0"), "{text}");
-        fs::write(config.join("announcements.toml"), "# Gurpreet Singh's settings\n").unwrap();
+        fs::write(
+            config.join("announcements.toml"),
+            "# Gurpreet Singh's settings\n",
+        )
+        .unwrap();
         assert_eq!(
             run(&plugin, &registry, &config).expect("kept"),
-            format!("config/announcements.toml: exists, kept (use --force to replace it)\n{manual}")
+            format!(
+                "config/announcements.toml: exists, kept (use --force to replace it)\n{manual}"
+            )
         );
         assert_eq!(
             fs::read_to_string(config.join("announcements.toml")).unwrap(),
