@@ -31,7 +31,7 @@ public struct SettingsShell: View {
         }
         .frame(minWidth: 480, idealWidth: 560, minHeight: 360, idealHeight: 520)
         .task {
-            session.begin(restoring: false)
+            session.begin(restoring: false, scene: "settings")
             session.window(.medium)
         }
     }

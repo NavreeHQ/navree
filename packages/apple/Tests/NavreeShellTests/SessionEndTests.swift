@@ -72,6 +72,36 @@ struct SessionEndTests {
         #expect(StubOrigin.seen(host).count == 2, "nothing was kept after the session ended")
     }
 
+    @Test func twoScenesNeverShareWhatTheirCoresKeep() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("navree-scenes-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        func effects() -> SystemEffects {
+            SystemEffects(
+                transport: FakeTransport(), cache: KeptFiles(folder: folder.appendingPathComponent("cache")),
+                snapshots: KeptFiles(folder: folder.appendingPathComponent("snapshot"))
+            )
+        }
+        // What a build that kept one store for every scene left goes.
+        KeptFiles(folder: folder.appendingPathComponent("cache")).write("page:https://shop.example/orders", "old")
+        let first = effects()
+        let second = effects()
+        first.keep(for: "A1B2-window")
+        second.keep(for: "../C3")
+        #expect(first.cache.folder != second.cache.folder)
+        #expect(first.cache.folder.deletingLastPathComponent() == folder.appendingPathComponent("cache"))
+        #expect(second.cache.folder.lastPathComponent == "scene----C3")
+        #expect(KeptFiles(folder: folder.appendingPathComponent("cache")).read("page:https://shop.example/orders") == nil)
+        first.cache.write("page:https://shop.example/orders", "Gurpreet's")
+        first.snapshots.write("snapshot", "Gurpreet's")
+        #expect(second.cache.read("page:https://shop.example/orders") == nil)
+        second.cache.write("page:https://shop.example/orders", "Simran's")
+        // A session that ends in one scene empties that scene's store only.
+        first.cache.clear()
+        first.snapshots.clear()
+        #expect(first.cache.read("page:https://shop.example/orders") == nil)
+        #expect(second.cache.read("page:https://shop.example/orders") == "Simran's")
+    }
+
     @Test func signingOutEmptiesWhatWasKeptOfThePersonBeforeTheNextEffect() throws {
         let shell = try Shell()
         shell.effects.cache.write("page:https://shop.example/orders", "kept")
