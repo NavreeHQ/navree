@@ -70,11 +70,11 @@ impl SafeHtml {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum HrefError {
-    /// A control character, whitespace or an invisible format character (a zero-width
-    /// space, a direction mark, a byte order mark) at the start or the end, or any of
-    /// those other than a plain space before the path: browsers strip some of those
-    /// before reading the scheme, so `java\tscript:` would still run, and other
-    /// clients trim or pass over the rest.
+    /// A control character anywhere, or whitespace or an invisible format character (a
+    /// zero-width space, a direction mark, a byte order mark) at the start: browsers
+    /// strip some of those before reading the scheme, so `java\tscript:` would still
+    /// run, and other clients trim the rest, so what follows would be read as a scheme
+    /// or a host.
     Control,
     /// A scheme other than `http`, `https`, `mailto` or `tel`.
     Scheme,
@@ -86,7 +86,7 @@ impl fmt::Display for HrefError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::Control => {
-                "a URL can't hold control characters, start or end with whitespace, or hold whitespace other than a space before its path"
+                "a URL can't hold control characters or start with whitespace or an invisible character"
             }
             Self::Scheme => "a URL's scheme must be http, https, mailto or tel",
             Self::OffSite => "this URL must stay on this site: a path, a query or a fragment",
@@ -114,33 +114,27 @@ impl Href {
     /// assert!(Href::parse("https://navree.com").is_ok());
     /// assert!(Href::parse("JavaScript:alert(1)").is_err());
     /// assert!(Href::parse("java\tscript:alert(1)").is_err());
-    /// // Whitespace or a line break at either end, or before the path in any script: a client
-    /// // that trims it would read another address than the browser does.
+    /// // Whitespace or a line break at the start, in any script: a client that trims it
+    /// // would read what follows as another site.
     /// assert!(Href::parse("\u{3000}//evil.example/x").is_err());
-    /// assert!(Href::parse("/deals\u{2028}").is_err());
-    /// assert!(Href::parse("https\u{a0}://evil.example").is_err());
     /// assert!(Href::parse(" /deals").is_err());
-    /// // So is an invisible format character, which some clients drop or pass over.
+    /// // So is an invisible format character there, which some clients trim too.
     /// assert!(Href::parse("\u{200b}//evil.example/x").is_err());
+    /// // A scheme is one of the four as written, so nothing hides in one.
+    /// assert!(Href::parse("https\u{a0}://evil.example").is_err());
     /// assert!(Href::parse("java\u{ad}script:alert(1)").is_err());
-    /// assert!(Href::parse("/deals\u{feff}").is_err());
+    /// // After the start, text is kept as written: a joiner of a word, a space at the end.
     /// assert!(Href::parse("tel:+91 98140 12345").is_ok());
     /// assert!(Href::parse("/ਗਾਹਕ?ਸ਼ਹਿਰ=ਲੁਧਿਆਣਾ").is_ok());
+    /// assert!(Href::parse("/खोज?q=क्\u{200d}").is_ok());
     /// ```
     pub fn parse(url: &str) -> Result<Self, HrefError> {
-        // Browsers strip a space or a control at the ends; a native client trims every kind of
-        // whitespace, and some trimmers and parsers drop the invisible format characters too.
-        // Either way the address read is not the one checked here.
+        // Browsers strip a space or a control from the start of an address; a native client
+        // trims every kind of whitespace there, and some trimmers drop the invisible format
+        // characters too. What follows one would then be read as a scheme or a host that was
+        // not checked here. Nothing trimmed from the end changes where an address leads.
         let trimmed = |c: char| c.is_whitespace() || c.is_control() || invisible(c);
-        // Before the path, a line or paragraph separator, a no-break or ideographic space is
-        // nothing a browser reads as part of a scheme or a host.
-        let foreign = |c: char| !c.is_ascii() && trimmed(c);
-        let head = &url[..url.find(['/', '?', '#']).unwrap_or(url.len())];
-        if url.starts_with(trimmed)
-            || url.ends_with(trimmed)
-            || head.contains(foreign)
-            || url.bytes().any(|byte| byte < 0x20 || byte == 0x7f)
-        {
+        if url.starts_with(trimmed) || url.bytes().any(|byte| byte < 0x20 || byte == 0x7f) {
             return Err(HrefError::Control);
         }
         let scheme_end = url.find([':', '/', '?', '#']);
@@ -166,11 +160,11 @@ impl Href {
     }
 }
 
-/// The invisible format characters some clients trim from an address or pass over in it: the
-/// soft hyphen, the Arabic letter mark, the Mongolian vowel separator, the zero-width space,
+/// The invisible format characters some clients trim from the start of an address: the soft
+/// hyphen, the Arabic letter mark, the Mongolian vowel separator, the zero-width space,
 /// joiners and direction marks, the direction embeddings, overrides and isolates, the word
-/// joiner and the invisible operators, and the byte order mark. None of them is ever needed at
-/// either end of an address or before its path.
+/// joiner and the invisible operators, and the byte order mark. No address needs one as its
+/// first character; inside a word (a joiner in Devanagari or Persian text) they are text.
 fn invisible(c: char) -> bool {
     matches!(
         c,
@@ -225,7 +219,7 @@ impl From<&String> for Href {
 /// assert!(LocalHref::parse("\u{3000}//evil.example/x").is_err());
 /// assert!(LocalHref::parse("\u{2029}/\\evil.example").is_err());
 /// assert!(LocalHref::parse("\u{feff}//evil.example/x").is_err());
-/// assert!(LocalHref::parse("\u{2066}/deals\u{2069}").is_err());
+/// assert!(LocalHref::parse("\u{2066}/deals").is_err());
 /// assert!(LocalHref::parse("ਰਿਪੋਰਟ?ਮਹੀਨਾ=ਕੱਤਕ").is_ok());
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -379,29 +373,29 @@ mod tests {
     }
 
     /// A native client trims every kind of whitespace before it resolves an address; a browser
-    /// doesn't. An address that changes when trimmed, or that holds such a character before its
-    /// path, is no link, so the two never read different sites in it.
+    /// doesn't. An address that starts with a character one of them trims is no link, so what
+    /// follows is never a host to one and a path to the other. After the start an address is
+    /// kept as it is written: a joiner inside or at the end of a word, a space at the end.
     #[test]
-    fn whitespace_a_client_would_trim_is_no_link() {
+    fn whitespace_a_client_would_trim_from_the_start_is_no_link() {
         for url in [
             "\u{3000}//evil.example/x",
             "\u{a0}//evil.example",
             "\u{85}/\\evil.example",
             "\u{2028}https://evil.example",
             "\u{2029}/deals",
-            "/deals\u{3000}",
-            "/deals\u{2029}",
-            "/deals ",
             "\u{9f}/deals",
-            "https\u{a0}://evil.example",
-            "http\u{2028}s://evil.example",
-            "deals\u{3000}list?x=1",
+            " /deals",
         ] {
             assert_eq!(Href::parse(url), Err(HrefError::Control), "{url:?}");
             assert_eq!(LocalHref::parse(url), Err(HrefError::Control), "{url:?}");
             assert_eq!(LocalHref::from(url).as_str(), "#", "{url:?}");
         }
-        // Each invisible format character, at either end and before the path.
+        // A scheme is one of the four as written, so nothing a client drops hides in one.
+        for url in ["https\u{a0}://evil.example", "http\u{2028}s://evil.example"] {
+            assert_eq!(Href::parse(url), Err(HrefError::Scheme), "{url:?}");
+            assert_eq!(LocalHref::from(url).as_str(), "#", "{url:?}");
+        }
         let invisible = [
             '\u{ad}', '\u{61c}', '\u{180e}', '\u{200b}', '\u{200c}', '\u{200d}', '\u{200e}',
             '\u{200f}', '\u{202a}', '\u{202b}', '\u{202c}', '\u{202d}', '\u{202e}', '\u{2060}',
@@ -409,34 +403,48 @@ mod tests {
             '\u{2069}', '\u{feff}',
         ];
         for c in invisible {
+            // As the first character.
             for url in [
                 format!("{c}//evil.example/x"),
                 format!("{c}/\\evil.example"),
-                format!("/deals{c}"),
-                format!("https{c}://evil.example"),
-                format!("java{c}script:alert(1)"),
-                format!("deals{c}list?x=1"),
-                format!("#top{c}"),
+                format!("{c}/deals"),
+                format!("{c}https://evil.example"),
             ] {
                 assert_eq!(Href::parse(&url), Err(HrefError::Control), "{url:?}");
                 assert_eq!(LocalHref::parse(&url), Err(HrefError::Control), "{url:?}");
                 assert_eq!(LocalHref::from(url.as_str()).as_str(), "#", "{url:?}");
             }
-            // Inside the path, the query or the fragment, one stays.
+            // In a scheme.
+            for url in [
+                format!("https{c}://evil.example"),
+                format!("java{c}script:alert(1)"),
+            ] {
+                assert_eq!(Href::parse(&url), Err(HrefError::Scheme), "{url:?}");
+                assert_eq!(LocalHref::from(url.as_str()).as_str(), "#", "{url:?}");
+            }
+            // Anywhere after the start it is text, and stays.
             for url in [
                 format!("/deals/{c}x"),
                 format!("/search?q=a{c}b"),
                 format!("#a{c}b"),
+                format!("/deals{c}"),
+                format!("deals{c}list?x=1"),
+                format!("#top{c}"),
+                format!("/\u{916}\u{94b}\u{91c}?q=\u{915}\u{94d}{c}"),
             ] {
                 assert!(Href::parse(&url).is_ok(), "{url:?}");
                 assert!(LocalHref::parse(&url).is_ok(), "{url:?}");
             }
         }
-        // Inside the path, the query or the fragment, and a plain space before them, stay.
+        // So do whitespace after the start, a space at the end, and text in any script.
         for url in [
             "/deals/\u{3000}x",
             "/search?q=a\u{a0}b",
             "#\u{2028}x",
+            "/deals\u{3000}",
+            "/deals\u{2029}",
+            "/deals ",
+            "deals\u{3000}list?x=1",
             "tel:+91 98140 12345",
             "/ਪੰਜਾਬ/ਲੁਧਿਆਣਾ",
             "ਰਿਪੋਰਟ?x=1",
