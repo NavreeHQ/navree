@@ -167,3 +167,12 @@ private let held = StatusItem(image: .symbol("shippingbox"), content: .app())
     #expect(StatusRules.fullWindowMinimum(configured: CGSize(width: 900, height: 600), columns: CGSize(width: 580, height: 120))
         == CGSize(width: 900, height: 600))
 }
+
+@Test func voiceOverSaysTheItemsNameAndItsCount() {
+    let item = StatusItem(image: .symbol("shippingbox"), content: .app(StatusWindow()))
+    let parts = StatusRules.label(item: item, count: 7, place: .menuBar, appName: "Charkha Bar")
+    #expect(parts.accessibilityLabel == "Charkha Bar, 7")
+    // The image keeps the name alone; with no count, the name alone.
+    #expect(parts.name == "Charkha Bar")
+    #expect(StatusRules.label(item: item, count: nil, place: .menuBar, appName: "Charkha Bar").accessibilityLabel == "Charkha Bar")
+}

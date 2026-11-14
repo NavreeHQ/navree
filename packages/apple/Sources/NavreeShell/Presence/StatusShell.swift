@@ -86,11 +86,11 @@ enum StatusButton {
 
     static func image(_ parts: StatusLabelParts) -> NSImage? {
         let image: NSImage? = switch parts.image {
-        case .symbol(let name): NSImage(systemSymbolName: name, accessibilityDescription: parts.accessibilityLabel)
+        case .symbol(let name): NSImage(systemSymbolName: name, accessibilityDescription: parts.name)
         case .asset(let name): NSImage(named: name)?.copy() as? NSImage
         }
         image?.isTemplate = true
-        image?.accessibilityDescription = parts.accessibilityLabel
+        image?.accessibilityDescription = parts.name
         return image
     }
 }
