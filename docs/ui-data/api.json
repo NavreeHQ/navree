@@ -589,6 +589,12 @@
     ],
     "methods": [
       {
+        "name": "namespace",
+        "generics": "",
+        "args": "namespace: &'static str",
+        "doc": "Puts the file under `namespace`, a plugin's namespace (a lower-case letter followed by up to 63 lower-case letters, digits or `_`): the file and its rule are served as `{namespace}.{name}`, and its name stays `name`. A namespace outside that grammar fails the build."
+      },
+      {
         "name": "weight",
         "generics": "",
         "args": "weight: u16",
@@ -646,13 +652,13 @@
         "name": "url",
         "generics": "",
         "args": "",
-        "doc": "Where the file is served: `/_navree/ui/app/{name}-{hash}.woff2`."
+        "doc": "Where the file is served: `/_navree/ui/app/{name}-{hash}.woff2`, or `/_navree/ui/app/{namespace}.{name}-{hash}.woff2` after `namespace`."
       },
       {
         "name": "face_url",
         "generics": "",
         "args": "",
-        "doc": "Where its `@font-face` rule is served: `/_navree/ui/app/{name}.face-{hash}.css`."
+        "doc": "Where its `@font-face` rule is served: `/_navree/ui/app/{name}.face-{hash}.css`, with `{namespace}.{name}` in place of `{name}` after `namespace`."
       },
       {
         "name": "face",
@@ -780,6 +786,12 @@
     ],
     "methods": [
       {
+        "name": "namespace",
+        "generics": "",
+        "args": "namespace: &'static str",
+        "doc": "Puts the file under `namespace`, a plugin's namespace (a lower-case letter followed by up to 63 lower-case letters, digits or `_`): it is served as `{namespace}.{name}`, and its name stays `name`. A namespace outside that grammar fails the build, and so does a sheet named `face`: a font's rule is served under that name."
+      },
+      {
         "name": "name",
         "generics": "",
         "args": "",
@@ -801,7 +813,7 @@
         "name": "url",
         "generics": "",
         "args": "",
-        "doc": "Where it is served: `/_navree/ui/app/{name}-{hash}.css`."
+        "doc": "Where it is served: `/_navree/ui/app/{name}-{hash}.css`, or `/_navree/ui/app/{namespace}.{name}-{hash}.css` after `namespace`."
       }
     ],
     "variants": [],
