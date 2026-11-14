@@ -186,6 +186,12 @@ private func labels(_ nodes: [Navree.Node]) -> [String] {
     #expect(CompositionRules.valuePlace(bar: .navigation) == .system)
 }
 
+@Test func aSheetInAMacWindowTakesTheSystemsSizeForAFormAndOnAPhoneItsDetents() {
+    // A Mac sheet takes its content's own height otherwise, and a list has none.
+    #expect(PresentationRules.sheetSizing(bar: .window) == .form)
+    #expect(PresentationRules.sheetSizing(bar: .navigation) == .detents)
+}
+
 @Test func aClickOnARowOfAMacsTableChoosesItAndOpensItsRecord() throws {
     #expect(ContentRules.tableOpening(bar: .window) == .choosing)
     // iPad keeps the tap on the record's name.

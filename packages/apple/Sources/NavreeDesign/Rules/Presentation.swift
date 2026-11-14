@@ -45,6 +45,19 @@ public enum SearchPlacement: Sendable, Equatable {
 }
 
 public enum PresentationRules {
+    /// How a sheet takes its size.
+    public enum SheetSizing: Sendable, Equatable {
+        /// By its detents: iPhone and iPad.
+        case detents
+        /// The system's size for a form: a Mac window's sheet, which
+        /// otherwise takes its content's own height, and a list has none.
+        case form
+    }
+
+    public static func sheetSizing(bar: ActionBar) -> SheetSizing {
+        bar == .window ? .form : .detents
+    }
+
     /// Medium sheets rest at half height and can be pulled up (iPhone's
     /// detents; a regular width shows a form sheet); large ones take the full
     /// height; full ones cover the screen.
