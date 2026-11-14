@@ -127,6 +127,16 @@ pub(crate) enum SessionKind {
         /// The longest the sign-in lasts.
         max_age_secs: u64,
     },
+    /// A sign-in handed over from a browser session to a native app: it
+    /// keeps the time the user last authenticated in that session and ends
+    /// at a fixed time.
+    #[cfg_attr(not(feature = "session"), allow(dead_code))]
+    HandedOver {
+        /// When the user last authenticated in the session it came from.
+        authenticated_at: DateTime<Utc>,
+        /// When it ends.
+        expires_at: DateTime<Utc>,
+    },
 }
 
 /// The session columns of a refresh-token family, kept by every token of
@@ -542,6 +552,16 @@ impl AuthService {
                 family_id: Uuid::now_v7(),
                 expires_at: after_secs(now, max_age_secs),
                 authenticated_at: Some(now),
+                impersonator: None,
+                audience: None,
+            },
+            SessionKind::HandedOver {
+                authenticated_at,
+                expires_at,
+            } => SessionState {
+                family_id: Uuid::now_v7(),
+                expires_at,
+                authenticated_at: Some(authenticated_at),
                 impersonator: None,
                 audience: None,
             },

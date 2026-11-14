@@ -414,19 +414,85 @@ impl AuthService {
         remember: bool,
         meta: &ClientMeta,
     ) -> Result<(), AuthError> {
+        let max_age_secs = self.options.session.max_age_secs(remember);
+        self.open_bound_session(
+            session,
+            user,
+            SessionKind::Browser { max_age_secs },
+            None,
+            remember,
+            meta,
+        )
+        .await
+    }
+
+    /// Binds the browser's session (an app's, through the hand-over
+    /// exchange) to `user` as [`start_session`](AuthService::start_session)
+    /// does, as a sign-in handed over from a browser session whose user
+    /// last authenticated at `signed_in_at` (Unix seconds): the new session
+    /// keeps that time as its own (`#[recent_auth]` routes read it), is kept
+    /// like "remember me", and ends when a "remember me" sign-in made at
+    /// `signed_in_at` would, never later. A hand-over therefore never makes
+    /// a sign-in younger than the one it came from.
+    /// [`AuthError::HandOverRefused`] when that time has already passed.
+    pub(crate) async fn start_handed_over_session(
+        &self,
+        session: &Session,
+        user: &User,
+        signed_in_at: i64,
+        meta: &ClientMeta,
+    ) -> Result<(), AuthError> {
+        let longest = i64::try_from(self.options.session.max_age_secs(true)).unwrap_or(i64::MAX);
+        let times = (
+            chrono::DateTime::from_timestamp(signed_in_at, 0),
+            chrono::DateTime::from_timestamp(signed_in_at.saturating_add(longest), 0),
+        );
+        let (Some(authenticated_at), Some(expires_at)) = times else {
+            return Err(AuthError::HandOverRefused(
+                "the sign-in it came from has no usable time".to_owned(),
+            ));
+        };
+        if expires_at <= self.clock.now() {
+            return Err(AuthError::HandOverRefused(
+                "the sign-in it came from has ended".to_owned(),
+            ));
+        }
+        self.open_bound_session(
+            session,
+            user,
+            SessionKind::HandedOver {
+                authenticated_at,
+                expires_at,
+            },
+            Some(signed_in_at),
+            true,
+            meta,
+        )
+        .await
+    }
+
+    /// Starts a server-side session of `kind` for `user` and binds the
+    /// browser's session to it (see [`start_session`](AuthService::start_session)),
+    /// with `at` as the time the user last authenticated (now when `None`).
+    async fn open_bound_session(
+        &self,
+        session: &Session,
+        user: &User,
+        kind: SessionKind,
+        at: Option<i64>,
+        remember: bool,
+        meta: &ClientMeta,
+    ) -> Result<(), AuthError> {
         let previous = session.get::<SignedIn>(SESSION_USER_KEY);
         let stashed = session.get::<SignedIn>(SESSION_STASH_KEY);
-        let max_age_secs = self.options.session.max_age_secs(remember);
-        let (state, _secret) = self
-            .open_family(user, meta, SessionKind::Browser { max_age_secs })
-            .await?;
+        let (state, _secret) = self.open_family(user, meta, kind).await?;
         let (typ, _) = self.session_token(user.id, Some(user), &state).await?;
         self.bind(
             session,
             SignedIn {
                 user: user.id,
                 sid: state.family_id,
-                at: self.clock.now().timestamp(),
+                at: at.unwrap_or_else(|| self.clock.now().timestamp()),
                 setup: typ == TokenType::TwoFactorSetup,
                 remember,
                 impersonator: None,

@@ -54,11 +54,21 @@ pub enum SignInMethod {
         /// The issuer's name.
         issuer: String,
     },
+    /// A sign-in made in the system's sign-in session and handed over to a
+    /// native app of `auth.apps` (`POST /auth/app/exchange`), by the app's
+    /// platform and id.
+    AppHandOver {
+        /// `apple` or `android`.
+        platform: String,
+        /// The app's bundle id or package name.
+        app: String,
+    },
 }
 
 impl SignInMethod {
     /// The method's name, as audit entries carry it: `password`,
-    /// `magic_link`, `otp`, `passkey`, `social`, `sso`, `token_exchange`.
+    /// `magic_link`, `otp`, `passkey`, `social`, `sso`, `token_exchange`,
+    /// `app_hand_over`.
     pub fn name(&self) -> &'static str {
         match self {
             SignInMethod::Password => "password",
@@ -68,6 +78,7 @@ impl SignInMethod {
             SignInMethod::Social { .. } => "social",
             SignInMethod::Sso { .. } => "sso",
             SignInMethod::TokenExchange { .. } => "token_exchange",
+            SignInMethod::AppHandOver { .. } => "app_hand_over",
         }
     }
 
@@ -93,6 +104,10 @@ impl SignInMethod {
             SignInMethod::Social { provider } => value["provider"] = json!(provider),
             SignInMethod::Sso { connection } => value["connection"] = json!(connection),
             SignInMethod::TokenExchange { issuer } => value["issuer"] = json!(issuer),
+            SignInMethod::AppHandOver { platform, app } => {
+                value["platform"] = json!(platform);
+                value["app"] = json!(app);
+            }
             _ => {}
         }
         value
@@ -402,6 +417,13 @@ mod tests {
                     issuer: "legacy".to_owned(),
                 },
                 "token_exchange",
+            ),
+            (
+                SignInMethod::AppHandOver {
+                    platform: "apple".to_owned(),
+                    app: "com.example.orders".to_owned(),
+                },
+                "app_hand_over",
             ),
         ] {
             assert_eq!(method.name(), name);
