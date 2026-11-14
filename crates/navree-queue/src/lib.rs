@@ -17,7 +17,9 @@
 //!   share them), `memory` (one process, for tests and development) and
 //!   `redis` (the [`QueueStore`] provider named `redis`, from navree-redis's
 //!   `RedisModule`). They behave the same; [`QueueStore`] states the
-//!   contract other drivers implement.
+//!   contract other drivers implement, and a module registers one under a
+//!   name of its own with [`m.queue_store`](ModuleBuilderQueueExt::queue_store),
+//!   which `queue.driver` then selects.
 //! - Workers ([`Queue::work`], command `queue:work`) reserve jobs atomically
 //!   (SQLite: `UPDATE … WHERE id = (SELECT … LIMIT 1) RETURNING`;
 //!   PostgreSQL adds `FOR UPDATE SKIP LOCKED`; MySQL, which cannot return
@@ -134,6 +136,7 @@
 
 mod batch;
 mod commands;
+mod drivers;
 mod error;
 mod fake;
 mod migration;
@@ -164,6 +167,7 @@ pub use record::{
     PendingState, QueueStatus, ReservedJob, RetryTarget,
 };
 pub use store::QueueStore;
+pub use drivers::ModuleBuilderQueueExt;
 /// The cancellation token [`Supervision::stop`] takes (tokio-util's).
 pub use tokio_util::sync::CancellationToken;
 pub use worker::{
