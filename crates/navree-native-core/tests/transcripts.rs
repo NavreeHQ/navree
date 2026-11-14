@@ -654,6 +654,7 @@ const REQUIRED: &[&str] = &[
     "composed-ops",
     "opened-from",
     "push-destination",
+    "addresses",
 ];
 
 #[test]

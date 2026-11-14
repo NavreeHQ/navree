@@ -1,0 +1,21 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "आंकड़े",
+  "nav": "/",
+  "body": {
+   "t": "stack",
+   "gap": 4,
+   "children": [
+    {
+     "t": "region",
+     "id": "आंकड़े",
+     "src": "/fragments/figures",
+     "lazy": true
+    }
+   ]
+  }
+ }
+}
