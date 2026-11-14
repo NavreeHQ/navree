@@ -36,7 +36,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | L0 | `navree-template` | The template engine under navree-view, navree-cli and navree-harbor: the Jinja syntax, HTML autoescaping, a sandboxed value model, caps on depth, loops, work and output |
 | L0 | `navree-openapi` | The OpenAPI 3.1 document model, and `ToSchema` (trait; its derive is in `navree-macros`) |
 | L0 | `navree-macros` | `#[module]`, `#[injectable]`, `#[controller]`, route and access attributes, `#[mcp_server]` |
-| L0 | `navree-i18n-macros` | `embed_locales!`: Fluent files embedded in the binary, checked at compile time (through navree-i18n) |
+| L0 | `navree-i18n-macros` | `embed_locales!`: Fluent files embedded in the binary, checked at compile time (through navree-i18n, and re-exported by the facade for any crate) |
 | L0 | `navree-validation-macros` | `#[derive(Validate)]` and its `#[validate(...)]` field rules (re-exported by navree-validation) |
 | L0 | `navree-orm-macros` | `#[derive(Model)]`, `#[relations]`, `#[scopes]`, `#[accessors]` and `#[test]` (re-exported by navree-orm) |
 | L0 | `navree-ui-macros` | `#[derive(Form)]`, `#[derive(TableRow)]`, `#[derive(FilterBar)]` and `#[derive(Options)]` (re-exported by navree-ui) |
