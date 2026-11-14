@@ -99,6 +99,20 @@ public enum NavigationRules {
     /// squeezing the detail until its words wrap and its bar's items fold.
     public static let detailMinimumWidth = 400.0
 
+    /// Where the person's account menu stands: at the foot of a Mac's sidebar
+    /// of destinations, as Mail and Music keep it; where there is no sidebar
+    /// (a Mac window of one destination, which is that destination's screen
+    /// with its toolbar), the toolbar's trailing person button, as on iPhone
+    /// and iPad. The menu bar's account items stand in every case.
+    public enum AccountPlace: Sendable, Equatable {
+        case toolbar
+        case sidebarFoot
+    }
+
+    public static func accountPlace(bar: ActionBar, destinations: Int) -> AccountPlace {
+        bar == .window && destinations > 1 ? .sidebarFoot : .toolbar
+    }
+
     public static func titleInContent(bar: ActionBar, besideList: Bool) -> Bool {
         bar == .window && besideList
     }

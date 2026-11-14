@@ -613,19 +613,6 @@ struct WindowWidth: ViewModifier {
     }
 }
 
-/// Where the person's account stands: a button at the trailing end of each
-/// destination's first screen on iPhone and iPad; on a Mac, the App menu and
-/// the foot of the sidebar, never the toolbar.
-enum AccountPlacement {
-    static var inToolbar: Bool {
-        #if os(macOS)
-        false
-        #else
-        true
-        #endif
-    }
-}
-
 /// The account at the foot of a Mac's sidebar, as Mail and Music keep it.
 struct SidebarAccount: ViewModifier {
     let client: NativeClient

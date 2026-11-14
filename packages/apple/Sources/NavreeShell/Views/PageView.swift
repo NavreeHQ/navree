@@ -326,7 +326,10 @@ struct ScreenPage: View {
             }
             .sharedBackgroundVisibility(.hidden)
         }
-        if depth == 0, modal == nil, state.chrome, AccountPlacement.inToolbar, let user = client.app?.user {
+        if depth == 0, modal == nil, state.chrome,
+            NavigationRules.accountPlace(bar: .current, destinations: client.nav.destinations.count) == .toolbar,
+            let user = client.app?.user
+        {
             ToolbarItem(placement: .primaryAction) {
                 AccountMenu(user: user, client: client, icons: configuration.icons).modifier(BarItemLook(.bar))
             }

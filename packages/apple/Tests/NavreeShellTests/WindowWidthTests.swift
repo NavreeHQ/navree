@@ -41,12 +41,9 @@ import Testing
     #expect(!ColumnRules.same("/orders/1043", "https://charkha.example/orders/1042"))
 }
 
-@Test func onAMacTheAccountIsInTheAppMenuAndTheSidebarNotTheToolbar() {
-    #if os(macOS)
-    #expect(!AccountPlacement.inToolbar)
-    #else
-    #expect(AccountPlacement.inToolbar)
-    #endif
+@Test func onAMacWithASidebarTheAccountIsAtItsFootNotInTheToolbar() {
+    #expect(NavigationRules.accountPlace(bar: .window, destinations: 3) == .sidebarFoot)
+    #expect(NavigationRules.accountPlace(bar: .navigation, destinations: 3) == .toolbar)
 }
 
 @Test func eachOriginKeepsItsCacheApart() {
