@@ -88,8 +88,8 @@ When the same name is defined more than once:
 1. the first directory in `view.dirs` holding the name wins;
 2. any file wins over an embedded template, so an app overrides a module's mail by dropping a file with the same name into `resources/views`;
 3. among embedded templates, a module's template replaces one with the same name from a module it imports;
-4. two other modules that embed one name with different text both log a warning, and the later one's is used; when one of them belongs to a plugin that is not one of the framework's own, the boot fails;
-5. a module of such a plugin may replace a template of a module it imports when that template is another plugin's, with a warning. Replacing a template of the app or of the framework fails the boot while the plugin's version is the one rendered. Put a file of that name in `resources/views/`, or register the template from a module of your own after the plugin's module, and the boot goes on with an `info` line saying which one is used.
+4. two other modules that embed one name with different text log a warning, and the later one's is used; when one of them belongs to a plugin that is not one of the framework's own, the boot fails;
+5. a module of such a plugin may replace a template of a module it imports when that template is another plugin's, with a warning. Replacing a template of the app or of the framework fails the boot while the plugin's version is the one rendered. Put a file with exactly that name in `resources/views/`, or register the template from a module of your own that comes after the plugin's module (one that imports it does) with the plugin's text or your own, and the boot goes on with an `info` line saying which one is used. A module of your own is one that names no plugin and is in no crate that a plugin of the app names.
 
 Every template is read and compiled when the app boots, off the async workers. A syntax error fails the boot and names the template.
 
