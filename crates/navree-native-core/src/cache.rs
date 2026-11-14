@@ -134,7 +134,8 @@ impl Core {
 
     /// Reads what an answer says of keeping its page on the device. Only a
     /// whole page, asked for with a `get`, answered with success and with
-    /// [`navree_native::KEEP_HEADER`], may be kept; any other answer takes
+    /// [`navree_native::KEEP_HEADER`], and whose `cache-control` (when the
+    /// client passed it) does not say `no-store`, may be kept; any other answer takes
     /// away what was kept for the address asked, and loses the header. An
     /// answer that never came (no network) changes nothing.
     pub(crate) fn keeping(&mut self, asked: &Asked, mut response: Response) -> Response {
@@ -145,7 +146,12 @@ impl Core {
             && asked.method == Method::Get
             && asked.region.is_none()
             && (200..300).contains(&response.status)
-            && response.header(navree_native::KEEP_HEADER) == Some("1");
+            && response.header(navree_native::KEEP_HEADER) == Some("1")
+            // The answer's own `cache-control`, when the client passed it, is
+            // the server's last word.
+            && response
+                .header("cache-control")
+                .is_none_or(|value| !value.to_ascii_lowercase().contains("no-store"));
         if !kept {
             response
                 .headers
