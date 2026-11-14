@@ -168,10 +168,16 @@ mod tests {
         let text = help_text(&own);
         assert!(!text.contains("plugins [--json]"), "{text}");
         assert!(
-            text.lines()
-                .any(|l| l.trim_start().starts_with("plugins ") && l.ends_with("The app's own list")),
+            text.lines().any(
+                |l| l.trim_start().starts_with("plugins ") && l.ends_with("The app's own list")
+            ),
             "{text}"
         );
-        assert!(help_text(&GraphReport { modules: Vec::new() }).contains("plugins [--json]"));
+        assert!(
+            help_text(&GraphReport {
+                modules: Vec::new()
+            })
+            .contains("plugins [--json]")
+        );
     }
 }

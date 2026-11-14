@@ -28,10 +28,9 @@ impl Drop for AppFolder {
 fn in_app_folder(name: &str, f: impl FnOnce(&Path)) {
     // A test that failed while holding the lock poisoned it; the next one takes it over.
     let _lock = LOCK.lock().unwrap_or_else(PoisonError::into_inner);
-    let folder = AppFolder(std::env::temp_dir().join(format!(
-        "navree-publish-{name}-{}",
-        std::process::id()
-    )));
+    let folder = AppFolder(
+        std::env::temp_dir().join(format!("navree-publish-{name}-{}", std::process::id())),
+    );
     let _ = fs::remove_dir_all(&folder.0);
     fs::create_dir_all(&folder.0).expect("an app folder");
     std::env::set_current_dir(&folder.0).expect("the app folder as the current directory");
@@ -157,7 +156,13 @@ fn plugin_publish_writes_only_inside_the_three_folders() {
         );
         publish(
             Announcements,
-            &["plugin:publish", "navree-kernel", "--tag", "files", "--force"],
+            &[
+                "plugin:publish",
+                "navree-kernel",
+                "--tag",
+                "files",
+                "--force",
+            ],
         )
         .expect("the crate name works as well as the namespace");
     });
@@ -181,7 +186,13 @@ fn plugin_publish_keeps_an_existing_file_without_force() {
         );
         publish(
             Announcements,
-            &["plugin:publish", "announcements", "--tag", "views", "--force"],
+            &[
+                "plugin:publish",
+                "announcements",
+                "--tag",
+                "views",
+                "--force",
+            ],
         )
         .expect("replaced");
         assert_eq!(fs::read_to_string(&list).unwrap(), "<ul></ul>");
@@ -221,7 +232,13 @@ fn plugin_publish_replaces_by_rename_and_never_writes_through_a_hard_link() {
         fs::hard_link(&outside, &list).unwrap();
         publish(
             Announcements,
-            &["plugin:publish", "announcements", "--tag", "views", "--force"],
+            &[
+                "plugin:publish",
+                "announcements",
+                "--tag",
+                "views",
+                "--force",
+            ],
         )
         .expect("replaced");
         assert_eq!(fs::read_to_string(&list).unwrap(), "<ul></ul>");
@@ -260,9 +277,7 @@ fn plugin_publish_refuses_a_destination_that_is_a_symbolic_link() {
             fs::read_to_string(&outside).unwrap(),
             "Ludhiana office notes"
         );
-        assert!(
-            !root.join("locales").exists() && !root.join("resources/announcements").exists()
-        );
+        assert!(!root.join("locales").exists() && !root.join("resources/announcements").exists());
 
         fs::remove_dir_all(&folder).unwrap();
         fs::create_dir(root.join("elsewhere")).unwrap();
@@ -292,8 +307,8 @@ fn plugin_publish_refuses_a_destination_folder_that_is_a_junction() {
             &root.join("resources/views/announcements"),
             &root.join("elsewhere"),
         );
-        let error = publish(Announcements, &["plugin:publish", "announcements"])
-            .expect_err("a junction");
+        let error =
+            publish(Announcements, &["plugin:publish", "announcements"]).expect_err("a junction");
         assert_eq!(
             error,
             "plugin:publish: resources/views/announcements is a symbolic link or inside one; nothing was written"
@@ -332,8 +347,8 @@ fn plugin_publish_refuses_a_destination_folder_that_is_a_file() {
     in_app_folder("folder-is-a-file", |root| {
         fs::create_dir(root.join("resources")).unwrap();
         fs::write(root.join("resources/views"), "a file").unwrap();
-        let error = publish(Announcements, &["plugin:publish", "announcements"])
-            .expect_err("a file");
+        let error =
+            publish(Announcements, &["plugin:publish", "announcements"]).expect_err("a file");
         assert_eq!(
             error,
             "plugin:publish: resources/views is a file where a folder is needed; nothing was written"

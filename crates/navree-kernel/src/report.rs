@@ -159,11 +159,7 @@ impl PluginsReport {
                     None => out.push_str("null"),
                 }
             }
-            let _ = write!(
-                out,
-                ",\"first_party\":{},\"modules\":[",
-                plugin.first_party
-            );
+            let _ = write!(out, ",\"first_party\":{},\"modules\":[", plugin.first_party);
             for (j, module) in plugin.modules.iter().enumerate() {
                 if j > 0 {
                     out.push(',');

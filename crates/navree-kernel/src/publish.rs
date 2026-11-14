@@ -265,10 +265,8 @@ fn write_file(root: &Path, path: &str, bytes: &[u8]) -> Result<(), PublishRefuse
     }
     let destination = root.join(path);
     let name = path.rsplit_once('/').map_or(path, |(_, name)| name);
-    let temporary = destination.with_file_name(format!(
-        ".{name}.navree-publish-{}.tmp",
-        std::process::id()
-    ));
+    let temporary =
+        destination.with_file_name(format!(".{name}.navree-publish-{}.tmp", std::process::id()));
     // `create_new` never opens a file or a link that is already there.
     let mut file = OpenOptions::new()
         .write(true)
@@ -365,7 +363,12 @@ pub(crate) fn run(graph: &Graph, args: &[String], root: &Path) -> Result<Publish
         .plugins
         .iter()
         .find(|plugin| plugin.info.namespace == word)
-        .or_else(|| report.plugins.iter().find(|plugin| plugin.info.name == word));
+        .or_else(|| {
+            report
+                .plugins
+                .iter()
+                .find(|plugin| plugin.info.name == word)
+        });
     let Some(found) = found else {
         let namespaces: Vec<&str> = report
             .plugins
@@ -408,7 +411,9 @@ pub(crate) fn run(graph: &Graph, args: &[String], root: &Path) -> Result<Publish
     if files.is_empty() {
         match tag {
             Some(asked) if asked != "config" => {
-                lines.push(format!("{asked}: plugin `{namespace}` has nothing to publish"));
+                lines.push(format!(
+                    "{asked}: plugin `{namespace}` has nothing to publish"
+                ));
             }
             // Nothing at all will be published; with a `config:publish`
             // command, its own lines say whether a section was written.
@@ -426,19 +431,14 @@ pub(crate) fn run(graph: &Graph, args: &[String], root: &Path) -> Result<Publish
             .collect();
         let published = publish_files(root, &listed, force, dry_run)
             .map_err(|refused| format!("plugin:publish: {refused}"))?;
-        lines.extend(
-            published
-                .iter()
-                .map(|(path, outcome)| outcome.line(path)),
-        );
+        lines.extend(published.iter().map(|(path, outcome)| outcome.line(path)));
     }
 
     let mut config_args = None;
     if config {
         if !has_config {
-            lines.push(
-                "config: the app has no ConfigModule, so no section is published".to_owned(),
-            );
+            lines
+                .push("config: the app has no ConfigModule, so no section is published".to_owned());
         } else if dry_run {
             lines.push(format!(
                 "config: would run config:publish --plugin {namespace}"
@@ -471,10 +471,8 @@ mod tests {
 
     impl TempFolder {
         fn new(name: &str) -> TempFolder {
-            let path = std::env::temp_dir().join(format!(
-                "navree-kernel-{name}-{}",
-                std::process::id()
-            ));
+            let path =
+                std::env::temp_dir().join(format!("navree-kernel-{name}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&path);
             fs::create_dir_all(&path).expect("a temporary folder");
             TempFolder(path)
@@ -672,7 +670,10 @@ mod tests {
         );
         assert!(!root.0.join("resources/announcements/print.css").exists());
         let out = publish_files(&root.0, &files, true, false).expect("forced");
-        assert_eq!(lines(&out)[0], "resources/announcements/banner.css: written");
+        assert_eq!(
+            lines(&out)[0],
+            "resources/announcements/banner.css: written"
+        );
         assert_eq!(fs::read_to_string(&banner).unwrap(), "body{}");
     }
 
@@ -691,8 +692,7 @@ mod tests {
         assert!(!root.0.join("resources").exists(), "nothing was written");
         fs::create_dir_all(root.0.join("resources")).unwrap();
         fs::write(root.0.join("resources/a"), "a file").unwrap();
-        let refused =
-            publish_files(&root.0, &unsafe_late[..1], false, false).expect_err("refused");
+        let refused = publish_files(&root.0, &unsafe_late[..1], false, false).expect_err("refused");
         assert_eq!(
             refused.to_string(),
             "resources/a is a file where a folder is needed; nothing was written"
@@ -742,7 +742,11 @@ mod tests {
             false,
         )
         .expect("an app inside a linked folder publishes");
-        assert!(root.0.join("real/resources/announcements/banner.css").is_file());
+        assert!(
+            root.0
+                .join("real/resources/announcements/banner.css")
+                .is_file()
+        );
     }
 
     /// A plugin with the namespace `announcements` and one views file,
@@ -772,11 +776,9 @@ mod tests {
     impl crate::Module for ConfigCommand {
         fn register(&self, m: &mut crate::ModuleBuilder) {
             m.command(
-                crate::CommandSpec::new(
-                    "config:publish",
-                    "Write a section's file",
-                    |_, _| async { Ok(()) },
-                )
+                crate::CommandSpec::new("config:publish", "Write a section's file", |_, _| async {
+                    Ok(())
+                })
                 .offline(),
             );
         }
@@ -796,11 +798,18 @@ mod tests {
         let done = run(&notices, &args(&["announcements"]), &root.0).expect("published");
         assert_eq!(
             done.lines,
-            ["resources/views/announcements/list.html: written", no_config]
+            [
+                "resources/views/announcements/list.html: written",
+                no_config
+            ]
         );
         assert_eq!((done.config_args, done.dry_run), (None, false));
-        let done = run(&notices, &args(&["announcements", "--tag", "files"]), &root.0)
-            .expect("nothing");
+        let done = run(
+            &notices,
+            &args(&["announcements", "--tag", "files"]),
+            &root.0,
+        )
+        .expect("nothing");
         assert_eq!(
             done.lines,
             ["files: plugin `announcements` has nothing to publish"]
@@ -840,8 +849,8 @@ mod tests {
             done.config_args,
             Some(args(&["--plugin", "announcements", "--force"]))
         );
-        let done = run(&configured, &args(&["announcements", "--dry-run"]), &root.0)
-            .expect("dry run");
+        let done =
+            run(&configured, &args(&["announcements", "--dry-run"]), &root.0).expect("dry run");
         assert_eq!(
             done.lines,
             ["config: would run config:publish --plugin announcements"]
