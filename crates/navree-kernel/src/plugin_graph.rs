@@ -1,6 +1,7 @@
-//! The boot checks of plugins, over the module graph.
+//! The boot checks of plugins, and the plugins report, over the module graph.
 
 use std::any::TypeId;
+use std::collections::BTreeMap;
 
 use crate::KernelError;
 use crate::graph::{Graph, ModuleNode};
@@ -9,6 +10,7 @@ use crate::plugin::{
     is_first_party, is_namespace, names_crate,
 };
 use crate::publish::{first_case_collision, is_locale_path, is_safe_relative_path};
+use crate::report::{PluginModuleReport, PluginReport, PluginsReport};
 
 /// A module that names a plugin and passed the checks of its own plugin info.
 struct Member<'g> {
@@ -215,6 +217,38 @@ impl Graph {
 
         self.first_party.extend(first_party);
     }
+
+    /// Every plugin of the graph and what its modules add: modules in
+    /// dependency order, grouped by plugin name, a plugin's info taken from
+    /// its first module; plugins by name. Nothing is built.
+    pub(crate) fn plugins_report(&self) -> PluginsReport {
+        let mut plugins: Vec<PluginReport> = Vec::new();
+        for &m in &self.order {
+            let module = &self.modules[m];
+            let Some(info) = &module.plugin else {
+                continue;
+            };
+            let report = PluginModuleReport {
+                id: module.id,
+                commands: module.commands.iter().map(|command| command.name).collect(),
+                contributions: contribution_counts(module),
+                publishable: publishable_counts(module),
+            };
+            match plugins
+                .iter_mut()
+                .find(|plugin| plugin.info.name == info.name)
+            {
+                Some(plugin) => plugin.modules.push(report),
+                None => plugins.push(PluginReport {
+                    info: info.clone(),
+                    first_party: self.first_party.contains(info.name),
+                    modules: vec![report],
+                }),
+            }
+        }
+        plugins.sort_by_key(|plugin| plugin.info.name);
+        PluginsReport { plugins }
+    }
 }
 
 /// The files `module` ships to publish, in registration order.
@@ -224,4 +258,29 @@ fn shipped(module: &ModuleNode) -> impl Iterator<Item = &Publishable> {
         .iter()
         .filter(|contribution| contribution.type_id == TypeId::of::<Publishable>())
         .filter_map(|contribution| contribution.value.downcast_ref::<Publishable>())
+}
+
+/// How many values of each type `module` contributes, by type name, in name
+/// order.
+fn contribution_counts(module: &ModuleNode) -> Vec<(&'static str, usize)> {
+    let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
+    for contribution in &module.contributions {
+        *counts.entry(contribution.type_name).or_default() += 1;
+    }
+    counts.into_iter().collect()
+}
+
+/// How many files `module` ships per tag, in [`PublishTag::ALL`] order; a tag
+/// without files is left out.
+fn publishable_counts(module: &ModuleNode) -> Vec<(PublishTag, usize)> {
+    PublishTag::ALL
+        .iter()
+        .filter_map(|&tag| {
+            let count: usize = shipped(module)
+                .filter(|files| files.tag() == tag)
+                .map(|files| files.files().count())
+                .sum();
+            (count > 0).then_some((tag, count))
+        })
+        .collect()
 }
