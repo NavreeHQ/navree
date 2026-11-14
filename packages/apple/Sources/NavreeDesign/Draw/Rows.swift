@@ -1,5 +1,8 @@
 import NavreeProtocol
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 /// One row of a screen's list.
 struct RowView: View {
@@ -286,7 +289,7 @@ struct RowContent: View {
         let bar = Self.barWords(row)
         content(bar: bar)
             .accessibilityElement(children: .combine)
-            .modifier(RowOffersActions(offers: offers, opening: $opening))
+            .modifier(RowOffersActions(offers: offers, opening: $opening, menu: row.menu))
             .sheet(item: $opening) { opening in
                 FormSheet(title: opening.label, subtitle: row.title, form: opening.form, confirm: opening.submit)
             }
@@ -327,7 +330,7 @@ struct RowContent: View {
                     Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                ForEach(Array(RowRules.detailLines(RowRules.withoutTitleButton(row.detail, title: row.title)).enumerated()), id: \.offset) { _, line in
+                ForEach(Array(RowRules.detailLines(RowRules.drawnDetail(row.detail, title: row.title, bar: .current)).enumerated()), id: \.offset) { _, line in
                     if line.count > 1 {
                         // States one after another share a line, as Mail's flags do.
                         Flow(spacing: 12, lineSpacing: 4) {
@@ -338,6 +341,21 @@ struct RowContent: View {
                         NodeView(part).font(.footnote).foregroundStyle(.secondary)
                             .environment(\.navreeInRowDetail, true)
                     }
+                }
+                // On a Mac, the row's forms in disclosures as its commands: the
+                // Mac's borderless button in the accent ("Move…"), opening the
+                // form in a sheet, as the row's context menu does too.
+                let openings = SpeechRules.offers(row).openings
+                if RowRules.rowFormDisclosure(bar: .current) == .command, !openings.isEmpty {
+                    HStack(spacing: 12) {
+                        ForEach(Array(openings.enumerated()), id: \.offset) { _, offer in
+                            Button(offer.label + "…") { opening = offer }
+                                .buttonStyle(.borderless)
+                                .modifier(LowProminenceLook())
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .font(.subheadline)
                 }
             }
             if let trailing = row.trailing, !typeSize.isAccessibilitySize {
@@ -588,6 +606,8 @@ extension EnvironmentValues {
 struct RowOffersActions: ViewModifier {
     let offers: SpeechRules.RowOffers
     @Binding var opening: SpeechRules.RowOffers.Opening?
+    /// The row's own menu, which a context menu of the row's commands holds too.
+    var menu: [Navree.Node] = []
     @Environment(\.navree) private var context
 
     func body(content: Content) -> some View {
@@ -598,9 +618,46 @@ struct RowOffersActions: ViewModifier {
                 }
             }
             .modifier(DefaultAction(button: offers.titleButton, form: offers.titleForm))
+            .modifier(CommandsMenu(offers: offers, opening: $opening, menu: menu))
+    }
+
+    /// On a Mac, the row's forms in disclosures as commands of its context
+    /// menu ("Move…"), after the row's own menu.
+    struct CommandsMenu: ViewModifier {
+        let offers: SpeechRules.RowOffers
+        @Binding var opening: SpeechRules.RowOffers.Opening?
+        let menu: [Navree.Node]
+
+        func body(content: Content) -> some View {
+            if RowRules.rowFormDisclosure(bar: .current) == .command, !offers.openings.isEmpty {
+                content.contextMenu {
+                    if !menu.isEmpty {
+                        MenuItems(items: menu)
+                        Divider()
+                    }
+                    ForEach(Array(offers.openings.enumerated()), id: \.offset) { _, offer in
+                        Button(offer.label + "…") { opening = offer }
+                    }
+                }
+            } else {
+                content
+            }
+        }
     }
 
     struct DefaultAction: ViewModifier {
+        /// Whether the click being answered is a secondary one, which opens
+        /// the row's context menu rather than the row.
+        static var secondaryClick: Bool {
+            #if os(macOS)
+            let event = NSApp.currentEvent
+            return event?.type == .rightMouseDown || event?.type == .rightMouseUp
+                || event?.modifierFlags.contains(.control) == true
+            #else
+            false
+            #endif
+        }
+
         let button: Navree.Button?
         let form: Navree.Form?
         @Environment(\.navree) private var context
@@ -612,7 +669,7 @@ struct RowOffersActions: ViewModifier {
                 let open = { context.send(.act(action, Place(form: form.map(FormRef.init)))) }
                 content
                     .contentShape(Rectangle())
-                    .onTapGesture { open() }
+                    .onTapGesture { if !Self.secondaryClick { open() } }
                     .accessibilityAction { open() }
             } else {
                 content
