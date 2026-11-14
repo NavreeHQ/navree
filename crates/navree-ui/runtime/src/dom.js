@@ -47,6 +47,17 @@ export const cookie = (name) => {
   }
   return "";
 };
+/**
+ * Who is signed in, as far as a script can tell: the session's token cookie, as a short hash so the
+ * token itself is never kept. No token, no session: "". What the browser keeps for a person is kept under it.
+ */
+export const who = () => {
+  let token = "";
+  for (const part of cookies().split("; ")) if (part.startsWith("XSRF-TOKEN=")) token = part.slice(11);
+  let hash = 5381;
+  for (let i = 0; i < token.length; i++) hash = ((hash * 33) ^ token.charCodeAt(i)) >>> 0;
+  return token ? hash.toString(36) : "";
+};
 /** @param {string} cookie */
 export const setCookie = (cookie) => sCookie?.call(document, cookie);
 /** @returns {boolean} */

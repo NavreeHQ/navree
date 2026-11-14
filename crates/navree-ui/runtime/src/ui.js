@@ -3,7 +3,7 @@
 // A toast lives in a CSS animation (`ui-toast-life`, as long as its `data-duration`)
 // and ends on `animationend`; pausing under the pointer or focus is
 // `animation-play-state`, so there is no timer to lose and nothing that can stick.
-import { active, attr, body, byId, closest, cookies, every, has, hidden, holds, keeping, make, on, one, persistent, root, set } from "./dom.js";
+import { active, attr, body, byId, closest, every, has, hidden, holds, keeping, make, on, one, persistent, root, set, who } from "./dom.js";
 
 /** @param {Element} el */
 export function openTarget(el) {
@@ -53,18 +53,6 @@ let returnTo = null;
 /** The user the toasts on show were raised for: a short hash of the session's token. @type {string | null} */
 let user = null;
 let serial = 0;
-
-/**
- * Who is signed in, as far as a script can tell: the session's token cookie, as a
- * short hash so the token itself is never kept. No token, no session: nothing to tell apart.
- */
-function who() {
-  let token = "";
-  for (const part of cookies().split("; ")) if (part.startsWith("XSRF-TOKEN=")) token = part.slice(11);
-  let hash = 5381;
-  for (let i = 0; i < token.length; i++) hash = ((hash * 33) ^ token.charCodeAt(i)) >>> 0;
-  return token ? hash.toString(36) : "";
-}
 
 /** When each toast was placed, to tell what came before a write from what the write's answer raised. @type {WeakMap<Element, number>} */
 const placedAt = new WeakMap();
