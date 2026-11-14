@@ -4653,6 +4653,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tracing",
+ "tracing-subscriber",
  "unicode-bidi",
  "uuid",
  "zip",

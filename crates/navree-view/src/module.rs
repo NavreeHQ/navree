@@ -4,7 +4,9 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use navree_config::{Config, ModuleBuilderConfigExt};
-use navree_kernel::__private::{imports, is_app_module, is_community_plugin, is_safe_relative_path};
+use navree_kernel::__private::{
+    imports, is_app_module, is_community_plugin, is_safe_relative_path,
+};
 use navree_kernel::{
     AppContext, BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ModuleId, ModuleInfo,
     ProviderKey, Resolver,
@@ -454,21 +456,14 @@ fn stem_errors(
     app_names: &[String],
     files: &[String],
 ) -> Vec<String> {
-    let app: BTreeSet<&str> = app_names
-        .iter()
-        .chain(files)
-        .map(String::as_str)
-        .collect();
+    let app: BTreeSet<&str> = app_names.iter().chain(files).map(String::as_str).collect();
     let mut errors = Vec::new();
     for template in plugin_names {
         if app.contains(template.name.as_str()) {
             continue;
         }
         let stem = stem_of(&template.name);
-        let other = app
-            .iter()
-            .copied()
-            .find(|other| stem_of(other) == stem);
+        let other = app.iter().copied().find(|other| stem_of(other) == stem);
         if let Some(other) = other {
             errors.push(format!(
                 "plugin `{}`: its template `{}` stands beside the app's `{other}`, and a lookup of `{stem}` or a mail of that name would take the plugin's; put `{}` in a template folder too (plugin:publish {} --tag views copies it) or rename the app's `{other}`",
