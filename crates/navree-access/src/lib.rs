@@ -36,6 +36,7 @@ pub mod engine;
 pub mod entity;
 
 mod authorizer;
+mod catalog;
 mod commands;
 mod context;
 mod controller;
