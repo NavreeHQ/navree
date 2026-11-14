@@ -1,5 +1,5 @@
 {
-  "about": "A session belongs to a host. An answer from another origin the app allows (a tenant's subdomain, a payment site) is not compared with the person the shell named, and is never kept on the device: it neither empties what is kept nor asks for the shell again.",
+  "about": "A session belongs to a host, though a cookie may be shared across subdomains. An answer from another origin the app allows (a tenant's subdomain, a payment site) is never kept on the device. When it names nobody it says nothing of the person the shell named: it neither empties what is kept nor asks for the shell again. When it names a person, it is compared with the one the shell named, as an answer of the app's own origin is.",
   "config": {"also":["https://*.shop.example"],"cache":{"persist":true}},
   "steps": [
     {
@@ -83,6 +83,63 @@
         ],
         "effects": [
           {"t":"stream_open","stream":2,"url":"https://patiala.shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "Another page of Patiala's.",
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"https://patiala.shop.example/y"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://patiala.shop.example/y","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":2}
+        ]
+      }
+    },
+    {
+      "note": "Patiala's answer names the person the shell named: nothing changes.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":3,"url":"https://patiala.shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "And another.",
+      "send": {"t":"act","screen":4,"action":{"t":"navigate","href":"https://patiala.shop.example/z"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":5}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://patiala.shop.example/z","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":3}
+        ]
+      }
+    },
+    {
+      "note": "Patiala's answer names another person: the session changed. What was kept is emptied, the shell is asked again at once, and that is said.",
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ha02"]]},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":5}
+        ],
+        "effects": [
+          {"t":"cache_clear"},
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"report","what":"session","detail":"an answer was made for another person than the shell named: what was kept was emptied, and the shell is asked again"},
+          {"t":"stream_open","stream":4,"url":"https://patiala.shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
         ]
       }
     }
