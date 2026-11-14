@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use chrono::{NaiveDate, NaiveTime};
-use http::header::{ALLOW, CONTENT_TYPE, HOST, ORIGIN};
+use http::header::{ALLOW, CONTENT_TYPE, COOKIE, ORIGIN};
 use http::request::Parts;
 use http::{HeaderValue, Method, StatusCode};
 use navree_http::body::{BodyLimit, read_body};
@@ -2621,27 +2621,29 @@ pub(crate) fn encode_into(out: &mut String, text: &str) {
 
 /// Whether the browser says this request came from this site. Browsers state it in
 /// `Sec-Fetch-Site`, which no page can set, or in `Origin` when they predate that or
-/// the page isn't on HTTPS. A client that sends neither (curl, a test) isn't a browser
-/// acting for a page. A sibling subdomain is another site here: it can set cookies,
-/// but it shouldn't be able to post.
+/// the page isn't on HTTPS: the `Origin` must name this host, and the scheme the request
+/// itself carries when it carries one (HTTP/2 and HTTP/3 do, an HTTP/1.1 request doesn't).
+/// A client that sends neither header (curl, a test) isn't a browser acting for a page and
+/// has no session to ride on, so it passes without a cookie; with one it is refused, as
+/// the session layer refuses it on a route that checks the origin alone. A sibling
+/// subdomain is another site here: it can set cookies, but it shouldn't be able to post.
 fn from_this_site(parts: &Parts) -> bool {
     if let Some(site) = parts.headers.get("sec-fetch-site") {
         return matches!(site.as_bytes(), b"same-origin" | b"none");
     }
     let Some(origin) = parts.headers.get(ORIGIN) else {
-        return true;
+        return !parts.headers.contains_key(COOKIE);
     };
-    let host = parts
-        .headers
-        .get(HOST)
-        .and_then(|host| host.to_str().ok())
-        .or_else(|| parts.uri.authority().map(http::uri::Authority::as_str));
-    let authority = origin
-        .to_str()
-        .ok()
-        .and_then(|origin| origin.split_once("://"))
-        .map(|(_, authority)| authority);
-    matches!((host, authority), (Some(host), Some(authority)) if host.eq_ignore_ascii_case(authority))
+    let Ok(origin) = origin.to_str() else {
+        return false;
+    };
+    if !navree_http::csrf::origin_is_host(origin, &parts.headers, &parts.uri) {
+        return false;
+    }
+    match (parts.uri.scheme_str(), origin.trim().split_once("://")) {
+        (Some(own), Some((scheme, _))) => own.eq_ignore_ascii_case(scheme),
+        _ => true,
+    }
 }
 
 /// Whether the request's `Origin` is a front end the app trusts to write from
@@ -2708,9 +2710,10 @@ async fn refusal_of(parts: &Parts, multipart: bool) -> Option<StatusCode> {
 ///
 /// It has its own answer to cross-site request forgery, with or without a session:
 /// a body from another site is refused with 403 unless its `Origin` is in
-/// `http.cors.allowed_origins`, a body that isn't a urlencoded form (or, for a form with a
-/// file field, a multipart one) with 415, and a `GET` or `HEAD` with 405, so no link or
-/// prefetch can fill one. Behind navree-session the token check also runs.
+/// `http.cors.allowed_origins`, a body from a request that sends neither `Sec-Fetch-Site`
+/// nor `Origin` but carries a cookie with 403 too, a body that isn't a urlencoded form (or,
+/// for a form with a file field, a multipart one) with 415, and a `GET` or `HEAD` with 405,
+/// so no link or prefetch can fill one. Behind navree-session the token check also runs.
 ///
 /// It checks a post as the API checks a body: the messages are the app's (its
 /// `validation.messages`, and its translator, so a reader gets them in their language),
@@ -3124,6 +3127,73 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The head of a `POST` to `uri` with `headers`.
+    fn request_head(uri: &str, headers: &[(&str, &str)]) -> Parts {
+        let mut request = http::Request::builder().method(Method::POST).uri(uri);
+        for (name, value) in headers {
+            request = request.header(*name, *value);
+        }
+        request.body(()).unwrap().into_parts().0
+    }
+
+    #[test]
+    fn a_request_with_neither_origin_header_passes_only_without_a_cookie() {
+        assert!(from_this_site(&request_head("/store", &[])));
+        assert!(!from_this_site(&request_head(
+            "/store",
+            &[("cookie", "sid=abc")]
+        )));
+        // The browser's own word comes first, with or without a cookie.
+        for site in ["same-origin", "none"] {
+            let head = request_head("/store", &[("cookie", "sid=abc"), ("sec-fetch-site", site)]);
+            assert!(from_this_site(&head), "{site}");
+        }
+        for site in ["same-site", "cross-site"] {
+            let head = request_head("/store", &[("sec-fetch-site", site)]);
+            assert!(!from_this_site(&head), "{site}");
+        }
+    }
+
+    #[test]
+    fn an_origin_names_this_host_and_the_scheme_the_request_carries() {
+        let host = ("host", "app.example");
+        // An HTTP/1.1 request carries no scheme, so the host is what is compared.
+        for origin in ["https://app.example", "http://app.example"] {
+            assert!(from_this_site(&request_head("/s", &[host, ("origin", origin)])));
+        }
+        for origin in [
+            "https://evil.example",
+            "https://app.example.evil.example",
+            "https://app.example:8443",
+            "null",
+            "app.example",
+        ] {
+            assert!(
+                !from_this_site(&request_head("/s", &[host, ("origin", origin)])),
+                "{origin}"
+            );
+        }
+        // An HTTP/2 request carries its scheme, and the page's origin is on the same one.
+        let over_https = "https://app.example/s";
+        assert!(from_this_site(&request_head(
+            over_https,
+            &[("origin", "https://app.example")]
+        )));
+        assert!(!from_this_site(&request_head(
+            over_https,
+            &[("origin", "http://app.example")]
+        )));
+        let over_http = "http://app.example/s";
+        assert!(from_this_site(&request_head(
+            over_http,
+            &[("origin", "http://app.example")]
+        )));
+        assert!(!from_this_site(&request_head(
+            over_http,
+            &[("origin", "https://app.example")]
+        )));
+    }
 
     #[test]
     fn money_reads_and_writes() {

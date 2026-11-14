@@ -312,8 +312,10 @@ fn cookie(value: &str, secure: bool) -> HeaderValue {
 }
 
 /// Whether a post comes from this site: the browser's `Sec-Fetch-Site`, else the
-/// `Origin` against the `Host`. A client that sends neither (an old browser, a
-/// script) is let through: what it changes is its own cookie.
+/// `Origin` against the `Host`. A client that sends neither (a script) is let through when
+/// it carries no cookie but the appearance cookie, since it has no session to ride on and
+/// what it changes is its own cookie; one that carries any other cookie is refused, as
+/// the session layer refuses it on a route that checks the origin alone.
 fn same_site(headers: &HeaderMap) -> bool {
     if let Some(site) = headers.get("sec-fetch-site") {
         return matches!(site.to_str(), Ok("same-origin" | "none"));
@@ -323,8 +325,23 @@ fn same_site(headers: &HeaderMap) -> bool {
         Some(origin) => origin.to_str().is_ok_and(|origin| {
             navree_http::csrf::origin_is_host(origin, headers, &http::Uri::default())
         }),
-        None => true,
+        None => !carries_other_cookies(headers),
     }
+}
+
+/// Whether the request carries a cookie other than the appearance cookie, or a `Cookie`
+/// header that cannot be read.
+fn carries_other_cookies(headers: &HeaderMap) -> bool {
+    headers
+        .get_all(COOKIE)
+        .iter()
+        .any(|value| match value.to_str() {
+            Ok(text) => text.split(';').any(|pair| {
+                let name = pair.split_once('=').map_or(pair, |(name, _)| name).trim();
+                !name.is_empty() && name != THEME_COOKIE
+            }),
+            Err(_) => true,
+        })
 }
 
 /// Whether the request came over HTTPS: the page's `Origin`, else what a proxy in
@@ -605,6 +622,37 @@ mod tests {
                 "{body}"
             );
         }
+    }
+
+    #[test]
+    fn a_post_with_a_session_cookie_and_no_word_of_where_it_came_from_is_refused() {
+        let post = |cookie: Option<&'static str>, site: Option<&'static str>| {
+            let mut headers = HeaderMap::new();
+            if let Some(cookie) = cookie {
+                headers.insert(COOKIE, HeaderValue::from_static(cookie));
+            }
+            if let Some(site) = site {
+                headers.insert("sec-fetch-site", HeaderValue::from_static(site));
+            }
+            respond_setting(&headers, b"theme=ocean").status()
+        };
+        // Another cookie is a session this request could ride on.
+        for cookie in ["sid=abc", "navree_ui_theme=dark.rose; sid=abc", "sid=abc; x"] {
+            assert_eq!(post(Some(cookie), None), StatusCode::FORBIDDEN, "{cookie}");
+        }
+        // No cookie, or the appearance cookie alone, is a script with nothing to ride on.
+        for cookie in [None, Some("navree_ui_theme=dark.rose"), Some("")] {
+            assert_eq!(post(cookie, None), StatusCode::SEE_OTHER, "{cookie:?}");
+        }
+        // The browser's own word is taken, cookies or not.
+        assert_eq!(
+            post(Some("sid=abc"), Some("same-origin")),
+            StatusCode::SEE_OTHER
+        );
+        assert_eq!(
+            post(Some("sid=abc"), Some("cross-site")),
+            StatusCode::FORBIDDEN
+        );
     }
 
     #[test]

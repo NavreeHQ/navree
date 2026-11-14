@@ -454,6 +454,37 @@ async fn a_submit_takes_this_site_and_clients_that_are_not_browsers() {
 }
 
 #[tokio::test]
+async fn a_submit_with_a_cookie_and_no_word_from_a_browser_is_refused() {
+    let app = app().await;
+    let body = "password=longenough&email=a";
+    // A request that carries a session and says nothing of where it came from is not taken:
+    // a client that sends no cookie has no session to ride on, this one has.
+    for cookie in ["sid=abc", "theme=dark; sid=abc"] {
+        let response = app
+            .client()
+            .post("/store")
+            .header("content-type", FORM)
+            .without_header("origin")
+            .header("cookie", cookie)
+            .body(body)
+            .send()
+            .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{cookie}");
+    }
+    // With the browser's word that it came from this site, it is.
+    let same = app
+        .client()
+        .post("/store")
+        .header("content-type", FORM)
+        .header("cookie", "sid=abc")
+        .header("sec-fetch-site", "same-origin")
+        .body(body)
+        .send()
+        .await;
+    assert_eq!(same.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn a_submit_takes_a_front_end_the_app_trusts() {
     let app = TestApp::builder()
         .config("http.per_ip_rate_limit", serde_json::Value::Null)
