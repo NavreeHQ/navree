@@ -1802,3 +1802,34 @@ fn a_first_party_plugin_keeps_its_reserved_namespace_and_a_community_plugin_does
         "plugin `navree-plugin-time` uses the namespace `time`, which the framework keeps for itself; set another with plugin_info!(namespace = \"..\")"
     );
 }
+
+/// A plugin embeds its templates and its translations with the macros at the facade's root, and
+/// the traits and types that take them are in `navree::plugin`.
+#[test]
+fn a_plugin_ships_templates_and_translations_through_the_facade() {
+    use navree::plugin::prelude::*;
+    struct Announcements;
+    impl Module for Announcements {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(navree::plugin_info!(namespace = "announcements"))
+                .plugin_templates(navree::embed_templates!("tests/fixtures/plugin-views"))
+                .locales(navree::embed_locales!("tests/fixtures/plugin-locales"));
+        }
+    }
+    assert!(same::<
+        navree::plugin::EmbeddedLocales,
+        navree::contracts::EmbeddedLocales,
+    >());
+    assert!(same::<navree::plugin::TemplateDir, navree::view::TemplateDir>());
+    let report = Navree::app()
+        .module(Announcements)
+        .plugin_report()
+        .expect("valid");
+    assert_eq!(
+        report.plugins[0].modules[0].publishable,
+        [
+            (navree::plugin::PublishTag::Views, 1),
+            (navree::plugin::PublishTag::Locales, 1)
+        ]
+    );
+}
