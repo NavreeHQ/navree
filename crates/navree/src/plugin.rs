@@ -23,8 +23,15 @@
 pub use navree_kernel::{
     PluginInfo, PluginModuleReport, PluginReport, PluginsReport, PublishTag, Publishable,
 };
+pub use navree_contracts::EmbeddedLocales;
+#[cfg(feature = "view")]
+pub use navree_view::TemplateDir;
 
 /// The `ModuleBuilder` extension traits of plugins, imported as `_`. They are
 /// not in `navree::prelude`, so a glob import of it never makes an app's own
 /// method of the same name ambiguous.
-pub mod prelude {}
+pub mod prelude {
+    pub use navree_contracts::ModuleBuilderLocalesExt as _;
+    #[cfg(feature = "view")]
+    pub use navree_view::ModuleBuilderPluginTemplatesExt as _;
+}
