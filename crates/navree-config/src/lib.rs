@@ -97,6 +97,7 @@ mod layers;
 mod lists;
 mod module;
 mod origin;
+mod plugin_sections;
 mod publish;
 mod redact;
 mod reference;
