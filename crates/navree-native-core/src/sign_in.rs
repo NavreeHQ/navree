@@ -342,16 +342,32 @@ impl Core {
             }
             return;
         };
+        // A return that says something went wrong is this sign-in's only when
+        // it carries this sign-in's state: compared first, then acted on. One
+        // that does not changes nothing, and the sign-in stays open.
+        if let Some(url) = url
+            && let Some(error) = query_value(url, "error")
+        {
+            let returned = query_value(url, "state").unwrap_or_default();
+            if !same(&returned, &state) {
+                return self.report(
+                    "sign_in",
+                    "a sign-in's return said it went wrong with a state that is not this sign-in's, and was not used"
+                        .to_owned(),
+                );
+            }
+            // The person said no: that is the sheet closed, and nothing failed.
+            if error == "access_denied" {
+                self.inner.hand_over = None;
+                return;
+            }
+        }
         // One return for one session, whatever it holds.
         self.inner.hand_over = None;
         // The person closed the sheet: nothing changed.
         let Some(url) = url else {
             return;
         };
-        // The person said no: that too is the sheet closed, and nothing failed.
-        if query_value(url, "error").as_deref() == Some("access_denied") {
-            return;
-        }
         let returned = query_value(url, "state").unwrap_or_default();
         if !same(&returned, &state) {
             self.notice(Notice::Failed, self.front());
