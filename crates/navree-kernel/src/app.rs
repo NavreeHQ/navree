@@ -165,7 +165,9 @@ impl AppBuilder {
     ///   file; an existing file is kept without `--force`, every path is
     ///   checked before the first write, and `--dry-run` writes nothing. The
     ///   `config` tag (and no `--tag`) runs the app's
-    ///   `config:publish --plugin <namespace>`, when the app has that command;
+    ///   `config:publish --plugin <namespace>`, when the app has that command,
+    ///   after the files are checked and before they are written, so a
+    ///   refusal from either leaves nothing written;
     /// - `<name> [args...]` boots the app, runs the registered command, then
     ///   shuts the app down gracefully; a command marked
     ///   [offline](CommandSpec::offline) skips the boot and the shutdown hooks;
@@ -232,15 +234,20 @@ impl AppBuilder {
                         .boot_and_run(graph, "plugin:publish".to_owned(), rest)
                         .await;
                 }
-                let done = publish::run(&graph, &rest, &std::env::current_dir()?)?;
-                for line in &done.lines {
-                    println!("{line}");
-                }
-                if let Some(args) = done.config_args {
+                let root = std::env::current_dir()?;
+                // Every file is checked first and the app's `config:publish`
+                // (which checks before it writes) runs next; the files are
+                // written last, so a refusal from either leaves nothing
+                // written.
+                let planned = publish::run(&graph, &rest, &root)?;
+                if let Some(args) = planned.config_args.clone() {
                     self.boot_and_run(graph, "config:publish".to_owned(), args)
                         .await?;
                 }
-                if done.dry_run {
+                for line in publish::write(&root, &planned)? {
+                    println!("{line}");
+                }
+                if planned.dry_run {
                     println!("Nothing was written (--dry-run).");
                 }
                 Ok(())

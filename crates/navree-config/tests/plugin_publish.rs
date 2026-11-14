@@ -10,7 +10,7 @@ use navree_config::{
     ConfigModule, ConfigRegistry, ConfigSection, ConfigSources, FieldSchema, FieldType,
     ModuleBuilderConfigExt, PublishOptions, SectionRegistration, SectionSchema, publish_section,
 };
-use navree_kernel::{Module, ModuleBuilder, Navree, plugin_info};
+use navree_kernel::{Module, ModuleBuilder, Navree, PublishTag, Publishable, plugin_info};
 use serde::Deserialize;
 
 /// Held by each test while it runs in its folder (the current directory is the process's).
@@ -98,15 +98,19 @@ struct CrmOptions {
     currency: String,
 }
 
-/// A plugin with the namespace `announcements` and two sections, `announcements` and
-/// `announcements.feed`.
+/// A plugin with the namespace `announcements`, two sections, `announcements` and
+/// `announcements.feed`, and one views file, `list.html`.
 struct AnnouncementsModule;
 
 impl Module for AnnouncementsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.plugin(plugin_info!(namespace = "announcements"))
             .config_section::<AnnouncementsOptions>()
-            .config_section::<FeedOptions>();
+            .config_section::<FeedOptions>()
+            .contribute(Publishable::new(PublishTag::Views).file(
+                "list.html",
+                "<ul><li>Fee for Ludhiana: ₹1,00,000</li></ul>".as_bytes(),
+            ));
     }
 }
 
@@ -164,6 +168,35 @@ fn plugin_publish_config_runs_config_publish_for_the_plugin() {
         assert_eq!(
             run(&["config:publish", "--plugin", "weather"]).expect_err("unknown"),
             "config:publish: no plugin has the namespace `weather`"
+        );
+    });
+}
+
+#[test]
+fn plugin_publish_writes_no_file_when_config_publish_refuses() {
+    in_app_folder(|root| {
+        // `config` is a file, so `config:publish --plugin` refuses before it writes; the
+        // plugin's views file was checked before it and is not written after it.
+        fs::write(root.join("config"), "").unwrap();
+        assert_eq!(
+            run(&["plugin:publish", "announcements"]).expect_err("refused"),
+            "config:publish: config is a file where a folder is needed; nothing was written"
+        );
+        assert_eq!(files_under(root), ["config"]);
+
+        fs::remove_file(root.join("config")).unwrap();
+        run(&["plugin:publish", "announcements"]).expect("published");
+        assert_eq!(
+            files_under(root),
+            [
+                "config",
+                "config/announcements.feed.toml",
+                "config/announcements.toml",
+                "resources",
+                "resources/views",
+                "resources/views/announcements",
+                "resources/views/announcements/list.html",
+            ]
         );
     });
 }
