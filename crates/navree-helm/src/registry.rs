@@ -8,6 +8,7 @@ use std::sync::Arc;
 use navree_kernel::{AppContext, BoxError, BoxFuture, Injectable, ModuleId};
 use navree_ui::html::LocalHref;
 
+use crate::core::community_plugin;
 use crate::field::{FieldKind, Related};
 use crate::handle::{ErasedResource, Handle};
 use crate::page::PageRegistration;
@@ -151,8 +152,10 @@ impl Registry {
             let PageRegistration { page, module } = (*contributed.value).clone();
             if page.template.is_none() {
                 return Err(format!(
-                    "Helm page `{}` has no template: add `.template(\"admin/{}\")`",
-                    page.slug, page.slug
+                    "Helm page `{}` has no template: add `.template(\"{}admin/{}\")`",
+                    page.slug,
+                    template_place(app, contributed.module.id),
+                    page.slug
                 )
                 .into());
             }
@@ -203,16 +206,20 @@ impl Registry {
             }
             let Some(named) = widget.template.as_deref() else {
                 return Err(format!(
-                    "Helm widget `{}` has no template: add .template(\"admin/widgets/{}\")",
-                    widget.key, widget.key
+                    "Helm widget `{}` has no template: add .template(\"{}admin/widgets/{}\")",
+                    widget.key,
+                    template_place(app, contributed.module.id),
+                    widget.key
                 )
                 .into());
             };
             // Only an HTML template escapes what it writes: a card renders nothing else.
             let Some(template) = html_template(named) else {
                 return Err(format!(
-                    "Helm widget `{}` names the template `{named}`, which is not HTML: name an .html template, such as .template(\"admin/widgets/{}\")",
-                    widget.key, widget.key
+                    "Helm widget `{}` names the template `{named}`, which is not HTML: name an .html template, such as .template(\"{}admin/widgets/{}\")",
+                    widget.key,
+                    template_place(app, contributed.module.id),
+                    widget.key
                 )
                 .into());
             };
@@ -320,4 +327,14 @@ impl Registry {
     pub(crate) fn widgets(&self) -> &[WidgetEntry] {
         &self.widgets
     }
+}
+
+/// Where the hints of the refusals above put a template of `module`: under its plugin's
+/// namespace (`announcements/`) for a module of a plugin the kernel does not find
+/// first-party, and nothing before `admin/` for any other module, as before. Asked only when
+/// the boot is refused.
+fn template_place(app: &AppContext, module: ModuleId) -> String {
+    community_plugin(&app.plugins().plugins, module)
+        .map(|plugin| format!("{}/", plugin.info.namespace))
+        .unwrap_or_default()
 }
