@@ -1,0 +1,12 @@
+{
+ "shell": "{",
+ "pages": [
+  "/orders"
+ ],
+ "owner": {
+  "person": [
+   "Ravneet Kaur",
+   "ravneet.kaur@example.com"
+  ]
+ }
+}
