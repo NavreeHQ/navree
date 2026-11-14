@@ -74,7 +74,7 @@ pub use resolver::Resolver;
 /// Items Navree's own crates and macros use; not public API.
 #[doc(hidden)]
 pub mod __private {
-    pub use crate::collide::{imports, is_community_plugin};
+    pub use crate::collide::{imports, is_app_module, is_community_plugin};
     pub use crate::plugin::{
         FIRST_PARTY, RESERVED_NAMESPACES, default_namespace, is_namespace, namespace_text,
     };

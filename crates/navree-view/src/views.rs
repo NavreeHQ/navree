@@ -39,9 +39,12 @@ use crate::{ViewError, ViewOptions, filters};
 /// imports when that template is another plugin's, and is then warned about.
 /// Replacing a template of the app or of the framework fails the boot while
 /// the plugin's version is the one rendered: it is not when a template folder
-/// holds a file of that name, or when a module that belongs to no plugin
-/// registers the name after the plugin's module. The replacement is then said
-/// at `info` and the boot goes on.
+/// holds a file of that name (letter for letter, with or without reloading), or
+/// when a module of the app registers the name after the plugin's module, with
+/// the plugin's text or with its own. A module of the app is one that names no
+/// plugin and is in no crate that a plugin of the app names; it is after the
+/// plugin's module when it imports it or is registered after it. The
+/// replacement is then said at `info` and the boot goes on.
 ///
 /// **Escaping**: a template's name picks its mode, in any case and also before
 /// a trailing `.j2`, `.jinja` or `.jinja2`. `.txt` and `.md` print values as they
@@ -206,9 +209,9 @@ impl Views {
     }
 
     /// Which of the template `names` a template file provides, and so wins
-    /// over an embedded template of that name, as this `Views` renders them.
+    /// over an embedded template of that name (see `Sources::provided_by_files`).
     pub(crate) fn provided_by_files(&self, names: &[String]) -> Result<Vec<String>, ViewError> {
-        self.sources.provided_by_files(self.reload, names)
+        self.sources.provided_by_files(names)
     }
 
     /// The first candidate for `name` that exists, with its full name.
