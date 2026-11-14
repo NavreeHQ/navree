@@ -308,8 +308,9 @@ const loads = new Set();
 
 /**
  * Goes to `url` like a boosted link. An answer that was on its way while something was written is fetched
- * again, twice at most (`tried`): a page that is written to as often as it is asked for then loads for real,
- * which shows what is there now and nothing from before a write.
+ * again, twice at most (`tried`). A page that is written to as often as it is asked for then loads for real,
+ * which shows what is there now and nothing from before a write; a region then draws what came, as its refresh
+ * does, so what else is on the page (a form's answer, what was typed) stays.
  * @param {string} url @param {{region?: string, push?: boolean}} [how] @param {number} [tried]
  */
 export async function go(url, how = {}, tried = 0) {
@@ -336,13 +337,14 @@ export async function go(url, how = {}, tried = 0) {
   tablePending(table, true);
   // As a region's refresh: an answer fetched before a write, a sign-out or another tab's change is from
   // before it, and is fetched again (a write began here overtakes this outright: see `whileWriting`).
-  const since = epoch;
-  // Asked again twice already, the page loads for real instead.
-  const again = () => (tried < 2 ? go(url, how, tried + 1) : location.assign(url));
+  const since = epoch, more = tried < 2;
+  // Asked again twice already, a page loads for real instead; a region takes the answer as it came.
+  const late = more || !id;
+  const again = () => (more ? go(url, how, tried + 1) : location.assign(url));
   try {
     const response = await fetchPage(url);
     if (stale()) return;
-    if (epoch !== since) return again();
+    if (late && epoch !== since) return again();
     if (table && !response.ok) {
       tableFailed(table, url, response.status);
       return;
@@ -351,7 +353,7 @@ export async function go(url, how = {}, tried = 0) {
       location.assign(url);
       return;
     }
-    if ((await showPage(response, { ...how, url: response.url || url, since })) && !stale()) return again();
+    if ((await showPage(response, { ...how, url: response.url || url, since: late ? since : undefined })) && !stale()) return again();
   } catch {
     if (stale()) return;
     if (table) tableFailed(table, url, 0);
