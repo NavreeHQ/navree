@@ -148,8 +148,10 @@ struct AppIconPicker: View {
         Task {
             do {
                 try await UIApplication.shared.setAlternateIconName(icon.name)
-                // The icon the system now shows, whatever was asked.
-                chosen = IconRules.selected(alternateIconName: UIApplication.shared.alternateIconName, icons: icons)
+                // The system changed it: the icon asked for is the one it
+                // shows. Its name read back at once can still be the last
+                // one's, on going back to the primary icon.
+                chosen = icon.id
             } catch {
                 Self.log.error("icon not changed: \(error.localizedDescription, privacy: .public)")
             }
