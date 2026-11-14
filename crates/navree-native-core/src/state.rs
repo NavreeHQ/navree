@@ -1011,6 +1011,9 @@ pub(crate) struct Inner {
     pub synthetic: bool,
     /// An address an answer gave did not read, and that was said, in this event.
     pub refusal_said: bool,
+    /// The kinds of thing a field's change asked for and was refused, each
+    /// said once.
+    pub change_refused: BTreeSet<&'static str>,
     pub screens: BTreeMap<ScreenId, ScreenInner>,
     /// The build the kept trees belong to.
     pub build: Option<String>,

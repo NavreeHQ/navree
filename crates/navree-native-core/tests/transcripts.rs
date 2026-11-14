@@ -670,6 +670,7 @@ const REQUIRED: &[&str] = &[
     "keep-unseen",
     "keep-also",
     "keep-stale-shell",
+    "changed-limits",
 ];
 
 #[test]

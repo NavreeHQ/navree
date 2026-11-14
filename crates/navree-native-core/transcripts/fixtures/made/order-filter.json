@@ -1,0 +1,168 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Orders",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "form",
+     "id": "filter",
+     "method": "get",
+     "action": "/orders",
+     "children": [
+      {
+       "t": "field",
+       "id": "paid",
+       "name": "paid",
+       "label": "Paid only",
+       "input": {
+        "t": "toggle"
+       },
+       "changed": {
+        "t": "submit"
+       }
+      },
+      {
+       "t": "field",
+       "id": "late",
+       "name": "late",
+       "label": "Late only",
+       "input": {
+        "t": "toggle"
+       },
+       "changed": {
+        "t": "commands",
+        "list": [
+         {
+          "c": "copy",
+          "text": "+91 98140 12345"
+         },
+         {
+          "c": "submit",
+          "id": "card"
+         },
+         {
+          "c": "toggle",
+          "id": "late-note"
+         },
+         {
+          "c": "submit",
+          "id": "filter"
+         }
+        ]
+       }
+      },
+      {
+       "t": "stack",
+       "id": "late-note",
+       "hidden": true,
+       "children": [
+        {
+         "t": "text",
+         "value": "Orders more than a week old, Ludhiana and Amritsar"
+        }
+       ]
+      },
+      {
+       "t": "field",
+       "id": "city",
+       "name": "city",
+       "label": "Ludhiana only",
+       "input": {
+        "t": "toggle"
+       },
+       "changed": {
+        "t": "submit",
+        "form": "card"
+       }
+      },
+      {
+       "t": "field",
+       "id": "near",
+       "name": "near",
+       "label": "Near me",
+       "input": {
+        "t": "toggle"
+       },
+       "changed": {
+        "t": "navigate",
+        "href": "/orders/near"
+       }
+      },
+      {
+       "t": "field",
+       "id": "call",
+       "name": "call",
+       "label": "Call the courier",
+       "input": {
+        "t": "toggle"
+       },
+       "changed": {
+        "t": "navigate",
+        "href": "tel:+919814012345"
+       }
+      },
+      {
+       "t": "field",
+       "id": "share",
+       "name": "share",
+       "label": "Share",
+       "input": {
+        "t": "toggle"
+       },
+       "changed": {
+        "t": "device",
+        "call": {
+         "f": "share",
+         "title": "Orders",
+         "href": "/orders"
+        }
+       }
+      },
+      {
+       "t": "field",
+       "id": "pay",
+       "name": "pay",
+       "label": "Pay now",
+       "input": {
+        "t": "toggle"
+       },
+       "changed": {
+        "t": "request",
+        "method": "post",
+        "href": "/orders/pay"
+       }
+      }
+     ]
+    },
+    {
+     "t": "form",
+     "id": "card",
+     "method": "post",
+     "action": "/card",
+     "hidden": [
+      {
+       "name": "_csrf",
+       "value": "tk-55d0"
+      }
+     ],
+     "children": [
+      {
+       "t": "field",
+       "id": "number",
+       "name": "number",
+       "label": "Card number",
+       "input": {
+        "t": "text",
+        "value": "4111 1111 1111 1111"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
