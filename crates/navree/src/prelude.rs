@@ -7,8 +7,9 @@
 //! methods of `ModelLifecycle`), and every `ModuleBuilder` extension trait
 //! (imported as `_`, so `m.migrations(..)`, `m.controller::<C>()`,
 //! `m.job::<J>()`, `m.templates(..)`, `m.resource::<R>()` and friends
-//! resolve without naming the traits). `navree::orm::prelude` has the rest
-//! of the ORM's names.
+//! resolve without naming the traits). The extension traits plugins use are
+//! in [`navree::plugin::prelude`](crate::plugin::prelude) instead.
+//! `navree::orm::prelude` has the rest of the ORM's names.
 //!
 //! Every name is gated by the feature of the crate it comes from. With
 //! `http`, `Result` here is `navree::Result` (error type `AppError` by

@@ -7,6 +7,24 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Added
+
+- Plugins: a module names itself a plugin with `m.plugin(navree::plugin_info!())`. The boot checks
+  each plugin's crate, version and namespace, and tells the framework's own packages from others
+  by itself. `plugins [--json]` lists an app's plugins and what each module adds without starting
+  the app, and `plugin:publish <plugin>` copies a plugin's templates, translations and files into
+  the app's folders and writes its configuration sections, commented out, refusing any path that
+  could leave them; `--dry-run` shows what it would write. `config:publish --plugin <namespace>`
+  publishes every section of a plugin. `navree::embed_locales!` works without the `i18n` feature.
+
+### Changed
+
+- `introspect --json` gives each module its `type` and lists the plugins under `plugins`; its
+  `commands` list includes `plugins` and `plugin:publish` unless a module registers a command of
+  that name, which then runs instead. `ModuleBuilder::plugin`, `AppContext::plugin` and
+  `AppContext::plugins` are inherent methods: an app that defined a method of one of these names
+  on its own extension trait calls it through the trait (`MyExt::plugin(m, ..)`).
+
 ## [1.2.1] - 2026-11-14
 
 ### Upgrading

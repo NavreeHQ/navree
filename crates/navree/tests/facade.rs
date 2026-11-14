@@ -7,6 +7,7 @@ use std::any::TypeId;
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
 
+use navree::ModuleId;
 use navree::prelude::*;
 use serde_json::Value;
 
@@ -602,7 +603,7 @@ const OPT_IN: &[&str] = &[
 ];
 
 /// Always compiled into the facade (not behind a feature).
-const ALWAYS: [&str; 7] = [
+const ALWAYS: [&str; 8] = [
     "navree-kernel",
     "navree-bounded",
     "navree-glob",
@@ -610,15 +611,15 @@ const ALWAYS: [&str; 7] = [
     "navree-config",
     "navree-macros",
     "navree-openapi",
+    "navree-i18n-macros",
 ];
 
 /// Proc-macro crates that a module crate re-exports, as (macro crate,
 /// module crate): they come with the module crate's feature (`orm` brings
 /// navree-orm-macros through navree-orm, `ui` navree-ui-macros through navree-ui),
 /// so the facade does not name them.
-const COMPANION_MACROS: [(&str, &str); 4] = [
+const COMPANION_MACROS: [(&str, &str); 3] = [
     ("navree-orm-macros", "navree-orm"),
-    ("navree-i18n-macros", "navree-i18n"),
     ("navree-ui-macros", "navree-ui"),
     ("navree-validation-macros", "navree-validation"),
 ];
@@ -1127,4 +1128,301 @@ fn ui_module_is_in_the_prelude_and_country_flags_have_their_own_name() {
         navree::ui::flags::CountryCode,
     >());
     assert_eq!(navree::ui::country_flags::IN.to_string(), "IN");
+}
+
+/// `navree::plugin` is the kernel's plugin types, and `navree::plugin_info!` describes the
+/// crate that calls it.
+#[test]
+fn the_plugin_module_brings_the_kernels_plugin_types() {
+    assert!(same::<
+        navree::plugin::PluginInfo,
+        navree::kernel::PluginInfo,
+    >());
+    assert!(same::<
+        navree::plugin::PluginsReport,
+        navree::kernel::PluginsReport,
+    >());
+    assert!(same::<
+        navree::plugin::PluginReport,
+        navree::kernel::PluginReport,
+    >());
+    assert!(same::<
+        navree::plugin::PluginModuleReport,
+        navree::kernel::PluginModuleReport,
+    >());
+    assert!(same::<
+        navree::plugin::Publishable,
+        navree::kernel::Publishable,
+    >());
+    assert!(same::<
+        navree::plugin::PublishTag,
+        navree::kernel::PublishTag,
+    >());
+    let info = navree::plugin_info!();
+    assert_eq!(
+        (info.name, info.crate_name, info.namespace),
+        ("navree", "facade", "navree")
+    );
+}
+
+/// `navree::embed_locales!` embeds a crate's Fluent files without the `i18n` feature.
+#[test]
+fn embed_locales_works_through_the_facade_without_i18n() {
+    let files: &'static [(&str, &str, &str)] =
+        navree::embed_locales!("tests/fixtures/plugin-locales");
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].0, "en");
+    assert!(files[0].2.contains("₹1,00,000"));
+}
+
+/// The kernel's first-party list is the `kind = "module"` packages of the first-party index,
+/// each behind a facade feature of its own name.
+#[test]
+fn the_kernels_first_party_list_matches_the_cli_index() {
+    assert!(
+        !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../navree-cli/src/plugin/index.toml")
+            .exists(),
+        "index.toml exists: compare FIRST_PARTY and RESERVED_NAMESPACES with it instead of the pinned rows"
+    );
+    // The `kind = "module"` packages of the first-party index, pinned until
+    // crates/navree-cli/src/plugin/index.toml exists.
+    const INDEXED: [&str; 31] = [
+        "ai",
+        "audit",
+        "billing",
+        "directory",
+        "documents",
+        "domains",
+        "flags",
+        "fleet",
+        "graphql",
+        "grpc",
+        "helm",
+        "http-client",
+        "i18n",
+        "integrations",
+        "mcp",
+        "media",
+        "micro",
+        "mongo",
+        "notify",
+        "oauth",
+        "realtime",
+        "redis",
+        "search",
+        "settings",
+        "sheets",
+        "social",
+        "sso",
+        "storage",
+        "time",
+        "webhooks",
+        "workflows",
+    ];
+    let listed: Vec<(String, String)> = navree::kernel::__private::FIRST_PARTY
+        .iter()
+        .map(|(package, krate)| ((*package).to_owned(), (*krate).to_owned()))
+        .collect();
+    let expected: Vec<(String, String)> = INDEXED
+        .iter()
+        .map(|name| {
+            (
+                format!("navree-{name}"),
+                format!("navree_{}", name.replace('-', "_")),
+            )
+        })
+        .collect();
+    assert_eq!(listed, expected);
+    let features = Features::read();
+    for (package, _) in &listed {
+        assert_eq!(
+            features.feature_of.get(package).map(String::as_str),
+            Some(package.trim_start_matches("navree-")),
+            "{package} is behind its own facade feature"
+        );
+    }
+}
+
+/// The namespaces the kernel keeps for the framework are the first words of the framework's
+/// configuration sections and a few words of its own, and they hold every permission prefix a
+/// framework crate declares.
+#[test]
+fn the_reserved_namespaces_match_the_framework_sections_and_permission_prefixes() {
+    assert!(
+        !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../navree-cli/src/plugin/index.toml")
+            .exists(),
+        "index.toml exists: compare FIRST_PARTY and RESERVED_NAMESPACES with it instead of the pinned rows"
+    );
+    let reserved: BTreeSet<&str> = navree::kernel::__private::RESERVED_NAMESPACES
+        .iter()
+        .copied()
+        .collect();
+    let mut expected: BTreeSet<&str> = navree::config::FRAMEWORK_SECTIONS
+        .iter()
+        .map(|key| key.split('.').next().unwrap())
+        .collect();
+    expected.extend(["navree", "views", "roles", "env", "plugins"]);
+    expected.extend([
+        "all",
+        "users",
+        "organization",
+        "subscriptions",
+        "operations",
+    ]);
+    assert_eq!(reserved, expected);
+    // Every permission prefix a framework crate declares in its source is reserved.
+    for (file, prefix) in permission_prefixes() {
+        let word = prefix.split('.').next().unwrap();
+        assert!(reserved.contains(word), "{file}: `{prefix}`");
+    }
+}
+
+/// Every permission prefix declared in `crates/navree-*/src/**/*.rs`, but for navree-cli,
+/// navree-macros and navree-orm-macros, with its file: the text after
+/// `PERMISSION_PREFIX: &'static str = "` or after `permission_prefix = "`, up to the next `"`,
+/// on a line that is not a comment. (Every first-party `#[model(subject ..)]` sets
+/// `permission_prefix` today; one that relied on its table as the default would escape this
+/// scan.)
+fn permission_prefixes() -> Vec<(String, String)> {
+    fn walk(folder: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(folder).expect("a source folder") {
+            let path = entry.expect("a folder entry").path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                out.push(path);
+            }
+        }
+    }
+    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(&crates).expect("the crates folder") {
+        let entry = entry.expect("a folder entry");
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let left_out =
+            ["navree-cli", "navree-macros", "navree-orm-macros"].contains(&name.as_str());
+        let src = entry.path().join("src");
+        if name.starts_with("navree-") && !left_out && src.is_dir() {
+            walk(&src, &mut files);
+        }
+    }
+    files.sort();
+    let mut prefixes = Vec::new();
+    for file in files {
+        let text = std::fs::read_to_string(&file).expect("a source file");
+        let shown = file.strip_prefix(&crates).unwrap_or(&file).display().to_string();
+        for line in text.lines().filter(|line| !line.trim_start().starts_with("//")) {
+            for needle in ["PERMISSION_PREFIX: &'static str = \"", "permission_prefix = \""] {
+                for (at, _) in line.match_indices(needle) {
+                    let rest = &line[at + needle.len()..];
+                    let prefix = rest.split('"').next().unwrap_or_default();
+                    prefixes.push((shown.clone(), prefix.to_owned()));
+                }
+            }
+        }
+    }
+    prefixes
+}
+
+/// A module that takes a first-party module type's id and names a plugin by hand.
+struct Probe(ModuleId, navree::plugin::PluginInfo);
+
+impl Module for Probe {
+    fn id(&self) -> ModuleId {
+        self.0
+    }
+
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(self.1.clone());
+    }
+}
+
+/// A module type whose path names a first-party crate only in a generic argument.
+struct Holder<T>(std::marker::PhantomData<T>);
+
+/// Whether an app of `probe` alone reports its plugin first-party, or the text of its boot
+/// errors.
+fn first_party(probe: Probe) -> Result<bool, String> {
+    Navree::app()
+        .module(probe)
+        .plugin_report()
+        .map(|report| report.plugins[0].first_party)
+        .map_err(|errors| errors.to_string())
+}
+
+#[test]
+fn only_the_indexed_crates_at_the_kernels_version_and_in_their_own_crate_are_first_party() {
+    use navree::plugin::PluginInfo;
+    let version = env!("CARGO_PKG_VERSION");
+    let time = ModuleId::of::<navree::time::TimeModule>();
+    assert_eq!(
+        first_party(Probe(
+            time,
+            PluginInfo::new("navree-time", "navree_time", "time", version)
+        )),
+        Ok(true)
+    );
+    assert!(
+        first_party(Probe(
+            time,
+            PluginInfo::new("navree-time", "navree_time", "time", "1.0.0")
+        ))
+        .unwrap_err()
+        .contains("which the framework keeps for itself"),
+        "another version"
+    );
+    assert_eq!(
+        first_party(Probe(
+            time,
+            PluginInfo::new("navree-clock", "navree_time", "clock", version)
+        )),
+        Ok(false)
+    );
+    let wrapped = ModuleId::of::<Holder<navree::time::TimeModule>>();
+    assert!(
+        first_party(Probe(
+            wrapped,
+            PluginInfo::new("navree-time", "navree_time", "time", version)
+        ))
+        .unwrap_err()
+        .contains("which the framework keeps for itself"),
+        "generic arguments do not count"
+    );
+}
+
+#[test]
+fn a_first_party_plugin_collides_like_a_module_of_today() {
+    use navree::plugin::PluginInfo;
+    let version = env!("CARGO_PKG_VERSION");
+    // A first-party plugin keeps its section's namespace and is reported first-party, which is
+    // what every crate's collision check reads to treat it as one of today's modules. Where
+    // such a collision only warns is up to each crate's check, tested in this folder with it.
+    let time = Probe(
+        ModuleId::of::<navree::time::TimeModule>(),
+        PluginInfo::new("navree-time", "navree_time", "time", version),
+    );
+    let report = Navree::app().module(time).plugin_report().expect("boots");
+    assert!(report.plugins[0].first_party);
+    // A community plugin in that namespace fails the boot.
+    struct CommunityTime;
+    impl Module for CommunityTime {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PluginInfo::new(
+                "navree-plugin-time",
+                "facade",
+                "time",
+                "1.0.0",
+            ));
+        }
+    }
+    assert_eq!(
+        Navree::app()
+            .module(CommunityTime)
+            .validate()
+            .unwrap_err()
+            .to_string(),
+        "plugin `navree-plugin-time` uses the namespace `time`, which the framework keeps for itself; set another with plugin_info!(namespace = \"..\")"
+    );
 }

@@ -740,6 +740,7 @@ navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-kernel = { workspace = true }
 navree-macros = { workspace = true }
+navree-i18n-macros = { workspace = true }
 navree-openapi = { workspace = true }
 
 navree-access = { workspace = true, optional = true }
