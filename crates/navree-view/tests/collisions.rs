@@ -116,10 +116,18 @@ impl Module for NoticeBoardModule {
 
 const ANNOUNCEMENT_VIEWS: &[(&str, &str)] = &[("list.html", "the plugin's list")];
 
-/// A plugin with a welcome mail of its own, outside its namespace, and a list
-/// under it.
+/// A plugin with a list under its namespace.
 struct AnnouncementsModule;
 impl Module for AnnouncementsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(announcements())
+            .plugin_templates(TemplateDir::from(ANNOUNCEMENT_VIEWS));
+    }
+}
+
+/// A plugin that also registers a welcome mail of its own, outside its namespace.
+struct LooseAnnouncementsModule;
+impl Module for LooseAnnouncementsModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.plugin(announcements())
             .templates(&[("mail/welcome.html", "Welcome from Harpreet Sandhu")])
@@ -256,13 +264,16 @@ async fn a_duplicate_template_warns_between_modules_and_fails_with_a_plugin_but_
     app.shutdown().await.unwrap();
 
     // A plugin on one side: the boot fails.
-    let error = boot(vec![Box::new(CrmModule), Box::new(AnnouncementsModule)])
-        .await
-        .expect_err("fails")
-        .to_string();
+    let error = boot(vec![
+        Box::new(CrmModule),
+        Box::new(LooseAnnouncementsModule),
+    ])
+    .await
+    .expect_err("fails")
+    .to_string();
     assert!(
         error.contains(
-            "embedded template `mail/welcome.html` is registered by both `CrmModule` and `AnnouncementsModule`; a plugin's templates are under its namespace"
+            "embedded template `mail/welcome.html` is registered by both `CrmModule` and `LooseAnnouncementsModule`; a plugin's templates are under its namespace"
         ),
         "{error}"
     );
@@ -467,15 +478,6 @@ async fn a_plugin_replacing_another_plugins_template_it_imports_is_warned_about(
     app.shutdown().await.unwrap();
 }
 
-/// The plugin, with only its list under its namespace.
-struct ListPlugin;
-impl Module for ListPlugin {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(announcements())
-            .plugin_templates(TemplateDir::from(ANNOUNCEMENT_VIEWS));
-    }
-}
-
 /// A module of the app with the template `name`.
 struct AppTemplate(&'static str);
 impl Module for AppTemplate {
@@ -506,13 +508,13 @@ async fn a_plugins_template_beside_an_app_template_of_the_same_stem_fails_the_bo
 
     // The app has `announcements/list.txt` as a file in a template folder, or embedded.
     let dir = views_dir(&[("announcements/list.txt", "the app's text list")]);
-    let text = boot_with(options(&[dir.path()]), vec![Box::new(ListPlugin)])
+    let text = boot_with(options(&[dir.path()]), vec![Box::new(AnnouncementsModule)])
         .await
         .expect_err("fails")
         .to_string();
     assert!(text.contains(error), "{text}");
     let text = boot(vec![
-        Box::new(ListPlugin),
+        Box::new(AnnouncementsModule),
         Box::new(AppTemplate("announcements/list.txt")),
     ])
     .await
@@ -522,7 +524,7 @@ async fn a_plugins_template_beside_an_app_template_of_the_same_stem_fails_the_bo
     // Whatever the order of the modules.
     let text = boot(vec![
         Box::new(AppTemplate("announcements/list.txt")),
-        Box::new(ListPlugin),
+        Box::new(AnnouncementsModule),
     ])
     .await
     .expect_err("fails")
@@ -534,7 +536,7 @@ async fn a_plugins_template_beside_an_app_template_of_the_same_stem_fails_the_bo
         ("announcements/list.txt", "the app's text list"),
         ("announcements/list.html", "Meera Sharma's list"),
     ]);
-    let app = boot_with(options(&[both.path()]), vec![Box::new(ListPlugin)])
+    let app = boot_with(options(&[both.path()]), vec![Box::new(AnnouncementsModule)])
         .await
         .expect("boots");
     assert_eq!(render(&app, "announcements/list").await, "Meera Sharma's list");
@@ -542,7 +544,7 @@ async fn a_plugins_template_beside_an_app_template_of_the_same_stem_fails_the_bo
 
     // A template of the app that is no other extension of the same name is no problem.
     let unrelated = views_dir(&[("announcements/other.txt", "the app's other text")]);
-    let app = boot_with(options(&[unrelated.path()]), vec![Box::new(ListPlugin)])
+    let app = boot_with(options(&[unrelated.path()]), vec![Box::new(AnnouncementsModule)])
         .await
         .expect("boots");
     assert_eq!(render(&app, "announcements/list").await, "the plugin's list");
