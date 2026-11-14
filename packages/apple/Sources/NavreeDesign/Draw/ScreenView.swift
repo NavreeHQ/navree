@@ -75,7 +75,7 @@ public struct ScreenView: View {
         content(drawn, sections: sections, width: width, table: table)
             .modifier(ComposerDock(found: composer))
             .navigationTitle(NavigationRules.title(screen.title, appName: appName))
-            .modifier(Subtitle(text: screen.subtitle))
+            .modifier(Subtitle(text: screen.subtitle, underLargeTitle: screen.pager == nil))
             .modifier(TitleDisplay(mode: PagerRules.titleMode(depth, pager: screen.pager)))
             .modifier(PagerInBar(pager: screen.pager, place: PagerRules.place(depth)))
             .toolbar {
@@ -517,12 +517,47 @@ struct SearchModifier: ViewModifier {
     }
 }
 
+/// The screen's subtitle: the system's, beside an inline title. Under a
+/// large title on iPhone and iPad it is written in the system's own place for
+/// it, but on as many lines as its words need: the system keeps it to one,
+/// and at the largest text sizes cuts a date line short ("Saturday 14 Novem…").
 struct Subtitle: ViewModifier {
     let text: String?
+    /// Whether the place under a large title is the subtitle's (a day
+    /// control may hold it).
+    var underLargeTitle = false
+
+    /// The type of the system's own subtitle under a large title, as iOS 27.2
+    /// draws it (measured: 11 points, medium, the secondary colour); the place
+    /// gives a view of its own no type.
+    static let type = Font.caption2.weight(.medium)
+
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     func body(content: Content) -> some View {
         if let text {
+            #if os(iOS)
+            if underLargeTitle {
+                content
+                    .navigationSubtitle(text)
+                    .toolbar {
+                        ToolbarItem(placement: .largeSubtitle) {
+                            Text(text)
+                                .font(Self.type)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                // As large as the person's text, as the system's
+                                // subtitle grows: a bar holds its items' text smaller.
+                                .dynamicTypeSize(typeSize)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+            } else {
+                content.navigationSubtitle(text)
+            }
+            #else
             content.navigationSubtitle(text)
+            #endif
         } else {
             content
         }
