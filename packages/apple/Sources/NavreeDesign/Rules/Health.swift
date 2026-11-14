@@ -719,6 +719,14 @@ public enum TrendRules {
 }
 
 /// The day pager: the day a screen is about, stepped in place.
+/// Where a screen's day control stands.
+public enum PagerPlace: Sendable, Equatable {
+    /// Under the screen's large title, in the bar.
+    case underTitle
+    /// At the head of the screen's content, under its inline title.
+    case headOfContent
+}
+
 public enum PagerRules {
     /// A day as the page writes it, `YYYY-MM-DD`, at noon UTC so no time zone
     /// moves it to another day.
@@ -787,11 +795,40 @@ public enum PagerRules {
         return false
     }
 
-    /// How the screen's title shows: a screen with its day control in the bar
-    /// has the title inline (the control is the bar's principal item), any
-    /// other as its depth says.
+    /// How the screen's title shows: as its depth says, whether or not it has
+    /// a day control. The control never takes the title's place: Health and
+    /// Fitness keep the screen's name in the bar, large at a destination's root.
     public static func titleMode(_ depth: ScreenDepth, pager: Navree.DayPager?) -> TitleMode {
-        pager == nil ? NavigationRules.titleMode(depth) : .inline
+        NavigationRules.titleMode(depth)
+    }
+
+    /// Where a screen's day control stands on iPhone and iPad: under a large
+    /// title, in the bar, where the title's subtitle stands (the day it is
+    /// about also written beside the title once the title folds inline); under
+    /// an inline title, at the head of the content, as Health keeps a pushed
+    /// chart's range control over the chart.
+    public static func place(_ depth: ScreenDepth) -> PagerPlace {
+        NavigationRules.titleMode(depth) == .large ? .underTitle : .headOfContent
+    }
+
+    /// The screen as it is drawn where its day control stands at the head of
+    /// its content: the control the first part of the body, and out of the bar.
+    public static func placed(_ screen: Navree.Screen, _ place: PagerPlace) -> Navree.Screen {
+        guard place == .headOfContent, let pager = screen.pager else { return screen }
+        var shown = screen
+        shown.pager = nil
+        if case .stack(var stack) = screen.body {
+            stack.children.insert(.dayPager(pager), at: 0)
+            shown.body = .stack(stack)
+        } else {
+            shown.body = .stack(Navree.Stack(children: [.dayPager(pager), screen.body]))
+        }
+        return shown
+    }
+
+    /// The day a pager shows, in words for the bar beside a folded title.
+    public static func words(_ pager: Navree.DayPager) -> String {
+        "\(pager.day), \(PagerWords.date(pager.date))"
     }
 
     static var gregorian: Calendar {

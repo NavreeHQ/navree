@@ -39,7 +39,14 @@ public struct ScreenView: View {
     @Environment(\.navreeBesideList) private var besideList
 
     public init(screen: Navree.Screen, depth: ScreenDepth, appName: String = "", notice: Notice? = nil, failure: Notice? = nil) {
-        self.screen = ActionRules.lifted(PagerRules.lifted(screen), depth: depth)
+        // The head row's buttons go to the bar before the day control is
+        // placed, which on iOS can put it back at the head of the content.
+        let lifted = ActionRules.lifted(PagerRules.lifted(screen), depth: depth)
+        #if os(iOS)
+        self.screen = PagerRules.placed(lifted, PagerRules.place(depth))
+        #else
+        self.screen = lifted
+        #endif
         self.depth = depth
         self.appName = appName
         self.notice = notice
@@ -70,7 +77,7 @@ public struct ScreenView: View {
             .navigationTitle(NavigationRules.title(screen.title, appName: appName))
             .modifier(Subtitle(text: screen.subtitle))
             .modifier(TitleDisplay(mode: PagerRules.titleMode(depth, pager: screen.pager)))
-            .modifier(PagerInBar(pager: screen.pager))
+            .modifier(PagerInBar(pager: screen.pager, place: PagerRules.place(depth)))
             .toolbar {
                 // The list's sort and filters, then what it makes new at the
                 // trailing end, as Mail's filter and compose stand.
