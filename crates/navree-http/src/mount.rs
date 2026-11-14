@@ -326,6 +326,15 @@ pub(crate) fn collect_mounts(ctx: &AppContext) -> Vec<MountEntry> {
         .collect()
 }
 
+/// The metadata of every mount, for the `routes` command: method `*` (or the
+/// declared methods), path `{prefix}/{*rest}`, access and module.
+pub(crate) fn mount_table(ctx: &AppContext) -> Vec<RouteMeta> {
+    collect_mounts(ctx)
+        .into_iter()
+        .map(|entry| entry.meta)
+        .collect()
+}
+
 /// The segments of a good prefix (`/khata/reports` is `["khata",
 /// "reports"]`). `Err(None)` for a prefix outside the grammar
 /// (`PREFIX_RULE`); `Err(Some(..))` with the router's own text for one
