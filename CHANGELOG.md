@@ -7,6 +7,12 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Changed
+
+- `@navree/nuxt` asks for Nuxt 4.6.4 or newer (`nuxt` peer `^4.6.4`, the module's own
+  compatibility check too): 4.6.3 has two advisories against `@nuxt/nitro-server` and
+  `@nuxt/schema` that 4.6.4 fixes.
+
 ### Fixed
 
 - A chart picture put in a page with `ChartImage::svg_node` marked the ids of its drawing with the
