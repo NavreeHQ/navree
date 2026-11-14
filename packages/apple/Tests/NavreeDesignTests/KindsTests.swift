@@ -105,3 +105,46 @@ import UniformTypeIdentifiers
     let chart = try #require(revenue)
     #expect(ValueWords.text(4_000_000, ValueWords.style(chart)) == "₹40,00,000")
 }
+
+@Test func aDurationsAxisReadsInTheUnitTheChartNamesNotInTheLastWordOfItsValues() {
+    #expect(ValueWords.compound("7 h 6 min"))
+    #expect(ValueWords.compound("7:15 am"))
+    #expect(!ValueWords.compound("₹31,55,138.50"))
+    #expect(!ValueWords.compound("91%"))
+    #expect(!ValueWords.compound("7.1 h"))
+    // Hours asleep a night, written as the page writes a duration, on an axis in hours.
+    let asleep = Navree.Chart(
+        kind: .bar, labels: ["Mon", "Tue"],
+        series: [Navree.Series(label: "Asleep", shown: ["7 h 6 min", "8 h 32 min"], values: [7.1, 8.5])],
+        y: Navree.Measure(name: "Asleep", unit: "h")
+    )
+    let style = ValueWords.style(asleep)
+    #expect([8.0, 4, 0].map { ValueWords.text($0, style) } == ["8 h", "4 h", "0 h"])
+    // A value in one number keeps the page's own way of writing it.
+    let duration = Navree.Chart(
+        kind: .area, labels: ["Mon"], series: [Navree.Series(label: "Duration", shown: ["7.1 h"], values: [7.1])],
+        y: Navree.Measure(name: "Duration", unit: "h")
+    )
+    #expect(ValueWords.text(6, ValueWords.style(duration)) == "6 h")
+}
+
+/// Every chart in a folder of recorded answers whose value axis names its unit
+/// writes its axis in that unit. The folder is named at run time
+/// (`NAVREE_ANSWERS`), never kept with the tests: without it, nothing runs.
+@Test(.enabled(if: ProcessInfo.processInfo.environment["NAVREE_ANSWERS"] != nil))
+func everyAxisOfAFolderOfAnswersReadsInTheUnitItsChartNames() throws {
+    let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["NAVREE_ANSWERS"] ?? "", isDirectory: true)
+    let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+        .filter { $0.pathExtension == "json" }
+    var checked = 0
+    for file in files {
+        guard let screen = try? WireDecoder.decode(Navree.Envelope.self, from: Data(contentsOf: file)).screen else { continue }
+        screen.body.walk { node in
+            guard case .chart(let chart) = node, chart.levels.isEmpty, let unit = chart.y?.unit, !unit.isEmpty else { return }
+            let written = ValueWords.text(4, ValueWords.style(chart))
+            #expect(written.hasSuffix(unit) || written.hasPrefix(unit), "\(chart.title ?? "") writes \(written)")
+            checked += 1
+        }
+    }
+    #expect(checked > 0)
+}
