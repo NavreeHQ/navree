@@ -185,6 +185,31 @@ async fn repeated_refusals_through_one_connection_log_one_line() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn a_customer_connection_without_the_flag_refuses_quietly_as_before() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let world = support::world().await;
+    let fake = SsoFake::new();
+    let workspace = workspace_of(&world).await;
+    world
+        .saml_connection(
+            &fake,
+            SsoOwner::Workspace(workspace),
+            "ludhiana-okta",
+            Provisioning::default(),
+        )
+        .await;
+    world
+        .saml_sign_in(&fake, "ludhiana-okta", "simran.kaur@gmail.test", &[])
+        .await
+        .assert_error_code(403, "unverified_domain");
+    let lines = capture.lines();
+    assert!(lines_with(&lines, &["WARN", "ludhiana-okta"]).is_empty());
+    let actions = world.audit.actions();
+    assert!(!actions.contains(&"sso.login_refused".to_owned()));
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn the_boot_names_customer_connections_with_the_flag() {
     if servers::Server::current() != servers::Server::Sqlite {
         return;

@@ -1,14 +1,14 @@
 //! Connections owned by workspaces and organizations, and the sso.tenants section.
 
-use navree_auth::{AuthService, ClientMeta};
+use navree_auth::{AuthService, ClientMeta, User};
 use navree_config::check::{CheckOptions, CheckReport};
 use navree_config::{ConfigSources, SectionRegistration};
 use navree_contracts::{AuditEntry, AuditKind};
 use navree_db::Db;
 use navree_orm::Model as _;
 use navree_sso::{
-    Provisioning, RoleRule, SsoError, SsoFake, SsoModule, SsoOptions, SsoOwner, SsoProfile,
-    SsoTenantOptions, sso_connection, sso_identity,
+    Provisioning, RoleRule, SsoConnection, SsoError, SsoFake, SsoModule, SsoOptions, SsoOwner,
+    SsoProfile, SsoTenantOptions, sso_connection, sso_identity,
 };
 use navree_workspace::{Members, NewOrganization, NewWorkspace, Organizations, Workspaces};
 use serde_json::{Value, json};
@@ -78,6 +78,27 @@ fn refusals(world: &World) -> Vec<AuditEntry> {
         .collect()
 }
 
+/// Links `user` to `connection` as the identity provider's `subject`, as an
+/// earlier sign-in would have.
+async fn link(world: &World, connection: &SsoConnection, user: &User, subject: &str) {
+    let now = chrono::Utc::now();
+    let row = sso_identity::Model {
+        id: Uuid::now_v7(),
+        connection_id: connection.id,
+        user_id: user.id,
+        subject: subject.to_owned(),
+        email: Some(user.email.clone()),
+        attributes: "{}".into(),
+        last_login_at: now,
+        created_at: now,
+        updated_at: now,
+    };
+    world
+        .write(|uow| async move { sso_identity::Model::insert(&uow, [row]).await })
+        .await
+        .expect("the identity is linked");
+}
+
 /// The role of `user` in `workspace`.
 async fn role(world: &World, workspace: Uuid, user: Uuid) -> String {
     let members = world.app.get::<Members>().await;
@@ -120,7 +141,75 @@ async fn an_app_without_the_tenants_section_boots_with_the_flag_closed_to_custom
             ..SsoOptions::default()
         }
     );
-    // What the defaults refuse is shown by the sign-in tests below.
+    let fake = SsoFake::new();
+    let workspace = workspace_of(&world).await;
+    world
+        .saml_connection(
+            &fake,
+            SsoOwner::Workspace(workspace),
+            "ludhiana-okta",
+            open(),
+        )
+        .await;
+    world
+        .saml_connection(&fake, SsoOwner::App, "staff-okta", open())
+        .await;
+    // Closed to the customer's connection, open to the app's.
+    world
+        .saml_sign_in(&fake, "ludhiana-okta", "simran.kaur@gmail.test", &[])
+        .await
+        .assert_error_code(403, "unverified_domain");
+    world
+        .saml_sign_in(&fake, "staff-okta", "simran.kaur@gmail.test", &[])
+        .await
+        .assert_status(200);
+}
+
+#[tokio::test]
+async fn the_tenants_key_is_read_from_the_environment() {
+    let environment = [("APP_SSO__TENANTS__UNVERIFIED_EMAILS", "true")];
+    let sources = ConfigSources::new().env_vars("APP_", environment);
+    let world = support::world_with(support::builder().sources(sources)).await;
+    let fake = SsoFake::new();
+    let workspace = workspace_of(&world).await;
+    world
+        .saml_connection(
+            &fake,
+            SsoOwner::Workspace(workspace),
+            "ludhiana-okta",
+            open(),
+        )
+        .await;
+    world
+        .saml_sign_in(&fake, "ludhiana-okta", "simran.kaur@gmail.test", &[])
+        .await
+        .assert_status(200);
+    assert_eq!(identities(&world).await, 1);
+    assert!(refusals(&world).is_empty());
+}
+
+#[tokio::test]
+async fn without_just_in_time_provisioning_a_customers_connection_answers_as_before() {
+    let world = support::world().await;
+    let fake = SsoFake::new();
+    let workspace = workspace_of(&world).await;
+    let closed = Provisioning {
+        jit: false,
+        ..open()
+    };
+    world
+        .saml_connection(
+            &fake,
+            SsoOwner::Workspace(workspace),
+            "ludhiana-okta",
+            closed,
+        )
+        .await;
+    world
+        .saml_sign_in(&fake, "ludhiana-okta", "simran.kaur@gmail.test", &[])
+        .await
+        .assert_error_code(403, "sso_provisioning_disabled");
+    assert!(refusals(&world).is_empty());
 }
 
 #[tokio::test]
@@ -223,6 +312,11 @@ async fn sign_in_profile_is_refused_the_same_way() {
         .sign_in_profile("ludhiana-okta", profile, &ClientMeta::default())
         .await;
     assert!(matches!(result, Err(SsoError::UnverifiedDomain(domain)) if domain == "gmail.test"));
+    let auth = world.app.get::<AuthService>().await;
+    let found = auth.find_by_email("simran.kaur@gmail.test").await;
+    assert!(found.unwrap().is_none());
+    assert_eq!(identities(&world).await, 0);
+    assert_eq!(refusals(&world).len(), 1);
 }
 
 #[tokio::test]
@@ -318,22 +412,7 @@ async fn a_person_already_linked_through_a_customers_connection_still_signs_in()
     let simran = world
         .create_user("Simran Kaur", "simran.kaur@gmail.test")
         .await;
-    let now = chrono::Utc::now();
-    let row = sso_identity::Model {
-        id: Uuid::now_v7(),
-        connection_id: connection.id,
-        user_id: simran.id,
-        subject: "simran.kaur@gmail.test".to_owned(),
-        email: Some("simran.kaur@gmail.test".to_owned()),
-        attributes: "{}".into(),
-        last_login_at: now,
-        created_at: now,
-        updated_at: now,
-    };
-    world
-        .write(|uow| async move { sso_identity::Model::insert(&uow, [row]).await })
-        .await
-        .expect("the identity is linked");
+    link(&world, &connection, &simran, "simran.kaur@gmail.test").await;
 
     world
         .saml_sign_in(
@@ -357,6 +436,39 @@ async fn a_person_already_linked_through_a_customers_connection_still_signs_in()
         .assert_status(200);
     // No rule matches her groups now: the default role.
     assert_eq!(role(&world, workspace, simran.id).await, "member");
+    assert!(refusals(&world).is_empty());
+}
+
+#[tokio::test]
+async fn a_linked_person_whose_address_changed_at_the_identity_provider_still_signs_in() {
+    let world = support::world().await;
+    let fake = SsoFake::new();
+    let workspace = workspace_of(&world).await;
+    let connection = world
+        .saml_connection(
+            &fake,
+            SsoOwner::Workspace(workspace),
+            "ludhiana-okta",
+            open(),
+        )
+        .await;
+    let simran = world
+        .create_user("Simran Kaur", "simran.kaur@gmail.test")
+        .await;
+    link(&world, &connection, &simran, "00u1simran").await;
+
+    // The identity provider's id for her stays; her address is a new one.
+    world
+        .saml_sign_in(
+            &fake,
+            "ludhiana-okta",
+            "00u1simran",
+            &[("email", &["simran.k@yahoo.test"])],
+        )
+        .await
+        .assert_status(200)
+        .assert_json_path("user.id", json!(simran.id));
+    assert_eq!(identities(&world).await, 1);
     assert!(refusals(&world).is_empty());
 }
 
