@@ -262,7 +262,16 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
             granted_by,
         },
         guest,
-    ) = admit(parts, source, &config, &workspaces, &principal, pinned, true).await?;
+    ) = admit(
+        parts,
+        source,
+        &config,
+        &workspaces,
+        &principal,
+        pinned,
+        true,
+    )
+    .await?;
     let demo = workspace.is_demo().then_some(config.demo.mode);
     if let Some(mode) = demo {
         check_demo_write(parts, &config, mode, &role)?;
@@ -447,7 +456,16 @@ pub(crate) async fn workspace_of_request(parts: &mut Parts) -> Option<Uuid> {
     // `CurrentWorkspace`'s own steps, writing nothing: a stale session choice is passed
     // over and left in the session, and none is made for a browser that has none.
     let source = Source::Configured;
-    let admitted = admit(parts, &source, &config, &workspaces, &principal, pinned, false).await;
+    let admitted = admit(
+        parts,
+        &source,
+        &config,
+        &workspaces,
+        &principal,
+        pinned,
+        false,
+    )
+    .await;
     admitted.ok().map(|(_, workspace, _, _)| workspace.id)
 }
 

@@ -95,7 +95,8 @@ async fn helm_refuses_an_off_site_link_and_a_card_without_a_template_or_with_a_b
         );
     }
 
-    let cases: [(fn(&mut ModuleBuilder), &str); 3] = [
+    type Adds = fn(&mut ModuleBuilder);
+    let cases: [(Adds, &str); 3] = [
         (
             capital_key,
             "Helm widget key `Pipeline` in `Adds` must be lower-case letters, digits and -",
