@@ -509,9 +509,10 @@ for (const name of NAMES) {
         const page = await open("/pages/regions");
         await until(() => page.locator("#r-poll [data-kind=not-found]").count(), "the region to say so");
         const first = (await hits())["404"];
-        await sleep(1500);
+        // The poll asks for 400 ms and gets a second, its least: the wait covers two more of its turns.
+        await sleep(2500);
         const later = (await hits())["404"];
-        // The lazy region asked once too; the poller, every 400 ms, would have asked three or four more times.
+        // The lazy region asked once too; the poller, every second, would have asked two more times.
         assert.ok(later <= first + 1, `asked ${first} times, then ${later}`);
         await page.done();
       });
@@ -685,10 +686,11 @@ for (const name of NAMES) {
         await sleep(1000);
         await listen(page);
         const before = await asked("poll500");
-        await sleep(3000);
+        // The poll asks for 300 ms and gets a second, its least: the wait is long enough for the doubling to show.
+        await sleep(6500);
         const fetches = (await asked("poll500")) - before;
-        // Every 300 ms would be ten; each failure doubles the wait.
-        assert.ok(fetches <= 4, `${fetches} fetches in 3 s`);
+        // Every second would be six; each failure doubles the wait.
+        assert.ok(fetches <= 4, `${fetches} fetches in 6.5 s`);
         assert.deepEqual(await page.evaluate(() => window.__said), [], "the same answer is not said again");
         // The page and the state are still there, and Try again still works by hand.
         assert.equal(await page.locator("#r-poll500 [data-slot=state][data-kind=failed]").count(), 1);
@@ -810,13 +812,14 @@ for (const name of NAMES) {
         const server = await start();
         try {
           const page_ = (inner) => fixturePage(inner);
+          // The runtime polls once a second at the most, so a second is what these ask for.
           server.routes.set("/", (req, res) => {
             server.html(
               res,
               page_(
-                `<main><div id="t" data-ui-region data-ui-table data-ui-src="/shut" data-ui-poll="200"><div data-slot="table-alert" hidden><span data-slot="alert-text"></span></div></div>` +
-                  `<div id="t500" data-ui-region data-ui-table data-ui-src="/fail" data-ui-poll="200"></div>` +
-                  `<div id="f" data-ui-region data-ui-src="/feed" data-ui-feed="rows" data-ui-after="0" data-ui-poll="200"><ul id="rows"><li>one</li></ul></div></main>`,
+                `<main><div id="t" data-ui-region data-ui-table data-ui-src="/shut" data-ui-poll="1000"><div data-slot="table-alert" hidden><span data-slot="alert-text"></span></div></div>` +
+                  `<div id="t500" data-ui-region data-ui-table data-ui-src="/fail" data-ui-poll="1000"></div>` +
+                  `<div id="f" data-ui-region data-ui-src="/feed" data-ui-feed="rows" data-ui-after="0" data-ui-poll="1000"><ul id="rows"><li>one</li></ul></div></main>`,
               ),
             );
           });
@@ -836,11 +839,12 @@ for (const name of NAMES) {
           contexts.push(context);
           const page = await context.newPage();
           await page.goto(server.origin + "/");
-          await sleep(3000);
+          // Long enough for a poll that never stopped or backed off to show: one a second would be six.
+          await sleep(6500);
           const count = (path) => server.log.filter((entry) => entry.path.startsWith(path)).length;
           assert.ok(count("/shut") <= 2, `a live table behind a 403 asked ${count("/shut")} times`);
           assert.ok(count("/feed") <= 2, `a feed behind a 403 asked ${count("/feed")} times`);
-          assert.ok(count("/fail") <= 5, `a live table behind a 500 asked ${count("/fail")} times (one every 200 ms would be 15)`);
+          assert.ok(count("/fail") <= 4, `a live table behind a 500 asked ${count("/fail")} times (one every second would be six)`);
           assert.equal(await page.locator("#intruder").count(), 0, "an error is not a row");
           const feedAsk = server.log.find((entry) => entry.path.startsWith("/feed"));
           assert.equal(feedAsk.headers["x-navree-region"], "f", "a feed names itself too");
@@ -861,7 +865,8 @@ for (const name of NAMES) {
             server.html(res, fixturePage(`<main><div id="box" data-ui-region data-ui-src="/frag" data-ui-lazy><img name="querySelector"><form name="addEventListener"></form></div></main>`));
           });
           server.routes.set("/frag", (req, res) => {
-            res.writeHead(403, { "content-type": "text/html", "x-navree-state": "403" });
+            // A state the app drew for the region is a page of the app, and says so, as every `View` does.
+            res.writeHead(403, { "content-type": "text/html", "x-navree-state": "403", "x-navree-page": "1" });
             res.end(
               `<!doctype html><html><body><div data-slot="state" data-kind="forbidden"><p data-slot="state-title">You don't have access to this</p>` +
                 `<script>document.documentElement.setAttribute("data-ran","1")</script>` +

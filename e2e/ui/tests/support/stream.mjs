@@ -65,8 +65,15 @@ export async function start() {
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
+  /**
+   * An answer that stands for one of the app's own pages, or a region's answer: it carries `x-navree-page`, as every
+   * answer of the app's `View` does, and the runtime morphs only an answer that has it. A header given as `null` is
+   * left out, so a test that means "this is no page of the app" passes `{ "x-navree-page": null }`.
+   */
   const html = (res, text, headers = {}) => {
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-security-policy": CSP, "cache-control": "no-store", ...headers });
+    const sent = { "content-type": "text/html; charset=utf-8", "content-security-policy": CSP, "cache-control": "no-store", "x-navree-page": "1", ...headers };
+    for (const name of Object.keys(sent)) if (sent[name] === null) delete sent[name];
+    res.writeHead(200, sent);
     res.end(text);
   };
   const stream = (talk) => (req, res) => {
