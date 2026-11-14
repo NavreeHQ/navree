@@ -34,6 +34,7 @@ mod frame;
 mod list;
 mod metrics;
 mod record;
+mod widgets;
 /// The Settings screens (feature `settings`).
 #[cfg(feature = "settings")]
 pub(crate) mod settings;
