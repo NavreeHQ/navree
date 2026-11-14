@@ -1,5 +1,5 @@
 {
-  "about": "The last tree of each address, kept as a head start: shown at once while a fresh one is fetched, and never trusted. Nothing is sent from a kept tree; a write and a new build empty what is kept.",
+  "about": "The last tree of each address, kept as a head start: shown at once while a fresh one is fetched, and never trusted. Nothing is sent from a kept tree; a write and a new build empty what is kept. A page is kept on the device only when its answer says it may be (`x-navree-keep`), and a kept page is drawn only once this launch's shell has named the same person.",
   "config": {"cache":{"persist":true}},
   "steps": [
     {
@@ -13,7 +13,7 @@
       }
     },
     {
-      "note": "The client kept the shell and the orders from the last launch: the app is drawn before the network has answered.",
+      "note": "The client kept the shell and the orders from the last launch: the app's bars are drawn before the network has answered.",
       "send": {"t":"cache","key":"boot"},
       "body": "made/kept-boot.json",
       "expect": {
@@ -31,6 +31,18 @@
         {"at":"/destinations/1/label","is":"Orders"},
         {"at":"/screens/1/loading","is":true}
       ]
+    },
+    {
+      "note": "The shell arrives. It is the one that was kept, so nothing is written again, and it names the person the kept shell named, so the pages kept may be drawn.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      }
     },
     {
       "note": "The orders were kept: they are asked of the client and of the server at once.",
@@ -81,7 +93,7 @@
     },
     {
       "note": "The fresh page takes its place.",
-      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-keep","1"]]},
       "body": "store/orders.json",
       "expect": {
         "changed": [
@@ -95,18 +107,6 @@
         {"at":"/screens/2/cached","is":false},
         {"at":"/screens/2/loading","is":false}
       ]
-    },
-    {
-      "note": "The shell arrives. It is the one that was kept, so nothing is written again.",
-      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
-      "body": "store/shell.json",
-      "expect": {
-        "changed": [
-          {"t":"app"},
-          {"t":"nav"}
-        ],
-        "effects": []
-      }
     },
     {
       "note": "A page for the web view is not kept.",
@@ -134,7 +134,7 @@
     },
     {
       "note": "A page that arrives is kept, and the list of what is kept is written.",
-      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-keep","1"]]},
       "body": "store/order.json",
       "expect": {
         "changed": [
@@ -177,7 +177,7 @@
       ]
     },
     {
-      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-keep","1"]]},
       "body": "store/order.json",
       "expect": {
         "changed": [
@@ -233,7 +233,7 @@
     },
     {
       "note": "The orders are fetched again as they come to the front. The answer says the server is a build this client has not seen: what is kept is emptied and the shell asked for again. Nothing on screen is thrown away.",
-      "send": {"t":"response","request":7,"status":200,"url":"https://shop.example/orders","content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":7,"status":200,"url":"https://shop.example/orders","content_type":"application/vnd.navree.native+json","headers":[["x-navree-keep","1"]]},
       "body": "made/home-next-build.json",
       "expect": {
         "changed": [

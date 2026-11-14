@@ -656,6 +656,7 @@ const REQUIRED: &[&str] = &[
     "push-destination",
     "addresses",
     "sign-in-declined",
+    "keep",
 ];
 
 #[test]

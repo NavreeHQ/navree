@@ -32,6 +32,9 @@ pub(crate) struct Read {
     pub missing: Vec<String>,
     /// An op was passed over: what the screen shows may be out of date.
     pub reload: bool,
+    /// The answer said its page may be kept on the device between launches
+    /// ([`navree_native::KEEP_HEADER`]).
+    pub keep: bool,
 }
 
 /// What a request was answered with.
@@ -293,6 +296,7 @@ fn envelope_here(body: &str, config: &Config) -> Result<Read, Failure> {
         envelope: blank(),
         missing: Vec::new(),
         reload: false,
+        keep: false,
     };
     match serde_json::from_str::<Envelope>(body) {
         Ok(envelope) => read.envelope = envelope,
@@ -384,8 +388,10 @@ pub(crate) fn read(response: Response, asked: &str, origin: &Origin, config: &Co
     let status = response.status;
     if media == CONTENT_TYPE {
         let header = response.header(SHELL_STAMP_HEADER).map(str::to_owned);
+        let keep = response.header(navree_native::KEEP_HEADER) == Some("1");
         return match envelope(&response.body, config) {
-            Ok(read) => {
+            Ok(mut read) => {
+                read.keep = keep;
                 let own = (!read.envelope.shell.is_empty()).then(|| read.envelope.shell.clone());
                 Answer::Tree {
                     url,
