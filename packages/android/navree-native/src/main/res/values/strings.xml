@@ -89,4 +89,8 @@
     <bool name="navree_loopback_http">false</bool>
     <!-- The server's OAuth client id for Sign in with Google, when its calls do not carry one. -->
     <string name="navree_google_client_id" translatable="false"></string>
+    <!-- How much of the app's screen the system may show elsewhere: empty for the system's own
+         behaviour, hidden_in_recents for no picture in the recent-apps list, no_capture for no
+         screenshot, recording or picture at all. -->
+    <string name="navree_screen" translatable="false"></string>
 </resources>

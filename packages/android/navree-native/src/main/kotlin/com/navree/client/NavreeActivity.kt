@@ -3,7 +3,9 @@ package com.navree.client
 import android.app.Application
 import android.content.Intent
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -153,6 +155,7 @@ open class NavreeActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val config = config()
+        guard(config)
         val origin = config.origin.toHttpUrlOrNull()?.takeIf { Origins(config.origin, loopbackHttp = config.loopbackHttp).usable }
         if (origin == null) {
             setContent { Unusable(config.origin) }
@@ -197,14 +200,41 @@ open class NavreeActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    /** A link that opened the app, or a notification tapped: handed to the core, which checks it. */
+    /**
+     * What the window allows: a screen kept out of screenshots and the
+     * recent-apps list as [NavreeConfig.screen] says, and touches ignored
+     * while another app's window covers this one.
+     */
+    private fun guard(config: NavreeConfig) {
+        val plan = config.screen.plan(Build.VERSION.SDK_INT)
+        if (plan.secure) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        if (!plan.recentsPicture && Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false)
+        if (config.filterObscuredTouches) window.decorView.filterTouchesWhenObscured = true
+    }
+
+    /**
+     * A link that opened the app, or a notification tapped: handed to the
+     * core, which checks it. Anything may start this activity with anything
+     * in its intent, so what it carries is read inside a guard: an intent
+     * that does not read is no link.
+     */
     private fun opened(intent: Intent?) {
         val session = session ?: return
-        intent?.getStringExtra(EXTRA_HREF)?.let {
-            session.driver.send(Events.notification(it))
+        val href = try {
+            intent?.getStringExtra(EXTRA_HREF)
+        } catch (_: Exception) {
+            null
+        }
+        if (href != null) {
+            session.driver.send(Events.notification(href))
             return
         }
-        intent?.data?.toString()?.let(session.effects::opened)
+        val link = try {
+            intent?.data?.toString()
+        } catch (_: Exception) {
+            null
+        }
+        link?.let(session.effects::opened)
     }
 
     companion object {

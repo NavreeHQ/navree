@@ -277,6 +277,18 @@ class ConfigTest {
     }
 
     @Test
+    fun the_screen_option_tells_the_window_what_it_allows_on_each_system() {
+        assertEquals(com.navree.client.ScreenPlan(secure = false, recentsPicture = true), com.navree.client.ScreenPrivacy.None.plan(36))
+        assertEquals(com.navree.client.ScreenPlan(secure = false, recentsPicture = false), com.navree.client.ScreenPrivacy.HiddenInRecents.plan(33))
+        assertEquals("before Android 13 the recent-apps picture goes only with the secure flag", com.navree.client.ScreenPlan(secure = true, recentsPicture = false), com.navree.client.ScreenPrivacy.HiddenInRecents.plan(32))
+        assertEquals(com.navree.client.ScreenPlan(secure = true, recentsPicture = false), com.navree.client.ScreenPrivacy.NoCapture.plan(26))
+        assertEquals(com.navree.client.ScreenPrivacy.None, com.navree.client.ScreenPrivacy.of(""))
+        assertEquals(com.navree.client.ScreenPrivacy.HiddenInRecents, com.navree.client.ScreenPrivacy.of("hidden_in_recents"))
+        assertEquals(com.navree.client.ScreenPrivacy.NoCapture, com.navree.client.ScreenPrivacy.of("no_capture"))
+        assertEquals("an option this build does not know keeps the most out", com.navree.client.ScreenPrivacy.NoCapture, com.navree.client.ScreenPrivacy.of("blur"))
+    }
+
+    @Test
     fun the_other_origins_the_app_allows_are_the_cores_too() {
         val config = coreConfig(NavreeConfig(origin = "https://store.example.in", name = "Store", seed = null, also = listOf("https://*.store.example.in")), device, emptyList())
         assertEquals(listOf("https://*.store.example.in"), config["also"]!!.jsonArray.map { it.jsonPrimitive.content })

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the client keeps for a person never leaves the device in a backup (Android 11 and
+     earlier, and apps that target them). The sealed page cache and the snapshot of a launch are
+     in the no-backup folder, which no backup takes; the web view's folder holds the session
+     cookie, what pages stored and its cache, and is left out here. Everything else of the app is
+     backed up as the app decides. An app with rules of its own adds this line to them. -->
+<full-backup-content>
+    <exclude domain="root" path="app_webview" />
+</full-backup-content>
