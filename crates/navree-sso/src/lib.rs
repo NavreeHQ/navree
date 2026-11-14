@@ -59,6 +59,7 @@ mod profile;
 pub mod saml;
 mod service;
 mod store;
+mod tenants;
 mod xml;
 
 pub use connection::{
