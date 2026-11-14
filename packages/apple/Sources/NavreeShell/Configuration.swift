@@ -29,6 +29,10 @@ public struct ShellConfiguration: Sendable {
     public var openAnyLink: Bool
     /// Whether the session's cookies are kept in the Keychain between launches.
     public var keepsSession: Bool
+    /// Hosts other than the origin's that pictures may come from, over
+    /// `https`, each named exactly (`images.store.example.in`). None by
+    /// default. A picture from one of them is asked for with no cookie.
+    public var pictureHosts: [String]
     /// What answers the core's requests: the network, or (for a demo or a
     /// test) answers the app has with it.
     public var transport: @MainActor @Sendable () -> any Transport
@@ -42,6 +46,7 @@ public struct ShellConfiguration: Sendable {
         origin: String, loopbackHTTP: Bool = false, appID: String = Bundle.main.bundleIdentifier ?? "",
         appVersion: String, signInScheme: String? = nil, signInPaths: [String] = ["/auth/*/redirect"],
         signedWith: Set<Entitlement>? = nil, openAnyLink: Bool = false, keepsSession: Bool = true,
+        pictureHosts: [String] = [],
         transport: (@MainActor @Sendable () -> any Transport)? = nil, webContent: WebContent = .network,
         launch: Launch = Launch()
     ) {
@@ -55,16 +60,26 @@ public struct ShellConfiguration: Sendable {
         self.signedWith = signedWith ?? Entitlement.declared(origin: origin)
         self.openAnyLink = openAnyLink
         self.keepsSession = keepsSession
+        self.pictureHosts = pictureHosts
         let keeps = keepsSession
+        let loopback = loopbackHTTP
         let origin = origin
-        self.transport = transport ?? { HTTPTransport(jar: CookieJar(origin: origin, persistent: keeps)) }
+        self.transport = transport ?? {
+            HTTPTransport(jar: CookieJar(origin: origin, loopbackHTTP: loopback, persistent: keeps))
+        }
         self.webContent = webContent
         self.launch = launch
     }
 
-    /// The origin as a URL: what relative addresses of pictures are read against.
+    /// The origin as a URL.
     public var base: URL? {
         URL(string: origin.hasSuffix("/") ? origin : origin + "/")
+    }
+
+    /// The origin every address is checked against: `nil` when the
+    /// configured text is not one, and then no address is the app's.
+    public var site: Origin? {
+        Origin(origin, loopbackHTTP: loopbackHTTP)
     }
 }
 

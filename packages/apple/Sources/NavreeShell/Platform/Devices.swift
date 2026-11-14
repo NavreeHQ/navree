@@ -34,8 +34,10 @@ final class DeviceCalls {
     var answer: (Int, CoreEvent.DeviceOutcome) -> Void = { _, _ in }
     /// Notifications were allowed: the app may ask the system for its token.
     var allowed: () -> Void = {}
-    /// The origin, which a shared address inside the app is read against.
+    /// The origin.
     let origin: URL?
+    /// The origin a shared address inside the app is joined to.
+    let site: Origin?
     /// What shows the system's sign-in sheets.
     var sheet: any AuthorizationSheet = SystemAuthorizationSheet()
     /// What asks the person to allow notifications.
@@ -44,9 +46,17 @@ final class DeviceCalls {
     /// The call whose sheet is showing: one at a time.
     private var showing: Int?
 
-    init(signedWith: Set<Entitlement>, origin: URL?) {
+    init(signedWith: Set<Entitlement>, origin: URL?, site: Origin? = nil) {
         self.signedWith = signedWith
         self.origin = origin
+        self.site = site
+    }
+
+    /// The link a share carries: a whole `http` or `https` address as it was
+    /// read, or an address of the app joined to its origin; never a relative
+    /// address read against it.
+    static func link(_ share: Navree.Share, site: Origin?) -> URL? {
+        share.url.flatMap { Origin.read($0)?.url } ?? share.href.flatMap { site?.address($0) }
     }
 
     func run(call: Int, device: DeviceRequest, posts: Bool, options: Navree.JSONValue?) {
@@ -107,8 +117,7 @@ final class DeviceCalls {
         #if canImport(UIKit)
         var items: [Any] = []
         if let text = share.text { items.append(text) }
-        let link = share.url.flatMap { URL(string: $0) } ?? share.href.flatMap { URL(string: $0, relativeTo: origin)?.absoluteURL }
-        if let link { items.append(link) }
+        if let link = Self.link(share, site: site) { items.append(link) }
         if items.isEmpty, let title = share.title { items.append(title) }
         guard !items.isEmpty, let top = Windows.top else { return answer(call, .refused(.unavailable)) }
         let sheet = UIActivityViewController(activityItems: items, applicationActivities: nil)

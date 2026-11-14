@@ -26,26 +26,34 @@ public final class SystemEffects: EffectRunner {
     let snapshots: KeptFiles
     let signIn: SignInSession
     let devices: DeviceCalls
+    /// The origin addresses are checked against.
+    let site: Origin?
+    /// Other hosts pictures may come from.
+    let pictureHosts: [String]
     private var timers: [Int: Task<Void, Never>] = [:]
 
     static let log = Logger(subsystem: "com.navree.native", category: "effects")
 
     public init(
         transport: any Transport, cache: KeptFiles = KeptFiles("navree-cache", in: .cachesDirectory),
-        snapshots: KeptFiles = KeptFiles("navree-snapshot"), signedWith: Set<Entitlement> = [], origin: URL? = nil
+        snapshots: KeptFiles = KeptFiles("navree-snapshot"), signedWith: Set<Entitlement> = [], origin: URL? = nil,
+        site: Origin? = nil, pictureHosts: [String] = []
     ) {
         self.transport = transport
         self.cache = cache
         self.snapshots = snapshots
+        let site = site ?? transport.jar?.site
+        self.site = site
+        self.pictureHosts = pictureHosts
         signIn = SignInSession(signedWith: signedWith, origin: origin)
-        devices = DeviceCalls(signedWith: signedWith, origin: origin)
+        devices = DeviceCalls(signedWith: signedWith, origin: origin, site: site)
     }
 
     /// The cookie store the web view shares.
     public var jar: CookieJar? { transport.jar }
 
     /// What loads the pictures of a screen, with the session's cookies.
-    public private(set) lazy var pictures = PictureLoader(jar: transport.jar)
+    public private(set) lazy var pictures = PictureLoader(jar: transport.jar, site: site, hosts: pictureHosts)
 
     public func run(_ effect: CoreEffect, for client: NativeClient) {
         switch effect {
@@ -123,10 +131,29 @@ public final class SystemEffects: EffectRunner {
 
     // MARK: - What the person sees and feels
 
+    /// The schemes an address the app opens may have: a web page, mail, a
+    /// call, a message, a place. Never a file or an app named by its scheme.
+    nonisolated static let openSchemes: Set<String> = ["http", "https", "mailto", "tel", "sms", "geo"]
+
+    /// The address the system may be asked to open, or `nil`: a whole `http`
+    /// or `https` address with a host and no user, written again from its
+    /// parts, or a `mailto:`, `tel:`, `sms:` or `geo:` one. Text with white
+    /// space, a control character or a backslash is never opened.
+    nonisolated static func openable(_ address: String) -> URL? {
+        guard Origin.isClean(address), let url = URL(string: address), let scheme = url.scheme?.lowercased(),
+            openSchemes.contains(scheme)
+        else { return nil }
+        if scheme == "http" || scheme == "https" { return Origin.read(address)?.url }
+        return url
+    }
+
     /// The system browser or the address's own app; with `inside`, Safari
-    /// inside the app. Never the web view.
+    /// inside the app. Never the web view, and only what `openable` allows.
     static func open(_ address: String, inside: Bool) {
-        guard let url = URL(string: address) else { return }
+        guard let url = openable(address) else {
+            Self.log.error("an address the app does not open was left unopened")
+            return
+        }
         #if canImport(UIKit)
         let web = ["http", "https"].contains(url.scheme?.lowercased() ?? "")
         if inside, web, let top = Windows.top {

@@ -65,7 +65,9 @@ struct WebPageView {
         func observe(_ view: WKWebView) {
             title = view.observe(\.title, options: [.new]) { [weak self] view, _ in
                 MainActor.assumeIsolated {
-                    guard let self, let title = view.title, !title.isEmpty else { return }
+                    // Only a page of the origin names the bar.
+                    guard let self, let title = view.title, !title.isEmpty, let url = view.url, self.isThePagesOwn(url)
+                    else { return }
                     self.parent.titled(title)
                 }
             }
@@ -93,12 +95,11 @@ struct WebPageView {
             }
         }
 
-        /// Whether `url` is where the page the core gave lives: its scheme,
-        /// host and port. What else may load is the core's to say.
+        /// Whether `url` is the app's own: on the configured origin, whole,
+        /// whatever address the page was loaded from. What else may load is
+        /// the core's to say.
         func isThePagesOwn(_ url: URL) -> Bool {
-            guard let loaded else { return false }
-            return url.scheme?.lowercased() == loaded.scheme?.lowercased() && url.host?.lowercased() == loaded.host?.lowercased()
-                && url.port == loaded.port
+            parent.configuration.site?.inside(url.absoluteString) != nil
         }
 
         func webView(
@@ -122,9 +123,12 @@ struct WebPageView {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            guard let jar = (parent.client.effects as? SystemEffects)?.jar, let host = webView.url?.host else { return }
+            // Only what a page of the origin set is taken into the session.
+            guard let jar = (parent.client.effects as? SystemEffects)?.jar, let site = parent.configuration.site,
+                let url = webView.url, isThePagesOwn(url)
+            else { return }
             Task { @MainActor in
-                await jar.adopt(from: webView.configuration.websiteDataStore.httpCookieStore, host: host)
+                await jar.adopt(from: webView.configuration.websiteDataStore.httpCookieStore, host: site.host)
             }
         }
 

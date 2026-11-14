@@ -1,17 +1,28 @@
 import Foundation
 
-/// Loads the pictures a screen shows with the session's own cookies, from the
-/// one cookie store the requests and the web view share, so a picture only a
-/// signed-in person may see is seen. Never follows a redirect to another
-/// host with them; keeps what it loaded in memory for as long as the app runs.
+/// Loads the pictures a screen shows. A picture of the origin goes with the
+/// session's own cookies, from the one cookie store the requests and the web
+/// view share, so a picture only a signed-in person may see is seen. A
+/// picture from one of the configured picture hosts goes with no cookie, and
+/// what it answers is never kept in the jar. No other address is asked for,
+/// and no redirect is followed. What it loaded is kept in memory until the
+/// session ends.
 @MainActor
 public final class PictureLoader {
     private let jar: CookieJar?
     private let session: URLSession
     private let kept = NSCache<NSURL, NSData>()
+    /// The origin a picture's address is read against.
+    public let site: Origin?
+    /// Other hosts pictures may come from, with no cookie.
+    public let hosts: [String]
 
-    public init(jar: CookieJar?, configuration: URLSessionConfiguration = .ephemeral) {
+    public init(
+        jar: CookieJar?, site: Origin? = nil, hosts: [String] = [], configuration: URLSessionConfiguration = .ephemeral
+    ) {
         self.jar = jar
+        self.site = site ?? jar?.site
+        self.hosts = hosts
         let configuration = HTTPTransport.prepared(configuration, timeout: 30)
         // Pictures may be cached as the system caches any answer.
         configuration.urlCache = URLCache(memoryCapacity: 8 << 20, diskCapacity: 0)
@@ -20,23 +31,33 @@ public final class PictureLoader {
         kept.totalCostLimit = 32 << 20
     }
 
-    /// The request for a picture: its cookies from the jar (only those of its own site).
+    /// The address of a picture the server names, or `nil` when it may not be asked for.
+    public func address(_ source: String) -> URL? {
+        site?.picture(source, hosts: hosts)
+    }
+
+    /// Whether `url` is the origin's own, so the session goes with it.
+    private func isOurs(_ url: URL) -> Bool {
+        site?.inside(url.absoluteString) != nil
+    }
+
+    /// The request for a picture: the session's cookies only when it is the origin's.
     public func request(_ url: URL) -> URLRequest {
         var request = URLRequest(url: url)
         request.setValue("image/*", forHTTPHeaderField: "Accept")
-        if let cookie = jar?.header(for: url) { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
+        if isOurs(url), let cookie = jar?.header(for: url) { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
         return request
     }
 
     /// The picture's bytes, or nothing when it could not be had.
     public func load(_ url: URL) async -> Data? {
         if let data = kept.object(forKey: url as NSURL) { return data as Data }
-        guard url.scheme == "https" || url.scheme == "http" else { return nil }
+        guard address(url.absoluteString) != nil else { return nil }
         let request = request(url)
         guard let (data, response) = try? await session.data(for: request),
             let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
         else { return nil }
-        jar?.take(from: http, for: url)
+        if isOurs(url) { jar?.take(from: http, for: url) }
         kept.setObject(data as NSData, forKey: url as NSURL, cost: data.count)
         return data
     }
