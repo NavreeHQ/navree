@@ -110,6 +110,22 @@ class DriverTest {
     }
 
     @Test
+    fun an_effect_that_runs_out_of_memory_is_reported_and_the_rest_still_run() {
+        val engine = Scripted(ArrayDeque(listOf("""{"changed":[],"effects":[{"t":"copy","text":"CS-220480"},{"t":"haptic","kind":"success"}]}""")), emptyMap())
+        val driver = Driver(engine)
+        val problems = ArrayList<String>()
+        driver.problems = { problems += it }
+        val ran = ArrayList<Effect>()
+        driver.effects = EffectRunner { effect ->
+            if (effect is Effect.Copy) throw OutOfMemoryError("Failed to allocate")
+            ran += effect
+        }
+        driver.send(Events.start)
+        assertEquals(listOf(Effect.Haptic("success")), ran)
+        assertEquals(1, problems.size)
+    }
+
+    @Test
     fun a_core_that_refuses_an_event_changes_nothing() {
         val engine = Scripted(ArrayDeque(listOf("""{"error":"the event does not read"}""")), emptyMap())
         val driver = Driver(engine)

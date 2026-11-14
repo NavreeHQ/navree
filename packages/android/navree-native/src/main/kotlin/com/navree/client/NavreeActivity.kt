@@ -109,6 +109,7 @@ class NavreeSession(
     }
 
     override fun onCleared() {
+        effects.close()
         engine.core?.close()
         engine.core = null
     }

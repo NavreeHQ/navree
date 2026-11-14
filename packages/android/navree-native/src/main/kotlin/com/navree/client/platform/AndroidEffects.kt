@@ -31,6 +31,7 @@ import kotlinx.serialization.json.JsonObject
 import okhttp3.HttpUrl
 import java.security.SecureRandom
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 /**
  * Empties what the system's web views keep for the app: what the page's
@@ -76,7 +77,13 @@ class AndroidEffects(
 
     /** Everything that touches what is kept on the device runs here, in order, one piece at a time. */
     private val storeThread = Executors.newSingleThreadExecutor { work -> Thread(work, "navree-store").apply { isDaemon = true } }
-    val state = StoredState { storeThread.execute(it) }
+    val state = StoredState { work ->
+        try {
+            storeThread.execute(work)
+        } catch (_: RejectedExecutionException) {
+            // The session was closed: nothing more is kept.
+        }
+    }
     val http = CoreHttp(cookies, origins, loopbackHttp, state) { post(it) }
     private val streams = CoreStreams(http.client, origins, cookies, state) { post(it) }
     private val cache = SealedCache(app)
@@ -213,6 +220,12 @@ class AndroidEffects(
                 done()
             }
         }
+    }
+
+    /** The session is gone for good: the store's thread ends once the work already asked for is done. */
+    fun close() {
+        streams.closeAll()
+        storeThread.shutdown()
     }
 
     /** The app left the front: streams close (the core opens them again when it comes back). */
