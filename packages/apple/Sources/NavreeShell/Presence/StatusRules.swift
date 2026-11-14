@@ -39,8 +39,11 @@ public struct StatusLabelParts: Sendable, Equatable {
     public var title: String?
     /// The count beside the image, as digits.
     public var count: String?
-    /// What VoiceOver calls the item.
+    /// What VoiceOver calls the item: its name, then the count beside it
+    /// where one shows ("Charkha Bar, 7").
     public var accessibilityLabel: String
+    /// The item's name alone, as its image describes itself.
+    public var name: String
 }
 
 /// The app's item in the menu bar, as plain rules.
@@ -163,6 +166,8 @@ public enum StatusRules {
     public static func label(item: StatusItem, count: Int?, place: MacPlace, appName: String) -> StatusLabelParts {
         let shown = item.showsCount && place == .menuBar ? BadgeRules.label(count) : nil
         let title = item.title.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
-        return StatusLabelParts(image: item.image, title: title, count: shown, accessibilityLabel: title ?? appName)
+        let name = title ?? appName
+        let said = [name, shown].compactMap(\.self).joined(separator: ", ")
+        return StatusLabelParts(image: item.image, title: title, count: shown, accessibilityLabel: said, name: name)
     }
 }
