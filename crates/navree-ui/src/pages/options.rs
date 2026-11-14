@@ -25,8 +25,9 @@ pub struct UiOptions {
     /// the sign-in state (default off).
     pub sign_in_redirect: Option<bool>,
     /// Add the status, code, message and cause to error pages, marked
-    /// "Development only" (default: on in a debug build, off in a release
-    /// build). Always off in `production` and `staging`.
+    /// "Development only". When it is not set, it is on only in a build with debug
+    /// assertions and only when the app's environment is named and is not `production`
+    /// or `staging`; otherwise off. Always off in `production` and `staging`.
     pub debug: Option<bool>,
 }
 
@@ -60,7 +61,7 @@ impl UiOptions {
 /// sign_in = "/sign-in"        # where "Sign in" leads; the page the user came from is added as `next`
 /// home = "/"                  # where "Go to home" leads
 /// sign_in_redirect = false    # send a guest straight to sign in, instead of showing a page
-/// debug = false               # add details to error pages; on by default in a debug build only
+/// debug = false               # add details to error pages; unset, on only in a debug build in a named environment that is not production
 /// ```
 #[derive(Clone, Debug)]
 #[must_use]
@@ -76,11 +77,16 @@ pub struct PagesOptions {
     /// asks for a page; an action or a region always gets its own answer.
     pub redirect_guests: bool,
     /// Adds the status, code, message and cause to an error page, marked "Development
-    /// only". On by default when the build has debug assertions, off in a release build.
-    /// In `production` and `staging` (the app's `env` or `app.env`) it is always off,
-    /// whatever the build, the configuration or the code say. Never turn it on where
-    /// users can see it.
+    /// only". Unless [`debug`](PagesOptions::debug) or the `ui` section says otherwise, it
+    /// is on when the build has debug assertions and the app's environment (`env` or
+    /// `app.env`, read from the configuration) is named and is not `production` or
+    /// `staging`; an app with no configuration to name one, or one that names none,
+    /// shows nothing, whatever the build. In `production` and `staging` it is always off,
+    /// whatever the build, the configuration or the code say. Never turn it on where users
+    /// can see it.
     pub debug: bool,
+    /// Whether the code or the configuration chose `debug`, and not the build.
+    debug_chosen: bool,
     /// The words of every state.
     pub labels: StateLabels,
 }
@@ -92,6 +98,7 @@ impl Default for PagesOptions {
             home: "/".to_owned(),
             redirect_guests: false,
             debug: cfg!(debug_assertions),
+            debug_chosen: false,
             labels: StateLabels::default(),
         }
     }
@@ -116,9 +123,11 @@ impl PagesOptions {
         self
     }
 
-    /// Turns the development details on or off.
+    /// Turns the development details on or off. What is said here stands (production
+    /// aside): an app with no configuration shows them only when this turns them on.
     pub fn debug(mut self, debug: bool) -> Self {
         self.debug = debug;
+        self.debug_chosen = true;
         self
     }
 
@@ -129,12 +138,13 @@ impl PagesOptions {
     }
 
     /// These options with the `ui` section of `config` applied. A `ui` section that is
-    /// not valid (an address that is not usable, a value of the wrong type) is ignored;
-    /// the boot uses [`try_configured`](PagesOptions::try_configured), which reports it.
+    /// not valid (an address that is not usable, a value of the wrong type) is ignored,
+    /// and then the development details stay off unless the code turned them on; the boot
+    /// uses [`try_configured`](PagesOptions::try_configured), which reports it.
     pub fn configured(self, config: &Config) -> Self {
         match self.clone().try_configured(config) {
             Ok(options) => options,
-            Err(_) => self,
+            Err(_) => self.unconfigured(),
         }
     }
 
@@ -151,14 +161,30 @@ impl PagesOptions {
         if let Some(value) = ui.sign_in_redirect {
             self.redirect_guests = value;
         }
+        let env = environment(config);
         if let Some(value) = ui.debug {
             self.debug = value;
+            self.debug_chosen = true;
+        } else if !self.debug_chosen {
+            // Nobody chose: a build with debug assertions shows the details only where the
+            // app says what it is and that it is not production.
+            self.debug = cfg!(debug_assertions) && named_and_not_production(env.as_deref());
         }
         // Production is final: whatever asked for the details, they stay off.
-        if is_production(environment(config).as_deref()) {
+        if is_production(env.as_deref()) {
             self.debug = false;
         }
         Ok(self)
+    }
+
+    /// These options for an app with no configuration to read its environment from: the
+    /// details stay off unless the code turned them on with [`debug`](PagesOptions::debug),
+    /// since a build with debug assertions says nothing of where the app runs.
+    pub(crate) fn unconfigured(mut self) -> Self {
+        if !self.debug_chosen {
+            self.debug = false;
+        }
+        self
     }
 
     /// The options with any address that is not usable put back to its default, so a
@@ -183,6 +209,11 @@ fn environment(config: &Config) -> Option<String> {
 /// Whether `env` takes the production behaviour (`production` or `staging`, in any case).
 pub(crate) fn is_production(env: Option<&str>) -> bool {
     env.is_some_and(|env| Environment::parse(env).behaves_like_production())
+}
+
+/// Whether `env` names an environment and it is not one that takes the production behaviour.
+fn named_and_not_production(env: Option<&str>) -> bool {
+    env.is_some_and(|env| !env.trim().is_empty() && !is_production(Some(env)))
 }
 
 /// Whether `address` can be a link target.
@@ -269,5 +300,66 @@ mod tests {
         assert_eq!(PagesOptions::default().debug, cfg!(debug_assertions));
         assert!(!PagesOptions::default().debug(false).debug);
         assert!(PagesOptions::default().debug(true).debug);
+    }
+
+    /// An app with no configuration cannot say it is not production, so a build with debug
+    /// assertions is not enough: only the code turning the details on does.
+    #[test]
+    fn with_no_configuration_the_details_are_off_unless_the_code_turned_them_on() {
+        assert!(!PagesOptions::default().unconfigured().debug);
+        assert!(PagesOptions::default().debug(true).unconfigured().debug);
+        assert!(!PagesOptions::default().debug(false).unconfigured().debug);
+    }
+
+    #[test]
+    fn with_a_configuration_the_details_need_a_named_environment_that_is_not_production() {
+        use navree_config::ConfigSources;
+
+        let load = |pairs: &[(&str, serde_json::Value)]| {
+            let mut sources = ConfigSources::new();
+            for (key, value) in pairs {
+                sources = sources.set(key, value.clone());
+            }
+            Config::load(&sources).expect("load")
+        };
+        let debug_in = |options: PagesOptions, pairs: &[(&str, serde_json::Value)]| {
+            options.try_configured(&load(pairs)).expect("valid").debug
+        };
+        // Nobody chose: a debug build shows them in an environment that is named and is not
+        // production, and nowhere else.
+        for (env, shown) in [
+            ("local", cfg!(debug_assertions)),
+            ("testing", cfg!(debug_assertions)),
+            ("development", cfg!(debug_assertions)),
+            ("production", false),
+            ("Production", false),
+            ("staging", false),
+            ("", false),
+        ] {
+            let pairs = [("env", serde_json::json!(env))];
+            assert_eq!(debug_in(PagesOptions::default(), &pairs), shown, "{env:?}");
+        }
+        // No environment named: off, whatever the build says.
+        let unnamed = [("ui.sign_in", serde_json::json!("/login"))];
+        assert!(!debug_in(PagesOptions::default(), &unnamed));
+        // Chosen in code or in the configuration: it stands, production aside.
+        assert!(debug_in(PagesOptions::default().debug(true), &unnamed));
+        assert!(debug_in(
+            PagesOptions::default(),
+            &[("ui.debug", serde_json::json!(true))]
+        ));
+        let development = [("env", serde_json::json!("development"))];
+        assert!(!debug_in(PagesOptions::default().debug(false), &development));
+        assert!(!debug_in(
+            PagesOptions::default().debug(true),
+            &[("env", serde_json::json!("production"))]
+        ));
+        // A `ui` section that is not valid is ignored, and the details stay as the code left them.
+        let invalid = load(&[
+            ("env", serde_json::json!("development")),
+            ("ui.sign_in", serde_json::json!("javascript:alert(1)")),
+        ]);
+        assert!(!PagesOptions::default().configured(&invalid).debug);
+        assert!(PagesOptions::default().debug(true).configured(&invalid).debug);
     }
 }
