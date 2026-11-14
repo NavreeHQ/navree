@@ -25,6 +25,11 @@ pub const PAGE_CSP: &str = "default-src 'none'; script-src 'self'; style-src 'se
 /// The `Speculation-Rules` header's name.
 const SPECULATION_RULES: HeaderName = HeaderName::from_static("speculation-rules");
 
+/// The header on every page a [`View`] answers: the runtime takes an answer into the page it
+/// shows only when it carries this, which no file the app serves as it is can (an upload served
+/// back, a page a proxy writes). The page's build is the second check.
+pub(crate) const PAGE_HEADER: HeaderName = HeaderName::from_static("x-navree-page");
+
 /// What the document head costs before its title and scripts.
 const HEAD_BYTES: usize = 512;
 
@@ -696,6 +701,7 @@ impl IntoResponse for View {
         )
             .into_response();
         let headers = response.headers_mut();
+        headers.insert(PAGE_HEADER, HeaderValue::from_static("1"));
         if !uses.has(Uses::CORE) {
             headers.insert(
                 SPECULATION_RULES,
@@ -907,6 +913,18 @@ mod tests {
             response.headers()["speculation-rules"],
             assets::SPECULATION_HEADER
         );
+    }
+
+    /// The runtime takes an answer into the page only when it says it is a page of this app, in
+    /// a header no file served as it is carries; with the runtime or without, every page says so.
+    #[test]
+    fn a_page_says_it_is_a_page_of_this_app_in_a_header() {
+        let plain = View::new("x").into_response();
+        assert_eq!(plain.headers()[PAGE_HEADER], "1");
+        let scripted = View::new("x")
+            .body(el("button").on_click_one(Cmd::toggle("a")))
+            .into_response();
+        assert_eq!(scripted.headers()["x-navree-page"], "1");
     }
 
     #[test]

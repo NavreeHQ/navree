@@ -22,7 +22,7 @@ The preview above is the region before it loads: two skeleton lines, and `aria-b
 
 ## The source
 
-`.src(url)` is where the content comes from: a page that holds an element with the region's id, or a fragment, which is a page with no script of its own. A source that answers a page with the runtime but without that id, or a redirect, means the reader is somewhere else, as when a session has ended: the reader goes there. The source is on your site: an address with another host becomes `#`, as with `LocalHref`, and the runtime never fetches a region from another origin or draws an answer redirected to one.
+`.src(url)` is where the content comes from: a page that holds an element with the region's id, or a fragment, which is a page with no script of its own. A source that answers a page with the runtime but without that id, or a redirect, means the reader is somewhere else, as when a session has ended: the reader goes there. Answer the source with a `View` (or a page built on one, such as the shell's): the runtime draws only an answer that carries the header every `View` sends, `X-Navree-Page`. The source is on your site: an address with another host becomes `#`, as with `LocalHref`, and the runtime never fetches a region from another origin or draws an answer redirected to one.
 
 ### A fragment that holds more parts
 
