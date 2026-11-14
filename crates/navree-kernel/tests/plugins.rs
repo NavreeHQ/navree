@@ -630,3 +630,42 @@ async fn a_module_of_a_plugin_the_kernel_does_not_find_first_party_is_a_communit
         "not in the app"
     );
 }
+
+/// A module of the app's own crate. This file is one crate, the plugin's, so the module takes the
+/// id of a type of another crate.
+struct Outside;
+impl Module for Outside {
+    fn id(&self) -> ModuleId {
+        ModuleId::named::<String>("Outside")
+    }
+
+    fn register(&self, _: &mut ModuleBuilder) {}
+}
+
+#[tokio::test]
+async fn a_module_of_the_app_names_no_plugin_and_is_in_no_plugins_crate() {
+    use navree_kernel::__private::is_app_module;
+    let app = Navree::app()
+        .module(NoticesModule)
+        .module(Plain)
+        .module(Outside)
+        .boot()
+        .await
+        .expect("boots");
+    assert!(is_app_module(
+        app.ctx(),
+        ModuleId::named::<String>("Outside")
+    ));
+    assert!(
+        !is_app_module(app.ctx(), ModuleId::of::<NoticesModule>()),
+        "a module of a plugin"
+    );
+    assert!(
+        !is_app_module(app.ctx(), ModuleId::of::<Plain>()),
+        "names no plugin, but it is in the crate the plugin names"
+    );
+    assert!(
+        !is_app_module(app.ctx(), ModuleId::of::<Shop>()),
+        "not in the app"
+    );
+}

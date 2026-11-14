@@ -75,24 +75,16 @@ impl Sources {
     }
 
     /// Which of `names` a template file provides, and so wins over an embedded
-    /// template of that name: the file the loader finds when `reload` is on,
-    /// the file in the listing of the directories otherwise (what
-    /// [`read_all`](Sources::read_all) reads). Walks the directories only when
-    /// there is a name to look for.
-    pub(crate) fn provided_by_files(
-        &self,
-        reload: bool,
-        names: &[String],
-    ) -> Result<Vec<String>, ViewError> {
+    /// template of that name: the names in the listing of the directories,
+    /// which is what [`read_all`](Sources::read_all) reads. A name counts
+    /// letter for letter, with or without reloading: on a disk that ignores
+    /// case a file `Mail/Welcome.html` is another name than `mail/welcome.html`,
+    /// as it is where the listing is all there is, so the boot answers the same
+    /// in development and in production. Walks the directories only when there
+    /// is a name to look for.
+    pub(crate) fn provided_by_files(&self, names: &[String]) -> Result<Vec<String>, ViewError> {
         if names.is_empty() {
             return Ok(Vec::new());
-        }
-        if reload {
-            return Ok(names
-                .iter()
-                .filter(|name| self.file(name).is_some())
-                .cloned()
-                .collect());
         }
         let files = self.files()?;
         Ok(names

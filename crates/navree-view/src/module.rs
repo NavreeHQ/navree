@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use navree_config::{Config, ModuleBuilderConfigExt};
-use navree_kernel::__private::{imports, is_community_plugin};
+use navree_kernel::__private::{imports, is_app_module, is_community_plugin};
 use navree_kernel::{
     AppContext, BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ModuleInfo,
     ProviderKey, Resolver,
@@ -201,6 +201,7 @@ fn embedded_templates(ctx: &AppContext) -> Found {
             if let Some((previous, previous_source)) =
                 owners.insert(name.clone(), (module.clone(), source))
                 && previous.id != module.id
+                && !close_takeover(ctx, &name, &module, &mut found)
                 && previous_source != source
             {
                 say_duplicate(ctx, &name, &previous, &module, &mut found);
@@ -211,20 +212,44 @@ fn embedded_templates(ctx: &AppContext) -> Found {
     found
 }
 
+/// Whether `module`, which registers the template `name` after another module,
+/// closes the [`Takeover`] of that name: a plugin's module replaced a template
+/// of the app or of the framework, and now a module of the app registers the
+/// name after it, so the app's version is the one rendered. It does, whatever
+/// the text it registers: the plugin's own text is the app choosing the
+/// plugin's version. Said at `info`; `false` when no takeover of `name` is open
+/// or `module` is not a module of the app (see `is_app_module`).
+fn close_takeover(ctx: &AppContext, name: &str, module: &ModuleInfo, found: &mut Found) -> bool {
+    let open = found
+        .takeovers
+        .iter()
+        .find(|taken| taken.name == name)
+        .map(|taken| (taken.first, taken.second, taken.plugin));
+    let Some((replaced, replacing, plugin)) = open else {
+        return false;
+    };
+    if !is_app_module(ctx, module.id) {
+        return false;
+    }
+    found.takeovers.retain(|taken| taken.name != name);
+    let used = module.name;
+    tracing::info!(
+        target: "navree::view",
+        "embedded template `{name}` of `{replaced}` is replaced by `{replacing}`'s, a module of the plugin `{plugin}`; `{used}`'s is used"
+    );
+    true
+}
+
 /// What it means that `module`, after `previous`, embeds the template `name`
-/// with other text.
+/// with other text, when `module` does not close a takeover of it.
 ///
-/// When a plugin's module replaced a template of the app or of the framework
-/// (a [`Takeover`] still open) and `module` belongs to no plugin, the app's
-/// version is the one rendered: said at `info`, and the takeover is closed.
-///
-/// Otherwise, when `module` imports `previous` (a module may replace what it
-/// imports) there are three outcomes: said at `info` when `module` is not a
-/// module of a plugin the kernel does not find first-party; when it is, a
-/// warning if `previous` belongs to such a plugin too (another plugin's
-/// template), and a takeover otherwise (a template of the app or of the
-/// framework). When it does not import `previous`, an error when either belongs
-/// to such a plugin, and otherwise a warning.
+/// When `module` imports `previous` (a module may replace what it imports)
+/// there are three outcomes: said at `info` when `module` is not a module of a
+/// plugin the kernel does not find first-party; when it is, a warning if
+/// `previous` belongs to such a plugin too (another plugin's template), and a
+/// takeover otherwise (a template of the app or of the framework). When it does
+/// not import `previous`, an error when either belongs to such a plugin, and
+/// otherwise a warning.
 fn say_duplicate(
     ctx: &AppContext,
     name: &str,
@@ -233,21 +258,6 @@ fn say_duplicate(
     found: &mut Found,
 ) {
     let (first, second) = (previous.name, module.name);
-    if ctx.plugin(module.id).is_none() {
-        let open = found
-            .takeovers
-            .iter()
-            .find(|taken| taken.name == name)
-            .map(|taken| (taken.first, taken.second, taken.plugin));
-        if let Some((replaced, replacing, plugin)) = open {
-            found.takeovers.retain(|taken| taken.name != name);
-            tracing::info!(
-                target: "navree::view",
-                "embedded template `{name}` of `{replaced}` is replaced by `{replacing}`'s, a module of the plugin `{plugin}`; `{second}`'s is used"
-            );
-            return;
-        }
-    }
     if imports(ctx, module.id, previous.id) {
         let community = ctx
             .plugin(module.id)
@@ -358,9 +368,13 @@ pub trait ModuleBuilderViewExt {
     /// when that template is another plugin's, and is then warned about.
     /// Replacing a template of the app or of the framework fails the boot while
     /// the plugin's version is the one rendered: it is not when a template
-    /// folder holds a file of that name, or when a module that belongs to no
-    /// plugin registers the name after the plugin's module. The replacement is
-    /// then said at `info` and the boot goes on.
+    /// folder holds a file of that name (letter for letter, with or without
+    /// reloading), or when a module of the app registers the name after the
+    /// plugin's module, with the plugin's text or with its own. A module of the
+    /// app is one that names no plugin and is in no crate that a plugin of the
+    /// app names; it is after the plugin's module when it imports it or is
+    /// registered after it. The replacement is then said at `info` and the boot
+    /// goes on.
     ///
     /// ```
     /// use navree_kernel::{Module, ModuleBuilder};
