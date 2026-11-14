@@ -9,4 +9,5 @@ mod database;
 mod databases;
 mod lifecycle;
 mod module;
+mod mount;
 mod spa;
