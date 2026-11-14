@@ -193,6 +193,18 @@ regexes = [
 
 [[allowlists]]
 description = """
+The session token of the tests that mask a CSRF token and check a mask of it
+(city names with a digit between them), and the one in the documentation
+example of `navree_http::csrf` (sixteen characters written out two and a half
+times). No session was ever given either."""
+targetRules = ["generic-api-key"]
+regexes = [
+  '''Agra4Pune7Kota2Surat9Patna1Ranchi8Mysore''',
+  '''q7zk2mvb4xjt3nrcq7zk2mvb4xjt3nrcq7zk2mvb''',
+]
+
+[[allowlists]]
+description = """
 The scanners' own output: the reports that scripts/sast.sh writes to
 sast-reports/ (git-ignored) hold commit hashes and redacted findings, and the
 working-tree scan would otherwise read the history report back in."""
