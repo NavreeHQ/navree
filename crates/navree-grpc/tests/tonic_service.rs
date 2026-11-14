@@ -119,11 +119,29 @@ impl Deals for Ledger {
 
     type WatchDealsStream = DealEvents;
 
+    /// One event, then an error after the head: the stream's unit of work
+    /// has committed by then.
     async fn watch_deals(
         &self,
         _request: Request<WatchDealsRequest>,
     ) -> Result<Response<Self::WatchDealsStream>, Status> {
-        Err(Status::unimplemented("this ledger is not watched"))
+        self.served();
+        let commits = self.commits.clone();
+        Uow::current()
+            .expect("the method runs in the call's unit of work")
+            .after_commit(move || {
+                Box::pin(async move {
+                    commits.fetch_add(1, Ordering::SeqCst);
+                })
+            });
+        let events = tokio_stream::iter([
+            Ok(DealEvent {
+                deal_id: "1".to_owned(),
+                stage: "won".to_owned(),
+            }),
+            Err(Status::aborted("the ledger closed the stream")),
+        ]);
+        Ok(Response::new(Box::pin(events) as DealEvents))
     }
 
     async fn import_deals(
@@ -447,6 +465,23 @@ async fn a_wrapped_method_commits_its_unit_of_work_only_when_it_answers_ok() {
     );
     assert_eq!(ledger.commits(), 1, "an error status rolls back");
     assert_eq!(ledger.calls(), 2);
+
+    // A stream commits when its head is sent; an error after the head does
+    // not roll it back.
+    let mut events = harpreet
+        .watch_deals(WatchDealsRequest {})
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(ledger.commits(), 2, "committed with the head");
+    let first = events.message().await.unwrap().expect("an event");
+    assert_eq!(first.stage, "won");
+    let status = events.message().await.unwrap_err();
+    assert_eq!(
+        (status.code(), status.message()),
+        (Code::Aborted, "the ledger closed the stream")
+    );
+    assert_eq!(ledger.commits(), 2, "the error after the head rolled nothing back");
 
     // A head that is not HTTP 200 and has no `grpc-status` rolls back and is
     // answered with the code the gRPC specification gives that HTTP status.

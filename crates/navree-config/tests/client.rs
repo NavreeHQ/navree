@@ -200,6 +200,44 @@ async fn two_client_modules_of_one_type_are_two_modules() {
         "{error}"
     );
 
+    // Each module's readiness check and shutdown hook use its own client.
+    let app = Navree::app()
+        .module(weather("delhi").for_root(WeatherOptions {
+            feed: "https://mausam.example/delhi".into(),
+        }))
+        .module(weather("ludhiana").for_root(WeatherOptions {
+            feed: "http://mausam.example/ludhiana".into(),
+        }))
+        .boot()
+        .await
+        .unwrap();
+    let mut checks = Vec::new();
+    for check in app.ctx().get_all::<dyn HealthCheck>().await.unwrap() {
+        checks.push((check.name().to_owned(), check.check().await));
+    }
+    checks.sort_by(|a, b| a.0.cmp(&b.0));
+    assert_eq!(
+        checks,
+        [
+            ("delhi".to_owned(), HealthStatus::Up),
+            (
+                "ludhiana".to_owned(),
+                HealthStatus::Down("the mausam feed is not https".into())
+            ),
+        ]
+    );
+    let delhi = app.ctx().get_named::<Forecasts>("delhi").await.unwrap();
+    let ludhiana = app.ctx().get_named::<Forecasts>("ludhiana").await.unwrap();
+    assert_eq!(
+        (delhi.feed.as_str(), ludhiana.feed.as_str()),
+        ("https://mausam.example/delhi", "http://mausam.example/ludhiana")
+    );
+    app.shutdown().await.unwrap();
+    assert!(
+        delhi.closed.load(Ordering::SeqCst) && ludhiana.closed.load(Ordering::SeqCst),
+        "each shutdown hook closed its own client"
+    );
+
     // One name twice is one module.
     let report = Navree::app()
         .module(config("https://mausam.example/ludhiana"))
