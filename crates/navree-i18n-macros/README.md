@@ -6,11 +6,13 @@ Part of [Navree](https://navree.com), the complete application framework for Rus
 
 ## Use it
 
-Its macros are re-exported by `navree-i18n`, and so by `navree` with the `i18n` feature. Depend on that crate instead of this one.
+It is always part of `navree`, the framework crate:
 
 ```sh
-cargo add navree --features i18n
+cargo add navree
 ```
+
+You can also depend on it alone with `cargo add navree-i18n-macros`.
 
 ## Documentation
 
