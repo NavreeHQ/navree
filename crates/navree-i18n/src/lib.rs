@@ -27,8 +27,11 @@
 //!   templates get `t()` and locale-aware `money` and `date` filters
 //!   (navree-view); notifications render in the recipient's saved locale
 //!   (navree-notify).
-//! - **Tooling.** `i18n:check`, `i18n:missing <locale>` and
-//!   `i18n:publish validation`.
+//! - **Plugins.** A plugin ships Fluent files with `m.locales(..)`; they load
+//!   after the app's own, so the app's message wins, and a plugin's message
+//!   ids start with its namespace.
+//! - **Tooling.** `i18n:check`, `i18n:missing <locale>`, `i18n:publish
+//!   validation` and `i18n:publish` with a plugin's name.
 //!
 //! ```
 //! use navree_i18n::{I18n, I18nOptions, Locale, t};
@@ -61,6 +64,7 @@ mod module;
 mod negotiate;
 mod notify;
 mod options;
+mod plugins;
 mod service;
 mod shipped;
 mod tag;

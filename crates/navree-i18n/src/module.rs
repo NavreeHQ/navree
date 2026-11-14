@@ -22,6 +22,7 @@ use crate::locale::{clear_global, set_global};
 use crate::migration::migrations;
 use crate::negotiate;
 use crate::notify::UserLocaleScope;
+use crate::plugins::plugin_sources;
 use crate::validation::Translator;
 use crate::views::{self, Slot};
 use crate::{I18n, I18nError, I18nOptions};
@@ -44,6 +45,9 @@ const RELOAD_EVERY: Duration = Duration::from_millis(500);
 ///   saved locale;
 /// - the `t` and `locale` template functions, and `money` and `date`
 ///   filters that format for the current locale (navree-view);
+/// - the Fluent files that plugins ship with `m.locales(..)`, read after the
+///   app's own (the app's message wins over a plugin's); a plugin's message ids
+///   start with its namespace;
 /// - the `i18n` migrations (`locale_preferences`, used with
 ///   `DatabaseModule`);
 /// - `GET {api_prefix}/i18n/locales` and, with `DatabaseModule` and an
@@ -116,10 +120,12 @@ fn register(m: &mut ModuleBuilder, options: Option<I18nOptions>) {
                         .command()
                         .is_some_and(|command| commands::NAMES.contains(&command.name));
                     let db = app.try_get::<Db>().await;
+                    let plugins = plugin_sources(&app)?;
                     // Reads files: keep it off the async workers.
-                    let i18n =
-                        tokio::task::spawn_blocking(move || I18n::load(options, db, lenient))
-                            .await??;
+                    let i18n = tokio::task::spawn_blocking(move || {
+                        I18n::load(options, db, plugins, lenient)
+                    })
+                    .await??;
                     let i18n = Arc::new(i18n);
                     let _ = slot.set(i18n.clone());
                     Ok(i18n)
