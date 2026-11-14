@@ -252,7 +252,9 @@ pub enum DriverNameError {
 /// What a driver's factory gets: the app, the driver's name, and where its
 /// settings are.
 ///
-/// The driver kind's module builds it when it builds the driver at boot.
+/// The driver kind's module builds it when it builds the driver at boot. A
+/// factory's error is shown in the boot error as written, so it must not
+/// contain a secret from the driver's settings.
 ///
 /// ```
 /// use navree_config::DriverContext;

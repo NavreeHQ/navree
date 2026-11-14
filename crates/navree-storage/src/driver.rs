@@ -397,7 +397,9 @@ pub trait ModuleBuilderStorageExt {
     /// `memory`, `s3`, `gcs`, `azure`) and a name two modules register
     /// fail the boot, naming `m.disk_driver` and the module, also when no
     /// disk uses it; `config:check` says the same. A disk naming a driver no
-    /// module registers, and a factory that fails, fail the boot too.
+    /// module registers, and a factory that fails, fail the boot too. A
+    /// factory's error is shown in the boot error as written, so it must not
+    /// contain a secret from the driver's settings.
     fn disk_driver<D, F, Fut>(&mut self, name: &'static str, factory: F) -> &mut Self
     where
         D: DiskDriver,

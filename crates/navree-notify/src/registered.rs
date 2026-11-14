@@ -192,8 +192,10 @@ pub trait ModuleBuilderNotifyChannelsExt {
     /// (`slack`, `meta`, `push`) and a name two modules register fail the boot,
     /// naming `m.sms_driver` and the module, also when another driver is
     /// selected; `config:check` says the same. A factory that fails fails
-    /// the boot. An app's own unnamed `dyn SmsDriver` (a fake in a test)
-    /// still wins when a message is sent.
+    /// the boot. A factory's error is shown in the boot error as written, so
+    /// it must not contain a secret from the driver's settings. An app's own
+    /// unnamed `dyn SmsDriver` (a fake in a test) still wins when a message
+    /// is sent.
     fn sms_driver<S, F, Fut>(&mut self, name: &'static str, factory: F) -> &mut Self
     where
         S: SmsDriver,

@@ -99,7 +99,9 @@ pub trait ModuleBuilderAiProviderExt {
     /// a name two modules register fail the boot, naming `m.ai_provider`
     /// and the module; so does a table naming a driver no module registers.
     /// `config:check` says the same. A factory that fails fails the boot,
-    /// naming the driver and the module.
+    /// naming the driver and the module. A factory's error is shown in the
+    /// boot error as written, so it must not contain a secret from the
+    /// driver's settings.
     fn ai_provider<A, F, Fut>(&mut self, name: &'static str, factory: F) -> &mut Self
     where
         A: AiDriver,
