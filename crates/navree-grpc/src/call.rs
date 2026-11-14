@@ -18,6 +18,7 @@ use navree_http::extract::FromRequestParts;
 use navree_http::serve::BodyReadLimit;
 use navree_http::{
     AppError, Authenticator, ClientIp, ErrorMapper, PathParams, RouteAuthorizer, RouteMeta,
+    rate_limit_key,
 };
 use navree_kernel::{AppContext, ModuleId, WeakAppContext};
 use tokio::time::Instant;
@@ -40,8 +41,10 @@ pub(crate) struct Runtime {
     pub(crate) mappers: Vec<ErrorMapper>,
     pub(crate) default_timeout: Duration,
     pub(crate) shutdown: CancellationToken,
-    /// The client addresses whose refused call to an undeclared method was
-    /// audited in the last minute.
+    /// `http.rate_limit_ipv6_prefix`: IPv6 clients are counted by network.
+    pub(crate) ipv6_prefix: u8,
+    /// The clients whose refused call to an undeclared method was audited in
+    /// the last minute.
     pub(crate) undeclared_audits: UndeclaredAudits,
 }
 
@@ -542,21 +545,23 @@ fn security_entry(parts: &Parts, meta: &RouteMeta, check: &str) -> AuditEntry {
 /// entry keep.
 const UNDECLARED_PATH_BYTES: usize = 128;
 
-/// At most one audit entry per client address in this window.
+/// At most one audit entry per client in this window.
 const UNDECLARED_AUDIT_WINDOW: Duration = Duration::from_secs(60);
 
-/// The most client addresses [`UndeclaredAudits`] remembers at once, and so
-/// the most refusals of undeclared methods audited in a minute.
+/// The most clients [`UndeclaredAudits`] remembers at once, and so the most
+/// refusals of undeclared methods audited in a minute.
 const UNDECLARED_AUDIT_ADDRESSES: usize = 4096;
 
 /// Records a refused call to a wrapped server's method that has no
 /// declaration. Every such call logs a warning on `navree::security`. When
-/// the app has an audit sink, the first one from a client address in a
-/// minute is also an `access.denied` security entry (`check` `undeclared`),
-/// as a guard's refusal records, written on the app's task tracker, so the
-/// refusal never waits for the sink. Both keep at most the first 128 bytes of
-/// the path. The call is refused before authentication, so the entry names
-/// no user.
+/// the app has an audit sink, the first one from a client in a minute is
+/// also an `access.denied` security entry (`check` `undeclared`), as a
+/// guard's refusal records, written on the app's task tracker, so the
+/// refusal never waits for the sink. A client is its address, or for IPv6
+/// its network of `http.rate_limit_ipv6_prefix` bits, as the app's other
+/// per-address limits count it. Both keep at most the first 128 bytes of the
+/// path. The call is refused before authentication, so the entry names no
+/// user.
 pub(crate) fn record_undeclared(runtime: &Runtime, parts: &Parts, path: &str) {
     let path = cut(path, UNDECLARED_PATH_BYTES);
     tracing::warn!(
@@ -571,11 +576,8 @@ pub(crate) fn record_undeclared(runtime: &Runtime, parts: &Parts, path: &str) {
     let Some(sink) = &runtime.audit else {
         return;
     };
-    let ip = parts
-        .extensions
-        .get::<ClientIp>()
-        .map_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED), |ClientIp(ip)| *ip);
-    if !runtime.undeclared_audits.admit(ip, Instant::now()) {
+    let key = client_key(parts, runtime.ipv6_prefix);
+    if !runtime.undeclared_audits.admit(key, Instant::now()) {
         return;
     }
     let Some(ctx) = runtime.ctx.upgrade() else {
@@ -593,6 +595,17 @@ pub(crate) fn record_undeclared(runtime: &Runtime, parts: &Parts, path: &str) {
     });
 }
 
+/// The key a call's client is counted under, as the app's other per-address
+/// limits count it: its address (`0.0.0.0` when unknown), or for IPv6 its
+/// network of `ipv6_prefix` bits.
+fn client_key(parts: &Parts, ipv6_prefix: u8) -> IpAddr {
+    let ip = parts
+        .extensions
+        .get::<ClientIp>()
+        .map_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED), |ClientIp(ip)| *ip);
+    rate_limit_key(ip, ipv6_prefix)
+}
+
 /// `text` cut to at most `max` bytes, at a character boundary.
 fn cut(text: &str, max: usize) -> &str {
     if text.len() <= max {
@@ -605,36 +618,38 @@ fn cut(text: &str, max: usize) -> &str {
     &text[..end]
 }
 
-/// The client addresses whose refused call to an undeclared method was
-/// audited in the last minute: at most one entry per address a minute, and
-/// at most [`UNDECLARED_AUDIT_ADDRESSES`] addresses remembered. While that
-/// many are remembered and none is a minute old, a refusal from a new
-/// address is logged and not audited.
+/// The clients whose refused call to an undeclared method was audited in the
+/// last minute, each by its rate-limit key (an address, or an IPv6 network):
+/// at most one entry per client a minute, and at most
+/// [`UNDECLARED_AUDIT_ADDRESSES`] clients remembered. While that many are
+/// remembered and none is a minute old, a refusal from a new client is
+/// logged and not audited.
 #[derive(Default)]
 pub(crate) struct UndeclaredAudits(Mutex<AuditWindow>);
 
 #[derive(Default)]
 struct AuditWindow {
-    /// When each address's last entry was recorded.
+    /// When each client's last entry was recorded.
     seen: HashMap<IpAddr, Instant>,
-    /// While the map is full: no address expires before this instant, so no
+    /// While the map is full: no client expires before this instant, so no
     /// sweep is needed until then.
     full_until: Option<Instant>,
 }
 
 impl UndeclaredAudits {
-    /// Whether a refused call from `ip` at `now` is audited: the first one of
-    /// the address's minute, while there is room for its address.
-    pub(crate) fn admit(&self, ip: IpAddr, now: Instant) -> bool {
+    /// Whether a refused call from the client keyed `key` at `now` is
+    /// audited: the first one of the client's minute, while there is room for
+    /// it.
+    pub(crate) fn admit(&self, key: IpAddr, now: Instant) -> bool {
         let mut window = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        window.admit(ip, now, UNDECLARED_AUDIT_ADDRESSES)
+        window.admit(key, now, UNDECLARED_AUDIT_ADDRESSES)
     }
 }
 
 impl AuditWindow {
-    fn admit(&mut self, ip: IpAddr, now: Instant, cap: usize) -> bool {
+    fn admit(&mut self, key: IpAddr, now: Instant, cap: usize) -> bool {
         let fresh = |at: Instant| now.duration_since(at) < UNDECLARED_AUDIT_WINDOW;
-        if let Some(at) = self.seen.get_mut(&ip) {
+        if let Some(at) = self.seen.get_mut(&key) {
             if fresh(*at) {
                 return false;
             }
@@ -656,7 +671,7 @@ impl AuditWindow {
             }
             self.full_until = None;
         }
-        self.seen.insert(ip, now);
+        self.seen.insert(key, now);
         true
     }
 }
@@ -849,5 +864,31 @@ mod tests {
         assert_eq!(cut("/crm.deals.v1.Deals/GetDeal", 4), "/crm");
         // `₹` is three bytes.
         assert_eq!(cut("₹₹", 4), "₹");
+    }
+
+    #[test]
+    fn the_addresses_of_one_ipv6_network_are_audited_as_one_client() {
+        let from = |address: &str| {
+            let (mut parts, ()) = http::Request::new(()).into_parts();
+            parts.extensions.insert(ClientIp(address.parse().unwrap()));
+            client_key(&parts, 64)
+        };
+        let start = Instant::now();
+        let at = |secs: u64| start + Duration::from_secs(secs);
+        let audits = UndeclaredAudits::default();
+
+        // Two addresses of one /64: one entry in the minute.
+        assert!(audits.admit(from("2001:db8:1:2::1"), at(0)));
+        assert!(!audits.admit(from("2001:db8:1:2:ffff::9"), at(1)));
+
+        // Addresses of two other /64s: one entry each.
+        assert!(audits.admit(from("2001:db8:1:3::1"), at(2)));
+        assert!(audits.admit(from("2001:db8:1:4::1"), at(3)));
+        assert!(!audits.admit(from("2001:db8:1:3::2"), at(4)));
+        assert!(!audits.admit(from("2001:db8:1:4::2"), at(5)));
+
+        // Each IPv4 address is a client of its own.
+        assert!(audits.admit(from("203.0.113.9"), at(6)));
+        assert!(audits.admit(from("203.0.113.10"), at(7)));
     }
 }

@@ -341,6 +341,7 @@ async fn build(
             .collect(),
         default_timeout: options.default_timeout(http.timeout_secs),
         shutdown: ctx.shutdown_token(),
+        ipv6_prefix: http.rate_limit_ipv6_prefix,
         undeclared_audits: UndeclaredAudits::default(),
     });
     let core = GrpcCore::new(runtime.clone(), services, routes);
