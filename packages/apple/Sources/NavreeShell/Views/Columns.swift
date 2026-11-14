@@ -164,7 +164,7 @@ struct DestinationSidebar: View {
     private func rows(_ members: [DestinationGroup.Member]) -> some View {
         ForEach(members) { member in
             DestinationLabel(label: member.item.label, icon: member.item.icon)
-                .badge(member.item.badge.flatMap { Int($0) } ?? 0)
+                .badge(BadgeRules.tabBadge(member.item.badge))
                 .tag(member.index)
         }
     }

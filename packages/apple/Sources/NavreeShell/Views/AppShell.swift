@@ -51,6 +51,8 @@ public struct AppShell: View {
                 )
             }
         }
+        .modifier(PresenceHooks(session: session, scene: scene))
+        .modifier(WindowSizing(look: session.configuration.windows))
         .task {
             if scene.isEmpty { scene = UUID().uuidString }
             session.begin(restoring: restorable, scene: scene)
@@ -462,7 +464,7 @@ struct Chrome: View {
         } label: {
             DestinationLabel(label: item.label, icon: item.icon, inTabBar: inTabBar)
         }
-        .badge(item.badge.flatMap { Int($0) } ?? 0)
+        .badge(BadgeRules.tabBadge(item.badge))
     }
 
     private var selection: Binding<Int> {
