@@ -118,12 +118,14 @@ The build says `LSUIElement`. Then:
   questions and menus as any window does. It is never in the Window menu nor
   among the windows ⌘` steps through. It opens again where the person left
   the app, and a window the person may resize at the size they left it.
-- **Its sheets fit it.** A Mac sheet takes the system's size for a form
-  (470 × 400 points) within the room the window it stands on has under its
-  bar: in the 400-point window under the item a sheet is that window's width,
-  its form whole, its content scrolling when taller, never hanging over the
-  window's edges; a sheet up while the person resizes the window stays inside
-  it, centred.
+- **Its sheets fit it.** A Mac sheet takes a form's width (470 points) within
+  the room the window it stands on has under its bar, and is as tall as its
+  content up to a form's height (400): in the 400-point window under the item
+  a sheet is that window's width, its form whole, its content scrolling when
+  taller, never hanging over the window's edges; a sheet up while the person
+  resizes the window stays inside it, centred; carried into the full window
+  with the shell, it takes a form's width there. Escape presses its Cancel on
+  the first press, also while a field is being typed in.
 - **It holds the whole app**: the app's one shell and session, with its
   navigation, sheets, forms, search, menus, notices, web screens and the
   person's menu. There is no second session: the window *is* the app's.
@@ -137,7 +139,10 @@ The build says `LSUIElement`. Then:
   tab views and segmented controls for closely related content and choices
   (Tab views, Segmented controls).
 - **The bar shows the screen's own title**, leading, with the screen's
-  actions trailing, in the system's compact toolbar: the window holds a whole
+  actions trailing, in the system's compact toolbar (the bar AppKit gives a
+  narrow utility window: 24-point controls in a 40-point bar; the unified
+  bar's 36-point circles are heavy in a window 400 points wide), the content
+  starting 20 points under it as a grouped form's first section does: the window holds a whole
   app, with a back button on a pushed screen, so the bar says where the person
   is, as a narrow window of Mail or Notes titles what it shows (Windows: a
   window's title names what it shows) and as Apple's own menu bar windows
@@ -153,8 +158,10 @@ The build says `LSUIElement`. Then:
   system's `NSStatusItem` with a panel (`NSPanel` hosting the shell).
 - **Open in Window** (the right-click menu; ⌘N and File > Open in Window
   while the app's menus show) moves the same shell, what it shows included,
-  into a full window, laid out by that window's width, with the app in the
-  Dock and its menus while the window is open (`LSUIElement` apps come into
+  into a full window, laid out by that window's width as a Dock app's window
+  is from its start (the sidebar beside the content, the screen's title over
+  the content, the toolbar laid out again for the new window), with the app in
+  the Dock and its menus while the window is open (`LSUIElement` apps come into
   the Dock only then); the window under the item closes. Closing the full
   window puts the app back under its item and out of the Dock. Opening the
   app again from the Finder, the Dock menu's New Window, and a notification
@@ -281,7 +288,14 @@ and filter sheets inside the window under the item with their words, Return
 submitting and Escape cancelling; ⌘N and File > Open in Window with the full
 window open; the right-click menu's account items; Help opening a site. On an
 iPhone simulator, a UI test chose a quick action on the Home Screen and found
-its destination open, and the Home Screen showed the count a server set. What only a person
+its destination open, and the Home Screen showed the count a server set. Also run:
+Escape with words typed in a sheet's field (one press cancels), a one-field
+sheet fitting its content, a sheet carried into the full window, the full
+window's toolbar and title right after Open in Window, the full window dragged
+below its smallest size (it holds), and the window under the item keeping its
+size for a screen with a size of its own. What only a person
 at the screen sees: the Dock icon at launch, the Dock's own drawing of the
 count and the menu, the item in the real menu bar, and the login item after
-logging out and in. Not run: signing in from the window under the item.
+logging out and in. Started but not finished: signing in from the window under
+the item; the core asked for the system's session and the window opened for
+it, and the system's own prompt then waits for a person to answer it.
