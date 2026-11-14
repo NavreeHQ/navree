@@ -19,7 +19,8 @@ import SwiftUI
 /// corner: where each word and control stands);
 /// `click:<x>,<y>` or `click:<words>` (a click of the mouse at that point of
 /// the window in front, or in the middle of the first element whose words
-/// hold those, as a person's click comes: through the app's event queue);
+/// are those, else hold them, as a person's click comes: through the app's
+/// event queue);
 /// `choose:<row>` (a row of the window's table chosen through the table's
 /// own selection, as a click chooses it);
 /// `scroll:<points>` (the content under the window's middle scrolled down by
@@ -435,17 +436,21 @@ enum WindowPictures {
         return "row \(row) chosen of \(table.numberOfRows), selected \(Array(table.selectedRowIndexes))"
     }
 
-    /// The frame of the first element whose words hold these, in the window.
+    /// The frame of the first element whose words are these, else of the
+    /// first whose words hold them, in the window.
     static func find(_ words: String, in window: NSWindow) -> CGRect? {
-        var found: CGRect?
+        var exact: CGRect?
+        var holding: CGRect?
         walk(window) { element, depth in
-            if depth > 0, element.words.contains(where: { $0.contains(words) }), let frame = element.frame(in: window) {
-                found = frame
+            guard depth > 0, let frame = element.frame(in: window) else { return true }
+            if element.words.contains(words) {
+                exact = frame
                 return false
             }
+            if holding == nil, element.words.contains(where: { $0.contains(words) }) { holding = frame }
             return true
         }
-        return found
+        return exact ?? holding
     }
 
     /// Scrolls the scroll view under the window's middle by some points.
