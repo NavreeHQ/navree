@@ -28,6 +28,7 @@ use crate::extract::{ProxyTrust, Request};
 use crate::handler::{BoxedService, Endpoint};
 use crate::limiter::{Limiter, RateLimitStore};
 use crate::middleware::from_fn_with_state;
+use crate::mount::{MountEntry, check_mounts, collect_mounts};
 use crate::network::rate_limit_key;
 use crate::pipeline::{
     self, CheckStages, ContextState, GuardStages, Requester, Stages, TimeoutOverride, X_REQUEST_ID,
@@ -59,10 +60,11 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
         .map_err(|error| format!("build_router needs HttpModule in the app: {error}"))?;
     let options = server.options();
     let routes = collect_routes(ctx, options).await?;
+    let mounts = collect_mounts(ctx);
 
     let authenticator = ctx.try_get::<dyn Authenticator>().await;
     let authorizer = ctx.try_get::<dyn RouteAuthorizer>().await;
-    validate(&routes, authenticator.is_some(), authorizer.is_some())?;
+    validate(&routes, &mounts, authenticator.is_some(), authorizer.is_some())?;
     // Audit actions, and security events (rate limiting, denials no
     // `RouteAuthorizer` saw).
     let audit = ctx.try_get::<dyn AuditSink>().await;
@@ -346,7 +348,12 @@ impl fmt::Display for RouteErrors {
 
 impl std::error::Error for RouteErrors {}
 
-fn validate(routes: &[Mounted], authenticator: bool, authorizer: bool) -> Result<(), RouteErrors> {
+fn validate(
+    routes: &[Mounted],
+    mounts: &[MountEntry],
+    authenticator: bool,
+    authorizer: bool,
+) -> Result<(), RouteErrors> {
     let mut errors = Vec::new();
     // (method, shape) → (path, controller): two routes of one shape match
     // the same paths.
@@ -380,6 +387,8 @@ fn validate(routes: &[Mounted], authenticator: bool, authorizer: bool) -> Result
         }
         errors.extend(access_problems(&label, "route", meta, authenticator, authorizer));
     }
+    let metas: Vec<&RouteMeta> = routes.iter().map(|route| &route.meta).collect();
+    errors.extend(check_mounts(&metas, mounts, authenticator, authorizer));
     if errors.is_empty() {
         Ok(())
     } else {
