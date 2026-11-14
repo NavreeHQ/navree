@@ -134,21 +134,30 @@ public enum SplitRules {
     /// The least width an inspector column takes beside its detail.
     public static let inspectorLeast = 280.0
 
-    /// Whether the inspector fits in the room the detail's column has (the
-    /// window less its sidebar and its list): the detail keeps its least
-    /// width beside it (``NavigationRules/detailMinimumWidth``), or the
-    /// inspector waits behind its bar button, rather than the two hanging
-    /// over the list's column and out of the window. A column not measured
-    /// yet says nothing against it.
     /// The room a window of columns leaves its detail: its width less the
     /// sidebar's (220) and the list's (360) columns at their ideal widths.
     public static func detailRoom(window: Double, sidebar: Bool) -> Double {
         window - (sidebar ? 220 : 0) - 360
     }
 
+    /// Whether the inspector fits in the room the detail's column has (the
+    /// window less its sidebar and its list): the detail keeps its least
+    /// width beside it (``NavigationRules/detailMinimumWidth``), or the
+    /// inspector waits behind its bar button, rather than the two hanging
+    /// over the list's column and out of the window. A column not measured
+    /// yet says nothing against it.
     public static func inspectorFits(detailRoom: Double?) -> Bool {
         guard let detailRoom else { return true }
         return detailRoom >= NavigationRules.detailMinimumWidth + inspectorLeast
+    }
+
+    /// Whether the inspector is a sheet the person opens rather than a
+    /// column: in a compact window, where the system's inspector is a sheet
+    /// too. The sheet is there only while it is open, so nothing of it (its
+    /// title, "Customer") can stand in the bar of the detail under it, as the
+    /// system's inspector kept out of sight let happen about one launch in six.
+    public static func inspectorIsSheet(width: WindowClass) -> Bool {
+        width == .compact
     }
 
     /// The destinations whose first screen is drawn as columns, as far as
