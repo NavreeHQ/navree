@@ -495,6 +495,7 @@ struct Assets {
     wanted: bool,
     islands: Arc<Vec<crate::island::Served>>,
     app_files: Arc<Vec<crate::app_files::Served>>,
+    links: Arc<crate::shell::links::Links>,
 }
 
 impl Injectable for Assets {
@@ -516,6 +517,7 @@ impl Injectable for Assets {
                 wanted: gate.0.get().copied().unwrap_or(false),
                 islands: Arc::new(islands),
                 app_files: Arc::new(app_files),
+                links: gate.1.clone(),
             })
         })
     }
@@ -530,7 +532,7 @@ impl Controller for Assets {
         if !self.wanted {
             return Vec::new();
         }
-        vec![
+        let mut routes = vec![
             RouteDef::on(
                 Method::GET,
                 format!("!{}/{{file}}", assets::MOUNT),
@@ -632,7 +634,34 @@ impl Controller for Assets {
                     &[400, 403],
                 )
             }),
-        ]
+        ];
+        // The links other modules add, those the caller may open: there only when a module
+        // adds one.
+        if !self.links.is_empty() {
+            let links = self.links.clone();
+            routes.push(
+                RouteDef::on(
+                    Method::GET,
+                    format!("!{}", crate::shell::links::NAVIGATION_PATH),
+                    move |mut parts: http::request::Parts| {
+                        let links = links.clone();
+                        async move { crate::shell::links::answer(&mut parts, &links).await }
+                    },
+                )
+                .name("ui.navigation")
+                .public()
+                .json_only()
+                .api(api(
+                    "The links of other modules the caller may open",
+                    "Every sidebar link a module adds with m.nav_item that the caller may open: \
+                     those with no permission for everyone, and those whose permission the \
+                     caller holds, app-wide or in the request's workspace. Nothing about the \
+                     others. Never cached.",
+                    &[],
+                )),
+            );
+        }
+        routes
     }
 }
 

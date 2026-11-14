@@ -5,9 +5,11 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use http::header::{self, HeaderValue};
 use http::request::Parts;
 use navree_contracts::{permission_catalog, permitted};
-use navree_http::{CurrentPrincipal, RequestWorkspace};
+use navree_http::response::{IntoResponse, Response};
+use navree_http::{CurrentPrincipal, Json, RequestWorkspace};
 use navree_kernel::AppContext;
 use uuid::Uuid;
 
@@ -199,4 +201,43 @@ pub(crate) async fn drawn(parts: &mut Parts) -> Vec<NavGroup> {
     }
     let shown = visible(parts, &gate.1).await;
     groups(&gate.1, &shown)
+}
+
+/// Where the links a caller may open are answered as JSON, under the toolkit's own prefix.
+pub(crate) const NAVIGATION_PATH: &str = "/_navree/ui/navigation";
+
+/// The answer of `GET /_navree/ui/navigation`: `{"items": [..]}`, one object per link the
+/// caller may open ([`visible`]), in the order the sidebar draws them, with exactly the
+/// keys `label`, `href`, `group`, `order` and `icon` (the icon's compile-time shapes, or
+/// `null`). Nothing about the other links, so a caller who may open none of the links with
+/// a permission gets a guest's bytes. Never kept by a cache: `Cache-Control: private,
+/// no-store` and `Vary: Cookie, Authorization`.
+pub(crate) async fn answer(parts: &mut Parts, links: &Links) -> Response {
+    let shown = visible(parts, links).await;
+    let items: Vec<serde_json::Value> = shown
+        .iter()
+        .filter_map(|index| links.0.get(*index))
+        .map(|link| {
+            serde_json::json!({
+                "label": link.label,
+                "href": link.href.as_str(),
+                "group": link.group,
+                "order": link.order,
+                "icon": link.icon.map(|icon| {
+                    serde_json::json!({ "view_box": icon.view_box(), "shapes": icon.shapes() })
+                }),
+            })
+        })
+        .collect();
+    let mut response = Json(serde_json::json!({ "items": items })).into_response();
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, no-store"),
+    );
+    headers.append(
+        header::VARY,
+        HeaderValue::from_static("Cookie, Authorization"),
+    );
+    response
 }
