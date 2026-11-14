@@ -68,9 +68,10 @@ const EMPTY_SEGMENT: &str = "Invalid URL: the path has an empty segment";
 /// A request with an `Upgrade` header (a WebSocket or h2c handshake) or the
 /// method `CONNECT` never reaches the service: a mounted service answers
 /// requests, it does not take over the connection. One that reaches the mount
-/// is answered 501 after the access check; with [`methods`](Mount::methods),
-/// a method the list leaves out (`CONNECT` among them) is the router's 405
-/// before it, as for a route.
+/// is answered 501 after the access check. With [`methods`](Mount::methods),
+/// a method the list leaves out, `CONNECT` among them, is the router's 405
+/// before the access check, as for a route; `HEAD` runs the `GET` answer when
+/// `GET` is listed, and `OPTIONS` is a 204 with `Allow`.
 ///
 /// The body is cut off at the mount's limit also when it comes without a
 /// length. A panic in the service answers 500, as in a handler. An

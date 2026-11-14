@@ -246,8 +246,10 @@ impl Module for LedgerModule {
 - Boot fails for a mount without access, a prefix under `/_` or not a plain
   path, and a route or another mount at, under or above the prefix.
 - A request with `Upgrade` or `CONNECT` never reaches it: the mount answers
-  501 after the access check, or the router 405 first when `.methods(..)`
-  leaves the method out, as for a route.
+  501 after the access check. With `.methods(..)`, a method left out
+  (`CONNECT` among them) is the router's 405 first, as for a route; `HEAD`
+  runs the `GET` answer when `GET` is listed, `OPTIONS` is a 204 with
+  `Allow`.
 - A 4xx the service writes goes out as written; a 5xx with no body or a
   plain-text one takes the app's error shape, its text logged, never sent.
 - Details: https://navree.com/docs/plugins/existing-crates/

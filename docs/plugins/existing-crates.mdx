@@ -58,7 +58,7 @@ base_url = "https://khata.example/ludhiana"
 - **The client is exported** to every module as `KhataClient`, and under the module's name: `ctx.get_named::<KhataClient>("khata")`. Two `ClientModule`s of one client type with different names are two modules, each with its own client; the plain `KhataClient` is then ambiguous, so each is reached by its name. Several clients of one type (one ledger per city, say) are several `ClientModule`s, each with a name of its own and its options given in code.
 - **Options in code**: `.for_root(KhataOptions { .. })` takes the options as they are, and the section is not read.
 - **Order**: call `.options::<O>()` first. It keeps the name, the readiness check, the shutdown hook and the plugin, and drops a connect function given before it.
-- **Boot errors**: without `.connect(..)` the boot fails with ``ClientModule `khata` has no connect function: call .connect(..)``, and a connect function that fails stops the boot with its error.
+- **Boot errors**: without `.connect(..)` the boot fails with ``ClientModule `khata` has no connect function: call .connect(..)``, and a connect function that fails stops the boot with its error. That error is logged at boot, so it must not carry the client's secrets, such as a password or a token in a connection string.
 - **Readiness**: an `Ok` from the check is up, an error is down with its message. The message is shown in the readiness report, so it must hold no secret.
 - **The plugin**: a plugin's modules are types of its own crate, or `ClientModule`s whose options type is: `.plugin(navree::plugin_info!())` ties the module to the crate that defines its options type. `.plugin(..)` needs an options type: without one, no type of the plugin's crate would tie the module to it.
 - **A common client type**: a `ClientModule` exports its client as the plain type, so one of a type other modules also export (`reqwest::Client`, say) makes every plain lookup of that type in the app ambiguous; wrap the client in a type of the plugin's own crate.
@@ -154,7 +154,7 @@ The service gets the request as the app received it, but for its URI: the scheme
 
 The service also sees the request's headers and authority exactly as the client sent them, forwarding headers such as `X-Original-URL`, `X-Rewrite-URL` and `X-Forwarded-Prefix` included, so a service that takes its path or builds its links from them is responsible for checking them. Sequences such as `..;` and a doubly encoded path (`%252e%252e`) reach it exactly as the client sent them too, since the router reads them as names, so a service that treats `;` as a separator or decodes its path a second time is responsible for refusing them.
 
-With no `.methods(..)`, every method reaches the service, extension methods such as `PROPFIND` included, and `HEAD` and `OPTIONS` too. `.methods(&[Method::GET, Method::POST])` limits it to those: another method is a 405 with an `Allow` header, as for a route.
+With no `.methods(..)`, every method reaches the service, extension methods such as `PROPFIND` included, and `HEAD` and `OPTIONS` too. `.methods(&[Method::GET, Method::POST])` limits it to those, as for a route: another method is a 405 with an `Allow` header, `HEAD` runs the `GET` answer when `GET` is listed, and `OPTIONS` is a 204 with `Allow`.
 
 ### What runs before it
 
@@ -166,7 +166,7 @@ A request with an `Upgrade` header (a WebSocket or h2c handshake) or the method 
 A mounted service answers requests; it does not take over the connection.
 ```
 
-With `.methods(..)`, a method the list leaves out, `CONNECT` among them, is answered `405 Method Not Allowed` by the router before the access check, as for a route.
+With `.methods(..)`, a method the list leaves out, `CONNECT` among them, is the router's 405 before the access check, as for a route; `HEAD` runs the `GET` answer when `GET` is listed, and `OPTIONS` is a 204 with `Allow`.
 
 gRPC, gRPC-Web and Connect calls on the HTTP port go to `GrpcModule` before any mount.
 
@@ -222,7 +222,7 @@ impl Module for KhataDealsModule {
 - **Method names**: name a method as the generated server trait spells it, `get_deal` for `GetDeal` and `get_http_status` for `GetHTTPStatus` (a leading `r#` is set aside). Another spelling fails the boot: ``gRPC method `GetDeal` of `crm.deals.v1.Deals` (module `KhataDealsModule`) is not a Rust method name: write `get_deal` (the name the generated server trait spells)``. A name in that form that matches no method of the server, a typo, can't be detected, so give the service default the strictest access and loosen it per method.
 - **Checked at boot**: a service with no access declaration at all (a guard alone is none), a method of its own without one, a method declared twice, a method whose `can` names a field of the message (a wrapped server's messages aren't read before it runs: write the service with `#[grpc_service]` for a check on a record), and a service named like `GrpcModule`'s own health or reflection service while that one is on (set `grpc.health = false` to serve your own) each fail the boot, as do two services of one name.
 - **Before the server reads a message** the call passes authentication, the access check, guards, the route authorizer and the deadline, so a refused call is answered without reading its messages. The server then runs in a unit of work, which commits when its response head is HTTP 200 with no error `grpc-status` and rolls back otherwise. A method that answers with a stream commits when its head is sent, and its messages run outside the unit of work. A head that carries an error `grpc-status` is answered with that status; one that is not HTTP 200 and carries no error `grpc-status` is answered with the gRPC status the gRPC specification gives its HTTP status, so a 503 stays `UNAVAILABLE`.
-- **Streams**: once a call is let in, its request body is no longer held to the read pace of an upload, so a client or two-way stream may sit silent between messages. A unary call stays bounded by its deadline and the server's message limit.
+- **Streams**: once a call is let in, its request body is no longer held to the read pace of an upload, so a client or two-way stream may sit silent between messages. A unary call stays bounded by its deadline and the server's message limit. So an anonymous client can send the body of a public unary call slowly until its deadline: give such a method an access declaration that needs a caller, or keep the deadline short (`grpc.timeout_secs`).
 - **Message limits**: `grpc.max_message_bytes` doesn't reach a server built elsewhere. Set its limits on the server before wrapping it (`DealsServer::new(..).max_decoding_message_size(..)`); tonic's own default decodes at most 4 MiB a message.
 
 See [a server built elsewhere](/docs/microservices/grpc/#a-server-built-elsewhere) on the gRPC page for the whole example.
