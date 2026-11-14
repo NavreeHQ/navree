@@ -50,9 +50,9 @@ pub(super) async fn cards(cx: &Cx) -> Vec<Node> {
         if user.is_none() {
             user = Some(user_json(cx).await);
         }
-        let template = widget.template.as_deref().unwrap_or_default();
+        // Always an `.html` template (checked at boot), so navree-view escapes what it writes.
         let rendered = match views.render(
-            template,
+            &entry.template,
             json!({
                 "title": widget.title,
                 "user": user,
@@ -71,7 +71,7 @@ pub(super) async fn cards(cx: &Cx) -> Vec<Node> {
                 continue;
             }
         };
-        // The app's own template, rendered by navree-view with its escaping.
+        // The app's own HTML template, rendered by navree-view with its escaping.
         drawn.push(
             el("section")
                 .attr("aria-label", widget.title.clone())

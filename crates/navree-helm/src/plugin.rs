@@ -81,8 +81,8 @@ impl HelmLink {
 ///
 /// The template (a navree-view template; the app needs `ViewModule`) gets `title`, `user`
 /// (`{id, name, email}`), `path` (the panel's path) and `data` (what
-/// [`data`](HelmWidget::data) returns, else `null`), and navree-view escapes what it
-/// writes. Cards are drawn while `helm.dashboard` is on, by [`order`](HelmWidget::order),
+/// [`data`](HelmWidget::data) returns, else `null`). It is always an HTML template, so
+/// navree-view escapes what it writes: see [`template`](HelmWidget::template). Cards are drawn while `helm.dashboard` is on, by [`order`](HelmWidget::order),
 /// then in the order they were added. Without [`can`](HelmWidget::can) every panel user
 /// sees the card; with it, only those who pass the check, and the data function runs only
 /// for them. A card whose data function or template fails is left out and logged, and the
@@ -123,7 +123,11 @@ impl HelmWidget {
     }
 
     /// The card's template (a navree-view template), given `title`, `user`, `path` and
-    /// `data`. A card without one stops the boot.
+    /// `data`. It is an HTML template, so navree-view escapes what it writes: a name without
+    /// an extension stands for that name with `.html` added (`admin/widgets/open-deals` is
+    /// `admin/widgets/open-deals.html`, never another file of that name), and a name may
+    /// end in `.html`. Any other name (a `.txt` or `.md` template prints values as they are)
+    /// stops the boot, and so does a card without a template.
     pub fn template(mut self, name: &str) -> HelmWidget {
         self.template = Some(name.to_owned());
         self
@@ -220,6 +224,19 @@ pub(crate) struct WidgetRegistration {
     pub(crate) module: ModuleId,
 }
 
+/// The name a card's template `name` is rendered under, one navree-view always escapes as
+/// HTML: `name` when its last segment ends in `.html`, `name` with `.html` added when its
+/// last segment has no extension (so navree-view never picks a `.txt` file of that name),
+/// and `None` for any other name, which the boot refuses.
+pub(crate) fn html_template(name: &str) -> Option<String> {
+    let file = name.rsplit('/').next().unwrap_or(name);
+    match file.strip_suffix(".html") {
+        Some(stem) if !stem.is_empty() => Some(name.to_owned()),
+        _ if !file.is_empty() && !file.contains('.') => Some(format!("{name}.html")),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,5 +250,36 @@ mod tests {
         let link = HelmLink::new("Status", "/status").can("read", "Deal");
         assert_eq!(link.can, Some(("read".into(), "Deal".into())));
         assert_eq!(link.group, None);
+    }
+
+    #[test]
+    fn a_card_renders_only_an_html_template() {
+        assert_eq!(
+            html_template("admin/widgets/pipeline").as_deref(),
+            Some("admin/widgets/pipeline.html")
+        );
+        assert_eq!(
+            html_template("admin/widgets.v2/pipeline").as_deref(),
+            Some("admin/widgets.v2/pipeline.html")
+        );
+        assert_eq!(
+            html_template("admin/widgets/pipeline.html").as_deref(),
+            Some("admin/widgets/pipeline.html")
+        );
+        for name in [
+            "admin/widgets/latest.txt",
+            "admin/widgets/latest.md",
+            "admin/widgets/latest.json",
+            "admin/widgets/latest.txt.j2",
+            "admin/widgets/latest.j2",
+            "admin/widgets/latest.svg",
+            "admin/widgets/latest.HTML",
+            "admin/widgets/latest.html.",
+            "admin/widgets/.html",
+            "admin/widgets/",
+            "",
+        ] {
+            assert_eq!(html_template(name), None, "{name:?}");
+        }
     }
 }

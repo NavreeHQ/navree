@@ -11,7 +11,7 @@ use navree_ui::html::LocalHref;
 use crate::field::{FieldKind, Related};
 use crate::handle::{ErasedResource, Handle};
 use crate::page::PageRegistration;
-use crate::plugin::{LinkRegistration, WidgetRegistration};
+use crate::plugin::{LinkRegistration, WidgetRegistration, html_template};
 use crate::{HelmLink, HelmOptions, HelmPage, HelmWidget, Resource};
 
 /// Builds a resource's handle.
@@ -72,6 +72,8 @@ pub(crate) struct LinkEntry {
 pub(crate) struct WidgetEntry {
     pub(crate) widget: HelmWidget,
     pub(crate) module: ModuleId,
+    /// The name its template is rendered under: always an `.html` template.
+    pub(crate) template: String,
 }
 
 /// The panel's resources (in menu order) and pages, and the links and cards
@@ -199,17 +201,29 @@ impl Registry {
                 )
                 .into());
             }
-            if widget.template.is_none() {
+            let Some(named) = widget.template.as_deref() else {
                 return Err(format!(
                     "Helm widget `{}` has no template: add .template(\"admin/widgets/{}\")",
                     widget.key, widget.key
                 )
                 .into());
-            }
+            };
+            // Only an HTML template escapes what it writes: a card renders nothing else.
+            let Some(template) = html_template(named) else {
+                return Err(format!(
+                    "Helm widget `{}` names the template `{named}`, which is not HTML: name an .html template, such as .template(\"admin/widgets/{}\")",
+                    widget.key, widget.key
+                )
+                .into());
+            };
             if !keys.insert(widget.key.clone()) {
                 return Err(format!("two Helm widgets use the key `{}`", widget.key).into());
             }
-            registry.widgets.push(WidgetEntry { widget, module });
+            registry.widgets.push(WidgetEntry {
+                widget,
+                module,
+                template,
+            });
         }
         // A stable sort: cards of one order keep the order they were added in.
         registry.widgets.sort_by_key(|entry| entry.widget.order);
