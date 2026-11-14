@@ -349,11 +349,13 @@ impl Controller for ClaimPages {
             RouteDef::on(
                 Method::POST,
                 "!/upload/claim/receipt",
-                move |mut form: Multipart| {
+                move |owner: navree::ui::upload::UploadOwner, mut form: Multipart| {
                     let me = Arc::clone(&me);
                     async move {
                         match me.receipts.receive_into(&mut form, 1).await {
-                            Ok(received) => received.into_keyed_response(&me.signer),
+                            Ok(received) => {
+                                received.into_keyed_response_for(&me.signer, owner.as_str())
+                            }
                             Err(error) => error.into_response(),
                         }
                     }

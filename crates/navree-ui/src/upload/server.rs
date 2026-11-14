@@ -10,7 +10,7 @@ use std::sync::{Arc, LazyLock, Mutex, PoisonError, Weak};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
-use futures_util::stream;
+use futures_util::{StreamExt, stream};
 use http::{HeaderMap, HeaderValue, StatusCode, header};
 use navree_http::AppError;
 use navree_http::extract::Multipart;
@@ -20,10 +20,10 @@ use navree_storage::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use tokio::sync::OwnedMutexGuard;
 use uuid::Uuid;
 
+use super::key::{is_file_in, owner_key};
 use super::labels::{UploadLabels, fill};
 use super::limits::UploadLimits;
 use crate::html::LocalHref;
@@ -160,23 +160,45 @@ impl Received {
         json_response(self.status(), &self.json())
     }
 
-    /// [`json`](Self::json) with each stored file's `key` ([`file_key`](crate::upload::file_key)):
-    /// the answer of the route a form's file field sends its file to
-    /// ([`FormView::upload`](crate::form::FormView::upload)), whose key the module puts in the
-    /// form in place of the file.
+    /// [`json`](Self::json) with each stored file's `key` ([`file_key`](crate::upload::file_key)).
+    /// The key names the path alone, for an app that reads its keys back itself: a form's file
+    /// field does not take it. For the route a form's file field sends its file to
+    /// ([`FormView::upload`](crate::form::FormView::upload)), use
+    /// [`json_with_keys_for`](Self::json_with_keys_for).
     pub fn json_with_keys(&self, signer: &navree_http::UrlSigner) -> Value {
-        let mut json = self.json();
-        if let Some(stored) = json.get_mut("stored").and_then(Value::as_array_mut) {
-            for (entry, file) in stored.iter_mut().zip(&self.stored) {
-                entry["key"] = Value::String(crate::upload::file_key(signer, &file.path));
-            }
-        }
-        json
+        self.keyed(|path| crate::upload::file_key(signer, path))
     }
 
     /// [`json_with_keys`](Self::json_with_keys) as a response, with [`status`](Self::status).
     pub fn into_keyed_response(self, signer: &navree_http::UrlSigner) -> Response {
         json_response(self.status(), &self.json_with_keys(signer))
+    }
+
+    /// [`json`](Self::json) with each stored file's `key` made for `owner`
+    /// ([`file_key_for`](crate::upload::file_key_for)): the answer of the route a form's file
+    /// field sends its file to ([`FormView::upload`](crate::form::FormView::upload)), whose key
+    /// the module puts in the form in place of the file. `owner` is who the request is from
+    /// ([`UploadOwner`](crate::upload::UploadOwner)): the form reads the key back only from that
+    /// person, for a file in the folder of the field's own upload.
+    pub fn json_with_keys_for(&self, signer: &navree_http::UrlSigner, owner: &str) -> Value {
+        self.keyed(|path| crate::upload::file_key_for(signer, owner, path))
+    }
+
+    /// [`json_with_keys_for`](Self::json_with_keys_for) as a response, with
+    /// [`status`](Self::status).
+    pub fn into_keyed_response_for(self, signer: &navree_http::UrlSigner, owner: &str) -> Response {
+        json_response(self.status(), &self.json_with_keys_for(signer, owner))
+    }
+
+    /// [`json`](Self::json) with each stored file's `key`, which `key_of` makes from its path.
+    fn keyed(&self, key_of: impl Fn(&str) -> String) -> Value {
+        let mut json = self.json();
+        if let Some(stored) = json.get_mut("stored").and_then(Value::as_array_mut) {
+            for (entry, file) in stored.iter_mut().zip(&self.stored) {
+                entry["key"] = Value::String(key_of(&file.path));
+            }
+        }
+        json
     }
 
     /// A toast's tone and text for a person who sent the form with no script: how many files
@@ -578,6 +600,46 @@ impl Uploads {
         }
     }
 
+    /// The folder of the disk this upload's files are directly in: what the paths it stores
+    /// start with, as `upload_path` writes it.
+    pub(crate) fn folder(&self) -> String {
+        let sample = upload_path(&self.dir, "application/octet-stream");
+        sample
+            .rsplit_once('/')
+            .map_or_else(String::new, |(folder, _)| folder.to_owned())
+    }
+
+    /// Whether the file at `path` is still one this upload accepts: directly in its folder, not
+    /// empty, no larger than the limit, and of a kind it accepts, read from its first bytes as
+    /// it was when it was stored. For a file a person names by a key, which was stored a while
+    /// ago, under the limits that field has now.
+    pub(crate) async fn still_fits(&self, path: &str) -> bool {
+        if !is_file_in(&self.folder(), path) {
+            return false;
+        }
+        let Ok(size) = self.disk.size(path).await else {
+            return false;
+        };
+        if size == 0 || size > self.limits.bytes() {
+            return false;
+        }
+        let Ok(mut parts) = self.disk.get_stream(path).await else {
+            return false;
+        };
+        let mut head: Vec<u8> = Vec::with_capacity(SNIFF_BYTES);
+        while head.len() < SNIFF_BYTES {
+            match parts.next().await {
+                Some(Ok(chunk)) => {
+                    let take = chunk.len().min(SNIFF_BYTES - head.len());
+                    head.extend_from_slice(&chunk[..take]);
+                }
+                Some(Err(_)) => return false,
+                None => break,
+            }
+        }
+        !head.is_empty() && self.limits.allows(&sniff_type(&head, Some(path)).mime)
+    }
+
     async fn undo(&self, received: Received, error: AppError) -> AppError {
         for file in &received.stored {
             // A file that cannot be removed now is found by whatever sweeps the disk.
@@ -934,15 +996,6 @@ fn join_parts(
             }
         }
     })
-}
-
-/// Where an owner's sessions are kept: 32 hexadecimal digits of the SHA-256 of `owner`, so
-/// an owner's uploads are counted by listing one directory, and no owner names a path.
-fn owner_key(owner: &str) -> String {
-    Sha256::digest(owner.as_bytes())[..16]
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
 }
 
 /// Locks by name, held while an upload is begun for an owner, one of its parts is kept, or it is
