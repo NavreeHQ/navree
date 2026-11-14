@@ -86,6 +86,15 @@ public enum NavigationRules {
         depth == .root ? .large : .inline
     }
 
+    /// Whether a screen writes its title at the head of its content. A Mac
+    /// window has one title, its destination's, over the list: the screen
+    /// open beside the list says what it is at its own head, as Mail writes
+    /// a message's subject at the top of the message. A navigation bar
+    /// (iPhone, iPad) shows every column's title itself.
+    public static func titleInContent(bar: ActionBar, besideList: Bool) -> Bool {
+        bar == .window && besideList
+    }
+
     /// A page in the web view has an inline title wherever it stands: the web
     /// view's own scrolling cannot fold a large title away, which would keep
     /// its room for ever.

@@ -360,11 +360,25 @@ struct ButtonRow: View {
             }
         }
         .disabled(button.disabled || button.pending)
+        .modifier(RowButtonLook())
         .modifier(PopoverAnchor(action: button.action))
     }
 
     /// Set where the section's footer already says why.
     var inFootedSection = false
+}
+
+/// A button that is a row of a list: on iPhone and iPad the row itself, its
+/// words in the tint (in red when it destroys); on a Mac, the Mac's own push
+/// button at its regular size, with the system's insets round its words.
+struct RowButtonLook: ViewModifier {
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.buttonStyle(.bordered).controlSize(.regular).fixedSize()
+        #else
+        content
+        #endif
+    }
 }
 
 /// A row that says something did not come, and offers to try again.
@@ -373,6 +387,14 @@ struct RetryRow: View {
     let retry: () -> Void
 
     var body: some View {
+        #if os(macOS)
+        // On a Mac: what did not come, and a push button to try again.
+        HStack {
+            Label(title, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            Button("Try Again", action: retry).modifier(RowButtonLook())
+        }
+        #else
         Button(action: retry) {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
@@ -383,6 +405,7 @@ struct RetryRow: View {
                 Image(systemName: "arrow.clockwise")
             }
         }
+        #endif
     }
 }
 

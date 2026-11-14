@@ -375,7 +375,7 @@ struct Chrome: View {
         case .ready:
             destinations
                 .modifier(Modals(level: 0, client: client, configuration: configuration))
-                .tint(ThemeColor.accent(client.app?.theme))
+                .tint(TintRules.appliesAppAccent(bar: .current) ? ThemeColor.accent(client.app?.theme) : nil)
                 .modifier(WindowWidth(width: WindowRules.window(client.nav.width)))
                 .environment(\.navreeFind, commands?.finding ?? 0)
         }

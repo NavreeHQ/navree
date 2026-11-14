@@ -20,6 +20,34 @@ public enum Slot: Sendable, Equatable {
     case leading
     /// On a bar as its symbol alone, its words for VoiceOver and the overflow.
     case bar
+    /// A Mac window's toolbar, as its symbol (its words where it has none),
+    /// the system's overflow taking it when the window is too narrow.
+    case window
+    /// Only in the menu bar's menu for what the window shows, last and in
+    /// red: what destroys, on a Mac.
+    case menu
+}
+
+/// The bars a screen's actions go to.
+public enum ActionBar: Sendable, Equatable {
+    /// A navigation bar (iPhone, iPad): the main act and making something new
+    /// at its trailing end, the rest in its overflow menu, what destroys in a
+    /// section at the end of the content.
+    case navigation
+    /// A Mac window's toolbar, beside a menu bar that holds every action
+    /// too: every action is an item of the toolbar (the system moves those
+    /// that do not fit into its overflow menu), and what destroys stays out
+    /// of the toolbar, the last command of the window's menu, in red.
+    case window
+
+    /// The bars of the system this is built for.
+    public static var current: ActionBar {
+        #if os(macOS)
+        .window
+        #else
+        .navigation
+        #endif
+    }
 }
 
 /// What placement needs to know of an action.
@@ -59,32 +87,36 @@ public enum PlacementRules {
     /// system's overflow menu. Anything destructive gets a section of its own
     /// at the end of the content, and is never the prominent action. Only one
     /// action is ever prominent; a second "primary" goes to the overflow menu.
-    public static func place(_ actions: [ActionTraits], depth: ScreenDepth) -> [Slot] {
+    ///
+    /// On a Mac window (`bar: .window`), what would go to the overflow menu
+    /// stands in the window's toolbar, and what destroys only in the menu bar.
+    public static func place(_ actions: [ActionTraits], depth: ScreenDepth, bar: ActionBar = .navigation) -> [Slot] {
         var tookMain = false
         var tookCreate = false
         let inSheet = depth == .sheet || depth == .cover
+        let window = bar == .window && !inSheet
         return actions.map { (action: ActionTraits) -> Slot in
             if action.role == .destructive || action.standard == .delete {
-                return .destructiveSection
+                return window ? .menu : .destructiveSection
             }
             if action.role == .cancel || action.standard == .cancel {
-                return inSheet ? .cancel : .overflow
+                return inSheet ? .cancel : window ? .window : .overflow
             }
             if action.role == .navigation {
                 return inSheet ? .overflow : .leading
             }
             let isMain = action.role == .primary || action.role == .confirm || action.standard == .done
             if isMain {
-                guard !tookMain else { return .overflow }
+                guard !tookMain else { return window ? .window : .overflow }
                 tookMain = true
                 return inSheet ? .confirm : .primary
             }
             if action.role == .create || action.standard == .add {
-                guard !tookCreate, !inSheet else { return .overflow }
+                guard !tookCreate, !inSheet else { return window ? .window : .overflow }
                 tookCreate = true
                 return .create
             }
-            return .overflow
+            return window ? .window : .overflow
         }
     }
 }

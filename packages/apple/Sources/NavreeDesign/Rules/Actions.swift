@@ -25,6 +25,48 @@ public enum ActionRules {
         ))
     }
 
+    /// The row of buttons a page sets at its head, under its title and its
+    /// states and before anything else (a record's Refund, Resend and Cancel),
+    /// and the body without it. On the web it is the page's header; on Apple's
+    /// systems such a row is the screen's own actions, placed by role: the
+    /// overflow menu of the bar, a Mac window's toolbar and the menu bar,
+    /// what destroys last and in red. `nil` when the body has no such row, or
+    /// when something other than words and states stands above it.
+    public static func head(_ body: Navree.Node) -> (buttons: [Navree.Button], rest: Navree.Node)? {
+        guard case .stack(var stack) = body, stack.axis == .vertical, !stack.hidden else { return nil }
+        for (index, child) in stack.children.enumerated() {
+            if case .stack(let row) = child, row.axis == .horizontal, !row.hidden,
+                let buttons = SectionRules.Builder.buttons(in: row)
+            {
+                stack.children.remove(at: index)
+                return (buttons, .stack(stack))
+            }
+            guard isHeading(child) else { return nil }
+        }
+        return nil
+    }
+
+    /// What may stand above a page's head row: its words and its states, on
+    /// a line or on their own, and what is presented rather than drawn.
+    static func isHeading(_ node: Navree.Node) -> Bool {
+        switch node {
+        case .text, .badge, .spacer, .divider, .sheet, .dialog, .popover: return true
+        case .stack(let stack) where stack.axis == .horizontal: return stack.children.allSatisfy(isHeading)
+        default: return false
+        }
+    }
+
+    /// The screen with its head row's buttons after its own actions and gone
+    /// from its body. A screen presented over another keeps its body as it is:
+    /// its buttons are the task's, placed by the sheet's own rules.
+    public static func lifted(_ screen: Navree.Screen, depth: ScreenDepth) -> Navree.Screen {
+        guard depth == .root || depth == .pushed, let head = head(screen.body) else { return screen }
+        var lifted = screen
+        lifted.actions += head.buttons.map(Navree.Node.button)
+        lifted.body = head.rest
+        return lifted
+    }
+
     /// The toolbars that stand in a screen's body: a group of actions at its
     /// foot, which Apple's systems put on the bottom bar.
     public static func footToolbars(_ body: Navree.Node) -> [Navree.Toolbar] {

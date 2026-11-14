@@ -12,7 +12,9 @@ struct PlacedActions: ToolbarContent {
     var destructiveInMenu = false
 
     var body: some ToolbarContent {
-        let slots = PlacementRules.place(actions.map { ActionTraits($0) ?? ActionTraits(role: Navree.Role.none) }, depth: depth)
+        let slots = PlacementRules.place(
+            actions.map { ActionTraits($0) ?? ActionTraits(role: Navree.Role.none) }, depth: depth, bar: .current
+        )
         let placed = Array(zip(actions, slots))
         ToolbarItemGroup(placement: .cancellationAction) {
             ForEach(Array(placed.filter { $0.1 == .cancel }.enumerated()), id: \.offset) { _, entry in
@@ -32,6 +34,14 @@ struct PlacedActions: ToolbarContent {
                 ForEach(Array(placed.filter { $0.1 == .destructiveSection }.enumerated()), id: \.offset) { _, entry in
                     ToolbarAction(node: entry.0, slot: .overflow, overlay: overlay, form: form)
                 }
+            }
+        }
+        // A Mac window's toolbar: each action an item of its own, as its
+        // symbol or its words, which the system moves into its overflow menu
+        // when the window is too narrow for them.
+        ToolbarItemGroup(placement: .automatic) {
+            ForEach(Array(placed.filter { $0.1 == .window }.enumerated()), id: \.offset) { _, entry in
+                ToolbarAction(node: entry.0, slot: .window, overlay: overlay, form: form)
             }
         }
         ToolbarItemGroup(placement: .primaryAction) {
@@ -57,7 +67,9 @@ struct ToolbarAction: View {
     @Environment(\.navree) private var context
 
     var body: some View {
-        content.modifier(PopoverAnchor(action: Self.action(of: node)))
+        content
+            .modifier(BarItemLook(slot))
+            .modifier(PopoverAnchor(action: Self.action(of: node)))
     }
 
     static func action(of node: Navree.Node) -> Navree.Action? {
@@ -86,7 +98,9 @@ struct ToolbarAction: View {
             case .create:
                 Button(action: action) { ButtonLabel(button: button, mode: .icon) }
                     .disabled(button.disabled)
-            case .bar:
+            case .bar, .window:
+                // Its symbol, or its words where it has none; why it can't be
+                // used now, where the pointer rests on it.
                 Button(role: buttonRole(button.role), action: action) { ButtonLabel(button: button, mode: .icon) }
                     .disabled(button.disabled || button.pending)
                     .help(ActionRules.reason(button) ?? "")
