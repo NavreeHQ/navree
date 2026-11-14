@@ -115,6 +115,7 @@ struct StackPart: View {
         } else {
             let axis = CompositionRules.axis(stack, wide: room.wide)
             laid(axis: axis)
+                .modifier(PersonSpeech(name: SpeechRules.person(in: stack)))
                 .padding(CGFloat(CompositionRules.points(steps: stack.pad)))
                 .frame(
                     maxWidth: CompositionRules.fillsWidth(stack, axis: axis, inLine: parentAxis == .horizontal) ? .infinity : nil,
@@ -414,7 +415,10 @@ public struct StatusLabel: View {
             if badge.dot {
                 Circle().fill(Tones.color(badge.tone)).frame(width: dot, height: dot)
             } else if RowRules.hasSymbol(badge) {
+                // The words say the state; VoiceOver would read a check
+                // mark as "selected".
                 Image(systemName: Tones.symbol(badge.tone)).foregroundStyle(Tones.color(badge.tone))
+                    .accessibilityHidden(true)
             }
             Text(badge.text)
         }
@@ -426,9 +430,17 @@ public struct StatusLabel: View {
 struct ProgressPart: View {
     let progress: Navree.Progress
     @Environment(\.navreeInRowDetail) private var inRow
+    @Environment(\.navreeRowSpeech) private var row
 
     var body: some View {
-        if let value = progress.value {
+        if let value = progress.value, let row {
+            // In a row that has said its name and state: what is left of the
+            // bar's words, and no percentage beside them.
+            ProgressView(value: Double(value), total: 1000)
+                .tint(tint)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(SpeechRules.barInRow(progress.label, title: row.title, state: row.state) ?? ""))
+        } else if let value = progress.value {
             ProgressView(value: Double(value), total: 1000) {
                 if let label = progress.label, !inRow { Text(label).font(.footnote).foregroundStyle(.secondary) }
             }
@@ -493,11 +505,14 @@ struct TabsPart: View {
 struct DisclosurePart: View {
     let disclosure: Navree.Disclosure
     @State private var open: Bool?
+    @Environment(\.navreeRowSpeech) private var row
 
     var body: some View {
         DisclosureGroup(disclosure.label, isExpanded: Binding(get: { open ?? disclosure.open }, set: { open = $0 })) {
             ForEach(Array(disclosure.children.enumerated()), id: \.offset) { _, child in NodeView(child) }
         }
+        // In a row it is one of the row's actions, not a heading inside it.
+        .accessibilityHidden(row != nil)
     }
 }
 
@@ -629,6 +644,19 @@ public enum Typography {
         case 5: .h5
         case 6: .h6
         default: .unspecified
+        }
+    }
+}
+
+/// A person's picture beside their name, said once by their whole name.
+struct PersonSpeech: ViewModifier {
+    let name: String?
+
+    func body(content: Content) -> some View {
+        if let name {
+            content.accessibilityElement(children: .ignore).accessibilityLabel(Text(name))
+        } else {
+            content
         }
     }
 }

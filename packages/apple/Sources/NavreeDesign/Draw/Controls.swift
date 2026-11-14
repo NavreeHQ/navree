@@ -76,6 +76,7 @@ struct ButtonPart: View {
     @Environment(\.navree) private var context
     @Environment(\.navreeForm) private var form
     @Environment(\.navreeOverlay) private var overlay
+    @Environment(\.navreeRowSpeech) private var row
 
     var body: some View {
         let control = Button(role: buttonRole(button.role)) {
@@ -108,6 +109,8 @@ struct ButtonPart: View {
                 Text(reason).font(.footnote).foregroundStyle(.secondary)
             }
         }
+        // A button that says its row's title again is the row's own action.
+        .accessibilityHidden(row.map { SpeechRules.repeatsTitle(button, of: $0.title) } ?? false)
     }
 }
 

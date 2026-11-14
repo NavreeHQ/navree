@@ -123,7 +123,7 @@ struct RingPart: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(ring.label ?? "")
-            .accessibilityValue(ring.summary ?? RingRules.centre(ring))
+            .accessibilityValue(SpeechRules.value(ring.summary ?? RingRules.centre(ring), after: ring.label))
             if RingRules.saysWords(ring.prominence) {
                 words
             }
@@ -202,7 +202,9 @@ struct RingsPart: View {
         let dial = Dial(rings: shown, diameter: diameter, prominence: rings.prominence, icon: rings.centre == .icon ? rings.icon : nil)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(rings.title ?? "")
-            .accessibilityValue(rings.summary ?? shown.map { "\($0.name) \(RingsRules.value($0))" }.joined(separator: ", "))
+            .accessibilityValue(SpeechRules.value(
+                rings.summary ?? shown.map { "\($0.name) \(RingsRules.value($0))" }.joined(separator: ", "), after: rings.title
+            ))
         if RingsRules.hasKey(rings) {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 24) {

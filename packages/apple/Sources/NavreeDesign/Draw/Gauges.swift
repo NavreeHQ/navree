@@ -38,7 +38,7 @@ private struct SmallGauge: View {
         .frame(width: side, height: side)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(gauge.label ?? "")
-        .accessibilityValue(gauge.summary ?? gauge.shown ?? NumberWords.amount(gauge.value))
+        .accessibilityValue(SpeechRules.value(gauge.summary ?? gauge.shown ?? NumberWords.amount(gauge.value), after: gauge.label))
     }
 
     private var tint: AnyShapeStyle {
@@ -100,7 +100,7 @@ private struct ZoneGauge: View {
             .frame(width: diameter, height: diameter * GaugeRules.heightShare)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(gauge.label ?? "")
-            .accessibilityValue(gauge.summary ?? gauge.shown ?? NumberWords.amount(gauge.value))
+            .accessibilityValue(SpeechRules.value(gauge.summary ?? gauge.shown ?? NumberWords.amount(gauge.value), after: gauge.label))
             VStack(spacing: 4) {
                 if gauge.label != nil || gauge.hint != nil {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -236,7 +236,7 @@ struct RangePart: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(range.title ?? "")
-        .accessibilityValue(range.summary ?? range.shown ?? range.value.map(amount) ?? "")
+        .accessibilityValue(SpeechRules.value(range.summary ?? range.shown ?? range.value.map(amount) ?? "", after: range.title))
     }
 
     private func ends(current: Int?) -> some View {

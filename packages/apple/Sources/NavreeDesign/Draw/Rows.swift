@@ -43,6 +43,7 @@ struct RowView: View {
                 Text(label).foregroundStyle(muted ? Color.secondary : Color.primary)
             }
             .fontWeight(muted ? nil : .semibold)
+            .accessibilityElement(children: .combine)
         case .field(let field, let form):
             FieldControl(field: field)
                 .environment(\.navreeForm, FormRef(form))
@@ -269,18 +270,49 @@ struct TreeRowView: View {
     }
 }
 
-/// The parts of a row of the tree.
+/// The parts of a row of the tree, said by VoiceOver as one stop: its name,
+/// its state in words, its lines and its end, each once. What its detail
+/// offers beyond words (a disclosure that holds a form, a button that says
+/// its title again) is among its actions.
 struct RowContent: View {
     let row: Navree.Row
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.navree) private var context
+    @State private var opening: SpeechRules.RowOffers.Opening?
 
     var body: some View {
+        let offers = SpeechRules.offers(row)
+        let bar = Self.barWords(row)
+        content(bar: bar)
+            .accessibilityElement(children: .combine)
+            .modifier(RowOffersActions(offers: offers, opening: $opening))
+            .sheet(item: $opening) { opening in
+                FormSheet(title: opening.label, subtitle: row.title, form: opening.form, confirm: opening.submit)
+            }
+    }
+
+    /// What the row's bar says, once the row has said its name and state.
+    static func barWords(_ row: Navree.Row) -> String? {
+        var found: String?
+        for part in row.detail {
+            part.walk { node in
+                if found == nil, case .progress(let progress) = node {
+                    found = SpeechRules.barInRow(progress.label, title: row.title, state: row.badge?.text)
+                }
+            }
+        }
+        return found
+    }
+
+    private func content(bar: String?) -> some View {
         HStack(alignment: Self.leadsWithPicture(row) ? .center : .firstTextBaseline, spacing: 12) {
             if let leading = row.leading {
                 NodeView(leading).font(.body)
+                    .accessibilityHidden(Self.leadingRepeatsTitle(leading, title: row.title))
             } else if let state = row.state {
                 Image(systemName: Self.symbol(state))
                     .foregroundStyle(state == .upcoming ? Color.secondary : Color.accentColor)
+                    .accessibilityLabel(Text(SpeechRules.step(state)))
             }
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
@@ -309,9 +341,21 @@ struct RowContent: View {
             if let trailing = row.trailing, !typeSize.isAccessibilitySize {
                 Spacer(minLength: 0)
                 NodeView(trailing).foregroundStyle(.secondary)
+                    .accessibilityHidden(!Self.saysTrailing(trailing, bar: bar))
             }
         }
-        .accessibilityElement(children: .combine)
+        .environment(\.navreeRowSpeech, RowSpeech(title: row.title, state: row.badge?.text))
+    }
+
+    /// A picture that leads a row of the same person's name is said once, by the name.
+    static func leadingRepeatsTitle(_ leading: Navree.Node, title: String) -> Bool {
+        if case .avatar(let avatar) = leading { return !SpeechRules.saysAvatar(avatar.name, beside: [title]) }
+        return false
+    }
+
+    static func saysTrailing(_ trailing: Navree.Node, bar: String?) -> Bool {
+        if case .text(let text) = trailing { return SpeechRules.saysTrailing(text.value, bar: bar) }
+        return true
     }
 
     /// A row led by a picture with no words in it (a chip, an avatar, an
@@ -426,6 +470,9 @@ struct FactContent: View {
             } label: {
                 label
             }
+            // One stop, as Settings reads a row: "Subtotal, ₹428".
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(SpeechRules.fact(label: fact.label, value: value)))
         } else {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 if let icon = fact.icon {
@@ -483,4 +530,55 @@ struct OptionRow: View {
         .disabled(option.disabled)
         .accessibilityAddTraits(chosen ? .isSelected : [])
     }
+}
+
+/// What a row has said by the time VoiceOver reaches the parts of its detail.
+struct RowSpeech: Equatable {
+    var title: String
+    var state: String?
+}
+
+extension EnvironmentValues {
+    /// Set on the parts of a row of the tree: what the row says before them,
+    /// so none of them says it again.
+    @Entry var navreeRowSpeech: RowSpeech? = nil
+}
+
+/// A row's offers as VoiceOver actions: each disclosure that holds a form by
+/// its name (it opens the form in a sheet), and the title's own button as
+/// what a double tap does.
+struct RowOffersActions: ViewModifier {
+    let offers: SpeechRules.RowOffers
+    @Binding var opening: SpeechRules.RowOffers.Opening?
+    @Environment(\.navree) private var context
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityActions {
+                ForEach(Array(offers.openings.enumerated()), id: \.offset) { _, offer in
+                    Button(offer.label) { opening = offer }
+                }
+            }
+            .modifier(DefaultAction(button: offers.titleButton, form: offers.titleForm))
+    }
+
+    struct DefaultAction: ViewModifier {
+        let button: Navree.Button?
+        let form: Navree.Form?
+        @Environment(\.navree) private var context
+
+        func body(content: Content) -> some View {
+            if let button, let action = button.action {
+                content.accessibilityAction {
+                    context.send(.act(action, Place(form: form.map(FormRef.init))))
+                }
+            } else {
+                content
+            }
+        }
+    }
+}
+
+extension SpeechRules.RowOffers.Opening: Identifiable {
+    public var id: String { label + form.action }
 }
