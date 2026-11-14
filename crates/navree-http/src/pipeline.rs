@@ -55,6 +55,12 @@ const MAX_NORMALIZED_BODY: u64 = 16 * 1024;
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LoggedUser(pub(crate) Uuid);
 
+/// Marks a response a mounted service wrote: error rendering leaves it as
+/// written, where a handler's error status with no body or a plain-text one
+/// takes the JSON error shape.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct AsWritten;
+
 /// The request's tracing span, so inner layers can record fields on it.
 #[derive(Clone, Debug)]
 pub(crate) struct RequestSpan(pub(crate) tracing::Span);
@@ -700,7 +706,11 @@ async fn finalize(
         .and_then(|pending| pending.take());
     let error = match pending {
         Some(error) => error,
-        None if needs_normalizing(&response) => {
+        // An error status with no body or a plain-text one takes the JSON
+        // shape; a mounted service's own answer goes out as it wrote it.
+        None if needs_normalizing(&response)
+            && response.extensions().get::<AsWritten>().is_none() =>
+        {
             let (parts, body) = response.into_parts();
             let text = match body.collect().await {
                 Ok(collected) => String::from_utf8_lossy(&collected.to_bytes()).into_owned(),
