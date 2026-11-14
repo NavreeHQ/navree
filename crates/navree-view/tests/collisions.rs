@@ -2,13 +2,15 @@
 //! app, an error when a plugin is one of them, and a module that replaces a
 //! template of a module it imports (said at info for an app's module, a warning
 //! for a plugin's module replacing another plugin's template, an error for a
-//! plugin's module replacing any other).
+//! plugin's module replacing any other while its version is the one rendered:
+//! not when the app has a file of that name in a template folder or a module of
+//! the app registers the name after it).
 //!
 //! A test binary of its own: the tests read the log, and `tracing` caches
 //! per-callsite interest process-wide, so events first hit by tests that
 //! install no subscriber could be skipped here if they ran in this process.
 
-// This binary uses only `options` of the helpers the view tests share.
+// This binary uses only `options` and `views_dir` of the helpers the view tests share.
 #[allow(dead_code)]
 #[path = "view/support.rs"]
 mod support;
@@ -17,11 +19,12 @@ use std::sync::{Arc, Mutex};
 
 use navree_kernel::{App, BootErrors, Module, ModuleBuilder, ModuleId, Navree, PluginInfo};
 use navree_view::{
-    ModuleBuilderPluginTemplatesExt, ModuleBuilderViewExt, TemplateDir, ViewModule, Views,
+    ModuleBuilderPluginTemplatesExt, ModuleBuilderViewExt, TemplateDir, ViewModule, ViewOptions,
+    Views,
 };
 use serde_json::json;
 
-use crate::support::options;
+use crate::support::{options, views_dir};
 
 /// Captures formatted tracing output written while the guard is alive (on
 /// this thread: use a current-thread runtime).
@@ -163,9 +166,25 @@ impl Module for NoticeBoardPlugin {
     }
 }
 
+/// An app module with a welcome mail of its own, for registering after a plugin.
+struct AppWelcomeModule;
+impl Module for AppWelcomeModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.templates(&[("mail/welcome.html", "Welcome from the app")]);
+    }
+}
+
 /// `ViewModule::for_root(options(&[]))` and `modules`, booted.
 async fn boot(modules: Vec<Box<dyn Module>>) -> Result<App, BootErrors> {
-    let mut app = Navree::app().module(ViewModule::for_root(options(&[])));
+    boot_with(options(&[]), modules).await
+}
+
+/// `ViewModule::for_root(view_options)` and `modules`, booted.
+async fn boot_with(
+    view_options: ViewOptions,
+    modules: Vec<Box<dyn Module>>,
+) -> Result<App, BootErrors> {
+    let mut app = Navree::app().module(ViewModule::for_root(view_options));
     for module in modules {
         app = app.module(Boxed(module));
     }
@@ -262,6 +281,75 @@ async fn a_plugin_replacing_a_template_of_an_app_module_it_imports_fails_the_boo
             .iter()
             .all(|line| !line.contains("is replaced by")),
         "an error, not a log line"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugin_replacing_a_template_of_an_app_module_it_imports_boots_when_the_app_has_a_file_for_it()
+ {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+
+    // The app's own file of that name wins over every embedded template.
+    let dir = views_dir(&[("mail/welcome.html", "Welcome from the app's own file")]);
+    let app = boot_with(options(&[dir.path()]), vec![Box::new(PluginShellModule)])
+        .await
+        .expect("boots");
+    assert_eq!(
+        render(&app, "mail/welcome").await,
+        "Welcome from the app's own file"
+    );
+    assert!(capture.lines().iter().any(|line| line.contains("INFO")
+        && line.contains(
+            "embedded template `mail/welcome.html` of `CrmModule` is replaced by `PluginShellModule`'s, a module of the plugin `navree-plugin-announcements`; the file `mail/welcome.html` in a template folder is used"
+        )));
+    app.shutdown().await.unwrap();
+
+    // A file of another name does not settle it.
+    let other = views_dir(&[("mail/welcome.txt", "Welcome from a text file")]);
+    let error = boot_with(options(&[other.path()]), vec![Box::new(PluginShellModule)])
+        .await
+        .expect_err("fails")
+        .to_string();
+    assert!(
+        error.contains(
+            "embedded template `mail/welcome.html` of `CrmModule` cannot be replaced by `PluginShellModule`"
+        ),
+        "{error}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugin_replacing_a_template_of_an_app_module_it_imports_boots_when_an_app_module_registers_it_after()
+ {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+
+    // A module that belongs to no plugin registers the name after the plugin's module.
+    let app = boot(vec![
+        Box::new(PluginShellModule),
+        Box::new(AppWelcomeModule),
+    ])
+    .await
+    .expect("boots");
+    assert_eq!(render(&app, "mail/welcome").await, "Welcome from the app");
+    assert!(capture.lines().iter().any(|line| line.contains("INFO")
+        && line.contains(
+            "embedded template `mail/welcome.html` of `CrmModule` is replaced by `PluginShellModule`'s, a module of the plugin `navree-plugin-announcements`; `AppWelcomeModule`'s is used"
+        )));
+    app.shutdown().await.unwrap();
+
+    // Registered before the plugin's module, it does not: the plugin's version is the one rendered.
+    let error = boot(vec![
+        Box::new(AppWelcomeModule),
+        Box::new(PluginShellModule),
+    ])
+    .await
+    .expect_err("fails")
+    .to_string();
+    assert!(
+        error.contains("embedded template `mail/welcome.html`"),
+        "{error}"
     );
 }
 
