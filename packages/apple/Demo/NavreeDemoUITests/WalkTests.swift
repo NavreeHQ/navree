@@ -59,8 +59,7 @@ final class WalkTests: XCTestCase {
         app.launchEnvironment["NAVREE_ORIGIN"] = origin
         app.launchArguments = ["-NavreeSelect", "/inbox"]
         app.launch()
-        let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Sukhpreet Chahal")).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 90), "The conversation's row did not appear")
+        let row = try firstConversation(in: app)
         Shots.save("inbox-list", in: self)
         row.tap()
         let reply = app.descendants(matching: .any)
@@ -96,16 +95,7 @@ final class WalkTests: XCTestCase {
         app.launchEnvironment["NAVREE_ORIGIN"] = origin
         app.launchArguments = ["-NavreeSelect", "/inbox"]
         app.launch()
-        // The first conversation, whichever it is now: the first wide button
-        // under the list's filters.
-        let filter = app.buttons["Filter"].firstMatch
-        XCTAssertTrue(filter.waitForExistence(timeout: 90), "The conversations did not appear")
-        settle(2)
-        let row = app.buttons.allElementsBoundByIndex.first { button in
-            button.frame.minY > filter.frame.maxY + 40 && button.frame.width > 200 && button.isHittable
-        }
-        let opened = try XCTUnwrap(row, "No conversation's row under the filters")
-        opened.tap()
+        try firstConversation(in: app).tap()
         let reply = app.descendants(matching: .any)
             .matching(NSPredicate(format: "placeholderValue BEGINSWITH %@", "Write a reply")).firstMatch
         XCTAssertTrue(reply.waitForExistence(timeout: 30), "The conversation's reply did not appear")
@@ -155,6 +145,68 @@ final class WalkTests: XCTestCase {
         Shots.note("reply-controls", frames)
         Shots.save("reply-saved-replies-opened", in: self)
         XCTAssertTrue(shown, "A tap above the words of Saved replies, inside a 44-point target, did not open the saved replies")
+    }
+
+    /// A bordered button in the content is the system's regular size, as
+    /// Mail's are, and still takes a tap across a target of 44 points: its
+    /// frame, what VoiceOver outlines, is the 44-point target round a capsule
+    /// about 34 points tall (the large capsule was 50.33), and a tap 20
+    /// points above the middle of the conversation's "Mark as read" (or,
+    /// once it is read, its "Close"), outside the capsule and inside the
+    /// target, does what the button does. The frames of the conversation's
+    /// bordered buttons are noted beside the pictures.
+    @MainActor
+    func test04BorderedButtonsAreTheRegularSizeAndTakeATapAcrossTheirTarget() throws {
+        guard let origin = environment["NAVREE_INBOX_ORIGIN"], !origin.isEmpty else {
+            throw XCTSkip("Only with NAVREE_INBOX_ORIGIN")
+        }
+        let app = XCUIApplication()
+        app.launchEnvironment["NAVREE_ORIGIN"] = origin
+        app.launchArguments = ["-NavreeSelect", "/inbox"]
+        app.launch()
+        try firstConversation(in: app).tap()
+        let close = app.buttons["Close"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 30), "The conversation's buttons did not appear")
+        settle(3)
+        Shots.save("bordered-buttons", in: self)
+        var frames = ""
+        for name in ["Snooze", "Close", "Mark as read"] {
+            let control = app.buttons[name].firstMatch
+            frames += "\(name): \(control.exists ? "\(control.frame)" : "none")\n"
+        }
+        Shots.note("bordered-buttons", frames)
+        let read = app.buttons["Mark as read"].firstMatch
+        let name = read.exists ? "Mark as read" : "Close"
+        let button = read.exists ? read : close
+        XCTAssertGreaterThanOrEqual(button.frame.height, 44, "A bordered button's target is under 44 points tall")
+        XCTAssertLessThan(button.frame.height, 50, "A bordered button is still at the large size")
+        let above = button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).withOffset(CGVector(dx: 0, dy: -20))
+        frames += "tapped \(name) at \(above.screenPoint), its target from y \(button.frame.minY)\n"
+        above.tap()
+        // What the button does: it goes (the conversation is read or closed),
+        // or the question it asks first comes up.
+        var acted = false
+        for _ in 0..<30 where !acted {
+            acted = !button.exists || app.alerts.count > 0 || app.sheets.count > 0
+            if !acted { settle(0.5) }
+        }
+        frames += "\(name) acted: \(acted) (gone \(!button.exists), a question \(app.alerts.count + app.sheets.count > 0))\n"
+        Shots.note("bordered-buttons", frames)
+        Shots.save("bordered-buttons-tapped", in: self)
+        XCTAssertTrue(acted, "A tap 20 points above the middle of a bordered button, inside its 44-point target, did nothing")
+    }
+
+    /// The first conversation the list shows, whichever it is now: the
+    /// first wide button under the list's filters.
+    @MainActor
+    private func firstConversation(in app: XCUIApplication) throws -> XCUIElement {
+        let filter = app.buttons["Filter"].firstMatch
+        XCTAssertTrue(filter.waitForExistence(timeout: 90), "The conversations did not appear")
+        settle(2)
+        let row = app.buttons.allElementsBoundByIndex.first { button in
+            button.frame.minY > filter.frame.maxY + 40 && button.frame.width > 200 && button.isHittable
+        }
+        return try XCTUnwrap(row, "No conversation's row under the filters")
     }
 
     @MainActor
