@@ -1334,6 +1334,16 @@ More: [/docs/security/single-sign-on/](/docs/security/single-sign-on/).
 | `oidc.scopes` | list of string | `["openid","email","profile"]` | `APP_SSO__OIDC__SCOPES` | The scopes asked for when a connection names none (default `openid email profile`; a comma-separated string from the environment). |
 | `oidc.clock_skew_secs` | integer | `60` | `APP_SSO__OIDC__CLOCK_SKEW_SECS` | How far the provider's clock may be off, in seconds (default 60). |
 
+## `sso.tenants`
+
+Rules for single sign-on connections owned by workspaces and organizations (configuration section `sso.tenants`).
+
+More: [/docs/security/single-sign-on/](/docs/security/single-sign-on/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `unverified_emails` | boolean | `false` | `APP_SSO__TENANTS__UNVERIFIED_EMAILS` | Whether a connection owned by a workspace or an organization creates accounts for addresses outside its verified domains when its `allow_unverified_emails` is on. Default `false`: only connections the app owns do. |
+
 ## `storage`
 
 `StorageModule` settings: configuration section `storage`.
