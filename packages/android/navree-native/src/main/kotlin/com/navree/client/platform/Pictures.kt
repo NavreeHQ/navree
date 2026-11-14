@@ -2,6 +2,8 @@ package com.navree.client.platform
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import okhttp3.CookieJar
+import okhttp3.Request
 
 /**
  * The most bytes a picture may have: 10 MiB, more than a photograph a page
@@ -39,6 +41,20 @@ fun decodePicture(bytes: ByteArray): Bitmap? = try {
     if (sample == 0) null else BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
 } catch (_: OutOfMemoryError) {
     null
+} catch (_: Exception) {
+    null
+}
+
+/**
+ * The request for a picture at [address] (already checked by
+ * [Origins.picture]), asking for a picture. It carries the store's cookies
+ * only to one of the app's origins, never to a picture host, and no session
+ * mark, so no cookie an answer sets is kept. Null when it does not build.
+ */
+fun pictureRequest(address: String, origins: Origins, cookies: CookieJar): Request? = try {
+    val bare = Request.Builder().url(address).header("Accept", "image/*").build()
+    val header = if (origins.ours(address)) cookieHeader(cookies, bare.url) else null
+    if (header == null) bare else bare.newBuilder().header("Cookie", header).build()
 } catch (_: Exception) {
     null
 }

@@ -30,14 +30,13 @@ import com.navree.client.core.Width
 import com.navree.client.platform.AndroidEffects
 import com.navree.client.platform.MOST_PICTURE_BYTES
 import com.navree.client.platform.Origins
-import com.navree.client.platform.cookieHeader
+import com.navree.client.platform.pictureRequest
 import com.navree.client.platform.readCapped
 import com.navree.client.ui.NavreeApp
 import com.navree.client.ui.rememberWindow
 import com.navree.core.Core
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.Request
 
 /**
  * The runtime core and everything that carries out its effects, kept for as
@@ -89,15 +88,14 @@ class NavreeSession(
     }
 
     /**
-     * Fetches a picture's bytes, with the session's cookies: only from the
+     * Fetches a picture's bytes (the session's cookies go only to the app's origins): only from the
      * app's origins and the picture hosts its configuration names, asking for
      * a picture, and at most [MOST_PICTURE_BYTES]. Null for anything else.
      */
     suspend fun image(url: String): ByteArray? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val target = effects.origins.picture(url) ?: return@withContext null
         try {
-            val bare = Request.Builder().url(target).header("Accept", "image/*").build()
-            val request = cookieHeader(effects.cookies, bare.url)?.let { bare.newBuilder().header("Cookie", it).build() } ?: bare
+            val request = pictureRequest(target, effects.origins, effects.cookies) ?: return@withContext null
             effects.http.client.newCall(request).execute().use { response ->
                 when {
                     !response.isSuccessful -> null
