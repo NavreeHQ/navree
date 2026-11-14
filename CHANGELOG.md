@@ -155,6 +155,9 @@ every `@navree/*` package carries the same version.
   rather than shown; a navigation that began before a form's post never replaces the form's answer;
   a region's fetch begun on one page never lands in the next page's region of the same id; and a
   page dropped as overtaken adds no history entry.
+- A table's selection and a palette's recent items are kept in the browser for the person signed in,
+  so the next person in the same browser starts with none, and a page restored from the back-forward
+  cache for someone else loads again.
 - `Href::parse`, and `LocalHref::parse` with it, refuses an address with whitespace or a control
   character at either end, or whitespace other than a plain space before its path (`\u{3000}`,
   `\u{a0}`, `\u{2028}` and the like), so a native client that trims it reads the same address.

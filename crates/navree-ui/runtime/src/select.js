@@ -4,7 +4,7 @@
 // the list is followed with `aria-activedescendant`, and the value lives in a native
 // <select> (`select-native`) that forms, `required`, reset and `change` already
 // understand. Placement of the popup is the overlay module's (`ui:place`).
-import { active, all, clean, cookie, every, fetchHere, make, on, one, sameOrigin } from "./dom.js";
+import { active, all, clean, cookie, every, fetchHere, make, on, one, sameOrigin, who } from "./dom.js";
 
 // The words, in English. The server sends only those a page changes (`data-l`), and a
 // test holds this list equal to the server's defaults.
@@ -946,10 +946,13 @@ function chipKey(e, root, chip) {
 
 // ---------------------------------------------------------------- the palette
 
+/** Where a palette's recent items are kept: for the person, so the next one in the browser sees none of them. @param {Element} dlg */
+const recentKey = (dlg) => "navree-ui:recent:" + who() + ":" + dlg.id;
+
 /** @param {Element} dlg */
 function recents(dlg) {
   try {
-    return new Set(JSON.parse(localStorage.getItem("navree-ui:recent:" + dlg.id) || "[]"));
+    return new Set(JSON.parse(localStorage.getItem(recentKey(dlg)) || "[]"));
   } catch {
     return new Set();
   }
@@ -1015,7 +1018,7 @@ function remember(dlg, item) {
   if (!n || item.hasAttribute("data-no-recent") || item.closest("[data-slot=command-remote]")) return;
   const id = valueOf(item);
   const ids = [id, ...[...recents(dlg)].filter((x) => x !== id)].slice(0, n);
-  try { localStorage.setItem("navree-ui:recent:" + dlg.id, JSON.stringify(ids)); } catch {}
+  try { localStorage.setItem(recentKey(dlg), JSON.stringify(ids)); } catch {}
 }
 
 /** Runs the item: closes the palette and clicks it. @param {HTMLDialogElement} dlg @param {HTMLElement} item */

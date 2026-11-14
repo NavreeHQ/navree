@@ -2,14 +2,14 @@
 // form, and work without this. Here: the selection across pages, dragging and
 // keying column widths and order, the grid keys, and keeping the address bar and
 // the form's controls true to what the server drew.
-import { closest } from "./dom.js";
+import { closest, who } from "./dom.js";
 
 const STICKY_SELECT = "[data-sticky=s]";
 
 /** @typedef {{mode: "ids" | "all", ids: string[], ex: string[], key: string}} Selection */
 
-/** @param {Element} root */
-const storeKey = (root) => "navree-table:" + root.id + ":" + location.pathname;
+/** Where a table's selection is kept: for the person, the table and the page, so the next person in the tab starts with none. @param {Element} root */
+const storeKey = (root) => "navree-table:" + who() + ":" + root.id + ":" + location.pathname;
 
 /** @param {Element} root @returns {Selection} */
 function load(root) {

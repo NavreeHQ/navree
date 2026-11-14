@@ -1,6 +1,6 @@
 // Link boosting and regions: fetch a page, morph what changed, keep the shell
 // alive. A failed fetch falls back to a real navigation.
-import { E, active, all, attr, body, byId, clean, closest, cookies, emit, every, fetchHere, head, hidden, holds, make, on, one, ownModule, root, sameOrigin, set, setTitle, titleOf, unset } from "./dom.js";
+import { E, active, all, attr, body, byId, clean, closest, cookies, emit, every, fetchHere, head, hidden, holds, make, on, one, ownModule, root, sameOrigin, set, setTitle, titleOf, unset, who } from "./dom.js";
 import { morph, pieces } from "./morph.js";
 import { adoptToasts, announce, noteWrite, sameUser } from "./ui.js";
 
@@ -42,7 +42,16 @@ function drop() {
   emit(new Event("ui:stale"));
 }
 if (tabs) tabs.onmessage = drop;
-on(window, "pageshow", (/** @type {PageTransitionEvent} */ e) => { if (e.persisted) drop(); });
+/** Who the page was drawn for, as of when it was last left. */
+let person = who();
+on(window, "pagehide", () => (person = who()));
+// A page kept for the back button that comes back to another person (one signed out, another in) is
+// theirs no more: it loads again, for whoever is signed in now.
+on(window, "pageshow", (/** @type {PageTransitionEvent} */ e) => {
+  if (!e.persisted) return;
+  if (who() !== person) location.reload();
+  else drop();
+});
 
 /** A write or a change of user: nothing fetched before it may be shown, in any tab. */
 export function forget() {

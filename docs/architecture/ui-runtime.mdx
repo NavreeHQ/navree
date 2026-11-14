@@ -50,6 +50,8 @@ An answer is taken into the page on screen only when it is a page of the app: ev
 
 An answer that may be from before a change is not shown. A page or a region fetched before a write in this tab, a write or a sign-out in another, or the page coming back from the back-forward cache is fetched again. A form that writes takes the page's turn, so a navigation that began before it never replaces the form's answer. A region's fetch that began on one page is dropped when the reader has moved to another, even where the next page has a region of the same id. A page dropped this way adds no history entry: the address changes only once the page is sure to show.
 
+What the runtime keeps in the browser between pages is kept for the person signed in, told apart by a short hash of the session's token cookie (never the token): a table's selection across pages, a palette's recent items. The next person in the same browser starts with none. A page that comes back from the back-forward cache to another person than the one it was drawn for loads again.
+
 A form or a command posts to a handler. The handler answers with a `Reply`: a list of ops for the runtime (morph this element, show a toast, close this dialog), or a redirect or a full page for a browser with JavaScript off. [Commands and ops](/docs/ui/commands-and-ops/) covers the ops.
 
 The morph turns the old element into the new one and keeps what the person is doing. Focus, the caret, the selection, an input method composition and typed values survive, and an element with an `id` keeps its identity even when it moves.
