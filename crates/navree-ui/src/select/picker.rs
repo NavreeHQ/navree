@@ -473,16 +473,19 @@ macro_rules! picker_methods {
                 self
             }
 
-            /// Sets an attribute on the root element.
+            /// Sets an attribute on the root element. As on any element, `style`, `srcdoc` and
+            /// the `on*` handlers are never written, and a URL attribute is checked like an
+            /// [`Href`](crate::Href).
             pub fn attr(
                 mut self,
                 name: &'static str,
                 value: impl Into<$crate::node::AttrValue>,
             ) -> Self {
-                self.picker.extra_attrs.push($crate::node::Attr {
-                    name,
-                    value: value.into(),
-                });
+                // The guards of `Element::attr`, on a scratch element: the root gets what it keeps.
+                let guarded = $crate::node::el("div").attr(name, value);
+                self.picker
+                    .extra_attrs
+                    .extend(guarded.attrs().iter().cloned());
                 self
             }
 
