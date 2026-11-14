@@ -1,13 +1,14 @@
 //! An export longer than one read, on SQLite, writes every row once: sorted by a column of
 //! a joined table (which walks the key, named with its table so the joined table's own `id`
-//! is not taken for it), and sorted by a column with NULL in it where one read ends.
+//! is not taken for it), and sorted by a column with NULL in it where one read ends. A
+//! filter, a search and a bulk request over the same join name the table they read too.
 //! Each test works in a database file of its own.
 
 use navree::db::Executor as _;
 use navree::db::{Db, DbOptions};
-use navree::orm::{Model, Record, col};
+use navree::orm::{Builder, Model, Record, col};
 use navree::ui::table::NoFilter;
-use navree::ui::{TableQuery, TableRow};
+use navree::ui::{BulkRequest, TableQuery, TableRow};
 use uuid::Uuid;
 
 /// More rows than an export reads at a time (2,000), so every test crosses a boundary.
@@ -33,9 +34,9 @@ pub struct Company {
 pub struct DealRow {
     #[col(skip)]
     pub id: i64,
-    #[col(sortable, label = "Name")]
+    #[col(sortable, search, filter = text, label = "Name")]
     pub name: String,
-    #[col(sortable, source = "eo_companies.name", label = "Company")]
+    #[col(sortable, filter = text, source = "eo_companies.name", label = "Company")]
     pub company: String,
 }
 
@@ -189,6 +190,118 @@ async fn an_export_sorted_by_a_column_of_a_joined_table_writes_every_row_once() 
         .await
         .expect("a page of the join");
     assert!(!page.rows.is_empty());
+    done(db, dir).await;
+}
+
+/// The deals with their companies: both tables have an `id` and a `name`.
+fn deals_with_companies() -> Builder<Deal> {
+    Deal::query().join(
+        "eo_companies",
+        col("eo_companies.id"),
+        "=",
+        col("eo_deals.company_id"),
+    )
+}
+
+fn deal_row(record: Record<Deal>) -> DealRow {
+    let deal = record.into_inner();
+    DealRow {
+        id: deal.id,
+        name: deal.name,
+        company: String::new(),
+    }
+}
+
+/// The names on the page `url` asks for, over the join, sorted.
+async fn names_of(db: &Db, url: &str) -> Vec<String> {
+    let page = TableQuery::<DealRow, NoFilter>::parse("/deals", url)
+        .load_as(deals_with_companies(), db, deal_row)
+        .await
+        .unwrap_or_else(|error| panic!("{url}: {error}"));
+    let mut names: Vec<String> = page.rows.into_iter().map(|row| row.name).collect();
+    names.sort_unstable();
+    names
+}
+
+/// Both tables have an `id` and a `name`. A filter, a search, an export and a bulk request
+/// over the join read the deals' own, and a filter on the company's name reads the company's.
+#[tokio::test]
+async fn a_filter_a_search_and_a_bulk_request_over_a_join_name_the_table_they_read() {
+    let (db, dir) = database().await;
+    let companies: Vec<Company> = ["Sandhu Traders", "Grewal Exports", "Dhillon Agro"]
+        .iter()
+        .enumerate()
+        .map(|(at, name)| Company {
+            id: i64::try_from(at).unwrap() + 1,
+            name: (*name).to_owned(),
+        })
+        .collect();
+    Company::query()
+        .insert(&db, companies)
+        .await
+        .expect("the companies");
+    // Twelve deals, four of each company.
+    let deals: Vec<Deal> = (1..=12)
+        .map(|n| Deal {
+            id: n,
+            name: format!("Deal-{n:02}"),
+            company_id: n % 3 + 1,
+        })
+        .collect();
+    Deal::query().insert(&db, deals).await.expect("the deals");
+    // A filter on a column both tables have.
+    assert_eq!(
+        names_of(&db, "filter[name][contains]=Deal-1").await,
+        ["Deal-10", "Deal-11", "Deal-12"]
+    );
+    // The search reads the same column.
+    assert_eq!(names_of(&db, "search=Deal-07").await, ["Deal-07"]);
+    // A filter on the company's column, which names its own table.
+    assert_eq!(
+        names_of(&db, "filter[company][contains]=Sandhu").await,
+        ["Deal-03", "Deal-06", "Deal-09", "Deal-12"]
+    );
+    // Both at once, sorted by the company.
+    assert_eq!(
+        names_of(
+            &db,
+            "filter[name][contains]=Deal-1&filter[company][contains]=Sandhu&sort=-company"
+        )
+        .await,
+        ["Deal-12"]
+    );
+    // The export, filtered.
+    let response = TableQuery::<DealRow, NoFilter>::parse(
+        "/deals",
+        "filter[name][contains]=Deal-1&sort=company&cols=name",
+    )
+    .export_csv(deals_with_companies(), &db, "deals.csv", deal_row)
+    .await
+    .expect("a filtered export of the join");
+    every_row_once(
+        first_fields(&file_of(response).await),
+        3,
+        "a filtered export",
+    );
+    // A bulk request by keys: the deals' keys, not the companies'.
+    let request = BulkRequest::<DealRow, NoFilter>::parse(b"action=x&ids=1&ids=2&ids=999").unwrap();
+    let target = request
+        .resolve(deals_with_companies(), &db)
+        .await
+        .expect("the keys over the join")
+        .expect("keys are never refused");
+    assert_eq!(target.count(&db).await.unwrap(), 2);
+    // All that match the filter, except one.
+    let request = BulkRequest::<DealRow, NoFilter>::parse(
+        b"action=x&_mode=all&_expected=2&ex=11&_q=filter%5Bname%5D%5Bcontains%5D%3DDeal-1",
+    )
+    .unwrap();
+    let target = request
+        .resolve(deals_with_companies(), &db)
+        .await
+        .expect("all that match over the join")
+        .expect("what was shown");
+    assert_eq!(target.count(&db).await.unwrap(), 2);
     done(db, dir).await;
 }
 
