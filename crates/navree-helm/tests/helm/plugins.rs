@@ -3,7 +3,7 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use navree_helm::{HelmLink, HelmWidget, ModuleBuilderHelmPanelExt};
+use navree_helm::{HelmLink, HelmWidget, ModuleBuilderHelmExt, ModuleBuilderHelmPanelExt};
 use navree_http::AppError;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_testing::{TestAppBuilder, TestClient, principal};
@@ -346,4 +346,76 @@ async fn a_card_writes_only_through_an_html_template_whatever_its_data_holds() {
         "{html}"
     );
     assert!(!html.contains("<script>alert(1)"), "{html}");
+}
+
+/// The pretty plugin, a community plugin. A test binary is one crate, so the plugin's own
+/// crate is this module: its `crate_name` is the module's path, and the app's subjects
+/// (`Deal` and `Company` of `support`) belong to another crate, as they do in an app.
+mod navree_plugin_pretty {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+    /// The plugin, whose crate is this module.
+    const PRETTY: PluginInfo =
+        PluginInfo::new("navree-plugin-pretty", module_path!(), "pretty", "1.0.0");
+
+    /// A module of the plugin that registers what `.0` registers.
+    pub struct PrettyStaff(pub fn(&mut ModuleBuilder));
+
+    impl Module for PrettyStaff {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PRETTY);
+            (self.0)(m);
+        }
+    }
+}
+
+use navree_plugin_pretty::PrettyStaff;
+
+/// Lets every user work in every workspace.
+fn every_workspace(m: &mut ModuleBuilder) {
+    m.helm_staff_workspaces(|_| async { Ok(true) });
+}
+
+/// Lets every user work with the settings of every organization.
+fn every_organization(m: &mut ModuleBuilder) {
+    m.helm_staff_organizations(|_| async { Ok(true) });
+}
+
+#[tokio::test]
+async fn a_plugin_may_not_decide_who_works_in_other_workspaces() {
+    type Registers = fn(&mut ModuleBuilder);
+    let cases: [(Registers, &str); 2] = [
+        (
+            every_workspace,
+            "plugin `navree-plugin-pretty` decides who works in workspaces they are not members of (m.helm_staff_workspaces in `PrettyStaff`); only the app decides that: call it from a module of the app",
+        ),
+        (
+            every_organization,
+            "plugin `navree-plugin-pretty` decides who works with the settings of organizations they are not members of (m.helm_staff_organizations in `PrettyStaff`); only the app decides that: call it from a module of the app",
+        ),
+    ];
+    for (registers, expected) in cases {
+        let alone = boot_error(builder().module(PrettyStaff(registers))).await;
+        // Whatever the order, beside the app's own policy.
+        let after_the_apps = boot_error(
+            builder()
+                .module(Adds(registers))
+                .module(PrettyStaff(registers)),
+        )
+        .await;
+        let before_the_apps = boot_error(
+            builder()
+                .module(PrettyStaff(registers))
+                .module(Adds(registers)),
+        )
+        .await;
+        for error in [alone, after_the_apps, before_the_apps] {
+            assert!(
+                error.contains(expected),
+                "expected `{expected}` in:\n{error}"
+            );
+        }
+        // The same call from a module of the app boots.
+        builder().module(Adds(registers)).build().await;
+    }
 }
