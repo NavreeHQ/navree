@@ -92,6 +92,8 @@ class WebRulesTest {
         assertTrue("it stops a document that is not one of them", script.contains("window.stop()"))
         assertTrue("and takes out what the parser puts in after", script.contains("new MutationObserver") && script.contains("removeChild"))
         assertTrue("a failure of the check empties the document too", script.endsWith("catch(e){stop()}})();"))
+        assertTrue("a document with no origin of its own is judged by its address", script.contains("o!=='null'") && script.contains("location.href"))
+        assertTrue("only a web address can pass", script.contains("if(s!=='http'&&s!=='https')return false"))
         assertTrue("it is short: it holds up every load", script.length < 1_500)
     }
 }
