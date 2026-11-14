@@ -139,6 +139,40 @@ async fn a_mount_without_access_or_overlapping_a_route_fails_the_boot() {
 }
 
 #[tokio::test]
+async fn a_mount_fails_the_boot_without_the_authenticator_or_authorizer_its_access_needs() {
+    // An app with no authenticator and no route authorizer.
+    let calls = Arc::new(Counter::default());
+    let error = Setup::new(vec![])
+        .register(move |m| {
+            m.mount(Mount::new("/khata", counted(&calls)).roles(&["munshi"]));
+        })
+        .boot_error()
+        .await;
+    assert!(
+        error.contains(
+            "mount `/khata` in `TestModule` requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the mount public)"
+        ),
+        "{error}"
+    );
+    assert!(
+        error.contains(
+            "mount `/khata` in `TestModule` declares roles:munshi but no `dyn RouteAuthorizer` is registered (import the access module)"
+        ),
+        "{error}"
+    );
+
+    // A public mount needs neither.
+    let calls = Arc::new(Counter::default());
+    let app = Setup::new(vec![])
+        .register(move |m| {
+            m.mount(Mount::new("/khata", counted(&calls)).public());
+        })
+        .boot()
+        .await;
+    assert_eq!(app.get("/khata/entries").await.text(), "GET /entries");
+}
+
+#[tokio::test]
 async fn a_mount_overlapping_a_parameter_or_catch_all_route_fails_the_boot() {
     for (pattern, shown, overlaps) in [
         ("!/{workspace}/dashboard", "/{workspace}/dashboard", true),
@@ -444,27 +478,23 @@ async fn an_encoded_slash_reaches_the_service_as_one_segment() {
 async fn dot_dot_raw_encoded_or_decoded_never_reaches_the_service() {
     let (ledger, app) = ledger_app(Mount::authenticated);
     let app = app.await;
-    for path in [
-        "/khata/..",
-        "/khata/../x",
-        "/khata/.",
-        "/khata/./x",
-        "/khata/%2e%2e/x",
-        "/khata/%2E%2e",
-        "/khata/.%2e/x",
-        "/khata/a%2F..%2Fb",
-        "/khata/..%2F",
-        "/khata/a/%2E",
+    // The router's check of the whole path, then its decoding of the rest.
+    let segment = "Invalid URL: the path has a `.` or `..` segment";
+    let decoded = "Invalid URL: `rest` is or holds a `.` or `..` segment";
+    for (path, message) in [
+        ("/khata/..", segment),
+        ("/khata/../x", segment),
+        ("/khata/.", segment),
+        ("/khata/./x", segment),
+        ("/khata/%2e%2e/x", segment),
+        ("/khata/%2E%2e", segment),
+        ("/khata/.%2e/x", segment),
+        ("/khata/a%2F..%2Fb", decoded),
+        ("/khata/..%2F", decoded),
+        ("/khata/a/%2E", segment),
     ] {
         let response = app.send(as_user("GET", path, HARPREET)).await;
-        let body = response.assert_error(400);
-        assert!(
-            body["message"]
-                .as_str()
-                .unwrap()
-                .starts_with("Invalid URL:"),
-            "{path}: {body}"
-        );
+        assert_eq!(response.assert_error(400)["message"], message, "{path}");
     }
     assert_eq!(ledger.calls(), 0);
     // Three dots are a name, not a step up.
@@ -528,18 +558,17 @@ async fn an_empty_segment_after_the_prefix_is_refused() {
 async fn a_backslash_a_nul_or_bytes_that_are_not_utf8_never_reach_the_service() {
     let (ledger, app) = ledger_app(Mount::authenticated);
     let app = app.await;
-    for path in ["/khata/a\\b", "/khata/a%5Cb", "/khata/a%00", "/khata/%FF"] {
+    for (path, message) in [
+        ("/khata/a\\b", "Invalid URL: the path has a backslash"),
+        ("/khata/a%5Cb", "Invalid URL: `rest` holds a backslash"),
+        ("/khata/a%00", "Invalid URL: `rest` holds a NUL character"),
+        ("/khata/%FF", "Invalid URL: Invalid UTF-8 in `rest`"),
+    ] {
         let body = app
             .send(as_user("GET", path, HARPREET))
             .await
             .assert_error(400);
-        assert!(
-            body["message"]
-                .as_str()
-                .unwrap()
-                .starts_with("Invalid URL:"),
-            "{path}: {body}"
-        );
+        assert_eq!(body["message"], message, "{path}");
     }
     assert_eq!(ledger.calls(), 0);
     assert_eq!(
@@ -1178,6 +1207,33 @@ async fn an_upgrade_or_connect_request_to_a_mount_is_refused_before_the_service(
         "{head}"
     );
     assert_eq!(ledger.calls(), 1);
+
+    // The refusal comes after the access check: a guest's handshake to a
+    // mount for signed-in users is a 401, a signed-in user's a 501.
+    let (ledger, app) = ledger_app(Mount::authenticated);
+    let app = app.await;
+    let handshake = |user: Option<&str>| {
+        let mut request = http::Request::get("/khata/chat")
+            .header("connection", "upgrade")
+            .header("upgrade", "websocket");
+        if let Some(user) = user {
+            request = request.header("x-user-id", user);
+        }
+        request.body(Body::empty()).unwrap()
+    };
+    app.send(handshake(None)).await.assert_error(401);
+    assert_eq!(
+        app.send(handshake(Some(HARPREET))).await.assert_error(501)["message"],
+        refused
+    );
+    app.send(as_user("CONNECT", "/khata/chat", MEERA))
+        .await
+        .assert_error(501);
+    let guest_tunnel = http::Request::connect("/khata/chat")
+        .body(Body::empty())
+        .unwrap();
+    app.send(guest_tunnel).await.assert_error(401);
+    assert_eq!(ledger.calls(), 0);
 }
 
 #[tokio::test]
