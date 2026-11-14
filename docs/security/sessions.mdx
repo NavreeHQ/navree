@@ -238,7 +238,7 @@ let redeemed = tickets.redeem(&ticket, &check).await?;
 ```
 
 - Issuing writes nothing; it costs one AES-GCM seal. A ticket lives 5 minutes unless `.ttl(..)` says otherwise (at most an hour).
-- Redeeming refuses a forged or changed ticket, one past its time, one issued to another session or user (a guest's to a guest only), for another call, or for another route, and one already redeemed, even by a request at the same moment. The errors are `TicketError`s; `AuthError::from(error)` answers `422 invalid_ticket`.
+- Redeeming refuses a forged or changed ticket, one past its time, one issued to another session or user (a guest's to a guest only; a client with a bearer token is in the session its token's `sid` names), for another call, or for another route, and one already redeemed, even by a request at the same moment. The errors are `TicketError`s; `AuthError::from(error)` answers `422 invalid_ticket`.
 - A `confirm` ticket goes to `POST /api/auth/confirm/options` as `{"ticket": "..."}`: it is used up there, and the challenge is derived from its binding (the action's digest). The assertion then goes to the page's own route, whose handler calls `confirm_action`.
 - Tickets are single use across instances when the cache is shared ([`CacheModule`](/docs/digging-deeper/cache/) with Redis); without `CacheModule` each instance remembers its own.
 

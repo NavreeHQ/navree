@@ -45,7 +45,8 @@ pub trait Strategy: Send + Sync + 'static {
 
 /// The built-in strategy (`"jwt"`): `Authorization: Bearer <access token>`
 /// verified by [`JwtService`] gives a [`Principal`] authenticated
-/// [`AuthVia::Token`] with no token restrictions, and stores the token's
+/// [`AuthVia::Token`] with no token restrictions and the token's session
+/// (its `sid` claim, when it has one) as `session_id`, and stores the token's
 /// [`AccessClaims`] in the request (plus navree-contracts' `Impersonator`
 /// for an impersonation token, which the unit of work and the audit trail
 /// pick up). No `Authorization` header, another scheme, or a bearer value
@@ -126,12 +127,15 @@ impl JwtStrategy {
             parts.extensions.insert(Impersonator(act.sub));
         }
         let user_id = claims.sub;
+        // The token's session (`sid`), so whatever is bound to a session
+        // (call tickets, push devices) is bound for bearer clients too.
+        let session_id = claims.sid.map(|sid| sid.to_string());
         parts.extensions.insert(AccessClaims(claims));
         Ok(Some(Principal {
             user_id,
             via: AuthVia::Token,
             token_abilities: None,
-            session_id: None,
+            session_id,
         }))
     }
 }
@@ -297,6 +301,35 @@ mod tests {
                 .unwrap()
                 .is_platform()
         );
+    }
+
+    #[tokio::test]
+    async fn a_bearer_principal_names_the_session_of_its_token() {
+        let jwt = jwt();
+        let strategy = JwtStrategy::new(jwt.clone());
+        let (user, session) = (Uuid::now_v7(), Uuid::now_v7());
+        let token = jwt
+            .sign_session(
+                user,
+                TokenType::Access,
+                Duration::from_secs(60),
+                crate::SessionClaims {
+                    session_id: Some(session),
+                    auth_time: None,
+                    impersonator: None,
+                },
+            )
+            .unwrap();
+        let mut parts = parts(Some(&format!("Bearer {token}")));
+        let principal = strategy.authenticate(&mut parts).await.unwrap().unwrap();
+        assert_eq!(principal.via, AuthVia::Token);
+        assert_eq!(principal.session_id, Some(session.to_string()));
+
+        // A token of no session names none.
+        let plain = jwt.sign_access(user).unwrap();
+        let mut parts = self::parts(Some(&format!("Bearer {plain}")));
+        let principal = strategy.authenticate(&mut parts).await.unwrap().unwrap();
+        assert_eq!(principal.session_id, None);
     }
 
     #[tokio::test]
