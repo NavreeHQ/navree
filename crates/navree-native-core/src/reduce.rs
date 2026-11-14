@@ -493,9 +493,14 @@ impl Core {
 
     /// Fails the requests that were never sent, each as an answer of 502.
     /// What their failure asks for in turn is failed the same way, a few
-    /// rounds at most.
+    /// rounds at most; after them, what is left is failed once more and what
+    /// that asks for is failed with the next event.
     fn fail_unsent(&mut self) {
-        for _ in 0..MOST_REDIRECTS {
+        self.fail_unsent_within(MOST_REDIRECTS);
+    }
+
+    fn fail_unsent_within(&mut self, rounds: u8) {
+        for _ in 0..rounds {
             let unsent = std::mem::take(&mut self.inner.unsent);
             if unsent.is_empty() {
                 return;
@@ -508,8 +513,14 @@ impl Core {
                 });
             }
         }
+        // What is left is failed all the same. What failing it asks for in
+        // turn waits for the next event's update, so no asker is left waiting.
         for request in std::mem::take(&mut self.inner.unsent) {
-            self.inner.pending.remove(&request);
+            self.answered(Response {
+                request,
+                status: 502,
+                ..Response::default()
+            });
         }
     }
 
@@ -580,9 +591,9 @@ impl Core {
                     self.said_refused("redirect", &location);
                 }
                 Some(Response {
-                request: response.request,
-                status: 502,
-                ..Response::default()
+                    request: response.request,
+                    status: 502,
+                    ..Response::default()
                 })
             }
         }
@@ -2447,6 +2458,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_page_whose_address_is_not_ours_fails_once_and_stops_loading() {
+        let mut core = started();
+        core.view.screens.get_mut(&1).unwrap().url = "https://evil.example/x".to_owned();
+        core.fetch_page(1, false);
+        let update = core.settle();
+        assert!(
+            !update
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Fetch(_))),
+            "{update:?}"
+        );
+        let view = &core.view.screens[&1];
+        assert!(!view.loading);
+        assert_eq!(view.failure, Some(Failure::Server));
+        assert!(core.inner.pending.is_empty() && core.inner.unsent.is_empty());
+    }
+
+    #[test]
+    fn a_request_left_after_the_rounds_is_failed_not_dropped() {
+        let mut core = started();
+        core.view.screens.get_mut(&1).unwrap().url = "https://evil.example/x".to_owned();
+        core.fetch_page(1, false);
+        core.fail_unsent_within(0);
+        let view = &core.view.screens[&1];
+        assert!(!view.loading);
+        assert_eq!(view.failure, Some(Failure::Server));
+        assert!(core.inner.pending.is_empty());
+    }
+
     fn reports(update: &Update) -> Vec<String> {
         update
             .effects
@@ -2496,10 +2538,12 @@ mod tests {
         // Another site is not refused, and is not said.
         assert!(reports(&core.send(tap("https://evil.example/x"))).is_empty());
         // A link from outside the app is the system's, and is not said.
-        assert!(reports(&core.send(Event::OpenLink {
-            url: " https://shop.example/x".to_owned()
-        }))
-        .is_empty());
+        assert!(
+            reports(&core.send(Event::OpenLink {
+                url: " https://shop.example/x".to_owned()
+            }))
+            .is_empty()
+        );
     }
 
     #[test]
