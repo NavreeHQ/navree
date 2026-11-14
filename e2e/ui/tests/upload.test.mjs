@@ -495,8 +495,9 @@ inBrowsers(({ open, browserName }) => {
     await page.locator("#up-claim-input").setInputFiles(png("Dhaba-bill.png"));
     await sent;
     await row(page, "up-claim", "done").waitFor();
-    // The file is sent: its key is in the form, the field is emptied, and nothing more is asked of it.
-    assert.match(await claimKey(page), /^\/_navree\/ui\/file\?path=receipts(%2F|\/)[^&]+&expires=\d+&signature=[0-9a-f]+$/);
+    // The file is sent: its key is in the form, the field is emptied, and nothing more is asked of it. The key names
+    // the person it was made for and the upload's folder.
+    assert.match(await claimKey(page), /^\/_navree\/ui\/file\/for\?path=receipts(%2F|\/)[^&]+&for=[0-9a-f]+&dir=receipts&expires=\d+&signature=[0-9a-f]+$/);
     assert.equal(await page.locator("#up-claim-input").evaluate((e) => e.files.length), 0);
     assert.equal(await asksForFile(page), false);
     assert.match(await said(page, "up-claim"), /Dhaba-bill\.png · Sent/);
