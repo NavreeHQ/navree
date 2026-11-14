@@ -161,7 +161,8 @@ The build says `LSUIElement`. Then:
   into a full window, laid out by that window's width as a Dock app's window
   is from its start (the sidebar beside the content, the screen's title over
   the content, the toolbar laid out again for the new window), with the app in
-  the Dock and its menus while the window is open (`LSUIElement` apps come into
+  the Dock and its menus while the window is open; it opens, and a drag
+  stops, no narrower than its sidebar and detail need side by side (`LSUIElement` apps come into
   the Dock only then); the window under the item closes. Closing the full
   window puts the app back under its item and out of the Dock. Opening the
   app again from the Finder, the Dock menu's New Window, and a notification
@@ -170,7 +171,8 @@ The build says `LSUIElement`. Then:
   `resizable`, `pinned`, `opensAtLaunch`. No background or material of the
   app's own: the window keeps the system's.
 - The item's `title` is its label, `tooltip` its tooltip; the count a server
-  sets with `set_badge` stands beside the image while `showsCount` is on.
+  sets with `set_badge` stands beside the image while `showsCount` is on, and
+  VoiceOver says the item's name and that count ("Charkha Bar, 7").
 - From code: `PresenceModel.shared.showStatusWindow()`, `hideStatusWindow()`,
   `openInWindow()`, and `statusWindowShown` (observable) for whether it is open.
 - In both places (`.both`) such an item would hold a second session beside
