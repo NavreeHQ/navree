@@ -20,6 +20,9 @@ import UIKit
 /// - `confirm`: a passkey's signature over the challenge the core asked the server for.
 /// - `passkey`: a passkey made or used, with the options of its ceremony when
 ///   the core hands them over.
+/// - `set_badge`, `notify`, `cancel_notification`: the count on the app's icon,
+///   and notifications the device schedules itself (the first asks the person).
+///   None of them posts, so none is answered.
 ///
 /// The last four need a build signed by a developer team with their
 /// entitlements (push; Sign in with Apple; the origin as an associated domain
@@ -42,6 +45,8 @@ final class DeviceCalls {
     var sheet: any AuthorizationSheet = SystemAuthorizationSheet()
     /// What asks the person to allow notifications.
     var permission: any NotificationPermission = SystemNotificationPermission()
+    /// What schedules the app's own notifications and sets the count on its icon.
+    var notifications: any AppNotifications = SystemAppNotifications()
 
     /// The call whose sheet is showing: one at a time.
     private var showing: Int?
@@ -68,6 +73,15 @@ final class DeviceCalls {
             if posts { answer(call, .done([])) }
         case .reply(.requestReview):
             requestReview()
+        case .call(.setBadge(let badge)), .reply(.setBadge(let badge)):
+            notifications.badge(badge.count)
+            if posts { answer(call, .done([])) }
+        case .call(.notify(let notify)):
+            notifications.schedule(notify, permission: permission)
+            if posts { answer(call, .done([])) }
+        case .call(.cancelNotification(let cancel)), .reply(.cancelNotification(let cancel)):
+            notifications.cancel(cancel.id)
+            if posts { answer(call, .done([])) }
         case .call(.registerPush) where posts && signedWith.contains(.pushNotifications):
             allowNotifications(call)
         case .call(.platformSignIn(let signIn)) where posts && signedWith.contains(.signInWithApple):

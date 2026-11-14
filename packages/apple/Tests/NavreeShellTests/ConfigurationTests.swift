@@ -11,7 +11,7 @@ import Testing
 @Test func aBuildWithNoTeamListsOnlyWhatAnyAppCanDo() {
     #expect(
         CoreConfiguration.caps(signedWith: [], signInScheme: nil)
-            == ["clipboard", "open_settings", "open_url", "request_review", "share"]
+            == ["clipboard", "local_notification", "open_settings", "open_url", "request_review", "share"]
     )
 }
 

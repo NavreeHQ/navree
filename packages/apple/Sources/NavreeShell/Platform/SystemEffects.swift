@@ -108,7 +108,9 @@ public final class SystemEffects: EffectRunner {
         case .forgetSession:
             // The person signed out: what was kept of them goes with the
             // session, here and now, before the next effect; the web view's
-            // store before it is used again.
+            // store before it is used again. The count and every notification
+            // go with them.
+            devices.notifications.signedOut()
             snapshots.clear()
             cache.clear()
             FileStore.shared.clear()
