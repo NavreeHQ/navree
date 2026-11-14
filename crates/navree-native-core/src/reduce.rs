@@ -24,6 +24,7 @@ use navree_native::{
 use serde_json::Value;
 
 use crate::Core;
+use crate::cache::Who;
 use crate::decode::{self, Answer, Read};
 use crate::effect::{Body, Change, Effect, Request, Update, Verb};
 use crate::event::{Event, Response, StreamState, TransportError};
@@ -813,6 +814,10 @@ impl Core {
         {
             Ok(mut shell) if shell.navree == MAJOR => {
                 self.shell_pictures(&mut shell);
+                self.inner.naming = response
+                    .header(navree_native::PERSON_HEADER)
+                    .filter(|id| !id.is_empty())
+                    .map(|id| Who::Id { id: id.to_owned() });
                 // The stamp of the shell now held: its own, or the one its answer named.
                 let stamp = (!shell.stamp.is_empty())
                     .then(|| shell.stamp.clone())
@@ -874,10 +879,13 @@ impl Core {
     }
 
     fn install(&mut self, shell: Shell) {
-        let user = shell
-            .user
-            .as_ref()
-            .map(|user| (user.name.clone(), user.email.clone()));
+        // Who it names: by the id its answer said, else by name and email.
+        let naming = self.inner.naming.take();
+        let user = shell.user.as_ref().map(|user| {
+            naming
+                .clone()
+                .unwrap_or_else(|| Who::Named(user.name.clone(), user.email.clone()))
+        });
         self.inner.sign_in = shell.sign_in;
         self.inner.push_route = shell
             .device

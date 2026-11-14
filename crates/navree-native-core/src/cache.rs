@@ -30,9 +30,25 @@ use crate::effect::Effect;
 use crate::event::Response;
 use crate::state::{Asked, Content, Pending, ScreenId};
 
-/// A person as the core compares people: a name and an email. `None` is a
-/// visitor, signed in as nobody.
-pub(crate) type Person = Option<(String, Option<String>)>;
+/// Who a shell names, as the core tells people apart: by the id the app's
+/// sign-in gives them, when the shell's answer says it
+/// ([`navree_native::PERSON_HEADER`]), and by their name and email when an
+/// older server does not.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum Who {
+    /// The id the app's sign-in gives them, as the header wrote it.
+    Id {
+        /// The id.
+        id: String,
+    },
+    /// Their name and email.
+    Named(String, Option<String>),
+}
+
+/// A person as the core compares people. `None` is a visitor, signed in as
+/// nobody.
+pub(crate) type Person = Option<Who>;
 
 /// Whose the pages the client keeps are.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -438,10 +454,16 @@ impl Core {
             self.disown();
             return self.owner_settles();
         };
-        if !self.inner.has_shell && !self.shell_from_cache(&shell) {
-            // A kept shell that does not read says nothing of whose the pages are.
-            self.disown();
-            return self.owner_settles();
+        if !self.inner.has_shell {
+            // The kept shell names the person the pages were kept for, as
+            // they were told apart then.
+            self.inner.naming = owner.clone();
+            if !self.shell_from_cache(&shell) {
+                // A kept shell that does not read says nothing of whose the pages are.
+                self.inner.naming = None;
+                self.disown();
+                return self.owner_settles();
+            }
         }
         // What was taken away before the list was read stays away.
         let removed = std::mem::take(&mut self.inner.cache.removed);
