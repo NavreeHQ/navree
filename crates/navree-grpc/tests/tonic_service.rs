@@ -529,7 +529,10 @@ async fn refused_calls_from_one_address_in_a_minute_are_each_logged_and_audited_
             .unwrap_err();
         assert_eq!(status.code(), Code::PermissionDenied);
     }
-    until("the first refusal is audited", || !denied(&audit).is_empty()).await;
+    until("the first refusal is audited", || {
+        !denied(&audit).is_empty()
+    })
+    .await;
     // Time for a second write to land, had one been started.
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert_eq!(denied(&audit).len(), 1, "one entry a minute per address");

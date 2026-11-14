@@ -842,7 +842,10 @@ mod tests {
 
     #[test]
     fn a_path_is_cut_at_a_character_boundary() {
-        assert_eq!(cut("/crm.deals.v1.Deals/GetDeal", 128), "/crm.deals.v1.Deals/GetDeal");
+        assert_eq!(
+            cut("/crm.deals.v1.Deals/GetDeal", 128),
+            "/crm.deals.v1.Deals/GetDeal"
+        );
         assert_eq!(cut("/crm.deals.v1.Deals/GetDeal", 4), "/crm");
         // `₹` is three bytes.
         assert_eq!(cut("₹₹", 4), "₹");
