@@ -233,35 +233,46 @@ fn plugins_with_locales(ctx: &AppContext) -> Vec<PluginLocales> {
     found
 }
 
-/// `plugin`'s files for each supported locale: those of the plugin's locale
-/// with the same tag, else of its first locale of the same language, at
-/// `{locale}/{namespace}/{rest}`; a locale it has none for gets a line saying so.
+/// `plugin`'s files for each supported locale, at `{locale}/{namespace}/{rest}`,
+/// from the plugin's locale that the app's own fallback would reach first: the
+/// same tag, else a less specific tag of it (`en` for `en-US`), else the first
+/// other locale of the same language by tag (`en-AU` before `en-GB`). A locale
+/// the plugin has none for gets a line saying so.
 fn plugin_steps(i18n: &I18n, plugin: &PluginLocales) -> Vec<Step> {
     let mut files = plugin.files.clone();
     files.sort_by(|a, b| a.0.cmp(&b.0));
-    // The plugin's locales: the first segment of each path, in path order.
-    let mut locales: Vec<&str> = Vec::new();
+    // The plugin's locales: the first segment of each path, with its canonical
+    // tag, in tag order (path order would put `en-GB/` before `en/`).
+    let mut locales: Vec<(String, &str)> = Vec::new();
     for (path, _) in &files {
         if let Some((locale, _)) = path.split_once('/')
-            && !locales.contains(&locale)
+            && let Ok(canonical) = tag::canonical(locale)
+            && !locales.iter().any(|(_, known)| *known == locale)
         {
-            locales.push(locale);
+            locales.push((canonical, locale));
         }
     }
+    locales.sort();
     let mut steps = Vec::new();
     for locale in supported(i18n) {
         let Ok(langid) = tag::parse(&locale) else {
             continue;
         };
+        let parents = tag::parents(&langid);
         let chosen = locales
             .iter()
-            .copied()
-            .find(|candidate| tag::canonical(candidate).is_ok_and(|canonical| canonical == locale))
+            .find(|(canonical, _)| *canonical == locale)
             .or_else(|| {
-                locales.iter().copied().find(|candidate| {
-                    tag::parse(candidate).is_ok_and(|other| other.language == langid.language)
+                parents.iter().find_map(|parent| {
+                    locales.iter().find(|(canonical, _)| canonical == parent)
                 })
-            });
+            })
+            .or_else(|| {
+                locales.iter().find(|(canonical, _)| {
+                    tag::parse(canonical).is_ok_and(|other| other.language == langid.language)
+                })
+            })
+            .map(|(_, written)| *written);
         let Some(chosen) = chosen else {
             steps.push(Step::Skipped(format!(
                 "{locale}: plugin `{}` ships no messages in this language",
@@ -440,6 +451,49 @@ mod tests {
                 "pa-IN/announcements/announcements.ftl",
                 "pa-IN/announcements/mail/welcome.ftl",
                 "ta: plugin `announcements` ships no messages in this language",
+            ]
+        );
+    }
+
+    /// A supported region takes the plugin's file of the language alone before one of a sibling
+    /// region, as the app's own fallback would reach it, and among siblings the first by tag:
+    /// `en-US` reads the plugin's `en`, not `en-GB` (which sorts before `en/` as a path), and
+    /// `de-AT`, with no `de` to fall back to, takes `de-CH` before `de-DE`.
+    #[test]
+    fn a_region_takes_the_plugins_language_before_a_sibling_region() {
+        const EN: &[u8] = b"announcements-title = Notices\n";
+        const EN_GB: &[u8] = b"announcements-title = Notices, in British spelling\n";
+        const DE_CH: &[u8] = b"announcements-title = Mitteilungen aus der Schweiz\n";
+        const DE_DE: &[u8] = b"announcements-title = Mitteilungen aus Deutschland\n";
+        let i18n = I18n::new(I18nOptions {
+            locales: vec!["en".into(), "en-US".into(), "de-AT".into()],
+            dir: "tests/fixtures/locales".into(),
+            ..I18nOptions::default()
+        })
+        .unwrap();
+        let plugin = PluginLocales {
+            name: "navree-plugin-announcements",
+            namespace: "announcements",
+            files: vec![
+                ("en-GB/announcements.ftl".to_owned(), EN_GB),
+                ("en/announcements.ftl".to_owned(), EN),
+                ("de-DE/announcements.ftl".to_owned(), DE_DE),
+                ("de-CH/announcements.ftl".to_owned(), DE_CH),
+            ],
+        };
+        let written: Vec<(String, &[u8])> = plugin_steps(&i18n, &plugin)
+            .into_iter()
+            .filter_map(|step| match step {
+                Step::File(path, bytes) => Some((path, bytes)),
+                Step::Skipped(_) => None,
+            })
+            .collect();
+        assert_eq!(
+            written,
+            [
+                ("en/announcements/announcements.ftl".to_owned(), EN),
+                ("en-US/announcements/announcements.ftl".to_owned(), EN),
+                ("de-AT/announcements/announcements.ftl".to_owned(), DE_CH),
             ]
         );
     }
