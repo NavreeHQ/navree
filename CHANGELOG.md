@@ -65,8 +65,8 @@ every `@navree/*` package carries the same version.
 - Modules describe their permissions with `m.permissions(&[Permission::new(..)])`
   (`navree::contracts`, also `navree::plugin::Permission`); `permission_catalog` lists them and
   `access:explain` prints a permission's description. Describing a permission grants it to nobody.
-  A plugin's permissions start with its namespace, and its namespace may not be another module's
-  permission prefix. A plugin that reads a configuration section outside its namespace is warned
+  A plugin's permissions and its own subjects' permission prefixes start with its namespace, and
+  its namespace may not be another module's permission prefix. A plugin that reads a configuration section outside its namespace is warned
   about at boot. Without `AccessModule` the permissions modules describe are not checked, and a
   route cannot require one. The roles that already hold every permission hold a plugin's too: a
   workspace's owner, an organization's owner in each of its workspaces, the app's super-admin role

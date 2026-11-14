@@ -255,7 +255,7 @@ for (module, permission) in navree::contracts::permission_catalog(&ctx) {
 }
 ```
 
-A name is two or more lower-case words joined by `.`, each a letter followed by up to 63 letters, digits or `_` (`announcements.publish`, `announcements.notice_board.publish`). A plugin that is not one of the framework's own packages describes only permissions that start with its namespace and `.`, and its namespace may not be the first word of the permission prefix of a subject from another crate (a plugin in the namespace `deals` next to the app's subject with the prefix `deals` stops the boot). A name two modules describe is a warning, or a boot error when one of the two is such a plugin.
+A name is two or more lower-case words joined by `.`, each a letter followed by up to 63 letters, digits or `_` (`announcements.publish`, `announcements.notice_board.publish`). A plugin that is not one of the framework's own packages describes only permissions that start with its namespace and `.`, its own subjects (types of its crate) take permission prefixes inside its namespace (the namespace itself, or starting with it and `.`), and its namespace may not be the first word of the permission prefix of a subject from another crate (a plugin in the namespace `deals` next to the app's subject with the prefix `deals` stops the boot). A name two modules describe is a warning, or a boot error when one of the two is such a plugin.
 
 The name, namespace and prefix checks and the check of a name two modules describe run in `AccessModule` at boot. Without `AccessModule`, nothing checks them and nothing reads the descriptions, but roles still hold what `workspace.roles.{role}.permissions` lists, and no route can require a permission.
 

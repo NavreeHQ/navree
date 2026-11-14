@@ -1,6 +1,7 @@
 //! The boot checks of the permissions modules describe with
 //! `m.permissions` (navree-contracts' `permission_catalog`): their names, a
-//! community plugin's namespace, and a name two modules describe. Describing
+//! community plugin's namespace and its own subjects' permission prefixes,
+//! and a name two modules describe. Describing
 //! a permission grants it to nobody; these checks grant nothing either.
 //! They run where the app has AccessModule: without it nothing checks the
 //! catalog and nothing reads the descriptions, while a workspace role still
@@ -19,7 +20,9 @@ use crate::subject::SubjectRegistration;
 ///
 /// 1. every described name is two or more lower-case words joined by `.`;
 /// 2. a community plugin's names start with its namespace and `.`;
-/// 3. a community plugin's namespace is neither the first word of a
+/// 3. a community plugin's own subjects (types of its crate) take permission
+///    prefixes inside its namespace (the namespace, or the namespace and
+///    `.` and more), and its namespace is neither the first word of a
 ///    permission prefix a subject of another crate registers nor `all`;
 /// 4. a name two modules describe is an error when either module belongs to
 ///    a community plugin, and otherwise a warning at target `navree::access`.
@@ -56,9 +59,18 @@ pub(crate) fn check(ctx: &AppContext) -> Result<(), AccessError> {
         let own = format!("{}::", plugin.info.crate_name);
         for contributed in &subjects {
             let registration = &contributed.value;
-            if registration.prefix.split('.').next() == Some(namespace)
-                && !registration.type_name.starts_with(&own)
-            {
+            if registration.type_name.starts_with(&own) {
+                // Its own subject: a prefix outside its namespace would take over the
+                // meaning of permissions the app grants under that prefix.
+                let inside = registration.prefix == namespace
+                    || registration.prefix.starts_with(&format!("{namespace}."));
+                if !inside {
+                    return Err(AccessError::Config(format!(
+                        "plugin `{}` registers the subject `{}` with the permission prefix `{}`, outside its namespace `{namespace}`",
+                        plugin.info.name, registration.subject, registration.prefix
+                    )));
+                }
+            } else if registration.prefix.split('.').next() == Some(namespace) {
                 return Err(namespace_taken(
                     plugin,
                     registration.subject,
