@@ -21,8 +21,9 @@
 //!    `code` (60 seconds) and the app's `state`; the browser is then signed
 //!    out, unless `auth.apps.keep_browser_signed_in` is on. A browser that
 //!    was already signed in when the hand-over began is asked first, on a
-//!    small page of the framework's own (no page toolkit needed): "<app>
-//!    wants to sign in as <person>", Continue or Cancel, posted to `POST
+//!    small page of the framework's own (no page toolkit needed) that names
+//!    the app and the person ("com.example.orders wants to sign in as Simran
+//!    Kaur"), with Continue and Cancel, posted to `POST
 //!    /auth/app/confirm` with the session's CSRF token (masked anew on every
 //!    page) and a one-time value of this hand-over. Continue hands that
 //!    sign-in over and keeps the browser signed in (an `https` callback), or
