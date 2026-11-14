@@ -57,6 +57,12 @@ every `@navree/*` package carries the same version.
   scope is then a list that isn't there, and a renewal leaves the ranks of a same-named list of
   another scope alone. The existing calls are unchanged and take no scope. The drag and drop page
   says to make list keys unique per workspace or to use the scoped forms.
+- The host shown beside a link to another site, in rendered Markdown and in an assistant's
+  `Sources`, is read the way a browser reads the address: a backslash is a slash, any run of
+  slashes follows the scheme, and a user name, a password and a port are left out, so
+  `https:/\other.example` shows `other.example`. A link that leaves the site with no host to read
+  still counts as off-site and shows no host in Markdown; a source like it is shown as its title,
+  not as a link.
 
 ## [1.2.0] - 2026-11-13
 

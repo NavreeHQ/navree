@@ -24,7 +24,7 @@ Text from a model or a visitor is not yours. `Markdown::new` treats it that way,
 <UiPreview example="markdown/raw-html" />
 
 - **Links are checked.** A link may go to `http`, `https`, `mailto`, `tel`, a path on your site, a query or a fragment. Any other link, such as `javascript:` or `data:`, keeps its words and loses the link.
-- **A link to another site shows where it goes.** It carries `rel="noopener noreferrer nofollow"`, a small arrow, and the host after the words, so `[your bank](https://other.example/login)` cannot hide that it leaves for `other.example`. A user name in the address (`https://bank.example@other.example`) shows the host the browser goes to, `other.example`.
+- **A link to another site shows where it goes.** It carries `rel="noopener noreferrer nofollow"`, a small arrow, and the host after the words, so `[your bank](https://other.example/login)` cannot hide that it leaves for `other.example`. A user name in the address (`https://bank.example@other.example`) shows the host the browser goes to, `other.example`. The host is read the way a browser reads it: a backslash is a slash, any run of slashes may follow the scheme, and a port is left out, so `https:/\other.example` and `https://other.example:8443/x` both show `other.example`. A link that leaves the site with no host to read keeps its `rel` and its arrow, and shows no host.
 
 <UiPreview example="markdown/links" />
 
