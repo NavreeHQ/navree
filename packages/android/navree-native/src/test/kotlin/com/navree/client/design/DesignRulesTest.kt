@@ -421,6 +421,17 @@ class FormRulesTest {
     }
 
     @Test
+    fun the_keyboard_learns_no_code_password_or_card_number() {
+        assertEquals("secret_number", FormRules.keyboard(Navree.TextKind.ONE_TIME_CODE).type)
+        assertEquals("secret_number", FormRules.keyboard(Navree.TextKind.NUMBER, "cc-number").type)
+        assertEquals("secret_number", FormRules.keyboard(Navree.TextKind.PLAIN, "cc-csc").type)
+        assertEquals("secret_number", FormRules.keyboard(Navree.TextKind.PLAIN, " One-Time-Code ").type)
+        assertEquals("password", FormRules.keyboard(Navree.TextKind.PASSWORD, "one-time-code").type)
+        assertEquals("number", FormRules.keyboard(Navree.TextKind.NUMBER, "postal-code").type)
+        assertEquals(false, FormRules.keyboard(Navree.TextKind.PLAIN, "cc-number").autoCorrect)
+    }
+
+    @Test
     fun names_are_capitalised_by_words_and_emails_not_at_all() {
         val plain = FormRules.keyboard(Navree.TextKind.PLAIN)
         assertEquals("words", FormRules.capitalise("name", plain))

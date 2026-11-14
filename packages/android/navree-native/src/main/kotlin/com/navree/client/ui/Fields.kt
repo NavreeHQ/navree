@@ -136,6 +136,7 @@ private fun keyboardType(type: String): KeyboardType = when (type) {
     "email" -> KeyboardType.Email
     "password" -> KeyboardType.Password
     "number" -> KeyboardType.Number
+    "secret_number" -> KeyboardType.NumberPassword
     "decimal" -> KeyboardType.Decimal
     "phone" -> KeyboardType.Phone
     "uri" -> KeyboardType.Uri
@@ -206,7 +207,7 @@ private fun TextFieldView(field: Navree.Field, input: Navree.TextInput, place: P
     if (echo.changedOutside(current, shown.text)) shown = TextFieldValue(current, TextRange(current.length))
 
     val support = support(field, place)
-    val plan = FormRules.keyboard(input.kind)
+    val plan = FormRules.keyboard(input.kind, input.autofill)
     val password = input.kind == Navree.TextKind.PASSWORD
     var revealed by rememberSaveable { mutableStateOf(false) }
     val requester = remember { FocusRequester() }
