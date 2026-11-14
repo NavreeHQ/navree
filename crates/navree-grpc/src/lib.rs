@@ -18,7 +18,11 @@
 //!   `#[permissions]`, `#[can]`) on itself or on the impl block, or the
 //!   service does not compile. Register the struct with
 //!   [`ModuleBuilderGrpcExt::grpc_service`] and its descriptor set with
-//!   [`ModuleBuilderGrpcExt::grpc_descriptors`].
+//!   [`ModuleBuilderGrpcExt::grpc_descriptors`]. A tonic server built
+//!   elsewhere (a crate's generated `DealsServer`) is served with
+//!   [`TonicService`] ([`ModuleBuilderTonicExt::tonic_service`]): each call
+//!   passes the access check of its method, or of the service default,
+//!   before the server reads a message.
 //! - **The call pipeline.** Request id and tracing, the interceptor, the
 //!   app's `Authenticator`, the access check, guards and the route
 //!   authorizer (`#[can(.., from = "id")]` loads the record named by the
@@ -73,6 +77,7 @@ pub use routes::Routes;
 pub use server::{GrpcErrors, GrpcServer};
 pub use service::{GrpcMethod, GrpcService, ModuleBuilderGrpcExt, ServiceLimits};
 pub use status::{error_from_status, status_from_error};
+pub use tonic_service::{ModuleBuilderTonicExt, TonicService};
 
 /// The attribute that serves a tonic service impl with Navree's call
 /// pipeline (see the crate docs).
