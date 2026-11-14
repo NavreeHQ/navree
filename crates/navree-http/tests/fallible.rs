@@ -125,11 +125,17 @@ impl Service<Request> for Rewrapped {
 
 /// A timeout of 50 ms around the whole app, in the `Context` slot.
 fn timeout(m: &mut ModuleBuilder) {
-    m.http_layer(GlobalLayer::new(LayerSlot::Context, "timeout", |_, router| {
-        Ok(router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
-            Duration::from_millis(50),
-        ))))
-    }));
+    m.http_layer(GlobalLayer::new(
+        LayerSlot::Context,
+        "timeout",
+        |_, router| {
+            Ok(
+                router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
+                    Duration::from_millis(50),
+                ))),
+            )
+        },
+    ));
 }
 
 fn routes() -> Vec<RouteDef> {

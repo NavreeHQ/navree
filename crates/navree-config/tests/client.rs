@@ -194,7 +194,9 @@ async fn two_client_modules_of_one_type_are_two_modules() {
         .expect("two unnamed exports")
         .to_string();
     assert!(
-        error.contains("delhi") && error.contains("ludhiana") && error.contains("use named providers"),
+        error.contains("delhi")
+            && error.contains("ludhiana")
+            && error.contains("use named providers"),
         "{error}"
     );
 
