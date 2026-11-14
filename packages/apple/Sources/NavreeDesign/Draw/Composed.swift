@@ -14,17 +14,20 @@ import UIKit
 // MARK: The screen
 
 /// A screen written for native clients: its parts on the grouped ground,
-/// scrolling, with the cards as surfaces.
+/// scrolling, with the cards as surfaces; no wider than `readable`, when
+/// it is given, centred in the window.
 public struct ComposedScreenBody: View {
     let body_: Navree.Node
+    let readable: Double?
 
-    public init(body: Navree.Node) {
+    public init(body: Navree.Node, readable: Double? = nil) {
         body_ = body
+        self.readable = readable
     }
 
     public var body: some View {
         ScrollView {
-            ComposedContent(body: body_)
+            ComposedContent(body: body_, readable: readable)
         }
         .background(Surfaces.ground)
     }
@@ -36,25 +39,62 @@ public struct ComposedScreenBody: View {
 /// window made narrower, a phone on its side) and never the kind of device.
 public struct ComposedContent: View {
     let node: Navree.Node
+    /// The widest the content stands, centred in the room it is given.
+    let readable: Double?
     @State private var width: Double?
 
-    public init(body: Navree.Node) {
+    public init(body: Navree.Node, readable: Double? = nil) {
         node = body
+        self.readable = readable
     }
 
     public var body: some View {
         let margin = width.map(CompositionRules.margin(width:)) ?? 16
         NodeView(node)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(ReadableWidth(width: readable))
             .padding(.horizontal, CGFloat(margin))
             .padding(.top, 8)
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity)
-            .environment(\.navreeRoomWidth, width.map(CompositionRules.room(width:)))
+            .environment(\.navreeRoomWidth, width.map { CompositionRules.room(width: $0, readable: readable) })
             .environment(\.navreeScreenMargin, CGFloat(margin))
             .environment(\.navreeOnGround, true)
             .onGeometryChange(for: Double.self) { Double($0.size.width) } action: { width = $0 }
             .background(Surfaces.ground)
+    }
+}
+
+/// Content no wider than a readable width, when there is one.
+struct ReadableWidth: ViewModifier {
+    let width: Double?
+
+    func body(content: Content) -> some View {
+        if let width {
+            content.frame(maxWidth: CGFloat(width))
+        } else {
+            content
+        }
+    }
+}
+
+/// Words standing on a composed screen's ground, set in as far as the words
+/// in its surfaces where the system keeps one leading edge for both (a Mac):
+/// once, for the outermost words, never again for words inside them.
+struct GroundWords: ViewModifier {
+    var applies = true
+    @Environment(\.navreeOnGround) private var onGround
+    @Environment(\.navreeWordsSetIn) private var setIn
+
+    func body(content: Content) -> some View {
+        let inset = onGround && applies && !setIn ? CompositionRules.groundWordsInset(bar: .current) : 0
+        if inset > 0 {
+            content
+                .padding(.horizontal, CGFloat(inset))
+                .environment(\.navreeWordsSetIn, true)
+        } else {
+            content
+        }
     }
 }
 
@@ -99,6 +139,7 @@ struct Parts: View {
             if spread, index > 0 { Spacer(minLength: 8) }
             NodeView(item.node)
                 .frame(maxWidth: growth == .horizontal && CompositionRules.grows(item.node) ? .infinity : nil, alignment: .leading)
+                .modifier(GroundWords(applies: CompositionRules.wordsOnGround(item.node)))
                 .environment(\.navreeWordsAbove, item.wordsAbove)
                 .modifier(Arriving(node: item.node))
         }
@@ -268,6 +309,7 @@ struct GroupHeading: View {
                     NodeView(action).font(.subheadline)
                 }
             }
+            .modifier(GroundWords())
         }
     }
 }
@@ -323,7 +365,7 @@ struct Surface<Content: View>: View {
         VStack(alignment: .leading, spacing: CGFloat(CompositionRules.cardSpacing)) {
             content
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, CGFloat(CompositionRules.surfaceInset))
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Surfaces.card, in: RoundedRectangle(cornerRadius: CompositionRules.cardCorner, style: .continuous))
@@ -787,6 +829,9 @@ extension EnvironmentValues {
     /// Whether the parts being drawn stand on a composed screen's ground
     /// rather than on a surface.
     @Entry var navreeOnGround: Bool = false
+    /// Set inside words on the ground already set in as far as a surface's
+    /// words, so the words inside them are not set in again.
+    @Entry var navreeWordsSetIn: Bool = false
     /// Whether the part being drawn is a cell of a row of tiles, as high as
     /// the row.
     @Entry var navreeInTileRow: Bool = false

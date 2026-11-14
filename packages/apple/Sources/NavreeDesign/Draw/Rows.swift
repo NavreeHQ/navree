@@ -42,6 +42,7 @@ struct RowView: View {
             } label: {
                 Text(label).foregroundStyle(muted ? Color.secondary : Color.primary)
             }
+            .modifier(ValueLook())
             .fontWeight(muted ? nil : .semibold)
             .accessibilityElement(children: .combine)
         case .field(let field, let form):
@@ -470,6 +471,7 @@ struct FactContent: View {
             } label: {
                 label
             }
+            .modifier(ValueLook())
             // One stop, as Settings reads a row: "Subtotal, ₹428".
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(SpeechRules.fact(label: fact.label, value: value)))
@@ -495,6 +497,30 @@ struct FactContent: View {
             Label { Text(fact.label) } icon: { Glyph(icon: icon).foregroundStyle(.secondary) }
         } else {
             Text(fact.label)
+        }
+    }
+}
+
+/// A labelled value with its value where ``CompositionRules/valuePlace(bar:)``
+/// puts it.
+struct ValueLook: ViewModifier {
+    func body(content: Content) -> some View {
+        switch CompositionRules.valuePlace(bar: .current) {
+        case .system: content
+        case .trailing: content.labeledContentStyle(TrailingValue())
+        }
+    }
+}
+
+/// A labelled value as a grouped form's row sets it: the label at the
+/// leading edge, the value at the trailing end, the value's lines ending
+/// there too when it wraps.
+struct TrailingValue: LabeledContentStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            configuration.label
+            Spacer(minLength: 0)
+            configuration.content.multilineTextAlignment(.trailing)
         }
     }
 }

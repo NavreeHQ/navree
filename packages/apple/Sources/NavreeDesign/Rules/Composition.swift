@@ -23,6 +23,23 @@ public enum CompositionRules {
         return (rows, note)
     }
 
+    /// Where a labelled value's value stands: at the trailing end of its
+    /// row, its label at the leading edge. On iPhone and iPad the system's
+    /// labelled content sets it there itself; a Mac's sets the value just
+    /// after its label outside a form, so in a Mac window the row is set as
+    /// a grouped form's row is (System Settings: label leading, value
+    /// trailing).
+    public enum ValuePlace: Sendable, Equatable {
+        /// As the system's labelled content sets it.
+        case system
+        /// At the trailing end, whatever the system's labelled content does.
+        case trailing
+    }
+
+    public static func valuePlace(bar: ActionBar) -> ValuePlace {
+        bar == .window ? .trailing : .system
+    }
+
     // MARK: The screen
 
     /// Whether a screen is composed rather than a list of sections: it holds
@@ -51,6 +68,61 @@ public enum CompositionRules {
     /// The width a composed screen's content has: the window's, less its margins.
     public static func room(width: Double) -> Double {
         max(width - 2 * margin(width: width), 0)
+    }
+
+    /// The width a composed screen's content has when it stops at a readable
+    /// width: the window's less its margins, no wider than `readable`.
+    public static func room(width: Double, readable: Double?) -> Double {
+        readable.map { min(room(width: width), $0) } ?? room(width: width)
+    }
+
+    /// The widest a detail's content stands in a Mac window, in points,
+    /// centred in the window: 704, as the system's grouped form sets its
+    /// sections (SwiftUI's `Form` with the grouped style on macOS 27, System
+    /// Settings' look, stops at 704 points in any wider window and centres
+    /// them), and as Apple's layout guidance keeps text to a readable width
+    /// (the readable content guide: "the maximum optimal width for text",
+    /// "always centered inside the view's layout margin"). A destination's
+    /// own screen (a dashboard of tiles) keeps the window's width, and so do
+    /// iPhone and iPad, whose windows the system already sizes (`nil`).
+    public static func readableWidth(bar: ActionBar, depth: ScreenDepth) -> Double? {
+        bar == .window && depth != .root ? macReadableWidth : nil
+    }
+
+    /// The width a Mac's grouped form stops at, measured on macOS 27.2 at the
+    /// default text size.
+    public static let macReadableWidth = 704.0
+
+    // MARK: One leading edge
+
+    /// How far a surface's words stand in from its edges: 16 points, as an
+    /// inset grouped list sets its rows and a card pads its parts.
+    public static let surfaceInset = 16.0
+
+    /// How far the words that stand on a composed screen's ground (a group's
+    /// heading, a note under a surface, a timeline with no surface) stand in
+    /// from the edge the surfaces start at. On iPhone and iPad nothing: a
+    /// heading starts at its card's edge, as Health's Summary sets them. In a
+    /// Mac window as far as a surface's words, so a heading, the words on the
+    /// ground and the words in every surface share one leading edge, as a
+    /// grouped form's headers, rows and notes do (System Settings).
+    public static func groundWordsInset(bar: ActionBar) -> Double {
+        bar == .window ? surfaceInset : 0
+    }
+
+    /// Whether a part standing on the ground is words that take
+    /// ``groundWordsInset(bar:)`` as a whole. A part that holds others (a
+    /// stack, a grid, a section) leaves it to them; a surface (a card, a
+    /// list, an inset section) and a picture (a chart, a ring, a shape) keep
+    /// the ground's edge.
+    public static func wordsOnGround(_ node: Navree.Node) -> Bool {
+        switch node {
+        case .text, .rich, .badge, .timeline, .facts, .progress, .button, .link, .menu, .row, .feedRow, .message,
+            .figure, .code, .table, .field, .disclosure:
+            true
+        default:
+            false
+        }
     }
 
     /// A room at least this wide is wide: what a tablet, a large window or a

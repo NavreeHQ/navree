@@ -135,3 +135,53 @@ private func labels(_ nodes: [Navree.Node]) -> [String] {
     #expect(ActionBar.current == .navigation)
     #endif
 }
+
+@Test func aDetailInAMacWindowStopsAtTheGroupedFormsWidthAndADestinationOrAPhoneKeepsTheWindows() {
+    // A pushed screen, a screen beside its list, a sheet: no wider than a grouped form's sections.
+    #expect(CompositionRules.readableWidth(bar: .window, depth: .pushed) == 704)
+    #expect(CompositionRules.readableWidth(bar: .window, depth: .sheet) == 704)
+    // A destination's own screen (a dashboard of tiles) and iPhone and iPad: the window's width.
+    #expect(CompositionRules.readableWidth(bar: .window, depth: .root) == nil)
+    #expect(CompositionRules.readableWidth(bar: .navigation, depth: .pushed) == nil)
+    #expect(CompositionRules.readableWidth(bar: .navigation, depth: .root) == nil)
+    // The room in a wide detail column (1220 points) and in a narrow one (740).
+    #expect(CompositionRules.room(width: 1220, readable: 704) == 704)
+    #expect(CompositionRules.room(width: 740, readable: 704) == 700)
+    // With no readable width the room is what it always was.
+    #expect(CompositionRules.room(width: 1220, readable: nil) == CompositionRules.room(width: 1220))
+    #expect(CompositionRules.room(width: 402, readable: nil) == 370)
+}
+
+@Test func inAMacWindowTheWordsOnTheGroundStandWithTheWordsInItsSurfacesAndOnAPhoneAtTheSurfacesEdge() throws {
+    #expect(CompositionRules.groundWordsInset(bar: .window) == CompositionRules.surfaceInset)
+    #expect(CompositionRules.surfaceInset == 16)
+    // iPhone and iPad: a heading starts at its card's edge, as before.
+    #expect(CompositionRules.groundWordsInset(bar: .navigation) == 0)
+    // The live order: its progress (a timeline in a section with no surface)
+    // is words on the ground; its card and its sections hold their own, and
+    // the facts in an inset section stand on that section's surface.
+    let order = try corpusScreen("store-order1.json")
+    var words: [String] = []
+    var held: [String] = []
+    if case .stack(let page) = order.body {
+        for part in page.children {
+            switch part {
+            case .sheet, .dialog: continue
+            default: break
+            }
+            if CompositionRules.wordsOnGround(part) { words.append(part.id ?? "") } else { held.append(part.id ?? "") }
+            if case .section(let section) = part, !CompositionRules.standsOnSurface(part) {
+                for inner in section.children where CompositionRules.wordsOnGround(inner) { words.append(inner.id ?? "") }
+            }
+        }
+    }
+    #expect(words == ["order-steps"])
+    #expect(held == ["order-state", "order-items", "order-customer", "order-delivery", "order-progress", "order-others"])
+}
+
+@Test func aLabelledValueStandsAtTheTrailingEndInAMacWindowAsOnAPhone() {
+    // A Mac's own labelled content sets the value just after its label outside a form.
+    #expect(CompositionRules.valuePlace(bar: .window) == .trailing)
+    // iPhone and iPad set it at the trailing end themselves.
+    #expect(CompositionRules.valuePlace(bar: .navigation) == .system)
+}
