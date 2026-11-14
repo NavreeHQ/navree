@@ -104,9 +104,16 @@ fn the_command_list_starts_with_the_built_ins() {
         .collect();
     assert_eq!(
         names,
-        ["check", "help", "introspect", "plugins", "deals:close"]
+        [
+            "check",
+            "help",
+            "introspect",
+            "plugins",
+            "plugin:publish",
+            "deals:close",
+        ]
     );
-    let close = &json["commands"][4];
+    let close = &json["commands"][5];
     assert_eq!(close["module"], "DealsModule");
     assert_eq!(json["commands"][0]["module"], Value::Null);
 }
@@ -126,7 +133,7 @@ fn strings_are_escaped() {
     let report = Navree::app().module(Quoted).validate().unwrap();
     let json: Value = serde_json::from_str(&report.to_json()).expect("valid JSON");
     assert_eq!(
-        json["commands"][4]["about"],
+        json["commands"][5]["about"],
         "Prints \"hi\"\\ and a\ttab\nthen a line \u{1}"
     );
 }
@@ -151,8 +158,11 @@ fn a_built_in_that_yields_is_left_out_of_the_command_list() {
         .iter()
         .map(|c| c["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["check", "help", "introspect", "plugins"]);
-    assert_eq!(json["commands"][3]["module"], "OwnPlugins");
+    assert_eq!(
+        names,
+        ["check", "help", "introspect", "plugin:publish", "plugins"]
+    );
+    assert_eq!(json["commands"][4]["module"], "OwnPlugins");
 }
 
 #[tokio::test]

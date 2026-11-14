@@ -1,5 +1,5 @@
 //! CLI commands contributed by modules, and the built-in `check`, `help`,
-//! `introspect` and `plugins`.
+//! `introspect`, `plugins` and `plugin:publish`.
 
 use std::fmt;
 use std::future::Future;
@@ -81,7 +81,7 @@ impl fmt::Debug for CommandSpec {
 }
 
 /// Built-in commands handled by [`AppBuilder::run_with_args`](crate::AppBuilder::run_with_args).
-pub(crate) const BUILT_INS: [(&str, &str); 4] = [
+pub(crate) const BUILT_INS: [(&str, &str); 5] = [
     (
         "check [--graph]",
         "Validate the module graph without constructing providers",
@@ -94,6 +94,10 @@ pub(crate) const BUILT_INS: [(&str, &str); 4] = [
     (
         "plugins [--json]",
         "List the plugins and what each adds, without constructing providers",
+    ),
+    (
+        "plugin:publish <plugin> [options]",
+        "Copy a plugin's templates, translations, config or files into the app",
     ),
 ];
 
