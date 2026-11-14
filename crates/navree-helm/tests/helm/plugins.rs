@@ -46,9 +46,7 @@ fn pipeline() -> HelmWidget {
 
 /// A card whose key has a capital letter.
 fn capital_key(m: &mut ModuleBuilder) {
-    m.helm_widget(
-        HelmWidget::new("Pipeline", "Open pipeline").template("admin/widgets/pipeline"),
-    );
+    m.helm_widget(HelmWidget::new("Pipeline", "Open pipeline").template("admin/widgets/pipeline"));
 }
 
 /// A card with no template.
@@ -115,13 +113,18 @@ async fn helm_refuses_an_off_site_link_and_a_card_without_a_template_or_with_a_b
                 .module(Adds(adds)),
         )
         .await;
-        assert!(error.contains(expected), "expected `{expected}` in:\n{error}");
+        assert!(
+            error.contains(expected),
+            "expected `{expected}` in:\n{error}"
+        );
     }
 
     // A card renders an app template, so the app needs ViewModule.
     let error = boot_error(builder().module(Adds(one_card))).await;
     assert!(
-        error.contains("Helm widget `pipeline` renders an app template, so the app needs ViewModule"),
+        error.contains(
+            "Helm widget `pipeline` renders an app template, so the app needs ViewModule"
+        ),
         "{error}"
     );
     // A link and a card that are right boot.

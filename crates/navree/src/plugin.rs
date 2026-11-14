@@ -20,17 +20,15 @@
 //! }
 //! ```
 
+pub use navree_config::ClientModule;
 pub use navree_contracts::EmbeddedLocales;
+/// A permission a module describes with `m.permissions(..)`; describing grants it to nobody.
+pub use navree_contracts::Permission;
 pub use navree_kernel::{
     PluginInfo, PluginModuleReport, PluginReport, PluginsReport, PublishTag, Publishable,
 };
 #[cfg(feature = "view")]
 pub use navree_view::TemplateDir;
-
-pub use navree_config::ClientModule;
-
-/// A permission a module describes with `m.permissions(..)`; describing grants it to nobody.
-pub use navree_contracts::Permission;
 
 /// The `ModuleBuilder` extension traits of plugins, imported as `_`. They are
 /// not in `navree::prelude`, so a glob import of it never makes an app's own

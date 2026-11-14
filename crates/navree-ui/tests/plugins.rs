@@ -178,9 +178,12 @@ impl Module for Announcements {
 /// `Some(false)`. A permission in `failing` is answered with an error.
 #[derive(Clone, Default)]
 struct Grants {
-    held: Arc<Mutex<Vec<(Uuid, &'static str, Option<Uuid>)>>>,
+    held: Arc<Mutex<Vec<Held>>>,
     failing: Arc<Mutex<Vec<&'static str>>>,
 }
+
+/// One grant: who holds which permission, in which workspace (`None` for app-wide).
+type Held = (Uuid, &'static str, Option<Uuid>);
 
 impl Grants {
     fn grant(&self, user: Uuid, permission: &'static str, workspace: Option<Uuid>) {
@@ -209,12 +212,7 @@ impl PermissionCheck for Grants {
         permission: &'a str,
         workspace: Option<Uuid>,
     ) -> BoxFuture<'a, Result<Option<bool>, BoxError>> {
-        let failing = self
-            .failing
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|name| *name == permission);
+        let failing = self.failing.lock().unwrap().contains(&permission);
         let answer = if failing {
             Err(BoxError::from("the role table is unavailable"))
         } else {
@@ -298,10 +296,8 @@ async fn a_contributed_link_that_leaves_the_site_fails_the_boot() {
         " /deals",
         "/a\nb",
     ] {
-        let error = boot_error(
-            builder(Shell::new("Kesar").contributed()).module(Outbound(href)),
-        )
-        .await;
+        let error =
+            boot_error(builder(Shell::new("Kesar").contributed()).module(Outbound(href))).await;
         assert!(
             error.contains(
                 "m.nav_item(\"Out\") in `Outbound`: the link must be a path on this app, such as /announcements"
@@ -553,7 +549,10 @@ async fn a_shell_without_contributed_draws_the_same_page_whatever_modules_add() 
         .build()
         .await;
 
-    assert_eq!(home(&bare, None, None).await, home(&added, None, None).await);
+    assert_eq!(
+        home(&bare, None, None).await,
+        home(&added, None, None).await
+    );
     assert_eq!(
         home(&bare, Some(harpreet), None).await,
         home(&added, Some(harpreet), None).await

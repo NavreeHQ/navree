@@ -225,8 +225,14 @@ fn links_and_cards_are_named() {
         m.helm_nav(link.clone()).helm_widget(card.clone());
     };
     let _ = wire;
-    let shown = format!("{:?}", HelmWidget::new("open-deals", "Open deals").order(10));
-    assert!(shown.contains("open-deals") && shown.contains("10"), "{shown}");
+    let shown = format!(
+        "{:?}",
+        HelmWidget::new("open-deals", "Open deals").order(10)
+    );
+    assert!(
+        shown.contains("open-deals") && shown.contains("10"),
+        "{shown}"
+    );
 }
 
 #[test]

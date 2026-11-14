@@ -6189,6 +6189,7 @@ dependencies = [
  "http-body-util",
  "navree-access",
  "navree-config",
+ "navree-contracts",
  "navree-db",
  "navree-http",
  "navree-kernel",

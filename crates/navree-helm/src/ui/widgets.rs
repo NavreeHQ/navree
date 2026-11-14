@@ -77,8 +77,7 @@ pub(super) async fn cards(cx: &Cx) -> Vec<Node> {
                 .attr("aria-label", widget.title.clone())
                 .attr("data-helm-widget", widget.key.clone())
                 .child(
-                    Card::titled(widget.title.clone())
-                        .body(Node::Raw(SafeHtml::trusted(rendered))),
+                    Card::titled(widget.title.clone()).body(Node::Raw(SafeHtml::trusted(rendered))),
                 )
                 .into(),
         );
