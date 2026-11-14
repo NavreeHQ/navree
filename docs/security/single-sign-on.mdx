@@ -86,6 +86,7 @@ clock_skew_secs = 120
 | `sso.saml.max_response_bytes` | `1048576` | The largest `SAMLResponse` accepted. |
 | `sso.oidc.scopes` | `openid email profile` | The scopes asked for when a connection names none. |
 | `sso.oidc.clock_skew_secs` | `60` | How far a provider's clock may be off. |
+| `sso.tenants.unverified_emails` | `false` | Let a connection owned by a workspace or an organization create accounts for addresses outside its verified domains when its `allow_unverified_emails` is on. Off, only connections the app owns do. |
 
 Environment variables follow the usual pattern: `APP_SSO__BASE_URL`, `APP_SSO__SAML__ALLOW_IDP_INITIATED=true`, and `APP_SSO__OIDC__SCOPES="openid,email,groups"` (a comma-separated list). A `base_url` or `complete_url` that isn't an absolute URL, a prefix without a leading `/`, a zero time-to-live or scopes without `openid` fail the boot, naming the key. `SsoModule::for_root(SsoOptions { .. })` takes the same options in code.
 
@@ -174,6 +175,8 @@ The management routes need the permission `sso.manage` (`MANAGE_PERMISSION`), wh
 | `DELETE /api/sso/domains/{id}` | Remove a domain (204) |
 
 A taken or reserved slug, settings without metadata or with metadata that doesn't parse, a metadata URL or issuer that isn't `https`, rules that grant the `owner` role, and an owner that doesn't exist are 400s with field errors (`errors.slug`, `errors["settings.metadata_xml"]`, `errors.owner`, ...). Every change is written through a record in the unit of work, so the [audit log](/docs/security/audit-log/) records it (client secrets only as ciphertext).
+
+The management routes are for the app's staff: they need `sso.manage` app-wide and accept every setting, `allow_unverified_emails` included.
 
 To let workspace administrators manage their own connection, mount your own routes on the `Sso` service (see [Using the Sso service](#using-the-sso-service)).
 
@@ -338,7 +341,7 @@ Navree finds the user of a sign-in in this order:
 
 1. **A linked identity.** An `sso_identities` row for this connection and subject (name id or `sub`) signs in its user, and is updated with the latest email and attributes.
 2. **The same email, in a verified domain.** When the email's domain is a verified domain of this connection and the user with that email has verified it (`email_verified_at`), the user gets the identity linked. An email outside the connection's verified domains never links: one company's identity provider must not take over another company's accounts. An account whose address was never verified doesn't link either, so whoever registered `ceo@agra.com` without owning the mailbox doesn't get the CEO's sign-ins; and an OpenID Connect token that says `email_verified: false` never links.
-3. **A new user**, when `provisioning.jit` is on (the default) and the email is in a verified domain. The user gets the profile's name and email, no password, and a verified email. With `allow_unverified_emails: true`, users outside the verified domains are created too, with an unverified email.
+3. **A new user**, when `provisioning.jit` is on (the default) and the email is in a verified domain. The user gets the profile's name and email, no password, and a verified email. With `allow_unverified_emails: true` on a connection the app owns (`SsoOwner::App`), users outside the verified domains are created too, with an unverified email. It creates an account for any address the identity provider sends, so keep it for connections your own staff configure. A connection owned by a workspace or an organization ignores it unless `sso.tenants.unverified_emails = true`, and the boot names every such connection that has it on. People already linked through a connection keep signing in either way.
 4. **Otherwise** the answer is 409 `email_taken` (the email belongs to someone) or 403 (`unverified_domain`, `sso_provisioning_disabled`).
 
 Then the person's membership of the connection's owner follows their groups. The first rule whose group they have wins; without one, `default_role` applies:
@@ -363,7 +366,7 @@ Then the person's membership of the connection's owner follows their groups. The
 - `default_role: null` refuses people whose groups match no rule (403 `sso_not_assigned`), which keeps everyone outside the listed groups out.
 - Groups are compared ignoring ASCII case. Entra ID sends group object ids, so write those in `group`.
 
-A sign-in that created the user or changed a membership emits `SsoUserProvisioned { connection_id, user_id, owner, role, created }` after the commit. Sign-ins are audited as `sso.login` (with `metadata.connection`), new users as `auth.register`.
+A sign-in that created the user or changed a membership emits `SsoUserProvisioned { connection_id, user_id, owner, role, created }` after the commit. Sign-ins are audited as `sso.login` (with `metadata.connection`), new users as `auth.register`. A first sign-in refused because a workspace's or an organization's connection may not create an account outside its verified domains is audited as `sso.login_refused` (with `metadata.connection`, `metadata.owner` and `metadata.domain`).
 
 ### Attribute mapping
 
@@ -478,6 +481,8 @@ impl WorkspaceSsoController {
     }
 }
 ```
+
+A page for a workspace's administrators sets `owner` itself (`SsoOwner::Workspace(current)`), never from the request, and builds `NewConnection` and `ConnectionUpdate` itself, copying only the fields you let them change: never pass the request's `provisioning` through. Before `update_connection`, `delete_connection`, `add_domain` or `remove_domain`, it checks that the connection's `owner` is that workspace (`connection(key)?.owner`). It never calls `mark_domain_verified` for a customer: domains are verified by DNS (`verify_domain`).
 
 | Method | Does |
 |---|---|
