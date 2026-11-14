@@ -639,7 +639,8 @@ export function startRegions() {
   for (const el of every("[data-ui-lazy]")) refresh(el.id);
   for (const el of every("[data-ui-poll]")) {
     if (/** @type {any} */ (el).uiPoll) continue;
-    const every = Number(el.getAttribute("data-ui-poll")) || 5000;
+    // Once a second at the most, whatever the page asks.
+    const every = Math.max(1000, Number(el.getAttribute("data-ui-poll")) || 5000);
     /** @type {any} */ (el).uiPoll = setInterval(() => {
       if (!el.isConnected) clearInterval(/** @type {any} */ (el).uiPoll);
       else if (!hidden() && (trouble.get(el)?.until || 0) < Date.now()) refresh(el.id, true);

@@ -142,6 +142,7 @@ every `@navree/*` package carries the same version.
   the database in it too. A code block's copy button, marked `data-ui-own`, still works inside.
 - The page's post form (`ui-post`) posts only for a button the toolkit drew for it, which the renderer
   marks `data-ui-post`, and a button in stored content sends no form.
+- A region is polled once a second at the most, whatever its `poll` says.
 
 ## [1.2.0] - 2026-11-13
 

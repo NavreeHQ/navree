@@ -34,7 +34,7 @@ The source may answer with a whole [`View`](/docs/ui/foundations/) whose body is
 
 ## Polling
 
-`.poll(every)` refetches the region this often while the page is visible. Its first content can be drawn with the page, with `.children`.
+`.poll(every)` refetches the region this often while the page is visible, and never more than once a second: a shorter time counts as one second. Its first content can be drawn with the page, with `.children`.
 
 <UiPreview example="regions/poll" />
 
