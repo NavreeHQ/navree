@@ -21,6 +21,9 @@ every `@navree/*` package carries the same version.
 - `AuthService::confirm_action` approves its action only: it no longer records the confirmation as
   the session's `authenticated_at`, so `#[recent_auth]` routes and refreshed tokens keep the
   sign-in time they had. `POST /auth/confirm` and `POST /auth/confirm/passkey` still step up.
+- A request authenticated with a bearer access token carries the token's session (`sid`) as the
+  principal's `session_id`, so call tickets and push devices are bound to that session as they are
+  for a browser's.
 
 ### Fixed
 

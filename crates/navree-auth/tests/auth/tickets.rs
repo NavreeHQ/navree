@@ -235,6 +235,56 @@ async fn a_ticket_from_another_session_is_refused() {
     refused(post_result(&phone, "A-1042", &ticket).await);
 }
 
+/// A client signed in with a bearer token: its access token.
+async fn bearer(app: &TestApp, email: &str) -> String {
+    support::tokens(
+        &support::login(&app.client(), email, PASSWORD)
+            .await
+            .assert_status(200),
+    )
+    .0
+}
+
+#[tokio::test]
+async fn a_bearer_clients_ticket_is_its_own_sessions() {
+    let clock = support::clock();
+    let app = app(&clock).await;
+    create_user(&app, "simran@example.com").await;
+    let phone = bearer(&app, "simran@example.com").await;
+    let tablet = bearer(&app, "simran@example.com").await;
+    let client = app.client();
+    client.csrf_cookie().await;
+    let ticket = client
+        .post("/api/orders/tickets")
+        .bearer(&phone)
+        .xsrf()
+        .json(&json!({ "feature": "scan_code", "path": "/api/orders/A-1042/scanned" }))
+        .send()
+        .await
+        .assert_status(200)
+        .json_value()["ticket"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // Another session of the same user.
+    refused(post_as(&client, &tablet, &ticket).await);
+    post_as(&client, &phone, &ticket)
+        .await
+        .assert_status(200)
+        .assert_json_path("binding", json!("sku=PB-1042"));
+}
+
+/// [`post_result`] for order `A-1042` with the bearer token `access`.
+async fn post_as(client: &TestClient, access: &str, ticket: &str) -> TestResponse {
+    client
+        .post("/api/orders/A-1042/scanned")
+        .bearer(access)
+        .xsrf()
+        .json(&json!({ "ticket": ticket }))
+        .send()
+        .await
+}
+
 #[tokio::test]
 async fn a_ticket_sent_to_another_route_is_refused() {
     let clock = support::clock();
