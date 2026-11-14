@@ -153,6 +153,21 @@ impl Default for OidcOptions {
     }
 }
 
+/// Rules for single sign-on connections owned by workspaces and
+/// organizations (configuration section `sso.tenants`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ConfigSection)]
+#[config(key = "sso.tenants", docs = "/docs/security/single-sign-on/")]
+#[serde(default)]
+#[non_exhaustive]
+#[doc(hidden)]
+pub struct SsoTenantOptions {
+    /// Whether a connection owned by a workspace or an organization creates
+    /// accounts for addresses outside its verified domains when its
+    /// `allow_unverified_emails` is on. Default `false`: only connections
+    /// the app owns do.
+    pub unverified_emails: bool,
+}
+
 /// A list, or a comma- or space-separated string (environment variables):
 /// the comma-separated list of navree-config, with each item split on spaces
 /// too, since scopes are words.
@@ -276,6 +291,27 @@ mod tests {
             serde_json::json!(["openid", "email", "profile"])
         );
         assert!(SsoOptions::default().validate().is_ok());
+    }
+
+    #[test]
+    fn the_tenants_section_describes_itself() {
+        let schema = SsoTenantOptions::schema().expect("schema");
+        assert_eq!(schema.key, "sso.tenants");
+        assert_eq!(
+            schema.docs.as_deref(),
+            Some("/docs/security/single-sign-on/")
+        );
+        let field = schema
+            .fields
+            .iter()
+            .find(|f| f.name == "unverified_emails")
+            .expect("field");
+        assert_eq!(field.ty, FieldType::Bool);
+        assert_eq!(
+            SsoTenantOptions::defaults().expect("defaults")["unverified_emails"],
+            false
+        );
+        assert!(!SsoTenantOptions::default().unverified_emails);
     }
 
     #[test]

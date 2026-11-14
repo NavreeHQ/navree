@@ -14,7 +14,7 @@ use crate::controller::SsoController;
 use crate::error::map_sso_error;
 use crate::migration::migrations;
 use crate::policy::SsoSignInPolicy;
-use crate::{DohResolver, Sso, SsoError, SsoOptions, TxtResolver};
+use crate::{DohResolver, Sso, SsoError, SsoOptions, SsoTenantOptions, TxtResolver};
 
 /// Single sign-on. Global; provides and exports [`Sso`], [`SsoOptions`]
 /// and `dyn` [`TxtResolver`] (a [`DohResolver`]), and contributes:
@@ -98,6 +98,9 @@ fn register(m: &mut ModuleBuilder, options: Option<SsoOptions>) {
         })),
         None => m.config::<SsoOptions>(),
     };
+    // Read by Sso at boot (not by m.config), so it is registered for
+    // config:check and the reference.
+    m.config_section::<SsoTenantOptions>();
     m.exports::<SsoOptions>()
         .factory(
             Factory::<dyn TxtResolver>::new(|r: Resolver| async move {

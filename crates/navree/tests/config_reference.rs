@@ -175,6 +175,8 @@ fn sections() -> Vec<SectionRegistration> {
     sections.push(SectionRegistration::of::<navree::social::SocialOptions>());
     #[cfg(feature = "sso")]
     sections.push(SectionRegistration::of::<navree::sso::SsoOptions>());
+    #[cfg(feature = "sso")]
+    sections.push(SectionRegistration::of::<navree::sso::SsoTenantOptions>());
     #[cfg(feature = "storage")]
     sections.push(SectionRegistration::of::<navree::storage::StorageOptions>());
     #[cfg(feature = "time")]

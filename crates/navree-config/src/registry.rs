@@ -369,6 +369,7 @@ pub const FRAMEWORK_SECTIONS: &[&str] = &[
     "sheets",
     "social",
     "sso",
+    "sso.tenants",
     "storage",
     "time",
     "ui",

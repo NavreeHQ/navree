@@ -34,7 +34,7 @@ use crate::store;
 use crate::{
     ConnectionSettings, ConnectionUpdate, NewConnection, OidcSettings, Protocol, Provisioning,
     SamlSettings, ServiceProviderInfo, SsoConnection, SsoDiscovery, SsoDomain, SsoDomainVerified,
-    SsoError, SsoOptions, SsoOwner, SsoProfile, SsoUserProvisioned, TxtResolver,
+    SsoError, SsoOptions, SsoOwner, SsoProfile, SsoTenantOptions, SsoUserProvisioned, TxtResolver,
 };
 
 /// Slugs the routes use as path segments.
@@ -156,6 +156,8 @@ pub struct Sso {
     metadata: Mutex<HashMap<Uuid, CachedMetadata>>,
     oidc: OidcCache,
     no_password: OnceCell<String>,
+    /// `sso.tenants.unverified_emails`.
+    tenants_unverified_emails: bool,
 }
 
 impl std::fmt::Debug for Sso {
@@ -281,6 +283,7 @@ impl Sso {
             Some(http) => (*http).clone(),
             None => HttpClient::new(HttpClientOptions::default())?,
         };
+        let tenants = tenant_options(app).await?;
         Ok(Sso {
             base_url,
             api_prefix,
@@ -296,6 +299,7 @@ impl Sso {
             metadata: Mutex::new(HashMap::new()),
             oidc: OidcCache::default(),
             no_password: OnceCell::new(),
+            tenants_unverified_emails: tenants.unverified_emails,
             options,
         })
     }
@@ -303,6 +307,13 @@ impl Sso {
     /// The module's options.
     pub fn options(&self) -> &SsoOptions {
         &self.options
+    }
+
+    /// Whether connections owned by workspaces and organizations may create
+    /// accounts outside their verified domains
+    /// (`sso.tenants.unverified_emails`).
+    pub(crate) fn tenants_allow_unverified_emails(&self) -> bool {
+        self.tenants_unverified_emails
     }
 
     fn now(&self) -> DateTime<Utc> {
@@ -1754,6 +1765,14 @@ impl Sso {
                 }
             })
         });
+    }
+}
+
+/// `sso.tenants` from the app's `Config`, or the defaults.
+async fn tenant_options(app: &AppContext) -> Result<SsoTenantOptions, BoxError> {
+    match app.try_get::<Config>().await {
+        Some(config) => Ok(config.typed::<SsoTenantOptions>()?),
+        None => Ok(SsoTenantOptions::default()),
     }
 }
 
