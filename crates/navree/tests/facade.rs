@@ -1134,10 +1134,7 @@ fn ui_module_is_in_the_prelude_and_country_flags_have_their_own_name() {
 /// crate that calls it.
 #[test]
 fn the_plugin_module_brings_the_kernels_plugin_types() {
-    assert!(same::<
-        navree::plugin::PluginInfo,
-        navree::kernel::PluginInfo,
-    >());
+    assert!(same::<navree::plugin::PluginInfo, navree::kernel::PluginInfo>());
     assert!(same::<
         navree::plugin::PluginsReport,
         navree::kernel::PluginsReport,
@@ -1154,10 +1151,7 @@ fn the_plugin_module_brings_the_kernels_plugin_types() {
         navree::plugin::Publishable,
         navree::kernel::Publishable,
     >());
-    assert!(same::<
-        navree::plugin::PublishTag,
-        navree::kernel::PublishTag,
-    >());
+    assert!(same::<navree::plugin::PublishTag, navree::kernel::PublishTag>());
     let info = navree::plugin_info!();
     assert_eq!(
         (info.name, info.crate_name, info.namespace),
@@ -1312,9 +1306,19 @@ fn permission_prefixes() -> Vec<(String, String)> {
     let mut prefixes = Vec::new();
     for file in files {
         let text = std::fs::read_to_string(&file).expect("a source file");
-        let shown = file.strip_prefix(&crates).unwrap_or(&file).display().to_string();
-        for line in text.lines().filter(|line| !line.trim_start().starts_with("//")) {
-            for needle in ["PERMISSION_PREFIX: &'static str = \"", "permission_prefix = \""] {
+        let shown = file
+            .strip_prefix(&crates)
+            .unwrap_or(&file)
+            .display()
+            .to_string();
+        for line in text
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+        {
+            for needle in [
+                "PERMISSION_PREFIX: &'static str = \"",
+                "permission_prefix = \"",
+            ] {
                 for (at, _) in line.match_indices(needle) {
                     let rest = &line[at + needle.len()..];
                     let prefix = rest.split('"').next().unwrap_or_default();
