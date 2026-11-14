@@ -1057,6 +1057,9 @@ pub(crate) struct Inner {
     pub land: Option<String>,
     /// A snapshot to start from, once the shell says who is signed in.
     pub restore: Option<crate::snapshot::Snapshot>,
+    /// The shell drawn is the one kept on the device: this launch's has not
+    /// answered yet, so nothing of a person is drawn or put back.
+    pub shell_kept: bool,
     /// The id of the part whose action is being carried out now: a screen
     /// that action opens keeps it.
     pub acting: Option<String>,

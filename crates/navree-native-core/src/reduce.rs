@@ -46,6 +46,19 @@ const MOST_REDIRECTS: u8 = 5;
 /// How long the answer to a form or a button may take.
 pub(crate) const SEND_LIMIT: u32 = 60_000;
 
+/// Destinations under a kept shell's, without the counts beside them: a
+/// count is the person's.
+fn without_badges(items: Vec<NavItem>) -> Vec<NavItem> {
+    items
+        .into_iter()
+        .map(|mut item| {
+            item.badge = None;
+            item.items = without_badges(item.items);
+            item
+        })
+        .collect()
+}
+
 /// What stands behind an address opened outside the app.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum By {
@@ -838,7 +851,7 @@ impl Core {
         if !(200..300).contains(&response.status) || media != CONTENT_TYPE {
             // A server with no shell still has pages: one destination, its first page.
             if !self.inner.has_shell {
-                self.install(Shell::new("", ""));
+                self.install(Shell::new("", ""), false);
             }
             return;
         }
@@ -873,7 +886,7 @@ impl Core {
                 let stamp = (!shell.stamp.is_empty())
                     .then(|| shell.stamp.clone())
                     .or(header);
-                self.install(shell);
+                self.install(shell, false);
                 // The person is the server's word now: what is kept is read
                 // only when it is theirs, and emptied when it is not.
                 let person = self.inner.user.clone();
@@ -886,7 +899,7 @@ impl Core {
             Err(error) => {
                 self.report("decode", format!("shell: {error}"));
                 if !self.inner.has_shell {
-                    self.install(Shell::new("", ""));
+                    self.install(Shell::new("", ""), false);
                 }
             }
         }
@@ -901,7 +914,7 @@ impl Core {
         {
             self.shell_pictures(&mut shell);
             self.inner.cache.shell = Some(body.to_owned());
-            self.install(shell);
+            self.install(shell, true);
             return true;
         }
         false
@@ -930,7 +943,11 @@ impl Core {
         }
     }
 
-    fn install(&mut self, shell: Shell) {
+    /// Draws the app from a shell. `from_device`: the shell is the one kept on the
+    /// device, drawn before this launch's has answered. It draws the app's
+    /// bars and nothing of the person: not their name, their menu or a
+    /// badge, and a snapshot waits for this launch's shell.
+    fn install(&mut self, shell: Shell, from_device: bool) {
         // Who it names: by the id its answer said, else by name and email.
         let naming = self.inner.naming.take();
         let user = shell.user.as_ref().map(|user| Who {
@@ -1010,13 +1027,18 @@ impl Core {
                 .iter()
                 .position(|destination| destination.href == item.href);
             let stack = kept.map(|at| old.remove(at).stack).unwrap_or_default();
+            let (badge, items) = if from_device {
+                (None, without_badges(item.items))
+            } else {
+                (item.badge, item.items)
+            };
             self.view.destinations.push(Destination {
                 label: item.label,
                 icon: item.icon,
                 href: item.href,
-                badge: item.badge,
+                badge,
                 group,
-                items: item.items,
+                items,
                 stack,
             });
         }
@@ -1035,14 +1057,20 @@ impl Core {
             context: shell.context,
             home: shell.home,
             theme: shell.theme,
-            user: shell.user,
+            user: if from_device { None } else { shell.user },
         });
+        self.inner.shell_kept = from_device;
         if self.view.stage != Stage::Upgrade {
             self.view.stage = Stage::Ready;
             self.view.failure = None;
         }
         self.touch(Change::App);
         self.touch(Change::Nav);
+        // A snapshot, and the links that wait for the shell, wait for this
+        // launch's: the kept shell's person is not yet anybody's word.
+        if from_device && self.inner.restore.is_some() {
+            return;
+        }
         // Where the person was when the system ended the app, if a snapshot says.
         self.restore_stacks();
         if let Some(launch) = self.inner.launch.take() {
@@ -2302,6 +2330,18 @@ impl Core {
                 }
             }
             None => {
+                // A snapshot waits for this launch's shell, drawn over the kept
+                // one: no screen is opened in its place while the shell is asked.
+                if self.inner.shell_kept
+                    && self.inner.restore.is_some()
+                    && self
+                        .inner
+                        .pending
+                        .values()
+                        .any(|asked| asked.purpose == Pending::Shell)
+                {
+                    return;
+                }
                 let Some(href) = self
                     .view
                     .destinations

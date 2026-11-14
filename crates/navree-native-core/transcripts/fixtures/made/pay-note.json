@@ -1,0 +1,112 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Pay for CS-20481",
+  "body": {
+   "t": "form",
+   "id": "pay",
+   "method": "post",
+   "action": "/orders/1/pay",
+   "hidden": [
+    {
+     "name": "_csrf",
+     "value": "tk-91c2"
+    }
+   ],
+   "children": [
+    {
+     "t": "field",
+     "id": "note-text",
+     "name": "note-text",
+     "label": "Note to the packer",
+     "input": {
+      "t": "text",
+      "multiline": true
+     }
+    },
+    {
+     "t": "field",
+     "id": "city",
+     "name": "city",
+     "label": "City",
+     "input": {
+      "t": "text",
+      "autofill": "shipping address-level2"
+     }
+    },
+    {
+     "t": "field",
+     "id": "gift",
+     "name": "gift",
+     "label": "Gift wrap",
+     "input": {
+      "t": "toggle"
+     }
+    },
+    {
+     "t": "field",
+     "id": "code",
+     "name": "code",
+     "label": "Code sent to your phone",
+     "input": {
+      "t": "text",
+      "kind": "one_time_code"
+     }
+    },
+    {
+     "t": "field",
+     "id": "card",
+     "name": "card",
+     "label": "Card number",
+     "input": {
+      "t": "text",
+      "kind": "number",
+      "autofill": "cc-number"
+     }
+    },
+    {
+     "t": "field",
+     "id": "cvc",
+     "name": "cvc",
+     "label": "Security code",
+     "input": {
+      "t": "text",
+      "kind": "number",
+      "autofill": "cc-csc"
+     }
+    },
+    {
+     "t": "field",
+     "id": "pin",
+     "name": "pin",
+     "label": "UPI PIN",
+     "input": {
+      "t": "text",
+      "kind": "password"
+     }
+    },
+    {
+     "t": "field",
+     "id": "amount",
+     "name": "amount",
+     "label": "Amount",
+     "input": {
+      "t": "text",
+      "kind": "decimal",
+      "autofill": "transaction-amount"
+     }
+    },
+    {
+     "t": "button",
+     "label": "Pay",
+     "action": {
+      "t": "submit"
+     },
+     "role": "primary"
+    }
+   ]
+  }
+ }
+}

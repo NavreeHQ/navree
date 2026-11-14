@@ -673,6 +673,7 @@ const REQUIRED: &[&str] = &[
     "changed-limits",
     "outside-taps",
     "origin-places",
+    "keep-restore",
 ];
 
 #[test]
