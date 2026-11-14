@@ -1371,7 +1371,7 @@ More: [/docs/ui/errors-and-states/](/docs/ui/errors-and-states/).
 | `sign_in` | string |  | `APP_UI__SIGN_IN` | Where "Sign in" leads: a path on this site, or the address of a sign-in provider (default `/sign-in`). The page the user came from is added as `next`. |
 | `home` | string |  | `APP_UI__HOME` | Where "Go to home" leads (default `/`). |
 | `sign_in_redirect` | boolean |  | `APP_UI__SIGN_IN_REDIRECT` | Send a guest who asks for a page straight to sign in, instead of showing the sign-in state (default off). |
-| `debug` | boolean |  | `APP_UI__DEBUG` | Add the status, code, message and cause to error pages, marked "Development only". When it is not set, it is on only in a build with debug assertions and only when the app's environment is named and is not `production` or `staging`; otherwise off. Always off in `production` and `staging`. |
+| `debug` | boolean |  | `APP_UI__DEBUG` | Add the status, code, message and cause to error pages, marked "Development only" (default: on in a debug build, off in a release build). Always off in `production` and `staging`. |
 
 ## `validation`
 
