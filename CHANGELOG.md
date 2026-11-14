@@ -20,6 +20,16 @@ every `@navree/*` package carries the same version.
   other HTML, with every release. The ids now come from the drawing and its size alone. A picture's
   `ETag` still changes with a release, since its pixels may.
 
+### Security
+
+- Social sign-in links a provider account to an existing user by email address only when the
+  provider verified the address and the user's own address is verified too. A user whose address
+  was never verified is refused as an app set to `link_by_email = "never"` refuses it (409
+  `email_taken`), and the refusal is audited as `social.link_refused`; once the address is
+  verified (the verification link, a magic link or an emailed code), the next sign-in with the
+  provider links. A user that a social sign-in created has a verified address when the provider
+  verified it, and connecting a provider from a signed-in session works as before.
+
 ## [1.2.0] - 2026-11-13
 
 ### Added

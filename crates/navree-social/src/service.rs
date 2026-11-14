@@ -32,6 +32,16 @@ use crate::{
 /// The callback throttle's window, in seconds.
 const THROTTLE_WINDOW_SECS: i64 = 60;
 
+/// What finding the user of a sign-in came to.
+enum Resolved {
+    /// The user to sign in.
+    User(User),
+    /// A user has the provider's verified address, and linking by address is
+    /// on, but the address of that user was never verified: nothing was
+    /// linked, and the sign-in is refused.
+    LinkRefused(User),
+}
+
 /// Where provider calls go.
 pub(crate) enum Backend {
     /// The providers' real endpoints.
@@ -238,13 +248,17 @@ impl Social {
     }
 
     /// Signs `social_user` in, like a password login: finds the user by a
-    /// linked account, links a user with the same verified email
+    /// linked account, links a user with the same email when the provider
+    /// verified it and the user's own address is verified too
     /// (`link_by_email = "verified"`), or creates one (when registration is
     /// on), then issues Navree tokens, or a two-factor challenge for users
     /// with two-factor authentication (`two_factor = "require"`).
     ///
     /// [`SocialError::EmailTaken`] (409) when the email belongs to a user
-    /// and linking does not apply, [`SocialError::RegistrationClosed`] (403)
+    /// and linking does not apply (`link_by_email = "never"`, an address the
+    /// provider did not verify, or a user whose address was never verified:
+    /// that last refusal is audited as `social.link_refused`),
+    /// [`SocialError::RegistrationClosed`] (403)
     /// when nobody matches and registration is off,
     /// [`SocialError::NotAllowed`] (403) outside `allowed_email_domains`.
     /// The navree-auth sign-in policies are asked
@@ -268,12 +282,7 @@ impl Social {
                 .check_sign_in(&SignInAttempt::new(email, method.clone()), meta)
                 .await?;
         }
-        let request_id = meta.request_id.clone();
-        let user = self
-            .write(rt, request_id, |uow| async move {
-                self.resolve_user(rt, &uow, entry, social_user).await
-            })
-            .await?;
+        let user = self.resolve(rt, entry, social_user, meta).await?;
         let metadata = json!({ "provider": entry.key });
         if two_factor_enabled(&user) && rt.options.two_factor == TwoFactorPolicy::Require {
             rt.auth
@@ -584,14 +593,50 @@ impl Social {
         }
     }
 
+    /// The user `social_user` signs in as, linking or creating one, in the
+    /// task's unit of work or one of its own. A refusal to link an
+    /// unverified account is audited here, after the unit of work, which
+    /// would roll back an entry written inside it.
+    pub(crate) async fn resolve(
+        &self,
+        rt: &Runtime,
+        entry: &ProviderEntry,
+        social_user: &SocialUser,
+        meta: &ClientMeta,
+    ) -> Result<User, SocialError> {
+        let resolved = self
+            .write(rt, meta.request_id.clone(), |uow| async move {
+                self.resolve_user(rt, &uow, entry, social_user).await
+            })
+            .await?;
+        match resolved {
+            Resolved::User(user) => Ok(user),
+            Resolved::LinkRefused(user) => {
+                rt.audit(
+                    entry_for(AuditKind::Security, "social.link_refused", meta)
+                        .actor(user.id)
+                        .subject("User", user.id.to_string())
+                        .metadata(json!({
+                            "provider": entry.key,
+                            "reason": "email_unverified",
+                        })),
+                )
+                .await;
+                Err(SocialError::EmailTaken {
+                    provider: entry.name.clone(),
+                })
+            }
+        }
+    }
+
     /// The user `social_user` signs in as, linking or creating one.
-    pub(crate) async fn resolve_user(
+    async fn resolve_user(
         &self,
         rt: &Runtime,
         uow: &Uow,
         entry: &ProviderEntry,
         social_user: &SocialUser,
-    ) -> Result<User, SocialError> {
+    ) -> Result<Resolved, SocialError> {
         let linked = match find_account(uow, &entry.key, &social_user.id).await? {
             Some(account) => User::find(uow, account.user_id)
                 .await?
@@ -608,10 +653,17 @@ impl Social {
         };
         if let Some((account, user)) = linked {
             self.refresh_account(rt, uow, account, social_user).await?;
-            return Ok(user);
+            return Ok(Resolved::User(user));
         }
         if let Some(user) = by_email {
             if rt.options.link_by_email == LinkByEmail::Verified && social_user.email_verified {
+                // The provider vouches for the address, but the account may
+                // have been made by someone else with a password before its
+                // owner came: it links only when the app itself verified the
+                // address of the account.
+                if user.email_verified_at.is_none() {
+                    return Ok(Resolved::LinkRefused(user));
+                }
                 let taken = find_user_account(uow, user.id, &entry.key).await?.is_some();
                 if taken {
                     return Err(SocialError::ProviderAlreadyConnected {
@@ -620,7 +672,7 @@ impl Social {
                 }
                 self.insert_account(rt, uow, user.id, entry, social_user)
                     .await?;
-                return Ok(user);
+                return Ok(Resolved::User(user));
             }
             return Err(SocialError::EmailTaken {
                 provider: entry.name.clone(),
@@ -646,7 +698,7 @@ impl Social {
             audit = audit.request_id(request_id);
         }
         rt.audit_after_commit(uow, audit).await;
-        Ok(user)
+        Ok(Resolved::User(user))
     }
 
     /// Creates a user with the provider's name and email, no password, and

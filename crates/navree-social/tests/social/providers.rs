@@ -20,7 +20,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::support::{
-    APPLE_P8, Idp, REDIRECT_BASE, builder, create_user, form_field, http_client_module, query_param,
+    APPLE_P8, Idp, REDIRECT_BASE, builder, create_user, create_verified_user, form_field,
+    http_client_module, query_param,
 };
 
 /// An app whose provider `key` is configured with `config` (pointing at
@@ -623,7 +624,7 @@ async fn discord_links_only_verified_emails() {
         json!({ "client_id": "dc-client", "client_secret": "s", "url": idp.uri() }),
     )
     .await;
-    create_user(&app, "Anu", "anu@example.com").await;
+    create_verified_user(&app, "Anu", "anu@example.com").await;
     idp.mount_post("/api/oauth2/token", 200, json!({ "access_token": "dc", "token_type": "Bearer", "expires_in": 604800, "refresh_token": "r", "scope": "identify email" }))
         .await;
     idp.mount_get_once(

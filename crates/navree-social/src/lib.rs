@@ -41,8 +41,11 @@
 //!   from their APIs. Apple's client secret is an ES256 JWT signed with the
 //!   `.p8` key.
 //! - **Linking**: a linked account signs in its user; otherwise a user
-//!   with the same **verified** email is linked (`link_by_email`);
-//!   otherwise a user is created when registration is on; otherwise 409.
+//!   with the same email is linked (`link_by_email`) when the provider
+//!   **verified** it and the user's own address is verified too (an account
+//!   whose address nobody proved is never linked, and the refusal is audited
+//!   as `social.link_refused`); otherwise a user is created when
+//!   registration is on; otherwise 409.
 //! - **Sign-in policies**: [`Social::sign_in`] asks navree-auth's
 //!   `SignInPolicy`s (`SignInMethod::Social { provider }`) about the
 //!   provider's email before any account is created or linked, and about the
