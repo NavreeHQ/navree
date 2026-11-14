@@ -7,6 +7,11 @@
 //! - [`ViewModule`] is global: it provides and exports [`Views`], built at
 //!   boot from the template directories in [`ViewOptions`] (section `view`)
 //!   and the templates modules embed with [`ModuleBuilderViewExt::templates`].
+//! - A plugin ships its templates with
+//!   [`ModuleBuilderPluginViewsExt::plugin_templates`] and [`TemplateDir`]
+//!   (built with `navree::embed_templates!`): they are registered under the
+//!   plugin's namespace (`announcements/list.html`), and a template file of
+//!   that name still wins.
 //! - [`Views::render`] renders a template by name: `mail/welcome` is
 //!   `mail/welcome.html`, `.txt` or `.j2`, whichever exists first. A template
 //!   file overrides an embedded template of the same name.
@@ -42,6 +47,7 @@ mod error;
 mod filters;
 mod module;
 mod options;
+mod plugin;
 mod source;
 mod views;
 
@@ -49,4 +55,5 @@ pub use error::ViewError;
 pub use module::{ModuleBuilderViewExt, ViewModule};
 pub use navree_template as template;
 pub use options::ViewOptions;
+pub use plugin::{ModuleBuilderPluginViewsExt, TemplateDir};
 pub use views::Views;

@@ -1,11 +1,13 @@
 //! [`ViewModule`] and [`ModuleBuilderViewExt`].
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use navree_config::{Config, ModuleBuilderConfigExt};
+use navree_kernel::__private::{imports, is_community_plugin};
 use navree_kernel::{
-    AppContext, BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
+    AppContext, BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ModuleInfo,
+    ProviderKey, Resolver,
 };
 
 use navree_template::Environment;
@@ -20,7 +22,9 @@ use crate::{ViewOptions, Views};
 ///   boot, so the app must include `ConfigModule`.
 ///
 /// Templates come from the configured directories and from templates that
-/// modules embed with [`ModuleBuilderViewExt::templates`]. They are read
+/// modules embed with [`ModuleBuilderViewExt::templates`] (a plugin's, with
+/// [`ModuleBuilderPluginViewsExt::plugin_templates`](crate::ModuleBuilderPluginViewsExt::plugin_templates),
+/// are under its namespace). They are read
 /// and compiled when the app boots (off the async workers): a syntax error
 /// fails the boot, naming the template.
 ///
@@ -104,7 +108,7 @@ fn register(m: &mut ModuleBuilder, options: Option<ViewOptions>) {
                 let source = source.clone();
                 async move {
                     let options = source.options(&r).await?;
-                    let embedded = embedded_templates(&r.app());
+                    let embedded = embedded_templates(&r.app())?;
                     // Reads template files: keep it off the async workers.
                     let mut views = tokio::task::spawn_blocking(move || {
                         Views::with_templates(&options, embedded)
@@ -120,32 +124,105 @@ fn register(m: &mut ModuleBuilder, options: Option<ViewOptions>) {
         .exports::<Views>();
 }
 
-/// Every embedded template, modules in dependency order, so that a module's
-/// template replaces one of the same name from a module it imports.
-fn embedded_templates(ctx: &AppContext) -> Vec<(&'static str, &'static str)> {
-    let mut owners: BTreeMap<&'static str, &'static str> = BTreeMap::new();
+/// Every embedded template with its full name (a plugin's under its
+/// namespace), modules in dependency order, so that a module's template
+/// replaces one of the same name from a module it imports. Two other modules
+/// that embed one name with different text are reported: a warning, or an
+/// error when either module belongs to a plugin the kernel does not find
+/// first-party.
+fn embedded_templates(ctx: &AppContext) -> Result<Vec<(String, &'static str)>, String> {
+    let mut owners: HashMap<String, (ModuleInfo, &'static str)> = HashMap::new();
     let mut embedded = Vec::new();
+    let mut errors = Vec::new();
     for contributed in ctx.contributions::<EmbeddedTemplates>() {
-        let module = contributed.module.name;
-        for &(name, source) in &contributed.value.0 {
-            if let Some(previous) = owners.insert(name, module)
-                && previous != module
+        let module = contributed.module;
+        // A plugin's templates go under its namespace. A module that names no
+        // plugin and has files to publish fails the boot before this runs, so
+        // a namespaced contribution without a plugin holds no templates.
+        let namespace = if contributed.value.under_namespace {
+            match ctx.plugin(module.id) {
+                Some(info) => Some(info.namespace),
+                None => continue,
+            }
+        } else {
+            None
+        };
+        for &(path, source) in &contributed.value.templates {
+            let name = match namespace {
+                Some(namespace) => format!("{namespace}/{path}"),
+                None => path.to_owned(),
+            };
+            if let Some((previous, previous_source)) =
+                owners.insert(name.clone(), (module.clone(), source))
+                && previous.id != module.id
+                && previous_source != source
             {
-                tracing::debug!(
-                    template = name,
-                    module,
-                    replaces = previous,
-                    "embedded template replaced"
-                );
+                say_duplicate(ctx, &name, &previous, &module, &mut errors);
             }
             embedded.push((name, source));
         }
     }
-    embedded
+    if errors.is_empty() {
+        Ok(embedded)
+    } else {
+        Err(errors.join("\n"))
+    }
 }
 
-/// Templates a module embeds (contributed by [`ModuleBuilderViewExt::templates`]).
-struct EmbeddedTemplates(Vec<(&'static str, &'static str)>);
+/// What it means that `module`, after `previous`, embeds the template `name`
+/// with other text: said at `info` when `module` imports `previous` (a module
+/// may replace what it imports), said at `warn` instead when `module` belongs
+/// to a plugin the kernel does not find first-party, an error when either
+/// belongs to one, and otherwise a warning.
+fn say_duplicate(
+    ctx: &AppContext,
+    name: &str,
+    previous: &ModuleInfo,
+    module: &ModuleInfo,
+    errors: &mut Vec<String>,
+) {
+    let (first, second) = (previous.name, module.name);
+    if imports(ctx, module.id, previous.id) {
+        let community = ctx
+            .plugin(module.id)
+            .filter(|_| is_community_plugin(ctx, module.id));
+        match community {
+            Some(plugin) => {
+                tracing::warn!(
+                    target: "navree::view",
+                    "embedded template `{name}` of `{first}` is replaced by `{second}`'s, a module of the plugin `{}`",
+                    plugin.name
+                );
+            }
+            None => {
+                tracing::info!(
+                    target: "navree::view",
+                    "embedded template `{name}` of `{first}` is replaced by `{second}`'s"
+                );
+            }
+        }
+    } else if is_community_plugin(ctx, previous.id) || is_community_plugin(ctx, module.id) {
+        errors.push(format!(
+            "embedded template `{name}` is registered by both `{first}` and `{second}`; a plugin's templates are under its namespace"
+        ));
+    } else {
+        tracing::warn!(
+            target: "navree::view",
+            "embedded template `{name}` is registered by both `{first}` and `{second}`; `{second}`'s is used, and this becomes an error in 2.0"
+        );
+    }
+}
+
+/// Templates a module embeds, contributed by `m.templates(..)` (names as
+/// given) and by `m.plugin_templates(..)` (names under the plugin's
+/// namespace).
+pub(crate) struct EmbeddedTemplates {
+    /// (path, source) pairs.
+    pub(crate) templates: Vec<(&'static str, &'static str)>,
+    /// Whether the paths are registered under the namespace of the plugin the
+    /// module names, read when the app boots.
+    pub(crate) under_namespace: bool,
+}
 
 /// A change to the template environment (contributed by
 /// [`ModuleBuilderViewExt::view_environment`]).
@@ -171,7 +248,11 @@ pub trait ModuleBuilderViewExt {
     /// `views.render("mail/welcome", ..)` find them. A template file of the
     /// same name in a template directory overrides an embedded one, and a
     /// module's template overrides one of the same name from a module it
-    /// imports (directly or not).
+    /// imports (directly or not). Two other modules that embed one name with
+    /// different text log a warning at boot and the later module's template is
+    /// used; when one of the two is a plugin, the boot fails (a plugin's
+    /// templates are under its namespace, see
+    /// [`ModuleBuilderPluginViewsExt::plugin_templates`](crate::ModuleBuilderPluginViewsExt::plugin_templates)).
     ///
     /// ```
     /// use navree_kernel::{Module, ModuleBuilder};
@@ -217,7 +298,10 @@ pub trait ModuleBuilderViewExt {
 
 impl ModuleBuilderViewExt for ModuleBuilder {
     fn templates(&mut self, templates: &[(&'static str, &'static str)]) -> &mut Self {
-        self.contribute(EmbeddedTemplates(templates.to_vec()))
+        self.contribute(EmbeddedTemplates {
+            templates: templates.to_vec(),
+            under_namespace: false,
+        })
     }
 
     fn view_environment(
