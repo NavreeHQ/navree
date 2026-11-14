@@ -669,6 +669,7 @@ const REQUIRED: &[&str] = &[
     "keep-ids",
     "keep-unseen",
     "keep-also",
+    "keep-stale-shell",
 ];
 
 #[test]
