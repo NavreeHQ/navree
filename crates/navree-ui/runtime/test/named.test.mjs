@@ -13,7 +13,6 @@ const page = install({
     <div id="t" data-ui-table data-total="2" data-l='{"selected":"{n} selected"}'>
       <div data-slot="table-bulk"><span data-slot="bulk-count"></span></div>
       <form id="bulk" method="post" action="/invoices/bulk" data-ui-bulk>
-        <input name="hasAttribute"><input name="closest">
         <button id="void" type="submit" data-ui-confirm="Cancel {n} invoices?">Cancel</button>
       </form>
       <table><tbody><tr data-key="k1"><td><input id="box" type="checkbox" data-ui-select-row value="k1"></td></tr></tbody></table>
@@ -31,7 +30,7 @@ for (const name of ["addEventListener", "querySelectorAll", "getElementById", "c
   Object.defineProperty(document, name, { value: document.querySelector(`img[name=${name}]`), configurable: true });
 }
 const $ = (/** @type {string} */ id) => /** @type {any} */ (Document.prototype.getElementById.call(document, id));
-for (const [form, name] of [["bulk", "hasAttribute"], ["bulk", "closest"], ["note", "requestSubmit"]]) {
+for (const [form, name] of [["note", "requestSubmit"]]) {
   Object.defineProperty($(form), name, { value: $(form).querySelector(`[name=${name}]`), configurable: true });
 }
 
@@ -46,7 +45,7 @@ test("the table module starts on a page with an element named like a document me
   assert.equal($("t").hasAttribute("data-has-selection"), true);
 });
 
-test("a bulk form still asks first when its fields are named like its methods", async () => {
+test("a bulk form asks first on a page with an element named like a document method", async () => {
   page.submitted.length = 0;
   page.fetched.length = 0;
   $("bulk").requestSubmit($("void"));

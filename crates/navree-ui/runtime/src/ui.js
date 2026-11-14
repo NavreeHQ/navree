@@ -42,6 +42,8 @@ export function announce(text) {
 const TONES = ["info", "success", "warning", "danger"];
 const DURATIONS = ["brief", "normal", "long", "sticky"];
 const KEY = "navree-ui-toasts";
+/** Who what the tab keeps is for. */
+const KEPT_FOR = "navree-ui-who";
 const LIFE = "ui-toast-life";
 /** How long a toast waits in the tab for the next page: the flash cookie's life. */
 const KEPT_MS = 30000;
@@ -58,6 +60,22 @@ let serial = 0;
 const placedAt = new WeakMap();
 /** When the last write began and ended, in this page. */
 const wrote = { start: -Infinity, end: -Infinity };
+
+/**
+ * What this tab keeps for a person (a table's selection across pages, under `navree-table:`) is theirs: when
+ * the person signed in is another than the one it was kept for, it goes, so the next person starts with none.
+ * @param {string} now who is signed in
+ */
+function keptFor(now) {
+  try {
+    if (sessionStorage.getItem(KEPT_FOR) === now) return;
+    for (let i = sessionStorage.length; i--; ) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith("navree-table:")) sessionStorage.removeItem(key);
+    }
+    sessionStorage.setItem(KEPT_FOR, now);
+  } catch {}
+}
 
 /** Notes that a write begins or ends. @param {boolean} begins */
 export function noteWrite(begins) {
@@ -80,6 +98,7 @@ export function sameUser(strict = false) {
   if (user === null) user = now;
   if (now === user) return true;
   user = now;
+  keptFor(now);
   const cutoff = !strict && performance.now() - wrote.end < 3000 ? wrote.start : Infinity;
   for (const t of host?.querySelectorAll("[data-slot=toast]") || []) {
     if ((placedAt.get(t) ?? 0) < cutoff) t.remove();
@@ -352,6 +371,7 @@ function handOff() {
 export function startToasts() {
   const box = toaster();
   user = who();
+  keptFor(user);
   // A toast the address hides (a close link followed with no script, then this page loaded) is a dismissed one.
   // The address is read, not `:target`: some engines have not picked the target yet when this runs.
   let target = "";

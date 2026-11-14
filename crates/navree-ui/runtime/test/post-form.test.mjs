@@ -17,6 +17,7 @@ const page = install({
         <button id="save" type="submit">Save</button>
       </form>
     </main>
+    <div data-ui-stored><form id="planted-form" method="post" action="/account/email" data-ui-form><button id="planted-send" type="submit">Send</button></form></div>
     <form id="ui-post" method="post" novalidate hidden data-ui-form><input type="hidden" name="_csrf" value="tok"></form>
   </body></html>`,
 });
@@ -43,6 +44,15 @@ test("a button that names the post form without the server's mark sends nothing"
   assert.deepEqual(sent(), []);
   // Nor does the browser send it in the runtime's place.
   assert.deepEqual(page.submitted, []);
+});
+
+test("a form in stored content is the browser's to send, with no token in a header", async () => {
+  page.fetched.length = 0;
+  page.submitted.length = 0;
+  $("planted-send").click();
+  await settle();
+  assert.deepEqual(sent(), []);
+  assert.equal(page.submitted.length, 1);
 });
 
 test("a button in stored content sends no form", async () => {

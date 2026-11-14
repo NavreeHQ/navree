@@ -19,7 +19,7 @@
 // Every read of the page goes through the prototypes, so no element named like a
 // method (`<img name="elementFromPoint">`, `<input name="requestSubmit">`) changes
 // what this does.
-import { active, all, attr, body, closest, every, field, has, holds, on, root as docRoot, set, unset, D as DP, T as TP } from "./dom.js";
+import { active, all, attr, body, every, field, has, holds, on, root as docRoot, set, unset, D as DP, E as EP, T as TP } from "./dom.js";
 
 const ROOT = "[data-ui-sortable]";
 const LIST = "[data-slot=sortable-list]";
@@ -32,9 +32,17 @@ const CONTROL = "button,input,select,textarea,summary,label,option,[contentedita
 const SLOP = 4, TOUCH_SLOP = 8, HOLD = 300, EDGE = 48, STEP = 18, EASE = 180;
 
 const NP = Node.prototype;
+/**
+ * The nearest of `node` and its ancestors that matches. Unlike dom.js's, it finds one in stored content too,
+ * which costs nothing here: what a sortable sends goes through a form, and the core runtime sends no form
+ * that is stored content; and its forms that send themselves into view are looked up with `every`, which
+ * leaves stored content out.
+ * @param {any} node @param {string} selector @returns {Element | null}
+ */
+const closest = (node, selector) => (node instanceof Element ? EP.closest.call(node, selector) : null);
 /** @param {Node} parent @param {Node} node @param {Node | null} before */
 const insert = (parent, node, before) => {
-  const own = /** @type {any} */ (Element.prototype).moveBefore;
+  const own = /** @type {any} */ (EP).moveBefore;
   if (own && parent.isConnected && node.isConnected) {
     try {
       own.call(parent, node, before);
@@ -68,11 +76,16 @@ const shown = (el) => el.getClientRects().length > 0;
 /** The items of `root`'s own lists. @param {Element} root */
 const itemsOfRoot = (root) => listsOf(root).flatMap((list) => itemsOf(list));
 /** The lists of `root`, not those of a sortable inside one of its items. @param {Element} root */
-const listsOf = (root) => [...all(root, LIST)].filter((list) => closest(list, ROOT) === root);
+/**
+ * The parts of `el` that match `selector` and are its own: the nearest `of` around them is `el`, not one inside it.
+ * @param {Element} el @param {string} selector @param {string} of @returns {any[]}
+ */
+const mine = (el, selector, of) => [...all(el, selector)].filter((part) => closest(part, of) === el);
+const listsOf = (root) => mine(root, LIST, ROOT);
 /** @param {Element} list @returns {HTMLElement[]} */
-const itemsOf = (list) => /** @type {HTMLElement[]} */ ([...all(list, ITEM)].filter((item) => closest(item, LIST) === list));
+const itemsOf = (list) => /** @type {HTMLElement[]} */ (mine(list, ITEM, LIST));
 /** @param {Element} list */
-const boxOf = (list) => [...all(list, BOX)].find((box) => closest(box, LIST) === list) || null;
+const boxOf = (list) => mine(list, BOX, LIST)[0] || null;
 /** @param {Element} item */
 const listOf = (item) => closest(item, LIST);
 /** The number a list says it holds, drawn or not, or null. @param {Element} list */
@@ -92,7 +105,7 @@ const shiftTotal = (list, by) => {
   if (list && total !== null) set(list, "data-total", String(Math.max(0, total + by)));
 };
 /** @param {Element} list */
-const titleOf = (list) => ([...all(list, "[data-slot=sortable-list-title]")].find((t) => closest(t, LIST) === list)?.textContent || listKey(list)).trim();
+const titleOf = (list) => (mine(list, "[data-slot=sortable-list-title]", LIST)[0]?.textContent || listKey(list)).trim();
 /** @param {Element} item */
 const nextOf = (item) => item.nextElementSibling;
 /** @param {Element} item @returns {Place} */
@@ -121,7 +134,7 @@ function about(item) {
 
 /** Says `text` in `root`'s live region. The same words twice are still said: a mark is added in turn. @param {Element} root @param {string} text */
 function say(root, text) {
-  const status = [...all(root, "[data-slot=sortable-status]")].find((s) => closest(s, ROOT) === root);
+  const status = mine(root, "[data-slot=sortable-status]", ROOT)[0];
   if (!status || !text) return;
   status.textContent = status.textContent === text ? text + " " : text;
 }
@@ -227,7 +240,7 @@ function count(root) {
     const n = sizeOf(list);
     const limit = attr(list, "data-limit");
     const has = limit !== null && /^\d+$/.test(limit);
-    const box = [...all(list, "[data-slot=sortable-count]")].find((c) => closest(c, LIST) === list);
+    const box = mine(list, "[data-slot=sortable-count]", LIST)[0];
     if (!box) continue;
     const values = { count: n, limit: limit || "" };
     const shownCount = all(box, "[data-count]")[0], text = all(box, "[data-count-text]")[0];
@@ -269,7 +282,7 @@ const records = new WeakMap();
 
 /** Posts the move of `item` from `from` to where it is now. @param {Element} root @param {HTMLElement} item @param {Place} from */
 function commit(root, item, from) {
-  const form = /** @type {HTMLFormElement | undefined} */ ([...all(item, FORM)].find((f) => closest(f, ITEM) === item));
+  const form = /** @type {HTMLFormElement | undefined} */ (mine(item, FORM, ITEM)[0]);
   const to = placeOf(item);
   if (!form || (from.list === to.list && from.next === to.next)) return;
   const record = records.get(item) || { back: from, to: [] };
