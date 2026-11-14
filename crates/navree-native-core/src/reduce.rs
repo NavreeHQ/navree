@@ -232,6 +232,8 @@ impl Core {
             }
             Event::Foreground => {
                 self.inner.background = false;
+                // The session may have run out, or changed, while it was away.
+                self.session_unsure();
                 // A token that could not be sent before is tried again.
                 self.push_sync();
             }
@@ -751,6 +753,11 @@ impl Core {
         self.fetch(Pending::Shell, Method::Get, SHELL_PATH, None, PAGE_LIMIT);
     }
 
+    /// Asks for the shell even when an older request for it is on its way.
+    pub(crate) fn fetch_shell_anew(&mut self) {
+        self.fetch(Pending::Shell, Method::Get, SHELL_PATH, None, PAGE_LIMIT);
+    }
+
     pub(crate) fn fetch_shell(&mut self) {
         let asking = self
             .inner
@@ -832,7 +839,10 @@ impl Core {
                 // The person is the server's word now: what is kept is read
                 // only when it is theirs, and emptied when it is not.
                 let person = self.inner.user.clone();
-                self.shell_named(person);
+                // A shell asked before the session became unsure names nobody.
+                if response.request >= self.inner.cache.fresh_from {
+                    self.shell_named(person);
+                }
                 self.remember_shell(response.body);
                 self.inner.shell_stamp = stamp;
                 self.inner.seen_stamp = None;
@@ -1157,6 +1167,8 @@ impl Core {
     /// away; and the screen that asked stays in its stack, to be fetched again
     /// once they are back.
     pub(crate) fn session_ended(&mut self, under: ScreenId, href: &str) {
+        // Nobody may be signed in any more, wherever the way in leads.
+        self.who_may_have_changed(false);
         let url = match self.resolve(href, under) {
             Target::Inside(url) => url,
             Target::Outside(url) => return self.open_outside(&url, false),
@@ -1171,8 +1183,6 @@ impl Core {
             inner.stale = true;
             self.touch_screen(under);
         }
-        // Nobody may be signed in any more.
-        self.who_may_have_changed(false);
         let route = self.route(&url);
         let present = match route.and_then(|route| route.present) {
             Some(present @ (Present::Sheet | Present::Full | Present::Task)) => present,
@@ -1861,6 +1871,8 @@ impl Core {
         title: Option<String>,
         why: Vec<String>,
     ) {
+        // A page in the web view shares the cookies: the session may change there.
+        self.session_unsure();
         let whole = self.inner.origin.absolute(page);
         let Some(view) = self.view.screens.get_mut(&id) else {
             return;

@@ -522,6 +522,8 @@ impl Core {
 
     /// A link was tapped in the web view.
     pub(crate) fn web_link(&mut self, id: ScreenId, url: &str) {
+        // The page it came from shares the cookies: the session may have changed there.
+        self.session_unsure();
         match self.resolve(url, id) {
             // The page the web view already shows is not a place to go.
             Target::Inside(inside)

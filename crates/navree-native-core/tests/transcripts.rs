@@ -667,6 +667,7 @@ const REQUIRED: &[&str] = &[
     "keep-who",
     "keep-session",
     "keep-ids",
+    "keep-unseen",
 ];
 
 #[test]
