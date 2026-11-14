@@ -187,12 +187,13 @@ public enum CoreConfiguration {
     /// the server wrote to stand in for it, before the app sees the tree.
     ///
     /// Always: the clipboard, the share sheet, opening an address, the
-    /// system's settings and its review prompt. A sign-in session only when it
+    /// system's settings and its review prompt, the app's own notifications
+    /// and the count on its icon. A sign-in session only when it
     /// can come back: on the app's own scheme, or on a link of the origin the
     /// build has the associated domain for. A confirmation with a passkey, Sign
     /// in with Apple and push only when the build is signed for them.
     public static func caps(signedWith: Set<Entitlement>, signInScheme: String?) -> [String] {
-        var caps = ["clipboard", "open_settings", "open_url", "request_review", "share"]
+        var caps = ["clipboard", "local_notification", "open_settings", "open_url", "request_review", "share"]
         if signInScheme != nil || signedWith.contains(.associatedDomains) { caps.append("auth_session") }
         if signedWith.contains(.associatedDomains) { caps.append("confirm") }
         if signedWith.contains(.signInWithApple) { caps.append("platform_sign_in") }
