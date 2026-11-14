@@ -113,8 +113,10 @@ struct ToolbarAction: View {
             Menu {
                 MenuItems(items: menu.items)
             } label: {
-                if let icon = menu.icon, let symbol = Symbols.symbol(for: icon) {
-                    Label(menu.label, systemImage: symbol)
+                if let icon = menu.icon, let symbol = Symbols.image(for: icon) {
+                    Label { Text(menu.label) } icon: { symbol }
+                } else if let icon = menu.icon {
+                    Label { Text(menu.label) } icon: { Glyph(icon: icon) }
                 } else {
                     Label(menu.label, systemImage: "ellipsis")
                 }
@@ -134,13 +136,14 @@ struct ReasonedLabel: View {
 
     var body: some View {
         if let reason = ActionRules.reason(button) {
-            let symbol = button.standard.flatMap(Symbols.standard) ?? button.icon.flatMap(Symbols.symbol(for:))
+            let symbol = button.standard.flatMap(Symbols.standard).map { Image(systemName: $0) }
+                ?? button.icon.flatMap(Symbols.image(for:))
             if let symbol {
                 Label {
                     Text(button.label)
                     Text(reason)
                 } icon: {
-                    Image(systemName: symbol)
+                    symbol
                 }
             } else {
                 Text(button.label)

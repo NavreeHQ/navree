@@ -339,7 +339,7 @@ struct IconPart: View {
     @Environment(\.navree) private var context
 
     var body: some View {
-        Glyph(icon: icon, icons: context.icons, side: CompositionRules.iconSide(icon.scale), relativeTo: icon.scale.map(Typography.textStyle) ?? .body)
+        Glyph(icon: icon, icons: context.icons, relativeTo: icon.scale.map(Typography.textStyle) ?? .body)
             .font(icon.scale.map(Typography.font))
             .foregroundStyle(icon.colour.map { Hues.color($0) } ?? icon.tone.map(Tones.color) ?? Color.secondary)
             .accessibilityLabel(icon.label ?? "")
@@ -347,32 +347,32 @@ struct IconPart: View {
     }
 }
 
-/// A symbol for an icon, or its shape when no symbol means the same.
+/// A symbol for an icon, or its shape when no symbol means the same, drawn
+/// as large as a symbol would be in the font around it.
 public struct Glyph: View {
     let icon: Navree.Icon
     let icons: [String: Navree.IconShape]
-    let side: Double
     let style: Font.TextStyle
+    @Environment(\.navree) private var context
 
-    /// `side` is the side of an icon drawn from its paths, before the
-    /// person's text size, which it follows as `style` does.
-    public init(icon: Navree.Icon, icons: [String: Navree.IconShape] = [:], side: Double = 20, relativeTo style: Font.TextStyle = .body) {
+    /// `style` sizes an icon drawn from its paths where no font is set
+    /// around it; the shapes of icons sent by name come from `icons`, else
+    /// from the screen's own.
+    public init(icon: Navree.Icon, icons: [String: Navree.IconShape] = [:], relativeTo style: Font.TextStyle = .body) {
         self.icon = icon
         self.icons = icons
-        self.side = side
         self.style = style
     }
 
     public var body: some View {
-        if let symbol = Symbols.symbol(for: icon) {
-            Image(systemName: symbol)
+        if let image = Symbols.image(for: icon) {
+            image
         } else {
-            let shape = icon.name.flatMap { icons[$0] }
+            let shape = icon.name.flatMap { icons[$0] ?? context.icons[$0] }
             IconShapeView(
                 paths: icon.paths.isEmpty ? shape?.paths ?? [] : icon.paths,
                 fills: icon.fills.isEmpty ? shape?.fills ?? [] : icon.fills,
                 viewBox: icon.viewBox ?? shape?.viewBox,
-                side: side,
                 relativeTo: style
             )
         }
