@@ -457,15 +457,16 @@ struct FiltersSheet: View {
             .navigationBarTitleDisplayModeInline()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .cancel) { dismiss() } label: { Label("Cancel", systemImage: "xmark") }
+                    SheetDismissButton(.cancel) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) {
                         context.send(.act(.submit(Navree.Action.Submit(form: query.form.key)), Place(form: query.form)))
                         dismiss()
                     } label: {
-                        Label("Apply", systemImage: "checkmark")
+                        SheetButtonLabel("Apply", systemImage: "checkmark")
                     }
+                    .sheetKey(.confirm)
                 }
             }
             .environment(\.navreeForm, query.form)

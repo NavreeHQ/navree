@@ -42,6 +42,7 @@ public struct AppShell: View {
             if let client = session.client {
                 Chrome(client: client, configuration: session.configuration, commands: session.commands)
                     .environment(\.navreeStartsEditing, session.configuration.launch.editing)
+                    .modifier(SheetRoom())
                     .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
                         shownWidth = width
                         session.window(StatusRules.width(compactWindow: compactWindow, sizeClass: WindowRules.system(sizeClass), points: width))
@@ -110,6 +111,24 @@ public struct AppShell: View {
         traits.locale = locale.identifier(.bcp47)
         traits.tz = timeZone.identifier
         return traits
+    }
+}
+
+/// The room a sheet has in the window, given to every sheet the window's
+/// screens open: on a Mac, the window's size under its bar, so a sheet in a
+/// window narrower than a form (the window under an item in the menu bar)
+/// takes the window's width rather than hanging over its edges.
+struct SheetRoom: ViewModifier {
+    @State private var room: CGSize?
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+            .environment(\.navreeSheetRoom, room)
+            .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in room = size }
+        #else
+        content
+        #endif
     }
 }
 

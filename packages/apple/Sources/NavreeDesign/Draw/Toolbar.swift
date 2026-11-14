@@ -72,6 +72,12 @@ struct ToolbarAction: View {
             .modifier(PopoverAnchor(action: Self.action(of: node)))
     }
 
+    /// A sheet's Cancel and confirming button: the symbol on iPhone and iPad,
+    /// the action's own words on a Mac.
+    static var sheetLabel: LabelMode {
+        PresentationRules.sheetButtons(bar: .current) == .words ? .title : .icon
+    }
+
     static func action(of node: Navree.Node) -> Navree.Action? {
         if case .button(let button) = node { return button.action }
         return nil
@@ -87,10 +93,12 @@ struct ToolbarAction: View {
             }
             switch slot {
             case .cancel:
-                Button(role: .cancel, action: action) { ButtonLabel(button: button, mode: .icon) }
+                Button(role: .cancel, action: action) { ButtonLabel(button: button, mode: Self.sheetLabel) }
+                    .sheetKey(.cancel)
             case .confirm:
-                Button(role: .confirm, action: action) { ButtonLabel(button: button, mode: .icon) }
+                Button(role: .confirm, action: action) { ButtonLabel(button: button, mode: Self.sheetLabel) }
                     .disabled(button.disabled || button.pending)
+                    .sheetKey(.confirm)
             case .primary:
                 Button(action: action) { ButtonLabel(button: button, mode: .icon) }
                     .buttonStyle(.glassProminent)

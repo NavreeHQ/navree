@@ -136,20 +136,7 @@ struct OverlaySheet: View {
                     )
                     if !parts.hasCancel {
                         ToolbarItem(placement: .cancellationAction) {
-                            switch parts.dismissal {
-                            case .cancel:
-                                Button(role: .cancel) {
-                                    context.send(.dismissed(overlay: parts.id))
-                                } label: {
-                                    Label("Cancel", systemImage: "xmark")
-                                }
-                            case .close:
-                                Button(role: .close) {
-                                    context.send(.dismissed(overlay: parts.id))
-                                } label: {
-                                    Label("Close", systemImage: "xmark")
-                                }
-                            }
+                            SheetDismissButton(parts.dismissal) { context.send(.dismissed(overlay: parts.id)) }
                         }
                     }
                 }
@@ -288,15 +275,16 @@ struct FormSheet: View {
             .navigationBarTitleDisplayModeInline()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .cancel) { dismiss() } label: { Label("Cancel", systemImage: "xmark") }
+                    SheetDismissButton(.cancel) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) {
                         if let action = confirm.action { context.send(.act(action, Place(form: ref))) }
                         dismiss()
                     } label: {
-                        Label(confirm.label, systemImage: "checkmark")
+                        SheetButtonLabel(verbatim: confirm.label, systemImage: "checkmark")
                     }
+                    .sheetKey(.confirm)
                 }
             }
             .environment(\.navreeForm, ref)
@@ -309,15 +297,24 @@ struct FormSheet: View {
 
 /// A sheet's size where the window gives it none of its own: on a Mac, the
 /// system's size for a form, so a sheet whose content is a list (which has no
-/// height of its own) shows it rather than shrinking to its bar. iPhone and
-/// iPad size a sheet by its detents.
+/// height of its own) shows it rather than shrinking to its bar, within the
+/// room the window it stands on has, so it never hangs over that window's
+/// edges. iPhone and iPad size a sheet by its detents.
 public struct SheetSizing: ViewModifier {
+    @Environment(\.navreeSheetRoom) private var room
+
     public init() {}
 
     public func body(content: Content) -> some View {
         switch PresentationRules.sheetSizing(bar: .current) {
-        case .detents: content
-        case .form: content.presentationSizing(.form)
+        case .detents:
+            content
+        case .form:
+            #if os(macOS)
+            content.presentationSizing(RoomFormSizing(room: room))
+            #else
+            content.presentationSizing(.form)
+            #endif
         }
     }
 }

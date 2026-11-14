@@ -1,3 +1,4 @@
+import CoreGraphics
 import NavreeProtocol
 
 /// How a sheet of a given size is presented.
@@ -56,6 +57,35 @@ public enum PresentationRules {
 
     public static func sheetSizing(bar: ActionBar) -> SheetSizing {
         bar == .window ? .form : .detents
+    }
+
+    /// The size the system gives a form sheet on a Mac, where it says none.
+    public static let formSize = CGSize(width: 470, height: 400)
+
+    /// The size a Mac sheet takes: the system's size for a form, within the
+    /// room the window it stands on has under its bar. In a window narrower or
+    /// shorter than a form (the window under an item in the menu bar, 400
+    /// points wide) the sheet takes the window's width and height and its
+    /// content scrolls, rather than hanging over the window's edges; a window
+    /// that says nothing of its room leaves the form's size.
+    public static func sheetSize(form: CGSize, room: CGSize?) -> CGSize {
+        guard let room, room.width > 0, room.height > 0 else { return form }
+        return CGSize(width: min(form.width, room.width), height: min(form.height, room.height))
+    }
+
+    /// How a sheet's Cancel and its confirming button show.
+    public enum SheetButtons: Sendable, Equatable {
+        /// Symbols in the sheet's bar, ✕ at its leading corner and ✓ at its
+        /// trailing one, their words for VoiceOver: iPhone and iPad.
+        case symbols
+        /// Words, as a Mac sheet's push buttons at its foot have them:
+        /// "Cancel", and the action's own words ("Refund") on the default
+        /// button, which Return presses; Escape presses Cancel.
+        case words
+    }
+
+    public static func sheetButtons(bar: ActionBar) -> SheetButtons {
+        bar == .window ? .words : .symbols
     }
 
     /// Medium sheets rest at half height and can be pulled up (iPhone's

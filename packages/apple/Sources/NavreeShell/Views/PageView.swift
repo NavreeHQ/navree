@@ -342,19 +342,8 @@ struct ScreenPage: View {
         }
         if depth == 0, let modal, !Self.hasCancel(state), let dismissal = ModalRules.dismissal(modal) {
             ToolbarItem(placement: .cancellationAction) {
-                switch dismissal {
-                case .cancel:
-                    Button(role: .cancel) {
-                        client.send(.dismissed(screen: state.id))
-                    } label: {
-                        Label("Cancel", systemImage: "xmark")
-                    }
-                case .close:
-                    Button(role: .close) {
-                        client.send(.dismissed(screen: state.id))
-                    } label: {
-                        Label("Close", systemImage: "xmark")
-                    }
+                SheetDismissButton(dismissal == .cancel ? .cancel : .close) {
+                    client.send(.dismissed(screen: state.id))
                 }
             }
         }

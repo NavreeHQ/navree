@@ -130,7 +130,7 @@ private struct DayChooser: View {
             .navigationBarTitleDisplayModeInline()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .cancel) { dismiss() } label: { Label("Cancel", systemImage: "xmark") }
+                    SheetDismissButton(.cancel) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) {
@@ -142,9 +142,10 @@ private struct DayChooser: View {
                         }
                         dismiss()
                     } label: {
-                        Label("Done", systemImage: "checkmark")
+                        SheetButtonLabel("Done", systemImage: "checkmark")
                     }
                     .disabled(day == nil)
+                    .sheetKey(.confirm)
                 }
             }
         }
