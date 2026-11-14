@@ -14,7 +14,9 @@
 //!   completions, and any compatible server), Google Gemini, Mistral,
 //!   Ollama and AWS Bedrock (Converse, signed with navree-crypto's SigV4
 //!   signer). Their HTTP goes through navree-http-client and its SSRF guard.
-//!   A module can add a provider of its own with an [`AiDriver`].
+//!   A module can add a provider of its own with an [`AiDriver`], registered
+//!   under a name ([`ModuleBuilderAiProviderExt`]) that a provider table
+//!   selects.
 //! - **Failover**: each model is retried on a 429, a 5xx, a timeout or a
 //!   connection failure (exponential backoff, `retry-after` honored), then
 //!   its `fallbacks` are tried in order.
@@ -50,6 +52,7 @@ mod agent;
 mod ai;
 mod chunker;
 mod commands;
+mod drivers;
 mod embeddings;
 mod error;
 mod fake;
@@ -73,6 +76,7 @@ pub use agent::{
 };
 pub use ai::Ai;
 pub use chunker::{Chunk, Chunker};
+pub use drivers::ModuleBuilderAiProviderExt;
 pub use embeddings::{Embedding, Embeddings};
 pub use error::AiError;
 pub use fake::{AiFake, FakeReply, FakeRequest};

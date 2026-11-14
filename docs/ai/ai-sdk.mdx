@@ -99,7 +99,7 @@ APP_AI__PROVIDERS__OPENAI__API_KEY=sk-proj-...
 
 A provider table needs no other key when the defaults suit you, so the two lines above are the whole provider configuration for this example. Every value maps to an environment variable the usual way (`APP_AI__DEFAULT=fast`, `APP_AI__MODELS__FAST__MODEL=claude-sonnet-5-5`), and `fallbacks` also accepts a comma-separated string (`APP_AI__MODELS__SMART__FALLBACKS=fast,backup`).
 
-The boot fails, naming the key, when a model names an unknown provider, a fallback names an unknown model, the fallbacks form a cycle, or `default` names no model. A missing API key doesn't fail the boot: requests to that provider fail with `AiError::Config`, and the log warns once at startup. `Config::redacted()` and the logs mask every `api_key`, `access_key_id`, `secret_access_key`, `session_token` and `key`.
+The boot fails, naming the key, when a model names an unknown provider, a provider table names a driver that is neither built in nor [registered by a module](#a-provider-a-module-registers), a fallback names an unknown model, the fallbacks form a cycle, or `default` names no model. A missing API key doesn't fail the boot: requests to that provider fail with `AiError::Config`, and the log warns once at startup. `Config::redacted()` and the logs mask every `api_key`, `access_key_id`, `secret_access_key`, `session_token` and `key`.
 
 ### Top-level keys
 
@@ -146,6 +146,79 @@ url = "http://127.0.0.1:8000/v1"
 provider = "local"
 model = "qwen3-32b"
 ```
+
+#### A provider a module registers
+
+A module can add a driver of its own, for a vendor Navree has no driver for or a model your company serves itself, and register it under a name with `m.ai_provider`, which comes with `use navree::plugin::prelude::*;`. A provider table then selects it like a built-in driver: by its name (`[ai.providers.vaani]`), or with `driver = "vaani"` in a table of another name. The driver implements `AiDriver`: its capabilities, a whole answer, a streamed answer and, if it has them, embeddings.
+
+```rust title="src/modules/vaani/mod.rs"
+use navree::ai::{
+    AiCapabilities, AiDriver, AiDriverAnswer, AiDriverChunk, AiDriverRequest, AiDriverStream,
+    AiError, Finish, Part, ProviderConfig, Usage,
+};
+use navree::BoxFuture;
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+
+/// Vaani's API, at the provider table's `url`.
+struct Vaani {
+    client: VaaniClient, // your HTTP client for the vendor's API
+}
+
+impl AiDriver for Vaani {
+    fn capabilities(&self) -> AiCapabilities {
+        AiCapabilities::default().images(true)
+    }
+
+    fn chat<'a>(&'a self, request: &'a AiDriverRequest) -> BoxFuture<'a, Result<AiDriverAnswer, AiError>> {
+        Box::pin(async move {
+            // `request.model()` is the vendor's model id from `ai.models`.
+            let reply = self.client.complete(request.model(), request.messages()).await?;
+            let usage = Usage::new(reply.input_tokens, reply.output_tokens);
+            Ok(AiDriverAnswer::new(vec![Part::Text { text: reply.text }], usage, Finish::Stop))
+        })
+    }
+
+    fn stream<'a>(&'a self, request: &'a AiDriverRequest) -> BoxFuture<'a, Result<AiDriverStream, AiError>> {
+        Box::pin(async move {
+            // Text chunks as they arrive, then one `AiDriverChunk::Done` with the usage.
+            let chunks = self.client.stream(request.model(), request.messages()).await?;
+            Ok(chunks)
+        })
+    }
+}
+
+pub struct VaaniModule;
+
+impl Module for VaaniModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.ai_provider("vaani", |ctx| async move {
+            // The provider table, `[ai.providers.vaani]`, as a `ProviderConfig`.
+            let table: ProviderConfig = ctx.settings()?;
+            let url = table.url.unwrap_or_else(|| "https://api.vaani.example".to_owned());
+            Ok(Vaani { client: VaaniClient::new(url, table.api_key) })
+        });
+    }
+}
+```
+
+```toml title="config/app.toml"
+[ai.providers.vaani]
+url = "https://ai.ludhiana.example"   # the key: APP_AI__PROVIDERS__VAANI__API_KEY
+
+[ai.models.smart]
+provider = "vaani"
+model = "vaani-large"
+fallbacks = ["fast"]
+```
+
+The factory runs once at boot for each table that selects the driver, with that table's `DriverContext`: `ctx.settings()` reads the table into `ProviderConfig` or a type of your own (an error names the key, never a value), `ctx.settings_key()` is `ai.providers.vaani` and `ctx.instance()` the table's name. `AiDriverRequest` gives the vendor's model id, the system prompt, the messages with their attachments, `max_tokens`, `temperature`, `stop`, the tools and whether the model may call them now, the JSON Schema of a structured answer (for a driver with `native_structured`), the user and the attempt's time limit.
+
+A registered provider runs behind the same model chains, retries, fallbacks, budgets, usage metrics, telemetry and log line as a built-in one; how its errors fail over is in [failover and retries](#failover-and-retries). It brings its own HTTP client: the client the built-in drivers share, with its guard against requests to internal addresses, does not apply to it, and its table's `url` is not added to that guard's list.
+
+A driver's name is a lower-case letter followed by up to 63 lower-case letters, digits or `_`. These fail the boot, naming `m.ai_provider` and the module that registered the name: a name that is not such a word, a built-in driver's name (`anthropic`, `openai`, `gemini`, `mistral`, `ollama`, `bedrock`), and one name registered by two modules. So does a provider table naming a driver no module registers (the message lists the drivers that are known), and a factory that returns an error. `config:check` reports the same problems, in the same words, without booting the app.
+
+`AiModule` builds registered drivers; `Ai::new(options)`, which builds an `Ai` outside an app, takes the built-in drivers only, and `AiOptions::check()` reports any other driver as unknown.
 
 ### Models
 
@@ -587,6 +660,19 @@ Providers have bad minutes. A request moves through its model's attempts, then i
 
 Failover happens only when trying again elsewhere can help. A request the provider rejects as invalid (a prompt longer than the context window, an unreadable image) fails at once with `AiError::Request`; a rejected API key fails with `AiError::Config` and is logged at `error`; a refusal is an answer, not a failure. A stream fails over only before its first event.
 
+A [provider a module registers](#a-provider-a-module-registers) says which of these happened with the `AiError` it returns, and the request goes on as it would for a built-in driver:
+
+| The driver returns | What happens |
+|---|---|
+| `AiError::RateLimited` (with the provider's `retry_after`, when it sent one) | Retried, then the fallbacks are tried; `AiError::RateLimited` when every model failed this way |
+| `AiError::Unavailable` | Retried, then the fallbacks are tried; `AiError::Unavailable` when every model failed |
+| `AiError::Unsupported` | The model is skipped and the next one in the chain is tried |
+| `AiError::Request` | The request fails at once with it, naming the provider table |
+| `AiError::Config` | The request fails at once with ``AI configuration error: provider `vaani`: ..``, logged at `error` |
+| any other `AiError` | The request fails at once with it, as it is |
+
+A stream whose first chunk is an error fails over as a whole answer does. A driver doesn't retry by itself: each call is one attempt, and the engine decides what comes next. Keep keys, tokens and prompts out of an error's message, which reaches the log.
+
 The response says who answered (`response.model`, `response.provider`), and the request's log line names every model it tried, so a dashboard of `outcome="failover"` shows a provider having a bad day before your users notice.
 
 <Callout type="warning" title="Fallbacks answer differently">
@@ -770,6 +856,7 @@ A transient error (`unavailable`, `rate_limited`) is retried `ai.max_retries` ti
 | `AiError` | Every failure; converts into `AppError`. |
 | `AiFake`, `FakeReply`, `FakeRequest` | The test fake. |
 | `json_schema::<T>()` | The JSON Schema Navree sends for a `ToSchema` type. |
+| `AiDriver`, `AiCapabilities`, `AiDriverRequest`, `AiTool`, `AiDriverAnswer`, `AiDriverChunk`, `AiDriverStream`, `AiEmbedRequest`, `AiEmbedAnswer` | The driver of a [provider a module registers](#a-provider-a-module-registers) with `m.ai_provider` (`ModuleBuilderAiProviderExt`). |
 
 <LinkCards>
   <LinkCard href="/docs/ai/agents-and-tools/" title="Agents and tools">

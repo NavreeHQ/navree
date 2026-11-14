@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use navree_config::ModuleBuilderConfigExt;
+use navree_config::__private::contribute_slot;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
@@ -12,6 +13,7 @@ use navree_kernel::{
 
 use crate::agent::Agent;
 use crate::commands::prune_command;
+use crate::drivers::{SLOT, registered_drivers};
 use crate::error::map_ai_error;
 use crate::memory::{self, Conversations};
 use crate::options::VectorStoreKind;
@@ -76,11 +78,13 @@ impl Module for AiModule {
 
 fn register(m: &mut ModuleBuilder, options: Option<AiOptions>) {
     m.global();
+    contribute_slot(m, SLOT);
     match options {
         Some(options) => m.factory(Factory::<AiOptions>::new(move |_| {
             let options = options.clone();
             async move {
-                let errors = options.check();
+                // A driver a module registers is resolved when `Ai` is built.
+                let errors = options.check_with(true);
                 if !errors.is_empty() {
                     return Err(format!("invalid ai options: {}", errors.join("; ")).into());
                 }
@@ -91,11 +95,17 @@ fn register(m: &mut ModuleBuilder, options: Option<AiOptions>) {
     };
     m.exports::<AiOptions>()
         .factory(
+            // Every registration of a provider driver is checked, whichever
+            // tables select one; each table of a registered driver gets the
+            // driver its registration builds.
             Factory::<Ai>::new(|r: Resolver| async move {
                 let options = r.get::<AiOptions>().await?;
-                Ok(Arc::new(Ai::build(
+                let app = r.app();
+                let registered = registered_drivers(&app, &options).await?;
+                Ok(Arc::new(Ai::build_with(
                     (*options).clone(),
-                    Some(r.app().downgrade()),
+                    Some(app.downgrade()),
+                    registered,
                 )?))
             })
             .deps(vec![ProviderKey::of::<AiOptions>()]),

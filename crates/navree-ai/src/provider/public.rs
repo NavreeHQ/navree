@@ -23,10 +23,10 @@ use crate::response::{Finish, Usage};
 
 /// The driver of an AI provider: one vendor API, or anything else that
 /// answers prompts. A module registers one under a name with
-/// `m.ai_provider`, and a provider table (`[ai.providers.vaani]`) selects it
-/// by that name; `AiModule` then runs it behind the same model chains,
-/// retries, failover, budgets, usage metrics and telemetry as the built-in
-/// drivers.
+/// [`m.ai_provider`](crate::ModuleBuilderAiProviderExt::ai_provider), and a
+/// provider table (`[ai.providers.vaani]`) selects it by that name;
+/// `AiModule` then runs it behind the same model chains, retries, failover,
+/// budgets, usage metrics and telemetry as the built-in drivers.
 ///
 /// Each method is one whole attempt: the failover engine retries, falls
 /// over and gives up, so a driver never retries by itself. The class of an
