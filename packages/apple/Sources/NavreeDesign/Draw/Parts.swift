@@ -40,6 +40,15 @@ public struct NodeView: View {
         case .progress(let progress): ProgressPart(progress: progress)
         case .banner(let banner): BannerPart(banner: banner)
         case .empty(let empty): EmptyPart(empty: empty)
+        case .facts(let facts) where !onGround:
+            // On a surface, labelled rows as a list's rows stand, with the
+            // system's separators between them, as Settings and Wallet set them.
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(facts.items.enumerated()), id: \.offset) { index, fact in
+                    if index > 0 { Divider() }
+                    FactContent(fact: fact)
+                }
+            }
         case .facts(let facts):
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(facts.items.enumerated()), id: \.offset) { _, fact in FactContent(fact: fact) }

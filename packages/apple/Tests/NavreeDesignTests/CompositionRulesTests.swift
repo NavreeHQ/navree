@@ -300,3 +300,12 @@ private let navigate = Navree.Action.navigate(Navree.Action.Navigate(href: "/sle
     // Parts with no id are known by their place; the same id twice stays two parts.
     #expect(CompositionRules.identities([text("x"), a, a]) == ["@0", "#a", "#a'"])
 }
+
+@Test func aSectionsSumsAreRowsOfItsSurfaceAndOnlyWordsStayANoteUnderIt() {
+    let sums = Navree.Node.facts(Navree.Facts(items: [Navree.Fact(label: "Total", value: [.text(Navree.Text(value: "₹507"))])]))
+    let words = Navree.Node.text(Navree.Text(value: "Prices include GST"))
+    let footer = CompositionRules.footer([sums, words])
+    #expect(footer.rows == [sums])
+    #expect(footer.note == [words])
+    #expect(CompositionRules.footer([]).rows.isEmpty)
+}

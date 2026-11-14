@@ -293,14 +293,20 @@ struct GroundSectionPart: View {
     let section: Navree.Section
 
     var body: some View {
+        let footer = CompositionRules.footer(section.footer)
         VStack(alignment: .leading, spacing: 10) {
             GroupHeading(section: section)
             if section.style == .inset || section.style == .card {
-                Surface { Parts(nodes: section.children) }
+                Surface {
+                    Parts(nodes: section.children)
+                    // The sums are rows of the same surface, a separator above them.
+                    if !section.children.isEmpty, !footer.rows.isEmpty { Divider() }
+                    Parts(nodes: footer.rows)
+                }
             } else {
-                Parts(nodes: section.children)
+                Parts(nodes: section.children + footer.rows)
             }
-            Parts(nodes: section.footer)
+            Parts(nodes: footer.note)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

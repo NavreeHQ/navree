@@ -7,6 +7,22 @@ import SwiftUI
 /// the newer words of `stack`, `grid`, `text` and `icon`), as plain functions
 /// of the tree, the room it is drawn in and the person's settings.
 public enum CompositionRules {
+    // MARK: A section's foot
+
+    /// A section's footer as it is drawn on a composed screen's ground:
+    /// labelled values (an order's subtotal, shipping and total) are rows of
+    /// the section, on its surface after its other rows, label leading and
+    /// value trailing in the body's type, as Wallet sets an order's sums; only
+    /// words stay a note in small type under the surface.
+    public static func footer(_ parts: [Navree.Node]) -> (rows: [Navree.Node], note: [Navree.Node]) {
+        var rows: [Navree.Node] = []
+        var note: [Navree.Node] = []
+        for part in parts {
+            if case .facts = part { rows.append(part) } else { note.append(part) }
+        }
+        return (rows, note)
+    }
+
     // MARK: The screen
 
     /// Whether a screen is composed rather than a list of sections: it holds
