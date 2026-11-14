@@ -14,6 +14,8 @@
 //!   database scan from the start of the index.
 //! - **Deep numbered pages** read from whichever end of the index is nearer.
 
+use std::borrow::Cow;
+
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use bytes::Bytes;
@@ -47,6 +49,16 @@ const EXPORT_MEMORY: usize = 8 * 1024 * 1024;
 
 /// How deep a page has to be before its keys are found first.
 const DEFERRED_FROM: u64 = 5_000;
+
+/// The table that names `source` in a query: `M`'s own, when `source` is one of its
+/// columns on a SQL database. A column of another table (`companies.name`) names its table
+/// itself, and a name the query selects under an alias, or a document's field, is written
+/// as it is.
+fn own_table<M: Model>(source: &str, dialect: Option<Dialect>) -> Option<&'static str> {
+    let meta = M::meta();
+    let own = source == meta.key_column() || meta.has_column(source);
+    (dialect.is_some() && !source.contains('.') && own).then(|| meta.table())
+}
 
 /// A value from a URL, bound as what the column holds.
 fn bind(kind: ValueKind, text: &str) -> Option<Value> {
@@ -201,9 +213,50 @@ struct Term {
     kind: ValueKind,
     nullable: bool,
     direction: Direction,
+    /// The table being read, when `source` is one of its columns on a SQL database: the
+    /// query names the column with it, so a query that joins another table with a column of
+    /// the same name (its `id`) still means this one.
+    table: Option<&'static str>,
+    /// Where NULL comes in the order, for reading on from a position.
+    nulls: Nulls,
+}
+
+/// Where a term's NULLs come in its order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Nulls {
+    /// The column holds none: read as the smallest value, where it would be.
+    Never,
+    /// The smallest value: what MySQL, SQLite and MongoDB do by themselves, and what the
+    /// order spells out on PostgreSQL for a column that says it can hold NULL.
+    Smallest,
+    /// The largest value: PostgreSQL's own order, for a column that says it holds none
+    /// but that an export reads NULL in all the same.
+    Largest,
 }
 
 impl Term {
+    /// The column as the query names it: with the table's name when it is a column of the
+    /// table being read.
+    fn column(self) -> Cow<'static, str> {
+        match self.table {
+            Some(table) if !self.source.contains('.') => {
+                Cow::Owned(format!("{table}.{}", self.source))
+            }
+            _ => Cow::Borrowed(self.source),
+        }
+    }
+
+    /// Whether NULL comes after every value in this term's order.
+    fn nulls_after(self) -> bool {
+        (self.nulls == Nulls::Largest) != (self.direction == Direction::Desc)
+    }
+
+    /// Whether rows with NULL can follow a row with a value: the term may hold NULL, and
+    /// NULL comes after the values.
+    fn nulls_follow(self) -> bool {
+        self.nulls != Nulls::Never && self.nulls_after()
+    }
+
     fn flipped(self) -> Self {
         Self {
             direction: if self.direction == Direction::Asc {
@@ -216,7 +269,7 @@ impl Term {
     }
 
     fn order(self, dialect: Option<Dialect>) -> Order {
-        let source = col(self.source);
+        let source = col(self.column());
         let order = if self.direction == Direction::Asc {
             source.asc()
         } else {
@@ -238,24 +291,29 @@ impl Term {
     /// Where this term equals `value`.
     fn equal(self, value: &Value) -> Filter {
         if Self::is_null(value) {
-            col(self.source).is_null()
+            col(self.column()).is_null()
         } else {
-            col(self.source).eq(value.clone())
+            col(self.column()).eq(value.clone())
         }
     }
 
     /// Where this term is strictly past `value`, in order.
     fn past(self, value: &Value) -> Option<Filter> {
-        let source = col(self.source);
-        match (self.direction, Self::is_null(value)) {
-            (Direction::Asc, true) => Some(source.is_not_null()),
-            (Direction::Asc, false) => Some(source.gt(value.clone())),
-            (Direction::Desc, true) => None,
-            (Direction::Desc, false) if self.nullable => {
-                Some(Filter::any([source.lt(value.clone()), source.is_null()]))
-            }
-            (Direction::Desc, false) => Some(source.lt(value.clone())),
+        let source = col(self.column());
+        if Self::is_null(value) {
+            // Past a NULL come the values, when NULL comes first; else nothing.
+            return (!self.nulls_after()).then(|| source.is_not_null());
         }
+        let strict = if self.direction == Direction::Asc {
+            source.gt(value.clone())
+        } else {
+            source.lt(value.clone())
+        };
+        Some(if self.nulls_follow() {
+            Filter::any([strict, col(self.column()).is_null()])
+        } else {
+            strict
+        })
     }
 }
 
@@ -278,19 +336,20 @@ fn keyset(terms: &[Term], values: &[Value]) -> (Option<Filter>, Option<Filter>) 
     let (Some(first), Some(value)) = (terms.first().copied(), values.first()) else {
         return (None, None);
     };
-    let source = col(first.source);
+    let source = col(first.column());
     let tail = past_from(terms, values, 1);
     let null = Term::is_null(value);
     match (first.direction, null) {
-        (Direction::Asc, true) => {
-            // Through the NULLs, then every value.
+        // NULL comes first: through the NULLs, then every value.
+        (_, true) if !first.nulls_after() => {
             let here = tail.map_or_else(
                 || source.is_null(),
                 |tail| Filter::all([source.is_null(), tail]),
             );
             (Some(here), Some(source.is_not_null()))
         }
-        (Direction::Desc, true) => (tail.map(|tail| Filter::all([source.is_null(), tail])), None),
+        // NULL comes last: through the NULLs, and nothing after them.
+        (_, true) => (tail.map(|tail| Filter::all([source.is_null(), tail])), None),
         (direction, false) => {
             let bound = if direction == Direction::Asc {
                 source.gte(value.clone())
@@ -311,8 +370,7 @@ fn keyset(terms: &[Term], values: &[Value]) -> (Option<Filter>, Option<Filter>) 
                     ])
                 },
             );
-            let after_nulls =
-                (direction == Direction::Desc && first.nullable).then(|| source.is_null());
+            let after_nulls = first.nulls_follow().then(|| source.is_null());
             (Some(Filter::all([bound, within])), after_nulls)
         }
     }
@@ -355,6 +413,12 @@ fn text_of(value: &Value) -> Option<String> {
 
 impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     /// The search and filters, on `builder`.
+    ///
+    /// The search reads the columns marked `search` that the person may use. In
+    /// [`SearchMode::Words`] it goes through the full-text index over all of them; when one
+    /// of them is taken away from the person ([`without_columns`](Self::without_columns)),
+    /// no index covers the columns left, so it reads those the way
+    /// [`SearchMode::Contains`] does.
     pub fn apply<M: Model>(&self, mut builder: Builder<M>) -> Builder<M> {
         if let Some(q) = &self.state.q {
             // Only the columns marked `search` that this person may use.
@@ -363,7 +427,18 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
                 .enumerate()
                 .filter(|(at, column)| column.search && !self.is_withdrawn(*at))
                 .map(|(_, column)| column);
-            match self.search_mode {
+            // A full-text index covers every searched column, in their order: one taken away
+            // leaves a list no index covers.
+            let whole = R::COLUMNS
+                .iter()
+                .enumerate()
+                .all(|(at, column)| !column.search || !self.is_withdrawn(at));
+            let mode = if whole {
+                self.search_mode
+            } else {
+                SearchMode::Contains
+            };
+            match mode {
                 SearchMode::Contains => {
                     let searches: Vec<Filter> = searched
                         .map(|column| {
@@ -394,7 +469,7 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     }
 
     /// The key as a term of the order.
-    fn key_term<M: Model>(direction: Direction) -> Term {
+    fn key_term<M: Model>(direction: Direction, dialect: Option<Dialect>) -> Term {
         let key = M::meta().key_column();
         Term {
             source: key,
@@ -402,11 +477,13 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
             kind: R::CONFIG.key_kind,
             nullable: false,
             direction,
+            table: own_table::<M>(key, dialect),
+            nulls: Nulls::Never,
         }
     }
 
     /// The order's terms, the key last.
-    fn terms<M: Model>(&self) -> Vec<Term> {
+    fn terms<M: Model>(&self, dialect: Option<Dialect>) -> Vec<Term> {
         let mut terms: Vec<Term> = self
             .state
             .sort
@@ -420,13 +497,19 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
                     kind: column.kind,
                     nullable: column.nullable,
                     direction: *direction,
+                    table: own_table::<M>(column.source, dialect),
+                    nulls: if column.nullable {
+                        Nulls::Smallest
+                    } else {
+                        Nulls::Never
+                    },
                 }
             })
             .collect();
         let key = M::meta().key_column();
         let last = terms.last().map_or(Direction::Asc, |term| term.direction);
         if !terms.iter().any(|term| term.field == key) {
-            terms.push(Self::key_term::<M>(last));
+            terms.push(Self::key_term::<M>(last, dialect));
         }
         terms
     }
@@ -466,8 +549,8 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     {
         let dialect = exec.target(Access::Read).await?.dialect();
         let filtered = self.apply(builder);
-        let terms = self.terms::<M>();
-        let total = self.count_rows(filtered.clone(), exec).await?;
+        let terms = self.terms::<M>(dialect);
+        let total = self.count_rows(filtered.clone(), exec, dialect).await?;
         let version = self.version_of(filtered.clone(), exec).await?;
         let mut page = if R::CONFIG.cursor {
             self.cursor_page(filtered, exec, dialect, &terms, total, map)
@@ -484,6 +567,7 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         &self,
         filtered: Builder<M>,
         exec: &E,
+        dialect: Option<Dialect>,
     ) -> Result<Total> {
         let count = if self.state.count {
             Count::Exact
@@ -494,10 +578,10 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
             Count::Exact => Total::Exact(filtered.count(exec).await?),
             Count::None => Total::Unknown,
             Count::Capped(cap) => {
-                let key = M::meta().key_column();
+                let key = Self::key_term::<M>(Direction::Asc, dialect).column();
                 let bounded = filtered
                     .reorder()
-                    .select([key])
+                    .select([key.into_owned()])
                     .limit(cap.saturating_add(1));
                 let counted = navree_orm::TableBuilder::from_sub(bounded, "counted")
                     .count(exec)
@@ -622,8 +706,12 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
             && matches!(dialect, Some(Dialect::Postgres | Dialect::Sqlite))
             && terms.iter().all(|term| !term.source.contains('.'))
         {
-            let key = M::meta().key_column();
-            let keys = ordered.clone().select([key]).offset(skip).limit(take);
+            let key = Self::key_term::<M>(Direction::Asc, dialect).column();
+            let keys = ordered
+                .clone()
+                .select([key.clone().into_owned()])
+                .offset(skip)
+                .limit(take);
             return Ok(Self::ordered(terms, dialect, filtered)
                 .where_(col(key).in_subquery(keys))
                 .get(exec)
@@ -825,7 +913,11 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     {
         let dialect = exec.target(Access::Read).await?.dialect();
         let filtered = self.apply(builder);
-        let terms = walk_order(self.terms::<M>(), Self::key_term::<M>(Direction::Asc));
+        let terms = walk_order(
+            self.terms::<M>(dialect),
+            Self::key_term::<M>(Direction::Asc, dialect),
+            dialect,
+        );
         let mut written: u64 = 0;
         let mut position: Option<Vec<Value>> = None;
         while written < limit {
@@ -909,12 +1001,30 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
 /// position in it can be found again by the values of its columns, and the key alone
 /// when a term is a column of a joined table. Such a position can't be found again
 /// without reading from the start, which is what paging by `OFFSET` does.
-fn walk_order(terms: Vec<Term>, key: Term) -> Vec<Term> {
+///
+/// An export reads every row, so it goes on from a row with NULL in an order column too,
+/// whatever the column says it holds: each term knows where its store puts NULL. A
+/// column that says it can hold NULL is ordered with NULL as the smallest value on every
+/// store; one that says it can't is ordered as the store orders it, which is NULL as the
+/// smallest value on MySQL, SQLite and MongoDB and as the largest on PostgreSQL.
+fn walk_order(terms: Vec<Term>, key: Term, dialect: Option<Dialect>) -> Vec<Term> {
     if terms.iter().any(|term| term.source.contains('.')) {
-        vec![key]
-    } else {
-        terms
+        return vec![key];
     }
+    terms
+        .into_iter()
+        .map(|term| {
+            if term.field == key.field {
+                return term;
+            }
+            let nulls = if !term.nullable && dialect == Some(Dialect::Postgres) {
+                Nulls::Largest
+            } else {
+                Nulls::Smallest
+            };
+            Term { nulls, ..term }
+        })
+        .collect()
 }
 
 /// What takes the rows of an export, a chunk at a time.
@@ -1425,6 +1535,8 @@ mod tests {
             kind: ValueKind::Text,
             nullable: false,
             direction,
+            table: None,
+            nulls: Nulls::Never,
         };
         let key = Term {
             source: "id",
@@ -1432,14 +1544,125 @@ mod tests {
             kind: ValueKind::Int,
             nullable: false,
             direction: Direction::Asc,
+            table: Some("deals"),
+            nulls: Nulls::Never,
         };
-        let own = walk_order(vec![term("title", Direction::Desc), key], key);
+        let own = walk_order(vec![term("title", Direction::Desc), key], key, None);
         let sources: Vec<&str> = own.iter().map(|term| term.source).collect();
         assert_eq!(sources, ["title", "id"], "the page's own order is kept");
-        let joined = walk_order(vec![term("companies.name", Direction::Desc), key], key);
+        let joined = walk_order(
+            vec![term("companies.name", Direction::Desc), key],
+            key,
+            None,
+        );
         assert_eq!(joined.len(), 1);
         assert_eq!(joined[0].source, "id");
         assert_eq!(joined[0].direction, Direction::Asc);
+        // The key is named with its table, so a joined table's `id` is not it.
+        assert_eq!(joined[0].column(), "deals.id");
+    }
+
+    /// The key and every column of the table being read carry the table's name in the
+    /// query; a column of a joined table carries its own, and a name selected under an alias
+    /// or a field of a document carries none.
+    #[test]
+    fn the_columns_of_the_table_being_read_are_named_with_it() {
+        let term = |source: &'static str, table| Term {
+            source,
+            field: source,
+            kind: ValueKind::Text,
+            nullable: false,
+            direction: Direction::Asc,
+            table,
+            nulls: Nulls::Never,
+        };
+        assert_eq!(term("title", Some("deals")).column(), "deals.title");
+        assert_eq!(
+            term("companies.name", Some("deals")).column(),
+            "companies.name"
+        );
+        assert_eq!(term("title", None).column(), "title");
+        assert_eq!(
+            own_table::<SavedViewModel>("id", Some(Dialect::MySql)),
+            Some("navree_ui_table_views")
+        );
+        assert_eq!(
+            own_table::<SavedViewModel>("owner", Some(Dialect::Postgres)),
+            Some("navree_ui_table_views")
+        );
+        assert_eq!(
+            own_table::<SavedViewModel>("company_name", Some(Dialect::Sqlite)),
+            None,
+            "not a column of the table: an alias the query selects"
+        );
+        assert_eq!(
+            own_table::<SavedViewModel>("other.owner", Some(Dialect::Sqlite)),
+            None
+        );
+        assert_eq!(own_table::<SavedViewDocument>("_id", None), None);
+    }
+
+    /// Where an export reads on from a row with NULL in an order column: past it in the
+    /// order, on each store, whatever the column says it holds.
+    #[test]
+    fn an_export_knows_where_each_store_puts_null() {
+        let term = |nullable: bool, direction| Term {
+            source: "city",
+            field: "city",
+            kind: ValueKind::Text,
+            nullable,
+            direction,
+            table: None,
+            nulls: if nullable {
+                Nulls::Smallest
+            } else {
+                Nulls::Never
+            },
+        };
+        let key = Term {
+            source: "id",
+            field: "id",
+            kind: ValueKind::Int,
+            nullable: false,
+            direction: Direction::Asc,
+            table: None,
+            nulls: Nulls::Never,
+        };
+        let nulls_of = |nullable: bool, dialect: Option<Dialect>| {
+            walk_order(vec![term(nullable, Direction::Asc), key], key, dialect)[0].nulls
+        };
+        // Said to hold NULL: the smallest value everywhere, as the order spells it.
+        for dialect in [
+            Some(Dialect::Postgres),
+            Some(Dialect::MySql),
+            Some(Dialect::Sqlite),
+            None,
+        ] {
+            assert_eq!(nulls_of(true, dialect), Nulls::Smallest, "{dialect:?}");
+        }
+        // Said to hold none: where the store puts it by itself.
+        assert_eq!(nulls_of(false, Some(Dialect::Postgres)), Nulls::Largest);
+        assert_eq!(nulls_of(false, Some(Dialect::MySql)), Nulls::Smallest);
+        assert_eq!(nulls_of(false, Some(Dialect::Sqlite)), Nulls::Smallest);
+        assert_eq!(nulls_of(false, None), Nulls::Smallest);
+        // The key holds none.
+        assert_eq!(
+            walk_order(vec![term(true, Direction::Asc), key], key, None)[1].nulls,
+            Nulls::Never
+        );
+        // NULL comes after the values: going down when it is the smallest, going up when it
+        // is the largest.
+        let with = |nulls, direction| Term {
+            nulls,
+            ..term(false, direction)
+        };
+        assert!(!with(Nulls::Smallest, Direction::Asc).nulls_after());
+        assert!(with(Nulls::Smallest, Direction::Desc).nulls_after());
+        assert!(with(Nulls::Largest, Direction::Asc).nulls_after());
+        assert!(!with(Nulls::Largest, Direction::Desc).nulls_after());
+        // A column that holds none has no NULL to read past.
+        assert!(!with(Nulls::Never, Direction::Desc).nulls_follow());
+        assert!(with(Nulls::Largest, Direction::Asc).nulls_follow());
     }
 
     #[test]

@@ -832,6 +832,35 @@ async fn a_list_with_no_row_is_not_locked_silently() {
     }
 }
 
+/// A scope whose value is NULL takes the rows where the column is NULL, in the lock as in
+/// the renewal: `= NULL` would match none, and every list would be missing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_scope_on_null_locks_the_lists_whose_column_is_null() {
+    for server in servers() {
+        let Some((test, db)) = fresh(server, None).await else {
+            continue;
+        };
+        seed(&db, &[("todo", None, 1), ("doing", Some(3), 1)]).await;
+        let no_limit = ListScope::new().and(&Lane::MAX_ITEMS, None::<i64>);
+        let ran =
+            sortable::transaction_scoped(&db, &Lane::KEY, vec!["todo"], &no_limit, |_uow| async {
+                Ok(7)
+            })
+            .await
+            .expect("todo has no limit");
+        assert_eq!(ran, 7, "{server}");
+        // A lane with a limit is not in the scope.
+        let missing =
+            sortable::transaction_scoped(&db, &Lane::KEY, vec!["doing"], &no_limit, |_uow| async {
+                Ok(())
+            })
+            .await
+            .expect_err("doing has a limit");
+        assert!(missing.is_not_found(), "{server}: {missing}");
+        done(test, db).await;
+    }
+}
+
 /// The toolkit's transaction runs again when the database asks for it (a deadlock,
 /// a serialization failure, a lock not free in time), at most three times; it
 /// gives up on any other error at once; and it is READ COMMITTED whatever the
