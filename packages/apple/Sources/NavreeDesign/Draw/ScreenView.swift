@@ -475,10 +475,17 @@ struct SearchModifier: ViewModifier {
     let query: QueryForm?
     let placement: SearchPlacement
     @State private var text: String?
+    /// Whether the screen has appeared, for a field that waits for it.
+    @State private var appeared = false
     @Environment(\.navree) private var context
 
     func body(content: Content) -> some View {
-        if let query, let name = query.searchName {
+        if query?.searchName != nil, PresentationRules.searchWaitsForFirstAppearance(placement), !appeared {
+            content.onAppear {
+                // After the bar's first layout, not within it.
+                DispatchQueue.main.async { appeared = true }
+            }
+        } else if let query, let name = query.searchName {
             let binding = Binding(get: { text ?? query.searchValue }, set: { text = $0 })
             content
                 .searchable(text: binding, placement: Self.placement(placement), prompt: query.searchPrompt ?? "Search")

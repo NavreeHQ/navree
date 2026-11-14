@@ -80,6 +80,11 @@ import Testing
     #expect(PresentationRules.search(width: .regular) == .toolbar)
 }
 
+@Test func aFieldUnderTheTitleJoinsTheBarOnceTheScreenHasAppearedSoARootScreenOpensLarge() {
+    #expect(PresentationRules.searchWaitsForFirstAppearance(.underTitle))
+    #expect(!PresentationRules.searchWaitsForFirstAppearance(.toolbar))
+}
+
 @Test func aMediumSheetRestsAtHalfHeightAndAFullOneCoversTheScreen() {
     #expect(PresentationRules.sheet(.medium) == .resizable)
     #expect(PresentationRules.sheet(.large) == .large)
