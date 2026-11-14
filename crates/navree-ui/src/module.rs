@@ -498,30 +498,17 @@ impl Injectable for Assets {
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
             let gate = r.get::<UiGate>().await?;
-            let scripts = r
-                .app()
-                .contributions::<crate::IslandScript>()
-                .into_iter()
-                .map(|contributed| *contributed.value);
-            let sheets = r
-                .app()
-                .contributions::<crate::AppSheet>()
-                .into_iter()
-                .map(|contributed| *contributed.value);
-            let fonts = r
-                .app()
-                .contributions::<crate::AppFont>()
-                .into_iter()
-                .map(|contributed| *contributed.value);
-            let images = r
-                .app()
-                .contributions::<crate::AppImage>()
-                .into_iter()
-                .map(|contributed| *contributed.value);
+            let (islands, app_files) =
+                crate::app_files::checked_files(&r.app()).map_err(|message| {
+                    KernelError::Construction {
+                        provider: std::any::type_name::<Assets>().to_owned(),
+                        source: message.into(),
+                    }
+                })?;
             Ok(Self {
                 wanted: gate.0.get().copied().unwrap_or(false),
-                islands: Arc::new(crate::island::served(scripts)),
-                app_files: Arc::new(crate::app_files::served(sheets, fonts, images)),
+                islands: Arc::new(islands),
+                app_files: Arc::new(app_files),
             })
         })
     }
