@@ -61,10 +61,14 @@ pub async fn permitted(
 /// [`m.permissions(..)`](ModuleBuilderPermissionsExt::permissions) and
 /// [`permission_catalog`] lists them. Describing a permission grants it to
 /// nobody: the app's own roles and configuration decide who holds it. The
-/// roles that hold every permission hold it too, from the moment the module
-/// is in the app: a workspace's `owner` (`all.*`) in that workspace, and the
-/// app's super-admin role. So a plugin does not guard a staff-only action
-/// with a permission a workspace's owner holds.
+/// roles that already hold every permission hold it too, from the moment the
+/// module is in the app: a workspace's `owner` (`all.*`) in that workspace,
+/// an organization's `owner` in each of its workspaces (with organizations
+/// on, it enters them as their `owner`), the app's super-admin role, and any
+/// role the app grants `all.*`. A role granted one action on `all` holds that
+/// action of every permission: `all.read` holds `announcements.read`. So a
+/// plugin does not guard a staff-only action with a permission a workspace's
+/// owner holds.
 ///
 /// ```
 /// use navree_contracts::{ModuleBuilderPermissionsExt, Permission};
@@ -104,8 +108,10 @@ pub trait ModuleBuilderPermissionsExt {
     /// Describes permissions; it grants none. A route that requires one says
     /// so with `RouteDef::permissions`, and a person holds one only when the
     /// app grants it: a workspace role's list under `workspace.roles` in the
-    /// app's configuration, or a role of navree-access. A workspace's owner
-    /// and the app's super-admin role hold every permission.
+    /// app's configuration, or a role of navree-access. The roles that
+    /// already hold every permission (a workspace's or an organization's
+    /// owner, the super-admin role, a role granted `all.*`) hold these too;
+    /// [`Permission`] lists them.
     ///
     /// The list is copied. A name given twice keeps its first description,
     /// and an empty list adds nothing. [`permission_catalog`] lists what
