@@ -949,7 +949,10 @@ mod tests {
             ("/ü?ü", "https://shop.example/%C3%BC?%C3%BC"),
             // An escape stays as it was; a `%` that is not one is written as one.
             ("/a%20b?c=%41", "https://shop.example/a%20b?c=%41"),
-            ("/100%?a=%zz&b=%4", "https://shop.example/100%25?a=%25zz&b=%254"),
+            (
+                "/100%?a=%zz&b=%4",
+                "https://shop.example/100%25?a=%25zz&b=%254",
+            ),
         ] {
             assert_eq!(whole(&origin, inside).as_deref(), Some(sent), "{inside:?}");
         }
@@ -1013,7 +1016,10 @@ mod tests {
             ("/app/signed-in", Some("shop")),
             ("", Some("shop")),
         ] {
-            assert!(!origin.callback_allowed(refused.0, refused.1), "{refused:?}");
+            assert!(
+                !origin.callback_allowed(refused.0, refused.1),
+                "{refused:?}"
+            );
         }
     }
 
