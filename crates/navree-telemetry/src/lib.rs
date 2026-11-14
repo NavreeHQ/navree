@@ -13,10 +13,11 @@
 //!   modules' [`AiCall`] (navree-ai), [`BroadcastSent`] (navree-realtime),
 //!   [`StorageOp`] (navree-storage), [`WebhookDelivery`] (navree-webhooks),
 //!   [`SearchQueried`] (navree-search), [`SignInEvent`] (navree-auth) and
-//!   [`UiOperation`] (navree-ui). A sink receives each one as a
-//!   [`TelemetryRecord`]: the event, when it was emitted and the
-//!   [`EventContext`] (request id, job id, trace, user, workspace) it
-//!   happened in.
+//!   [`UiOperation`] (navree-ui); and a module's own [`CustomEvent`]s,
+//!   named with dotted lower-case words (`announcements.published`). A sink
+//!   receives each one as a [`TelemetryRecord`]: the event, when it was
+//!   emitted and the [`EventContext`] (request id, job id, trace, user,
+//!   workspace) it happened in.
 //! - **Sinks** ([`TelemetrySink`]) are `dyn TelemetrySink` multi-bindings,
 //!   registered with [`ModuleBuilderTelemetryExt`]; [`TelemetryModule`]
 //!   collects them into the app's [`Telemetry`] registry when the app boots.
@@ -63,9 +64,10 @@ mod trace;
 
 pub use context::{TelemetryContext, capture_panic_locations, current_trace_id};
 pub use event::{
-    CacheEvent, CacheOperation, EventContext, EventEmitted, EventKind, ExceptionReported,
-    HttpClientRequest, JobFailed, JobProcessed, LogLevel, LogRecord, MailSent, NotificationSent,
-    QueryExecuted, RequestHandled, RequestInfo, ScheduledTaskRan, TelemetryEvent, TelemetryRecord,
+    CacheEvent, CacheOperation, CustomEvent, EventContext, EventEmitted, EventKind,
+    ExceptionReported, HttpClientRequest, JobFailed, JobProcessed, LogLevel, LogRecord, MailSent,
+    NotificationSent, QueryExecuted, RequestHandled, RequestInfo, ScheduledTaskRan, TelemetryEvent,
+    TelemetryRecord,
 };
 pub use module::{ModuleBuilderTelemetryExt, TelemetryModule};
 pub use platform::{
