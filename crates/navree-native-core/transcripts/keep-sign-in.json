@@ -42,9 +42,7 @@
         "changed": [
           {"t":"screen","id":1}
         ],
-        "effects": [
-          {"t":"cache_write","key":"page:https://shop.example/"}
-        ]
+        "effects": []
       }
     },
     {
@@ -160,9 +158,7 @@
         "changed": [
           {"t":"screen","id":1}
         ],
-        "effects": [
-          {"t":"cache_write","key":"page:https://shop.example/"}
-        ]
+        "effects": []
       }
     },
     {

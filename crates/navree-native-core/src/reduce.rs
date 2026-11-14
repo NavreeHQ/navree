@@ -2608,6 +2608,58 @@ mod tests {
         );
     }
 
+    /// In an app where no page allows keeping, opening pages writes nothing
+    /// to the device but the shell.
+    #[test]
+    fn a_page_never_kept_is_never_written_or_taken_away() {
+        let mut config = Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        );
+        config.cache.persist = true;
+        let mut core = Core::new(config);
+        let mut written = Vec::new();
+        let mut note = |update: Update| {
+            written.extend(
+                update
+                    .effects
+                    .into_iter()
+                    .filter_map(|effect| match effect {
+                        Effect::CacheWrite { key, .. } if key != "boot" => Some(key),
+                        _ => None,
+                    }),
+            );
+        };
+        note(core.send(Event::Start));
+        let page = |request: u64| {
+            Event::Response(Response {
+                request,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: include_str!("../transcripts/fixtures/store/orders.json").to_owned(),
+                ..Response::default()
+            })
+        };
+        // The first page answers before what was kept is read.
+        note(core.send(Event::Response(Response {
+            request: 1,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: include_str!("../transcripts/fixtures/store/shell.json").to_owned(),
+            ..Response::default()
+        })));
+        note(core.send(page(2)));
+        note(core.send(Event::Cache {
+            key: "boot".to_owned(),
+            value: None,
+        }));
+        note(core.send(Event::Select { destination: 1 }));
+        note(core.send(page(3)));
+        note(core.send(Event::Select { destination: 2 }));
+        note(core.send(page(4)));
+        assert!(written.is_empty(), "{written:?}");
+    }
+
     #[test]
     fn a_picture_in_the_shell_s_user_menu_is_written_whole() {
         let mut core = Core::new(Config::new(
