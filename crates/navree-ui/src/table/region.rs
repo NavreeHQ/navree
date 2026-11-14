@@ -51,8 +51,10 @@ const REFUSED_SAID: usize = 32;
 /// Says in the log, once for each address, that a source was refused. The part is still
 /// drawn, only never fetched, which is easy to miss: a whole address of the site's own
 /// (`https://example.com/fragments/kpis`) is refused like any other, and is written as a path.
+/// The address is named without its query and fragment, which may hold what no log should.
 fn say_refused(src: &str) {
     static SAID: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    let src = src.split(['?', '#']).next().unwrap_or(src);
     let src = src
         .char_indices()
         .nth(200)
@@ -117,7 +119,7 @@ impl Region {
     /// what goes with a source (fetching after paint, a poll, a feed, a stream) is left out
     /// with it. A region never names another site, nor fetches the page it stands on. A
     /// whole address of the site's own (`https://example.com/fragments/kpis`) is refused like
-    /// any other: write the path. A refused address is named in the log as a warning, once.
+    /// any other: write the path. Such an address is named in the log as a warning, once.
     ///
     /// ```
     /// use std::time::Duration;
