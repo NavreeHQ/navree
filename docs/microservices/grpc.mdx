@@ -309,6 +309,75 @@ impl Deals for DealsGrpc {
 }
 ```
 
+## A server built elsewhere
+
+A crate may give a tonic server that's already built: the generated `DealsServer` around its own implementation of the generated `Deals` trait, written without `#[grpc_service]`. Serve it with `TonicService`, which puts it behind the same call pipeline, and declare its access there:
+
+```rust title="src/deals.rs"
+use navree::grpc::{GrpcMethod, Request, Response, Status, TonicService};
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+
+use pb::deals_server::{Deals, DealsServer};
+
+/// A crate's own implementation of the generated `Deals` trait.
+pub struct KhataDeals;
+
+#[tonic::async_trait]
+impl Deals for KhataDeals {
+    async fn get_deal(
+        &self,
+        request: Request<pb::GetDealRequest>,
+    ) -> Result<Response<pb::Deal>, Status> {
+        Ok(Response::new(pb::Deal {
+            id: request.into_inner().id,
+            title: "Ludhiana renewal".into(),
+            ..pb::Deal::default()
+        }))
+    }
+
+    async fn list_deals(
+        &self,
+        _request: Request<pb::ListDealsRequest>,
+    ) -> Result<Response<pb::ListDealsResponse>, Status> {
+        Ok(Response::new(pb::ListDealsResponse::default()))
+    }
+
+    async fn move_deal(
+        &self,
+        _request: Request<pb::MoveDealRequest>,
+    ) -> Result<Response<pb::Deal>, Status> {
+        Err(Status::unimplemented("deals move in the CRM"))
+    }
+
+    // `watch_deals` and any other method of the trait, as it declares them.
+}
+
+/// Serves the generated server behind the app's access checks: every
+/// method needs a signed-in caller, except `GetDeal`.
+pub struct KhataDealsModule;
+
+impl Module for KhataDealsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.tonic_service(
+            TonicService::new(DealsServer::new(KhataDeals))
+                .authenticated()
+                .method(GrpcMethod::new("get_deal").public()),
+        );
+    }
+}
+```
+
+`use navree::plugin::prelude::*;` brings `m.tonic_service(..)`. Add `KhataDealsModule` to an app with `GrpcModule`: a guest's `GetDeal` is served, a guest's `ListDeals` is `UNAUTHENTICATED`.
+
+- **Access.** `.public()`, `.authenticated()`, `.roles(..)`, `.permissions(..)`, `.can(action, subject)` and `.guard(..)` on `TonicService` are the service default, for every method without its own declaration. `.method(GrpcMethod::new("get_deal").public())` gives one method its own, which replaces the default, guards included. A call to a method with neither is refused with `PERMISSION_DENIED`, and a path that names no method is `UNIMPLEMENTED`; neither reaches the server.
+- **Method names.** Name a method as the generated server trait spells it: `get_deal` for `GetDeal`, `get_http_status` for `GetHTTPStatus`. Another spelling, such as `GetDeal`, fails the boot, since it would match no call. A typo in that form (`get_deals`) can't be detected, so give the service default the strictest access and loosen it per method.
+- **Checked at boot.** A service with no access declaration (a guard alone is none), a method declared without access or twice, a method whose `can` names a field of the message (a wrapped server's messages aren't read before it runs), and a service named like `GrpcModule`'s own health or reflection service while that one is on fail the boot, as two services of one name do.
+- **The pipeline.** Authentication, the access check, guards, the route authorizer and the deadline run before the server reads a message, so a refused call is answered without reading its messages. The server runs in a unit of work, which commits when its response head is HTTP 200 with no error `grpc-status` and rolls back otherwise; a method that answers with a stream commits when its head is sent. A head that isn't HTTP 200 is answered with the status the gRPC specification gives its HTTP status (503 is `UNAVAILABLE`). Once a call is let in, its request body is no longer held to the read pace of an upload, for every method of the server.
+- **Message limits.** `grpc.max_message_bytes` doesn't reach a server built elsewhere: set its limits on the server before wrapping it, as `DealsServer::new(..).max_decoding_message_size(..)`. tonic's own default decodes at most 4 MiB a message.
+
+See [a tonic service](/docs/plugins/existing-crates/#a-tonic-service) for a plugin that does this.
+
 ## Errors
 
 An `AppError` becomes the gRPC status that means the same thing, with the error's message (`navree::grpc::status_from_error`):

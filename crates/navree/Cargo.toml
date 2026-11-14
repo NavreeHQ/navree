@@ -985,6 +985,10 @@ name = "plugin_collisions"
 required-features = ["http", "queue", "testing", "time", "ui", "view"]
 
 [[test]]
+name = "plugins_docs"
+required-features = ["access", "cache", "db", "helm", "http", "queue", "sqlite", "storage", "testing", "ui", "view", "workspace"]
+
+[[test]]
 name = "production_migrations"
 required-features = ["access", "audit", "auth", "crypto", "db", "directory", "domains", "fleet", "integrations", "lighthouse", "mail", "notify", "queue", "schedule", "session", "settings", "sheets", "sqlite", "sso", "storage", "view", "webhooks", "workflows", "workspace"]
 

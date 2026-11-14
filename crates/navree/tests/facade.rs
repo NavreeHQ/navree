@@ -1833,3 +1833,59 @@ fn a_plugin_ships_templates_and_translations_through_the_facade() {
         ]
     );
 }
+
+/// `navree::plugin` brings `ClientModule`, and `navree::plugin::prelude` the mount extension.
+#[test]
+fn the_plugin_module_brings_the_client_module_and_the_mount_extension() {
+    assert!(same::<
+        navree::plugin::ClientModule<String, ()>,
+        navree::config::ClientModule<String, ()>,
+    >());
+    use navree::plugin::prelude::*;
+    struct Ledger;
+    impl Module for Ledger {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.mount(
+                navree::http::Mount::new(
+                    "/khata",
+                    navree::http::AppRouter::from_handler(|| async { "khata" }),
+                )
+                .public(),
+            );
+        }
+    }
+    Navree::app()
+        .module(Ledger)
+        .validate()
+        .expect("a module mounts through the plugin prelude");
+}
+
+/// An app's own `mount` on `ModuleBuilder` stays the one called under `navree::prelude::*`.
+/// In a module of its own, so its trait is not in scope beside the plugin prelude above.
+mod own_mount {
+    use navree::prelude::*;
+
+    trait OwnMount {
+        fn mount(&mut self, path: &'static str) -> &mut Self;
+    }
+
+    impl OwnMount for ModuleBuilder {
+        fn mount(&mut self, _path: &'static str) -> &mut Self {
+            self
+        }
+    }
+
+    #[test]
+    fn an_apps_own_mount_method_stays_unambiguous_under_the_prelude() {
+        struct Ledger;
+        impl Module for Ledger {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.mount("/khata");
+            }
+        }
+        Navree::app()
+            .module(Ledger)
+            .validate()
+            .expect("compiles and registers nothing");
+    }
+}

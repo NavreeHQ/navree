@@ -275,6 +275,8 @@ POST    /webhooks/stripe                                        public  DealsMod
 
 `routes --json` prints the same routes as JSON, with each route's handler (`DealsController::index`, recorded by `#[controller]`), throttle, timeout, body limit, `transactional` flag, audit action and number of guards as well. In code, `navree::http::route_table(&ctx).await` returns the same information as a `Vec<RouteMeta>`.
 
+`routes` lists [mounts](#mounting-a-service-under-a-path) too, one row each among the routes: the method `*` (or the methods the mount names), the path `/khata/{*rest}`, its access and its module. With a mount the last line counts both, as in `13 routes, 1 mounts`, and `routes --json` marks each mount with `"mount": true`. `route_table` returns the routes only: a mount is not a route.
+
 ## Writing controllers by hand
 
 `#[controller]` implements the `Controller` trait, and you can implement it yourself. Each route is a `RouteDef`: a method, a path, a handler (an `async` function or closure whose arguments are extractors) and a builder for everything the attributes declare. Hand-written routes can do two things the attributes can't: set a per-route body limit with `body_limit(bytes)`, and wrap the handler in [Tower layers](/docs/basics/middleware/#a-layer-on-one-route).
@@ -314,6 +316,23 @@ impl Controller for ImportController {
 
 `RouteDef::on(method, path, handler)` builds the handler for exactly that method. The builder methods match the attributes: `public()`, `authenticated()`, `roles(&[..])`, `permissions(&[..])`, `can(action, subject, from)`, `guard(..)`, `throttle(limit, per)`, `timeout(..)`, `transactional()`, `no_compression()`, `page()`, `json_only()`, `audit(..)`, `api(..)`, `name(..)` and `body_limit(..)`. Register the controller like any other, with `controllers = [ImportController]` or `m.controller::<ImportController>()`.
 
+## Mounting a service under a path
+
+A service written with tower alone, such as one a crate gives, answers under a path prefix with `m.mount(Mount::new(prefix, service))`, inside the same pipeline as a route. The mount declares its access as a route does, and the declaration is required:
+
+```rust title="src/ledger.rs"
+use navree::http::{AppRouter, Mount};
+use navree::plugin::prelude::*;
+
+m.mount(
+    Mount::new("/khata", AppRouter::from_handler(entries))
+        .authenticated()
+        .throttle(60, Duration::from_secs(60)),
+);
+```
+
+The prefix is absolute, not under `http.api_prefix`. The service answers `/khata` and every path below it, for every method unless `.methods(&[..])` names some, and sees the path below the prefix as it was sent: `/khata/entries?month=kartik` arrives as `/entries?month=kartik`. Authentication, the access check, guards, the throttle (one budget for the whole mount), the timeout and the body limit run on every request before it. See [a service under a path](/docs/plugins/existing-crates/#a-service-under-a-path) for what the service sees, the paths refused before it and what its errors become.
+
 ## Route checks at boot
 
 Mistakes in routes stop the app before it serves anything. The `#[controller]` macro rejects many of them at compile time:
@@ -331,6 +350,8 @@ When the app boots, `HttpModule` checks every route of every module again, inclu
 ```text wrap
 route `GET /api/v1/reports/team` (ReportsController in module `ReportsModule`) declares roles:admin|manager but no `dyn RouteAuthorizer` is registered (import the access module)
 ```
+
+A [mount](#mounting-a-service-under-a-path) is checked with the routes, by the same rule and texts (naming it `` mount `/khata` in `LedgerModule` ``), and also fails the boot when its prefix isn't a plain path or starts with `/_`, when a route matches the prefix or a path below it (through a `{param}` or `{*rest}` segment too), or when another mount is at, under or above it.
 
 ## What clients see when nothing matches
 

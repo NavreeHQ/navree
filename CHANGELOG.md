@@ -26,6 +26,30 @@ every `@navree/*` package carries the same version.
   start with its namespace, and a plugin needs no `i18n` feature. `i18n:publish <plugin>` copies a
   plugin's translations into `i18n.dir`. `AppSheet`, `AppFont`, `AppImage` and `IslandScript` take
   `.namespace(..)` and are then served as `{namespace}.{name}`.
+- `ClientModule` (`navree::plugin::ClientModule`) makes a client crate a module in a few lines:
+  `ClientModule::<T>::new(name).options::<O>().connect(..)` reads section `O::KEY` at boot (or
+  takes the options in code with `for_root`), builds the client once and exports it as `T` and
+  under its name; `.health(..)` adds a readiness check and `.shutdown(..)` a hook at graceful
+  shutdown. With `.plugin(navree::plugin_info!())` the module belongs to the plugin whose crate
+  defines the options type.
+- `FallibleLayer` (`navree::http::FallibleLayer`) puts a tower layer whose service can fail, such
+  as `tower::timeout::TimeoutLayer`, on `AppRouter::layer`, `Endpoint::layer` and
+  `Router::route_layer`; the service's error answers as a 500 through the app's `m.map_error`
+  mappings.
+- `m.mount(Mount::new("/khata", service).authenticated())` serves any tower service under a path
+  prefix inside the app's pipeline: request id, context, client address, session and CSRF,
+  authentication, the mount's access check on every request, throttle, timeout and body limit.
+  The service sees the rest of the path, as received, below `/`. A mount without an access
+  declaration, a prefix under `/_`, and a prefix that a route or another mount reaches fail the
+  boot. A request with an `Upgrade` header or `CONNECT` is answered 501 without reaching the
+  service. `routes` lists mounts. `use navree::plugin::prelude::*;` brings `m.mount`.
+- `TonicService` (`navree::grpc::TonicService`) serves a tonic server built elsewhere, such as a
+  crate's generated `DealsServer`, through `GrpcModule` with the authentication, access checks,
+  guards, deadline and unit of work of a `#[grpc_service]` method, checked before the server
+  reads a message. A method without a declaration of its own or a service default is refused
+  with `PERMISSION_DENIED`, and a service with no declaration fails the boot, as does a method
+  declared under another name than the one the generated server trait spells (`GetDeal` for
+  `get_deal`). `use navree::plugin::prelude::*;` brings `m.tonic_service`.
 
 ### Changed
 

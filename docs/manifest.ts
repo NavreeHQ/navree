@@ -591,6 +591,12 @@ export const sections: DocsSection[] = [
     ],
   },
   {
+    slug: "plugins",
+    title: "Plugins",
+    description: "Package a feature as a crate an app adds with one command, and connect existing Rust crates to an app.",
+    pages: ["existing-crates"],
+  },
+  {
     slug: "tools",
     title: "Tools",
     description: "The first-party tools: Lighthouse, Logbook, Fleet and Helm run inside your app, Harbor deploys it and Dock runs its local services.",

@@ -27,11 +27,17 @@ pub use navree_kernel::{
 #[cfg(feature = "view")]
 pub use navree_view::TemplateDir;
 
+pub use navree_config::ClientModule;
+
 /// The `ModuleBuilder` extension traits of plugins, imported as `_`. They are
 /// not in `navree::prelude`, so a glob import of it never makes an app's own
 /// method of the same name ambiguous.
 pub mod prelude {
     pub use navree_contracts::ModuleBuilderLocalesExt as _;
+    #[cfg(feature = "grpc")]
+    pub use navree_grpc::ModuleBuilderTonicExt as _;
+    #[cfg(feature = "http")]
+    pub use navree_http::ModuleBuilderMountExt as _;
     #[cfg(feature = "view")]
     pub use navree_view::ModuleBuilderPluginTemplatesExt as _;
 }
