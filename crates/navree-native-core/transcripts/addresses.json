@@ -1,0 +1,184 @@
+{
+  "about": "Addresses are read as they are and never repaired. What does not read leads nowhere; another site opens outside, written again from what was read; and what a client is asked to fetch is a whole address on the app's origin. An id the server chose goes in a header written as visible ASCII, and the newer app is offered only at an https address.",
+  "steps": [
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-routes.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "A page whose region has an id in Devanagari. The region is asked for with the id in its header, each byte of its UTF-8 written as `%` and two hex digits.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/figures-hi.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/fragments/figures","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","%E0%A4%86%E0%A4%82%E0%A4%95%E0%A4%A1%E0%A4%BC%E0%A5%87"]],"timeout_ms":15000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/regions/आंकड़े/loading","is":true}
+      ]
+    },
+    {
+      "note": "An address with a wide space in front of it does not read: nothing happens.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"　//evil.example/x"}},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Nor one with a plain space in front of it.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":" /orders"}},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "A path that starts with two slashes once its dot segments are taken out does not read.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/a/..//evil.example/x"}},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"https://shop.example//evil.example/x?a=b://c"}},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Nor an address with a name before its host.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"https://shop.example@evil.example/"}},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Another site opens outside, written again from what was read.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"//Evil.Example/x?a=b://c"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"open_url","url":"https://evil.example/x?a=b://c"}
+        ]
+      }
+    },
+    {
+      "note": "A query that holds `://` is a query like any other: the page is asked for at its whole address.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/products?back=https://shop.example/"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/products?back=https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/2/url","is":"/products?back=https://shop.example/"}
+      ]
+    },
+    {
+      "note": "The page's answer is a redirect to an address with a wide space in front of it. It does not read, so it is not followed: the page failed.",
+      "send": {"t":"response","request":4,"status":302,"location":"　//evil.example/x"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/2/failure","is":"server"},
+        {"at":"/screens/2/loading","is":false}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"/orders/7"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/orders/7","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "A redirect to a path that starts with two slashes once cleaned is not followed either.",
+      "send": {"t":"response","request":5,"status":303,"location":"/.//evil.example/x"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/3/failure","is":"server"}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"/old"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/old","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "An answer asks for a newer app at an address that is not https. The app is too old all the same, and offers nothing to open.",
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/upgrade-not-https.json",
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/stage","is":"upgrade"},
+        {"at":"/upgrade/url","is":""}
+      ]
+    },
+    {
+      "note": "The person agrees, and nothing is opened.",
+      "send": {"t":"open_upgrade"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    }
+  ]
+}
