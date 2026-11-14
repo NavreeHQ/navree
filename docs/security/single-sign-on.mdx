@@ -176,7 +176,7 @@ The management routes need the permission `sso.manage` (`MANAGE_PERMISSION`), wh
 
 A taken or reserved slug, settings without metadata or with metadata that doesn't parse, a metadata URL or issuer that isn't `https`, rules that grant the `owner` role, and an owner that doesn't exist are 400s with field errors (`errors.slug`, `errors["settings.metadata_xml"]`, `errors.owner`, ...). Every change is written through a record in the unit of work, so the [audit log](/docs/security/audit-log/) records it (client secrets only as ciphertext).
 
-The management routes are for the app's staff: they need `sso.manage` app-wide and accept every setting, `allow_unverified_emails` included.
+The management routes are for the app's staff: they need `sso.manage` app-wide and accept every setting, `owner` and `allow_unverified_emails` included. Grant `sso.manage` app-wide only to your own staff: whoever holds it can create a connection owned by the app.
 
 To let workspace administrators manage their own connection, mount your own routes on the `Sso` service (see [Using the Sso service](#using-the-sso-service)).
 
@@ -482,7 +482,7 @@ impl WorkspaceSsoController {
 }
 ```
 
-A page for a workspace's administrators sets `owner` itself (`SsoOwner::Workspace(current)`), never from the request, and builds `NewConnection` and `ConnectionUpdate` itself, copying only the fields you let them change: never pass the request's `provisioning` through. Before `update_connection`, `delete_connection`, `add_domain` or `remove_domain`, it checks that the connection's `owner` is that workspace (`connection(key)?.owner`). It never calls `mark_domain_verified` for a customer: domains are verified by DNS (`verify_domain`).
+A page for a workspace's administrators sets `owner` itself (`SsoOwner::Workspace(current)`), never from the request, and builds `NewConnection` and `ConnectionUpdate` itself, copying only the fields you let them change: never pass the request's `provisioning` through. Before `update_connection`, `delete_connection` or `add_domain`, it checks that the connection's `owner` is that workspace (`connection(key)?.owner`). `verify_domain` and `remove_domain` take a domain's id: before either, the page looks the domain up among `domains(key)` of a connection the workspace owns, and refuses an id it doesn't find there. It never calls `mark_domain_verified` for a customer: domains are verified by DNS (`verify_domain`). The sign-in rule goes by the owner stored on the connection, so a connection a customer could create as `SsoOwner::App`, or change without these checks, keeps `allow_unverified_emails` working: never let a customer choose the owner.
 
 | Method | Does |
 |---|---|
