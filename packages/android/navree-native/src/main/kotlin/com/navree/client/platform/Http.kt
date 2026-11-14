@@ -48,11 +48,41 @@ class WebViewCookies(private val manager: () -> CookieManager = { CookieManager.
         return header.split(';').mapNotNull { Cookie.parse(url, it.trim()) }
     }
 
-    /** Every cookie of the store gone: the session ended on this device. */
+    /**
+     * Every cookie of the store gone: the session ended on this device. Call
+     * on a thread with a looper (the main thread): [done] runs on it once the
+     * store says they are gone.
+     */
     fun clear(done: () -> Unit = {}) {
-        val store = manager()
-        store.removeAllCookies { done() }
-        store.flush()
+        manager().removeAllCookies { done() }
+    }
+
+    /** Writes the store to disk now. It blocks while it does: not on the main thread. */
+    fun flush() {
+        manager().flush()
+    }
+}
+
+/** The `Cookie` header the store has for an address, or null when it has none. */
+fun cookieHeader(jar: CookieJar, url: HttpUrl): String? =
+    jar.loadForRequest(url).takeIf { it.isNotEmpty() }?.joinToString("; ") { "${it.name}=${it.value}" }
+
+/** The number of the session a request was made for (see [StoredState]): its cookies are kept only for that session. */
+data class Session(val number: Long)
+
+/**
+ * Keeps the cookies an answer sets, in the store's turn and only while the
+ * session the request was made for is still the one on the device: a late
+ * answer of a session that has ended brings none of its cookies back.
+ */
+class SessionCookies(private val state: StoredState, private val jar: CookieJar) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        val response = chain.proceed(request)
+        val session = request.tag(Session::class.java) ?: return response
+        val cookies = Cookie.parseAll(request.url, response.headers)
+        if (cookies.isNotEmpty()) state.write(session.number) { jar.saveFromResponse(request.url, cookies) }
+        return response
     }
 }
 
@@ -84,16 +114,18 @@ fun connectionSpecs(loopbackHttp: Boolean): List<ConnectionSpec> =
     if (loopbackHttp) listOf(ConnectionSpec.MODERN_TLS, ConnectionSpec.CLEARTEXT) else listOf(ConnectionSpec.MODERN_TLS)
 
 /**
- * The request a `fetch` effect asks for, or null when it cannot be sent: an
- * address that is not one of the app's origins, a header value HTTP cannot
- * carry (a line break, a character outside ASCII), a method that cannot have
- * the body it was given. The caller answers null as a failed request.
+ * The request a `fetch` effect asks for, with the store's cookies as they are
+ * now, or null when it cannot be sent: an address that is not one of the
+ * app's origins, a header value HTTP cannot carry (a line break, a character
+ * outside ASCII), a method that cannot have the body it was given. The caller
+ * answers null as a failed request.
  */
 fun fetchRequest(
     effect: Effect.Fetch,
     origins: Origins,
     cookies: CookieJar,
     files: (String) -> RequestBody? = { null },
+    session: Long? = null,
 ): Request? = try {
     val url = effect.url.takeIf(origins::ours)?.toHttpUrlOrNull()
     if (url == null) {
@@ -101,7 +133,9 @@ fun fetchRequest(
     } else {
         val builder = Request.Builder().url(url)
         for ((name, value) in effect.headers) builder.header(name, value)
+        cookieHeader(cookies, url)?.let { builder.header("Cookie", it) }
         if (effect.xsrf) xsrfToken(cookies, url)?.let { builder.header("x-xsrf-token", it) }
+        session?.let { builder.tag(Session::class.java, Session(it)) }
         val method = effect.method.uppercase()
         val type = effect.headers.firstOrNull { it.first.equals("content-type", ignoreCase = true) }?.second
         val body: RequestBody? = when (val sent = effect.body) {
@@ -156,29 +190,46 @@ class OriginGuard(private val allowed: (String) -> Boolean) : Interceptor {
  * The core decides which addresses are asked; the platform checks each again
  * ([Origins.ours]) and answers one it refuses, or a request that cannot be
  * built, as a failed request, the failure the core already understands.
+ *
+ * Each request reads its cookies in the store's turn ([StoredState]), so one
+ * the core asked for before the end of a session goes out with that session's
+ * cookies, and one asked for after goes out only once the wipe has finished.
  */
 class CoreHttp(
     val cookies: CookieJar,
     private val origins: Origins,
     loopbackHttp: Boolean = false,
+    private val state: StoredState = StoredState { it.run() },
     private val files: (String) -> RequestBody? = { null },
     /** Where an answer goes: posted to the thread the core is driven on. */
     private val answer: (JsonObject) -> Unit,
 ) {
     val client: OkHttpClient = OkHttpClient.Builder()
-        .cookieJar(cookies)
+        // Cookies are read in the store's turn when a request is made, and kept by SessionCookies.
+        .cookieJar(CookieJar.NO_COOKIES)
         .followRedirects(false)
         .followSslRedirects(false)
         .connectionSpecs(connectionSpecs(loopbackHttp))
         .addInterceptor(OriginGuard(origins::mayLoad))
+        .addInterceptor(SessionCookies(state, cookies))
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
     private val calls = ConcurrentHashMap<Long, Call>()
 
+    /** Requests the core cancelled before their turn came. */
+    private val cancelled = ConcurrentHashMap.newKeySet<Long>()
+
     fun fetch(effect: Effect.Fetch) {
-        val request = fetchRequest(effect, origins, cookies, files)
+        val session = state.generation
+        state.always {
+            if (!cancelled.remove(effect.request)) send(effect, session)
+        }
+    }
+
+    private fun send(effect: Effect.Fetch, session: Long) {
+        val request = fetchRequest(effect, origins, cookies, files, session)
         val call = try {
             request?.let { client.newCall(it).apply { timeout().timeout(effect.timeoutMs, TimeUnit.MILLISECONDS) } }
         } catch (_: Exception) {
@@ -214,7 +265,8 @@ class CoreHttp(
     }
 
     fun cancel(request: Long) {
-        calls.remove(request)?.cancel()
+        val call = calls.remove(request)
+        if (call == null) cancelled.add(request) else call.cancel()
     }
 
     private fun read(request: Long, response: Response): JsonObject {
