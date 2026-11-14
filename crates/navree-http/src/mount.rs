@@ -77,11 +77,13 @@ const EMPTY_SEGMENT: &str = "Invalid URL: the path has an empty segment";
 /// error of the service answers 500 with the error as its source, which the
 /// app's error mappings (`m.map_error`) see and the log records; one that
 /// comes from the body's limit or the server's read timeout answers 413 or
-/// 408, as the body extractors do. A response the service writes goes out as
-/// written, error statuses included: its status, headers and body are the
-/// service's (a 422 with a plain-text body stays a 422 with that body). The
-/// pipeline adds `X-Request-Id`, and the default security headers where the
-/// service set none.
+/// 408, as the body extractors do. A response below 500 the service writes
+/// goes out as written, a 4xx included: its status, headers and body are the
+/// service's (a 422 with a plain-text body stays a 422 with that body). A 5xx
+/// with no body or a plain-text one takes the app's JSON error shape, its text
+/// logged, never sent; a 5xx with a body of another type goes out as written.
+/// The pipeline adds `X-Request-Id`, and the default security headers where
+/// the service set none.
 ///
 /// The service is built in `register`; it reaches the app's providers through
 /// the `AppContext` in each request's extensions.
@@ -514,10 +516,13 @@ async fn serve_mounted(prefix: &str, service: MountService, mut request: Request
     let limit = BodyLimit::of(request.extensions());
     let request = request.map(|body| Body::new(http_body_util::Limited::new(body, limit)));
     match service.oneshot(request).await {
-        // The service's own answer, error statuses included, goes out as it
-        // wrote it.
         Ok(mut response) => {
-            response.extensions_mut().insert(AsWritten);
+            // An answer below 500 the service writes goes out as written; a
+            // bodyless or plain-text 5xx still takes the app's shape, its text
+            // logged, never sent.
+            if !response.status().is_server_error() {
+                response.extensions_mut().insert(AsWritten);
+            }
             response
         }
         Err(error) => match body_error_in(&*error) {

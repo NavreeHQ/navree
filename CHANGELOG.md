@@ -39,8 +39,9 @@ every `@navree/*` package carries the same version.
 - `m.mount(Mount::new("/khata", service).authenticated())` serves any tower service under a path
   prefix inside the app's pipeline: request id, context, client address, session and CSRF,
   authentication, the mount's access check on every request, throttle, timeout and body limit.
-  The service sees the rest of the path, as received, below `/`, and its answers go out as it
-  wrote them. A mount without an access declaration, a prefix under `/_`, and a prefix that a
+  The service sees the rest of the path, as received, below `/`. A 4xx it writes goes out as
+  written; a 5xx with no body or a plain-text one takes the app's error shape, its text logged,
+  never sent. A mount without an access declaration, a prefix under `/_`, and a prefix that a
   route or another mount reaches fail the boot. A request with an `Upgrade` header or `CONNECT`
   never reaches the service: the mount answers it 501, or the router 405 when `.methods(..)`
   leaves its method out. `routes` lists mounts. `use navree::plugin::prelude::*;` brings
