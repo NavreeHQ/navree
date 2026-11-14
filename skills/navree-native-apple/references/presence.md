@@ -81,13 +81,76 @@ opens a Home Screen quick action.
   menu then), Settings… (⌘,) and Quit (⌘Q). What is chosen opens in the main
   window in front, or in a new one. Before any window has shown the app's
   destinations, the menu offers "Open <App>".
+- `content: .app(StatusWindow(...))`: **the whole app under the item**, for
+  an app in the menu bar only (below).
 - `content: .screen("/today")`, a small window showing one destination, is
   **not built yet**: it needs one session shared by the app's cores. Such an
   item stands nowhere and the app stays in the Dock.
+- `tooltip`: what the item says when the pointer rests on it.
 
 The item is the system's own `NSStatusItem`, made only while the app stands
 in the menu bar. An app that never asks for one has no item at all, not even
-a hidden one.
+a hidden one. (SwiftUI's `MenuBarExtra` is not used: a scene cannot be left
+out by a value known at run time, a `MenuBarExtra` left out of the menu bar
+still makes an item, and it gives no right-click menu.)
+
+## The whole app under the item (an app in the menu bar only)
+
+```swift
+presence: Presence(
+    place: .menuBar,
+    statusItem: StatusItem(
+        image: .symbol("shippingbox"), title: "Charkha", tooltip: "Orders and stock",
+        content: .app(StatusWindow(size: CGSize(width: 400, height: 560), resizable: false, pinned: false, opensAtLaunch: false))
+    )
+)
+```
+
+The build says `LSUIElement`. Then:
+- **A left click** opens a window under the item, centred on it and kept on
+  the screen, as the system's own items open theirs: no arrow, no window
+  buttons, the system's window material, the item shown pressed while it is
+  open. A click anywhere else, or the app going to the background, closes
+  it, unless `pinned` (then it stays open above other windows). It takes the
+  keyboard, so forms can be typed in, and holds the app's sheets, questions
+  and menus as any window does.
+- **It holds the whole app**: the app's one shell and session, with its
+  navigation, sheets, forms, search, menus, notices, web screens and the
+  person's menu. There is no second session: the window *is* the app's.
+- **Laid out as a compact window**: the core is told the width is compact,
+  so each destination is one column (a list pushes its detail, with the back
+  button in the bar), and the destinations stand in the Mac's own sidebar,
+  folded away behind the toolbar's sidebar button, as a narrow window of
+  Notes or Mail folds its sidebar. Not the iPhone's tab bar at the foot (no
+  Mac app has one), and not a segmented control in the bar: Apple's guidelines
+  put navigation among an app's sections in a sidebar (Sidebars), and keep
+  tab views and segmented controls for closely related content and choices
+  (Tab views, Segmented controls). The bar shows the screen's title, since the
+  window holds a whole app.
+- **A right click** (or a click with Control held) opens the system's menu:
+  the destinations, the person's menu, Open in Window, Settings…, About,
+  Quit. `MenuBarExtra` has no right click, which is why the item is the
+  system's `NSStatusItem` with a panel (`NSPanel` hosting the shell).
+- **Open in Window** (the right-click menu; ⌘N and File > Open in Window
+  while the app's menus show) moves the same shell, what it shows included,
+  into a full window, laid out by that window's width, with the app in the
+  Dock and its menus while the window is open (`LSUIElement` apps come into
+  the Dock only then); the window under the item closes. Closing the full
+  window puts the app back under its item and out of the Dock. Opening the
+  app again from the Finder, the Dock menu's New Window, and a notification
+  clicked while nothing is open lead to the same place.
+- `StatusWindow`: `size` (400 × 560 points by default), `minimumSize`,
+  `resizable`, `pinned`, `opensAtLaunch`. No background or material of the
+  app's own: the window keeps the system's.
+- The item's `title` is its label, `tooltip` its tooltip; the count a server
+  sets with `set_badge` stands beside the image while `showsCount` is on.
+- From code: `PresenceModel.shared.showStatusWindow()`, `hideStatusWindow()`,
+  `openInWindow()`, and `statusWindowShown` (observable) for whether it is open.
+- In both places (`.both`) such an item would hold a second session beside
+  the Dock app's windows; until the app's cores share one session, `.both`
+  is not offered for it and stands as the menu bar only.
+- The core starts when the window first opens (or at launch with
+  `opensAtLaunch`): until then the server's `set_badge` cannot arrive.
 
 ## The count on the app's icon
 
@@ -171,10 +234,15 @@ pane offers "Allow in System Settings…".
 On a Mac (macOS 27.2), the demo pictures and logs itself
 (`-NavreePictures <folder> -NavreeSteps …`, steps `presence`, `place:`,
 `status:`, `statusmenu`, `statuschoose:`, `badge:`, `dockmenu`, `dockopen:`,
-`reopen`, `close`, `about:`, `login:`): the activation policy and the type the
-system lists the app as (`Foreground` or `UIElement`) in each place and as
-windows open and close, the item's button and its menu, the Dock tile's
-count, the Dock menu, the About panel, opening at login. What only a person
+`reopen`, `close`, `panel:`, `openinwindow`, `closewindow`, `typetext:`,
+`about:`, `login:`): the activation policy and the type the system lists the
+app as (`Foreground` or `UIElement`) in each place and as windows open and
+close, the item's button and its menus, the window under the item with the
+store's orders, a pushed order and a sheet with words typed in it (pictured
+as the window server composes it), the app moved into a full window and back,
+the Dock tile's count, the Dock menu, the About panel, opening at login. On an
+iPhone simulator, a UI test chose a quick action on the Home Screen and found
+its destination open, and the Home Screen showed the count a server set. What only a person
 at the screen sees: the Dock icon at launch, the Dock's own drawing of the
 count and the menu, the item in the real menu bar, and the login item after
 logging out and in.
