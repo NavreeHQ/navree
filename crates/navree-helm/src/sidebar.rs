@@ -16,9 +16,9 @@ use http::header::CACHE_CONTROL;
 use http::{HeaderMap, HeaderValue};
 use navree_access::READ;
 use navree_db::{Backend, Executor};
-use navree_http::response::{Html, IntoResponse, Response};
+use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, Json};
-use navree_ui::pages::{FROM_HEADER, region_asked};
+use navree_ui::pages::{FROM_HEADER, region_answer, region_asked};
 use serde_json::{Map, json};
 
 use crate::cx::Cx;
@@ -112,7 +112,7 @@ pub(crate) async fn counts(Panel { cx, session, .. }: Panel, headers: HeaderMap)
             let group = ui::menu_fragment(&cx, session.csrf.as_deref(), region, &at, &texts)
                 .await
                 .ok_or_else(AppError::not_found)?;
-            let mut response = Html(navree_ui::render(&group)).into_response();
+            let mut response = region_answer(group);
             response
                 .headers_mut()
                 .insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));

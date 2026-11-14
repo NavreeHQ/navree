@@ -11,12 +11,13 @@ use http::{HeaderMap, HeaderValue, Method};
 use navree_access::{Abilities, Subject as _};
 use navree_auth::{AuthService, SIGN_OUT_PATH};
 use navree_http::extract::FromRequestParts;
-use navree_http::response::{Html, IntoResponse, Response};
+use navree_http::response::Response;
 use navree_http::{AppError, ClientIp, Controller, CurrentPrincipal, Form, Path, Query, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_session::Session;
+use navree_ui::pages::region_answer;
 use navree_ui::{
-    Alert, AlertTone, AppPage, NavGroup, NavItem, Reply, Shell, UserMenu, icons, render,
+    Alert, AlertTone, AppPage, NavGroup, NavItem, Node, Reply, Shell, UserMenu, icons,
 };
 use uuid::Uuid;
 
@@ -388,7 +389,7 @@ impl LighthouseDashboardController {
 
     async fn overview_live(&self, period: crate::Period) -> Result<Response, AppError> {
         let region = overview::live(self, period).await?;
-        Ok(fragment(render(&region.into())))
+        Ok(fragment(region.into()))
     }
 
     async fn issues(&self, viewer: Viewer, query: IssueFilterQuery) -> Result<Response, AppError> {
@@ -472,9 +473,10 @@ impl LighthouseDashboardController {
     }
 }
 
-/// A part of a page, for a region to fetch: HTML with no script of its own.
-fn fragment(body: String) -> Response {
-    let mut response = Html(body).into_response();
+/// A part of a page, for a region to fetch: HTML with no script of its own, with what the
+/// runtime needs to draw it.
+fn fragment(body: Node) -> Response {
+    let mut response = region_answer(body);
     response.headers_mut().insert(
         http::header::CACHE_CONTROL,
         HeaderValue::from_static("no-store"),

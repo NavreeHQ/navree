@@ -648,6 +648,11 @@ async fn the_counts_beside_the_menu_come_after_the_page() {
             .unwrap()
             .starts_with("text/html")
     );
+    // The runtime draws an answer only when it says it is a page of this app, and takes it as
+    // the region's fragment.
+    assert_eq!(answer.header("x-navree-page"), Some("1"));
+    assert_eq!(answer.header("x-navree-fragment"), Some("1"));
+    assert_eq!(answer.header("cache-control"), Some("no-store"));
     let fragment = answer.text().replace("&#x2f;", "/");
     assert!(
         fragment.starts_with(&format!("<div data-slot=\"sidebar-group\" id=\"{group}\"")),

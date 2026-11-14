@@ -425,6 +425,24 @@ async fn the_overview_has_a_part_a_region_can_fetch_again() {
     assert!(part.contains("id=\"lighthouse-live\""), "{part}");
     assert!(part.contains("invoice inv_7 not found"), "{part}");
     assert!(!part.contains("<html"), "a part, not a page: {part}");
+    // Fetched by the region, as the runtime fetches it: the runtime draws an answer only when it
+    // says it is a page of this app.
+    let polled = client
+        .get("/_lighthouse/overview/live?period=24h")
+        .header("x-navree-ui", "1")
+        .header("x-navree-region", "lighthouse-live")
+        .send()
+        .await
+        .assert_status(200);
+    assert_eq!(polled.header("x-navree-page"), Some("1"));
+    assert_eq!(polled.header("x-navree-fragment"), Some("1"));
+    assert_eq!(polled.header("cache-control"), Some("no-store"));
+    assert_eq!(polled.header("content-security-policy"), Some(PAGE_CSP));
+    assert!(
+        polled
+            .header("content-type")
+            .is_some_and(|kind| kind.starts_with("text/html"))
+    );
     app.shutdown().await.unwrap();
 }
 
