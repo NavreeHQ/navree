@@ -14,6 +14,7 @@ use tokio::sync::watch;
 use crate::body::BodyError;
 use crate::extract::rejection;
 use crate::maintenance::{MaintenanceInfo, MaintenanceMode};
+use crate::mount::mount_table;
 use crate::{
     AppError, HttpOptions, ModuleBuilderHttpExt, RouteMeta, UrlSigner, build_router, route_table,
 };
@@ -260,21 +261,25 @@ async fn serve(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
     Ok(result?)
 }
 
-/// `routes [--json]`: prints the route table.
+/// `routes [--json]`: prints the route table, mounts included.
 async fn routes(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {
     let routes = route_table(&ctx).await?;
+    let mounts = mount_table(&ctx);
     if args.iter().any(|a| a == "--json") {
-        println!("{}", serde_json::to_string_pretty(&routes_json(&routes))?);
+        println!("{}", serde_json::to_string_pretty(&routes_json(&routes, &mounts))?);
     } else {
-        print!("{}", render_routes(&routes));
+        print!("{}", render_routes(&routes, &mounts));
     }
     Ok(())
 }
 
 /// The route table as text columns: method, path, name, access, module.
-pub(crate) fn render_routes(routes: &[RouteMeta]) -> String {
+/// Mounts (method `*` or their methods, path `{prefix}/{*rest}`) are rows
+/// among the routes, and the count after them names them apart.
+pub(crate) fn render_routes(routes: &[RouteMeta], mounts: &[RouteMeta]) -> String {
     let mut rows: Vec<[String; 5]> = routes
         .iter()
+        .chain(mounts)
         .map(|r| {
             [
                 r.method.clone(),
@@ -303,31 +308,45 @@ pub(crate) fn render_routes(routes: &[RouteMeta]) -> String {
         out.push_str(line.join("  ").trim_end());
         out.push('\n');
     }
-    out.push_str(&format!("\n{} routes\n", rows.len()));
+    if mounts.is_empty() {
+        out.push_str(&format!("\n{} routes\n", routes.len()));
+    } else {
+        out.push_str(&format!("\n{} routes, {} mounts\n", routes.len(), mounts.len()));
+    }
     out
 }
 
-fn routes_json(routes: &[RouteMeta]) -> serde_json::Value {
-    routes
-        .iter()
-        .map(|r| {
-            serde_json::json!({
-                "method": r.method,
-                "path": r.full_path,
-                "name": r.name,
-                "access": r.access.describe(),
-                "module": r.module,
-                "handler": r.handler,
-                "throttle": r.throttle.map(|t| serde_json::json!({"limit": t.limit, "per_secs": t.per.as_secs_f64()})),
-                "timeout_ms": r.timeout.map(|t| t.as_millis() as u64),
-                "body_limit": r.body_limit,
-                "transactional": r.transactional,
-                "audit": r.audit_action,
-                "guards": r.guards.len(),
-                "page": r.kind == crate::RouteKind::Page,
-            })
-        })
-        .collect()
+/// The route table as JSON: the routes, then the mounts, each marked
+/// `"mount": true`.
+fn routes_json(routes: &[RouteMeta], mounts: &[RouteMeta]) -> serde_json::Value {
+    let mut listed: Vec<serde_json::Value> = routes.iter().map(route_json).collect();
+    listed.extend(mounts.iter().map(|mount| {
+        let mut json = route_json(mount);
+        if let Some(object) = json.as_object_mut() {
+            object.insert("mount".to_owned(), serde_json::Value::Bool(true));
+        }
+        json
+    }));
+    serde_json::Value::Array(listed)
+}
+
+/// One row of [`routes_json`].
+fn route_json(r: &RouteMeta) -> serde_json::Value {
+    serde_json::json!({
+        "method": r.method,
+        "path": r.full_path,
+        "name": r.name,
+        "access": r.access.describe(),
+        "module": r.module,
+        "handler": r.handler,
+        "throttle": r.throttle.map(|t| serde_json::json!({"limit": t.limit, "per_secs": t.per.as_secs_f64()})),
+        "timeout_ms": r.timeout.map(|t| t.as_millis() as u64),
+        "body_limit": r.body_limit,
+        "transactional": r.transactional,
+        "audit": r.audit_action,
+        "guards": r.guards.len(),
+        "page": r.kind == crate::RouteKind::Page,
+    })
 }
 
 /// `down [--retry SECS] [--message TEXT]`.
@@ -382,11 +401,14 @@ mod tests {
             }
             meta
         };
-        let text = render_routes(&[
-            route("POST", "/api/v1/deals", Some("deals.store"), false),
-            route("GET", "/api/v1/deals", None, true),
-            route("DELETE", "/api/v1/deals/{id}", None, false),
-        ]);
+        let text = render_routes(
+            &[
+                route("POST", "/api/v1/deals", Some("deals.store"), false),
+                route("GET", "/api/v1/deals", None, true),
+                route("DELETE", "/api/v1/deals/{id}", None, false),
+            ],
+            &[],
+        );
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(
             lines,
@@ -399,20 +421,52 @@ mod tests {
                 "3 routes",
             ]
         );
-        let json = routes_json(&[route("GET", "/x", None, true)]);
+        let json = routes_json(&[route("GET", "/x", None, true)], &[]);
         assert_eq!(json[0]["path"], "/x");
         assert_eq!(json[0]["access"], "public");
         assert_eq!(json[0]["handler"], serde_json::Value::Null);
         let mut handled = route("GET", "/y", None, true);
         handled.handler = Some("DealsController::index".to_owned());
         assert_eq!(
-            routes_json(&[handled])[0]["handler"],
+            routes_json(&[handled], &[])[0]["handler"],
             "DealsController::index"
         );
         assert_eq!(json[0]["page"], false);
         let mut page = route("GET", "/z", None, true);
         page.kind = crate::RouteKind::Page;
-        assert_eq!(routes_json(&[page])[0]["page"], true);
+        assert_eq!(routes_json(&[page], &[])[0]["page"], true);
+    }
+
+    #[test]
+    fn mounts_are_listed_with_their_access_after_the_routes() {
+        let mut deals = RouteMeta {
+            method: "GET".into(),
+            full_path: "/api/v1/deals".into(),
+            module: Some("DealsModule"),
+            ..RouteMeta::default()
+        };
+        deals.access.public = true;
+        let mut khata = RouteMeta {
+            method: "*".into(),
+            full_path: "/khata/{*rest}".into(),
+            module: Some("LedgerModule"),
+            ..RouteMeta::default()
+        };
+        khata.access.authenticated = true;
+        let text = render_routes(std::slice::from_ref(&deals), std::slice::from_ref(&khata));
+        let rows: Vec<Vec<&str>> = text
+            .lines()
+            .map(|line| line.split_whitespace().collect())
+            .collect();
+        assert_eq!(rows[1], ["GET", "/api/v1/deals", "public", "DealsModule"]);
+        assert_eq!(rows[2], ["*", "/khata/{*rest}", "auth", "LedgerModule"]);
+        assert_eq!(text.lines().last(), Some("1 routes, 1 mounts"));
+        let json = routes_json(&[deals], &[khata]);
+        assert!(json[0].get("mount").is_none());
+        assert_eq!(
+            (json[1]["path"].as_str(), json[1]["mount"].as_bool()),
+            (Some("/khata/{*rest}"), Some(true))
+        );
     }
 
     #[test]
