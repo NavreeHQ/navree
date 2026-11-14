@@ -28,7 +28,7 @@ use navree::db::{
 use navree::orm::testing::database::TestDb;
 use navree::orm::{Dialect, Model as _, OrmError, raw, scalar};
 use navree::prelude::*;
-use navree::ui::sortable::{self, Placement, RANK_GAP, RankedLists, Spot};
+use navree::ui::sortable::{self, ListScope, Placement, RANK_GAP, RankedLists, Spot};
 use navree::ui::{Landing, ListState, Move, Refusal};
 use tokio::sync::Barrier;
 
@@ -1090,6 +1090,271 @@ async fn a_tight_gap_renews_the_lane_and_the_move_lands() {
             .map(|(id, _)| id)
             .collect();
         assert_eq!(ids, [1, 3, 2], "{server}");
+        done(test, db).await;
+    }
+}
+
+/// A lane of a board that more than one organisation uses: the key names it, and `org`
+/// says whose it is.
+#[derive(Model, Clone, Debug, Default, serde::Serialize)]
+#[model(table = "shared_lanes")]
+struct SharedLane {
+    id: i64,
+    org: i64,
+    key: String,
+}
+
+/// A card in a shared lane: the lane is named by its key, which two organisations
+/// can both have.
+#[derive(Model, Clone, Debug, Default, serde::Serialize)]
+#[model(table = "shared_cards")]
+struct SharedCard {
+    id: i64,
+    org: i64,
+    lane: String,
+    rank: i64,
+}
+
+async fn shared_schema(db: &Db) {
+    let dialect = Dialect::from(db.backend());
+    let q = |name: &str| dialect.quote_identifier(name);
+    for sql in [
+        format!(
+            "CREATE TABLE {} ({} BIGINT PRIMARY KEY, {} BIGINT NOT NULL, {} VARCHAR(64) NOT NULL)",
+            q("shared_lanes"),
+            q("id"),
+            q("org"),
+            q("key")
+        ),
+        format!(
+            "CREATE TABLE {} ({} BIGINT PRIMARY KEY, {} BIGINT NOT NULL, {} VARCHAR(64) NOT NULL, {} BIGINT NOT NULL)",
+            q("shared_cards"),
+            q("id"),
+            q("org"),
+            q("lane"),
+            q("rank")
+        ),
+    ] {
+        db.pool().execute_script(&sql).await.expect("schema");
+    }
+}
+
+/// A database of its own with the shared tables; `None` when `server` isn't configured.
+async fn fresh_shared(server: &str) -> Option<(TestDb, Db)> {
+    let test = match server {
+        "sqlite" => TestDb::sqlite().await.expect("sqlite"),
+        "postgres" => TestDb::postgres().await.expect("postgres")?,
+        _ => TestDb::mysql().await.expect("mysql")?,
+    };
+    let db = pool(test.url(), None).await;
+    shared_schema(&db).await;
+    Some((test, db))
+}
+
+fn shared_lane(id: i64, org: i64, key: &str) -> SharedLane {
+    SharedLane {
+        id,
+        org,
+        key: key.to_owned(),
+    }
+}
+
+/// `(id, rank)` of the cards of `org`, by id.
+async fn cards_of(db: &Db, org: i64) -> Vec<(i64, i64)> {
+    SharedCard::query()
+        .where_(SharedCard::ORG.eq(org))
+        .order_by("id")
+        .get(db)
+        .await
+        .expect("cards")
+        .into_vec()
+        .into_iter()
+        .map(|record| {
+            let card = record.into_inner();
+            (card.id, card.rank)
+        })
+        .collect()
+}
+
+/// A list is found only among the rows of the caller's scope: the key of another
+/// organisation's lane, posted by a browser, is a lane that isn't there, and is not
+/// locked. Without a scope the key finds any row of the table.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_scoped_lock_finds_a_list_only_among_the_callers_rows() {
+    for server in servers() {
+        let Some((test, db)) = fresh_shared(server).await else {
+            continue;
+        };
+        SharedLane::query()
+            .insert(
+                &db,
+                vec![shared_lane(1, 1, "todo"), shared_lane(2, 2, "doing")],
+            )
+            .await
+            .expect("lanes");
+        let mine = ListScope::new().and(&SharedLane::ORG, 1_i64);
+        let theirs = ListScope::new().and(&SharedLane::ORG, 2_i64);
+
+        // Their lane, named by a caller of organisation 1.
+        let missing = sortable::transaction_scoped(
+            &db,
+            &SharedLane::KEY,
+            vec!["doing"],
+            &mine,
+            |_uow| async { Ok(()) },
+        )
+        .await
+        .expect_err("not among organisation 1's rows");
+        assert!(missing.is_not_found(), "{server}: {missing}");
+        assert!(missing.to_string().contains("doing"), "{server}: {missing}");
+        let missing = Move::new("1", "todo", "doing")
+            .transaction_scoped(&db, &SharedLane::KEY, &mine, |_uow| async { Ok(()) })
+            .await
+            .expect_err("the move reaches for a lane that is not theirs");
+        assert!(missing.is_not_found(), "{server}: {missing}");
+
+        // Their own lanes lock, and the work runs.
+        let ran = sortable::transaction_scoped(
+            &db,
+            &SharedLane::KEY,
+            vec!["doing"],
+            &theirs,
+            |_uow| async { Ok(7) },
+        )
+        .await
+        .expect("organisation 2's lane");
+        assert_eq!(ran, 7, "{server}");
+        let ran = Move::new("1", "todo", "todo")
+            .transaction_scoped(&db, &SharedLane::KEY, &mine, |_uow| async { Ok(8) })
+            .await
+            .expect("organisation 1's lane");
+        assert_eq!(ran, 8, "{server}");
+
+        // Without a scope the key finds the row of another organisation, as it did.
+        let ran = sortable::transaction(&db, &SharedLane::KEY, vec!["doing"], |_uow| async {
+            Ok(9)
+        })
+        .await
+        .expect("any row of the table");
+        assert_eq!(ran, 9, "{server}");
+
+        // A scope has to be of the lanes' own table.
+        let wrong = ListScope::new().and(&Task::ID, 1_i64);
+        let refused = sortable::transaction_scoped(
+            &db,
+            &SharedLane::KEY,
+            vec!["todo"],
+            &wrong,
+            |_uow| async { Ok(()) },
+        )
+        .await
+        .expect_err("a column of another table");
+        assert!(refused.to_string().contains("tasks"), "{server}: {refused}");
+        done(test, db).await;
+    }
+}
+
+/// Where two organisations have a list of the same name, a renewal for one leaves the
+/// other's ranks as they are. Without a scope it numbers both organisations' rows
+/// together by the one name.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_scoped_renewal_leaves_the_ranks_of_the_same_named_list_of_another_organisation() {
+    for server in servers() {
+        let Some((test, db)) = fresh_shared(server).await else {
+            continue;
+        };
+        let card = |id: i64, org: i64, rank: i64| SharedCard {
+            id,
+            org,
+            lane: "todo".to_owned(),
+            rank,
+        };
+        SharedCard::query()
+            .insert(
+                &db,
+                vec![
+                    card(1, 1, 5),
+                    card(2, 1, 5),
+                    card(3, 1, 5),
+                    card(11, 2, 7),
+                    card(12, 2, 7),
+                    card(13, 2, 7),
+                ],
+            )
+            .await
+            .expect("cards");
+        let mine = ListScope::new().and(&SharedCard::ORG, 1_i64);
+        let changed = db
+            .transaction(|uow| {
+                let mine = mine.clone();
+                async move {
+                    sortable::renew_ranks_scoped(
+                        &uow,
+                        &SharedCard::LANE,
+                        &SharedCard::RANK,
+                        &SharedCard::ID,
+                        "todo",
+                        &mine,
+                    )
+                    .await
+                    .map_err(db_error)
+                }
+            })
+            .await
+            .expect("renews");
+        assert!(changed > 0, "{server}: {changed} rows changed");
+        assert_eq!(
+            cards_of(&db, 1).await,
+            [(1, 0), (2, RANK_GAP), (3, 2 * RANK_GAP)],
+            "{server}: organisation 1's list has fresh ranks"
+        );
+        assert_eq!(
+            cards_of(&db, 2).await,
+            [(11, 7), (12, 7), (13, 7)],
+            "{server}: organisation 2's list is as it was"
+        );
+
+        // The scope's own value is bound, not written into the statement.
+        let nobody = ListScope::new().and(&SharedCard::ORG, 99_i64);
+        let changed = db
+            .transaction(|uow| {
+                let nobody = nobody.clone();
+                async move {
+                    sortable::renew_ranks_scoped(
+                        &uow,
+                        &SharedCard::LANE,
+                        &SharedCard::RANK,
+                        &SharedCard::ID,
+                        "todo",
+                        &nobody,
+                    )
+                    .await
+                    .map_err(db_error)
+                }
+            })
+            .await
+            .expect("renews nothing");
+        assert_eq!(changed, 0, "{server}: no row is of organisation 99");
+
+        // Without a scope the one name is every organisation's rows.
+        db.transaction(|uow| async move {
+            sortable::renew_ranks(
+                &uow,
+                &SharedCard::LANE,
+                &SharedCard::RANK,
+                &SharedCard::ID,
+                "todo",
+            )
+            .await
+            .map_err(db_error)
+        })
+        .await
+        .expect("renews");
+        assert_ne!(
+            cards_of(&db, 2).await,
+            [(11, 7), (12, 7), (13, 7)],
+            "{server}: the unscoped form rewrites the rows of both"
+        );
         done(test, db).await;
     }
 }

@@ -14,7 +14,9 @@
 //! one after the other. With the `orm` feature, `transaction` runs a move in a
 //! transaction the toolkit begins, at READ COMMITTED with that lock taken first,
 //! `lock_lists` is the lock, and `renew_ranks` gives a list fresh ranks in one
-//! statement.
+//! statement. Each has a `_scoped` form that takes a `ListScope`, the columns that
+//! must hold the caller's workspace or board, so that the keys a browser posts can
+//! only reach the caller's own rows.
 //!
 //! [`SortableGrid`] draws tiles in rows and columns that people put in their own
 //! order and take away; it posts the whole order, which [`GridOrder`] reads and
@@ -40,7 +42,10 @@ pub use grid::{GridColumns, GridFit, GridTile, SortableGrid, SortableGridLabels}
 pub use moves::{Landing, ListState, Move, MoveError, MoveRejected, Refusal};
 pub use order::{Arranged, GridOrder, OrderError, OrderRejected};
 #[cfg(feature = "orm")]
-pub use orm::{lock_lists, renew_ranks, transaction};
+pub use orm::{
+    ListScope, lock_lists, lock_lists_scoped, renew_ranks, renew_ranks_scoped, transaction,
+    transaction_scoped,
+};
 pub use ranked::{Placement, RANK_GAP, RankedLists, Spot, rank_between};
 
 /// How a sortable's lists sit.

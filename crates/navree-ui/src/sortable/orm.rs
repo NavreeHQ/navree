@@ -6,7 +6,8 @@ use std::future::Future;
 
 use navree_db::{Backend, Db, IsolationLevel, Uow};
 use navree_orm::{
-    Access, Column, Dialect, Executor, OrmError, Result, ValueFor, raw, scalar, table,
+    Access, Column, Dialect, Executor, Filter, OrmError, Result, Value, ValueFor, col, raw,
+    scalar, table,
 };
 
 use super::moves::Move;
@@ -15,6 +16,94 @@ use super::ranked::RANK_GAP;
 /// How many times [`transaction`] runs a move, at most, when the database asks for
 /// it to run again.
 const ATTEMPTS: usize = 3;
+
+/// The rows a move may lock and renumber: the columns that must hold a value for a row
+/// to count, such as the workspace or the board it belongs to. [`lock_lists`] and
+/// [`renew_ranks`] find rows by the keys a move names, which a browser posts; a scope
+/// is what keeps them to the caller's own rows, on a table that no model's scope
+/// reaches. [`lock_lists_scoped`], [`renew_ranks_scoped`], [`transaction_scoped`] and
+/// [`Move::transaction_scoped`] apply it to both.
+///
+/// ```ignore
+/// let scope = ListScope::new().and(&Lane::WORKSPACE_ID, workspace.id);
+/// let landed = mv
+///     .transaction_scoped(&db, &Lane::KEY, &scope, |uow| async move { /* ... */ })
+///     .await?;
+/// ```
+#[derive(Clone, Debug, Default)]
+pub struct ListScope {
+    terms: Vec<ScopeTerm>,
+}
+
+/// One column of a scope, and the value it must hold.
+#[derive(Clone, Debug)]
+struct ScopeTerm {
+    table: Option<String>,
+    column: String,
+    /// The value as the column stores it, or why it can't be.
+    value: std::result::Result<Value, String>,
+}
+
+impl ListScope {
+    /// A scope with no condition: every row counts.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Adds a condition: only the rows whose `column` holds `value`. Conditions add up.
+    #[must_use]
+    pub fn and<M, T, V>(mut self, column: &Column<M, T>, value: V) -> Self
+    where
+        V: ValueFor<T>,
+    {
+        let value: T = value.into_value_for();
+        self.terms.push(ScopeTerm {
+            table: column.table().map(str::to_owned),
+            column: column.name().to_owned(),
+            value: column.encode(&value),
+        });
+        self
+    }
+
+    /// Whether the scope has no condition.
+    pub fn is_empty(&self) -> bool {
+        self.terms.is_empty()
+    }
+
+    /// Each condition, with its column's table checked against `table`, and its value
+    /// as the column stores it.
+    fn checked(&self, table: &str) -> Result<Vec<(&str, Value)>> {
+        self.terms
+            .iter()
+            .map(|term| {
+                if let Some(of) = term.table.as_deref()
+                    && of != table
+                {
+                    return Err(OrmError::InvalidQuery(format!(
+                        "the scope's column `{}` is of the table `{of}`, and the lists are of `{table}`",
+                        term.column
+                    )));
+                }
+                let value = term.value.clone().map_err(|error| {
+                    OrmError::InvalidQuery(format!(
+                        "cannot scope the lists by the column `{}`: {error}",
+                        term.column
+                    ))
+                })?;
+                Ok((term.column.as_str(), value))
+            })
+            .collect()
+    }
+
+    /// The conditions as filters for a read of `table`.
+    fn filters(&self, table: &str) -> Result<Vec<Filter>> {
+        Ok(self
+            .checked(table)?
+            .into_iter()
+            .map(|(column, value)| col(column.to_owned()).eq(value))
+            .collect())
+    }
+}
 
 /// Runs `f` in a transaction that holds the lists a move touches: the safe way to
 /// check or place a move against a database. It
@@ -60,6 +149,38 @@ where
     F: Fn(Uow) -> Fut,
     Fut: Future<Output = Result<R>>,
 {
+    transaction_scoped(db, key, lists, &ListScope::new(), f).await
+}
+
+/// [`transaction`], with the lists found only among the rows of `scope`: the lock
+/// ([`lock_lists_scoped`]) takes a list that is not in the scope as not there. Use it
+/// where the keys of the lists are the caller's to name but only their own are theirs
+/// to move: lists of a workspace or a board, on a table that holds those of others.
+///
+/// ```ignore
+/// let scope = ListScope::new().and(&Card::WORKSPACE_ID, workspace.id);
+/// let landed = sortable::transaction_scoped(&db, &Column::KEY, mv.lists(), &scope, |uow| {
+///     let mv = mv.clone();
+///     async move { Ok(mv.check(&read_lists(&uow).await?)) }
+/// })
+/// .await?;
+/// ```
+///
+/// # Errors
+///
+/// As [`transaction`], and [`lock_lists_scoped`]'s.
+pub async fn transaction_scoped<M, T, V, R, F, Fut>(
+    db: &Db,
+    key: &Column<M, T>,
+    lists: Vec<V>,
+    scope: &ListScope,
+    f: F,
+) -> Result<R>
+where
+    V: ValueFor<T> + Ord + Clone,
+    F: Fn(Uow) -> Fut,
+    Fut: Future<Output = Result<R>>,
+{
     let mut attempt = 1;
     loop {
         let uow = unit_of_work(db).await;
@@ -68,7 +189,7 @@ where
         }
         let ran = uow
             .scope(async {
-                lock_lists(&uow, key, lists.clone()).await?;
+                lock_lists_scoped(&uow, key, lists.clone(), scope).await?;
                 f(uow.clone()).await
             })
             .await;
@@ -125,6 +246,27 @@ impl Move {
         transaction(db, key, self.lists(), f).await
     }
 
+    /// [`transaction`](Self::transaction), with the lists found only among the rows of
+    /// `scope`: a list the move names that is not in the scope is a list that isn't
+    /// there ([`is_not_found`](OrmError::is_not_found)). See [`ListScope`].
+    ///
+    /// # Errors
+    ///
+    /// As [`transaction_scoped`].
+    pub async fn transaction_scoped<M, R, F, Fut>(
+        &self,
+        db: &Db,
+        key: &Column<M, String>,
+        scope: &ListScope,
+        f: F,
+    ) -> Result<R>
+    where
+        F: Fn(Uow) -> Fut,
+        Fut: Future<Output = Result<R>>,
+    {
+        transaction_scoped(db, key, self.lists(), scope, f).await
+    }
+
     /// Locks the lists the move touches ([`lists`](Self::lists)), each a row found
     /// by its `key` column, until the transaction ends: [`lock_lists`] for this
     /// move. [`transaction`](Self::transaction) takes this lock itself.
@@ -137,6 +279,24 @@ impl Move {
         E: Executor + ?Sized,
     {
         lock_lists(exec, key, self.lists()).await
+    }
+
+    /// [`lock`](Self::lock), with the lists found only among the rows of `scope`:
+    /// [`lock_lists_scoped`] for this move.
+    ///
+    /// # Errors
+    ///
+    /// As [`lock_lists_scoped`].
+    pub async fn lock_scoped<M, E>(
+        &self,
+        exec: &E,
+        key: &Column<M, String>,
+        scope: &ListScope,
+    ) -> Result<()>
+    where
+        E: Executor + ?Sized,
+    {
+        lock_lists_scoped(exec, key, self.lists(), scope).await
     }
 }
 
@@ -166,8 +326,9 @@ async fn unit_of_work(db: &Db) -> Uow {
 ///
 /// The key column is the list's unique, indexed key (a primary key): on MySQL a
 /// `FOR UPDATE` on a column with no index locks every row it reads. And it is the
-/// key of a list the caller may move in: a key is locked across the whole table,
-/// so scope the keys to the caller's board or workspace before they get here.
+/// key of a list the caller may move in: a key is locked across the whole table, so
+/// either make the keys unique to the caller's board or workspace, or lock with
+/// [`lock_lists_scoped`], which finds each list only among the caller's rows.
 ///
 /// It refuses, rather than lock nothing, when the lock would not hold:
 ///
@@ -193,6 +354,30 @@ where
     V: ValueFor<T> + Ord,
     E: Executor + ?Sized,
 {
+    lock_lists_scoped(exec, key, lists, &ListScope::new()).await
+}
+
+/// [`lock_lists`], finding each list only among the rows of `scope`: `SELECT ... FOR
+/// UPDATE` on the row with that key *and* the scope's values. A key that names a row
+/// outside the scope is a list with no row, which fails as [`lock_lists`] does for any
+/// list that isn't there, so a browser can't have a list of another workspace locked by
+/// naming it. Call it in [`RankedLists::lock`](super::RankedLists::lock) with the same
+/// scope as the transaction's.
+///
+/// # Errors
+///
+/// As [`lock_lists`]; [`OrmError::InvalidQuery`] for a scope column of another table
+/// than the key's, or a value that column can't hold.
+pub async fn lock_lists_scoped<M, T, V, E>(
+    exec: &E,
+    key: &Column<M, T>,
+    lists: impl IntoIterator<Item = V>,
+    scope: &ListScope,
+) -> Result<()>
+where
+    V: ValueFor<T> + Ord,
+    E: Executor + ?Sized,
+{
     let (dialect, uow) = {
         let target = exec.target(Access::Read).await?;
         let dialect = target.dialect().ok_or_else(|| OrmError::Unsupported {
@@ -210,6 +395,7 @@ where
         read_committed(&uow, dialect).await?;
     }
     let name = table_of(key)?;
+    let scoped = scope.filters(name)?;
     let mut lists: Vec<V> = lists.into_iter().collect();
     lists.sort();
     lists.dedup();
@@ -219,6 +405,9 @@ where
             .encode(&list)
             .map_or_else(|error| error, |value| value.to_string());
         let mut query = table(name).select([key.name()]).where_(key.eq(list));
+        for filter in &scoped {
+            query = query.where_(filter.clone());
+        }
         if dialect != Dialect::Sqlite {
             query = query.lock_for_update();
         }
@@ -285,6 +474,44 @@ where
     V: ValueFor<L>,
     E: Executor + ?Sized,
 {
+    renew_ranks_scoped(
+        exec,
+        list_column,
+        rank_column,
+        id_column,
+        list,
+        &ListScope::new(),
+    )
+    .await
+}
+
+/// [`renew_ranks`], for the items of `list` among the rows of `scope` only: where lists
+/// of several workspaces or boards share a name, the rows of the others keep their ranks.
+/// Without a scope, a list named `backlog` is every row of the table whose list column
+/// holds `backlog`, whoever's it is. Use the same scope as the move's transaction.
+///
+/// ```ignore
+/// let scope = ListScope::new().and(&Card::WORKSPACE_ID, workspace.id);
+/// sortable::renew_ranks_scoped(&uow, &Card::LIST, &Card::RANK, &Card::ID, "backlog", &scope)
+///     .await?;
+/// ```
+///
+/// # Errors
+///
+/// As [`renew_ranks`]; [`OrmError::InvalidQuery`] for a scope column of another table
+/// than the list's, or a value that column can't hold.
+pub async fn renew_ranks_scoped<M, L, I, V, E>(
+    exec: &E,
+    list_column: &Column<M, L>,
+    rank_column: &Column<M, i64>,
+    id_column: &Column<M, I>,
+    list: V,
+    scope: &ListScope,
+) -> Result<u64>
+where
+    V: ValueFor<L>,
+    E: Executor + ?Sized,
+{
     let dialect = dialect(exec, "renewing ranks").await?;
     let name = table_of(list_column)?;
     if table_of(rank_column)? != name || table_of(id_column)? != name {
@@ -299,9 +526,24 @@ where
         q(rank_column.name()),
         q(id_column.name()),
     );
+    let value = list_column
+        .encode(&list.into_value_for())
+        .map_err(OrmError::InvalidQuery)?;
+    // The rows that count: the list's, and the scope's.
+    let mut conditions = format!("{l} = ?");
+    let mut values = vec![value];
+    for (column, wanted) in scope.checked(name)? {
+        let column = q(column);
+        if matches!(wanted, Value::Null(_)) {
+            conditions = format!("{conditions} AND {column} IS NULL");
+        } else {
+            conditions = format!("{conditions} AND {column} = ?");
+            values.push(wanted);
+        }
+    }
     // The list's order, numbered once by a window, joined back to its rows by id.
     let fresh = format!(
-        "(SELECT {i} AS id, (ROW_NUMBER() OVER (ORDER BY {r}, {i}) - 1) * {RANK_GAP} AS n FROM {t} WHERE {l} = ?) AS fresh"
+        "(SELECT {i} AS id, (ROW_NUMBER() OVER (ORDER BY {r}, {i}) - 1) * {RANK_GAP} AS n FROM {t} WHERE {conditions}) AS fresh"
     );
     let sql = match dialect {
         Dialect::MySql => {
@@ -311,10 +553,7 @@ where
             format!("UPDATE {t} SET {r} = fresh.n FROM {fresh} WHERE {t}.{i} = fresh.id")
         }
     };
-    let value = list_column
-        .encode(&list.into_value_for())
-        .map_err(OrmError::InvalidQuery)?;
-    navree_orm::statement(exec, raw(sql, [value])).await
+    navree_orm::statement(exec, raw(sql, values)).await
 }
 
 /// The SQL dialect `exec` speaks.
