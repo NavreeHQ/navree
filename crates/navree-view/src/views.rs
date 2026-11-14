@@ -30,7 +30,11 @@ use crate::{ViewError, ViewOptions, filters};
 ///
 /// **Precedence**: the first directory holding a name wins, and any file
 /// wins over an embedded template; among embedded templates the last one
-/// given wins.
+/// given wins. [`ViewModule`](crate::ViewModule) gives the templates of the
+/// modules an app has in dependency order, so a module's template replaces
+/// one of the same name from a module it imports; two other modules that
+/// embed one name log a warning (the later one's is used), and fail the boot
+/// when one of them is a plugin.
 ///
 /// **Escaping**: a template's name picks its mode, in any case and also before
 /// a trailing `.j2`, `.jinja` or `.jinja2`. `.txt` and `.md` print values as they
