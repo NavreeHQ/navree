@@ -149,6 +149,32 @@ test("a region's own link whose every answer is overtaken by a write draws what 
   history.replaceState(null, "", "/deals/5");
 });
 
+// A poll is on its way; a form is saved and its reply draws the page again; then the poll's answer comes. It is from
+// before the save and is not drawn, and since nothing else will ask (a hidden page does not poll), it is asked again.
+test("a region's fetch from before a write is asked again after the write's reply drew the page again", async () => {
+  $("main").innerHTML = `<form id="note" method="post" action="/deals/notes" data-ui-form><button id="save" type="submit">Save</button></form>`;
+  $("kpis").textContent = "before (page)";
+  page.fetched.length = 0;
+  page.assigned.length = 0;
+  const slow = held();
+  page.answers.push(() => slow.promise);
+  const fetching = refresh("kpis");
+  await settle(2);
+  // The save's reply sends the page to itself, and the page comes with what the save changed.
+  page.answers.push(answer(`{"ops":[{"op":"navigate","href":"/deals/5"}]}`, { headers: OPS }), answer(html("Deal 5", "after (page)"), { headers: PAGE }));
+  $("save").click();
+  await settle();
+  assert.equal($("kpis").textContent, "after (page)");
+  assert.equal(page.fetched.length, 3, "the region, the save and the page");
+  page.answers.push(answer(`<div id="kpis" data-ui-region data-ui-src="/deals/kpis">after (poll 2)</div>`, { headers: PAGE }));
+  slow.release(answer(`<div id="kpis" data-ui-region data-ui-src="/deals/kpis">before (poll 1)</div>`, { headers: PAGE }));
+  await fetching;
+  await settle();
+  assert.equal(page.fetched.length, 4, "the region is asked again");
+  assert.equal($("kpis").textContent, "after (poll 2)");
+  assert.deepEqual(page.assigned, []);
+});
+
 test("a region whose every answer is overtaken by a write is drawn after at most three fetches", async () => {
   page.fetched.length = 0;
   for (let n = 1; n <= 6; n++) {

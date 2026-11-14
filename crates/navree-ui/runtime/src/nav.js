@@ -608,14 +608,17 @@ export async function refresh(id, polled = false, tried = 0) {
   const table = el.hasAttribute("data-ui-table") ? el : null;
   // Whether a newer fetch of the region began, or the user moved on while this was on its way: it answers a state
   // that's gone. Asked after the headers and again after the body, which a newer fetch can overtake.
-  const old = () => regions.get(id) !== mine || swaps !== page || !!(table && (el.getAttribute("data-ui-src") !== src || el.hasAttribute("data-pending")));
+  const newer = () => regions.get(id) !== mine || !!(table && (el.getAttribute("data-ui-src") !== src || el.hasAttribute("data-pending")));
+  // So does an answer asked from a page that has been drawn again since, or left.
+  const old = () => newer() || swaps !== page;
   // Whether something was written since this fetch began, here or in another tab, or the page was shown again from
   // the back-forward cache: the answer may be from before the write, and drawn after the page was drawn again for
   // it, it would put back what the write changed. Asked wherever `old` is.
   const late = () => tried < 2 && epoch !== since;
-  // An answer that is old or late is not drawn. A late one is asked for again, unless a newer fetch is on its way to
-  // draw the region: polled or not, a region is left showing what came after the last write, never before it.
-  const again = () => (old() ? undefined : refresh(id, polled, tried + 1));
+  // An answer that is old or late is not drawn. A late one is asked for again, also when the write's reply has drawn
+  // the page again meanwhile, unless a newer fetch is on its way to draw the region: polled or not, a region is left
+  // showing what came after the last write, never before it.
+  const again = () => (newer() || !late() ? undefined : refresh(id, polled, tried + 1));
   try {
     if (el.hasAttribute("data-ui-feed")) {
       await feed(el, src, () => !old() && !late());
