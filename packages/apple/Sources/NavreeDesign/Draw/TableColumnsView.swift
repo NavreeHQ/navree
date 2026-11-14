@@ -134,9 +134,18 @@ struct TableColumnsView: View {
 
         var body: some View {
             if index < record.cells.count {
-                if index == 0, opening == .choosing, record.action != nil {
+                if index == 0, let words = ContentRules.nameWords(record.cells[0], opening: opening, opens: record.action != nil) {
                     // The row's click opens it: the name's own button (the web
-                    // page's link to the same) takes no click of its own.
+                    // page's link to the same) is the record's name.
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(words[0])
+                        ForEach(Array(words.dropFirst().enumerated()), id: \.offset) { _, line in
+                            Text(line).foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                } else if index == 0, opening == .choosing, record.action != nil {
+                    // The row's click opens it: nothing in the name takes a click of its own.
                     NodeView(record.cells[index]).allowsHitTesting(false)
                 } else if index == 0 {
                     Opening(action: record.action, place: Place()) { NodeView(record.cells[index]) }

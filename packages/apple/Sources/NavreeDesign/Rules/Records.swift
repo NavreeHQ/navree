@@ -140,7 +140,7 @@ public enum RecordRules {
     }
 
     /// The first button or link in `node`, and the form it stands in.
-    static func firstAction(in node: Navree.Node, form: Navree.Form?) -> (Navree.Action, Navree.Form?)? {
+    public static func firstAction(in node: Navree.Node, form: Navree.Form?) -> (Navree.Action, Navree.Form?)? {
         switch node {
         case .button(let button):
             return button.action.map { ($0, form) }

@@ -279,7 +279,7 @@ struct CellControls: View {
                 } label: {
                     Text(CommandRules.title(control.button.label, more: control.opensSheet))
                 }
-                .buttonStyle(.borderless)
+                .modifier(CellControlStyle())
                 .disabled(control.button.disabled || control.button.pending)
                 .modifier(PointerHover())
             }
@@ -288,6 +288,16 @@ struct CellControls: View {
             if let form = filling.control.form {
                 FormSheet(title: filling.control.button.label, subtitle: title, form: form, confirm: filling.control.button)
             }
+        }
+    }
+}
+
+/// A control in a wide table's cell, as ``ContentRules/cellControlLook(bar:)`` draws it.
+struct CellControlStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        switch ContentRules.cellControlLook(bar: .current) {
+        case .borderless: content.buttonStyle(.borderless)
+        case .smallPushButton: content.buttonStyle(.bordered).controlSize(.small)
         }
     }
 }
