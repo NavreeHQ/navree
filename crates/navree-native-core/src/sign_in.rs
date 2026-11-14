@@ -331,6 +331,10 @@ impl Core {
         let Some(url) = url else {
             return;
         };
+        // The person said no: that too is the sheet closed, and nothing failed.
+        if query_value(url, "error").as_deref() == Some("access_denied") {
+            return;
+        }
         let returned = query_value(url, "state").unwrap_or_default();
         if !same(&returned, &state) {
             self.notice(Notice::Failed, self.front());

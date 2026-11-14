@@ -1,0 +1,144 @@
+{
+  "about": "The person says no in the system's sign-in session: its return carries `error=access_denied`. That ends the sign-in as closing the sheet does, and nobody is told it failed. Any other `error` is a sign-in that failed.",
+  "config": {"app_id":"com.charkha.supply","client":{"caps":["auth_session"],"form":"phone","platform":"ios","text_percent":100,"vocab":0},"sign_in":{"paths":["/sign-in"]}},
+  "steps": [
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app-nobody.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/welcome.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/sign-in"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"random","request":1,"bytes":48}
+        ]
+      }
+    },
+    {
+      "send": {"t":"random","request":1,"bytes":"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"sign_in","url":"https://shop.example/auth/app/sign-in?platform=apple&app=com.charkha.supply&code_challenge=658WgAyQKf_KhWlXY9I8Os5xARz0DpNUrNgQIF4lD4c&code_challenge_method=S256&state=ISIjJCUmJygpKissLS4vMA&redirect_uri=https%3A%2F%2Fshop.example%2Fapp%2Fsigned-in","callback":"https://shop.example/app/signed-in"}
+        ]
+      }
+    },
+    {
+      "note": "The person said no. The sign-in ends, nothing is sent and nothing is shown.",
+      "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?error=access_denied&state=ISIjJCUmJygpKissLS4vMA"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      },
+      "check": [
+        {"at":"/messages","is":[]}
+      ]
+    },
+    {
+      "note": "It has ended: a return after it is one with no sign-in open.",
+      "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?code=Xk3mQ8r1v5&state=ISIjJCUmJygpKissLS4vMA"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"sign_in","detail":"a sign-in's return arrived with no sign-in open, and was not used"}
+        ]
+      },
+      "check": [
+        {"at":"/messages","is":[]}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/sign-in"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"random","request":2,"bytes":48}
+        ]
+      }
+    },
+    {
+      "send": {"t":"random","request":2,"bytes":"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"sign_in","url":"https://shop.example/auth/app/sign-in?platform=apple&app=com.charkha.supply&code_challenge=658WgAyQKf_KhWlXY9I8Os5xARz0DpNUrNgQIF4lD4c&code_challenge_method=S256&state=ISIjJCUmJygpKissLS4vMA&redirect_uri=https%3A%2F%2Fshop.example%2Fapp%2Fsigned-in","callback":"https://shop.example/app/signed-in"}
+        ]
+      }
+    },
+    {
+      "note": "A saying no with no state is still only that.",
+      "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?error=access_denied"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      },
+      "check": [
+        {"at":"/messages","is":[]}
+      ]
+    },
+    {
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/sign-in"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"random","request":3,"bytes":48}
+        ]
+      }
+    },
+    {
+      "send": {"t":"random","request":3,"bytes":"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"sign_in","url":"https://shop.example/auth/app/sign-in?platform=apple&app=com.charkha.supply&code_challenge=658WgAyQKf_KhWlXY9I8Os5xARz0DpNUrNgQIF4lD4c&code_challenge_method=S256&state=ISIjJCUmJygpKissLS4vMA&redirect_uri=https%3A%2F%2Fshop.example%2Fapp%2Fsigned-in","callback":"https://shop.example/app/signed-in"}
+        ]
+      }
+    },
+    {
+      "note": "Any other error is a sign-in that failed: the person is told.",
+      "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?error=server_error&state=ISIjJCUmJygpKissLS4vMA"},
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"danger","notice":"failed"},
+          {"t":"report","what":"sign_in","detail":"a sign-in's return carried no code"}
+        ]
+      },
+      "check": [
+        {"at":"/messages/0/notice","is":"failed"}
+      ]
+    }
+  ]
+}
