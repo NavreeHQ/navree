@@ -215,6 +215,27 @@ A tick in a filter's list, a radio and a select apply at once. The search box an
 | `.debounce(wait)` | how long typing in the search or a text filter waits for a pause: 100 ms unless this says otherwise |
 | `.prefetch()` | fetches the table's own links (sort, page, filter chips, details) when the pointer rests on one, so the next state is often there before the click; off unless asked |
 
+## Exporting
+
+`.export(url)` adds a link that carries the table's state to a route of yours, and `TableQuery::export_csv(builder, &uow, "deals.csv", map)` answers it with a CSV file of the current search, filters, sort and columns. It reads from your scoped query inside the request's unit of work, a chunk at a time, and keeps what it has written in memory only up to 8 MiB before it goes to a temporary file.
+
+- **How many rows.** At most 100,000 (`DEFAULT_EXPORT_ROWS`). A result with more rows is cut there, and the response carries `x-navree-truncated: 1`. `query.export_limit(500_000)` raises the limit for one route, up to `MAX_EXPORT_ROWS` (2,000,000), which nothing passes. A result of exactly the limit is not cut, and says nothing.
+- **In which order.** In the page's sort order, as long as every column of the sort is a column of the table being read. A sort by a column of a joined table (`source = "companies.name"`) writes the file in the order of the key instead, so it is not in the order the page showed. An export never pages by `OFFSET`: it goes on from the position of the last row it wrote, so the millionth row costs what the first does.
+- **Which columns.** The columns shown, less any [taken away](#columns-a-person-may-not-use) from the person asking.
+
+An export holds a unit of work, a connection and a temporary file for as long as it takes to write, and Navree does not limit how many run at once. Throttle the route that serves it, and keep it behind the sign-in and the ability that lets a person export. A route's throttle is on the [rate limiting](/docs/basics/rate-limiting/) page:
+
+```rust
+use std::time::Duration;
+
+use http::Method;
+use navree::http::RouteDef;
+
+RouteDef::on(Method::GET, "/deals/export", || async { "the file" })
+    .authenticated()
+    .throttle(5, Duration::from_secs(60))
+```
+
 ## Limits
 
 - **One table per URL.** Its state lives in plain query parameters, so two tables on one page would share it: give the second its own route or [region](/docs/ui/regions/).

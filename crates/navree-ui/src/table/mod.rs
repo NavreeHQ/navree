@@ -76,8 +76,8 @@ pub use view::{
 
 #[cfg(feature = "orm")]
 pub use orm::{
-    AsyncChunk, MAX_EXPORT_ROWS, SavedViewDocument, SavedViewModel, delete_view, list_views,
-    save_view,
+    AsyncChunk, DEFAULT_EXPORT_ROWS, MAX_EXPORT_ROWS, SavedViewDocument, SavedViewModel,
+    delete_view, list_views, save_view,
 };
 
 /// How a column's values are typed, so a value from a URL binds as what the
