@@ -10,8 +10,8 @@ every `@navree/*` package carries the same version.
 ### Upgrading
 
 - To see before upgrading whether the single sign-on change below affects your app, list the
-  connections that have `allow_unverified_emails` on (on MySQL and MariaDB, select
-  `HEX(owner_id)`):
+  connections that have `allow_unverified_emails` on (on SQLite, MySQL and MariaDB, select
+  `hex(owner_id)`):
 
   ```sql
   SELECT slug, owner_type, owner_id FROM sso_connections
