@@ -9,8 +9,15 @@ import UserNotifications
 ///   where it stands, with an item in the menu bar showing `shippingbox`
 ///   wherever the menu bar is among its places;
 /// - `-NavreeChoices "dock;menuBar;both"`: the places Settings offers;
-/// - `-NavreeStatus menu|/today`: what the item opens (a small window showing
-///   a destination is not built yet);
+/// - `-NavreeStatus app|menu|/today`: what the item opens: the whole app in a
+///   window under it (the default of a build that starts in the menu bar
+///   only), a menu, or a small window showing a destination (not built yet);
+/// - `-NavreeStatusSize 400x560`, `-NavreeStatusResizable YES`,
+///   `-NavreeStatusPinned YES`, `-NavreeStatusAtLaunch YES`: that window's
+///   size, whether the person may resize it, whether it stays open above
+///   other windows, and whether it opens at launch;
+/// - `-NavreeStatusLabel <words>`, `-NavreeStatusTooltip <words>`: the words
+///   beside the item's image and when the pointer rests on it;
 /// - `-NavreeDockWhileWindowOpen NO`: a menu-bar app stays out of the Dock
 ///   while its window is open;
 /// - `-NavreeShortcuts 4`: quick actions and the Dock menu, from the first
@@ -26,12 +33,20 @@ enum DemoPresence {
         let place = (defaults.string(forKey: "NavreePresence") ?? info).flatMap(MacPlace.init(rawValue:)) ?? .dock
         let choices = (defaults.string(forKey: "NavreeChoices") ?? "")
             .split(separator: ";").compactMap { MacPlace(rawValue: String($0)) }
-        let status = defaults.string(forKey: "NavreeStatus")
-        let content: StatusContent = status.flatMap { $0.hasPrefix("/") ? .screen($0) : nil } ?? .menu
+        let status = defaults.string(forKey: "NavreeStatus") ?? (info == MacPlace.menuBar.rawValue ? "app" : "menu")
+        let content: StatusContent = switch status {
+        case "app": .app(window(defaults))
+        case let path where path.hasPrefix("/"): .screen(path)
+        default: .menu
+        }
         let inMenuBar = place != .dock || choices.contains { $0 != .dock }
+        let item = StatusItem(
+            image: .symbol("shippingbox"), title: defaults.string(forKey: "NavreeStatusLabel"), content: content,
+            tooltip: defaults.string(forKey: "NavreeStatusTooltip")
+        )
         var presence = Presence(
             place: place, choices: choices,
-            statusItem: inMenuBar ? StatusItem(image: .symbol("shippingbox"), content: content) : nil,
+            statusItem: inMenuBar ? item : nil,
             dockWhileWindowOpen: defaults.object(forKey: "NavreeDockWhileWindowOpen") == nil
                 || defaults.bool(forKey: "NavreeDockWhileWindowOpen"),
             offersOpenAtLogin: defaults.bool(forKey: "NavreeOpenAtLogin")
@@ -67,6 +82,17 @@ enum DemoPresence {
         }
         #endif
         return presence
+    }
+
+    /// The window an item holding the whole app opens.
+    static func window(_ defaults: UserDefaults) -> StatusWindow {
+        var window = StatusWindow()
+        let size = (defaults.string(forKey: "NavreeStatusSize") ?? "").split(separator: "x").compactMap { Double($0) }
+        if size.count == 2 { window.size = CGSize(width: size[0], height: size[1]) }
+        window.resizable = defaults.bool(forKey: "NavreeStatusResizable")
+        window.pinned = defaults.bool(forKey: "NavreeStatusPinned")
+        window.opensAtLaunch = defaults.bool(forKey: "NavreeStatusAtLaunch")
+        return window
     }
 
     /// The count at launch, as a server's `set_badge` sets it. The Home
