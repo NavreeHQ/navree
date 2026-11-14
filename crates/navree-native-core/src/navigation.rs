@@ -19,12 +19,13 @@ use crate::Core;
 use crate::config::DeepLinks;
 use crate::effect::{Change, Effect};
 use crate::origin::{Target, path_of, route_matches};
-use crate::reduce::Shown;
+use crate::reduce::{By, Shown};
 use crate::state::{Content, Modal, ScreenId};
 
 impl Core {
-    /// Follows `href` as found on the screen `from`. Returns the screen now
-    /// in front of that stack.
+    /// Follows `href` as found on the screen `from`, because the person tapped
+    /// it: only a tap follows a link. Returns the screen now in front of that
+    /// stack.
     pub(crate) fn navigate(
         &mut self,
         from: Option<ScreenId>,
@@ -41,7 +42,7 @@ impl Core {
                 from
             }
             Target::Outside(url) => {
-                self.open_outside(&url, false);
+                self.open_outside(&url, false, By::Tap);
                 from
             }
             Target::Inside(url) => self.go(from, &url, present),
@@ -535,7 +536,8 @@ impl Core {
             Target::Inside(inside) => {
                 self.go(Some(id), &inside, Present::Auto);
             }
-            Target::Outside(url) => self.open_outside(&url, false),
+            // The client says a link of the page was tapped.
+            Target::Outside(url) => self.open_outside(&url, false, By::Tap),
             Target::Refused => {}
         }
     }

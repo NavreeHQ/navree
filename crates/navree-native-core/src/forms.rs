@@ -31,7 +31,7 @@ use crate::decode::Answer;
 use crate::effect::{Body, Change, Part};
 use crate::event::FieldValue;
 use crate::origin::Target;
-use crate::reduce::SEND_LIMIT;
+use crate::reduce::{By, SEND_LIMIT};
 use crate::state::{
     Content, FieldView, FormView, Held, Notice, Pending, Question, ScreenId, TimerFor, Waiting,
 };
@@ -918,10 +918,14 @@ impl Core {
         href: &str,
         fields: Vec<Pair>,
         action: Option<Action>,
+        by: By,
     ) {
-        self.request(id, Method::Post, href, fields, action);
+        self.request(id, Method::Post, href, fields, action, by);
     }
 
+    /// Sends a request of its own. `by` says whether a tap stands behind it:
+    /// an address outside the app opens there, and only a tap opens one that
+    /// is not a web page.
     pub(crate) fn request(
         &mut self,
         id: ScreenId,
@@ -929,10 +933,11 @@ impl Core {
         href: &str,
         fields: Vec<Pair>,
         action: Option<Action>,
+        by: By,
     ) {
         let url = match self.resolve(href, id) {
             Target::Inside(url) => url,
-            Target::Outside(url) => return self.open_outside(&url, false),
+            Target::Outside(url) => return self.open_outside(&url, false, by),
             Target::Refused => return self.said_refused("form", href),
         };
         if !self.may_send(id) {
@@ -1093,7 +1098,7 @@ impl Core {
                 let (method, href, fields) = (*method, href.clone(), fields.clone());
                 // A system alert goes away when one of its buttons is tapped.
                 self.close_alert(id, overlay.as_deref());
-                self.request(id, method, &href, fields, Some(action));
+                self.request(id, method, &href, fields, Some(action), By::Tap);
             }
             Action::Commands { list } => self.commands(id, list, text.as_deref()),
             Action::Back => self.back(),
@@ -1250,7 +1255,7 @@ impl Core {
                 self.failed(failure, Some(id));
                 told = true;
             }
-            Answer::Left(url) => self.open_outside(&url, false),
+            Answer::Left(url) => self.open_outside(&url, false, By::Answer("redirect")),
             Answer::Empty => {
                 if write {
                     self.wrote(id);

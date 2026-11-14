@@ -38,8 +38,9 @@
  * character or backslash; the platform reads it as http or https with no user
  * information; its scheme, host and port are an origin of the app. It runs the
  * `ours` list of vectors/addresses.json to prove it (the README, "Addresses").
- * An open_url effect holds only a whole http or https address, or a mailto,
- * tel, sms or geo one.
+ * An open_url effect holds only a whole http or https address, or, only when
+ * the person's tap stands behind it, a mailto, tel, sms or geo one. A client
+ * sends web_link only for a navigation the person started in the web view.
  *
  * Errors: a call never crashes on bad input. navree_core_new answers NULL for
  * a configuration it can't read. navree_core_send and navree_core_view answer

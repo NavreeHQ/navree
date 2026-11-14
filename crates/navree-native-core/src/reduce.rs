@@ -46,6 +46,16 @@ const MOST_REDIRECTS: u8 = 5;
 /// How long the answer to a form or a button may take.
 pub(crate) const SEND_LIMIT: u32 = 60_000;
 
+/// What stands behind an address opened outside the app.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum By {
+    /// The person tapped something: a link, a button, a message's button.
+    Tap,
+    /// An answer, by itself: a redirect, an op. The kind is what is said
+    /// when what it asked is refused.
+    Answer(&'static str),
+}
+
 /// A value a server chose, written so it can go in a header: every byte of its
 /// UTF-8 outside `!` to `~`, and `%`, as `%` and two hex digits. A plain ASCII
 /// id without `%` goes out as it is.
@@ -328,7 +338,8 @@ impl Core {
                     .map(|upgrade| upgrade.url.clone())
                     .filter(|url| !url.is_empty())
                 {
-                    self.open_outside(&url, false);
+                    // The person tapped the upgrade's button.
+                    self.open_outside(&url, false, By::Tap);
                 }
             }
         }
@@ -546,17 +557,34 @@ impl Core {
     /// Asks the client to open an address outside the app: the one way an
     /// `open_url` effect is made. Only a whole `http` or `https` address that
     /// reads, written again from its parts, or an address of a scheme the
-    /// system handles, is ever opened; anything else is dropped.
-    pub(crate) fn open_outside(&mut self, url: &str, inside: bool) {
-        if let Some(url) = openable(url) {
-            self.effects.push(Effect::OpenUrl { url, inside });
+    /// system handles, is ever opened; anything else is dropped. The
+    /// system's own (mail, the dialler, messages, maps) open only when a tap
+    /// stands behind them: an answer by itself takes the person to a web
+    /// page, never to those, and what it asked is said, without the address.
+    pub(crate) fn open_outside(&mut self, url: &str, inside: bool, by: By) {
+        let Some(url) = openable(url) else {
+            return;
+        };
+        let web = matches!(
+            crate::origin::scheme_of(&url).as_deref(),
+            Some("http" | "https")
+        );
+        match by {
+            By::Answer(kind) if !web => {
+                if !std::mem::replace(&mut self.inner.refusal_said, true) {
+                    let site = crate::origin::site_of(&url);
+                    self.report("address", format!("{kind} with no tap: {site}"));
+                }
+            }
+            _ => self.effects.push(Effect::OpenUrl { url, inside }),
         }
     }
 
-    /// Opens an address of the app's own outside it, as a whole address.
+    /// Opens an address of the app's own outside it, as a whole address:
+    /// always a web one.
     pub(crate) fn open_ours_outside(&mut self, url: &str) {
         if let Some(url) = self.inner.origin.absolute(url) {
-            self.open_outside(&url, false);
+            self.open_outside(&url, false, By::Answer("external"));
         }
     }
 
@@ -725,7 +753,8 @@ impl Core {
         if !action.post {
             self.navigate(from, &action.href, Present::Auto);
         } else if let Some(screen) = from {
-            self.post(screen, &action.href, action.fields, None);
+            // The person tapped the message's button.
+            self.post(screen, &action.href, action.fields, None, By::Tap);
         }
     }
 
@@ -1178,7 +1207,9 @@ impl Core {
         self.who_may_have_changed(false);
         let url = match self.resolve(href, under) {
             Target::Inside(url) => url,
-            Target::Outside(url) => return self.open_outside(&url, false),
+            Target::Outside(url) => {
+                return self.open_outside(&url, false, By::Answer("sign-in"));
+            }
             Target::Refused => return self.said_refused("navigate", href),
         };
         if let (Some(view), Some(inner)) = (
@@ -1321,7 +1352,8 @@ impl Core {
                     count: None,
                 });
             }
-            Call::OpenUrl(open) => self.open_outside(open.url.as_str(), open.inside),
+            // Every device call here is one a tap started.
+            Call::OpenUrl(open) => self.open_outside(open.url.as_str(), open.inside, By::Tap),
             Call::AuthSession(session) => {
                 self.sign_in_session(session.start.as_str(), session.ephemeral);
             }
@@ -1476,7 +1508,13 @@ impl Core {
             fields.push(pair(TICKET_FIELD, then.ticket.as_str()));
         }
         fields.push(pair(OUTCOME_FIELD, &outcome));
-        self.post(screen, then.href.as_str(), fields, None);
+        self.post(
+            screen,
+            then.href.as_str(),
+            fields,
+            None,
+            By::Answer("device reply"),
+        );
     }
 
     /// Starts the web's sign-in with a provider, in the system's sign-in session.
@@ -2188,7 +2226,7 @@ impl Core {
             }
             Answer::Left(url) => {
                 // The page moved to another site: it opens there.
-                self.open_outside(&url, false);
+                self.open_outside(&url, false, By::Answer("redirect"));
                 if blank {
                     self.remove(id);
                 } else {
