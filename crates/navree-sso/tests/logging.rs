@@ -253,7 +253,7 @@ async fn with_the_tenants_key_the_boot_says_so_at_info() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn the_boot_says_nothing_without_the_flag_and_boots_when_the_scan_fails() {
+async fn the_boot_says_nothing_without_the_flag_or_before_the_first_migration() {
     if servers::Server::current() != servers::Server::Sqlite {
         return;
     }
@@ -262,11 +262,15 @@ async fn the_boot_says_nothing_without_the_flag_and_boots_when_the_scan_fails() 
     let _plain = support::world().await;
     let lines = capture.lines();
     assert!(lines_with(&lines, &["allow_unverified_emails"]).is_empty());
-    // Without migrations the scan fails, and the app still boots.
+    // Without migrations the table doesn't exist: the app boots, and the
+    // check says so at debug only.
     let unmigrated = support::builder().config("database.migrate_on_boot", false);
     let _unmigrated = support::world_with(unmigrated).await;
+    let lines = capture.lines();
     let failed = "could not check the single sign-on connections at boot";
-    assert!(!lines_with(&capture.lines(), &["WARN", failed]).is_empty());
+    assert!(lines_with(&lines, &[failed]).is_empty());
+    let not_yet = "their table doesn't exist yet";
+    assert!(!lines_with(&lines, &["DEBUG", not_yet]).is_empty());
 }
 
 #[tokio::test(flavor = "current_thread")]

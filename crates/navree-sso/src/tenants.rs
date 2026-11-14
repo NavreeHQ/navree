@@ -213,6 +213,21 @@ pub(crate) fn change_line(slug: &str, owner: SsoOwner, tenants_allowed: bool) ->
     }
 }
 
+/// Whether `error` says the connections' table doesn't exist yet (a database
+/// not migrated yet): SQLSTATE `42P01` on PostgreSQL, error 1146 on MySQL,
+/// `no such table` on SQLite.
+pub(crate) fn missing_table(error: &SsoError) -> bool {
+    let database = match error {
+        SsoError::Orm(error) => error.db_error(),
+        SsoError::Db(error) => Some(error),
+        _ => None,
+    };
+    database.is_some_and(|database| {
+        matches!(database.code(), Some("42P01" | "1146"))
+            || database.message().contains("no such table")
+    })
+}
+
 /// The boot's line when the connections could not be read.
 pub(crate) fn scan_failed_line(error: &SsoError) -> Line {
     Line {
@@ -234,7 +249,8 @@ pub(crate) fn emit(line: &Line) {
 
 /// Names, when the app boots, the connections that have
 /// `allow_unverified_emails` on ([`boot_lines`]). A scan that fails is a
-/// warning ([`scan_failed_line`]): the boot goes on either way.
+/// warning ([`scan_failed_line`]), unless the table doesn't exist yet
+/// ([`missing_table`], logged at `debug`): the boot goes on either way.
 pub(crate) struct TenantScan {
     sso: Arc<Sso>,
 }
@@ -259,6 +275,12 @@ impl Lifecycle for TenantScan {
             let tenants_allowed = self.sso.tenants_allow_unverified_emails();
             let lines = match self.sso.flagged_connections().await {
                 Ok(flagged) => boot_lines(&flagged, tenants_allowed),
+                // A database before its first migration (`navree migrate`
+                // boots the app first): nothing to check yet.
+                Err(error) if missing_table(&error) => {
+                    tracing::debug!(target: "navree::sso", %error, "the single sign-on connections are not checked at boot: their table doesn't exist yet");
+                    Vec::new()
+                }
                 Err(error) => vec![scan_failed_line(&error)],
             };
             for line in &lines {
@@ -271,6 +293,8 @@ impl Lifecycle for TenantScan {
 
 #[cfg(test)]
 mod tests {
+    use navree_db::{DbError, ErrorKind};
+
     use super::*;
 
     #[test]
@@ -373,6 +397,21 @@ mod tests {
         assert!(off.message.contains(&expected));
         let on = change_line("ludhiana-okta", SsoOwner::Workspace(ws), true);
         assert_eq!(on.level, tracing::Level::INFO);
+    }
+
+    #[test]
+    fn a_table_that_does_not_exist_yet_is_told_apart() {
+        let missing = DbError::new(
+            ErrorKind::Database,
+            "error returned from database: (code: 1) no such table: sso_connections",
+        );
+        assert!(missing_table(&SsoError::Db(missing)));
+        let locked = DbError::new(
+            ErrorKind::LockUnavailable,
+            "error returned from database: (code: 5) database is locked",
+        );
+        assert!(!missing_table(&SsoError::Db(locked)));
+        assert!(!missing_table(&SsoError::Config("no such table".into())));
     }
 
     #[test]
