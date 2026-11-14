@@ -286,7 +286,9 @@ async fn a_first_party_plugin_collides_like_a_module_of_today() {
     };
     let error = error.to_string();
     assert!(
-        error.contains("cannot be replaced by `NoticesShell`, a module of the plugin `navree-plugin-notices`"),
+        error.contains(
+            "cannot be replaced by `NoticesShell`, a module of the plugin `navree-plugin-notices`"
+        ),
         "{error}"
     );
 }
