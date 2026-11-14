@@ -32,7 +32,9 @@ mod plugin {
     impl Module for AnnouncementsModule {
         fn register(&self, m: &mut ModuleBuilder) {
             m.plugin(super::announcements())
-                .locales(navree_i18n_macros::embed_locales!("tests/fixtures/plugin-locales"));
+                .locales(navree_i18n_macros::embed_locales!(
+                    "tests/fixtures/plugin-locales"
+                ));
         }
     }
 }
@@ -168,7 +170,10 @@ async fn i18n_publish_writes_a_plugins_files() {
         fs::read_to_string(&hi).unwrap(),
         include_str!("fixtures/plugin-locales/hi/announcements.ftl")
     );
-    assert!(!dir.path().join("pa").exists(), "pa is not a locale of the app");
+    assert!(
+        !dir.path().join("pa").exists(),
+        "pa is not a locale of the app"
+    );
 
     // An existing file is kept without --force and replaced with it; the plugin's name works too.
     fs::write(&en, "announcements-title = Harpreet Sandhu's notices\n").unwrap();
@@ -228,7 +233,10 @@ async fn i18n_publish_takes_the_plugins_locale_of_the_same_language() {
         fs::read_to_string(dir.path().join("pa-IN/announcements/announcements.ftl")).unwrap(),
         include_str!("fixtures/plugin-locales/pa/announcements.ftl")
     );
-    assert!(!dir.path().join("hi").exists(), "hi is not a locale of the app");
+    assert!(
+        !dir.path().join("hi").exists(),
+        "hi is not a locale of the app"
+    );
     app.shutdown().await.unwrap();
 }
 

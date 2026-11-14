@@ -1065,7 +1065,9 @@ mod tests {
             Catalog::build_with(&options(&["en"], "en"), vec![], &[held], false)
                 .err()
                 .unwrap(),
-            ["plugin `navree-time`: message `zone-ist` in locales/en/time.ftl does not start with `time-`"]
+            [
+                "plugin `navree-time`: message `zone-ist` in locales/en/time.ftl does not start with `time-`"
+            ]
         );
     }
 }
