@@ -148,10 +148,7 @@ async fn two_config_types_on_one_key_warn_between_modules_and_fail_with_a_plugin
     );
 
     // Two of today's modules: a warning, and the check still passes.
-    let booted = app(NoticeBoardModule)
-        .boot()
-        .await
-        .expect("a warning only");
+    let booted = app(NoticeBoardModule).boot().await.expect("a warning only");
     assert!(capture.lines().iter().any(|line| line.contains("WARN")
         && line.contains(
             "configuration section `notices` is read by two types: `collisions::NoticesA` (CrmModule) and `collisions::NoticesB` (NoticeBoardModule); this becomes an error in 2.0"

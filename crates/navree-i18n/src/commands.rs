@@ -275,7 +275,7 @@ fn plugin_steps(i18n: &I18n, plugin: &PluginLocales) -> Vec<Step> {
             {
                 steps.push(Step::File(
                     format!("{locale}/{}/{rest}", plugin.namespace),
-                    *bytes,
+                    bytes,
                 ));
             }
         }
@@ -370,14 +370,19 @@ mod tests {
                 let error = write_files(&dir, &steps, force).unwrap_err().to_string();
                 assert_eq!(
                     error,
-                    format!("i18n:publish: {path} is not a safe relative path; nothing was written")
+                    format!(
+                        "i18n:publish: {path} is not a safe relative path; nothing was written"
+                    )
                 );
                 assert!(!dir.exists(), "{path:?}");
             }
         }
         for (paths, refusal) in [
             (
-                ["en/announcements/notices.ftl", "en/announcements/Notices.ftl"],
+                [
+                    "en/announcements/notices.ftl",
+                    "en/announcements/Notices.ftl",
+                ],
                 "en/announcements/notices.ftl is the same file as another one on a disk that ignores case; nothing was written",
             ),
             (

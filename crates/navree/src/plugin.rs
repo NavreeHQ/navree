@@ -20,10 +20,10 @@
 //! }
 //! ```
 
+pub use navree_contracts::EmbeddedLocales;
 pub use navree_kernel::{
     PluginInfo, PluginModuleReport, PluginReport, PluginsReport, PublishTag, Publishable,
 };
-pub use navree_contracts::EmbeddedLocales;
 #[cfg(feature = "view")]
 pub use navree_view::TemplateDir;
 

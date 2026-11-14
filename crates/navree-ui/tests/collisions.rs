@@ -76,13 +76,13 @@ static BOARD_BRAND: AppSheet = AppSheet::new("brand", b".hero{color:var(--accent
 
 /// Three sheets named `banner` under the plugin's namespace, with different text, and one
 /// with no namespace.
-static NOTICE_BANNER: AppSheet = AppSheet::new("banner", b".notice{border-color:var(--accent)}", 1024)
-    .namespace("announcements");
-static SHELL_BANNER: AppSheet = AppSheet::new("banner", b".notice{border-color:var(--ink-1)}", 1024)
-    .namespace("announcements");
-static OTHER_SHELL_BANNER: AppSheet =
-    AppSheet::new("banner", b".notice{border-color:var(--ink-2)}", 1024)
+static NOTICE_BANNER: AppSheet =
+    AppSheet::new("banner", b".notice{border-color:var(--accent)}", 1024)
         .namespace("announcements");
+static SHELL_BANNER: AppSheet =
+    AppSheet::new("banner", b".notice{border-color:var(--ink-1)}", 1024).namespace("announcements");
+static OTHER_SHELL_BANNER: AppSheet =
+    AppSheet::new("banner", b".notice{border-color:var(--ink-2)}", 1024).namespace("announcements");
 static LOOSE_BANNER: AppSheet =
     AppSheet::new("banner", b".notice{border-color:var(--accent)}", 1024);
 

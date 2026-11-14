@@ -1320,10 +1320,8 @@ mod tests {
         // A namespace outside the grammar, and a namespaced sheet named `face`, fail the build.
         for bad in ["Announcements", "1notices", "notice-board", ""] {
             assert!(
-                std::panic::catch_unwind(|| {
-                    AppSheet::new("banner", b"x", 8).namespace(bad)
-                })
-                .is_err(),
+                std::panic::catch_unwind(|| { AppSheet::new("banner", b"x", 8).namespace(bad) })
+                    .is_err(),
                 "{bad}"
             );
             assert!(
