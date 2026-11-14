@@ -295,11 +295,22 @@ private func labels(_ nodes: [Navree.Node]) -> [String] {
     #expect(ContentRules.lowProminenceWords(bar: .navigation) == .system)
 }
 
-@Test func aClickAnywhereOnAMacRowOpensWhatItsTitleButtonOpens() {
-    // A board card on a Mac opens its peek from a click anywhere on it.
-    #expect(ContentRules.rowOpening(bar: .window) == .click)
-    // On iPhone and iPad the button and VoiceOver's default action.
-    #expect(ContentRules.rowOpening(bar: .navigation) == .button)
+@Test func aRowWhoseButtonRepeatsItsTitleIsTheControlAndTheButtonIsNotDrawnAgain() {
+    // A board card opens its peek from a click on a Mac and a tap on iPhone and iPad, anywhere on it.
+    #expect(RowRules.rowOpening(bar: .window) == .click)
+    #expect(RowRules.rowOpening(bar: .navigation) == .tap)
+    // The live board's cards: the peek's form, whose one button is the card's
+    // title, is left out of what the row draws; everything else stays.
+    let peek = Navree.Node.form(Navree.Form(action: "/cards/1/peek", children: [.button(Navree.Button(label: "Export a shipment as CSV"))]))
+    let badges = Navree.Node.stack(Navree.Stack(children: [.badge(Navree.Badge(text: "Feature"))]))
+    let detail = [Navree.Node.stack(Navree.Stack(children: [badges, peek, .text(Navree.Text(value: "Rohit"))]))]
+    let drawn = RowRules.withoutTitleButton(detail, title: "Export a shipment as CSV")
+    guard case .stack(let stack)? = drawn.first else { Issue.record("the detail's stack went"); return }
+    #expect(stack.children.count == 2)
+    #expect(!stack.children.contains(peek))
+    // A button with other words, or a form that asks for something, stays.
+    let other = Navree.Node.button(Navree.Button(label: "Move"))
+    #expect(RowRules.withoutTitleButton([other], title: "Export a shipment as CSV") == [other])
 }
 
 @Test func aMacWindowsDetailKeepsTheWidthEveryScreenIsLaidOutFor() {
