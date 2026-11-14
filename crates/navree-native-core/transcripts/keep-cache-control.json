@@ -55,7 +55,6 @@
           {"t":"screen","id":2}
         ],
         "effects": [
-          {"t":"cache_write","key":"page:https://shop.example/orders"},
           {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
         ]
       }

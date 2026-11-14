@@ -1,5 +1,5 @@
 {
-  "about": "Taking away and emptying reach the device whatever the core holds in memory: a page answered without the header before what was kept has been read is taken away and stays away; a write, a new build and a change of person empty the device's store even when the list in memory is empty; and the build the pages were kept under is kept beside them, so a deploy between launches empties them.",
+  "about": "Taking away and emptying reach the device whatever the core holds in memory: a page answered without the header before what was kept has been read is taken away once the list is read, and stays away; a write, a new build and a change of person empty the device's store even when the list in memory is empty; and the build the pages were kept under is kept beside them, so a deploy between launches empties them.",
   "config": {"cache":{"persist":true}},
   "steps": [
     {
@@ -40,7 +40,7 @@
       }
     },
     {
-      "note": "The orders are answered without the header: what the device kept for them is taken away, though the list is not read yet.",
+      "note": "The orders are answered without the header before what was kept has been read: the core remembers to take them away.",
       "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "store/orders.json",
       "expect": {
@@ -48,18 +48,18 @@
           {"t":"screen","id":2}
         ],
         "effects": [
-          {"t":"cache_write","key":"page:https://shop.example/orders"},
           {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
         ]
       }
     },
     {
-      "note": "The list is read, Ravneet's, with the orders on it: they stay away, and the list is written again without them.",
+      "note": "The list is read, Ravneet's, with the orders on it: they are taken away now, and the list is written again without them.",
       "send": {"t":"cache","key":"boot"},
       "body": "made/kept-boot.json",
       "expect": {
         "changed": [],
         "effects": [
+          {"t":"cache_write","key":"page:https://shop.example/orders"},
           {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\\"navree\\\":1,\\\"build\\\":\\\"152bd84abf4d\\\",\\\"name\\\":\\\"Charkha Supply Co.\\\",\\\"context\\\":\\\"Store operations\\\",\\\"home\\\":\\\"/\\\",\\\"nav\\\":{\\\"groups\\\":[{\\\"label\\\":\\\"Store\\\",\\\"items\\\":[{\\\"label\\\":\\\"Dashboard\\\",\\\"icon\\\":{\\\"name\\\":\\\"layout-dashboard\\\",\\\"paths\\\":[\\\"M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1z\\\",\\\"M15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1z\\\",\\\"M15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1z\\\",\\\"M4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1z\\\"]},\\\"href\\\":\\\"/\\\"},{\\\"label\\\":\\\"Orders\\\",\\\"icon\\\":{\\\"name\\\":\\\"shopping-bag\\\",\\\"paths\\\":[\\\"M16 10a4 4 0 0 1-8 0\\\",\\\"M3.103 6.034h17.794\\\",\\\"M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z\\\"]},\\\"href\\\":\\\"/orders\\\"},{\\\"label\\\":\\\"Inventory\\\",\\\"icon\\\":{\\\"name\\\":\\\"boxes\\\",\\\"paths\\\":[\\\"M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z\\\",\\\"m7 16.5-4.74-2.85\\\",\\\"m7 16.5 5-3\\\",\\\"M7 16.5v5.17\\\",\\\"M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z\\\",\\\"m17 16.5-5-3\\\",\\\"m17 16.5 4.74-2.85\\\",\\\"M17 16.5v5.17\\\",\\\"M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z\\\",\\\"M12 8 7.26 5.15\\\",\\\"m12 8 4.74-2.85\\\",\\\"M12 13.5V8\\\"]},\\\"href\\\":\\\"/inventory\\\"}]}]},\\\"user\\\":{\\\"name\\\":\\\"Ravneet Kaur\\\",\\\"email\\\":\\\"ravneet.kaur@example.com\\\",\\\"menu\\\":[{\\\"t\\\":\\\"link\\\",\\\"label\\\":\\\"Profile\\\",\\\"action\\\":{\\\"t\\\":\\\"navigate\\\",\\\"href\\\":\\\"/\\\"}},{\\\"t\\\":\\\"button\\\",\\\"label\\\":\\\"Sign out\\\",\\\"action\\\":{\\\"t\\\":\\\"request\\\",\\\"method\\\":\\\"post\\\",\\\"href\\\":\\\"/sign-out\\\"}}]}}\",\"pages\":[],\"owner\":{\"person\":{\"name\":\"Ravneet Kaur\",\"email\":\"ravneet.kaur@example.com\"}},\"build\":\"152bd84abf4d\"}"}
         ]
       }

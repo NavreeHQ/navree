@@ -247,28 +247,32 @@ impl Core {
         }
     }
 
-    /// Takes away what the client keeps for `url`: always when `always`, else
-    /// only when the list says it keeps a page there.
+    /// Takes away what the client keeps for `url`, when the list says it
+    /// keeps a page there; before the list is read, remembers a screen's page
+    /// (`always`) to take away once it is.
     fn forget_kept(&mut self, url: &str, always: bool) {
         if !self.config.cache.persist {
             return;
         }
         let key = self.key_of(url);
-        let listed = self.inner.cache.disk.contains(&key);
-        if !listed && !always {
+        // Before the list is read, a screen's page is remembered, and taken
+        // away when the list is read and holds it: nothing is written for a
+        // page that was never kept.
+        if self.inner.cache.owner == Owner::Unread {
+            if always && !self.inner.cache.removed.contains(&key) {
+                self.inner.cache.removed.push(key);
+            }
             return;
         }
-        if self.inner.cache.owner == Owner::Unread && !self.inner.cache.removed.contains(&key) {
-            self.inner.cache.removed.push(key.clone());
+        if !self.inner.cache.disk.contains(&key) {
+            return;
         }
         self.inner.cache.disk.retain(|kept| *kept != key);
         self.effects.push(Effect::CacheWrite {
             key: format!("page:{key}"),
             value: None,
         });
-        if listed {
-            self.boot();
-        }
+        self.boot();
     }
 
     /// Hands the client the shell, the list of pages kept and their owner.
@@ -535,6 +539,12 @@ impl Core {
         // What was taken away before the list was read stays away.
         let removed = std::mem::take(&mut self.inner.cache.removed);
         let before = pages.len();
+        for key in removed.iter().filter(|key| pages.contains(key)) {
+            self.effects.push(Effect::CacheWrite {
+                key: format!("page:{key}"),
+                value: None,
+            });
+        }
         pages.retain(|kept| !removed.contains(kept));
         self.inner.cache.disk = pages;
         self.inner.cache.owner = Owner::Of(owner);
