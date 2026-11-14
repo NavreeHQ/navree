@@ -1,6 +1,7 @@
 //! [`SendNotificationJob`]: one rendered notification on one channel.
 
 use chrono::{DateTime, Utc};
+use navree_config::DriverName;
 use navree_contracts::{BoxError, Job, JobContext};
 use navree_mail::TemplateMail;
 use serde::{Deserialize, Serialize};
@@ -121,6 +122,19 @@ pub enum Delivery {
         /// The notification.
         message: PushMessage,
     },
+    /// A message over a channel a module adds (`"via": "registered"`). The
+    /// channel's name reads back only when the process knows it: a payload
+    /// naming a channel no module of the process registers does not read.
+    Registered {
+        /// The channel's name.
+        channel: DriverName,
+        /// The address, as [`Notifiable::route_channel`](crate::Notifiable::route_channel)
+        /// gave it.
+        to: String,
+        /// The message, as [`Notification::to_channel`](crate::Notification::to_channel)
+        /// gave it.
+        message: Value,
+    },
 }
 
 impl Delivery {
@@ -136,6 +150,7 @@ impl Delivery {
             Delivery::WhatsApp { .. } => Channel::WhatsApp,
             Delivery::WebPush { .. } => Channel::WebPush,
             Delivery::Push { .. } => Channel::Push,
+            Delivery::Registered { channel, .. } => Channel::Registered(*channel),
         }
     }
 }

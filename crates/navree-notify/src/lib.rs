@@ -13,7 +13,9 @@
 //!   [`to_slack`](Notification::to_slack), [`to_teams`](Notification::to_teams),
 //!   [`to_sms`](Notification::to_sms), [`to_whatsapp`](Notification::to_whatsapp),
 //!   [`to_web_push`](Notification::to_web_push) and
-//!   [`to_push`](Notification::to_push). A [`Notifiable`]
+//!   [`to_push`](Notification::to_push), and for a channel a module adds
+//!   ([`ChannelDriver`], [`Channel::named`])
+//!   [`to_channel`](Notification::to_channel). A [`Notifiable`]
 //!   (usually a user) names the owner of stored notifications and routes
 //!   each channel (`route_mail`, `route_slack`, `route_sms`...).
 //! - [`NotifyModule`] is global: it provides and exports [`Notifier`]
@@ -220,6 +222,7 @@ pub use devices::{
 };
 pub use digest::{DIGEST_TYPE, DigestItem};
 pub use drivers::apns::ApnsPush;
+pub use drivers::channel::ChannelDriver;
 pub use drivers::fcm::FcmPush;
 pub use drivers::log::{LogSms, LogWhatsApp};
 pub use drivers::meta::MetaWhatsApp;

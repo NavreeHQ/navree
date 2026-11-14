@@ -1,5 +1,6 @@
 //! [`Notification`]: one message, many channels.
 
+use navree_config::DriverName;
 use navree_mail::TemplateMail;
 use navree_time::SendWindow;
 use serde::Serialize;
@@ -210,6 +211,43 @@ pub trait Notification: Serialize + DeserializeOwned + Send + Sync + 'static {
     /// ```
     fn to_push(&self, notifiable: &dyn Notifiable) -> Option<PushMessage> {
         let _ = notifiable;
+        None
+    }
+
+    /// The message of `channel`, a channel a module adds
+    /// (`Channel::named("doot")`): what its
+    /// [`ChannelDriver::send`](crate::ChannelDriver::send) receives. It goes
+    /// to [`Notifiable::route_channel`]. Default: `None` (the channel is
+    /// skipped).
+    ///
+    /// ```
+    /// use navree_config::DriverName;
+    /// use navree_notify::{Channel, Notifiable, Notification};
+    /// use serde::{Deserialize, Serialize};
+    /// use serde_json::{Value, json};
+    ///
+    /// const DOOT: Channel = Channel::named("doot");
+    ///
+    /// #[derive(Serialize, Deserialize)]
+    /// struct InvoicePaid {
+    ///     customer: String,
+    /// }
+    ///
+    /// impl Notification for InvoicePaid {
+    ///     const TYPE: &'static str = "invoice_paid";
+    ///
+    ///     fn via(&self, _n: &dyn Notifiable) -> Vec<Channel> {
+    ///         vec![Channel::Database, DOOT]
+    ///     }
+    ///
+    ///     fn to_channel(&self, channel: DriverName, _n: &dyn Notifiable) -> Option<Value> {
+    ///         (channel.as_str() == "doot")
+    ///             .then(|| json!({ "text": format!("{} paid ₹1,00,000", self.customer) }))
+    ///     }
+    /// }
+    /// ```
+    fn to_channel(&self, channel: DriverName, notifiable: &dyn Notifiable) -> Option<Value> {
+        let _ = (channel, notifiable);
         None
     }
 }

@@ -323,10 +323,22 @@ pub struct NotificationPreference {
 }
 
 impl NotificationPreference {
-    /// The stored preferences; a row that no longer reads (written by
-    /// hand) counts as none.
+    /// The stored preferences. A channel no module adds any more is left
+    /// out (with a warning) and the other choices kept; a row that still
+    /// does not read (written by hand) counts as none.
     pub fn read(&self) -> Preferences {
-        serde_json::from_value(self.preferences.clone()).unwrap_or_else(|error| {
+        if let Ok(preferences) = serde_json::from_value(self.preferences.clone()) {
+            return preferences;
+        }
+        let mut stored = self.preferences.clone();
+        for name in drop_unknown_channels(&mut stored) {
+            tracing::warn!(
+                target: "navree::notify",
+                channel = %name,
+                "skipping a stored notification channel that no module registers"
+            );
+        }
+        serde_json::from_value(stored).unwrap_or_else(|error| {
             tracing::warn!(
                 target: "navree::notify",
                 owner = %format!("{}:{}", self.owner_type, self.owner_id),
@@ -336,6 +348,31 @@ impl NotificationPreference {
             Preferences::default()
         })
     }
+}
+
+/// Removes from stored preferences every channel switch (of every category
+/// and of each one) whose channel the process does not know
+/// ([`Channel::from_name`]); returns their names.
+fn drop_unknown_channels(stored: &mut Value) -> Vec<String> {
+    let mut dropped = Vec::new();
+    let mut prune = |channels: Option<&mut Value>| {
+        if let Some(Value::Object(channels)) = channels {
+            channels.retain(|name, _| {
+                let known = Channel::from_name(name).is_some();
+                if !known {
+                    dropped.push(name.clone());
+                }
+                known
+            });
+        }
+    };
+    prune(stored.get_mut("channels"));
+    if let Some(Value::Object(categories)) = stored.get_mut("categories") {
+        for category in categories.values_mut() {
+            prune(category.get_mut("channels"));
+        }
+    }
+    dropped
 }
 
 /// The preferences that decide one delivery: the recipient's own over

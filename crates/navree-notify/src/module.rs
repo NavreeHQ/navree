@@ -23,7 +23,7 @@ use crate::controller::NotificationsController;
 use crate::devices::{DeviceRevoker, RegisteredApps};
 use crate::digest::DIGEST_TEMPLATES;
 use crate::notifier::Parts;
-use crate::registered::{SMS_SLOT, WHATSAPP_SLOT, registered_drivers};
+use crate::registered::{CHANNEL_SLOT, SMS_SLOT, WHATSAPP_SLOT, registered_drivers};
 use crate::{
     Channel, DeliveryLog, ModuleBuilderNotifyExt, Notification, NotificationCatalog,
     NotificationPreferences, Notifier, NotifyOptions, OptOuts, PushDevices, PushOptions,
@@ -257,6 +257,7 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
                 let ctx = r.app();
                 check_registrations(&ctx, &SMS_SLOT, NotifyOptions::schema())?;
                 check_registrations(&ctx, &WHATSAPP_SLOT, NotifyOptions::schema())?;
+                check_registrations(&ctx, &CHANNEL_SLOT, NotifyOptions::schema())?;
                 let registered = registered_drivers(&ctx, &options).await?;
                 let drivers = ChannelDrivers::from_options(&options, &push, &app)
                     .map_err(|message| format!("notify: {message}"))?
