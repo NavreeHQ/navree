@@ -175,10 +175,11 @@ async function send(form, submitter) {
     // place and record, for the same user. A redirect, a page, a swap, a new action, a
     // form drawn again for another record or a sign-out drops it, and the user is told.
     if (next && kept && form.isConnected && next.page === pageSwaps() && next.href === location.href && next.target === targetOf(form, by) && next.token === cookie("XSRF-TOKEN") && next.record === recordOf(form)) {
+      // Through the prototype: a field named `requestSubmit` can't stand in for it.
       try {
-        form.requestSubmit(/** @type {HTMLButtonElement | null} */ (by));
+        HTMLFormElement.prototype.requestSubmit.call(form, /** @type {HTMLButtonElement | null} */ (by));
       } catch {
-        form.requestSubmit();
+        HTMLFormElement.prototype.requestSubmit.call(form);
       }
     } else if (next && !told) toast("warning", "Your latest change wasn't saved. Check it and save again.");
   }
