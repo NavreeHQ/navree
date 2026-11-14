@@ -98,6 +98,8 @@ public struct SplitColumns<Sidebar: View, ListColumn: View, DetailRoot: View, In
     @Environment(\.navreeWindow) private var window
     @State private var shown: NavigationSplitViewColumn
     @State private var inspecting: Bool?
+    /// The room the detail's column has, its inspector included.
+    @State private var detailRoom: Double?
 
     public init(
         path: ColumnPath, compactColumn: CompactColumn, inspectorTitle: String? = nil,
@@ -137,6 +139,11 @@ public struct SplitColumns<Sidebar: View, ListColumn: View, DetailRoot: View, In
             }
         }
         .navigationSplitViewStyle(.balanced)
+        // The room the detail's column has: the window's, less the sidebar's
+        // and the list's columns at their ideal widths.
+        .onGeometryChange(for: Double.self) { Double($0.size.width) } action: { [hasSidebar = sidebar != nil] width in
+            detailRoom = SplitRules.detailRoom(window: width, sidebar: hasSidebar)
+        }
         .onChange(of: compactColumn) { _, column in shown = Self.column(column, sidebar: sidebar != nil) }
     }
 
@@ -163,7 +170,8 @@ public struct SplitColumns<Sidebar: View, ListColumn: View, DetailRoot: View, In
     }
 
     private var detailColumn: some View {
-        detailStack.navigationSplitViewColumnWidth(min: NavigationRules.detailMinimumWidth, ideal: 760)
+        detailStack
+            .navigationSplitViewColumnWidth(min: NavigationRules.detailMinimumWidth, ideal: 760)
     }
 
     private var detailStack: some View {
@@ -190,7 +198,7 @@ public struct SplitColumns<Sidebar: View, ListColumn: View, DetailRoot: View, In
     /// Shown beside the detail as the window's width says, until the person
     /// says otherwise.
     private var inspectorShown: Bool {
-        inspecting ?? SplitRules.showsInspector(width: window)
+        inspecting ?? (SplitRules.showsInspector(width: window) && SplitRules.inspectorFits(detailRoom: detailRoom))
     }
 
     private var inspectorBinding: Binding<Bool> {
@@ -239,7 +247,7 @@ struct InspectorColumn<Inspector: View>: ViewModifier {
                 NavigationStack {
                     content
                 }
-                .inspectorColumnWidth(min: 280, ideal: 320, max: 400)
+                .inspectorColumnWidth(min: CGFloat(SplitRules.inspectorLeast), ideal: 320, max: 400)
             }
         } else {
             view
@@ -333,7 +341,7 @@ struct PointerHover: ViewModifier {
 struct DetailMinimum: ViewModifier {
     func body(content: Content) -> some View {
         #if os(macOS)
-        content.frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
+        content.frame(minWidth: CGFloat(NavigationRules.detailMinimumWidth), maxWidth: .infinity, maxHeight: .infinity)
         #else
         content
         #endif
