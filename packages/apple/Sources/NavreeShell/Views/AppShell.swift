@@ -32,6 +32,10 @@ public struct AppShell: View {
     /// Whether the shell stands in the window under an item in the menu bar.
     @Environment(\.navreeCompactWindow) private var compactWindow
     @State private var shownWidth: CGFloat = 0
+    /// What a card and the screen it opens are matched in as the one grows
+    /// into the other: one for the window, so a card on a destination's
+    /// screen matches a screen pushed over it or presented over everything.
+    @Namespace private var zoom
 
     public init(configuration: ShellConfiguration) {
         _session = State(initialValue: Session(configuration: configuration))
@@ -49,6 +53,7 @@ public struct AppShell: View {
                     // What it shows is the core's, so nothing is lost.
                     .id(compactWindow)
                     .environment(\.navreeStartsEditing, session.configuration.launch.editing)
+                    .environment(\.navreeZoomSpace, zoom)
                     .modifier(SheetRoom())
                     .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
                         shownWidth = width

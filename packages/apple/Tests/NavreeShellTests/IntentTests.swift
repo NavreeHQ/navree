@@ -138,3 +138,40 @@ struct IntentTests {
     #expect(shell.client.screen(order)?.from == "order-card")
     #expect(shell.client.context(for: order, depth: 1, base: nil).from == "order-card")
 }
+
+/// A screen opened from a card that zooms grows out of that card: pushed
+/// from a destination's screen, or presented over the screen in front. Less
+/// motion, or a screen opened from anything else, comes in as any screen does.
+@MainActor
+@Test func aScreenGrowsOutOfTheCardItWasOpenedFromUnlessThePersonAskedForLessMotion() throws {
+    let shell = try Shell(answers: [
+        "/_navree/native/shell": (200, "made/shell-health.json"),
+        "/": (200, "../../../navree-native/corpus/screen-designed-health.json"),
+        "/sleep": (200, "made/designed-sleep.json"),
+        "/sleep/night": (200, "made/designed-sleep.json"),
+        "/heart": (200, "made/designed-sleep.json"),
+    ])
+    shell.client.begin()
+    let today = try #require(shell.client.nav.front)
+    #expect(shell.client.zoomSource(of: today, reduceMotion: false) == nil)
+
+    shell.client.perform(.act(.navigate(.init(href: "/sleep")), Place(from: "pillar-sleep")), on: today)
+    let sleep = try #require(shell.client.nav.front)
+    #expect(sleep != today)
+    #expect(shell.client.zoomSource(of: sleep, reduceMotion: false) == "pillar-sleep")
+    #expect(shell.client.zoomSource(of: sleep, reduceMotion: true) == nil)
+
+    shell.client.perform(.act(.navigate(.init(href: "/sleep/night", present: .sheet)), Place(from: "night-card")), on: sleep)
+    let night = try #require(shell.client.nav.modals.first?.stack.first)
+    #expect(shell.client.zoomSource(of: night, reduceMotion: false) == "night-card")
+    #expect(shell.client.zoomSource(of: night, reduceMotion: true) == nil)
+    shell.client.send(.dismissed(screen: night))
+
+    // Opened by a link of the same screen rather than by its card: a plain push.
+    shell.client.send(.popTo(screen: today))
+    shell.client.perform(.act(.navigate(.init(href: "/heart")), Place(from: "pillar-heart-link")), on: today)
+    let heart = try #require(shell.client.nav.front)
+    #expect(heart != today)
+    #expect(shell.client.zoomSource(of: heart, reduceMotion: false) == nil)
+    #expect(shell.problems.list.isEmpty, "\(shell.problems.list)")
+}
