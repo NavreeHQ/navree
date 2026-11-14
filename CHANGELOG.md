@@ -133,6 +133,10 @@ every `@navree/*` package carries the same version.
   screens write a different string each time, and the session's check takes the token as it is or
   any mask of it, in the `_csrf` field and in both headers. The `XSRF-TOKEN` cookie still holds the
   token as it is.
+- An `HtmlPolicy` that allows an attribute the page acts on (`data-ui-*`, `data-genui*`, `form`,
+  `formaction`, `formmethod`, `formenctype`, `formtarget`, `popover`, `popovertarget`,
+  `popovertargetaction`, `command`, `commandfor`, `autofocus`, `accesskey`, `contenteditable`) is
+  refused at boot, and the sanitizer drops these from rich text whatever the policy says.
 - The UI runtime acts on no hook inside an element marked `data-ui-stored`, and an op or command that
   names an id never finds an element there. `Markdown` carries the mark; wrap rich text you show from
   the database in it too. A code block's copy button, marked `data-ui-own`, still works inside.

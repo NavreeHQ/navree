@@ -20,6 +20,40 @@ const CONTENT_TAGS: [&str; 2] = ["script", "style"];
 /// handlers are the same.
 const NEVER_ATTRIBUTES: [&str; 2] = ["srcdoc", "http-equiv"];
 
+/// Attributes the page's own scripts act on, or that make an element act for the
+/// page with no script: which form a button posts and where, a popover or a
+/// command it opens, focus or a key it takes, text it makes editable. Rich text
+/// never keeps one, whatever the policy says, and a policy that lists one is
+/// refused. `id` and `name` stay: a document needs its anchors.
+const PAGE_ATTRIBUTES: [&str; 13] = [
+    "accesskey",
+    "autofocus",
+    "command",
+    "commandfor",
+    "contenteditable",
+    "form",
+    "formaction",
+    "formenctype",
+    "formmethod",
+    "formtarget",
+    "popover",
+    "popovertarget",
+    "popovertargetaction",
+];
+
+/// The hooks of the UI toolkit's browser runtime, by their prefix: the same as
+/// [`PAGE_ATTRIBUTES`].
+const PAGE_ATTRIBUTE_PREFIXES: [&str; 2] = ["data-ui-", "data-genui"];
+
+/// Whether the page acts on `attribute` (see [`PAGE_ATTRIBUTES`]), in any case.
+pub(crate) fn acts_on_page(attribute: &str) -> bool {
+    let name = attribute.to_ascii_lowercase();
+    PAGE_ATTRIBUTE_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+        || PAGE_ATTRIBUTES.contains(&name.as_str())
+}
+
 /// The most an input may be, unless the policy says otherwise (see
 /// [`HtmlPolicy::max_input_bytes`]).
 const DEFAULT_MAX_INPUT_BYTES: usize = 512 * 1024;
@@ -80,8 +114,14 @@ const MOST_DEPTH: usize = 256;
 /// ```
 ///
 /// `script` and `style` can't be allowed, nor `on*`, `srcdoc` or `http-equiv`,
-/// and `rel` can't be allowed while `link_rel` is set; `ValidationModule`
-/// refuses to boot with such a policy ([`check`](HtmlPolicy::check)).
+/// nor an attribute the page's own scripts act on (`data-ui-*`, `data-genui*`,
+/// `form`, `formaction`, `formmethod`, `formenctype`, `formtarget`, `popover`,
+/// `popovertarget`, `popovertargetaction`, `command`, `commandfor`,
+/// `autofocus`, `accesskey`, `contenteditable`), and `rel` can't be allowed
+/// while `link_rel` is set; `ValidationModule` refuses to boot with such a
+/// policy ([`check`](HtmlPolicy::check)). The sanitizer drops the attributes
+/// the page acts on whatever the policy says, so rich text cleaned under a
+/// policy that listed one is safe too.
 ///
 /// An input over a limit (`max_input_bytes`, `max_nodes`, `max_depth`, or 256
 /// attributes on one tag) is refused rather than parsed further:
@@ -175,6 +215,16 @@ impl Default for HtmlPolicy {
 }
 
 impl HtmlPolicy {
+    /// The attributes no policy keeps because the page's own scripts act on
+    /// them. Read by the UI toolkit's tests; not part of the API.
+    #[doc(hidden)]
+    pub const PAGE_ATTRIBUTES: &'static [&'static str] = &PAGE_ATTRIBUTES;
+
+    /// The prefixes of the attribute families no policy keeps for the same
+    /// reason. Read by the UI toolkit's tests; not part of the API.
+    #[doc(hidden)]
+    pub const PAGE_ATTRIBUTE_PREFIXES: &'static [&'static str] = &PAGE_ATTRIBUTE_PREFIXES;
+
     /// No tags at all: the text is kept, escaped, and every tag removed.
     pub fn text_only() -> Self {
         Self {
@@ -225,7 +275,9 @@ impl HtmlPolicy {
 
     /// Whether the policy is safe to use: `Err` names the key at fault
     /// (`validation.html.tags: ...`) when it allows `script` or `style`, an
-    /// `on*` handler, `srcdoc` or `http-equiv`, `rel` while
+    /// `on*` handler, `srcdoc` or `http-equiv`, an attribute the page's own
+    /// scripts act on (`data-ui-*`, `form`, `popovertarget` and the others
+    /// listed on [`HtmlPolicy`]), `rel` while
     /// [`link_rel`](HtmlPolicy::link_rel) is set, a limit of 0 (it would
     /// refuse every field), or a [`max_depth`](HtmlPolicy::max_depth) over
     /// 256.
@@ -259,6 +311,18 @@ impl HtmlPolicy {
             if let Some(attribute) = attributes.iter().find(|a| never(a)) {
                 return Err(format!(
                     "validation.html.tag_attributes: `{attribute}` on `{tag}` can't be allowed (it acts on its own, and no list can vet it)"
+                ));
+            }
+        }
+        if let Some(attribute) = self.generic_attributes.iter().find(|a| acts_on_page(a)) {
+            return Err(format!(
+                "validation.html.generic_attributes: `{attribute}` can't be allowed (the page's own scripts act on it)"
+            ));
+        }
+        for (tag, attributes) in &self.tag_attributes {
+            if let Some(attribute) = attributes.iter().find(|a| acts_on_page(a)) {
+                return Err(format!(
+                    "validation.html.tag_attributes: `{attribute}` on `{tag}` can't be allowed (the page's own scripts act on it)"
                 ));
             }
         }
@@ -618,6 +682,88 @@ mod tests {
             .link_rel("")
             .allow_attributes("a", ["rel"]);
         assert_eq!(policy.check(), Ok(()));
+    }
+
+    #[test]
+    fn a_policy_that_keeps_an_attribute_the_page_acts_on_is_refused() {
+        for attribute in [
+            "data-ui-click",
+            "DATA-UI-HOTKEY",
+            "data-ui-stored",
+            "data-genui",
+            "data-genui-part",
+            "form",
+            "formaction",
+            "formmethod",
+            "formenctype",
+            "formtarget",
+            "popover",
+            "popovertarget",
+            "popovertargetaction",
+            "command",
+            "commandfor",
+            "autofocus",
+            "accesskey",
+            "contenteditable",
+        ] {
+            let error = HtmlPolicy::default()
+                .allow_attributes("button", [attribute])
+                .check()
+                .unwrap_err();
+            assert!(
+                error.starts_with(&format!(
+                    "validation.html.tag_attributes: `{attribute}` on `button`"
+                )),
+                "{error}"
+            );
+            let generic = HtmlPolicy {
+                generic_attributes: set([attribute]),
+                ..HtmlPolicy::default()
+            };
+            let error = generic.check().unwrap_err();
+            assert!(
+                error.starts_with(&format!(
+                    "validation.html.generic_attributes: `{attribute}`"
+                )),
+                "{error}"
+            );
+        }
+        // A document's anchors stay.
+        let anchors = HtmlPolicy::default()
+            .allow_attributes("h2", ["id"])
+            .allow_attributes("a", ["name", "id"]);
+        assert_eq!(anchors.check(), Ok(()));
+    }
+
+    /// A policy written before these attributes were refused, or a hand-built one that skips
+    /// `check`, still cleans them away.
+    #[cfg(feature = "html")]
+    #[test]
+    fn clean_drops_what_the_page_acts_on_whatever_the_policy_says() {
+        let policy = HtmlPolicy {
+            generic_attributes: set([
+                "id",
+                "name",
+                "data-ui-click",
+                "data-ui-stored",
+                "data-genui",
+                "form",
+                "formaction",
+                "formmethod",
+                "popovertarget",
+                "autofocus",
+                "accesskey",
+                "contenteditable",
+            ]),
+            ..HtmlPolicy::default().allow_tags(["button"])
+        };
+        assert!(policy.check().is_err());
+        assert_eq!(
+            policy.clean(
+                r#"<button id="go" name="go" data-ui-click='[["copy","x"]]' data-ui-stored data-genui="message" form="ui-post" formaction="/sign-out" formmethod="post" popovertarget="menu" autofocus accesskey="s" contenteditable>Go</button>"#
+            ),
+            r#"<button id="go" name="go">Go</button>"#
+        );
     }
 
     #[test]

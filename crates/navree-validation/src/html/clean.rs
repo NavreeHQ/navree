@@ -7,8 +7,9 @@
 //!    take its place; `script` and `style`, and an element that is in a
 //!    namespace the HTML parser would not put it in under its new parent
 //!    (`<svg><p>` once `svg` is gone), are removed with all they hold. A
-//!    kept element keeps only its allowed attributes, and a URL attribute
-//!    only with an allowed scheme or a relative URL.
+//!    kept element keeps only its allowed attributes, never one the page's
+//!    own scripts act on, and a URL attribute only with an allowed scheme or
+//!    a relative URL.
 //! 3. The tree is written out and parsed again. The result is returned only
 //!    when that parse is the tree that was kept (apart from the `tbody`,
 //!    `tr` and `colgroup` the parser adds to a table by itself), so what a
@@ -22,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use html5ever::{Attribute, QualName, local_name, ns};
 
 use super::tree::{Data, Id, Limits, Tree, escape_text};
-use super::{CONTENT_TAGS, HtmlError, NEVER_ATTRIBUTES};
+use super::{CONTENT_TAGS, HtmlError, NEVER_ATTRIBUTES, acts_on_page};
 
 /// SVG elements that change another element's attributes, which an
 /// allow-list of attributes can't vet: never kept.
@@ -202,6 +203,8 @@ impl Sanitizer<'_> {
             || (self.link_rel.is_some() && attribute == "rel")
             || NEVER_ATTRIBUTES.contains(&attribute)
             || attribute.starts_with("on")
+            // Whatever the policy says: one written before these were refused cleans as safely.
+            || acts_on_page(attribute)
         {
             return false;
         }
