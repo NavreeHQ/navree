@@ -138,6 +138,10 @@ every `@navree/*` package carries the same version.
   named `context` calls it through the trait.
 - An app with `WorkspaceModule` lists one more provider and export, `dyn RequestWorkspace`, in
   `check --graph` and `introspect --json`.
+- Helm warns at boot about a custom page whose template is not an HTML one (a `.txt` or `.md`
+  template prints values as they are); the page still renders. A page of a plugin that is not one
+  of the framework's own packages renders only an HTML template, and one that names another stops
+  the boot.
 
 ## [1.2.2] - 2026-11-14
 

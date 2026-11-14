@@ -571,7 +571,7 @@ m.helm_page(
 );
 ```
 
-The page is served at `/admin/pages/pipeline` and appears in the menu for users who pass its check. Its template is one of your app's templates, so the app needs `ViewModule`. It gets `title`, `user` (`{id, name, email}`), `csrf_token`, `path` (the panel's path) and `data`, and can call your API, or get its data from `.data(|ctx| async move { .. })`, which returns a `Result<serde_json::Value>`. `ctx` is a `PageContext` with `uow()`, `user_id()` and `get::<T>()`. The panel's Content Security Policy allows scripts from your app's origin only, so a page's script is a file your app serves, never inline.
+The page is served at `/admin/pages/pipeline` and appears in the menu for users who pass its check. Its template is one of your app's templates, so the app needs `ViewModule`. It gets `title`, `user` (`{id, name, email}`), `csrf_token`, `path` (the panel's path) and `data`, and can call your API, or get its data from `.data(|ctx| async move { .. })`, which returns a `Result<serde_json::Value>`. `ctx` is a `PageContext` with `uow()`, `user_id()` and `get::<T>()`. The panel's Content Security Policy allows scripts from your app's origin only, so a page's script is a file your app serves, never inline. Only an HTML template escapes what it writes: a page of a plugin that is not one of the framework's own packages renders only an HTML template, as a card does (a name without an extension is that name with `.html`, a name may end in `.html`, and any other stops the boot), and any other page whose template is not HTML (a `.txt` or `.md` one) is warned about at boot and still renders.
 
 ### Links and cards from other modules
 

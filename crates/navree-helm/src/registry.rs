@@ -59,6 +59,9 @@ fn build<R: Resource + Injectable>(
 pub(crate) struct PageEntry {
     pub(crate) page: HelmPage,
     pub(crate) module: ModuleId,
+    /// The name its template is rendered under: an `.html` template for a page of a plugin
+    /// the kernel does not find first-party, the name as given for any other page.
+    pub(crate) template: String,
 }
 
 /// A link another module added to the menu, checked at boot.
@@ -147,10 +150,18 @@ impl Registry {
         registry.resources = resources;
         registry.check_relations()?;
 
+        let pages = app.contributions::<PageRegistration>();
+        // Whose page it is decides how its template is read: only an HTML template escapes
+        // what it writes.
+        let plugins = if pages.is_empty() {
+            Vec::new()
+        } else {
+            app.plugins().plugins
+        };
         let mut slugs = HashSet::new();
-        for contributed in app.contributions::<PageRegistration>() {
+        for contributed in pages {
             let PageRegistration { page, module } = (*contributed.value).clone();
-            if page.template.is_none() {
+            let Some(named) = page.template.clone() else {
                 return Err(format!(
                     "Helm page `{}` has no template: add `.template(\"{}admin/{}\")`",
                     page.slug,
@@ -158,11 +169,40 @@ impl Registry {
                     page.slug
                 )
                 .into());
-            }
+            };
+            let template = match (
+                html_template(&named),
+                community_plugin(&plugins, contributed.module.id),
+            ) {
+                // A plugin's page renders under the `.html` name, never another file of it.
+                (Some(html), Some(_)) => html,
+                (None, Some(plugin)) => {
+                    return Err(format!(
+                        "Helm page `{}` names the template `{named}`, which is not HTML: name an .html template, such as .template(\"{}/admin/{}\")",
+                        page.slug, plugin.info.namespace, page.slug
+                    )
+                    .into());
+                }
+                // Any other page renders the name it gives, as before.
+                (Some(_), None) => named,
+                (None, None) => {
+                    tracing::warn!(
+                        target: "navree::helm",
+                        "Helm page `{}` names the template `{named}`, which is not HTML, so what it writes is not escaped: name an .html template, such as .template(\"admin/{}\")",
+                        page.slug,
+                        page.slug
+                    );
+                    named
+                }
+            };
             if page.slug.is_empty() || !slugs.insert(page.slug.clone()) {
                 return Err(format!("two Helm pages use the slug `{}`", page.slug).into());
             }
-            registry.pages.push(PageEntry { page, module });
+            registry.pages.push(PageEntry {
+                page,
+                module,
+                template,
+            });
         }
 
         // A link is drawn on every page of the panel: its address must be a path of this
