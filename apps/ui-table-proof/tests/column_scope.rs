@@ -6,7 +6,9 @@
 use navree::db::Executor as _;
 use navree::db::{Db, DbOptions};
 use navree::orm::{Model, Record};
-use navree::ui::table::{NoFilter, Total};
+use navree::ui::table::{
+    MAX_SAVED_VIEWS, NoFilter, Total, TooManyViews, delete_view, list_views, save_view,
+};
 use navree::ui::{TableQuery, TableRow};
 use uuid::Uuid;
 
@@ -232,6 +234,55 @@ async fn a_long_export_goes_on_from_its_position_and_stops_exactly_at_its_limit(
     let (some, cut) = export(&query("sort=-pay").export_limit(2_500), &db).await;
     assert_eq!(exported_names(&some).len(), 2_500);
     assert!(cut);
+    done(db, dir).await;
+}
+
+const VIEWS: &str = "CREATE TABLE navree_ui_table_views (id VARCHAR(64) PRIMARY KEY, owner VARCHAR(64) NOT NULL, table_id VARCHAR(64) NOT NULL, name VARCHAR(200) NOT NULL, query TEXT NOT NULL, is_default BOOLEAN NOT NULL)";
+
+#[tokio::test]
+async fn a_person_keeps_a_limited_number_of_saved_views_of_a_table() {
+    let (db, dir) = staff().await;
+    db.pool()
+        .execute_script(VIEWS)
+        .await
+        .expect("the views table");
+    let view = query("filter[city][contains]=Amritsar");
+    // The owner names the workspace and the person, so each workspace's people have their own.
+    let owner = "ws1:gurpreet";
+    for n in 1..=MAX_SAVED_VIEWS {
+        save_view(&db, owner, "staff", &format!("View {n}"), &view, n == 1)
+            .await
+            .expect("saved");
+    }
+
+    let full = save_view(&db, owner, "staff", "One more", &view, true)
+        .await
+        .expect_err("the limit");
+    let refusal = TooManyViews::of(&full).expect("the error says why");
+    assert_eq!(refusal.limit, MAX_SAVED_VIEWS);
+    assert!(refusal.to_string().contains("50"), "{refusal}");
+    // Nothing was written, and the default is the one it was.
+    let kept = list_views(&db, owner, "staff").await.unwrap();
+    assert_eq!(u64::try_from(kept.len()).unwrap(), MAX_SAVED_VIEWS);
+    assert_eq!(kept.iter().filter(|view| view.is_default).count(), 1);
+    assert!(
+        kept.iter()
+            .any(|view| view.name == "View 1" && view.is_default)
+    );
+
+    // Another owner and another table have views of their own.
+    save_view(&db, "ws2:gurpreet", "staff", "Mine", &view, false)
+        .await
+        .expect("another owner");
+    save_view(&db, owner, "payroll", "Mine", &view, false)
+        .await
+        .expect("another table");
+
+    // Deleting one makes room.
+    delete_view(&db, owner, &kept[0].id).await.unwrap();
+    save_view(&db, owner, "staff", "One more", &view, false)
+        .await
+        .expect("there is room again");
     done(db, dir).await;
 }
 

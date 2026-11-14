@@ -66,6 +66,10 @@ every `@navree/*` package carries the same version.
 - A chart picture served with `ChartImage::respond` answers `Cache-Control: private, no-cache`
   unless the route sets another with `.cache_control(...)`, so a shared cache keeps no copy of a
   picture of someone's own data. It was `no-cache`.
+- An owner keeps at most 50 saved views of one table (`MAX_SAVED_VIEWS`): `save_view` refuses
+  another with `TooManyViews` and writes nothing, and `ViewPost::refused` answers the form with the
+  reason. The data table page says that an app with workspaces puts the workspace into the owner
+  string, and shows it.
 
 ## [1.2.0] - 2026-11-13
 

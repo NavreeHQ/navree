@@ -1113,6 +1113,38 @@ impl Spool {
     }
 }
 
+/// The most views one owner can keep of one table. [`save_view`] refuses another with
+/// [`TooManyViews`]. [`list_views`] shows at most 200.
+pub const MAX_SAVED_VIEWS: u64 = 50;
+
+/// Why [`save_view`] saved nothing: its owner already keeps [`MAX_SAVED_VIEWS`] views of
+/// that table. It comes in a [`navree_orm::OrmError`] ([`TooManyViews::of`] finds it there), so an
+/// app can answer the form with its words and a 4xx status, as the docs show.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TooManyViews {
+    /// The most views one owner keeps of a table.
+    pub limit: u64,
+}
+
+impl TooManyViews {
+    /// The refusal inside `error`, when that is what it is.
+    pub fn of(error: &navree_orm::OrmError) -> Option<&Self> {
+        std::error::Error::source(error).and_then(|source| source.downcast_ref::<Self>())
+    }
+}
+
+impl std::fmt::Display for TooManyViews {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "A table keeps at most {} saved views for one person. Delete one to save another.",
+            self.limit
+        )
+    }
+}
+
+impl std::error::Error for TooManyViews {}
+
 /// A saved view, stored in an SQL database. The table is the app's to create; see the crate's README.
 #[derive(navree_orm::Model, Clone, Debug, Default, serde::Serialize)]
 #[model(table = "navree_ui_table_views")]
@@ -1234,6 +1266,15 @@ async fn list_in<M: StoredView, E: Executor + ?Sized>(
         .collect())
 }
 
+/// How many views `owner` keeps of `table`, in model `M`.
+async fn count_in<M: StoredView, E: Executor + ?Sized>(
+    exec: &E,
+    owner: &str,
+    table: &str,
+) -> Result<u64> {
+    views_of::<M>(owner, table).count(exec).await
+}
+
 async fn create_in<M: StoredView, E: Executor + ?Sized>(
     exec: &E,
     view: SavedView,
@@ -1283,6 +1324,17 @@ pub async fn list_views<E: Executor + ?Sized>(
 
 /// Saves `owner`'s view of table `table`, on the store `exec` runs on (see [`list_views`]). The state
 /// is parsed through the table's definition first, so what's stored is only what the definition allows.
+///
+/// `owner` and `table` are what a person's views are found by, so an app with workspaces puts the
+/// workspace into the owner (`"{workspace_id}:{user_id}"`), or one workspace's people could see each
+/// other's views, and a person in two workspaces would have one set. An owner keeps at most
+/// [`MAX_SAVED_VIEWS`] views of a table: past that, nothing is saved (not even a default's change)
+/// and the error is [`TooManyViews`]. The count is read before the view is written, so views saved
+/// in the same instant by one owner can overshoot it by a few.
+///
+/// # Errors
+///
+/// [`TooManyViews`], in a [`navree_orm::OrmError`] ([`TooManyViews::of`]); the store's.
 pub async fn save_view<R, F, E>(
     exec: &E,
     owner: &str,
@@ -1297,6 +1349,20 @@ where
     E: Executor + ?Sized,
 {
     let documents = on_documents(exec).await?;
+    // Before anything is written: a refusal changes nothing, a default included.
+    let kept = if documents {
+        count_in::<SavedViewDocument, E>(exec, owner, table).await?
+    } else {
+        count_in::<SavedViewModel, E>(exec, owner, table).await?
+    };
+    if kept >= MAX_SAVED_VIEWS {
+        return Err(navree_orm::OrmError::refused(
+            "SavedView",
+            TooManyViews {
+                limit: MAX_SAVED_VIEWS,
+            },
+        ));
+    }
     if is_default {
         if documents {
             clear_default_in::<SavedViewDocument, E>(exec, owner, table).await?;
