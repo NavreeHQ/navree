@@ -6,7 +6,8 @@
 //! - Drivers: `local` (a directory) and `memory` (tests) always; `s3` (AWS,
 //!   MinIO, Cloudflare R2, DigitalOcean Spaces), `gcs` and `azure` with the
 //!   crate features of the same name (navree's `storage-s3`, `storage-gcs`
-//!   and `storage-azure`), on rustls with ring.
+//!   and `storage-azure`), on rustls with ring; and a [`DiskDriver`] a
+//!   module registers under a name ([`ModuleBuilderStorageExt`]).
 //! - [`StorageModule`] is global and exports [`Storage`] (every disk, by
 //!   name) and [`Disk`] (the default disk). Configure it with
 //!   [`StorageModule::for_root`] or [`StorageModule::from_config`] (section
@@ -63,6 +64,8 @@
 #[cfg(feature = "azure")]
 mod azure_sas;
 mod disk;
+mod disk_driver_store;
+mod driver;
 mod drivers;
 mod error;
 mod module;
@@ -78,6 +81,7 @@ mod sync;
 mod upload;
 
 pub use disk::{ByteStream, Disk, FileMeta};
+pub use driver::{DiskDriver, DiskDriverError, DiskUpload, ModuleBuilderStorageExt, OpenedFile};
 pub use error::{StorageError, UploadRejection};
 pub use module::StorageModule;
 pub use options::{AzureConfig, DiskConfig, GcsConfig, RegisteredDisk, S3Config, StorageOptions};

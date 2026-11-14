@@ -94,7 +94,8 @@ impl Disk {
         &self.inner.name
     }
 
-    /// The driver: `local`, `memory`, `s3`, `gcs` or `azure`.
+    /// The driver: `local`, `memory`, `s3`, `gcs`, `azure`, or the name a
+    /// module registered a driver under.
     pub fn driver(&self) -> &'static str {
         self.inner.driver
     }

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use navree_config::ConfigSection;
 
 use crate::signing::Signer;
-use crate::{Disk, DiskConfig, StorageError, StorageOptions, drivers};
+use crate::{Disk, DiskConfig, DiskDriver, StorageError, StorageOptions, drivers};
 
 /// The app's disks, by name (what `StorageModule` provides).
 #[derive(Clone)]
@@ -30,17 +30,30 @@ impl Storage {
     /// ([`StorageError::InvalidOptions`]): its driver is built at boot by
     /// `StorageModule`, which needs the app.
     pub fn new(options: &StorageOptions, signing_key: &[u8]) -> Result<Self, StorageError> {
+        Storage::with_drivers(options, signing_key, BTreeMap::new())
+    }
+
+    /// [`new`](Storage::new), with the drivers `StorageModule` built at boot
+    /// for the disks whose driver a module registers, by disk name.
+    pub(crate) fn with_drivers(
+        options: &StorageOptions,
+        signing_key: &[u8],
+        mut registered: BTreeMap<String, Arc<dyn DiskDriver>>,
+    ) -> Result<Self, StorageError> {
         options.validate().map_err(StorageError::InvalidOptions)?;
-        // Refused before any disk is built (no local root is created).
+        // A disk without its driver is refused before any disk is built (no
+        // local root is created).
         for (name, config) in &options.disks {
-            if let DiskConfig::Registered(disk) = config {
+            if let DiskConfig::Registered(disk) = config
+                && !registered.contains_key(name)
+            {
                 return Err(drivers::registered_by_a_module(name, disk));
             }
         }
         let signer = Arc::new(Signer::new(signing_key));
         let mut disks = BTreeMap::new();
         for (name, config) in &options.disks {
-            let backend = drivers::build(name, config)?;
+            let backend = drivers::build(name, config, registered.remove(name))?;
             let disk = Disk::new(
                 name.clone(),
                 config.driver(),

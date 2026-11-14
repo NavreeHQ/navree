@@ -1,10 +1,12 @@
 //! [`StorageModule`].
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::future::join_all;
 use http::StatusCode;
+use navree_config::__private::{build_driver, check_registrations, contribute_slot};
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::{BoxFuture, HealthCheck, HealthStatus};
 use navree_crypto::{AppKey, Encrypter};
@@ -13,8 +15,9 @@ use navree_kernel::{
     BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 
+use crate::options::SLOT;
 use crate::serve::StorageController;
-use crate::{Disk, Storage, StorageError, StorageOptions, UploadRejection};
+use crate::{Disk, DiskConfig, DiskDriver, Storage, StorageError, StorageOptions, UploadRejection};
 
 /// The purpose string temporary URL keys are derived for.
 const SIGNING_PURPOSE: &str = "navree-storage/temporary-url/v1";
@@ -43,7 +46,10 @@ const SIGNING_PURPOSE: &str = "navree-storage/temporary-url/v1";
 /// `StorageModule` when no configured instance exists, read section
 /// `storage` ([`StorageOptions`]) at boot, so the app must include
 /// `navree_config::ConfigModule`. Local disk roots are created at boot; invalid
-/// options fail the boot.
+/// options fail the boot. A disk whose `driver` a module registers
+/// ([`ModuleBuilderStorageExt`](crate::ModuleBuilderStorageExt)) is built at
+/// boot by that driver's factory, and a disk naming a driver no module
+/// registers fails the boot.
 ///
 /// Temporary URLs are signed with a key derived from the app key
 /// (`app.key` / `APP_KEY`, through `CryptoModule` when the app has it), so
@@ -77,6 +83,7 @@ impl Module for StorageModule {
 
 fn register(m: &mut ModuleBuilder, options: Option<StorageOptions>) {
     m.global();
+    contribute_slot(m, SLOT);
     match options {
         Some(options) => m.value(options),
         None => m.config::<StorageOptions>(),
@@ -85,9 +92,12 @@ fn register(m: &mut ModuleBuilder, options: Option<StorageOptions>) {
         Factory::<Storage>::new(|r: Resolver| async move {
             let options = r.get::<StorageOptions>().await?;
             let key = signing_key(&r).await?;
+            let registered = registered_drivers(&r, &options).await?;
             // Creating local roots touches the filesystem.
-            let storage =
-                tokio::task::spawn_blocking(move || Storage::new(&options, &key)).await??;
+            let storage = tokio::task::spawn_blocking(move || {
+                Storage::with_drivers(&options, &key, registered)
+            })
+            .await??;
             Ok(Arc::new(storage))
         })
         .deps(vec![ProviderKey::of::<StorageOptions>()]),
@@ -133,6 +143,35 @@ async fn signing_key(r: &Resolver) -> Result<Vec<u8>, BoxError> {
          key and stop working after a restart"
     );
     Ok(AppKey::generate().expose_bytes().to_vec())
+}
+
+/// Checks every registration of a disk driver, whichever disks use one,
+/// then builds the driver of each disk whose `driver` a module registers,
+/// by disk name: its settings are the disk's table, and a driver no module
+/// registers fails the boot naming `m.disk_driver`.
+async fn registered_drivers(
+    r: &Resolver,
+    options: &StorageOptions,
+) -> Result<BTreeMap<String, Arc<dyn DiskDriver>>, BoxError> {
+    let app = r.app();
+    check_registrations(&app, &SLOT, None)?;
+    let mut registered = BTreeMap::new();
+    for (disk, config) in &options.disks {
+        let DiskConfig::Registered(table) = config else {
+            continue;
+        };
+        let driver = build_driver::<dyn DiskDriver>(
+            &app,
+            &SLOT,
+            &format!("storage.disks.{disk}.driver"),
+            table.driver(),
+            format!("storage.disks.{disk}"),
+            Some(disk.clone()),
+        )
+        .await?;
+        registered.insert(disk.clone(), driver);
+    }
+    Ok(registered)
 }
 
 /// Maps storage errors that reach a handler's `?`.
