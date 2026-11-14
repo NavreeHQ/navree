@@ -12,7 +12,7 @@ mod support;
 
 use std::sync::{Arc, Mutex};
 
-use navree_sso::{Provisioning, SsoFake, SsoOwner};
+use navree_sso::{ConnectionUpdate, Provisioning, SsoFake, SsoOwner};
 use navree_workspace::{NewOrganization, NewWorkspace, Organizations, Workspaces};
 use uuid::Uuid;
 
@@ -242,4 +242,38 @@ async fn the_boot_says_nothing_without_the_flag_and_boots_when_the_scan_fails() 
     let _unmigrated = support::world_with(unmigrated).await;
     let failed = "could not check the single sign-on connections at boot";
     assert!(!lines_with(&capture.lines(), &["WARN", failed]).is_empty());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn saving_a_connection_with_the_flag_is_logged_by_owner() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let world = support::world().await;
+    let fake = SsoFake::new();
+    let workspace = workspace_of(&world).await;
+    world
+        .saml_connection(
+            &fake,
+            SsoOwner::Workspace(workspace),
+            "ludhiana-okta",
+            open(),
+        )
+        .await;
+    world
+        .saml_connection(&fake, SsoOwner::App, "staff-okta", open())
+        .await;
+    let sso = world.sso().await;
+    let rename = ConnectionUpdate {
+        name: Some("Ludhiana Login".to_owned()),
+        ..ConnectionUpdate::default()
+    };
+    world
+        .write(|uow| async move { sso.update_connection(&uow, "ludhiana-okta", rename).await })
+        .await
+        .expect("the connection is updated");
+    let lines = capture.lines();
+    let no_effect = lines_with(&lines, &["WARN", "ludhiana-okta", "has no effect"]);
+    assert_eq!(no_effect.len(), 2, "{lines:#?}");
+    let app = lines_with(&lines, &["INFO", "staff-okta owned by the app"]);
+    assert!(!app.is_empty(), "{lines:#?}");
 }

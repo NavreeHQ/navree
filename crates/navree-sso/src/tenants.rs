@@ -181,6 +181,36 @@ pub(crate) fn boot_lines(flagged: &[Flagged], tenants_allowed: bool) -> Vec<Line
     lines
 }
 
+/// The line written after connection `slug` of `owner` is saved with
+/// `allow_unverified_emails` on: information for a connection the app owns
+/// or when `tenants_allowed` (`sso.tenants.unverified_emails`), otherwise a
+/// warning that the setting has no effect.
+pub(crate) fn change_line(slug: &str, owner: SsoOwner, tenants_allowed: bool) -> Line {
+    let name = named(slug, owner);
+    if owner == SsoOwner::App {
+        Line {
+            level: tracing::Level::INFO,
+            message: format!(
+                "single sign-on connection {name} owned by the app creates accounts outside its verified domains (allow_unverified_emails)"
+            ),
+        }
+    } else if tenants_allowed {
+        Line {
+            level: tracing::Level::INFO,
+            message: format!(
+                "single sign-on connection {name} creates accounts outside its verified domains (sso.tenants.unverified_emails = true)"
+            ),
+        }
+    } else {
+        Line {
+            level: tracing::Level::WARN,
+            message: format!(
+                "single sign-on connection {name} has allow_unverified_emails on, which has no effect for a connection the app doesn't own; set sso.tenants.unverified_emails = true to allow it"
+            ),
+        }
+    }
+}
+
 /// The boot's line when the connections could not be read.
 pub(crate) fn scan_failed_line(error: &SsoError) -> Line {
     Line {
@@ -326,6 +356,21 @@ mod tests {
         let listed = &lines[0].message;
         assert!(listed.contains("c-19") && !listed.contains("c-20"));
         assert!(listed.contains("and 5 more"));
+    }
+
+    #[test]
+    fn change_lines_by_owner() {
+        let ws = Uuid::now_v7();
+        let app = change_line("staff-okta", SsoOwner::App, false);
+        assert_eq!(app.level, tracing::Level::INFO);
+        let off = change_line("ludhiana-okta", SsoOwner::Workspace(ws), false);
+        assert_eq!(off.level, tracing::Level::WARN);
+        let expected = format!(
+            "ludhiana-okta (workspace {ws}) has allow_unverified_emails on, which has no effect"
+        );
+        assert!(off.message.contains(&expected));
+        let on = change_line("ludhiana-okta", SsoOwner::Workspace(ws), true);
+        assert_eq!(on.level, tracing::Level::INFO);
     }
 
     #[test]

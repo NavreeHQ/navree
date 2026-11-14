@@ -31,7 +31,7 @@ use crate::saml::{
     validate_response,
 };
 use crate::store;
-use crate::tenants::{Flagged, RefusalLog, honours_unverified_emails};
+use crate::tenants::{Flagged, RefusalLog, change_line, emit, honours_unverified_emails};
 use crate::{
     ConnectionSettings, ConnectionUpdate, NewConnection, OidcSettings, Protocol, Provisioning,
     SamlSettings, ServiceProviderInfo, SsoConnection, SsoDiscovery, SsoDomain, SsoDomainVerified,
@@ -696,6 +696,10 @@ impl Sso {
             updated_at: now,
         };
         let model = store::insert(uow, row).await?;
+        if input.provisioning.allow_unverified_emails {
+            let line = change_line(&model.slug, input.owner, self.tenants_unverified_emails);
+            uow.after_commit(move || Box::pin(async move { emit(&line) }));
+        }
         Ok(self.present(&self.decode(model)?))
     }
 
@@ -767,7 +771,16 @@ impl Sso {
             sets.push(sso_connection::Model::ENFORCE.set(Some(enforce)));
         }
         let model: sso_connection::Model = store::update(uow, current.model.id, sets).await?;
-        Ok(self.present(&self.decode(model)?))
+        let updated = self.decode(model)?;
+        if updated.provisioning.allow_unverified_emails {
+            let line = change_line(
+                &updated.model.slug,
+                updated.owner,
+                self.tenants_unverified_emails,
+            );
+            uow.after_commit(move || Box::pin(async move { emit(&line) }));
+        }
+        Ok(self.present(&updated))
     }
 
     /// Deletes a connection in `uow`, with its domains and identities (the
