@@ -336,6 +336,56 @@ mod tests {
         }
     }
 
+    /// Makes `link` a junction to the folder `target` with `mklink /J`, which needs no
+    /// administrator rights, and checks it was made.
+    #[cfg(windows)]
+    fn junction(link: &Path, target: &Path) {
+        // `mklink` reads a `/` as the start of an option: pass `\` only.
+        let backslashed = |path: &Path| path.to_string_lossy().replace('/', "\\");
+        let output = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(backslashed(link))
+            .arg(backslashed(target))
+            .output()
+            .expect("cmd runs");
+        assert!(
+            output.status.success(),
+            "mklink /J failed: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    /// A junction is a link as much as a symbolic link is: below the folder it is refused, and
+    /// as the folder itself, pointing out of the crate, so is it.
+    #[cfg(windows)]
+    #[test]
+    fn embed_templates_refuses_a_junction() {
+        let crate_dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
+        let root = crate_dir.path();
+        let outside = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
+        write(outside.path(), "secret.html", b"outside");
+        fs::create_dir_all(root.join("junctioned")).unwrap();
+        junction(&root.join("junctioned").join("out"), outside.path());
+        assert_eq!(
+            collect(root, "junctioned").unwrap_err(),
+            [
+                "embed_templates!: `junctioned/out` is a symbolic link; put the file itself in the folder"
+            ]
+        );
+        junction(&root.join("elsewhere"), outside.path());
+        assert_eq!(
+            collect(root, "elsewhere").unwrap_err(),
+            ["embed_templates!: `elsewhere` is outside this crate's folder"]
+        );
+    }
+
     #[test]
     fn embed_templates_path_rule_agrees_with_the_kernels() {
         let longest = format!("{}/{}", "a".repeat(128), "b".repeat(126));

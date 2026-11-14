@@ -7,7 +7,7 @@ use std::path::Path;
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{EmbeddedLocales, ModuleBuilderLocalesExt};
 use navree_i18n::{I18n, I18nModule, args};
-use navree_kernel::{Module, ModuleBuilder, Navree, PluginInfo};
+use navree_kernel::{Module, ModuleBuilder, ModuleId, Navree, PluginInfo};
 use navree_testing::TestApp;
 use serde_json::json;
 
@@ -140,6 +140,86 @@ async fn a_plugin_message_outside_its_namespace_fails_the_boot() {
         .to_string();
     assert!(
         error.contains("message `notice-title` in locales/en/notices.ftl"),
+        "{error}"
+    );
+}
+
+/// A module of a first-party plugin: it takes an id built from navree-i18n's own module type,
+/// under another name, and names navree-i18n's plugin, as the framework's own crate would.
+struct FirstParty;
+impl Module for FirstParty {
+    fn id(&self) -> ModuleId {
+        ModuleId::named::<I18nModule>("FirstPartyProbe")
+    }
+
+    fn register(&self, m: &mut ModuleBuilder) {
+        const ZONES: &[(&str, &str, &str)] = &[(
+            "en",
+            "locales/en/zones.ftl",
+            "zone-ist = India Standard Time\n",
+        )];
+        m.plugin(PluginInfo::new(
+            "navree-i18n",
+            "navree_i18n",
+            "i18n",
+            env!("CARGO_PKG_VERSION"),
+        ))
+        .locales(EmbeddedLocales::from(ZONES));
+    }
+}
+
+#[tokio::test]
+async fn a_first_party_plugins_ids_are_not_held_to_its_namespace_in_a_booted_app() {
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    // `zone-ist` does not start with `i18n-`: a plugin that is not the framework's own would
+    // fail the boot for it.
+    let app = TestApp::builder()
+        .config("i18n.dir", dir.path().to_string_lossy().as_ref())
+        .module(I18nModule::from_config())
+        .module(FirstParty)
+        .build()
+        .await;
+    let i18n = app.get::<I18n>().await;
+    assert_eq!(
+        i18n.t("en", "zone-ist", args!()).unwrap(),
+        "India Standard Time"
+    );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn translations_of_a_module_that_names_no_plugin_fail_the_boot() {
+    const FILES: &[(&str, &str, &str)] = &[(
+        "en",
+        "locales/en/orphan.ftl",
+        "orphan-title = Notices for Harpreet Sandhu\n",
+    )];
+    // Contributed by hand: `m.locales` from a module that names no plugin fails earlier.
+    struct Orphan;
+    impl Module for Orphan {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.contribute(EmbeddedLocales::from(FILES));
+        }
+    }
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let Err(error) = TestApp::builder()
+        .config("i18n.dir", dir.path().to_string_lossy().as_ref())
+        .module(I18nModule::from_config())
+        .module(Orphan)
+        .try_build()
+        .await
+    else {
+        panic!("the boot must fail")
+    };
+    let error = error.to_string();
+    assert!(
+        error.contains("module `Orphan` has translations but does not name itself a plugin; call m.plugin(plugin_info!()) in its register"),
         "{error}"
     );
 }
