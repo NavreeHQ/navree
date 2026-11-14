@@ -28,7 +28,11 @@ use crate::theme::{Appearance, Density, Theme, ThemeMenu, ThemeSetting};
 use crate::view::View;
 
 mod contribute;
-pub use contribute::{NativeClient, NativeFamily, NativeShellPart, NativeShellParts, NativeSignIn};
+pub(crate) mod links;
+pub use contribute::{
+    ModuleBuilderShellExt, NativeClient, NativeFamily, NativeShellPart, NativeShellParts,
+    NativeSignIn, ShellNavItem,
+};
 
 #[cfg(feature = "native-preview")]
 mod native;
@@ -570,6 +574,8 @@ pub struct Shell {
     app_sheets: Vec<AppSheet>,
     app_fonts: Vec<AppFont>,
     title_template: Option<Cow<'static, str>>,
+    /// Whether the [`AppShell`] extractor draws the links modules add.
+    contributed: bool,
 }
 
 impl Shell {
@@ -594,6 +600,7 @@ impl Shell {
             app_sheets: Vec::new(),
             app_fonts: Vec::new(),
             title_template: None,
+            contributed: false,
         }
     }
 
@@ -776,6 +783,27 @@ impl Shell {
     #[must_use]
     pub fn group(mut self, group: NavGroup) -> Self {
         self.groups.push(group);
+        self
+    }
+
+    /// Adds the links modules contribute with `m.nav_item`, after the shell's own groups,
+    /// each shown only to readers who hold its permission. Off unless called.
+    ///
+    /// The `AppShell` extractor draws them. `Shell::page` and `Shell::for_request`, which
+    /// have no request to ask, draw only the shell's own groups.
+    ///
+    /// ```
+    /// use navree_ui::{NavGroup, NavItem, Shell};
+    ///
+    /// let shell = Shell::new("Kesar")
+    ///     .group(NavGroup::new("Sales").item(NavItem::new("Deals", "/deals")))
+    ///     .contributed();
+    /// let html = shell.page("Deals", "/deals").to_view().to_html();
+    /// assert!(html.contains(r#"href="/deals" title="Deals" aria-current="page""#));
+    /// ```
+    #[must_use]
+    pub fn contributed(mut self) -> Shell {
+        self.contributed = true;
         self
     }
 

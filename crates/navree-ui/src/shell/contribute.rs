@@ -29,6 +29,16 @@
 //!
 //! Nothing here depends on the preview feature: a module says its routes the same whether
 //! or not an app answers native clients, and the preview reads them.
+//!
+//! A module also adds links to the app's sidebar, as [`ShellNavItem`]s with `m.nav_item`
+//! ([`ModuleBuilderShellExt`]): a shell built with `Shell::contributed` draws each one,
+//! after its own groups, for the readers who may open it.
+
+use std::borrow::Cow;
+
+use navree_kernel::ModuleBuilder;
+
+use crate::icons::Icon;
 
 /// The family of systems a native client is on, as an app's list of apps names them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -123,4 +133,101 @@ impl NativeShellParts {
 pub trait NativeShellPart: Send + Sync {
     /// Adds what the module knows to `shell`, for `client`.
     fn contribute(&self, shell: &mut NativeShellParts, client: &NativeClient);
+}
+
+/// A link a module adds to the app's sidebar: `m.nav_item(..)`.
+///
+/// A shell built with [`Shell::contributed`](crate::Shell::contributed) draws it through the
+/// [`AppShell`](crate::AppShell) extractor, after the shell's own groups, for a reader who
+/// holds its [`permission`](ShellNavItem::permission), decided on the server for every request.
+///
+/// A link without a permission is public: every reader sees it, a guest too, also through
+/// `GET /_navree/ui/navigation`. Hiding a link is not access control: the page it leads to
+/// declares its own access.
+///
+/// ```
+/// use navree_kernel::{Module, ModuleBuilder};
+/// use navree_ui::{ModuleBuilderShellExt, ShellNavItem, icons};
+///
+/// struct AnnouncementsModule;
+///
+/// impl Module for AnnouncementsModule {
+///     fn register(&self, m: &mut ModuleBuilder) {
+///         m.nav_item(
+///             ShellNavItem::new("Announcements", "/announcements")
+///                 .icon(icons::MEGAPHONE)
+///                 .group("Workspace")
+///                 .permission("announcements.read")
+///                 .order(10),
+///         );
+///     }
+/// }
+/// ```
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct ShellNavItem {
+    pub(crate) label: Cow<'static, str>,
+    pub(crate) href: &'static str,
+    pub(crate) icon: Option<Icon>,
+    pub(crate) group: Option<Cow<'static, str>>,
+    pub(crate) permission: Option<&'static str>,
+    pub(crate) order: i32,
+}
+
+impl ShellNavItem {
+    /// A link labelled `label`. `href` is a path on this app (`/announcements`); checked at
+    /// boot as [`LocalHref::parse`](crate::html::LocalHref::parse) does, and it starts with
+    /// `/`.
+    pub fn new(label: impl Into<Cow<'static, str>>, href: &'static str) -> ShellNavItem {
+        ShellNavItem {
+            label: label.into(),
+            href,
+            icon: None,
+            group: None,
+            permission: None,
+            order: 0,
+        }
+    }
+
+    /// Sets the icon: the folded sidebar shows only that.
+    #[must_use]
+    pub fn icon(mut self, icon: Icon) -> ShellNavItem {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// The sidebar group's label (default: the plugin's title, else `More`).
+    #[must_use]
+    pub fn group(mut self, group: impl Into<Cow<'static, str>>) -> ShellNavItem {
+        self.group = Some(group.into());
+        self
+    }
+
+    /// Shown only to readers who hold `permission`, app-wide or in the request's workspace.
+    #[must_use]
+    pub fn permission(mut self, permission: &'static str) -> ShellNavItem {
+        self.permission = Some(permission);
+        self
+    }
+
+    /// Lower comes first in its group (default 0; ties keep module order).
+    #[must_use]
+    pub fn order(mut self, order: i32) -> ShellNavItem {
+        self.order = order;
+        self
+    }
+}
+
+/// Sidebar links on a [`ModuleBuilder`].
+pub trait ModuleBuilderShellExt {
+    /// Adds `item` to the app's sidebar, drawn by a shell built with
+    /// [`Shell::contributed`](crate::Shell::contributed). Its address is checked at boot;
+    /// [`ShellNavItem`] shows a module calling it.
+    fn nav_item(&mut self, item: ShellNavItem) -> &mut Self;
+}
+
+impl ModuleBuilderShellExt for ModuleBuilder {
+    fn nav_item(&mut self, item: ShellNavItem) -> &mut Self {
+        self.contribute(item)
+    }
 }

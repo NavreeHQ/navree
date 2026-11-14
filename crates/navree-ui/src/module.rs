@@ -123,8 +123,12 @@ impl UiNeed {
 pub(crate) struct UiAlways;
 
 /// The answer to "does anything need the toolkit", settled before the first
-/// request and read by the layer.
-pub(crate) struct UiGate(pub(crate) Arc<OnceLock<bool>>);
+/// request and read by the layer; and the links modules add to the sidebar,
+/// checked at boot.
+pub(crate) struct UiGate(
+    pub(crate) Arc<OnceLock<bool>>,
+    pub(crate) Arc<crate::shell::links::Links>,
+);
 
 fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     m.global();
@@ -171,8 +175,11 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
                     }
                 }
             }
+            // The links modules add with `m.nav_item`, checked once: an address that is not
+            // a path of this app stops the boot.
+            let links = crate::shell::links::check(&ctx)?;
             let _ = slot.set(wanted);
-            Ok(Arc::new(UiGate(slot)))
+            Ok(Arc::new(UiGate(slot, Arc::new(links))))
         }
     }));
     #[cfg(feature = "native-preview")]
