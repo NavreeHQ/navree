@@ -1515,15 +1515,21 @@ impl<T: Form> FormView<T> {
             .attr("method", self.method)
             .attr_opt("action", self.action.clone().map(AttrHref))
             .flag("data-ui-form", true)
-            .children((
-                self.csrf.clone().map(csrf_field),
-                hidden,
-                self.fields_node(),
-            ))
+            .children((self.token_field(), hidden, self.fields_node()))
+    }
+
+    /// The field that carries the session's token, for a form that posts: a `GET` form
+    /// would put the token in its URL, where logs and the `Referer` keep it, so it has none.
+    fn token_field(&self) -> Option<Element> {
+        self.csrf
+            .clone()
+            .filter(|_| !self.method.eq_ignore_ascii_case("get"))
+            .map(csrf_field)
     }
 
     fn into_node(self) -> Node {
         let fields = self.fields_node();
+        let token = self.token_field();
         // A file goes with the form when no script sent it first.
         let files = self
             .shape
@@ -1549,7 +1555,7 @@ impl<T: Form> FormView<T> {
             .flag("data-ui-form", true)
             .uses(Uses::CORE)
             .children((
-                self.csrf.map(csrf_field),
+                token,
                 hidden,
                 fields,
                 el("div").slot("form-actions").children((
@@ -3200,6 +3206,31 @@ mod tests {
             over_http,
             &[("origin", "https://app.example")]
         )));
+    }
+
+    /// A form with no fields of its own.
+    struct Search;
+
+    impl Form for Search {
+        const ID: &'static str = "search";
+        const FIELDS: &'static [FormField] = &[];
+        const RULES: &'static [FieldRules] = &[];
+
+        fn values(&self) -> Vec<(&'static str, String)> {
+            Vec::new()
+        }
+    }
+
+    #[test]
+    fn a_form_that_gets_never_carries_the_token() {
+        let token = "Agra4Pune7Kota2Surat9Patna1Ranchi8Mysore";
+        let posts = crate::render(&FormView::<Search>::new().csrf(token).into());
+        assert!(posts.contains(r#"name="_csrf""#), "{posts}");
+        let mut gets = FormView::<Search>::new().csrf(token);
+        gets.method = "get";
+        let gets = crate::render(&gets.into());
+        assert!(gets.contains(r#"method="get""#), "{gets}");
+        assert!(!gets.contains("_csrf"), "{gets}");
     }
 
     #[test]
