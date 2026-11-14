@@ -51,7 +51,7 @@ enum WindowPictures {
         let enhance = NSSelectorFromString("accessibilitySetEnhancedUserInterfaceAttribute:")
         if NSApp.responds(to: enhance) { _ = NSApp.perform(enhance, with: NSNumber(value: true)) }
         // The menu bar acts on the key window of the active app, as for a person.
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         windows.first?.makeKeyAndOrderFront(nil)
         let steps = (defaults.string(forKey: "NavreeSteps") ?? "wait:4;menus;picture:window;quit")
             .split(separator: ";").map { String($0).trimmingCharacters(in: .whitespaces) }
@@ -62,7 +62,7 @@ enum WindowPictures {
             case "wait":
                 try? await Task.sleep(for: .seconds(Double(argument) ?? 1))
             case "front":
-                NSApp.activate(ignoringOtherApps: true)
+                NSApp.activate()
                 windows.first?.makeKeyAndOrderFront(nil)
                 log.append("front: key window \"\(NSApp.keyWindow?.title ?? "none")\", app \(NSApp.isActive ? "active" : "not active")")
             case "size":
@@ -129,7 +129,14 @@ enum WindowPictures {
                 }
                 NSApp.terminate(nil)
             default:
-                log.append("unknown step \(step)")
+                let name = parts.first ?? ""
+                if let lines = await PresenceSteps.run(name, argument, out: out) {
+                    log.append(contentsOf: lines)
+                } else if let lines = await WindowSteps.run(name, argument, out: out) {
+                    log.append(contentsOf: lines)
+                } else {
+                    log.append("unknown step \(step)")
+                }
             }
         }
         write(log.joined(separator: "\n") + "\n", to: out.appendingPathComponent("steps.txt"))

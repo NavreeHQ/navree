@@ -41,6 +41,15 @@ public struct ShellConfiguration: Sendable {
     /// Screens opened as the app starts, as a person would open them: for a
     /// demo and its tests.
     public var launch: Launch
+    /// Where the app stands in the system outside its windows: the Dock and
+    /// the menu bar on a Mac, the count on its icon, its quick ways in, About
+    /// and Help.
+    public var presence: Presence
+    /// The app's main windows, as far as the system lets an app choose (Mac).
+    public var windows: WindowLook
+    /// The icons the person may choose among (iOS, iPadOS): the build's
+    /// alternate app icons. Empty, the app offers no choice.
+    public var icons: [AppIcon]
 
     public init(
         origin: String, loopbackHTTP: Bool = false, appID: String = Bundle.main.bundleIdentifier ?? "",
@@ -48,7 +57,8 @@ public struct ShellConfiguration: Sendable {
         signedWith: Set<Entitlement>? = nil, openAnyLink: Bool = false, keepsSession: Bool = true,
         pictureHosts: [String] = [],
         transport: (@MainActor @Sendable () -> any Transport)? = nil, webContent: WebContent = .network,
-        launch: Launch = Launch()
+        launch: Launch = Launch(), presence: Presence = Presence(), windows: WindowLook = WindowLook(),
+        icons: [AppIcon] = []
     ) {
         self.origin = origin
         self.loopbackHTTP = loopbackHTTP
@@ -69,6 +79,9 @@ public struct ShellConfiguration: Sendable {
         }
         self.webContent = webContent
         self.launch = launch
+        self.presence = presence
+        self.windows = windows
+        self.icons = icons
     }
 
     /// The origin as a URL.

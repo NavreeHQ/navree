@@ -10,25 +10,27 @@ import SwiftUI
 /// launched with `-NavreeAnswers <folder>` (or `NAVREE_ANSWERS` in the
 /// environment), so it runs with no server at all.
 @main
+enum DemoMain {
+    /// Starts the demo as its launch arguments ask.
+    static func main() {
+        DemoStyles.run()
+    }
+}
+
+/// The demo's scenes: its main windows and, on a Mac, its Settings window and
+/// its item in the menu bar.
 struct DemoApp: App {
-    #if canImport(UIKit)
+    #if os(macOS)
+    /// What the system tells the app outside its windows, passed on to the shell.
+    @NSApplicationDelegateAdaptor(NavreeAppDelegate.self) private var delegate
+    #else
     /// The push token and a tapped notification, passed on to the shell.
     @UIApplicationDelegateAdaptor(NavreeAppDelegate.self) private var delegate
     #endif
     private let configuration = DemoConfiguration.make()
 
     var body: some Scene {
-        WindowGroup(id: "main") {
-            AppShell(configuration: configuration)
-                .modifier(DemoPictures())
-        }
-        .commands { NavreeCommands(window: "main") }
-        #if os(macOS)
-        // The person's settings, from the App menu (⌘,), in a window of their own.
-        Settings {
-            SettingsShell(configuration: configuration)
-        }
-        #endif
+        NavreeScenes(configuration: configuration) { $0.modifier(DemoPictures()) }
     }
 }
 
@@ -45,6 +47,16 @@ enum DemoConfiguration {
 
     static func make() -> ShellConfiguration {
         let defaults = UserDefaults.standard
+        var configuration = source(defaults)
+        configuration.presence = DemoPresence.make(defaults)
+        configuration.windows = DemoWindows.make(defaults)
+        configuration.icons = DemoWindows.icons(defaults)
+        return configuration
+    }
+
+    /// Where the demo's answers come from: a folder, the answers kept in the
+    /// app, or a server.
+    static func source(_ defaults: UserDefaults) -> ShellConfiguration {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
         let launch = Self.launch(defaults)
         if let folder = defaults.string(forKey: "NavreeAnswers") ?? ProcessInfo.processInfo.environment["NAVREE_ANSWERS"],

@@ -124,14 +124,25 @@ extension FocusedValues {
 /// the App menu, and the system's sidebar, toolbar and inspector commands.
 ///
 ///     WindowGroup(id: "main") { AppShell(configuration: configuration) }
-///         .commands { NavreeCommands(window: "main") }
+///         .commands { NavreeCommands(window: "main", configuration: configuration) }
+///
+/// Given the app's configuration, About and Help are as it says; without it
+/// they are the system's own.
 public struct NavreeCommands: Commands {
     /// The id of the app's window group, for New Window.
     let window: String
+    /// The app's configuration, for About and Help.
+    let configuration: ShellConfiguration?
     @FocusedValue(\.navreeCommands) private var target
 
     public init(window: String) {
         self.window = window
+        configuration = nil
+    }
+
+    public init(window: String, configuration: ShellConfiguration) {
+        self.window = window
+        self.configuration = configuration
     }
 
     public var body: some Commands {
@@ -158,6 +169,8 @@ public struct NavreeCommands: Commands {
         CommandMenu(CommandRules.screenMenu(destinationLabel)) {
             ScreenCommands(target: target)
         }
+        AboutCommands(configuration: configuration)
+        HelpCommands(configuration: configuration)
     }
 
     private var destinationLabel: String? {

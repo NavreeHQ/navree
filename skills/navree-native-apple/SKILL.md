@@ -133,6 +133,18 @@ Do not:
   contrast settings.
 - Set fixed text sizes or widths.
 
+## What the app sets in its build
+
+The app's place in the system is the app's, not a page's: it is set once in
+`ShellConfiguration`, and the app declares its scenes with one line
+(`var body: some Scene { NavreeScenes(configuration: .shop) }`). Every default
+keeps an ordinary app in the Dock with the system's own windows.
+
+| What | Reference |
+|---|---|
+| Where the app stands outside its windows: the Dock or the menu bar, its item in the menu bar, the count on its icon, its quick actions and Dock menu, opening at login, About and Help (`presence`) | [`references/presence.md`](references/presence.md) |
+| Its windows, their toolbar and its icon: window sizes, tabs, the toolbar's style and labels, the icon file, and the icons a person may choose on iPhone and iPad (`windows`, `icons`) | [`references/windows-and-icons.md`](references/windows-and-icons.md) |
+
 ## What an Apple app needs from the server
 
 The app is built on a Mac with Xcode 27 (Apple silicon, macOS Tahoe 26.6 or
