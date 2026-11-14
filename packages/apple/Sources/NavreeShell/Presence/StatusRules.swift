@@ -1,6 +1,8 @@
+import CoreGraphics
 import Foundation
 import NavreeDesign
 import NavreeProtocol
+import NavreeRuntime
 
 /// How the app's item in the menu bar opens: the system's `MenuBarExtraStyle`.
 public enum StatusStyle: String, Sendable, Equatable {
@@ -20,8 +22,12 @@ public enum StatusEntry: Sendable, Equatable {
     case account(String)
     /// An entry of the person's menu, by its place in it.
     case accountItem(label: String, index: Int, destructive: Bool)
+    /// Open in Window: the app's window, out of the menu bar.
+    case openInWindow
     /// Settings… (⌘,).
     case settings
+    /// "About <App>".
+    case about(String)
     /// "Quit <App>" (⌘Q).
     case quit(String)
     case divider
@@ -46,8 +52,47 @@ public enum StatusRules {
     public static func style(_ item: StatusItem?) -> StatusStyle? {
         switch item?.content {
         case .menu?: .menu
+        case .app?: .window
         case .screen?, nil: nil
         }
+    }
+
+    /// Whether the item's window holds the whole app: then it is the app's
+    /// one window in the menu bar, with the app's one session.
+    public static func holdsApp(_ item: StatusItem?) -> Bool {
+        if case .app? = item?.content { true } else { false }
+    }
+
+    /// Where the item's window stands: under the item, centred on it, kept on
+    /// the item's screen, its top a few points under the menu bar.
+    public static func windowFrame(item: CGRect, size: CGSize, screen: CGRect) -> CGRect {
+        let margin: CGFloat = 8, gap: CGFloat = 4
+        var x = item.midX - size.width / 2
+        x = min(max(x, screen.minX + margin), screen.maxX - margin - size.width)
+        let top = min(item.minY, screen.maxY) - gap
+        let height = min(size.height, top - screen.minY - margin)
+        return CGRect(x: x, y: top - height, width: size.width, height: height)
+    }
+
+    /// The width the window's core is told: the window under an item in the
+    /// menu bar is a compact window, laid out as one column with its
+    /// destinations' sidebar folded away; any other window by its width.
+    public static func width(compactWindow: Bool, sizeClass: WidthClass?, points: CGFloat) -> Width {
+        compactWindow ? .compact : WindowRules.width(sizeClass: sizeClass, points: points)
+    }
+
+    /// The menu a right click on an item holding the whole app opens: the
+    /// destinations, the person's menu, Open in Window, Settings…, About and Quit.
+    public static func contextMenu(
+        destinations: [PresenceDestination], appName: String, user: Navree.User?
+    ) -> [StatusEntry] {
+        var entries = menu(destinations: destinations, appName: appName, place: .menuBar, user: user)
+            .filter { if case .open = $0 { false } else { true } }
+        if entries.first == .divider { entries.removeFirst() }
+        let settings = entries.firstIndex(of: .settings) ?? entries.endIndex
+        entries.insert(.openInWindow, at: settings)
+        entries.insert(.about(String(localized: "About \(appName)")), at: settings + 2)
+        return entries
     }
 
     /// Whether the scene of one style is in the menu bar: only while the app

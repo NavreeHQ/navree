@@ -49,16 +49,19 @@ public enum PresenceRules {
     /// bar stands in the Dock, so it can always be reached.
     public static func place(_ presence: Presence, chosen: MacPlace?) -> MacPlace {
         guard StatusRules.style(presence.statusItem) != nil else { return .dock }
-        if let chosen, choices(presence).contains(chosen) { return chosen }
-        return presence.place
+        let place = chosen.flatMap { choices(presence).contains($0) ? $0 : nil } ?? presence.place
+        // An item holding the whole app is the app's one window in the menu
+        // bar: beside a Dock app's own windows it would be a second session.
+        return place == .both && StatusRules.holdsApp(presence.statusItem) ? .menuBar : place
     }
 
     /// The places Settings offers, in the build's order: none when fewer than
     /// two can stand. The menu bar is never offered without a status item.
     public static func choices(_ presence: Presence) -> [MacPlace] {
         let item = StatusRules.style(presence.statusItem) != nil
+        let app = StatusRules.holdsApp(presence.statusItem)
         var places: [MacPlace] = []
-        for place in presence.choices where !places.contains(place) && (place == .dock || item) {
+        for place in presence.choices where !places.contains(place) && (place == .dock || item) && !(app && place == .both) {
             places.append(place)
         }
         return places.count < 2 ? [] : places

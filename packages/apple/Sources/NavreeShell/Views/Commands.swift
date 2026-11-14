@@ -204,8 +204,14 @@ struct NewCommands: View {
     var body: some View {
         let creates = target.map { CommandRules.entries($0.screenActions).contains { $0.slot == .new } } ?? false
         SlotCommands(target: target, slot: .new)
-        Button("New Window") { openWindow(id: window) }
-            .keyboardShortcut(KeyCommand.equivalent(creates ? .newWindow : .new))
+        if PresenceModel.shared.holdsApp {
+            // One session: the app its item in the menu bar holds comes into a window.
+            Button("Open in Window") { PresenceModel.shared.openInWindow() }
+                .keyboardShortcut(KeyCommand.equivalent(creates ? .newWindow : .new))
+        } else {
+            Button("New Window") { openWindow(id: window) }
+                .keyboardShortcut(KeyCommand.equivalent(creates ? .newWindow : .new))
+        }
     }
 }
 

@@ -13,14 +13,18 @@ import AppKit
 /// windows while it had none. It draws nothing.
 struct PresenceHooks: ViewModifier {
     let session: Session
-    /// The window's own name.
+    /// The window's scene's name, which a shell outside a scene (the one an
+    /// item in the menu bar holds) does not have.
     let scene: String
     @Environment(\.scenePhase) private var phase
     @Environment(\.openWindow) private var openWindow
     @State private var box = Box()
+    /// The shell's own name in the presence, wherever it stands.
+    @State private var name = UUID().uuidString
 
     func body(content: Content) -> some View {
-        content
+        let scene = name
+        return content
             .onChange(of: scene, initial: true) { _, scene in
                 guard !scene.isEmpty else { return }
                 let model = PresenceModel.shared
@@ -44,6 +48,13 @@ struct PresenceHooks: ViewModifier {
             }
             .onChange(of: phase) { _, phase in
                 if phase == .active, !scene.isEmpty { PresenceModel.shared.show(scene) }
+            }
+            .onAppear {
+                // Back in a window (the shell an item in the menu bar holds moves
+                // between its panel and a full window).
+                guard !scene.isEmpty else { return }
+                PresenceModel.shared.attach(scene: scene, session: session)
+                PresenceModel.shared.heard(scene: scene, destinations: mirror.destinations, user: mirror.user)
             }
             .onDisappear {
                 if !scene.isEmpty { PresenceModel.shared.detach(scene: scene) }
@@ -111,6 +122,12 @@ struct WindowReader: NSViewRepresentable {
 }
 #endif
 
+extension EnvironmentValues {
+    /// Whether the shell stands in the window under an item in the menu bar
+    /// (a Mac's): a compact window, laid out by its width as one.
+    @Entry var navreeCompactWindow = false
+}
+
 extension Scene {
     /// The main windows as the app's place in the system needs them: an app
     /// in the menu bar only opens none at launch; any other opens one, as the
@@ -118,8 +135,13 @@ extension Scene {
     public func navreePresence(_ presence: Presence) -> some Scene {
         PresenceModel.shared.configure(presence)
         #if os(macOS)
-        let launch = PresenceRules.launch(place: PresenceRules.place(presence, chosen: PresenceModel.storedPlace))
+        let place = PresenceRules.place(presence, chosen: PresenceModel.storedPlace)
+        let launch = PresenceRules.launch(place: place)
+        // An app held by its item in the menu bar has one session, there: no
+        // main window of another is brought back from before.
+        let restores = !(place == .menuBar && StatusRules.holdsApp(presence.statusItem))
         return defaultLaunchBehavior(launch == .suppressed ? .suppressed : .automatic)
+            .restorationBehavior(restores ? .automatic : .disabled)
         #else
         return self
         #endif
