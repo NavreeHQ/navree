@@ -66,6 +66,9 @@ pub(crate) struct Cache {
     /// The build the pages kept were answered by, as `boot` said, until this
     /// launch's own build is known.
     kept_build: Option<String>,
+    /// The pages asked of the client since what is kept was last emptied:
+    /// an answer for any other is dropped.
+    asked: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -262,6 +265,7 @@ impl Core {
     pub(crate) fn forget_pages(&mut self) {
         self.inner.cache.pages.clear();
         self.inner.cache.disk.clear();
+        self.inner.cache.asked.clear();
         if !self.config.cache.persist {
             return;
         }
@@ -308,6 +312,7 @@ impl Core {
     fn disown(&mut self) {
         self.inner.cache.pages.clear();
         self.inner.cache.disk.clear();
+        self.inner.cache.asked.clear();
         self.inner.cache.owner = Owner::Empty;
         if self.config.cache.persist {
             self.effects.push(Effect::CacheClear);
@@ -333,6 +338,9 @@ impl Core {
             && self.inner.cache.readable()
             && self.inner.cache.disk.contains(&key)
         {
+            if !self.inner.cache.asked.contains(&key) {
+                self.inner.cache.asked.push(key.clone());
+            }
             self.effects.push(Effect::CacheRead {
                 key: format!("page:{key}"),
             });
@@ -453,6 +461,18 @@ impl Core {
             return;
         };
         if let Some(kept) = key.strip_prefix("page:") {
+            // A read asked before what is kept was last emptied, or never
+            // asked, is dropped: it may be someone else's page.
+            let Some(at) = self
+                .inner
+                .cache
+                .asked
+                .iter()
+                .position(|asked| asked == kept)
+            else {
+                return;
+            };
+            self.inner.cache.asked.remove(at);
             if !self.inner.cache.readable() {
                 return;
             }
