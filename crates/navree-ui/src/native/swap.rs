@@ -1485,6 +1485,8 @@ mod tests {
             "private, no-store",
             "No-Store",
             "no-cache,no-store,must-revalidate",
+            // What an answer says when its handler asked for no transform.
+            "no-store, no-transform",
             "",
             "  ",
             "private\u{7}",
