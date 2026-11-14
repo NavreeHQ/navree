@@ -1,6 +1,8 @@
 //! Two modules that embed one template name: a warning between modules of an
 //! app, an error when a plugin is one of them, and a module that replaces a
-//! template of a module it imports.
+//! template of a module it imports (said at info for an app's module, a warning
+//! for a plugin's module replacing another plugin's template, an error for a
+//! plugin's module replacing any other).
 //!
 //! A test binary of its own: the tests read the log, and `tracing` caches
 //! per-callsite interest process-wide, so events first hit by tests that
@@ -15,7 +17,7 @@ use std::sync::{Arc, Mutex};
 
 use navree_kernel::{App, BootErrors, Module, ModuleBuilder, ModuleId, Navree, PluginInfo};
 use navree_view::{
-    ModuleBuilderPluginViewsExt, ModuleBuilderViewExt, TemplateDir, ViewModule, Views,
+    ModuleBuilderPluginTemplatesExt, ModuleBuilderViewExt, TemplateDir, ViewModule, Views,
 };
 use serde_json::json;
 
@@ -141,6 +143,26 @@ impl Module for PluginShellModule {
     }
 }
 
+fn notice_board() -> PluginInfo {
+    PluginInfo::new(
+        "navree-plugin-notice-board",
+        env!("CARGO_CRATE_NAME"),
+        "notice_board",
+        "1.0.0",
+    )
+}
+
+/// A module of another plugin that imports the announcements plugin and
+/// replaces its list.
+struct NoticeBoardPlugin;
+impl Module for NoticeBoardPlugin {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(notice_board())
+            .import(AnnouncementsModule)
+            .templates(&[("announcements/list.html", "the notice board's list")]);
+    }
+}
+
 /// `ViewModule::for_root(options(&[]))` and `modules`, booted.
 async fn boot(modules: Vec<Box<dyn Module>>) -> Result<App, BootErrors> {
     let mut app = Navree::app().module(ViewModule::for_root(options(&[])));
@@ -220,20 +242,44 @@ async fn a_duplicate_template_warns_between_modules_and_fails_with_a_plugin_but_
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn a_plugin_replacing_a_template_of_a_module_it_imports_is_warned_about() {
+async fn a_plugin_replacing_a_template_of_an_app_module_it_imports_fails_the_boot() {
     let capture = LogCapture::default();
     let _guard = capture.install();
 
-    let app = boot(vec![Box::new(PluginShellModule)])
+    let error = boot(vec![Box::new(PluginShellModule)])
+        .await
+        .expect_err("fails")
+        .to_string();
+    assert!(
+        error.contains(
+            "embedded template `mail/welcome.html` of `CrmModule` cannot be replaced by `PluginShellModule`, a module of the plugin `navree-plugin-announcements`; to use the plugin's version, copy it to resources/views/mail/welcome.html or register it from a module of the app"
+        ),
+        "{error}"
+    );
+    assert!(
+        capture
+            .lines()
+            .iter()
+            .all(|line| !line.contains("is replaced by")),
+        "an error, not a log line"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugin_replacing_another_plugins_template_it_imports_is_warned_about() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+
+    let app = boot(vec![Box::new(NoticeBoardPlugin)])
         .await
         .expect("boots");
     assert_eq!(
-        render(&app, "mail/welcome").await,
-        "Welcome from the plugin's shell"
+        render(&app, "announcements/list").await,
+        "the notice board's list"
     );
     assert!(capture.lines().iter().any(|line| line.contains("WARN")
         && line.contains(
-            "embedded template `mail/welcome.html` of `CrmModule` is replaced by `PluginShellModule`'s, a module of the plugin `navree-plugin-announcements`"
+            "embedded template `announcements/list.html` of `AnnouncementsModule` is replaced by `NoticeBoardPlugin`'s, a module of the plugin `navree-plugin-notice-board`"
         )));
     assert!(
         capture
