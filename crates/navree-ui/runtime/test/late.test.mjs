@@ -128,6 +128,27 @@ test("a page whose every answer is overtaken by a write loads for real after thr
   page.assigned.length = 0;
 });
 
+// A link that redraws its region alone (a table's sort, a page of it) never loads the whole page for that:
+// what else is on the page, a form's answer or what was typed, stays.
+test("a region's own link whose every answer is overtaken by a write draws what came, and the page stays", async () => {
+  $("kpis").innerHTML = `<a id="next" href="/deals?page=2" data-ui-in-region>Next</a>`;
+  page.fetched.length = 0;
+  page.assigned.length = 0;
+  for (let n = 1; n <= 6; n++) {
+    page.answers.push(() => {
+      page.channels[0].onmessage();
+      return answer(html("Deals", `Page 2, answer ${n}`), { headers: PAGE });
+    });
+  }
+  $("next").click();
+  await settle();
+  assert.equal(page.fetched.length, 3);
+  assert.equal($("kpis").textContent, "Page 2, answer 3");
+  assert.deepEqual(page.assigned, []);
+  page.answers.length = 0;
+  history.replaceState(null, "", "/deals/5");
+});
+
 test("a region whose every answer is overtaken by a write is drawn after at most three fetches", async () => {
   page.fetched.length = 0;
   for (let n = 1; n <= 6; n++) {
