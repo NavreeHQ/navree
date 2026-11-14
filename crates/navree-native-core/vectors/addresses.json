@@ -8,8 +8,8 @@
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "https://shop.example:443/x", "reads": "inside", "address": "https://shop.example/x"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "/x?a=b://c", "reads": "inside", "address": "https://shop.example/x?a=b://c"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "https://shop.example/x?a=b://c", "reads": "inside", "address": "https://shop.example/x?a=b://c"},
-    {"origin": "https://shop.example", "also": [], "from": "/", "href": "/उत्पाद/1", "reads": "inside", "address": "https://shop.example/उत्पाद/1"},
-    {"origin": "https://shop.example", "also": [], "from": "/", "href": "/a b", "reads": "inside", "address": "https://shop.example/a b"},
+    {"origin": "https://shop.example", "also": [], "from": "/", "href": "/उत्पाद/1", "reads": "inside", "address": "https://shop.example/%E0%A4%89%E0%A4%A4%E0%A5%8D%E0%A4%AA%E0%A4%BE%E0%A4%A6/1"},
+    {"origin": "https://shop.example", "also": [], "from": "/", "href": "/a b", "reads": "inside", "address": "https://shop.example/a%20b"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "/a//b", "reads": "inside", "address": "https://shop.example/a//b"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "/a/%2e%2e/%2E%2E/etc", "reads": "inside", "address": "https://shop.example/etc"},
     {"origin": "https://shop.example", "also": [], "from": "/a/b", "href": "../../../x", "reads": "inside", "address": "https://shop.example/x"},
@@ -72,7 +72,11 @@
     {"origin": "https://shop.example", "also": [], "from": "/orders/7", "href": "a #x", "reads": "refused"},
     {"origin": "https://shop.example", "also": [], "from": "/orders?page=1", "href": "?q #x", "reads": "refused"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "/a #x", "reads": "refused"},
-    {"origin": "https://shop.example", "also": [], "from": "/", "href": "https://shop.example/a #x", "reads": "refused"}
+    {"origin": "https://shop.example", "also": [], "from": "/", "href": "https://shop.example/a #x", "reads": "refused"},
+    {"origin": "https://shop.example", "also": [], "from": "/", "href": "/x?filter[status]=won&q=a b", "reads": "inside", "address": "https://shop.example/x?filter[status]=won&q=a%20b"},
+    {"origin": "https://shop.example", "also": [], "from": "/", "href": "/a^b`{c}?it's", "reads": "inside", "address": "https://shop.example/a%5Eb%60%7Bc%7D?it%27s"},
+    {"origin": "https://shop.example", "also": [], "from": "/", "href": "/100%?a=%41%zz", "reads": "inside", "address": "https://shop.example/100%25?a=%41%25zz"},
+    {"origin": "https://shop.example", "also": [], "from": "/", "href": "https://evil.example/ü?ü#ü", "reads": "outside", "address": "https://evil.example/%C3%BC?%C3%BC#%C3%BC"}
   ],
   "ours": [
     {"origin": "https://shop.example", "also": [], "address": "https://shop.example/", "ours": true},
