@@ -22,7 +22,7 @@ struct DayClockPart: View {
                 .frame(maxWidth: ClockRules.diameter * scale.capped(1.25))
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(clock.title ?? clock.label ?? "")
-                .accessibilityValue(clock.summary ?? sentence(uses24: uses24))
+                .accessibilityValue(SpeechRules.value(clock.summary ?? sentence(uses24: uses24), after: clock.title ?? clock.label))
             VStack(alignment: .leading, spacing: 10) {
                 if !clock.key.isEmpty {
                     KeyFlow(entries: clock.key.map { (Hues.color($0.colour, fallback: .secondary), $0.name, $0.detail) })

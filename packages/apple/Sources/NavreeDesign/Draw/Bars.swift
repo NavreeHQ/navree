@@ -62,7 +62,7 @@ struct MeterPart: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(meter.title ?? "")
-        .accessibilityValue(meter.summary ?? sentence)
+        .accessibilityValue(SpeechRules.value(meter.summary ?? sentence, after: meter.title))
     }
 
     private var sentence: String {
@@ -121,7 +121,7 @@ struct ColumnsPart: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(columns.title ?? "")
-        .accessibilityValue(columns.summary ?? sentence)
+        .accessibilityValue(SpeechRules.value(columns.summary ?? sentence, after: columns.title))
     }
 
     private func colour(_ part: Int) -> Color {
@@ -184,7 +184,7 @@ struct StripPart: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(strip.title ?? "")
-        .accessibilityValue(strip.summary ?? entries.map { KeyRules.entry($0.name, detail: $0.detail) }.joined(separator: ", "))
+        .accessibilityValue(SpeechRules.value(strip.summary ?? entries.map { KeyRules.entry($0.name, detail: $0.detail) }.joined(separator: ", "), after: strip.title))
     }
 
     private var entries: [(color: Color, name: String, detail: String?)] {

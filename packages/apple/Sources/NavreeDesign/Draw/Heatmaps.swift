@@ -66,7 +66,7 @@ struct CalendarHeatmapPart: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(heatmap.title ?? "")
-        .accessibilityValue(heatmap.summary ?? "")
+        .accessibilityValue(SpeechRules.value(heatmap.summary ?? "", after: heatmap.title))
     }
 
     private func weekday(_ row: Int) -> String {
@@ -130,7 +130,7 @@ struct MatrixHeatmapPart: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(matrix.title ?? "")
-        .accessibilityValue(matrix.summary ?? "")
+        .accessibilityValue(SpeechRules.value(matrix.summary ?? "", after: matrix.title))
     }
 
     private func cell(row: Int, column: Int) -> some View {
@@ -208,7 +208,7 @@ struct ScatterPart: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(scatter.title ?? "")
-        .accessibilityValue(scatter.summary ?? "")
+        .accessibilityValue(SpeechRules.value(scatter.summary ?? "", after: scatter.title))
     }
 
     private func axisWords(_ measure: Navree.Measure?) -> String {
