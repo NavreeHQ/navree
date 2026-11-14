@@ -334,7 +334,7 @@ impl Module for Ships {
 
 #[test]
 fn an_unsafe_publish_path_fails_the_boot() {
-    let rule = "is not a safe relative path inside its folder (no `..`, no leading `/`, no `\\`, no `:`, none of `<>\"|?*`, no segment ending in `.` or a space, no device name such as `con` or `nul`, no two names that differ only in case); fix the path in the plugin";
+    let rule = "is not a safe relative path inside its folder (no `..`, no leading `/`, no `\\`, no `:`, none of `<>\"|?*`, no segment ending in `.` or a space, no device name such as `con` or `nul`, no two names that differ only in case, no file that is also a folder); fix the path in the plugin";
     for (tag, paths, named) in [
         (
             PublishTag::Views,
@@ -358,6 +358,18 @@ fn an_unsafe_publish_path_fails_the_boot() {
             ("locales", "announcements.ftl"),
         ),
         (PublishTag::Files, vec!["con.css"], ("files", "con.css")),
+        // A file that the other path needs as its folder: one would have to be written over
+        // the other.
+        (
+            PublishTag::Views,
+            vec!["admin", "admin/edit.html"],
+            ("views", "admin"),
+        ),
+        (
+            PublishTag::Views,
+            vec!["Admin", "admin/edit.html"],
+            ("views", "Admin"),
+        ),
     ] {
         assert_eq!(
             errors(Navree::app().module(Ships(tag, paths))),

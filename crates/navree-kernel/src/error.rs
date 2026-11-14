@@ -230,7 +230,7 @@ pub enum KernelError {
     },
     /// A file a plugin ships has a path that is not safe inside its folder.
     #[error(
-        "plugin `{plugin}`: the {tag} file `{path}` is not a safe relative path inside its folder (no `..`, no leading `/`, no `\\`, no `:`, none of `<>\"|?*`, no segment ending in `.` or a space, no device name such as `con` or `nul`, no two names that differ only in case); fix the path in the plugin"
+        "plugin `{plugin}`: the {tag} file `{path}` is not a safe relative path inside its folder (no `..`, no leading `/`, no `\\`, no `:`, none of `<>\"|?*`, no segment ending in `.` or a space, no device name such as `con` or `nul`, no two names that differ only in case, no file that is also a folder); fix the path in the plugin"
     )]
     UnsafePublishPath {
         /// The plugin's name.
