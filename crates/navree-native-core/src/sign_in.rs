@@ -342,40 +342,27 @@ impl Core {
             }
             return;
         };
-        // A return that says something went wrong is this sign-in's only when
-        // it carries this sign-in's state: compared first, then acted on. One
-        // that does not changes nothing, and the sign-in stays open.
-        if let Some(url) = url
-            && let Some(error) = query_value(url, "error")
-        {
-            let returned = query_value(url, "state").unwrap_or_default();
-            if !same(&returned, &state) {
-                return self.report(
-                    "sign_in",
-                    "a sign-in's return said it went wrong with a state that is not this sign-in's, and was not used"
-                        .to_owned(),
-                );
-            }
-            // The person said no: that is the sheet closed, and nothing failed.
-            if error == "access_denied" {
-                self.inner.hand_over = None;
-                return;
-            }
-        }
-        // One return for one session, whatever it holds.
-        self.inner.hand_over = None;
-        // The person closed the sheet: nothing changed.
+        // The person closed the sheet: nothing changed, and the sign-in ends.
         let Some(url) = url else {
+            self.inner.hand_over = None;
             return;
         };
+        // A return is this sign-in's only with this sign-in's state, compared
+        // before anything else is read of it. One with another state, or none,
+        // changes nothing: the sign-in stays open.
         let returned = query_value(url, "state").unwrap_or_default();
         if !same(&returned, &state) {
-            self.notice(Notice::Failed, self.front());
             return self.report(
                 "sign_in",
                 "a sign-in's return carried a state that is not this sign-in's, and was not used"
                     .to_owned(),
             );
+        }
+        // One return for one session, whatever it holds.
+        self.inner.hand_over = None;
+        // The person said no: that is the sheet closed, and nothing failed.
+        if query_value(url, "error").as_deref() == Some("access_denied") {
+            return;
         }
         let (Some(code), Some(family)) = (
             query_value(url, "code").filter(|code| !code.is_empty()),

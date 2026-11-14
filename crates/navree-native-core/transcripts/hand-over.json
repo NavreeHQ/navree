@@ -150,19 +150,16 @@
       }
     },
     {
-      "note": "The return carries a state that is not this sign-in's. It is refused: nothing is exchanged, and the person is told it did not work.",
+      "note": "The return carries a state that is not this sign-in's. It is not this sign-in's return: nothing is exchanged, nothing is shown, and the sign-in stays open.",
       "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?code=Xk3mQ8r1v5&state=not-the-state"},
       "expect": {
-        "changed": [
-          {"t":"messages"}
-        ],
+        "changed": [],
         "effects": [
-          {"t":"message","id":1,"tone":"danger","notice":"failed"},
           {"t":"report","what":"sign_in","detail":"a sign-in's return carried a state that is not this sign-in's, and was not used"}
         ]
       },
       "check": [
-        {"at":"/messages/0/notice","is":"failed"}
+        {"at":"/messages","is":[]}
       ]
     },
     {
@@ -240,14 +237,11 @@
       }
     },
     {
-      "note": "A return of the first is refused by its state.",
+      "note": "A return of the first is not this one's, by its state: nothing changes.",
       "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?code=Xk3mQ8r1v5&state=ISIjJCUmJygpKissLS4vMA"},
       "expect": {
-        "changed": [
-          {"t":"messages"}
-        ],
+        "changed": [],
         "effects": [
-          {"t":"message","id":2,"tone":"danger","notice":"failed"},
           {"t":"report","what":"sign_in","detail":"a sign-in's return carried a state that is not this sign-in's, and was not used"}
         ]
       }
@@ -289,12 +283,12 @@
           {"t":"messages"}
         ],
         "effects": [
-          {"t":"message","id":3,"tone":"danger","notice":"failed"},
+          {"t":"message","id":1,"tone":"danger","notice":"failed"},
           {"t":"report","what":"sign_in","detail":"the exchange route answered 400"}
         ]
       },
       "check": [
-        {"at":"/messages/2/notice","is":"failed"}
+        {"at":"/messages/0/notice","is":"failed"}
       ]
     },
     {
@@ -314,7 +308,7 @@
           {"t":"messages"}
         ],
         "effects": [
-          {"t":"message","id":4,"tone":"danger","notice":"failed"},
+          {"t":"message","id":2,"tone":"danger","notice":"failed"},
           {"t":"report","what":"sign_in","detail":"a sign-in needs 48 random bytes; 4 came"}
         ]
       }
