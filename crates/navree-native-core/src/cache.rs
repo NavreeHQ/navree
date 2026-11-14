@@ -32,27 +32,37 @@ use crate::state::{Asked, Content, Pending, ScreenId};
 
 /// Who a shell names, as the core tells people apart: by the id the app's
 /// sign-in gives them, when the shell's answer says it
-/// ([`navree_native::PERSON_HEADER`]), and by their name and email when an
-/// older server does not.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub(crate) enum Who {
-    /// The id the app's sign-in gives them, as the header wrote it.
-    Id {
-        /// The id.
-        id: String,
-    },
-    /// Their name and email.
-    Named(String, Option<String>),
+/// ([`navree_native::PERSON_HEADER`]), and always by their name and email.
+/// Two are the same person when both have an id and the ids are equal, or
+/// when either has none and the name and email are equal: an answer that
+/// lost its id (a proxy, a server rolled back) names the same person still.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub(crate) struct Who {
+    /// The id, when the server said it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Their name.
+    pub name: String,
+    /// Their email, when they have one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
 }
+
+impl PartialEq for Who {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.id, &other.id) {
+            (Some(one), Some(other)) => one == other,
+            _ => self.name == other.name && self.email == other.email,
+        }
+    }
+}
+
+impl Eq for Who {}
 
 impl Who {
     /// The id the app's sign-in gives them, when the server said it.
     pub(crate) fn id(&self) -> Option<&str> {
-        match self {
-            Self::Id { id } => Some(id),
-            Self::Named(..) => None,
-        }
+        self.id.as_deref()
     }
 }
 
@@ -514,7 +524,7 @@ impl Core {
         if !self.inner.has_shell {
             // The kept shell names the person the pages were kept for, as
             // they were told apart then.
-            self.inner.naming = owner.clone();
+            self.inner.naming = owner.as_ref().and_then(|who| who.id.clone());
             if !self.shell_from_cache(&shell) {
                 // A kept shell that does not read says nothing of whose the pages are.
                 self.inner.naming = None;
