@@ -3,6 +3,7 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use navree_config::__private::{check_registrations, contribute_slot};
 use navree_config::{Config, ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::{ModuleBuilderJobsExt, ModuleBuilderRevocationExt};
 use navree_db::ModuleBuilderDbExt;
@@ -22,6 +23,7 @@ use crate::controller::NotificationsController;
 use crate::devices::{DeviceRevoker, RegisteredApps};
 use crate::digest::DIGEST_TEMPLATES;
 use crate::notifier::Parts;
+use crate::registered::{SMS_SLOT, WHATSAPP_SLOT, registered_drivers};
 use crate::{
     Channel, DeliveryLog, ModuleBuilderNotifyExt, Notification, NotificationCatalog,
     NotificationPreferences, Notifier, NotifyOptions, OptOuts, PushDevices, PushOptions,
@@ -144,6 +146,8 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
         m.config_section::<NotifyOptions>();
     }
     m.config_section::<PushOptions>();
+    contribute_slot(m, SMS_SLOT);
+    contribute_slot(m, WHATSAPP_SLOT);
     m.credential_revoker::<DeviceRevoker>();
     let mut deps = source.deps();
     deps.push(ProviderKey::of::<PushOptions>());
@@ -248,8 +252,15 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
                 let options = r.get::<NotifyOptions>().await?;
                 let push = r.get::<PushOptions>().await?;
                 let app = r.app().downgrade();
+                // Every registration of a driver is checked, whichever is
+                // selected; a selected one is built with its settings.
+                let ctx = r.app();
+                check_registrations(&ctx, &SMS_SLOT, NotifyOptions::schema())?;
+                check_registrations(&ctx, &WHATSAPP_SLOT, NotifyOptions::schema())?;
+                let registered = registered_drivers(&ctx, &options).await?;
                 let drivers = ChannelDrivers::from_options(&options, &push, &app)
-                    .map_err(|message| format!("notify: {message}"))?;
+                    .map_err(|message| format!("notify: {message}"))?
+                    .with_registered(registered.sms, registered.whatsapp);
                 let parts = Parts {
                     telemetry: Telemetry::from_app(&r.app()).await,
                     drivers,

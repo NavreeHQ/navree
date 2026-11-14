@@ -32,7 +32,9 @@
 //!   `notify.<channel>` configures ([`SlackApi`], [`TeamsApi`],
 //!   [`TwilioSms`], [`VonageSms`], [`SnsSms`], [`TwilioWhatsApp`],
 //!   [`MetaWhatsApp`], [`VapidWebPush`], and for native apps [`ApnsPush`]
-//!   and [`FcmPush`] from section `notify.push`). Numbers are
+//!   and [`FcmPush`] from section `notify.push`), or an SMS or WhatsApp
+//!   driver a module registers under a name
+//!   ([`ModuleBuilderNotifyChannelsExt`]). Numbers are
 //!   read as E.164; opted-out numbers are skipped; each attempt is a
 //!   [`NotificationDelivery`] row, moved forward by provider callbacks
 //!   ([`ChannelCallback`], [`DeliveryLog::ingest`]).
@@ -193,6 +195,7 @@ mod overrides;
 mod preferences;
 mod push;
 mod recipient;
+mod registered;
 mod schema;
 mod store;
 mod stored;
@@ -267,6 +270,7 @@ pub use preferences::{
 };
 pub use push::{NewPushSubscription, PushKeys, PushSubscription, PushSubscriptions};
 pub use recipient::RecipientScope;
+pub use registered::ModuleBuilderNotifyChannelsExt;
 pub use stored::{DatabaseNotification, NotificationList};
 pub use timing::{Digest, QuietHours};
 pub use tokens::ConnectionTokens;
