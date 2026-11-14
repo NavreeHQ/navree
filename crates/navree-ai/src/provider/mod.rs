@@ -27,6 +27,7 @@ pub(crate) mod eventstream;
 pub(crate) mod gemini;
 pub(crate) mod ollama;
 pub(crate) mod openai;
+pub(crate) mod public;
 pub(crate) mod wire;
 
 /// A tool the model may call.

@@ -14,6 +14,7 @@
 //!   completions, and any compatible server), Google Gemini, Mistral,
 //!   Ollama and AWS Bedrock (Converse, signed with navree-crypto's SigV4
 //!   signer). Their HTTP goes through navree-http-client and its SSRF guard.
+//!   A module can add a provider of its own with an [`AiDriver`].
 //! - **Failover**: each model is retried on a 429, a 5xx, a timeout or a
 //!   connection failure (exponential backoff, `retry-after` honored), then
 //!   its `fallbacks` are tried in order.
@@ -81,6 +82,10 @@ pub use module::{AiModule, ModuleBuilderAiExt};
 pub use options::{
     AiOptions, BudgetOptions, EmbeddingsOptions, MemoryOptions, Metric, ModelConfig,
     ProviderConfig, VectorStoreKind, VectorsOptions,
+};
+pub use provider::public::{
+    AiCapabilities, AiDriver, AiDriverAnswer, AiDriverChunk, AiDriverRequest, AiDriverStream,
+    AiEmbedAnswer, AiEmbedRequest, AiTool,
 };
 pub use request::{StreamRequest, StructuredRequest, TextRequest};
 pub use rerank::RerankRequest;
