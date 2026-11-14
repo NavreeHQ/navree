@@ -564,3 +564,69 @@ async fn the_plugins_command_prints_the_report_and_yields_to_a_module_command() 
         .expect("the app's own command");
     assert_eq!(*seen.lock().unwrap(), ["--json"]);
 }
+
+/// Ledger is imported by Billing, which Shop imports.
+struct Ledger;
+impl Module for Ledger {
+    fn register(&self, _: &mut ModuleBuilder) {}
+}
+struct Billing;
+impl Module for Billing {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.import(Ledger);
+    }
+}
+struct Shop;
+impl Module for Shop {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.import(Billing);
+    }
+}
+
+#[tokio::test]
+async fn a_module_imports_what_its_imports_import() {
+    use navree_kernel::__private::imports;
+    let app = Navree::app()
+        .module(Shop)
+        .module(Plain)
+        .boot()
+        .await
+        .expect("boots");
+    let (shop, billing, ledger) = (
+        ModuleId::of::<Shop>(),
+        ModuleId::of::<Billing>(),
+        ModuleId::of::<Ledger>(),
+    );
+    assert!(imports(app.ctx(), shop, billing));
+    assert!(imports(app.ctx(), shop, ledger), "through Billing");
+    assert!(!imports(app.ctx(), ledger, shop), "not the other way round");
+    assert!(!imports(app.ctx(), shop, shop));
+    assert!(!imports(app.ctx(), shop, ModuleId::of::<Plain>()));
+    assert!(
+        !imports(app.ctx(), shop, ModuleId::of::<NoticesModule>()),
+        "not in the app"
+    );
+}
+
+#[tokio::test]
+async fn a_module_of_a_plugin_the_kernel_does_not_find_first_party_is_a_community_plugin() {
+    use navree_kernel::__private::is_community_plugin;
+    let app = Navree::app()
+        .module(NoticesModule)
+        .module(Plain)
+        .boot()
+        .await
+        .expect("boots");
+    assert!(is_community_plugin(
+        app.ctx(),
+        ModuleId::of::<NoticesModule>()
+    ));
+    assert!(
+        !is_community_plugin(app.ctx(), ModuleId::of::<Plain>()),
+        "no plugin"
+    );
+    assert!(
+        !is_community_plugin(app.ctx(), ModuleId::of::<Shop>()),
+        "not in the app"
+    );
+}

@@ -41,6 +41,7 @@ compile_error!(
 
 mod app;
 mod builder;
+mod collide;
 mod command;
 mod container;
 mod error;
@@ -78,6 +79,7 @@ pub mod __private {
     };
     pub use crate::publish::is_safe_relative_path;
     pub use crate::publish::{PublishRefused, Published, publish_files};
+    pub use crate::collide::{imports, is_community_plugin};
 }
 
 /// A boxed error that can cross module and task boundaries.
