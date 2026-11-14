@@ -331,14 +331,20 @@ extension SheetAnswer {
 /// `ASAuthorizationController` over the app's key window.
 @MainActor
 final class SystemAuthorizationSheet: NSObject, AuthorizationSheet {
-    private var open: [ObjectIdentifier: (controller: ASAuthorizationController, done: @MainActor (SheetOutcome) -> Void)] =
-        [:]
+    /// Each open sheet's controller and the window it stands over, kept
+    /// until it answers: the controller holds both weakly.
+    private var open:
+        [ObjectIdentifier: (controller: ASAuthorizationController, anchor: SheetAnchor, done: @MainActor (SheetOutcome) -> Void)] =
+            [:]
 
     func present(_ request: SheetRequest, done: @escaping @MainActor (SheetOutcome) -> Void) {
+        // No window yet, nothing to stand over: the system could not show it.
+        guard let window = Windows.anchor else { return done(.refused(.unavailable)) }
+        let anchor = SheetAnchor(window)
         let controller = ASAuthorizationController(authorizationRequests: [request.system])
         controller.delegate = self
-        controller.presentationContextProvider = self
-        open[ObjectIdentifier(controller)] = (controller, done)
+        controller.presentationContextProvider = anchor
+        open[ObjectIdentifier(controller)] = (controller, anchor, done)
         controller.performRequests()
     }
 
@@ -347,7 +353,7 @@ final class SystemAuthorizationSheet: NSObject, AuthorizationSheet {
     }
 }
 
-extension SystemAuthorizationSheet: ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+extension SystemAuthorizationSheet: ASAuthorizationControllerDelegate {
     nonisolated func authorizationController(
         controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization
     ) {
@@ -360,9 +366,5 @@ extension SystemAuthorizationSheet: ASAuthorizationControllerDelegate, ASAuthori
         let key = ObjectIdentifier(controller)
         let refusal = SheetOutcome.refusal(error)
         MainActor.assumeIsolated { finish(key, .refused(refusal)) }
-    }
-
-    nonisolated func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        MainActor.assumeIsolated { Windows.key ?? ASPresentationAnchor() }
     }
 }
