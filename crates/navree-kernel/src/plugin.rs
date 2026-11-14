@@ -1,0 +1,327 @@
+//! [`PluginInfo`] and `plugin_info!`: what a plugin says about itself.
+
+/// What a plugin says about itself: `m.plugin(plugin_info!())`.
+///
+/// `plugin_info!()` fills it from the `Cargo.toml` of the crate that calls
+/// it; [`PluginInfo::new`] and the setters build one by hand. The kernel
+/// checks it at boot.
+///
+/// ```
+/// use navree_kernel::PluginInfo;
+///
+/// let info = PluginInfo::new(
+///     "navree-plugin-announcements",
+///     "navree_plugin_announcements",
+///     "announcements",
+///     "1.0.0",
+/// )
+/// .title("Announcements")
+/// .description("Notices for every member of a workspace, by Simran Kaur's team in Ludhiana.")
+/// .homepage("")
+/// .repository("https://code.ludhiana.example/navree-plugin-announcements")
+/// .license("MIT OR Apache-2.0");
+/// assert_eq!(info.namespace, "announcements");
+/// assert_eq!(info.homepage, None);
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PluginInfo {
+    /// The crate name (`CARGO_PKG_NAME`): `navree-plugin-announcements`.
+    pub name: &'static str,
+    /// The crate's Rust name (`CARGO_CRATE_NAME`): `navree_plugin_announcements`.
+    /// The kernel checks the plugin's modules against it.
+    pub crate_name: &'static str,
+    /// What the plugin's config sections, permissions, env names, templates,
+    /// static files and message ids start with: `announcements`. A lower-case
+    /// letter followed by up to 63 lower-case letters, digits or `_`.
+    pub namespace: &'static str,
+    /// `CARGO_PKG_VERSION`.
+    pub version: &'static str,
+    /// A display name (`Announcements`), from `plugin_info!(title = "..")`.
+    pub title: Option<&'static str>,
+    /// `CARGO_PKG_DESCRIPTION`; `None` when empty.
+    pub description: Option<&'static str>,
+    /// `CARGO_PKG_HOMEPAGE`; `None` when empty.
+    pub homepage: Option<&'static str>,
+    /// `CARGO_PKG_REPOSITORY`; `None` when empty.
+    pub repository: Option<&'static str>,
+    /// `CARGO_PKG_LICENSE`; `None` when empty.
+    pub license: Option<&'static str>,
+}
+
+impl PluginInfo {
+    /// A plugin named `name` (crate `crate_name`) at `version` with `namespace`
+    /// (checked at boot).
+    pub const fn new(
+        name: &'static str,
+        crate_name: &'static str,
+        namespace: &'static str,
+        version: &'static str,
+    ) -> PluginInfo {
+        PluginInfo {
+            name,
+            crate_name,
+            namespace,
+            version,
+            title: None,
+            description: None,
+            homepage: None,
+            repository: None,
+            license: None,
+        }
+    }
+
+    /// Sets the display name; an empty string sets `None`.
+    pub const fn title(self, title: &'static str) -> PluginInfo {
+        PluginInfo {
+            title: non_empty(title),
+            ..self
+        }
+    }
+
+    /// Sets the description; an empty string sets `None`.
+    pub const fn description(self, description: &'static str) -> PluginInfo {
+        PluginInfo {
+            description: non_empty(description),
+            ..self
+        }
+    }
+
+    /// Sets the homepage; an empty string sets `None`.
+    pub const fn homepage(self, homepage: &'static str) -> PluginInfo {
+        PluginInfo {
+            homepage: non_empty(homepage),
+            ..self
+        }
+    }
+
+    /// Sets the repository; an empty string sets `None`.
+    pub const fn repository(self, repository: &'static str) -> PluginInfo {
+        PluginInfo {
+            repository: non_empty(repository),
+            ..self
+        }
+    }
+
+    /// Sets the license; an empty string sets `None`.
+    pub const fn license(self, license: &'static str) -> PluginInfo {
+        PluginInfo {
+            license: non_empty(license),
+            ..self
+        }
+    }
+}
+
+/// `None` for an empty string.
+const fn non_empty(value: &'static str) -> Option<&'static str> {
+    if value.is_empty() { None } else { Some(value) }
+}
+
+/// What a plugin says about itself, filled from the `Cargo.toml` of the crate
+/// that calls it: a [`PluginInfo`](crate::PluginInfo) with the calling crate's
+/// `CARGO_PKG_NAME`, `CARGO_CRATE_NAME`, `CARGO_PKG_VERSION`,
+/// `CARGO_PKG_DESCRIPTION`, `CARGO_PKG_HOMEPAGE`, `CARGO_PKG_REPOSITORY` and
+/// `CARGO_PKG_LICENSE` (an empty value gives `None`).
+///
+/// The namespace defaults to the package name without a leading
+/// `navree-plugin-`, else without a leading `navree-`, with every `-` turned
+/// into `_` (`navree-plugin-announcements` gives `announcements`, `acme-crm`
+/// gives `acme_crm`). Two optional keys, in any order: `namespace = ".."` sets
+/// another namespace, `title = ".."` a display name. A namespace is a
+/// lower-case letter followed by up to 63 lower-case letters, digits or `_`;
+/// any other namespace, or a package name that gives none, is a compile error.
+///
+/// ```
+/// let info = navree_kernel::plugin_info!(namespace = "notice_board", title = "Notice board");
+/// assert_eq!(info.namespace, "notice_board");
+/// assert_eq!(info.title, Some("Notice board"));
+/// ```
+///
+/// An unknown key and a namespace outside the grammar do not compile:
+///
+/// ```compile_fail
+/// let _ = navree_kernel::plugin_info!(name = "announcements");
+/// ```
+///
+/// ```compile_fail
+/// let _ = navree_kernel::plugin_info!(namespace = "Notice-Board");
+/// ```
+#[macro_export]
+macro_rules! plugin_info {
+    () => { $crate::plugin_info!(@default) };
+    (title = $title:literal $(,)?) => { $crate::plugin_info!(@default).title($title) };
+    (namespace = $namespace:literal $(,)?) => { $crate::plugin_info!(@given $namespace) };
+    (namespace = $namespace:literal, title = $title:literal $(,)?) => {
+        $crate::plugin_info!(@given $namespace).title($title)
+    };
+    (title = $title:literal, namespace = $namespace:literal $(,)?) => {
+        $crate::plugin_info!(@given $namespace).title($title)
+    };
+    (@default) => {{
+        const PACKAGE: &str = ::core::env!("CARGO_PKG_NAME");
+        const DEFAULT: ([u8; PACKAGE.len()], usize) =
+            $crate::__private::default_namespace::<{ PACKAGE.len() }>(PACKAGE);
+        const BYTES: &[u8] = &DEFAULT.0;
+        const NAMESPACE: &str = {
+            let namespace = $crate::__private::namespace_text(BYTES, DEFAULT.1);
+            ::core::assert!(
+                $crate::__private::is_namespace(namespace),
+                "plugin_info!: this crate's name gives no valid namespace; set one with plugin_info!(namespace = \"..\")"
+            );
+            namespace
+        };
+        $crate::plugin_info!(@build NAMESPACE)
+    }};
+    (@given $namespace:literal) => {{
+        const NAMESPACE: &str = {
+            ::core::assert!(
+                $crate::__private::is_namespace($namespace),
+                "plugin_info!: a namespace is a lower-case letter followed by up to 63 lower-case letters, digits or _"
+            );
+            $namespace
+        };
+        $crate::plugin_info!(@build NAMESPACE)
+    }};
+    (@build $namespace:expr) => {
+        $crate::PluginInfo::new(
+            ::core::env!("CARGO_PKG_NAME"),
+            ::core::env!("CARGO_CRATE_NAME"),
+            $namespace,
+            ::core::env!("CARGO_PKG_VERSION"),
+        )
+        .description(::core::env!("CARGO_PKG_DESCRIPTION"))
+        .homepage(::core::env!("CARGO_PKG_HOMEPAGE"))
+        .repository(::core::env!("CARGO_PKG_REPOSITORY"))
+        .license(::core::env!("CARGO_PKG_LICENSE"))
+    };
+    ($($other:tt)*) => {
+        ::core::compile_error!("plugin_info!: unknown key; expected namespace = \"..\" or title = \"..\"")
+    };
+}
+
+/// Whether `namespace` is a lower-case letter followed by up to 63 lower-case
+/// letters, digits or `_`. Not public API; `plugin_info!` and the kernel's
+/// boot checks use it.
+pub const fn is_namespace(namespace: &str) -> bool {
+    let bytes = namespace.as_bytes();
+    if bytes.is_empty() || bytes.len() > 64 || !bytes[0].is_ascii_lowercase() {
+        return false;
+    }
+    let mut index = 1;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'a'..=b'z' | b'0'..=b'9' | b'_' => index += 1,
+            _ => return false,
+        }
+    }
+    true
+}
+
+/// The namespace a package name gives, as bytes and how many of them are
+/// used: `package` without a leading `navree-plugin-`, else without a leading
+/// `navree-`, with every `-` turned into `_`. `N` must be at least
+/// `package.len()`. Not public API; `plugin_info!` uses it.
+pub const fn default_namespace<const N: usize>(package: &str) -> ([u8; N], usize) {
+    let bytes = package.as_bytes();
+    let start = if starts_with(bytes, b"navree-plugin-") {
+        "navree-plugin-".len()
+    } else if starts_with(bytes, b"navree-") {
+        "navree-".len()
+    } else {
+        0
+    };
+    let mut namespace = [0_u8; N];
+    let mut index = start;
+    while index < bytes.len() {
+        namespace[index - start] = if bytes[index] == b'-' {
+            b'_'
+        } else {
+            bytes[index]
+        };
+        index += 1;
+    }
+    (namespace, bytes.len() - start)
+}
+
+/// The first `len` bytes of `bytes` as text. Not public API; `plugin_info!`
+/// uses it on the bytes [`default_namespace`] gives.
+pub const fn namespace_text(bytes: &'static [u8], len: usize) -> &'static str {
+    // `split_at`, since range indexing is not available in a `const fn`.
+    match core::str::from_utf8(bytes.split_at(len).0) {
+        Ok(text) => text,
+        Err(_) => panic!("plugin_info!: a package name is UTF-8"),
+    }
+}
+
+/// Whether `bytes` starts with `prefix` (`<[u8]>::starts_with` in a `const fn`).
+const fn starts_with(bytes: &[u8], prefix: &[u8]) -> bool {
+    if bytes.len() < prefix.len() {
+        return false;
+    }
+    let mut index = 0;
+    while index < prefix.len() {
+        if bytes[index] != prefix[index] {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn default_of(package: &str) -> String {
+        let (bytes, len) = default_namespace::<64>(package);
+        String::from_utf8(bytes[..len].to_vec()).expect("UTF-8")
+    }
+
+    #[test]
+    fn the_default_namespace_drops_the_navree_prefixes_and_turns_dashes_into_underscores() {
+        for (package, namespace) in [
+            ("navree-plugin-announcements", "announcements"),
+            ("navree-billing", "billing"),
+            ("navree-http-client", "http_client"),
+            ("acme-crm", "acme_crm"),
+            ("navree-plugin-notice-board", "notice_board"),
+            ("navree", "navree"),
+            ("navree_plugin_x", "navree_plugin_x"),
+            ("navree-plugin-2fa", "2fa"),
+            ("navree-plugin-", ""),
+        ] {
+            assert_eq!(default_of(package), namespace, "{package}");
+        }
+        assert!(!is_namespace("2fa") && !is_namespace(""));
+    }
+
+    #[test]
+    fn the_namespace_check_agrees_with_the_grammar() {
+        let longest = "a".repeat(64);
+        let too_long = "a".repeat(65);
+        for good in [
+            "a",
+            "announcements",
+            "notice_board",
+            "a1",
+            "ludhiana_2026",
+            longest.as_str(),
+        ] {
+            assert!(is_namespace(good), "{good}");
+        }
+        for bad in [
+            "",
+            "1a",
+            "_a",
+            "A",
+            "Announcements",
+            "a-b",
+            "a b",
+            "a.b",
+            "ਸੂਚਨਾ",
+            too_long.as_str(),
+        ] {
+            assert!(!is_namespace(bad), "{bad}");
+        }
+    }
+}
