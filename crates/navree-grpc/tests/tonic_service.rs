@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use navree_contracts::AuthState;
+use navree_contracts::{AuditKind, AuditSink, AuthState};
 use navree_db::Uow;
 use navree_grpc::testing::TestChannel;
 use navree_grpc::{
@@ -38,7 +38,7 @@ use support::pb::deals::{
 };
 use support::pb::ping::ping_server::{Ping, PingServer};
 use support::pb::ping::{PingReply, PingRequest};
-use support::{ApiVersion, BearerAuthenticator, DealEvents, ping_app};
+use support::{ApiVersion, BearerAuthenticator, DealEvents, RecordingAudit, ping_app};
 
 const HARPREET: &str = "0192f0c1-0000-7000-8000-0000000000a1";
 const MEERA: &str = "0192f0c1-0000-7000-8000-0000000000a2";
@@ -356,6 +356,39 @@ async fn a_wrapped_tonic_server_runs_the_access_checks_and_denies_undeclared_met
     assert!(meera.list_deals(ListDealsRequest::default()).await.is_ok());
     assert!(guest.get_deal(get_deal()).await.is_ok());
     assert_eq!(ledger.calls(), 2);
+}
+
+#[tokio::test]
+async fn a_refused_call_to_an_undeclared_method_is_audited_as_a_refused_guard_is() {
+    let audit = RecordingAudit::default();
+    let ledger = Ledger::default();
+    let app = wrapped(deals(&ledger).method(GrpcMethod::new("get_deal").public()))
+        .override_value::<dyn AuditSink>(Arc::new(audit.clone()))
+        .build()
+        .await;
+    let mut harpreet = DealsClient::new(TestChannel::new(&app).bearer(HARPREET));
+    let status = harpreet
+        .list_deals(ListDealsRequest::default())
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), Code::PermissionDenied);
+    assert_eq!(ledger.calls(), 0);
+    let denied = audit
+        .entries()
+        .into_iter()
+        .find(|entry| entry.action == "access.denied")
+        .expect("the refusal is audited");
+    assert_eq!(denied.kind, AuditKind::Security);
+    assert_eq!(denied.metadata["check"], "undeclared");
+    assert_eq!(denied.metadata["route"], "/crm.deals.v1.Deals/ListDeals");
+    assert_eq!(denied.metadata["method"], "GRPC");
+    assert!(denied.request_id.is_some(), "{denied:?}");
+    assert_eq!(denied.actor_id, None, "refused before authentication");
+
+    // A declared method is served and leaves no refusal behind.
+    let entries = audit.entries().len();
+    assert!(harpreet.get_deal(get_deal()).await.is_ok());
+    assert_eq!(audit.entries().len(), entries);
 }
 
 #[tokio::test]

@@ -10,7 +10,6 @@ use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
 
 use http::StatusCode;
-use navree_contracts::RequestId;
 use navree_http::{AppError, CanSpec, Guard, RouteMeta};
 use navree_kernel::{BoxFuture, ModuleBuilder};
 use tonic::metadata::MetadataMap;
@@ -19,7 +18,7 @@ use tonic::{Code, Status};
 use tower::{Service, ServiceExt};
 
 use crate::Routes;
-use crate::call::{CallError, CallInfo, WrappedAccess, call_as, lift_body_limit};
+use crate::call::{CallError, CallInfo, WrappedAccess, call_as, lift_body_limit, record_undeclared};
 use crate::server::access_problems;
 use crate::service::GrpcMethod;
 use crate::status::status_from_error;
@@ -472,12 +471,8 @@ where
         WrappedAccess::Declared(meta) => meta,
         WrappedAccess::NoMethod => return Status::unimplemented("").into_http(),
         WrappedAccess::Undeclared => {
-            tracing::warn!(
-                target: "navree::security",
-                path = %info.path,
-                request_id = request.extensions().get::<RequestId>().map(tracing::field::display),
-                "a call to a method without an access declaration was refused"
-            );
+            let (head, _body) = request.into_parts();
+            record_undeclared(&info.runtime, &head, &info.path).await;
             return status_from_error(&AppError::forbidden()).into_http();
         }
     };

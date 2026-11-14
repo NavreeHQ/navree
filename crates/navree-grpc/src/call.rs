@@ -534,6 +534,31 @@ fn security_entry(parts: &Parts, meta: &RouteMeta, check: &str) -> AuditEntry {
     entry
 }
 
+/// Records a refused call to a wrapped server's method that has no
+/// declaration: a warning on `navree::security`, and, when the app has an
+/// audit sink, an `access.denied` security entry (`check` `undeclared`), as a
+/// guard's refusal records. The call is refused before authentication, so
+/// the entry names no user.
+pub(crate) async fn record_undeclared(runtime: &Runtime, parts: &Parts, path: &str) {
+    tracing::warn!(
+        target: "navree::security",
+        path,
+        request_id = parts
+            .extensions
+            .get::<RequestId>()
+            .map(tracing::field::display),
+        "a call to a method without an access declaration was refused"
+    );
+    if let Some(sink) = &runtime.audit {
+        let meta = RouteMeta {
+            method: "GRPC".to_owned(),
+            full_path: path.to_owned(),
+            ..RouteMeta::default()
+        };
+        record_security(sink.as_ref(), security_entry(parts, &meta, "undeclared")).await;
+    }
+}
+
 async fn record_security(sink: &dyn AuditSink, entry: AuditEntry) {
     if let Err(error) = sink.record(entry).await {
         tracing::warn!(target: "navree::audit", %error, "could not write a security audit entry");
