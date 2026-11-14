@@ -169,8 +169,7 @@ public struct NavreeCommands: Commands {
         CommandMenu(CommandRules.screenMenu(destinationLabel)) {
             ScreenCommands(target: target)
         }
-        AboutCommands(configuration: configuration)
-        HelpCommands(configuration: configuration)
+        AboutAndHelpCommands(configuration: configuration)
     }
 
     private var destinationLabel: String? {

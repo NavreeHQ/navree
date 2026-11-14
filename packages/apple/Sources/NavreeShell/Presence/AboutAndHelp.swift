@@ -61,6 +61,17 @@ public enum HelpRules {
     }
 }
 
+/// About and Help, as the app says, in one place of the menu bar's
+/// commands: a builder of commands takes at most ten in one block.
+struct AboutAndHelpCommands: Commands {
+    let configuration: ShellConfiguration?
+
+    var body: some Commands {
+        AboutCommands(configuration: configuration)
+        HelpCommands(configuration: configuration)
+    }
+}
+
 /// App > About: what the app adds to the system's own About panel (Mac).
 /// With nothing added, the system's own item stands.
 struct AboutCommands: Commands {
