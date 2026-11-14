@@ -1024,7 +1024,7 @@ pub(crate) struct Inner {
     pub person: Option<crate::cache::Who>,
     /// Who the shell about to be installed names, when its answer said it by
     /// id: taken by the install.
-    pub naming: Option<crate::cache::Who>,
+    pub naming: Option<String>,
     pub has_shell: bool,
     /// An address the app was opened with before the shell had arrived.
     pub launch: Option<String>,

@@ -818,7 +818,7 @@ impl Core {
                 self.inner.naming = response
                     .header(navree_native::PERSON_HEADER)
                     .filter(|id| !id.is_empty())
-                    .map(|id| Who::Id { id: id.to_owned() });
+                    .map(str::to_owned);
                 // The stamp of the shell now held: its own, or the one its answer named.
                 let stamp = (!shell.stamp.is_empty())
                     .then(|| shell.stamp.clone())
@@ -882,10 +882,10 @@ impl Core {
     fn install(&mut self, shell: Shell) {
         // Who it names: by the id its answer said, else by name and email.
         let naming = self.inner.naming.take();
-        let user = shell.user.as_ref().map(|user| {
-            naming
-                .clone()
-                .unwrap_or_else(|| Who::Named(user.name.clone(), user.email.clone()))
+        let user = shell.user.as_ref().map(|user| Who {
+            id: naming.clone(),
+            name: user.name.clone(),
+            email: user.email.clone(),
         });
         self.inner.sign_in = shell.sign_in;
         self.inner.push_route = shell

@@ -4,9 +4,9 @@
   "https://shop.example/orders"
  ],
  "owner": {
-  "person": [
-   "Ravneet Kaur",
-   "ravneet.kaur@example.com"
-  ]
+  "person": {
+   "name": "Ravneet Kaur",
+   "email": "ravneet.kaur@example.com"
+  }
  }
 }
