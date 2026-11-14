@@ -171,12 +171,25 @@
           {"t":"screen","id":4}
         ],
         "effects": [
-          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/activity","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/activity","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
     {
+      "note": "The shell, asked again since a page was shown in the web view, names the person: what was kept may be drawn now.",
       "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/activity.json",
       "expect": {
         "changed": [
@@ -192,13 +205,13 @@
           {"t":"rows","screen":4,"id":"feed","from":3,"count":0}
         ],
         "effects": [
-          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/activity?cursor=a3","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","feed"]],"timeout_ms":10000}
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/activity?cursor=a3","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","feed"]],"timeout_ms":10000}
         ]
       }
     },
     {
       "note": "The next rows fail to load. The list says so, and keeps its address.",
-      "send": {"t":"response","request":8,"error":"offline"},
+      "send": {"t":"response","request":9,"error":"offline"},
       "expect": {
         "changed": [
           {"t":"rows","screen":4,"id":"feed","from":3,"count":0}
@@ -218,7 +231,7 @@
           {"t":"rows","screen":4,"id":"feed","from":3,"count":0}
         ],
         "effects": [
-          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/activity?cursor=a3","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","feed"]],"timeout_ms":10000}
+          {"t":"fetch","request":10,"method":"get","url":"https://shop.example/activity?cursor=a3","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","feed"]],"timeout_ms":10000}
         ]
       },
       "check": [
@@ -227,7 +240,7 @@
     },
     {
       "note": "An answer that leaves the address as it was has no page after it: the list ends, or asking would never end.",
-      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":10,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/activity-same.json",
       "expect": {
         "changed": [
@@ -247,13 +260,13 @@
           {"t":"screen","id":5}
         ],
         "effects": [
-          {"t":"fetch","request":10,"method":"get","url":"https://shop.example/inventory","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":11,"method":"get","url":"https://shop.example/inventory","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
     {
       "note": "The store's inventory: a table of 25 products in a region, with the address of the next 25.",
-      "send": {"t":"response","request":10,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":11,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "store/inventory.json",
       "expect": {
         "changed": [
@@ -276,13 +289,13 @@
           {"t":"rows","screen":5,"id":"products","from":25,"count":0}
         ],
         "effects": [
-          {"t":"fetch","request":11,"method":"get","url":"https://shop.example/inventory?page=2","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","products"]],"timeout_ms":10000}
+          {"t":"fetch","request":12,"method":"get","url":"https://shop.example/inventory?page=2","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","products"]],"timeout_ms":10000}
         ]
       }
     },
     {
       "note": "The answer is the whole page again. The table in the region of the same id is the next page: its rows are added, each with its restock form, and its address after them is taken.",
-      "send": {"t":"response","request":11,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":12,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "store/inventory-page-2.json",
       "expect": {
         "changed": [
