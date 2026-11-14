@@ -24,6 +24,7 @@ mod conformity;
 mod events;
 mod health;
 mod jobs;
+mod locales;
 mod permissions;
 mod principal;
 mod redactor;
@@ -48,6 +49,7 @@ pub use jobs::{
     Backoff, Dispatcher, Job, JobCancelled, JobContext, JobEnvelope, JobMonitor, JobOptions,
     JobProgress, JobRegistration, ModuleBuilderJobsExt,
 };
+pub use locales::{EmbeddedLocales, ModuleBuilderLocalesExt};
 pub use navree_kernel::{BoxError, BoxFuture};
 pub use permissions::{PermissionCheck, permitted};
 pub use principal::{AuthState, AuthVia, Impersonator, Principal};
