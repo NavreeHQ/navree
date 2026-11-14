@@ -173,7 +173,7 @@ pub(crate) fn read(headers: &HeaderMap, url: &str) -> Reading {
             region: headers
                 .get(crate::pages::REGION_HEADER)
                 .and_then(|value| value.to_str().ok())
-                .map(str::to_owned),
+                .map(percent_decoded),
             stamp: super::Stamp::of(None),
             sign_in: None,
             shell_parts: crate::NativeShellParts::default(),
@@ -183,6 +183,33 @@ pub(crate) fn read(headers: &HeaderMap, url: &str) -> Reading {
         }))),
         Err(error) => Reading::Refused(error),
     }
+}
+
+/// A header value a native client wrote header-safe: each `%` and two hex
+/// digits is the byte they name. A `%` that is not followed by two hex digits
+/// stays as it is, and so does a value whose bytes are not UTF-8 once read,
+/// so an id an older client sent as it was reads as that id.
+fn percent_decoded(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        let hex = |byte: u8| char::from(byte).to_digit(16);
+        if bytes[at] == b'%'
+            && let (Some(high), Some(low)) = (
+                bytes.get(at + 1).copied().and_then(hex),
+                bytes.get(at + 2).copied().and_then(hex),
+            )
+        {
+            // Both digits are below 16, so the byte fits.
+            out.push(u8::try_from(high * 16 + low).unwrap_or(b'%'));
+            at += 3;
+        } else {
+            out.push(bytes[at]);
+            at += 1;
+        }
+    }
+    String::from_utf8(out).unwrap_or_else(|_| value.to_owned())
 }
 
 /// Runs `future` with `asked` current.
@@ -332,6 +359,36 @@ mod tests {
         };
         assert_eq!(request.client.platform, Platform::Android);
         assert_eq!(request.url, "/orders?page=2");
+    }
+
+    #[test]
+    fn the_region_a_native_client_asks_for_is_read_percent_decoded() {
+        let region = |value: &'static str| {
+            let Reading::Asked(Asked::Native(request)) = read(
+                &headers(&[
+                    (NATIVE_HEADER, "1"),
+                    (CLIENT_HEADER, "platform=android; form=phone"),
+                    (crate::pages::REGION_HEADER, value),
+                ]),
+                "/",
+            ) else {
+                panic!("not a native request");
+            };
+            request.region.clone()
+        };
+        // A plain id, as an older client sent it.
+        assert_eq!(region("figures").as_deref(), Some("figures"));
+        assert_eq!(
+            region("%E0%A4%86%E0%A4%82%E0%A4%95%E0%A4%A1%E0%A4%BC%E0%A5%87").as_deref(),
+            Some("आंकड़े")
+        );
+        assert_eq!(region("a%20b%25c").as_deref(), Some("a b%c"));
+        // A broken escape stays as it was written.
+        assert_eq!(percent_decoded("100%"), "100%");
+        assert_eq!(percent_decoded("a%2"), "a%2");
+        assert_eq!(percent_decoded("a%zzb"), "a%zzb");
+        assert_eq!(percent_decoded("%e0%a4"), "%e0%a4");
+        assert_eq!(percent_decoded("%41%42"), "AB");
     }
 
     #[test]
