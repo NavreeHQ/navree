@@ -25,7 +25,8 @@ final class SystemNotificationPermission: NotificationPermission {
 
 #if canImport(UIKit)
 /// What the system tells the app outside any view, passed on to the shell:
-/// this install's push token, and a notification the person tapped. An app
+/// this install's push token, a notification the person tapped, and (through
+/// ``NavreeSceneDelegate``) a Home Screen quick action. An app
 /// adopts it in its `App`:
 ///
 /// ```swift
@@ -44,6 +45,17 @@ open class NavreeAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         return true
+    }
+
+    /// Each window's scene gets the shell's scene delegate, which hands a
+    /// Home Screen quick action to the app.
+    open func application(
+        _ application: UIApplication, configurationForConnecting session: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: nil, sessionRole: session.role)
+        if session.role == .windowApplication { configuration.delegateClass = NavreeSceneDelegate.self }
+        return configuration
     }
 
     open func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken token: Data) {
