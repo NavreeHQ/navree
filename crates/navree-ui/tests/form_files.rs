@@ -24,6 +24,8 @@ use serde_json::Value;
 
 /// The first bytes of a PNG file, and some more.
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\x07\x07\x07\x07";
+/// The first bytes of a Windows executable: a kind the receipts do not accept.
+const EXE: &[u8] = b"MZ\x90\0\x03\0\0\0";
 const BOUNDARY: &str = "navree-form-files";
 
 #[derive(Debug, Deserialize, Validate, Form)]
@@ -102,6 +104,11 @@ async fn app(disk: &Disk) -> TestApp {
 
 /// A multipart body: text `fields`, then `file` (name and bytes) as `receipt`.
 fn multipart(fields: &[(&str, &str)], file: Option<(&str, &[u8])>) -> Vec<u8> {
+    multipart_files(fields, file.as_slice())
+}
+
+/// A multipart body: text `fields`, then each of `files` (name and bytes) as `receipt`.
+fn multipart_files(fields: &[(&str, &str)], files: &[(&str, &[u8])]) -> Vec<u8> {
     let mut body = Vec::new();
     for (name, value) in fields {
         body.extend_from_slice(
@@ -111,7 +118,7 @@ fn multipart(fields: &[(&str, &str)], file: Option<(&str, &[u8])>) -> Vec<u8> {
             .as_bytes(),
         );
     }
-    if let Some((file_name, bytes)) = file {
+    for (file_name, bytes) in files {
         body.extend_from_slice(
             format!(
                 "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"receipt\"; filename=\"{file_name}\"\r\nContent-Type: image/png\r\n\r\n"
@@ -198,6 +205,50 @@ async fn a_file_posted_with_the_form_is_stored_and_the_handler_gets_its_path() {
         "{path}"
     );
     assert!(disk.exists(path).await.unwrap(), "{path} is on the disk");
+}
+
+#[tokio::test]
+async fn a_file_field_keeps_the_first_file_it_is_sent_and_no_other() {
+    let disk = memory_disk();
+    let app = app(&disk).await;
+    let response = post_multipart(
+        &app,
+        multipart_files(
+            &[("title", "Diwali stall")],
+            &[("first.png", PNG), ("second.png", PNG)],
+        ),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK, "{}", response.text());
+    let text = response.text();
+    let path = text
+        .strip_prefix("Diwali stall ")
+        .expect("the title, then the path");
+    assert_eq!(
+        disk.list("receipts").await.unwrap(),
+        vec![path.to_owned()],
+        "the field's file is the only one on the disk"
+    );
+}
+
+#[tokio::test]
+async fn a_file_after_a_refused_one_is_not_stored() {
+    let disk = memory_disk();
+    let app = app(&disk).await;
+    let response = post_multipart(
+        &app,
+        multipart_files(
+            &[("title", "Diwali stall")],
+            &[("run.exe", EXE), ("second.png", PNG)],
+        ),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(response.text().contains("run.exe"), "{}", response.text());
+    assert!(
+        disk.list("receipts").await.unwrap().is_empty(),
+        "the refused field stores nothing"
+    );
 }
 
 #[tokio::test]

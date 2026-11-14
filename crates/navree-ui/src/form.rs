@@ -1844,6 +1844,8 @@ async fn read_multipart<T: Form>(
     #[cfg(feature = "storage")]
     let mut kept: Vec<(Arc<crate::Uploads>, navree_storage::StoredFile)> = Vec::new();
     let mut parts = 0_usize;
+    // The file fields that already had a file in this post, stored or refused.
+    let mut sent: Vec<String> = Vec::new();
     let outcome: Result<(), Result<StatusCode, AppError>> = loop {
         let field = match form.next_field().await {
             Ok(Some(field)) => field,
@@ -1863,6 +1865,12 @@ async fn read_multipart<T: Form>(
         match field.file_name().map(str::to_owned) {
             // A file name of nothing is a browser saying no file was chosen.
             Some(raw) if is_file && !raw.trim().is_empty() => {
+                // A file field holds one file: the first is the field's, and a later part under
+                // the same name is not stored, so nothing is left on the disk that no value names.
+                if sent.contains(&name) {
+                    continue;
+                }
+                sent.push(name.clone());
                 #[cfg(feature = "storage")]
                 {
                     let Some(uploads) = uploads_for(ctx, &name).await else {
