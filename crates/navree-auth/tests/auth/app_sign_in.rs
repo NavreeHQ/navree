@@ -11,8 +11,11 @@ use std::time::Duration;
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use http::Method;
-use navree_auth::{APP_CODE_TTL_SECS, AuthPages, AuthService, ClientMeta, SignInMethod, User};
-use navree_contracts::{AuditSink, FixedClock};
+use navree_auth::{
+    APP_CODE_TTL_SECS, AuthError, AuthPages, AuthService, ClientMeta, ModuleBuilderAuthExt,
+    SignInAttempt, SignInMethod, SignInPolicy, User,
+};
+use navree_contracts::{AuditSink, Clock as _, FixedClock};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_session::{Session, SessionModule, SessionOptions};
@@ -79,11 +82,37 @@ impl Controller for PlatformController {
     }
 }
 
+/// Keeps the people of `blocked.test` to the website: their sign-ins are
+/// never handed over to an app.
+struct WebOnly;
+
+impl Injectable for WebOnly {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(WebOnly) })
+    }
+}
+
+impl SignInPolicy for WebOnly {
+    fn check<'a>(&'a self, attempt: &'a SignInAttempt) -> BoxFuture<'a, Result<(), AuthError>> {
+        Box::pin(async move {
+            if attempt.method.name() == "app_hand_over" && attempt.domain() == Some("blocked.test")
+            {
+                return Err(AuthError::SignInRefused {
+                    code: "web_only".to_owned(),
+                    message: "Sign in on the website".to_owned(),
+                });
+            }
+            Ok(())
+        })
+    }
+}
+
 struct PlatformModule;
 
 impl Module for PlatformModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.controller::<PlatformController>();
+        m.sign_in_policy::<WebOnly>();
     }
 }
 
@@ -454,6 +483,75 @@ async fn a_start_without_an_s256_challenge_or_a_callback_is_refused() {
     assert_eq!(finish.status().as_u16(), 400);
     assert!(finish.text().contains("invalid_hand_over"));
     assert_eq!(finish.header("location"), None);
+}
+
+/// The current session of `client`, as `GET /api/auth/sessions` lists it.
+async fn current_session(client: &TestClient) -> serde_json::Value {
+    let sessions = client
+        .get("/api/auth/sessions")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    sessions["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|session| session["current"] == json!(true))
+        .expect("the current session")
+        .clone()
+}
+
+/// A time of a session resource, in Unix seconds.
+fn unix(session: &serde_json::Value, key: &str) -> i64 {
+    chrono::DateTime::parse_from_rfc3339(session[key].as_str().expect(key))
+        .expect(key)
+        .timestamp()
+}
+
+#[tokio::test]
+async fn an_apps_session_keeps_the_sign_in_time_of_the_browser_session() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    create_user(&app, "simran@example.com").await;
+    let (verifier, challenge) = pkce("time");
+    let signed_in_at = clock.now().timestamp();
+    let (_, code) = sheet_sign_in(&app, "simran@example.com", &challenge).await;
+    clock.advance(Duration::from_secs(50));
+    let phone = phone(&app).await;
+    exchange(&phone, "apple", &code, &verifier)
+        .await
+        .assert_status(200);
+
+    // The sign-in the app holds is the one made in the sheet: same time,
+    // and it ends when a "remember me" sign-in made then would (30 days).
+    let session = current_session(&phone).await;
+    assert_eq!(unix(&session, "authenticated_at"), signed_in_at);
+    assert_eq!(unix(&session, "expires_at"), signed_in_at + 30 * 24 * 3600);
+    clock.advance(Duration::from_secs(30 * 24 * 3600 - 50 - 60));
+    whoami(&phone).await.assert_status(200);
+    clock.advance(Duration::from_secs(61));
+    whoami(&phone).await.assert_status(401);
+}
+
+#[tokio::test]
+async fn the_exchange_asks_the_sign_in_policies() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    create_user(&app, "gurpreet@blocked.test").await;
+    let (verifier, challenge) = pkce("policy");
+    // The sheet signs in on the website as usual.
+    let (_, code) = sheet_sign_in(&app, "gurpreet@blocked.test", &challenge).await;
+    let phone = phone(&app).await;
+    exchange(&phone, "apple", &code, &verifier)
+        .await
+        .assert_error_code(403, "web_only");
+    whoami(&phone).await.assert_status(401);
+    let refused = sink.with_action("auth.login_refused");
+    let last = refused.last().expect("the refusal is audited");
+    assert_eq!(last.metadata["method"], "app_hand_over");
+    assert_eq!(last.metadata["platform"], "apple");
+    assert_eq!(last.metadata["app"], BUNDLE);
 }
 
 // Fixation: an attacker signs in as themselves, keeps the code the

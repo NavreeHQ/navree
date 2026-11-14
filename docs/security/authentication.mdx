@@ -986,6 +986,7 @@ A sign-in policy decides whether a sign-in may go on. Every flow that signs a pe
 | `POST /api/auth/otp` and `/otp/verify` | `Otp` | When a code is requested and when one is used |
 | `POST /api/auth/passkeys/login` | `Passkey` | Once the passkey is verified, before the session |
 | `POST /api/auth/exchange` | `TokenExchange { issuer }` | Once the token is verified, before the session |
+| `POST /api/auth/app/exchange` ([app hand-over](/docs/security/passwordless/#signing-an-app-in-through-the-systems-sign-in-session)) | `AppHandOver { platform, app }` | Once the code and verifier check out, before the app's session |
 | `POST /api/auth/2fa/verify` | the method of the first step | Again, before the code is checked |
 | [Social sign-in](/docs/packages/social-sign-in/) | `Social { provider }` | On the provider's address before any account is created or linked, and on the account before the session |
 | [Single sign-on](/docs/security/single-sign-on/) | `Sso { connection }` | On the identity provider's address before provisioning, and on the account before the session |

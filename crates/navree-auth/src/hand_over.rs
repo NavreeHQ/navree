@@ -23,9 +23,13 @@
 //! 3. The app posts `{platform, app, code, code_verifier}` to `POST
 //!    {api}/auth/app/exchange` from its own HTTP stack. The code works once,
 //!    for that app, with the verifier whose SHA-256 the session was started
-//!    with; the answer signs the app's own session cookie in as a new
-//!    session of the same person ("remember me"), so the app and the browser
-//!    end separately.
+//!    with, and the sign-in policies are asked about it
+//!    (`SignInMethod::AppHandOver`). The answer signs the app's own session
+//!    cookie in as a new session of the same person, so the app and the
+//!    browser end separately. That session keeps the time the person last
+//!    authenticated in the browser session it came from, and ends when a
+//!    "remember me" sign-in made at that time would: a hand-over never
+//!    makes a sign-in younger or longer-lived than the one it came from.
 //!
 //! The code reaches only the app the operating system opens for the
 //! callback (a verified universal link or App Link), and only the app that
@@ -64,7 +68,10 @@ use crate::controller::api;
 use crate::passkeys::base64_url;
 use crate::passkeys::webauthn::sha256;
 use crate::service::entry;
-use crate::{AppsOptions, AuthError, AuthOptions, AuthService, ClientMeta, User, UserResource};
+use crate::{
+    AppsOptions, AuthError, AuthOptions, AuthService, ClientMeta, SignInAttempt, SignInMethod, User,
+    UserResource,
+};
 
 /// Where an app starts the hand-over (outside the API prefix: it is opened
 /// in the system's sign-in session).
@@ -137,6 +144,10 @@ struct Code {
     app: String,
     challenge: String,
     expires_at: i64,
+    /// When the user last authenticated in the browser session the code
+    /// came from (Unix seconds): the app's session keeps it.
+    #[serde(default)]
+    auth_time: Option<i64>,
 }
 
 /// Where [`AuthService::finish_app_sign_in`] sends the browser.
@@ -339,6 +350,7 @@ impl AuthService {
                     app: pending.app.clone(),
                     challenge: pending.challenge.clone(),
                     expires_at: now.timestamp() + i64::try_from(APP_CODE_TTL_SECS).unwrap_or(60),
+                    auth_time: Some(signed_in.auth_time),
                 },
                 Duration::from_secs(APP_CODE_TTL_SECS + 5),
             )
@@ -363,10 +375,15 @@ impl AuthService {
     /// /auth/app/exchange`): the code works once (the first attempt uses it
     /// up, right or wrong), within [`APP_CODE_TTL_SECS`] seconds, for the
     /// app it was issued to, and with the verifier of the challenge the
-    /// hand-over was started with. The app's session is signed in as a new
-    /// session of the same person, kept like "remember me". Audited as
-    /// `auth.login` with `metadata.method = "app_hand_over"`; refusals as
-    /// `auth.app_sign_in_refused` with the reason.
+    /// hand-over was started with. The [`SignInPolicy`](crate::SignInPolicy)s
+    /// are asked about [`SignInMethod::AppHandOver`] as for any sign-in. The
+    /// app's session is signed in as a new session of the same person, kept
+    /// like "remember me", that keeps the time the person last authenticated
+    /// in the browser session the code came from and ends when a "remember
+    /// me" sign-in made then would
+    /// ([`start_handed_over_session`](AuthService::start_handed_over_session)).
+    /// Audited as `auth.login` with `metadata.method = "app_hand_over"`;
+    /// refusals as `auth.app_sign_in_refused` with the reason.
     pub(crate) async fn exchange_app_code(
         &self,
         session: &Session,
@@ -376,9 +393,21 @@ impl AuthService {
         verifier: &str,
         meta: &ClientMeta,
     ) -> Result<User, AuthError> {
-        match self.check_code(platform, app, code, verifier).await {
+        let result = async {
+            let (user, auth_time) = self.check_code(platform, app, code, verifier).await?;
+            let method = SignInMethod::AppHandOver {
+                platform: platform.to_owned(),
+                app: app.to_owned(),
+            };
+            self.check_sign_in(&SignInAttempt::of(&user, method), meta)
+                .await?;
+            self.start_handed_over_session(session, &user, auth_time, meta)
+                .await?;
+            Ok::<_, AuthError>(user)
+        }
+        .await;
+        match result {
             Ok(user) => {
-                self.start_session(session, &user, true, meta).await?;
                 self.audit(
                     entry(AuditKind::Auth, "auth.login", meta)
                         .actor(user.id)
@@ -399,13 +428,15 @@ impl AuthService {
         }
     }
 
+    /// The user of a valid `code` and the time they last authenticated in
+    /// the browser session it came from.
     async fn check_code(
         &self,
         platform: &str,
         app: &str,
         code: &str,
         verifier: &str,
-    ) -> Result<User, AuthError> {
+    ) -> Result<(User, i64), AuthError> {
         if code.is_empty() || code.len() > 128 {
             return Err(refused("malformed code"));
         }
@@ -429,9 +460,14 @@ impl AuthService {
         {
             return Err(refused("wrong code verifier"));
         }
-        self.find_user(issued.user_id)
+        let auth_time = issued
+            .auth_time
+            .ok_or_else(|| refused("the code names no sign-in time"))?;
+        let user = self
+            .find_user(issued.user_id)
             .await?
-            .ok_or_else(|| refused("the user no longer exists"))
+            .ok_or_else(|| refused("the user no longer exists"))?;
+        Ok((user, auth_time))
     }
 
     async fn hand_over_refused(&self, app: Option<&str>, error: &AuthError, meta: &ClientMeta) {

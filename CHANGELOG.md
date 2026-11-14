@@ -27,6 +27,10 @@ every `@navree/*` package carries the same version.
 - Call tickets (`SealedTickets`) are sealed with a key derived from the application key for tickets
   alone, so no other value sealed with the application key opens as a ticket. Tickets issued
   before the upgrade no longer redeem; they live minutes.
+- The session an app gets from `POST /auth/app/exchange` keeps the time the person last
+  authenticated in the browser session the code came from, and ends when a "remember me" sign-in
+  made at that time would. The exchange asks the sign-in policies about the new
+  `SignInMethod::AppHandOver { platform, app }`.
 
 ### Fixed
 

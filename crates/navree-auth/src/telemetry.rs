@@ -60,6 +60,10 @@ pub(crate) fn report_signed_in(user: &crate::User, method: &crate::SignInMethod)
             crate::SignInMethod::TokenExchange { issuer } => {
                 (SignInMethod::TokenExchange, Some(issuer))
             }
+            // A sign-in handed over to an app: a token exchange, named by the app.
+            crate::SignInMethod::AppHandOver { app, .. } => {
+                (SignInMethod::TokenExchange, Some(app))
+            }
         };
         let event = SignInEvent::succeeded(kind, user.id.to_string());
         match provider {
