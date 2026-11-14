@@ -210,8 +210,10 @@ async fn a_duplicate_template_warns_between_modules_and_fails_with_a_plugin_but_
             "embedded template `announcements/list.html` of `AnnouncementsModule` is replaced by `ShellModule`'s"
         )));
     assert!(
-        capture.lines().iter().all(|line| !line.contains("WARN")
-            || !line.contains("announcements/list.html")),
+        capture
+            .lines()
+            .iter()
+            .all(|line| !line.contains("WARN") || !line.contains("announcements/list.html")),
         "an app module replacing a plugin's template is not a warning"
     );
     app.shutdown().await.unwrap();

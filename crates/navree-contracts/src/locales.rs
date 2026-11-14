@@ -179,11 +179,7 @@ mod tests {
     #[test]
     fn the_publish_path_of_a_locale_file_is_its_locale_then_the_rest() {
         for (locale, path, expected) in [
-            (
-                "en",
-                "locales/en/announcements.ftl",
-                "en/announcements.ftl",
-            ),
+            ("en", "locales/en/announcements.ftl", "en/announcements.ftl"),
             (
                 "pa-IN",
                 "locales/pa-IN/mail/welcome.ftl",
