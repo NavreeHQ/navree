@@ -31,7 +31,7 @@ use crate::saml::{
     validate_response,
 };
 use crate::store;
-use crate::tenants::{RefusalLog, honours_unverified_emails};
+use crate::tenants::{Flagged, RefusalLog, honours_unverified_emails};
 use crate::{
     ConnectionSettings, ConnectionUpdate, NewConnection, OidcSettings, Protocol, Provisioning,
     SamlSettings, ServiceProviderInfo, SsoConnection, SsoDiscovery, SsoDomain, SsoDomainVerified,
@@ -496,6 +496,38 @@ impl Sso {
         rows.into_iter()
             .map(|row| self.decode(row).map(|loaded| self.present(&loaded)))
             .collect()
+    }
+
+    /// The connections with `allow_unverified_emails` on, oldest first, for
+    /// the boot's lines. Only the owner and the provisioning rules are read;
+    /// a row whose owner or rules don't read is left out.
+    pub(crate) async fn flagged_connections(&self) -> Result<Vec<Flagged>, SsoError> {
+        let rows = sso_connection::Model::query()
+            .order_by(sso_connection::Model::CREATED_AT)
+            .get(&self.db)
+            .await?
+            .into_models();
+        let mut flagged = Vec::new();
+        for row in rows {
+            let Some(owner) = SsoOwner::from_parts(&row.owner_type, row.owner_id) else {
+                tracing::debug!(target: "navree::sso", connection = %row.slug, "left out of the boot check: its owner does not read");
+                continue;
+            };
+            let provisioning: Provisioning = match serde_json::from_str(&row.provisioning) {
+                Ok(provisioning) => provisioning,
+                Err(error) => {
+                    tracing::debug!(target: "navree::sso", connection = %row.slug, %error, "left out of the boot check: its provisioning rules do not read");
+                    continue;
+                }
+            };
+            if provisioning.allow_unverified_emails {
+                flagged.push(Flagged {
+                    slug: row.slug,
+                    owner,
+                });
+            }
+        }
+        Ok(flagged)
     }
 
     /// The owner exists: read through `uow`, so an organization or

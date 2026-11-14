@@ -1,6 +1,6 @@
 //! Connections owned by workspaces and organizations, and the
-//! `allow_unverified_emails` setting: who it counts for, and how its
-//! refusals are logged.
+//! `allow_unverified_emails` setting: who it counts for, how its refusals
+//! are logged, and the boot's lines about the connections that have it on.
 //!
 //! The setting lets a connection create accounts for addresses outside its
 //! verified domains. It counts for connections the app owns; for a
@@ -9,12 +9,15 @@
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use chrono::{DateTime, TimeDelta, Utc};
+use navree_kernel::{
+    AppContext, BoxError, BoxFuture, Injectable, KernelError, Lifecycle, ProviderKey, Resolver,
+};
 use uuid::Uuid;
 
-use crate::{Provisioning, SsoOwner};
+use crate::{Provisioning, Sso, SsoError, SsoOwner};
 
 /// Whether a connection of `owner` with `provisioning` creates accounts for
 /// addresses outside its verified domains: its `allow_unverified_emails` is
@@ -91,6 +94,149 @@ impl RefusalLog {
     }
 }
 
+/// A connection with `allow_unverified_emails` on, as the boot names it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Flagged {
+    /// Its slug.
+    pub(crate) slug: String,
+    /// Who owns it.
+    pub(crate) owner: SsoOwner,
+}
+
+/// A line to log: its level and its message.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Line {
+    /// The level.
+    pub(crate) level: tracing::Level,
+    /// The message.
+    pub(crate) message: String,
+}
+
+/// How many connections a boot line names before `and N more`.
+pub(crate) const MAX_NAMED: usize = 20;
+
+/// A connection as the lines name it: `{slug}` for one the app owns,
+/// `{slug} ({kind} {id})` for a workspace's or an organization's.
+fn named(slug: &str, owner: SsoOwner) -> String {
+    match owner.id() {
+        Some(id) => format!("{slug} ({} {id})", owner.kind()),
+        None => slug.to_owned(),
+    }
+}
+
+/// The names of `connections`, joined with `, `: at most [`MAX_NAMED`],
+/// then `, and {n} more`.
+fn names(connections: &[&Flagged]) -> String {
+    let list = connections
+        .iter()
+        .take(MAX_NAMED)
+        .map(|connection| named(&connection.slug, connection.owner))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let more = connections.len().saturating_sub(MAX_NAMED);
+    if more > 0 {
+        format!("{list}, and {more} more")
+    } else {
+        list
+    }
+}
+
+/// The boot's lines about the connections with `allow_unverified_emails`
+/// on: one for those owned by workspaces and organizations (a warning
+/// unless `tenants_allowed`, `sso.tenants.unverified_emails`), one for the
+/// app's, and none when there are none.
+pub(crate) fn boot_lines(flagged: &[Flagged], tenants_allowed: bool) -> Vec<Line> {
+    let (app, tenants): (Vec<&Flagged>, Vec<&Flagged>) = flagged
+        .iter()
+        .partition(|connection| connection.owner == SsoOwner::App);
+    let mut lines = Vec::new();
+    if !tenants.is_empty() {
+        let list = names(&tenants);
+        let line = if tenants_allowed {
+            Line {
+                level: tracing::Level::INFO,
+                message: format!(
+                    "single sign-on connections {list} owned by workspaces or organizations create accounts outside their verified domains (sso.tenants.unverified_emails = true)"
+                ),
+            }
+        } else {
+            Line {
+                level: tracing::Level::WARN,
+                message: format!(
+                    "single sign-on connections {list} have allow_unverified_emails on; connections not owned by the app no longer create accounts outside their verified domains. Set sso.tenants.unverified_emails = true to allow it."
+                ),
+            }
+        };
+        lines.push(line);
+    }
+    if !app.is_empty() {
+        let list = names(&app);
+        lines.push(Line {
+            level: tracing::Level::INFO,
+            message: format!(
+                "single sign-on connections {list} owned by the app create accounts outside their verified domains (allow_unverified_emails)"
+            ),
+        });
+    }
+    lines
+}
+
+/// The boot's line when the connections could not be read.
+pub(crate) fn scan_failed_line(error: &SsoError) -> Line {
+    Line {
+        level: tracing::Level::WARN,
+        message: format!("could not check the single sign-on connections at boot: {error}"),
+    }
+}
+
+/// Writes `line` at its level, under the target `navree::sso`.
+pub(crate) fn emit(line: &Line) {
+    match line.level {
+        tracing::Level::ERROR => tracing::error!(target: "navree::sso", "{}", line.message),
+        tracing::Level::WARN => tracing::warn!(target: "navree::sso", "{}", line.message),
+        tracing::Level::INFO => tracing::info!(target: "navree::sso", "{}", line.message),
+        tracing::Level::DEBUG => tracing::debug!(target: "navree::sso", "{}", line.message),
+        _ => tracing::trace!(target: "navree::sso", "{}", line.message),
+    }
+}
+
+/// Names, when the app boots, the connections that have
+/// `allow_unverified_emails` on ([`boot_lines`]). A scan that fails is a
+/// warning ([`scan_failed_line`]): the boot goes on either way.
+pub(crate) struct TenantScan {
+    sso: Arc<Sso>,
+}
+
+impl Injectable for TenantScan {
+    fn dependencies() -> Vec<ProviderKey> {
+        vec![ProviderKey::of::<Sso>()]
+    }
+
+    fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async move {
+            Ok(TenantScan {
+                sso: r.get::<Sso>().await?,
+            })
+        })
+    }
+}
+
+impl Lifecycle for TenantScan {
+    fn on_bootstrap(&self, _ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
+        Box::pin(async move {
+            let tenants_allowed = self.sso.tenants_allow_unverified_emails();
+            let lines = match self.sso.flagged_connections().await {
+                Ok(flagged) => boot_lines(&flagged, tenants_allowed),
+                Err(error) => vec![scan_failed_line(&error)],
+            };
+            for line in &lines {
+                emit(line);
+            }
+            Ok(())
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,5 +282,57 @@ mod tests {
             assert_eq!(log.note(Uuid::now_v7(), now), Some(1));
         }
         assert!(log.tracked() <= MAX_TRACKED_CONNECTIONS);
+    }
+
+    #[test]
+    fn boot_lines_name_each_kind_of_connection() {
+        let ws = Uuid::now_v7();
+        let flagged = [
+            Flagged {
+                slug: "ludhiana-okta".into(),
+                owner: SsoOwner::Workspace(ws),
+            },
+            Flagged {
+                slug: "staff-okta".into(),
+                owner: SsoOwner::App,
+            },
+        ];
+        let off = boot_lines(&flagged, false);
+        assert_eq!(off.len(), 2);
+        assert_eq!(off[0].level, tracing::Level::WARN);
+        let warning = &off[0].message;
+        let workspace = format!("ludhiana-okta (workspace {ws})");
+        assert!(warning.contains(&workspace));
+        assert!(warning.contains("Set sso.tenants.unverified_emails = true to allow it."));
+        assert_eq!(off[1].level, tracing::Level::INFO);
+        assert!(off[1].message.contains("staff-okta owned by the app"));
+        let on = boot_lines(&flagged, true);
+        assert_eq!(on[0].level, tracing::Level::INFO);
+        let allowed = &on[0].message;
+        assert!(allowed.contains("(sso.tenants.unverified_emails = true)"));
+        assert!(boot_lines(&[], false).is_empty());
+    }
+
+    #[test]
+    fn boot_lines_name_at_most_twenty() {
+        // Ids of their own, so no id can read as one of the slugs.
+        let many: Vec<Flagged> = (0..25)
+            .map(|n| Flagged {
+                slug: format!("c-{n:02}"),
+                owner: SsoOwner::Workspace(Uuid::from_u128(n)),
+            })
+            .collect();
+        let lines = boot_lines(&many, false);
+        let listed = &lines[0].message;
+        assert!(listed.contains("c-19") && !listed.contains("c-20"));
+        assert!(listed.contains("and 5 more"));
+    }
+
+    #[test]
+    fn a_failed_scan_is_a_warning() {
+        let line = scan_failed_line(&SsoError::Config("no such table: sso_connections".into()));
+        assert_eq!(line.level, tracing::Level::WARN);
+        let message = &line.message;
+        assert!(message.starts_with("could not check the single sign-on connections at boot: "));
     }
 }
