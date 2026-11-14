@@ -55,7 +55,9 @@ const MIN_SIZE: u64 = 32;
 ///   With a secret (a CSRF token) and reflected input in one response, and
 ///   cookies that a cross-site request carries, an attacker who sees lengths
 ///   on the network recovers the secret request by request. Opt such a
-///   response out with `no_compression` or `no-transform`.
+///   response out with `no_compression` or `no-transform`. Every compressor
+///   of the app reads the same rule ([`may_compress`]), the UI toolkit's
+///   brotli for pages included.
 /// - **`Vary: accept-encoding`** is added to every response that could be
 ///   compressed, whatever the client accepts, unless a `Vary` value already
 ///   contains `accept-encoding` (in any case). A 304 carries it as well,
@@ -202,6 +204,31 @@ fn weaken_etag(headers: &mut HeaderMap) {
     }
 }
 
+/// Whether `response` may be compressed at all, by this layer or by another
+/// compressor of the app (the UI toolkit's brotli for pages and ops): not
+/// when its route opted out with
+/// [`no_compression`](crate::RouteDef::no_compression), and not when it has
+/// `Cache-Control: no-transform` (in any case). `http.compression = false`
+/// turns every compressor off as well; that is the app's setting
+/// ([`HttpOptions::compression`](crate::HttpOptions::compression)), not the
+/// response's, so it is not read here.
+///
+/// ```
+/// use http::header::CACHE_CONTROL;
+/// use navree_http::may_compress;
+///
+/// let page = http::Response::new(());
+/// assert!(may_compress(&page));
+/// let kept = http::Response::builder()
+///     .header(CACHE_CONTROL, "private, no-transform")
+///     .body(())
+///     .unwrap();
+/// assert!(!may_compress(&kept));
+/// ```
+pub fn may_compress<B>(response: &Response<B>) -> bool {
+    !opted_out(response) && !no_transform(response.headers())
+}
+
 /// Whether the response was opted out of compression by its route.
 fn opted_out<B>(response: &Response<B>) -> bool {
     response
@@ -226,13 +253,12 @@ fn stands_in_for_a_varying_response<B>(response: &Response<B>) -> bool {
 /// the `GET` response's body measures.
 fn compressible<B: HttpBody>(response: &Response<B>, head: bool) -> bool {
     let headers = response.headers();
-    if opted_out(response)
+    if !may_compress(response)
         || !has_a_body(response.status())
         // The parts of a `multipart/byteranges` body say which ranges they are.
         || response.status() == StatusCode::PARTIAL_CONTENT
         || headers.contains_key(CONTENT_ENCODING)
         || headers.contains_key(CONTENT_RANGE)
-        || no_transform(headers)
     {
         return false;
     }

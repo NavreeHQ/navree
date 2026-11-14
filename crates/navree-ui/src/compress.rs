@@ -5,6 +5,11 @@
 //! (`assets`); this is for what is rendered per request. Below [`MIN_SIZE`],
 //! brotli gained 2% for three times the CPU when measured, so small responses
 //! stay with the HTTP pipeline's gzip unless the client takes only brotli.
+//!
+//! It follows the HTTP pipeline's rule ([`navree_http::may_compress`]): a
+//! route with `no_compression` and a response with `Cache-Control:
+//! no-transform` go out as they are, and with `http.compression = false`
+//! nothing is compressed here either.
 
 use std::io::Write as _;
 
@@ -14,6 +19,7 @@ use http::header::{
 };
 use http::{HeaderMap, Method};
 use navree_http::body::{Body, read_body};
+use navree_http::extract::Request;
 use navree_http::response::Response;
 
 use crate::assets::accepts;
@@ -67,9 +73,11 @@ fn wanted(method: &Method, request: &str, headers: &HeaderMap) -> bool {
 }
 
 /// Compresses a rendered response when the client takes brotli. A response
-/// with a body of unknown size is left to the pipeline.
+/// with a body of unknown size is left to the pipeline, and so is one that
+/// may not be compressed at all: its route opted out, or it says
+/// `no-transform`.
 pub(crate) async fn encode(method: &Method, accept: &str, response: Response) -> Response {
-    if !wanted(method, accept, response.headers()) {
+    if !navree_http::may_compress(&response) || !wanted(method, accept, response.headers()) {
         return response;
     }
     let (mut parts, body) = response.into_parts();
@@ -96,9 +104,19 @@ pub(crate) async fn encode(method: &Method, accept: &str, response: Response) ->
     Response::from_parts(parts, Body::from(Bytes::from(brotli(&bytes))))
 }
 
-/// The value of `Accept-Encoding`, or nothing.
-pub(crate) fn accept_of(headers: &HeaderMap) -> String {
-    headers
+/// In a request's extensions when the app turned compression off
+/// (`http.compression = false`): nothing the toolkit answers it is compressed.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Off;
+
+/// The request's `Accept-Encoding`, or nothing: when it has none, and when the
+/// app turned compression off (`Off`), as if the client took no coding.
+pub(crate) fn accept_of(request: &Request) -> String {
+    if request.extensions().get::<Off>().is_some() {
+        return String::new();
+    }
+    request
+        .headers()
         .get(ACCEPT_ENCODING)
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default()

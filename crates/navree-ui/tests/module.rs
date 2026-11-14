@@ -2,7 +2,8 @@
 //! request asked.
 
 use http::{Method, StatusCode};
-use navree_http::{Controller, HttpModule, ModuleBuilderHttpExt, RouteDef};
+use navree_http::response::IntoResponse;
+use navree_http::{Controller, HttpModule, HttpOptions, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
     BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
 };
@@ -35,6 +36,22 @@ impl Controller for Pages {
             .public(),
             RouteDef::on(Method::GET, "!/big", || async {
                 View::new("Big").body("x".repeat(64 * 1024))
+            })
+            .public(),
+            RouteDef::on(Method::GET, "!/quiet", || async {
+                View::new("Quiet").body("x".repeat(64 * 1024))
+            })
+            .public()
+            .no_compression(),
+            RouteDef::on(Method::GET, "!/as-is", || async {
+                let mut response = View::new("As is")
+                    .body("x".repeat(64 * 1024))
+                    .into_response();
+                response.headers_mut().insert(
+                    http::header::CACHE_CONTROL,
+                    http::HeaderValue::from_static("private, no-transform"),
+                );
+                response
             })
             .public(),
             RouteDef::on(Method::POST, "!/act", || async {
@@ -153,6 +170,65 @@ async fn big_pages_go_out_in_brotli_and_small_ones_in_gzip() {
     assert_eq!(only_br.header("content-encoding"), Some("br"));
     let none = app.client().get("/small").send().await;
     assert_eq!(none.header("content-encoding"), None);
+}
+
+/// The coding a page at `path` goes out in to a client that takes `accept`.
+async fn coding(app: &TestApp, path: &str, accept: &str) -> Option<String> {
+    let response = app
+        .client()
+        .get(path)
+        .header("accept-encoding", accept)
+        .send()
+        .await;
+    assert_eq!(response.status(), StatusCode::OK, "{path}");
+    response.header("content-encoding").map(str::to_owned)
+}
+
+#[tokio::test]
+async fn a_route_without_compression_is_not_compressed_by_the_toolkit_either() {
+    let app = app().await;
+    for accept in ["br", "gzip, br"] {
+        assert_eq!(
+            coding(&app, "/big", accept).await.as_deref(),
+            Some("br"),
+            "{accept}"
+        );
+        assert_eq!(coding(&app, "/quiet", accept).await, None, "{accept}");
+    }
+}
+
+#[tokio::test]
+async fn a_page_that_says_no_transform_is_not_compressed_by_the_toolkit_either() {
+    let app = app().await;
+    for accept in ["br", "gzip, br"] {
+        assert_eq!(
+            coding(&app, "/big", accept).await.as_deref(),
+            Some("br"),
+            "{accept}"
+        );
+        assert_eq!(coding(&app, "/as-is", accept).await, None, "{accept}");
+    }
+}
+
+#[tokio::test]
+async fn with_compression_off_the_toolkit_compresses_no_page() {
+    let app = TestApp::builder()
+        .module(HttpModule::for_root(HttpOptions {
+            compression: false,
+            ..HttpOptions::default()
+        }))
+        .module(UiModule)
+        .module(App)
+        .build()
+        .await;
+    for (path, accept) in [
+        ("/big", "br"),
+        ("/big", "gzip, br"),
+        ("/small", "br"),
+        ("/small", "gzip, br"),
+    ] {
+        assert_eq!(coding(&app, path, accept).await, None, "{path} {accept}");
+    }
 }
 
 #[tokio::test]

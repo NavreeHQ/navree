@@ -15,7 +15,7 @@ use navree_http::extract::Request;
 use navree_http::middleware::{self, Next};
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{
-    ApiMeta, Controller, GlobalLayer, LayerSlot, ModuleBuilderHttpExt, Path, RouteDef,
+    ApiMeta, Controller, GlobalLayer, HttpOptions, LayerSlot, ModuleBuilderHttpExt, Path, RouteDef,
 };
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, CommandSpec, Factory, Injectable, KernelError, Module,
@@ -147,11 +147,21 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
         m.contribute(UiAlways);
     }
     let slot: Arc<OnceLock<bool>> = Arc::new(OnceLock::new());
+    // Whether the app compresses its answers (`http.compression`), settled with the gate:
+    // off, the toolkit compresses nothing either.
+    let compressing: Arc<OnceLock<bool>> = Arc::new(OnceLock::new());
     let for_gate = slot.clone();
+    let compressing_for_gate = compressing.clone();
     m.factory(Factory::<UiGate>::new(move |r: Resolver| {
         let slot = for_gate.clone();
+        let compressing = compressing_for_gate.clone();
         async move {
             let ctx = r.app();
+            let on = ctx
+                .try_get::<HttpOptions>()
+                .await
+                .is_none_or(|http| http.compression);
+            let _ = compressing.set(on);
             let mut wanted = !ctx.contributions::<UiAlways>().is_empty();
             if !wanted {
                 for need in ctx.contributions::<UiNeed>() {
@@ -172,7 +182,12 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
         "ui.reply",
         move |_, router| {
             if slot.get().copied().unwrap_or(false) {
-                Ok(router.layer(middleware::from_fn(reply_layer)))
+                let compressing = compressing.get().copied().unwrap_or(true);
+                Ok(
+                    router.layer(middleware::from_fn(move |request: Request, next: Next| {
+                        reply_layer(compressing, request, next)
+                    })),
+                )
             } else {
                 Ok(router)
             }
@@ -291,8 +306,12 @@ pub(crate) async fn render_json(
 }
 
 /// Swaps a reply's fallback for its ops when the request came from the runtime,
-/// and sends rendered responses in brotli to clients that take it.
-async fn reply_layer(request: Request, next: Next) -> Response {
+/// and sends rendered responses in brotli to clients that take it, unless the
+/// app turned compression off (`compressing` is false).
+async fn reply_layer(compressing: bool, mut request: Request, next: Next) -> Response {
+    if !compressing {
+        request.extensions_mut().insert(compress::Off);
+    }
     let asked = crate::asked::who_asked(request.headers());
     // A native client's request, or its web view's, is answered its own way;
     // a browser's is handed back untouched.
@@ -303,7 +322,7 @@ async fn reply_layer(request: Request, next: Next) -> Response {
     };
     let from_runtime = asked.is_runtime();
     let for_region = request.headers().contains_key(REGION_HEADER);
-    let accept = compress::accept_of(request.headers());
+    let accept = compress::accept_of(&request);
     let method = request.method().clone();
     // What the runtime asked for, for telemetry: a fetch ahead of a click is
     // not an operation anyone performed.

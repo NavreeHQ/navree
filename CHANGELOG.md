@@ -91,6 +91,10 @@ every `@navree/*` package carries the same version.
   or the `ui` section turns them on, or, in a build with debug assertions, when the configuration
   names an environment that is not `production` or `staging`. An app with no configuration shows
   none unless `PagesOptions::debug(true)` says so. In `production` and `staging` they stay off.
+- The UI toolkit's brotli for pages and ops answers follows the same opt-outs as the HTTP
+  pipeline's gzip: a route with `no_compression`, a response with `Cache-Control: no-transform` and
+  `http.compression = false` leave the body uncompressed. `navree_http::may_compress` is the rule
+  both read.
 
 ## [1.2.0] - 2026-11-13
 
