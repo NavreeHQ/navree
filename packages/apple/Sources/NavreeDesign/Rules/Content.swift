@@ -192,6 +192,26 @@ public enum ContentRules {
         table.columns.indices.filter { table.columns[$0].role != .subtitle }
     }
 
+    /// The columns a window too narrow for them gave up (see
+    /// ``fittedColumns(_:available:)``), by their places, in the table's order.
+    public static func givenUp(_ table: Navree.Table, fitted: [Int]) -> [Int] {
+        shownColumns(table).filter { !fitted.contains($0) }
+    }
+
+    /// The line under a record's name that holds the words of the columns a
+    /// narrow window gave up, so they are still there to read in the row, as
+    /// Files writes a file's date and size under its name once its window is
+    /// too narrow for their columns: each given-up cell's words, in the
+    /// table's order, joined by " · "; `nil` when they hold none.
+    public static func givenUpLine(_ cells: [Navree.Node], columns: [Int]) -> String? {
+        let parts = columns.compactMap { index -> String? in
+            guard index < cells.count else { return nil }
+            let words = RecordRules.words(in: cells[index]).joined(separator: " ")
+            return words.isEmpty ? nil : words
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     /// How a record of a wide table opens what it opens.
     public enum TableOpening: Sendable, Equatable {
         /// A tap on its first cell, its name (iPad: a table's rows are
