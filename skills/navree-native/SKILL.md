@@ -544,6 +544,20 @@ What to hold to:
   screen on top of this one (what stands behind a card of a summary), say
   so: `Action::present("/sleep?date=2026-11-12", Present::Push)`. The screen
   then has a way back, and a card with `.zoom()` grows into it.
+- **An address is read as it is written.** The runtime core never trims or
+  repairs one: white space or a control character around it, a backslash, a
+  name before its host, a host that is not ASCII, or a path that starts with
+  `//` once its dot segments are out leads nowhere. Every address a client
+  fetches, streams from or shows in the web view is a whole address on one of
+  the app's origins; one opens outside the app only when it is a whole `http`
+  or `https` address or a `mailto`, `tel`, `sms` or `geo` one, and a newer app
+  is offered only at an `https` address. The addresses every client must read
+  the same way are in `crates/navree-native-core/vectors/addresses.json`.
+  Write addresses with the server's `LocalHref` rules, and percent-encode what
+  a request gave.
+- **The id of a region or a list may be in any script.** The core writes it
+  into `x-navree-region` percent-encoded and the server reads it back with
+  `pages::region_asked(&headers)`.
 - **What the screen says in words travels as words.** `Ring::status` and
   `Ring::trend` say how a ring stands and which way it is going,
   `Progress::tone` or `Progress::colour` what a bar's fill means, and

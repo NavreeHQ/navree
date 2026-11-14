@@ -183,7 +183,12 @@ pub struct CreateContact {
   `try_with_policy` and `try_clean` return `HtmlError`. The policy is
   `[validation.html]` (`tags`, `generic_attributes`, `tag_attributes`,
   `url_schemes`, `link_rel`); allowing `script`, `style`, `on*`, `srcdoc` or
-  `http-equiv` fails the boot. A URL with a host and no scheme (`//x`) stays
+  `http-equiv` fails the boot, and so does allowing an attribute the page acts
+  on: `data-ui-*`, `data-genui*`, `form`, `formaction`, `formmethod`,
+  `formenctype`, `formtarget`, `popover`, `popovertarget`,
+  `popovertargetaction`, `command`, `commandfor`, `autofocus`, `accesskey` or
+  `contenteditable` (the sanitizer drops them from rich text whatever the
+  policy says; `id` and `name` may be allowed). A URL with a host and no scheme (`//x`) stays
   only when `http` and `https` are both allowed.
   The output is parsed again and returned only when a browser would build
   the tree that was checked, else only the text is kept; SVG animation

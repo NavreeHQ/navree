@@ -73,7 +73,7 @@ is dropped.
 | A correlation matrix, ranked pairs | `MatrixHeatmap::new(title).metrics(..).relation(a, b, Relation::new(r))`, `RelationList::new(title).relation(..)` |
 | A scatter plot | `Scatter::new(title).series(PointSeries::new(name, pairs))` |
 | Gradient strokes, glow, colour by band, marks growing in | `Gradient`, `Ink`, `ColorScale`, `.glow()`, `Motion`; see `navree-ui`'s `references/charts.md` |
-| A chart as a picture, where only an image shows: a home-screen widget, an email, a link preview (chart pictures) | `ChartImage::for_tile(&tile).mode(Mode::Dark).png(&tile.into())` with `Tile::new(TileSize::Medium).block(Block::ring(label, value, max))`, `Block::sparkline(..)`, `Block::stat(..)`; `ChartImage::respond` serves it with an `ETag`; the `ui-image` feature, in `navree::ui::image` |
+| A chart as a picture, where only an image shows: a home-screen widget, an email, a link preview (chart pictures) | `ChartImage::for_tile(&tile).mode(Mode::Dark).png(&tile.into())` with `Tile::new(TileSize::Medium).block(Block::ring(label, value, max))`, `Block::sparkline(..)`, `Block::stat(..)`; `ChartImage::respond` serves it with an `ETag` and `Cache-Control: private, no-cache` (`.cache_control(..)` sets another); the `ui-image` feature, in `navree::ui::image` |
 | A chart-shaped placeholder while loading | `ChartSkeleton::ring(size)`, `gauge`, `line`, `bars`, `heat_map`, `matrix`, `meter` |
 | A "?" or (i) beside a heading that explains it | `InfoTip::new(id, about).title(..).body(..)` |
 | A floating bar of icon links at the bottom (phones) | `Dock::new(label).below(Screen::Md).item(DockItem::new(label, href).icon(..).current())` |
@@ -166,7 +166,7 @@ form can't be a struct.
 | One of a large or growing set | combobox, searched on the server | `String` with `widget = combobox`; `FormView::search(field, url)`; the route answers `OptionQuery` with a `ChoiceList` built by `OptionSource` (below) |
 | Several of a set | multi-select, shown as chips | `Many<T>` (a multi-select with no hint); `#[form(max = n)]` limits it; options and search as for a combobox |
 | Something with a prefix or unit | input group | `#[form(addon = "other_field")]`, or `InputGroup::new(input).start(..).end(..)` |
-| A file | upload | `String` with `widget = file`: the form posts `multipart/form-data` and `Submit<T>` stores the file through the app's `Uploads`, giving the handler its path; `FormView::upload(field, Upload::new(..).send_to(route))` sends it first |
+| A file | upload | `String` with `widget = file`: the form posts `multipart/form-data` and `Submit<T>` stores the file through the app's `Uploads`, giving the handler its path (a field holds the first file posted under its name); `FormView::upload(field, Upload::new(..).send_to(route))` sends it first, and the route answers with `Received::into_keyed_response_for(&signer, owner.as_str())`, where `owner: UploadOwner` is the signed-in person's id (nothing for a guest): the field takes a file key only from that person, for a file directly in its own `Uploads` folder and still within its limits (`file_key` keys are not taken by a form's file field) |
 | A hidden value | hidden input | `widget = hidden`, or `#[form(skip)]` to keep it off the client |
 
 A form too long for one screen, one question at a time (an onboarding, a
@@ -237,10 +237,10 @@ filters, sort, pages, selection, bulk actions and export run on the server.
 | Row menu | `.row_actions(fn)` with `RowAction::link`, `RowAction::post`, `.destructive()` |
 | Select rows, bulk actions | `.bulk(url, [BulkAction::new(..).confirm(..)])`, `BulkRequest` on the server |
 | Expand a row | `.detail(fn)` |
-| Columns shown, hidden, pinned, resized | `#[col(hidden, locked, sticky, sticky_end, width = 240)]`; the user's choice is in the URL |
+| Columns shown, hidden, pinned, resized | `#[col(hidden, locked, sticky, sticky_end, width = 240)]`; the user's choice is in the URL. `hidden` says how a column starts and is not a permission: a column a person may not use is taken away in the handler with `TableQuery::without_columns([..])` or `only_columns([..])` (also on `BulkRequest` and `ViewPost`) |
 | Density | the user's choice, in the URL |
-| Export | `.export(url)`; Excel through `navree-sheets` |
-| Saved views | `.views(&views, url)` with `SavedViewModel` |
+| Export | `.export(url)`; the route's `export_csv` writes at most 100,000 rows unless `TableQuery::export_limit(n)` raises it, and says `x-navree-truncated` when it cut; throttle that route. Excel through `navree-sheets` |
+| Saved views | `.views(&views, url)` with `SavedViewModel`; an owner keeps at most 50 per table, and an app with workspaces puts the workspace into the owner string |
 | Cells drawn from the whole row | `#[col(cell = draw)]`, `.cell(name, fn)` |
 | Edit in the cell | `EditCell::text`, `number`, `date`, `select` |
 | Live data | `.live(every)`, `.live_from(url)`, `.refreshable()` |
@@ -254,7 +254,7 @@ Other lists and moves:
 | Design element | navree-ui |
 |---|---|
 | An inbox, a conversation, a feed: a stream read in one order | `LazyList::new(id, label, src).items(..).more_after(url)`; the source reads `LazyQuery` and answers `LazyPage` |
-| Drag to reorder, a board of columns | `Sortable::new(id, label).board().post(url).list(SortList::new(key, title).item(SortItem::new(key, title)))`; the server holds each `Move` to the lists with `Move::check` |
+| Drag to reorder, a board of columns | `Sortable::new(id, label).board().post(url).list(SortList::new(key, title).item(SortItem::new(key, title)))`; the server holds each `Move` to the lists with `Move::check`, in `Move::transaction_scoped` with a `ListScope` of the caller's workspace or board when list keys are not unique per workspace |
 | Tiles people put in their own order and take away: a personal dashboard, the blocks of a widget | `SortableGrid::new(id, label).post(url).columns(n).tile(GridTile::new(key, title))`, `.fit(GridFit::Medium)`, a tile that stays with `GridTile::fixed()`; the server reads the whole order with `GridOrder` and `arrange` |
 
 ## Steps and trees
@@ -271,7 +271,11 @@ Other lists and moves:
 `Region::new(id).src(url).lazy()` fetches a part after the page paints;
 `.poll(every)` refreshes it while visible; `.feed(..)` follows a stream;
 `.live_from(url)` refetches when a server-sent event stream speaks.
-The handler returns a `View` of just that part.
+The handler returns a `View` of just that part, or answers with
+`navree::ui::pages::region_answer(node)` for a part of a page alone. The
+source must be a `LocalHref` (an address on this site): any other leaves the
+region with no source, drawn once and never fetched. A poll is held to one
+second at the most.
 
 ## Themes and modes
 

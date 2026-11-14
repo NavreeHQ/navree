@@ -33,6 +33,7 @@ Text from a model or a visitor is not yours. `Markdown::new` treats it that way,
 <UiPreview example="markdown/images" />
 
 - **Nothing grows without a bound.** The text is cut at 256 KB and a line says so. Lists and quotes stop nesting at 24 levels. A code block past 64 KB is not coloured.
+- **Nothing it draws drives the page.** `Markdown` is drawn inside an element marked `data-ui-stored`. The page's runtime acts on no command, hotkey, region or post button inside it, and no element inside it stands in for one of the page's own when an op or a command names an id. A code block's copy button, which the toolkit marks as its own, still works. Wrap other rich text you show from the database in the same mark (see [Security](/docs/ui/overview/#security)).
 
 ## Text you wrote yourself
 

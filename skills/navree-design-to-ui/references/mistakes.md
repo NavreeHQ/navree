@@ -151,7 +151,10 @@ which buttons appear.
 `#[permissions(..)]`) decides; the page hides what the user can't do
 (`DataTable::can_select(false)`, no row actions, no New button) as a
 courtesy. Every hidden action's route refuses on its own
-(`navree-access-control`).
+(`navree-access-control`). A table column marked `#[col(hidden)]` is hidden
+only at first: an address can still show, filter, sort or search it. For a
+column some people may not use, take it away in the handler with
+`TableQuery::without_columns([..])` (and on the `BulkRequest` and `ViewPost`).
 
 ## 11. Built for one width
 

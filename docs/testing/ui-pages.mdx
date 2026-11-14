@@ -86,7 +86,7 @@ let response = client
 assert_eq!(response.status(), 303);
 ```
 
-`.xsrf()` sends the session's CSRF token back, as the page's script or a hidden field does. Leave it out to prove the check works: a post without the token is a 403, and so is one marked `sec-fetch-site: cross-site`. A post whose token the session's check took needs neither `sec-fetch-site` nor `Origin`; one that carries a cookie, neither header and no token is refused by the form. See [sessions and CSRF](/docs/basics/sessions-and-csrf/#csrf-protection).
+`.xsrf()` sends the session's CSRF token back, as the page's script or a hidden field does. Leave it out to prove the check works: a post without the token is a 403, and so is one marked `sec-fetch-site: cross-site`. A post whose token the session's check took needs neither `sec-fetch-site` nor `Origin`; one that carries a cookie, neither header and no token is refused by the form. In an app with no session layer there is no token to send, so a test that posts a form with a cookie adds `.header("sec-fetch-site", "same-origin")`, as a browser does; a post with no cookie needs nothing. See [sessions and CSRF](/docs/basics/sessions-and-csrf/#csrf-protection).
 
 A form that fails comes back as the page again, with what was typed and the errors under the fields, and a status of 422. The body holds the text, so assert on it. (To the runtime, the same rejection is a 422 with ops that put the errors under the fields.) A good post answers with a redirect, as the next example shows.
 

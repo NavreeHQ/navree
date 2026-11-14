@@ -79,7 +79,7 @@ The same page after the button is pressed: the sidebar sits over the page and th
 - **Items:** `.count(text)` puts a count at the end, `.sub(item)` nests an item under another, and `.current(true)` marks a link as the current page when several differ only in their query.
 - **The user menu:** `.link` adds a page to read; `.action` adds a button that posts, for signing out or switching workspace. It works with JavaScript off and carries the session's CSRF token when there is one.
 - **For one request:** `AppShell::user_menu(menu)` puts the person signed in at the foot, `AppShell::header_slot(node)` puts something under the app's name (a workspace switcher; `Shell::header_slot` for every page), and `AppShell::csrf(token)` gives the shell's own forms the session's token. The app's one `Shell` stays as it is.
-- **Counts that come later:** `NavGroup::lazy(id, src)` makes a group a region fetched once the page is up, so a page never waits for its counts; `Shell::live_group(id, path)` draws the answer, the group with its counts.
+- **Counts that come later:** `NavGroup::lazy(id, src)` makes a group a region fetched once the page is up, so a page never waits for its counts; `Shell::live_group(id, path)` draws the answer, the group with its counts. The source is an address on your site: one that is not a `LocalHref` (or is `#`) leaves the group with no source, and it is never fetched.
 - **Your mark:** `Shell::logo(src)` draws a picture of yours in place of Navree's.
 
 ## Only what a reader may use

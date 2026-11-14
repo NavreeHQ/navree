@@ -384,6 +384,9 @@ What each part answers for:
   page, with JavaScript on or off.
 - Behind a session, give the form its token with JavaScript off:
   `FormView::csrf(session.csrf_token())` (`navree-auth`, `navree::session`).
+  The page writes it masked afresh in every answer, and the session's check
+  takes any mask of it. A post that carries a cookie and sends neither
+  `Sec-Fetch-Site` nor `Origin` is taken only when its token was checked.
 
 ## States
 
@@ -449,5 +452,6 @@ impl DealDetailPages {
 }
 ```
 
-`Region::poll(Duration)` refreshes such a part while the page is visible;
+`Region::poll(Duration)` refreshes such a part while the page is visible, at
+most once a second;
 `DataTable::live(every)` does the same for a table.

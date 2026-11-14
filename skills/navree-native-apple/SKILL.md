@@ -117,7 +117,7 @@ their skills and do not repeat them:
 |---|---|---|
 | App ids (team id, bundle id), the `apple-app-site-association` file served at `/.well-known/`, the Associated Domains entitlement (`applinks:` and `webcredentials:`) | `auth.apps.apple.<name>` | `navree-auth` |
 | Passkeys from the app (relying party id, `https://<rp_id>` origin, `webcredentials`) | `auth.passkeys`, `auth.apps` | `navree-auth` |
-| Sign-in in the system's sign-in session and the hand-over to the app (a one-time code with a PKCE verifier; the callback is an https universal link) | `auth.apps.apple.<name>.callback` | `navree-auth` |
+| Sign-in in the system's sign-in session and the hand-over to the app (a one-time code with a PKCE verifier; the callback is an https universal link on the site's own host; a browser already signed in gets a confirmation page first, and Cancel sends the callback `error=access_denied`; `auth.apps.callback_page` answers the callback's path with an empty page for a browser the system did not hand to the app) | `auth.apps.apple.<name>.callback` | `navree-auth` |
 | Confirming one action with a passkey assertion over the action's own details | `ConfirmAction` | `navree-auth` |
 | Sign in with Apple from the system sheet (the identity token for the bundle id, the nonce hashed as lower-case hex SHA-256) | `social.providers`, `auth.apps.apple` | `navree-social` |
 | Push through Apple's service (a `.p8` key, `aps-environment`, the app registers its token with its session) | `notify.push.apns` | `navree-notification-channels` |

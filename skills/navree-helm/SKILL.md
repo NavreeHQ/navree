@@ -258,7 +258,8 @@ m.helm_page(
 ```
 
 Served at `/admin/pages/pipeline`; the template gets `title`, `user`,
-`csrf_token`, `path` and `data`. No inline scripts: the CSP allows scripts
+`csrf_token` (the session's token, masked afresh for each page, for a form's
+`_csrf` field), `path` and `data`. No inline scripts: the CSP allows scripts
 from the app's origin only.
 
 ## Testing template

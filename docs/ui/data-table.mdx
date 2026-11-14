@@ -197,7 +197,7 @@ let query = TableQuery::<Customer>::parse("/customers", raw_query)
     .search_mode(SearchMode::Words);
 ```
 
-Create the index in a migration. On PostgreSQL it is a text-search index. On MySQL and MariaDB it is a `FULLTEXT` index over exactly the `#[col(search)]` columns, in the same order: `FULLTEXT (title, notes)` for `title` and `notes`.
+Create the index in a migration. On PostgreSQL it is a text-search index. On MySQL and MariaDB it is a `FULLTEXT` index over exactly the `#[col(search)]` columns, in the same order: `FULLTEXT (title, notes)` for `title` and `notes`. When a searched column is [taken away](#columns-a-person-may-not-use) from the person asking, a words search reads the columns left as plain text, since the index also covers the column that is gone.
 
 ## Typing and choosing
 

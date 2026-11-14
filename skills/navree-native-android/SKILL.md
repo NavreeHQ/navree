@@ -137,7 +137,7 @@ secret. The server pieces already exist; their skills hold the detail:
 |---|---|---|
 | The package name and the signing certificate's SHA-256 fingerprints; the `assetlinks.json` file served at `/.well-known/`; the app's link filter | `auth.apps.android.<name>` | `navree-auth` |
 | Passkeys from the app (the origin is `android:apk-key-hash:<fingerprint>`; `get_login_creds` in the asset links) | `auth.passkeys`, `auth.apps` | `navree-auth` |
-| Sign-in in the system's browser tab and the hand-over to the app (a one-time code with a PKCE verifier; an App Link callback) | `auth.apps.android.<name>.callback` | `navree-auth` |
+| Sign-in in the system's browser tab and the hand-over to the app (a one-time code with a PKCE verifier; an App Link callback on the site's own host; a browser already signed in gets a confirmation page first, and Cancel sends the callback `error=access_denied`; `auth.apps.callback_page` answers the callback's path with an empty page for a browser the system did not hand to the app) | `auth.apps.android.<name>.callback` | `navree-auth` |
 | Confirming one action with a passkey assertion over the action's own details | `ConfirmAction` | `navree-auth` |
 | Sign in with Google from the system sheet (Credential Manager; the web client id is `serverClientId`) | `social.providers.google` | `navree-social` |
 | Push through Firebase Cloud Messaging (a service account, the app's package, the Firebase options in the app's resources, `POST_NOTIFICATIONS` on Android 13+) | `notify.push.fcm` | `navree-notification-channels` |

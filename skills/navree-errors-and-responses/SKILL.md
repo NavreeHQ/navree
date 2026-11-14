@@ -233,8 +233,12 @@ For a route written by hand, the same marks are `RouteDef::on(..).page()` and
 
 - **Details.** A 5xx shows fixed words: its source, message, SQL, paths and
   panic text never reach the page. A 4xx or a 503 shows the error's own
-  `detail`, as the JSON `message` does. In `production` (the app's `env`) the
-  development block is never shown.
+  `detail`, as the JSON `message` does. The development block ("Development
+  only") is on in a build with debug assertions and off in a release build,
+  unless `[ui] debug` or `PagesOptions::debug(..)` says otherwise; in
+  `production` and `staging` (the app's `env`) it is never shown. An app with no
+  configuration to read its `env` from shows it only when the code calls
+  `PagesOptions::debug(true)`.
 - **Sign-in.** A 401 offers a button to the sign-in page with the page the user
   was on as `next`: set `[ui] sign_in = "/sign-in"` (and `sign_in_redirect =
   true` to send a guest straight there). Read `next` with `navree::ui::ReturnTo`,

@@ -282,7 +282,8 @@ They are revoked at Apple (with `client_id` the bundle id or the Services ID the
 
 - the person disconnects Apple (`DELETE /api/auth/social/accounts/apple`, `Social::unlink`): an Apple that can't be reached answers 502 and leaves the account linked, to try again;
 - you call `Social::revoke_tokens(user_id)`;
-- you offboard the user with `AuthService::revoke_all_credentials(user_id)` (or `revoke_credentials_of_domain`): the module takes part as a credential revoker (kind `social_provider_tokens`).
+- you offboard the user with `AuthService::revoke_all_credentials(user_id)` (or `revoke_credentials_of_domain`): the module takes part as a credential revoker (kind `social_provider_tokens`);
+- a magic link or an emailed code [gives an account whose address was never verified](/docs/security/passwordless/#proving-the-mailbox-of-an-unverified-account) to its mailbox's owner: the tokens are revoked as above, and the provider accounts linked to the user are then unlinked as well (kind `social_accounts`), so none of them signs in to it.
 
 Stored Google tokens (`store_tokens`) are revoked the same way, at `https://oauth2.googleapis.com/revoke` (the provider's `url` changes the host). A token the provider no longer knows counts as revoked.
 

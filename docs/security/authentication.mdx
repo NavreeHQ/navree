@@ -426,7 +426,7 @@ impl WhoAmIController {
 }
 ```
 
-A `Principal` holds `user_id`, `via` (how the request authenticated: `AuthVia::Token` for JWTs), `token_abilities` (see [custom strategies](#writing-your-own-strategy)) and `session_id`.
+A `Principal` holds `user_id`, `via` (how the request authenticated: `AuthVia::Token` for JWTs), `token_abilities` (see [custom strategies](#writing-your-own-strategy)) and `session_id` (the session the request belongs to: the `sid` of a bearer access token, or a browser's session; call tickets and push devices are bound to it).
 
 For the access token itself, take `navree::auth::AccessClaims`: its session id, `auth_time` and impersonator (see [Reading the token's claims](/docs/security/sessions/#reading-the-tokens-claims)). `navree::auth::Actor` names the signed-in user and, in an impersonation session, the impersonator.
 
@@ -1052,6 +1052,7 @@ async fn offboard(auth: &AuthService) -> Result<(), navree::auth::AuthError> {
 | `oauth_access_tokens`, `oauth_refresh_tokens` | `navree-oauth` | Tokens issued to apps; the refresh token no longer refreshes |
 | `oauth_codes`, `oauth_device_codes` | `navree-oauth` | Approved authorization codes and device codes that were not exchanged yet |
 | `oauth_authorizations` | `navree-oauth` | The remembered consent for each app is forgotten, so the app asks again |
+| `social_provider_tokens` | `navree-social` | The provider tokens kept for sign-in with a provider are revoked at the provider and forgotten |
 
 Modules that issue credentials take part by registering a `CredentialRevoker` (`navree::contracts::CredentialRevoker`, with `m.credential_revoker::<R>()` from `ModuleBuilderRevocationExt`); `navree-oauth` registers one, so `navree-auth` and [single sign-on](/docs/security/single-sign-on/#offboarding) don't depend on it. Your own module can end its API keys or invitations the same way: `revoke_for_users(&[Uuid])` returns the count of each kind it ended. Every revoker runs even when one fails; the first failure comes back as `AuthError::Revocation { module, .. }` after the others finish, and the call can be repeated. The call is audited as `auth.credentials_revoked`.
 

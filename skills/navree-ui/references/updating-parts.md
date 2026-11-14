@@ -7,7 +7,12 @@ actions use; and long work followed from a page. Each block compiles on its own.
 
 A `Region` is a named part of a page with its own source. Each answer
 morphs in and keeps focus and what was typed. The handler of a source
-returns a `View` of just that part.
+returns a `View` of just that part (every `View` answers with
+`X-Navree-Page: 1`, and the runtime draws only an answer that carries it).
+A source that answers with a part of a page alone answers through
+`navree::ui::pages::region_answer(node)`; a handler that reads which region
+was asked reads it with `pages::region_asked(&headers)`, since the id travels
+percent-encoded in `x-navree-region`.
 
 ```rust
 use std::time::Duration;
@@ -40,6 +45,11 @@ pub fn dashboard() -> Stack {
 }
 ```
 
+- A source is an address on your site. One that is not a `LocalHref` (another
+  origin, a scheme, `//host`), or is `#`, leaves the region with no source: it
+  is drawn once and never fetched, and its `poll`, feed or stream are left out.
+  A region is polled once a second at the most, whatever `.poll(..)` says. The
+  same holds for the source of a lazy tab or a lazy sidebar group.
 - `.feed(into, after, empty)` asks the source only for rows newer than a
   cursor; `.feed_limit(n)` keeps the newest `n`.
 - A region that gets a 401, 403, 404, 410, 429, 500 or 503 shows the state

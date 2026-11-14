@@ -324,15 +324,21 @@ What each part does:
   sees only the rows they may read. Back, forward, reload and a shared link
   restore the list, with JavaScript on or off.
 - `Submit<ContactInput>` refuses a body from another site (403), a body
-  that is not a form (415) and a `GET` (405). It reads only the struct's
-  own fields. `Rejected` draws your page again with what was typed and each
+  that is not a form (415) and a `GET` (405). It also refuses (403) a post
+  that carries a cookie, sends neither `Sec-Fetch-Site` nor `Origin` and has
+  no CSRF token the session's check took; a post with no cookie, or with its
+  token, is taken. It reads only the struct's own fields. `Rejected` draws your page again with what was typed and each
   error under its field: `422` with the page when JavaScript is off, `422`
   with an `errors` op when it is on.
 - `Reply::redirect` stays on this site, and `.toast(..)` shows on the next
   page, with JavaScript on or off.
 - Behind a session, give the form its token for the case of JavaScript off:
   `FormView::csrf(session.csrf_token())`. The runtime sends the token as a
-  header itself.
+  header itself. The page writes the token masked afresh in every answer (a
+  different string each time, which the session's check takes as it takes the
+  token); in markup you write yourself use
+  `navree::http::csrf::page_token(&session.csrf_token())`. A form whose
+  method is `get` writes no token.
 - A page that needs a company picked from thousands of rows, an edit page
   and a detail page with a part that loads later are built in
   [`building-pages.md`](../navree-design-to-ui/references/building-pages.md),
@@ -387,7 +393,9 @@ impl ExportPages {
 Set where "Sign in" and "Home" lead, and the words, when you add the module.
 The `[ui]` section of the configuration (`sign_in`, `sign_in_redirect`,
 `debug`) overrides the options. A 5xx never shows its source, SQL or paths.
-In `production` the development details are never shown.
+In `production` and `staging` the development details are never shown, and an
+app with no configuration shows them only when the code calls
+`PagesOptions::debug(true)`.
 
 ```rust
 use navree::ui::UiModule;
@@ -584,6 +592,22 @@ Facts to keep in mind:
   `navree-orm`). When the log must see each change, load the records and save
   or delete each one through the unit of work.
 - **NULL is the smallest value** on every store: ascending puts NULLs first.
+- **`#[col(hidden)]` is not a permission.** It says how a column starts; a
+  URL can still show it (`cols=`), filter, sort by or search it. For a column
+  a person may not use, call `query.without_columns(["pay"])` (or
+  `only_columns([..])`) in the handler, and the same on the `BulkRequest`
+  and the `ViewPost`: the column is then gone from the table, the menu, the
+  filters, saved views that are applied, the cells and the export.
+- **An export is capped.** `export_csv` writes at most 100,000 rows
+  (`DEFAULT_EXPORT_ROWS`); `query.export_limit(n)` raises it up to
+  `MAX_EXPORT_ROWS`. A result cut at the limit says so in
+  `x-navree-truncated`. It never pages by `OFFSET`, and a sort by a column of
+  a joined table writes the file in the order of the key. Throttle the
+  route that serves it and keep it behind a sign-in and an ability.
+- **Saved views**: an owner keeps at most 50 per table (`MAX_SAVED_VIEWS`;
+  `save_view` refuses another with `TooManyViews`, `ViewPost::refused`
+  answers with the reason). In an app with workspaces put the workspace into
+  the owner string.
 - **Excel**: hand the rows from `export_rows` to `navree-sheets`.
 - **A cell drawn by you**: `#[col(cell = draw)]` or `.cell(name, fn)`;
   `EditCell::text`, `number`, `date` and `select` edit in place.
@@ -803,7 +827,8 @@ the whole order a moment after the last change, and the server reads it with
 or a long list, use `Sortable`. Chart pictures are for a place that shows only
 an image (a home-screen widget, an email, a link preview): `ChartImage` draws
 a ring, rings, a gauge, a sparkline or a `Tile` of blocks as a PNG in the
-theme's colours and answers with an `ETag`; it is the `ui-image` feature of
+theme's colours and answers with an `ETag` and `Cache-Control: private,
+no-cache` (`.cache_control(..)` says another); it is the `ui-image` feature of
 `navree`, off by default (https://navree.com/docs/components/chart-image/). The
 marketing blocks draw a public site from the same app with no script, and
 `View::seo` writes its head
@@ -828,7 +853,22 @@ marketing blocks draw a public site from the same app with no script, and
   person's zone (`navree-time-zones`).
 - Marking a link `.prefetch()` whose `GET` changes something.
 - Reading a redirect target from the request without `ReturnTo`: it is an
-  open redirect.
+  open redirect. For a link or a region source that holds an address your own
+  code wrote, use `LocalHref`; for one taken from a request, `ReturnTo`
+  (one absolute path of this site). Both refuse white space or a control
+  character at either end, and an address that has one becomes `#` through
+  `From`, so percent-encode what a request gave before it goes into an address.
+- Showing rich text from the database with no wrapper: wrap it in an element
+  marked `data-ui-stored` (`el("div").flag("data-ui-stored", true)
+  .child(SafeHtml::trusted(html))` with the toolkit's `SafeHtml`, on text
+  already cleaned by `navree-validation`), as `Markdown` is. The runtime acts on no
+  hook inside it. An `HtmlPolicy` that allows `data-ui-*`, `data-genui*`,
+  `form`, `formaction`, `formmethod`, `formenctype`, `formtarget`, `popover`,
+  `popovertarget`, `popovertargetaction`, `command`, `commandfor`,
+  `autofocus`, `accesskey` or `contenteditable` is refused at boot.
+- A region, lazy tab or lazy sidebar group whose source is not a `LocalHref`,
+  or a `poll` under one second: it has no source, and a poll is held to one
+  second.
 - Skipping the empty, failed, read-only and forbidden states.
 - Telling the owner a component is missing without checking the index and
   `crates/navree-ui/README.md`.

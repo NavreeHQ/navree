@@ -200,7 +200,7 @@ Instead, the shared shape lives in `navree-contracts` (L1) as a trait. One modul
 | `HealthCheck`, `HealthStatus` | navree-db, navree-cache, navree-storage, navree-redis, navree-mongo, navree-micro (as multi-bindings) | navree-observe (readiness) |
 | `SessionStore`, `SessionRecord` | navree-session's memory and database stores, navree-redis's store | The session layer |
 | `Principal`, `AuthState`, `AuthVia` | navree-auth (through navree-http's `Authenticator`) | Every module that needs the current user |
-| `CredentialRevoker`, `RevokedByKind` | Modules that issue credentials to users, such as navree-oauth, as multi-bindings (`m.credential_revoker::<R>()`) | navree-auth (`revoke_credentials_of_domain`, `revoke_all_credentials`) |
+| `CredentialRevoker`, `RevokedByKind` | Modules that issue credentials to users, such as navree-oauth, as multi-bindings (`m.credential_revoker::<R>()`) | navree-auth (`revoke_credentials_of_domain`, `revoke_all_credentials`; `end_sign_ins_of` when an account goes to its mailbox's owner) |
 | `Clock` | `SystemClock`, `FixedClock` (tests), registered by your app | Modules that need "now" and tests that fix it |
 | `ZoneSource`, `ZoneOwner`, `ZoneLevel`, `ZoneRequest` | navree-workspace (workspaces), your app (users), as multi-bindings | navree-time (`CurrentZone`, `Zones`), navree-schedule (per-workspace schedules) |
 
