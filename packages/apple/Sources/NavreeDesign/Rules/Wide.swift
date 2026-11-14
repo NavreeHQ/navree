@@ -131,6 +131,26 @@ public enum SplitRules {
         width == .expanded
     }
 
+    /// The least width an inspector column takes beside its detail.
+    public static let inspectorLeast = 280.0
+
+    /// Whether the inspector fits in the room the detail's column has (the
+    /// window less its sidebar and its list): the detail keeps its least
+    /// width beside it (``NavigationRules/detailMinimumWidth``), or the
+    /// inspector waits behind its bar button, rather than the two hanging
+    /// over the list's column and out of the window. A column not measured
+    /// yet says nothing against it.
+    /// The room a window of columns leaves its detail: its width less the
+    /// sidebar's (220) and the list's (360) columns at their ideal widths.
+    public static func detailRoom(window: Double, sidebar: Bool) -> Double {
+        window - (sidebar ? 220 : 0) - 360
+    }
+
+    public static func inspectorFits(detailRoom: Double?) -> Bool {
+        guard let detailRoom else { return true }
+        return detailRoom >= NavigationRules.detailMinimumWidth + inspectorLeast
+    }
+
     /// The destinations whose first screen is drawn as columns, as far as
     /// their first screens are known: what a tab view with its bar at the top
     /// is built anew for when it changes. Laid out round a stack (a screen

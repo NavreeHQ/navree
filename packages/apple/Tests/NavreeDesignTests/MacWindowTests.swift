@@ -318,3 +318,12 @@ private func labels(_ nodes: [Navree.Node]) -> [String] {
     // the sidebar's least beside it rather than squeezing the detail.
     #expect(NavigationRules.detailMinimumWidth == 400)
 }
+
+@Test func theInspectorStandsBesideTheDetailOnlyWhereBothFit() {
+    // A 1200-point window less its sidebar (220) and its list (360): 620, too little for 400 + 280.
+    #expect(!SplitRules.inspectorFits(detailRoom: 620))
+    #expect(SplitRules.inspectorFits(detailRoom: 680))
+    #expect(SplitRules.inspectorFits(detailRoom: nil))
+    #expect(SplitRules.detailRoom(window: 1200, sidebar: true) == 620)
+    #expect(SplitRules.detailRoom(window: 1440, sidebar: true) == 860)
+}
