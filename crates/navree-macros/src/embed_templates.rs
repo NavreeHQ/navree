@@ -320,7 +320,9 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 collect(root, "linked").unwrap_err(),
-                ["embed_templates!: `linked/list.html` is a symbolic link; put the file itself in the folder"]
+                [
+                    "embed_templates!: `linked/list.html` is a symbolic link; put the file itself in the folder"
+                ]
             );
             let outside = tempfile::Builder::new()
                 .prefix("navree-test-")
@@ -398,7 +400,12 @@ mod tests {
             path: PathBuf::from("/srv/notices/views/admin/edit.html"),
         }];
         let code = tokens(&files).to_string();
-        for needle in ["\"admin/edit.html\"", "include_str !", "Into :: into", "'static"] {
+        for needle in [
+            "\"admin/edit.html\"",
+            "include_str !",
+            "Into :: into",
+            "'static",
+        ] {
             assert!(code.contains(needle), "{needle}: {code}");
         }
     }

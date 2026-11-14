@@ -74,12 +74,12 @@ pub use resolver::Resolver;
 /// Items Navree's own crates and macros use; not public API.
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::collide::{imports, is_community_plugin};
     pub use crate::plugin::{
         FIRST_PARTY, RESERVED_NAMESPACES, default_namespace, is_namespace, namespace_text,
     };
     pub use crate::publish::is_safe_relative_path;
     pub use crate::publish::{PublishRefused, Published, publish_files};
-    pub use crate::collide::{imports, is_community_plugin};
 }
 
 /// A boxed error that can cross module and task boundaries.
