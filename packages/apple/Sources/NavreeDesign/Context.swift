@@ -156,7 +156,7 @@ public struct DrawingContext: Sendable {
     public var icons: [String: Navree.IconShape]
     /// The address of the screen, for sharing.
     public var address: String
-    /// The origin, which relative addresses of pictures are read against.
+    /// The origin.
     public var base: URL?
     /// How deep the screen being drawn is in its stack: the root is 0.
     public var depth: Int
@@ -169,6 +169,10 @@ public struct DrawingContext: Sendable {
     /// Loads a picture's bytes the way the app's requests go: with the
     /// session's cookies, from the one cookie store.
     public var picture: @MainActor @Sendable (URL) async -> Data? = { _ in nil }
+    /// The address of a picture the server names (an image's or an avatar's
+    /// `src`), or `nil` when the app may not ask for it: then its place
+    /// shows the placeholder.
+    public var pictureAddress: @Sendable (String) -> URL? = { _ in nil }
 
     public init(
         send: @escaping @MainActor @Sendable (Intent) -> Void,

@@ -134,7 +134,8 @@ final class Session {
         let effects = SystemEffects(
             transport: configuration.transport(),
             cache: KeptFiles(Self.cacheFolder(configuration.origin), in: .cachesDirectory),
-            signedWith: configuration.signedWith, origin: configuration.base
+            signedWith: configuration.signedWith, origin: configuration.base, site: configuration.site,
+            pictureHosts: configuration.pictureHosts
         )
         self.effects = effects
         let client = NativeClient(core: core, effects: effects)

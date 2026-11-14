@@ -320,7 +320,7 @@ struct ImagePart: View {
     @Environment(\.navree) private var context
 
     var body: some View {
-        RemotePicture(url: URL(string: image.src, relativeTo: context.base)) { loaded in
+        RemotePicture(url: context.pictureAddress(image.src)) { loaded in
             loaded.resizable().aspectRatio(contentMode: image.fit == .cover ? .fill : .fit)
         } placeholder: {
             Rectangle().fill(.quaternary)
@@ -387,7 +387,7 @@ struct AvatarPart: View {
 
     var body: some View {
         Group {
-            if let src = avatar.src, let url = URL(string: src, relativeTo: context.base) {
+            if let src = avatar.src, let url = context.pictureAddress(src) {
                 RemotePicture(url: url) { image in image.resizable().scaledToFill() } placeholder: { initials }
             } else {
                 initials

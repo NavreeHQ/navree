@@ -23,7 +23,9 @@ public protocol Transport: AnyObject {
 /// the `x-navree-*` headers.
 ///
 /// Whether an address may be asked at all is the core's to decide: this sends
-/// what it is told, and nothing of its own.
+/// what it is told, and nothing of its own. It asks one thing again itself:
+/// an address that is not the origin's own, whole, is never sent, and is
+/// answered as a request that failed.
 @MainActor
 public final class HTTPTransport: Transport {
     public let jar: CookieJar?
@@ -56,9 +58,10 @@ public final class HTTPTransport: Transport {
         return configuration
     }
 
-    /// The request as it goes over the wire, or `nil` for an address that is not one.
+    /// The request as it goes over the wire, or `nil` for an address that is
+    /// not the origin's own.
     public func urlRequest(for request: FetchRequest) -> URLRequest? {
-        guard let url = URL(string: request.url), url.scheme != nil else { return nil }
+        guard let url = cookies.site?.inside(request.url) else { return nil }
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = request.method.uppercased()
         urlRequest.timeoutInterval = TimeInterval(max(request.timeoutMs, 1)) / 1000
@@ -148,7 +151,7 @@ public final class HTTPTransport: Transport {
     public func open(
         stream: Int, url: String, headers: [(String, String)], report: @escaping @MainActor (CoreEvent.StreamState) -> Void
     ) {
-        guard let address = URL(string: url) else { return report(.closed(status: nil)) }
+        guard let address = cookies.site?.inside(url) else { return report(.closed(status: nil)) }
         var request = URLRequest(url: address)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }

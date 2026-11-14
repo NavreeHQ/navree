@@ -86,9 +86,14 @@ public struct CookieRecord: Sendable, Equatable, Codable {
 public final class CookieJar {
     private(set) var records: [CookieRecord] = []
     private let keychain: KeychainSlot?
+    /// The origin whose session this is: what every address a request, a
+    /// picture or the web view goes to is checked against. `nil` when the
+    /// configured text is not an origin, and then no address is ours.
+    public let site: Origin?
 
     /// A jar for the app at `origin`; `persistent` keeps it in the Keychain.
-    public init(origin: String, persistent: Bool = true) {
+    public init(origin: String, loopbackHTTP: Bool = false, persistent: Bool = true) {
+        site = Origin(origin, loopbackHTTP: loopbackHTTP)
         keychain = persistent ? KeychainSlot(service: "com.navree.native.session", account: origin) : nil
         if let data = keychain?.read(), let saved = try? JSONDecoder().decode([CookieRecord].self, from: data) {
             records = saved.filter { $0.expires.map { $0 > Date() } ?? true }
@@ -142,8 +147,10 @@ public final class CookieJar {
         }
     }
 
-    /// Takes back what a page of `host` set in the web view's store.
+    /// Takes back what a page of `host` set in the web view's store, when
+    /// `host` is the origin's own: never another site's.
     public func adopt(from store: WKHTTPCookieStore, host: String) async {
+        guard let site, host.lowercased() == site.host else { return }
         let cookies = await store.allCookies().map(CookieRecord.init).filter { $0.matches(host: host.lowercased()) }
         let others = records.filter { !$0.matches(host: host.lowercased()) }
         let next = others + cookies

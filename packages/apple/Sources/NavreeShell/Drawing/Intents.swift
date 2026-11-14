@@ -38,6 +38,9 @@ extension NativeClient {
         context.routes = app?.routes ?? []
         let pictures = (effects as? SystemEffects)?.pictures
         context.picture = { url in await pictures?.load(url) }
+        let site = pictures?.site
+        let hosts = pictures?.hosts ?? []
+        context.pictureAddress = { source in site?.picture(source, hosts: hosts) }
         return context
     }
 

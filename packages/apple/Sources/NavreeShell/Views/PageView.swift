@@ -269,7 +269,8 @@ struct ScreenPage: View {
                 appName: client.app?.name ?? "", notice: shown.notice, failure: shown.failure
             )
         case .web(let address, let title, _, let serial):
-            if let url = URL(string: address) {
+            // Only an address of the origin is loaded; any other is a page that failed.
+            if let url = configuration.site?.inside(address) {
                 WebPageView(url: url, serial: serial, screen: state.id, client: client, configuration: configuration) {
                     webTitle = $0
                 }
@@ -277,20 +278,12 @@ struct ScreenPage: View {
                 .navigationTitle(webTitle ?? title ?? state.title ?? "")
                 .modifier(InlineTitle(mode: NavigationRules.webTitleMode(screenDepth)))
                 .modifier(WebMessage(message: message, client: client))
+            } else {
+                failed(Failure.server)
             }
         case .blank:
             if state.failure != nil, !state.loading {
-                let words = Words.failure(state.failure)
-                ContentUnavailableView {
-                    Label(words.title, systemImage: "wifi.exclamationmark")
-                } description: {
-                    Text(words.text)
-                } actions: {
-                    Button("Try Again") { client.send(.refresh(screen: state.id)) }
-                        .buttonStyle(.bordered)
-                }
-                .navigationTitle(state.title ?? "")
-                .modifier(InlineTitle(mode: NavigationRules.titleMode(screenDepth)))
+                failed(state.failure)
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -298,6 +291,21 @@ struct ScreenPage: View {
                     .modifier(InlineTitle(mode: NavigationRules.titleMode(screenDepth)))
             }
         }
+    }
+
+    /// The system's layout for a screen that could not be shown, with "Try Again".
+    private func failed(_ failure: Failure?) -> some View {
+        let words = Words.failure(failure)
+        return ContentUnavailableView {
+            Label(words.title, systemImage: "wifi.exclamationmark")
+        } description: {
+            Text(words.text)
+        } actions: {
+            Button("Try Again") { client.send(.refresh(screen: state.id)) }
+                .buttonStyle(.bordered)
+        }
+        .navigationTitle(state.title ?? "")
+        .modifier(InlineTitle(mode: NavigationRules.titleMode(screenDepth)))
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
@@ -314,7 +322,7 @@ struct ScreenPage: View {
             }
             ToolbarSpacer(.fixed, placement: .primaryAction)
         }
-        if case .web(let address, _, _, _) = state.content, let url = URL(string: address) {
+        if case .web(let address, _, _, _) = state.content, let url = configuration.site?.inside(address) {
             ToolbarItem(placement: .primaryAction) {
                 ShareLink(item: url) {
                     Label("Share", systemImage: Symbols.standard(.share) ?? "square.and.arrow.up")
