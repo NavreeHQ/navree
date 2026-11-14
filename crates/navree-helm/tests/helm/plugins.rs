@@ -3,7 +3,9 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use navree_helm::{HelmLink, HelmPage, HelmWidget, ModuleBuilderHelmExt, ModuleBuilderHelmPanelExt};
+use navree_helm::{
+    HelmLink, HelmPage, HelmWidget, ModuleBuilderHelmExt, ModuleBuilderHelmPanelExt,
+};
 use navree_http::AppError;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_testing::{TestAppBuilder, TestClient, principal};
