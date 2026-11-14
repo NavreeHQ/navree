@@ -1,5 +1,5 @@
 {
-  "about": "The person says no in the system's sign-in session: its return carries `error=access_denied`. That ends the sign-in as closing the sheet does, and nobody is told it failed. Any other `error` is a sign-in that failed.",
+  "about": "The person says no in the system's sign-in session: its return carries `error=access_denied` and this sign-in's `state`. That ends the sign-in as closing the sheet does, and nobody is told it failed. A return with an error and another `state`, or none, is not this sign-in's: nothing changes. Any other `error` is a sign-in that failed.",
   "config": {"app_id":"com.charkha.supply","client":{"caps":["auth_session"],"form":"phone","platform":"ios","text_percent":100,"vocab":0},"sign_in":{"paths":["/sign-in"]}},
   "steps": [
     {
@@ -96,8 +96,21 @@
       }
     },
     {
-      "note": "A saying no with no state is still only that.",
+      "note": "A refusal that does not carry this sign-in's state is not this sign-in's: nothing changes, and the sign-in stays open.",
       "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?error=access_denied"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"sign_in","detail":"a sign-in's return said it went wrong with a state that is not this sign-in's, and was not used"}
+        ]
+      },
+      "check": [
+        {"at":"/messages","is":[]}
+      ]
+    },
+    {
+      "note": "It was still open: this sign-in's own refusal ends it, quietly.",
+      "send": {"t":"sign_in_done","url":"https://shop.example/app/signed-in?error=access_denied&state=ISIjJCUmJygpKissLS4vMA"},
       "expect": {
         "changed": [],
         "effects": []
