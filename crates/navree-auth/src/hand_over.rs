@@ -338,7 +338,12 @@ impl AuthService {
         };
         if self.clock.now().timestamp() - pending.started_at > PENDING_TTL_SECS {
             return Err(self
-                .end_hand_over(session, &pending.app, "the app sign-in waited too long", meta)
+                .end_hand_over(
+                    session,
+                    &pending.app,
+                    "the app sign-in waited too long",
+                    meta,
+                )
                 .await);
         }
         Ok(pending)
@@ -417,11 +422,18 @@ impl AuthService {
         };
         if signed_in.impersonator.is_some() {
             return Err(self
-                .end_hand_over(session, &pending.app, "an impersonation is not handed over", meta)
+                .end_hand_over(
+                    session,
+                    &pending.app,
+                    "an impersonation is not handed over",
+                    meta,
+                )
                 .await);
         }
         let made_for_this = match (pending.attempt.as_deref(), attempt) {
-            (Some(expected), Some(given)) => constant_time_eq(given.as_bytes(), expected.as_bytes()),
+            (Some(expected), Some(given)) => {
+                constant_time_eq(given.as_bytes(), expected.as_bytes())
+            }
             _ => false,
         };
         if made_for_this {
@@ -475,7 +487,9 @@ impl AuthService {
     ) -> Result<Finish, AuthError> {
         let mut pending = self.pending(session, meta).await?;
         let answered = match (pending.confirm.as_deref(), token) {
-            (Some(expected), Some(given)) => constant_time_eq(given.as_bytes(), expected.as_bytes()),
+            (Some(expected), Some(given)) => {
+                constant_time_eq(given.as_bytes(), expected.as_bytes())
+            }
             _ => false,
         };
         if !answered {
@@ -533,7 +547,12 @@ impl AuthService {
     ) -> Result<Finish, AuthError> {
         if signed_in.impersonator.is_some() {
             return Err(self
-                .end_hand_over(session, &pending.app, "an impersonation is not handed over", meta)
+                .end_hand_over(
+                    session,
+                    &pending.app,
+                    "an impersonation is not handed over",
+                    meta,
+                )
                 .await);
         }
         let now = self.clock.now();
@@ -843,33 +862,41 @@ impl Controller for AppSignInController {
 
         let service = self.service.clone();
         let sign_in = self.sign_in.clone();
-        let confirm =
-            move |session: Session, meta: ClientMeta, Form(input): Form<ConfirmRequest>| {
-                let service = service.clone();
-                let sign_in = sign_in.clone();
-                async move {
-                    let proceed = input.decision.as_deref() == Some("continue");
-                    let finish = service
-                        .confirm_app_sign_in(&session, input.confirm.as_deref(), proceed, keep, &meta)
-                        .await
-                        .map_err(AuthError::into_app_error)?;
-                    Ok::<_, AppError>(finish_response(finish, &sign_in, &session))
-                }
-            };
+        let confirm = move |session: Session,
+                            meta: ClientMeta,
+                            Form(input): Form<ConfirmRequest>| {
+            let service = service.clone();
+            let sign_in = sign_in.clone();
+            async move {
+                let proceed = input.decision.as_deref() == Some("continue");
+                let finish = service
+                    .confirm_app_sign_in(&session, input.confirm.as_deref(), proceed, keep, &meta)
+                    .await
+                    .map_err(AuthError::into_app_error)?;
+                Ok::<_, AppError>(finish_response(finish, &sign_in, &session))
+            }
+        };
         routes.push(
-            RouteDef::on(Method::POST, format!("!{APP_SIGN_IN_CONFIRM_PATH}"), confirm)
-                .public()
-                .name("auth.app.confirm")
-                .api(ApiMeta {
-                    description: Some(
-                        "The answer of the page that asks a signed-in browser before its \
+            RouteDef::on(
+                Method::POST,
+                format!("!{APP_SIGN_IN_CONFIRM_PATH}"),
+                confirm,
+            )
+            .public()
+            .name("auth.app.confirm")
+            .api(ApiMeta {
+                description: Some(
+                    "The answer of the page that asks a signed-in browser before its \
                          sign-in goes to an app: a form with the session's CSRF token \
                          (`_csrf`), the hand-over's one-time `confirm` value and `decision` \
                          (`continue` or `cancel`)."
-                            .to_owned(),
-                    ),
-                    ..api("Answer the question of an app sign-in hand-over", &[303, 400, 403])
-                }),
+                        .to_owned(),
+                ),
+                ..api(
+                    "Answer the question of an app sign-in hand-over",
+                    &[303, 400, 403],
+                )
+            }),
         );
 
         let service = self.service.clone();

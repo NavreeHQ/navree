@@ -207,9 +207,7 @@ async fn sheet_sign_in(app: &TestApp, email: &str, challenge: &str) -> (TestClie
     assert_eq!(location(&started), "/auth/app/finish");
     let to_sign_in = get(&sheet, "/auth/app/finish").await.assert_status(303);
     let back = finish_with_attempt(&location(&to_sign_in));
-    let signed_in = sign_in_form(&sheet, email, &back)
-        .await
-        .assert_status(303);
+    let signed_in = sign_in_form(&sheet, email, &back).await.assert_status(303);
     assert_eq!(location(&signed_in), back);
     let code = callback_code(&get(&sheet, &back).await, "s-1");
     (sheet, code)

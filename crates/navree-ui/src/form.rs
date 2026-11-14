@@ -2031,10 +2031,7 @@ async fn file_values<T: Form>(
                 Some(key) => match file_of_key(ctx, signer, owner, name, key).await {
                     Some(path) => Some(path),
                     None => {
-                        errors.insert(
-                            name.to_owned(),
-                            vec![words.render(name, "form.file", &[])],
-                        );
+                        errors.insert(name.to_owned(), vec![words.render(name, "form.file", &[])]);
                         None
                     }
                 },
@@ -3173,7 +3170,10 @@ mod tests {
         let host = ("host", "app.example");
         // An HTTP/1.1 request carries no scheme, so the host is what is compared.
         for origin in ["https://app.example", "http://app.example"] {
-            assert!(from_this_site(&request_head("/s", &[host, ("origin", origin)])));
+            assert!(from_this_site(&request_head(
+                "/s",
+                &[host, ("origin", origin)]
+            )));
         }
         for origin in [
             "https://evil.example",

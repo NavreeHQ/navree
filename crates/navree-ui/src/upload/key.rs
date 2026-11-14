@@ -337,7 +337,10 @@ mod tests {
             ),
             None
         );
-        assert_eq!(file_path_for(&signer, "u", "receipts", "receipts/a.pdf"), None);
+        assert_eq!(
+            file_path_for(&signer, "u", "receipts", "receipts/a.pdf"),
+            None
+        );
     }
 
     #[test]

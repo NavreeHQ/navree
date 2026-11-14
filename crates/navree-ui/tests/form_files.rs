@@ -450,7 +450,9 @@ async fn the_key_the_upload_route_answers_is_read_back_by_the_person_who_sent_th
     let response = post_key(&app.acting_as(principal(alice)), &key).await;
     assert_eq!(response.status(), StatusCode::OK, "{}", response.text());
     let text = response.text();
-    let path = text.strip_prefix("Lohri ").expect("the title, then the path");
+    let path = text
+        .strip_prefix("Lohri ")
+        .expect("the title, then the path");
     assert!(disk.exists(path).await.unwrap(), "{path} is on the disk");
     // Nobody else does.
     for client in [app.acting_as(principal(meera)), app.client()] {
@@ -564,6 +566,10 @@ async fn the_upload_route_can_answer_each_stored_file_with_a_key_for_its_owner()
         Some("receipts/k3v9q.png")
     );
     assert_eq!(file_path_for(&signer, "user-8", "receipts", key), None);
-    assert_eq!(file_path(&signer, key), None, "it is not a key of the path alone");
+    assert_eq!(
+        file_path(&signer, key),
+        None,
+        "it is not a key of the path alone"
+    );
     assert!(json["stored"][0].get("path").is_none(), "{json}");
 }

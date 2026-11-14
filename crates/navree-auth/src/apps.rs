@@ -434,7 +434,10 @@ impl AppsOptions {
             Some((format!("auth.apps.apple.{name}"), app.callback.as_deref()?))
         });
         let android = self.android.iter().filter_map(|(name, app)| {
-            Some((format!("auth.apps.android.{name}"), app.callback.as_deref()?))
+            Some((
+                format!("auth.apps.android.{name}"),
+                app.callback.as_deref()?,
+            ))
         });
         apple.chain(android)
     }
@@ -966,7 +969,10 @@ mod tests {
                     "https://example.com/app/signed-in",
                 )
                 .set("auth.apps.android.legacy.package", "com.example.legacy")
-                .set("auth.apps.android.legacy.fingerprints", json!([FINGERPRINT]))
+                .set(
+                    "auth.apps.android.legacy.fingerprints",
+                    json!([FINGERPRINT]),
+                )
                 .set(
                     "auth.apps.android.legacy.callback",
                     "com.example.legacy:/signed-in",

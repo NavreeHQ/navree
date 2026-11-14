@@ -1231,11 +1231,10 @@ async fn a_scoped_lock_finds_a_list_only_among_the_callers_rows() {
         assert_eq!(ran, 8, "{server}");
 
         // Without a scope the key finds the row of another organisation, as it did.
-        let ran = sortable::transaction(&db, &SharedLane::KEY, vec!["doing"], |_uow| async {
-            Ok(9)
-        })
-        .await
-        .expect("any row of the table");
+        let ran =
+            sortable::transaction(&db, &SharedLane::KEY, vec!["doing"], |_uow| async { Ok(9) })
+                .await
+                .expect("any row of the table");
         assert_eq!(ran, 9, "{server}");
 
         // A scope has to be of the lanes' own table.

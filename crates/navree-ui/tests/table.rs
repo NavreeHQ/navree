@@ -1476,7 +1476,12 @@ fn a_saved_view_applied_by_default_leaves_the_columns_taken_away_out() {
         q("").or_default_view(&views).without_columns(["amount"]),
     ] {
         assert!(query.filter_on("amount").is_none());
-        assert!(query.sorts().iter().all(|term| name(term.column) != "amount"));
+        assert!(
+            query
+                .sorts()
+                .iter()
+                .all(|term| name(term.column) != "amount")
+        );
         assert!(!shown(&query).contains(&"amount"));
     }
 }

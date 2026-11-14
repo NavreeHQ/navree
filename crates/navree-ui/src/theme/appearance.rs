@@ -637,7 +637,11 @@ mod tests {
             respond_setting(&headers, b"theme=ocean").status()
         };
         // Another cookie is a session this request could ride on.
-        for cookie in ["sid=abc", "navree_ui_theme=dark.rose; sid=abc", "sid=abc; x"] {
+        for cookie in [
+            "sid=abc",
+            "navree_ui_theme=dark.rose; sid=abc",
+            "sid=abc; x",
+        ] {
             assert_eq!(post(Some(cookie), None), StatusCode::FORBIDDEN, "{cookie}");
         }
         // No cookie, or the appearance cookie alone, is a script with nothing to ride on.
