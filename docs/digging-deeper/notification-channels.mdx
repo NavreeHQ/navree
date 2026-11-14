@@ -225,11 +225,11 @@ access_token = ""                 # APP_NOTIFY__META__ACCESS_TOKEN
 | `notify.teams.app_password` | empty | Its client secret. Required with `app_id`. |
 | `notify.teams.tenant` | `botframework.com` | The tenant that issues the bot's tokens: `botframework.com` for a multi-tenant bot, your tenant id for a single-tenant one. |
 | `notify.teams.token_url` | `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` | The token endpoint. |
-| `notify.sms.driver` | none | `twilio`, `vonage`, `sns` (also spelled `aws_sns`) or `log`. Without one, the SMS channel is unavailable. |
+| `notify.sms.driver` | none | `twilio`, `vonage`, `sns` (also spelled `aws_sns`) or `log`, or the name of a driver a module registers with `m.sms_driver`. Without one, the SMS channel is unavailable. |
 | `notify.sms.from` | none | The default sender. |
 | `notify.sms.default_region` | none | The ISO 3166-1 country numbers without a country code are read in. Without it, such numbers are invalid. |
 | `notify.sms.status_callback` | none | The URL the provider reports statuses to: Twilio's `StatusCallback`, Vonage's `webhook_url`. |
-| `notify.whatsapp.driver` | none | `twilio`, `meta` or `log`. |
+| `notify.whatsapp.driver` | none | `twilio`, `meta` or `log`, or the name of a driver a module registers with `m.whatsapp_driver`. |
 | `notify.whatsapp.from` | none | The sender's number (Twilio). |
 | `notify.whatsapp.status_callback` | none | Twilio's `StatusCallback` for WhatsApp. |
 | `notify.web_push.public_key` | none | The VAPID public key (base64url). Web push is on when it is set. |
@@ -317,6 +317,62 @@ Numbers are read as E.164 with navree-validation's [`Phone`](/docs/basics/valida
 | `.from(sender)` | The sender instead of `notify.sms.from` |
 | `.to(number)` | The recipient instead of `route_sms` |
 
+### A driver a module registers
+
+A gateway Navree has no driver for is an `SmsDriver` of your own that a module registers under a name; `notify.sms.driver` then names it, and its settings are the table under that name, `[notify.<name>]`:
+
+```rust title="src/sandesh.rs"
+use navree::BoxFuture;
+use navree::notify::{ChannelError, SentMessage, SmsDriver, SmsMessage};
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+use serde::Deserialize;
+
+/// The settings of the driver: `[notify.sandesh]`.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct SandeshSettings {
+    sender_id: String,
+}
+
+/// Texts through the Sandesh gateway.
+struct Sandesh {
+    sender_id: String,
+}
+
+impl SmsDriver for Sandesh {
+    fn send<'a>(&'a self, to: &'a str, message: &'a SmsMessage) -> BoxFuture<'a, Result<SentMessage, ChannelError>> {
+        Box::pin(async move {
+            // Post `message.body` to `to` (E.164) as `self.sender_id`.
+            Ok(SentMessage::new("sandesh"))
+        })
+    }
+}
+
+pub struct SandeshModule;
+
+impl Module for SandeshModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.sms_driver("sandesh", |ctx| async move {
+            let settings: SandeshSettings = ctx.settings()?;
+            Ok(Sandesh { sender_id: settings.sender_id })
+        });
+    }
+}
+```
+
+```toml title="config/app.toml"
+[notify.sms]
+driver = "sandesh"
+from = "+911612345678"
+default_region = "IN"
+
+[notify.sandesh]
+sender_id = "NAVREE"
+```
+
+The channel reads numbers, skips opted-out ones and records each delivery as it does for the built-in drivers, with the `provider` the driver's `SentMessage` names. An app's own `dyn SmsDriver` (a fake in a test) still wins over the configured driver. A name is a lower-case letter followed by lower-case letters, digits or `_`; a registration under a built-in name (`twilio`, `vonage`, `sns`, `aws_sns`, `log`) or a key of `[notify]` (`slack`, `meta`), one name registered by two modules, a `notify.sms.driver` naming a driver no module registers and a factory that fails each fail the boot, naming `m.sms_driver`; `config:check` reports the same.
+
 ### Opt-outs
 
 Text messages must stop when the recipient asks. The SMS and WhatsApp channels keep an opt-out list per channel, `notification_opt_outs`, and skip a number on it: its delivery is recorded as `opted_out`, and `send` succeeds.
@@ -345,7 +401,7 @@ Numbers are normalized the same way as for sending, so every format of one numbe
 
 ## WhatsApp
 
-Pick a driver with `notify.whatsapp.driver`: `twilio` (the Messages API with `whatsapp:` addresses, sharing `notify.twilio`'s credentials with SMS), `meta` (the WhatsApp Cloud API, `POST /{api_version}/{phone_number_id}/messages`) or `log`.
+Pick a driver with `notify.whatsapp.driver`: `twilio` (the Messages API with `whatsapp:` addresses, sharing `notify.twilio`'s credentials with SMS), `meta` (the WhatsApp Cloud API, `POST /{api_version}/{phone_number_id}/messages`) or `log`. A `WhatsAppDriver` of your own registers the same way as an SMS driver, with `m.whatsapp_driver("baat", ..)`, and `notify.whatsapp.driver = "baat"` selects it (see [a driver a module registers](#a-driver-a-module-registers)).
 
 WhatsApp takes free text only inside the 24-hour window after the recipient last wrote to you. Outside it, send an approved template:
 

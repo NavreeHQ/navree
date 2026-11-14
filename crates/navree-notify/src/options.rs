@@ -1,11 +1,13 @@
 //! [`NotifyOptions`]: configuration section `notify`.
 
 use chrono::{NaiveTime, Weekday};
-use navree_config::{ConfigSection, ConfigTable};
+use navree_config::__private::{selector_error, selector_name};
+use navree_config::{ConfigSection, ConfigTable, DriverName, DriverNameError};
 use navree_contracts::Secret;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::Channel;
+use crate::registered::{SMS_SLOT, WHATSAPP_SLOT};
 use crate::timing::{parse_hh_mm, parse_weekday};
 
 /// How [`NotifyModule`](crate::NotifyModule) sends notifications
@@ -257,11 +259,12 @@ impl NotifyOptions {
             );
         }
         if let Some(driver) = self.sms.driver {
-            match driver {
+            match driver.resolved() {
                 SmsDriverKind::Twilio => self.twilio.check("sms")?,
                 SmsDriverKind::Vonage => self.vonage.check()?,
                 SmsDriverKind::Sns => self.sns.check()?,
-                SmsDriverKind::Log => {}
+                // A registered driver's factory reads its own settings.
+                SmsDriverKind::Log | SmsDriverKind::Registered(_) => {}
             }
         }
         if let Some(region) = &self.sms.default_region {
@@ -270,10 +273,10 @@ impl NotifyOptions {
             })?;
         }
         if let Some(driver) = self.whatsapp.driver {
-            match driver {
+            match driver.resolved() {
                 WhatsAppDriverKind::Twilio => self.twilio.check("whatsapp")?,
                 WhatsAppDriverKind::Meta => self.meta.check()?,
-                WhatsAppDriverKind::Log => {}
+                WhatsAppDriverKind::Log | WhatsAppDriverKind::Registered(_) => {}
             }
         }
         self.web_push.check()?;
@@ -353,8 +356,7 @@ impl Default for TeamsOptions {
 }
 
 /// An SMS driver.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum SmsDriverKind {
     /// Twilio's Messages API (`notify.twilio`).
@@ -362,10 +364,74 @@ pub enum SmsDriverKind {
     /// Vonage's Messages API (`notify.vonage`).
     Vonage,
     /// Amazon SNS `Publish` (`notify.sns`); `aws_sns` is accepted too.
-    #[serde(alias = "aws_sns")]
     Sns,
     /// Writes each message to the log (development).
     Log,
+    /// A driver a module registers under this name with
+    /// [`m.sms_driver`](crate::ModuleBuilderNotifyChannelsExt::sms_driver)
+    /// (`"sandesh"`); its settings are `notify.{name}`. Holding a built-in
+    /// name, it is that built-in driver.
+    Registered(DriverName),
+}
+
+impl SmsDriverKind {
+    /// The configuration name: `twilio`, `vonage`, `sns`, `log`, or the
+    /// name a driver is registered under.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            SmsDriverKind::Twilio => "twilio",
+            SmsDriverKind::Vonage => "vonage",
+            SmsDriverKind::Sns => "sns",
+            SmsDriverKind::Log => "log",
+            SmsDriverKind::Registered(name) => name.as_str(),
+        }
+    }
+
+    /// The kind, with a `Registered` built-in name turned into that
+    /// built-in (`Registered("aws_sns")` is `Sns`).
+    pub(crate) fn resolved(self) -> SmsDriverKind {
+        match self {
+            SmsDriverKind::Registered(name) => match name.as_str() {
+                "twilio" => SmsDriverKind::Twilio,
+                "vonage" => SmsDriverKind::Vonage,
+                "sns" | "aws_sns" => SmsDriverKind::Sns,
+                "log" => SmsDriverKind::Log,
+                _ => self,
+            },
+            other => other,
+        }
+    }
+}
+
+/// The configuration name (`aws_sns` is written `sns`).
+impl Serialize for SmsDriverKind {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
+    }
+}
+
+/// `twilio`, `vonage`, `sns` (or `aws_sns`) and `log` are the built-in
+/// drivers, also when written as a table whose only key is the name; any
+/// other lower-case name (a letter, then letters, digits or `_`) is a
+/// driver a module registers, which the boot resolves. Anything else is an
+/// error that lists the names and never repeats the value.
+impl<'de> Deserialize<'de> for SmsDriverKind {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = selector_name(deserializer, "driver", &SMS_SLOT)?;
+        match name.as_str() {
+            "twilio" => Ok(SmsDriverKind::Twilio),
+            "vonage" => Ok(SmsDriverKind::Vonage),
+            "sns" | "aws_sns" => Ok(SmsDriverKind::Sns),
+            "log" => Ok(SmsDriverKind::Log),
+            other => match DriverName::new(other) {
+                Ok(name) => Ok(SmsDriverKind::Registered(name)),
+                Err(DriverNameError::Invalid) => {
+                    Err(serde::de::Error::custom(selector_error("driver", &SMS_SLOT)))
+                }
+                Err(error) => Err(serde::de::Error::custom(error)),
+            },
+        }
+    }
 }
 
 /// `notify.sms`.
@@ -373,7 +439,7 @@ pub enum SmsDriverKind {
 #[serde(default)]
 pub struct SmsOptions {
     /// The driver; without one the SMS channel is unavailable.
-    #[config(one_of = "twilio, vonage, sns, log")]
+    #[config(driver = "twilio, vonage, sns, aws_sns, log", register = "m.sms_driver")]
     pub driver: Option<SmsDriverKind>,
     /// The default sender: a number in E.164, an alphanumeric sender id, or
     /// a Twilio messaging service (`MG...`).
@@ -388,8 +454,7 @@ pub struct SmsOptions {
 }
 
 /// A WhatsApp driver.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum WhatsAppDriverKind {
     /// Twilio's Messages API with `whatsapp:` addresses (`notify.twilio`).
@@ -398,6 +463,69 @@ pub enum WhatsAppDriverKind {
     Meta,
     /// Writes each message to the log (development).
     Log,
+    /// A driver a module registers under this name with
+    /// [`m.whatsapp_driver`](crate::ModuleBuilderNotifyChannelsExt::whatsapp_driver)
+    /// (`"baat"`); its settings are `notify.{name}`. Holding a built-in
+    /// name, it is that built-in driver.
+    Registered(DriverName),
+}
+
+impl WhatsAppDriverKind {
+    /// The configuration name: `twilio`, `meta`, `log`, or the name a
+    /// driver is registered under.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            WhatsAppDriverKind::Twilio => "twilio",
+            WhatsAppDriverKind::Meta => "meta",
+            WhatsAppDriverKind::Log => "log",
+            WhatsAppDriverKind::Registered(name) => name.as_str(),
+        }
+    }
+
+    /// The kind, with a `Registered` built-in name turned into that
+    /// built-in (`Registered("meta")` is `Meta`).
+    pub(crate) fn resolved(self) -> WhatsAppDriverKind {
+        match self {
+            WhatsAppDriverKind::Registered(name) => match name.as_str() {
+                "twilio" => WhatsAppDriverKind::Twilio,
+                "meta" => WhatsAppDriverKind::Meta,
+                "log" => WhatsAppDriverKind::Log,
+                _ => self,
+            },
+            other => other,
+        }
+    }
+}
+
+/// The configuration name.
+impl Serialize for WhatsAppDriverKind {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name())
+    }
+}
+
+/// `twilio`, `meta` and `log` are the built-in drivers, also when written
+/// as a table whose only key is the name; any other lower-case name (a
+/// letter, then letters, digits or `_`) is a driver a module registers,
+/// which the boot resolves. Anything else is an error that lists the names
+/// and never repeats the value.
+impl<'de> Deserialize<'de> for WhatsAppDriverKind {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = selector_name(deserializer, "driver", &WHATSAPP_SLOT)?;
+        match name.as_str() {
+            "twilio" => Ok(WhatsAppDriverKind::Twilio),
+            "meta" => Ok(WhatsAppDriverKind::Meta),
+            "log" => Ok(WhatsAppDriverKind::Log),
+            other => match DriverName::new(other) {
+                Ok(name) => Ok(WhatsAppDriverKind::Registered(name)),
+                Err(DriverNameError::Invalid) => Err(serde::de::Error::custom(selector_error(
+                    "driver",
+                    &WHATSAPP_SLOT,
+                ))),
+                Err(error) => Err(serde::de::Error::custom(error)),
+            },
+        }
+    }
 }
 
 /// `notify.whatsapp`.
@@ -405,7 +533,7 @@ pub enum WhatsAppDriverKind {
 #[serde(default)]
 pub struct WhatsAppOptions {
     /// The driver; without one the WhatsApp channel is unavailable.
-    #[config(one_of = "twilio, meta, log")]
+    #[config(driver = "twilio, meta, log", register = "m.whatsapp_driver")]
     pub driver: Option<WhatsAppDriverKind>,
     /// The sender's number in E.164 (Twilio).
     pub from: Option<String>,
@@ -1205,11 +1333,23 @@ mod tests {
         };
         assert_eq!(
             field("sms", "driver").ty,
-            FieldType::choice(&["twilio", "vonage", "sns", "log"])
+            FieldType::Driver {
+                built_in: vec![
+                    "twilio".into(),
+                    "vonage".into(),
+                    "sns".into(),
+                    "aws_sns".into(),
+                    "log".into(),
+                ],
+                register: "m.sms_driver".into(),
+            }
         );
         assert_eq!(
             field("whatsapp", "driver").ty,
-            FieldType::choice(&["twilio", "meta", "log"])
+            FieldType::Driver {
+                built_in: vec!["twilio".into(), "meta".into(), "log".into()],
+                register: "m.whatsapp_driver".into(),
+            }
         );
         assert_eq!(
             field("preferences", "channels").ty,
@@ -1235,5 +1375,84 @@ mod tests {
             defaults["deferred"]["channels"],
             "mail, slack, teams, sms, whatsapp, web_push, push"
         );
+    }
+
+    #[test]
+    fn notify_config_of_today_reads_as_before() {
+        let sms = |value: serde_json::Value| serde_json::from_value::<SmsDriverKind>(value);
+        for (text, kind, written) in [
+            ("twilio", SmsDriverKind::Twilio, "twilio"),
+            ("vonage", SmsDriverKind::Vonage, "vonage"),
+            ("sns", SmsDriverKind::Sns, "sns"),
+            ("aws_sns", SmsDriverKind::Sns, "sns"),
+            ("log", SmsDriverKind::Log, "log"),
+        ] {
+            assert_eq!(sms(serde_json::json!(text)).unwrap(), kind, "{text}");
+            assert_eq!(serde_json::to_value(kind).unwrap(), written);
+        }
+        let whatsapp = |value: serde_json::Value| serde_json::from_value::<WhatsAppDriverKind>(value);
+        for (text, kind) in [
+            ("twilio", WhatsAppDriverKind::Twilio),
+            ("meta", WhatsAppDriverKind::Meta),
+            ("log", WhatsAppDriverKind::Log),
+        ] {
+            assert_eq!(whatsapp(serde_json::json!(text)).unwrap(), kind);
+            assert_eq!(serde_json::to_value(kind).unwrap(), text);
+        }
+        let options: NotifyOptions = serde_json::from_value(serde_json::json!({
+            "sms": {"driver": "aws_sns"},
+            "whatsapp": {"driver": "meta"},
+        }))
+        .unwrap();
+        assert_eq!(options.sms.driver, Some(SmsDriverKind::Sns));
+        assert_eq!(options.whatsapp.driver, Some(WhatsAppDriverKind::Meta));
+        assert_eq!(
+            serde_json::to_value(&options).unwrap()["sms"]["driver"],
+            "sns"
+        );
+        assert!(NotifyOptions::defaults().unwrap()["sms"]["driver"].is_null());
+
+        // Any other lower-case name is a driver a module registers; anything
+        // else is the selector's error, which never repeats the value.
+        let read = sms(serde_json::json!("sandesh")).unwrap();
+        assert_eq!(read, SmsDriverKind::Registered(DriverName::from_static("sandesh")));
+        assert_eq!(serde_json::to_value(read).unwrap(), "sandesh");
+        assert_eq!(
+            SmsDriverKind::Registered(DriverName::from_static("aws_sns")).resolved(),
+            SmsDriverKind::Sns
+        );
+        let error = sms(serde_json::json!("twi-lio")).unwrap_err().to_string();
+        assert_eq!(
+            error,
+            "the driver must be `twilio`, `vonage`, `sns`, `aws_sns`, `log` or the name of an SMS driver registered with m.sms_driver (a lower-case letter, then lower-case letters, digits or _)"
+        );
+        let error = whatsapp(serde_json::json!("Meta")).unwrap_err().to_string();
+        assert_eq!(
+            error,
+            "the driver must be `twilio`, `meta`, `log` or the name of a WhatsApp driver registered with m.whatsapp_driver (a lower-case letter, then lower-case letters, digits or _)"
+        );
+    }
+
+    #[test]
+    fn sms_and_whatsapp_drivers_written_as_a_one_key_table_read_as_before() {
+        let read = serde_json::from_value::<SmsDriverKind>(serde_json::json!({"aws_sns": {}}))
+            .unwrap();
+        assert_eq!(read, SmsDriverKind::Sns);
+        assert_eq!(serde_json::to_value(read).unwrap(), "sns");
+        let read =
+            serde_json::from_value::<WhatsAppDriverKind>(serde_json::json!({"meta": null}))
+                .unwrap();
+        assert_eq!(read, WhatsAppDriverKind::Meta);
+        assert_eq!(serde_json::to_value(read).unwrap(), "meta");
+
+        // A table never names a driver a module registers.
+        let error = serde_json::from_value::<SmsDriverKind>(serde_json::json!({"sandesh": {}}))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            error,
+            "the driver must be `twilio`, `vonage`, `sns`, `aws_sns`, `log` or the name of an SMS driver registered with m.sms_driver (a lower-case letter, then lower-case letters, digits or _)"
+        );
+        assert!(!error.contains("sandesh"), "{error}");
     }
 }
