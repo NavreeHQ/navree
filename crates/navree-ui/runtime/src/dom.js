@@ -71,13 +71,26 @@ export const setTitle = (title) => sTitle?.call(document, title);
  * and not in a part it draws there for itself (`data-ui-own`, a code block's copy button). No hook in
  * stored content drives the runtime, and no element in it stands in for one of the page's own. Neither
  * mark can be written from inside: stored markup loses every `data-ui-*` when it is cleaned.
+ * The nearest mark decides: what lies under a stored wrapper is stored, unless a part of the toolkit's own,
+ * which the wrapper holds, lies between; and a part of the toolkit's own that holds the wrapper opens
+ * nothing in it. An element that carries a mark was written by the server, and is not stored itself.
  * @param {Element} el
  */
-export const stored = (el) => E.matches.call(el, "[data-ui-stored] :not([data-ui-own] *)");
+export const stored = (el) => {
+  const mark = E.closest.call(el, "[data-ui-stored],[data-ui-own]");
+  return !!mark && mark !== el && has(mark, "data-ui-stored");
+};
 /** @param {Element | null} el */
 const own = (el) => (el && !stored(el) ? el : null);
-/** The element with this id, unless it is stored content. @param {string} id @param {Document} [doc] @returns {HTMLElement | null} */
-export const byId = (id, doc = document) => own(D.getElementById.call(doc, id));
+/**
+ * The element with this id that is not stored content: the first one is not it when stored content holds
+ * the same id ahead of it, so the page's own is looked for past it.
+ * @param {string} id @param {Document} [doc] @returns {HTMLElement | null}
+ */
+export const byId = (id, doc = document) => {
+  const found = D.getElementById.call(doc, id);
+  return found && stored(found) ? [...D.querySelectorAll.call(doc, "#" + CSS.escape(id))].find((el) => !stored(el)) || null : found;
+};
 /** @param {string} selector @returns {Element | null} */
 export const one = (selector) => own(D.querySelector.call(document, selector));
 /** The elements that match, stored content left out. @param {string} selector @param {Document} [doc] @returns {Element[]} */

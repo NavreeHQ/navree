@@ -11,8 +11,8 @@ const on = EventTarget.prototype.addEventListener.bind(document);
 /** @param {string} id @returns {any} */
 const byId = (id) => D.getElementById.call(document, id);
 const tables = () => /** @type {NodeListOf<HTMLElement>} */ (D.querySelectorAll.call(document, "[data-ui-table]"));
-/** Whether `el` is laid out right to left. @param {Element} el */
-const rtl = (el) => getComputedStyle(el).direction === "rtl";
+/** Which way `el` reads along a row: 1 to the right, -1 to the left. @param {Element} el */
+const dir = (el) => (getComputedStyle(el).direction === "rtl" ? -1 : 1);
 
 const STICKY_SELECT = "[data-sticky=s]";
 
@@ -285,7 +285,7 @@ function setupGrid(root) {
   const table = root.querySelector("[data-slot=table]");
   table?.setAttribute("role", "grid");
   const cells = /** @type {HTMLElement[]} */ ([...root.querySelectorAll("tbody td")]);
-  let current = cells.find((cell) => cell.getAttribute("tabindex") === "0");
+  const current = cells.find((cell) => cell.getAttribute("tabindex") === "0");
   for (const cell of cells) if (cell !== current) cell.setAttribute("tabindex", "-1");
   // The one tab stop starts on a cell with no control of its own.
   if (!current) (cells.find((cell) => !cell.querySelector("input,button,a[href],select")) || cells[0])?.setAttribute("tabindex", "0");
@@ -304,7 +304,7 @@ function gridKey(e, cell) {
   const row = /** @type {HTMLTableRowElement} */ (cell.parentElement);
   const rows = /** @type {HTMLTableRowElement[]} */ ([...(row.parentElement?.children || [])]);
   const at = cell.cellIndex;
-  const rtl = rtl(cell);
+  const side = dir(cell);
   const byRow = (/** @type {number} */ delta) => {
     const target = rows[Math.max(0, Math.min(rows.length - 1, rows.indexOf(row) + delta))];
     return /** @type {HTMLElement | undefined} */ (target?.cells[Math.min(at, target.cells.length - 1)]);
@@ -313,8 +313,8 @@ function gridKey(e, cell) {
   switch (e.key) {
     case "ArrowUp": to = byRow(-1); break;
     case "ArrowDown": to = byRow(1); break;
-    case "ArrowLeft": to = row.cells[at + (rtl ? 1 : -1)]; break;
-    case "ArrowRight": to = row.cells[at + (rtl ? -1 : 1)]; break;
+    case "ArrowLeft": to = row.cells[at - side]; break;
+    case "ArrowRight": to = row.cells[at + side]; break;
     case "PageUp": to = byRow(-10); break;
     case "PageDown": to = byRow(10); break;
     case "Home": to = e.ctrlKey ? rows[0]?.cells[0] : row.cells[0]; break;
@@ -362,7 +362,7 @@ const digits = /^\d{1,15}$/;
 function valueOf(row, at, kind) {
   const raw = row.cells[at]?.getAttribute("data-v") ?? "";
   const number = kind === "n" ? Number(raw.replace(/[^\d.eE+-]/g, "")) : 0;
-  return raw === "" || Number.isNaN(number) ? null : kind === "n" ? number : raw;
+  return raw === "" || isNaN(number) ? null : kind === "n" ? number : raw;
 }
 
 /**
@@ -589,7 +589,7 @@ on("submit", (e) => {
   /** @type {any} */ (dialog).uiSubmit = () => {
     confirmed = button;
     dialog.close();
-    form.requestSubmit(button);
+    HTMLFormElement.prototype.requestSubmit.call(form, button);
   };
   dialog.showModal();
 }, true);
@@ -619,7 +619,7 @@ function restore(form, back) {
 on("change", (e) => {
   const control = /** @type {HTMLInputElement} */ (e.target);
   const form = control.closest?.("form[data-ui-edit]");
-  if (form) /** @type {HTMLFormElement} */ (form).requestSubmit();
+  if (form) HTMLFormElement.prototype.requestSubmit.call(form);
 });
 
 on("keydown", (e) => {
@@ -660,8 +660,7 @@ on("pointerdown", (e) => {
   e.preventDefault();
   freezeWidths(root);
   const th = /** @type {HTMLElement} */ (handle.closest("th"));
-  const rtl = rtl(th);
-  resizing = { root, handle, start: e.clientX, width: th.getBoundingClientRect().width, side: rtl ? -1 : 1 };
+  resizing = { root, handle, start: e.clientX, width: th.getBoundingClientRect().width, side: dir(th) };
   /** @type {HTMLElement} */ (handle).setPointerCapture?.(e.pointerId);
 });
 
@@ -678,9 +677,8 @@ on("pointerup", () => {
 
 on("keydown", (e) => {
   const target = /** @type {HTMLElement} */ (e.target);
-  const cell = target.matches?.("td[tabindex]") && target.closest("[data-ui-grid]") ? target : null;
-  if (cell) {
-    gridKey(e, cell);
+  if (target.matches?.("td[tabindex]") && target.closest("[data-ui-grid]")) {
+    gridKey(e, target);
     return;
   }
   if (e.key === "Escape") {
@@ -692,10 +690,8 @@ on("keydown", (e) => {
   if (!root) return;
   e.preventDefault();
   freezeWidths(root);
-  const rtl = rtl(target);
-  const grow = (e.key === "ArrowRight") !== rtl;
   // From the width the column has now, which a late face or a cell that filled in may have changed since it was drawn.
-  setWidth(root, target, /** @type {Element} */ (target.closest("th")).getBoundingClientRect().width + (grow ? 16 : -16));
+  setWidth(root, target, /** @type {Element} */ (target.closest("th")).getBoundingClientRect().width + (e.key === "ArrowRight" ? 16 : -16) * dir(target));
   clearTimeout(keyTimers.get(target));
   keyTimers.set(target, setTimeout(() => commitWidths(root), 400));
 });

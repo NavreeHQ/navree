@@ -19,7 +19,7 @@
 // Every read of the page goes through the prototypes, so no element named like a
 // method (`<img name="elementFromPoint">`, `<input name="requestSubmit">`) changes
 // what this does.
-import { active, all, attr, body, every, field, has, holds, on, root as docRoot, set, unset, D as DP, E as EP, T as TP } from "./dom.js";
+import { active, all, attr, body, field, has, holds, on, root as docRoot, set, unset, D as DP, E as EP, T as TP } from "./dom.js";
 
 const ROOT = "[data-ui-sortable]";
 const LIST = "[data-slot=sortable-list]";
@@ -40,6 +40,13 @@ const NP = Node.prototype;
  * @param {any} node @param {string} selector @returns {Element | null}
  */
 const closest = (node, selector) => (node instanceof Element ? EP.closest.call(node, selector) : null);
+/**
+ * The elements of the page that match `selector` (one compound selector) and are not in stored content: a sortable
+ * or a form that sends itself into view there is left alone. Like upload's, the lookup leaves out all that is
+ * under a stored wrapper: no part of the toolkit's own holds a sortable.
+ * @param {string} selector
+ */
+const every = (selector) => [...DP.querySelectorAll.call(document, selector + ":not([data-ui-stored] *)")];
 /** @param {Node} parent @param {Node} node @param {Node | null} before */
 const insert = (parent, node, before) => {
   const own = /** @type {any} */ (EP).moveBefore;
@@ -499,7 +506,8 @@ function tidy() {
     }
     const region = closest(root, "[data-ui-region]");
     const src = region && attr(region, "data-ui-src");
-    if (!region || !src) continue;
+    // A region with no source (or `#`) has none to rewrite: `#` would be read as this page.
+    if (!region || !src || src === "#") continue;
     const url = new URL(src, location.href);
     for (const list of listsOf(root)) {
       if (has(list, "data-paged")) url.searchParams.set("show." + listKey(list), String(itemsOf(list).length));

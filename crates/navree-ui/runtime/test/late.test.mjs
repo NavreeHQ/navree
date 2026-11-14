@@ -102,3 +102,42 @@ test("a page dropped as overtaken while its styles load leaves no history entry"
   assert.deepEqual(page.pushed, ["https://app.test/deals/5"]);
   assert.equal($("main").textContent, "Deal 5");
 });
+
+// Something written on every answer would have a navigation, or a region, fetch for ever. It asks again
+// twice at most, then shows what came.
+test("a page whose every answer is overtaken by a write is shown after at most three fetches", async () => {
+  history.replaceState(null, "", "/deals/5");
+  $("main").innerHTML = `<a id="six" href="/deals/6">6</a>`;
+  page.fetched.length = 0;
+  page.pushed.length = 0;
+  page.assigned.length = 0;
+  for (let n = 1; n <= 6; n++) {
+    page.answers.push(() => {
+      // Another tab wrote while this answer was on its way.
+      page.channels[0].onmessage();
+      return answer(html(`Deal 6, answer ${n}`), { headers: PAGE });
+    });
+  }
+  $("six").click();
+  await settle();
+  assert.equal(page.fetched.length, 3);
+  assert.equal($("main").textContent, "Deal 6, answer 3");
+  assert.deepEqual(page.pushed, ["https://app.test/deals/6"]);
+  assert.deepEqual(page.assigned, []);
+  page.answers.length = 0;
+});
+
+test("a region whose every answer is overtaken by a write is drawn after at most three fetches", async () => {
+  page.fetched.length = 0;
+  for (let n = 1; n <= 6; n++) {
+    page.answers.push(() => {
+      page.channels[0].onmessage();
+      return answer(`<div id="kpis" data-ui-region data-ui-src="/deals/kpis">₹${n},00,000</div>`, { headers: PAGE });
+    });
+  }
+  await refresh("kpis");
+  await settle();
+  assert.equal(page.fetched.length, 3);
+  assert.equal($("kpis").textContent, "₹3,00,000");
+  page.answers.length = 0;
+});

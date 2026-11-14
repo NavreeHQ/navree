@@ -88,7 +88,8 @@ function run(cmd, from) {
     case "toggle_attr": if (STATE.test(b)) target?.toggleAttribute(b); break;
     case "dispatch": from.dispatchEvent(new CustomEvent(a, { bubbles: true })); break;
     case "focus": target?.focus(); break;
-    case "submit": /** @type {HTMLFormElement | null} */ (target)?.requestSubmit?.(); break;
+    // Through the prototype: a field named `requestSubmit` can't stand in for the method.
+    case "submit": if (target instanceof HTMLFormElement) HTMLFormElement.prototype.requestSubmit.call(target); break;
     // Text only, never markup: see `write`.
     case "text": if (target && typeof b === "string") write(target, b); break;
     case "count": {

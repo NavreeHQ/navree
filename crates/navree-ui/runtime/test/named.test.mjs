@@ -13,11 +13,15 @@ const page = install({
     <div id="t" data-ui-table data-total="2" data-l='{"selected":"{n} selected"}'>
       <div data-slot="table-bulk"><span data-slot="bulk-count"></span></div>
       <form id="bulk" method="post" action="/invoices/bulk" data-ui-bulk>
+        <input name="requestSubmit">
         <button id="void" type="submit" data-ui-confirm="Cancel {n} invoices?">Cancel</button>
       </form>
       <table><tbody><tr data-key="k1"><td><input id="box" type="checkbox" data-ui-select-row value="k1"></td></tr></tbody></table>
-      <dialog id="t-confirm"><p data-slot="dialog-description"></p></dialog>
+      <form id="edit" method="post" action="/invoices/k1/title" data-ui-edit><input id="cell" name="title" value="Paid"><input name="requestSubmit"></form>
+      <dialog id="t-confirm"><p data-slot="dialog-description"></p><button id="yes" type="button" data-ui-confirm-yes>Yes</button></dialog>
     </div>
+    <form id="plain" method="get" action="/invoices/search"><input name="q" value="UPI"><input name="requestSubmit"></form>
+    <button id="send-plain" type="button" data-ui-click='[["submit","plain"]]'>Search</button>
     <form id="note" method="post" action="/invoices/1/note" data-ui-form>
       <input id="text" name="text" value="Paid by UPI"><input name="requestSubmit">
       <button id="save" type="submit">Save</button>
@@ -71,4 +75,52 @@ test("what was typed while a save was on its way is sent after it, whatever the 
   await settle();
   assert.equal(page.fetched.length, 2);
   assert.match(String(page.fetched[1].init.body), /14\+November/);
+});
+
+/** What a browser does with a field named like a form's method: the form's property is the field. @param {string} form */
+function shadowed(form) {
+  Object.defineProperty($(form), "requestSubmit", { value: $(form).querySelector("[name=requestSubmit]"), configurable: true });
+  return () => delete $(form).requestSubmit;
+}
+
+test("the submit command sends a form that has a field named like the method", async () => {
+  page.submitted.length = 0;
+  page.errors.length = 0;
+  const restore = shadowed("plain");
+  $("send-plain").click();
+  await settle();
+  restore();
+  assert.deepEqual(page.errors, []);
+  assert.equal(page.submitted.length, 1);
+  assert.equal(page.submitted[0].form, $("plain"));
+});
+
+test("a bulk form that asked first sends itself after the answer, whatever its fields are named", async () => {
+  page.submitted.length = 0;
+  page.errors.length = 0;
+  sessionStorage.setItem("navree-table:t:/invoices", JSON.stringify({ mode: "ids", ids: ["k1"], ex: [], key: "" }));
+  const restore = shadowed("bulk");
+  $("void").click();
+  assert.equal($("t-confirm").hasAttribute("open"), true);
+  assert.deepEqual(page.submitted, []);
+  $("yes").click();
+  await settle();
+  restore();
+  assert.deepEqual(page.errors, []);
+  assert.equal(page.submitted.length, 1);
+  assert.equal(page.submitted[0].form, $("bulk"));
+  assert.equal(page.submitted[0].submitter, $("void"));
+});
+
+test("an edited cell sends its form whatever the form's fields are named", async () => {
+  page.submitted.length = 0;
+  page.errors.length = 0;
+  const restore = shadowed("edit");
+  $("cell").value = "Paid by NEFT";
+  fire($("cell"), "change");
+  await settle();
+  restore();
+  assert.deepEqual(page.errors, []);
+  assert.equal(page.submitted.length, 1);
+  assert.equal(page.submitted[0].form, $("edit"));
 });
