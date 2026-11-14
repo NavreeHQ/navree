@@ -17,6 +17,9 @@ struct WebPageView {
     let screen: ScreenID
     let client: NativeClient
     let configuration: ShellConfiguration
+    /// The page could not be shown: it never arrived, it was stopped before
+    /// it was, or its process ended twice. The screen shows it failed.
+    let failed: @MainActor () -> Void
     /// The title the page gives itself.
     let titled: @MainActor (String) -> Void
 
@@ -57,6 +60,10 @@ struct WebPageView {
         private var title: NSKeyValueObservation?
         private(set) var serial: Int?
         private var loaded: URL?
+        /// Whether a page of this load has been shown.
+        private var shown = false
+        /// How often the page's process has ended since its serial moved.
+        private var ended = 0
 
         init(_ parent: WebPageView) {
             self.parent = parent
@@ -75,8 +82,10 @@ struct WebPageView {
 
         /// Copies the session in, then loads: from the network, or the markup the app supplies.
         func load(_ url: URL, serial: Int, in view: WKWebView) {
+            if serial != self.serial { ended = 0 }
             self.serial = serial
             loaded = url
+            shown = false
             let jar = (parent.client.effects as? SystemEffects)?.jar
             let content = parent.configuration.webContent
             Task { @MainActor in
@@ -116,10 +125,34 @@ struct WebPageView {
             if navigationAction.navigationType == .linkActivated || !isThePagesOwn(url) {
                 // A link, or a page that would leave for elsewhere: the core decides.
                 parent.client.send(.webLink(screen: parent.screen, url: url.absoluteString))
+                // A first page stopped on its way is a screen that failed, not a blank one.
+                if !shown { parent.failed() }
                 return .cancel
             }
             // A form posted, a redirect of the page's own, the page's own reload: it stays.
             return .allow
+        }
+
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            shown = true
+        }
+
+        func webView(
+            _ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error
+        ) {
+            // A first page that never arrived is a screen that failed; a load
+            // the web view gave up for a newer one is not.
+            let error = error as NSError
+            if !shown, !(error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled) { parent.failed() }
+        }
+
+        /// The page's process ended (the system took its memory, or it
+        /// crashed): the page is loaded again once; a second end is a screen
+        /// that failed, never a blank one.
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            ended += 1
+            guard ended == 1, let loaded, let serial else { return parent.failed() }
+            load(loaded, serial: serial, in: webView)
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
