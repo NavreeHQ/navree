@@ -168,8 +168,12 @@ pub struct Provisioning {
     /// owner's role never changes). Default `true`.
     pub sync_roles: bool,
     /// Create users whose email domain is not a verified domain of the
-    /// connection. Such emails never link to an existing user. Default
-    /// `false`.
+    /// connection. Such emails never link to an existing user. It counts for
+    /// a connection the app owns ([`SsoOwner::App`](crate::SsoOwner::App)); a
+    /// workspace's or an organization's connection needs
+    /// `sso.tenants.unverified_emails = true` too. Inside the verified
+    /// domains it also creates the users whose email the identity provider
+    /// doesn't vouch for, whoever owns the connection. Default `false`.
     pub allow_unverified_emails: bool,
     /// Where the profile is read from.
     pub attributes: AttributeMapping,
