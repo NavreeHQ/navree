@@ -11,8 +11,10 @@ import SwiftUI
 /// environment), so it runs with no server at all.
 @main
 struct DemoApp: App {
+    #if canImport(UIKit)
     /// The push token and a tapped notification, passed on to the shell.
     @UIApplicationDelegateAdaptor(NavreeAppDelegate.self) private var delegate
+    #endif
     private let configuration = DemoConfiguration.make()
 
     var body: some Scene {
