@@ -12,6 +12,10 @@ public final class PictureLoader {
     private let jar: CookieJar?
     private let session: URLSession
     private let kept = NSCache<NSURL, NSData>()
+    /// The system's cache of the answers, in memory only.
+    private let answers: URLCache
+    /// Moves on when the session ends: a picture asked for before is not kept.
+    private var era = 0
     /// The origin a picture's address is read against.
     public let site: Origin?
     /// Other hosts pictures may come from, with no cookie.
@@ -25,7 +29,9 @@ public final class PictureLoader {
         self.hosts = hosts
         let configuration = HTTPTransport.prepared(configuration, timeout: 30)
         // Pictures may be cached as the system caches any answer.
-        configuration.urlCache = URLCache(memoryCapacity: 8 << 20, diskCapacity: 0)
+        let answers = URLCache(memoryCapacity: 8 << 20, diskCapacity: 0)
+        self.answers = answers
+        configuration.urlCache = answers
         configuration.requestCachePolicy = .useProtocolCachePolicy
         session = URLSession(configuration: configuration, delegate: RedirectRefuser(), delegateQueue: nil)
         kept.totalCostLimit = 32 << 20
@@ -54,11 +60,21 @@ public final class PictureLoader {
         if let data = kept.object(forKey: url as NSURL) { return data as Data }
         guard address(url.absoluteString) != nil else { return nil }
         let request = request(url)
+        let era = era
+        let asked = jar?.session
         guard let (data, response) = try? await session.data(for: request),
-            let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+            let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode), era == self.era
         else { return nil }
-        if isOurs(url) { jar?.take(from: http, for: url) }
+        if isOurs(url) { jar?.take(from: http, for: url, session: asked) }
         kept.setObject(data as NSData, forKey: url as NSURL, cost: data.count)
         return data
+    }
+
+    /// The session ended: every picture kept, in memory and in the system's
+    /// cache, goes, and a picture still on its way is not kept.
+    public func forget() {
+        era += 1
+        kept.removeAllObjects()
+        answers.removeAllCachedResponses()
     }
 }

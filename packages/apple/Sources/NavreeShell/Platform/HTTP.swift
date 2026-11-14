@@ -105,6 +105,8 @@ public final class HTTPTransport: Transport {
         }
         let number = request.request
         let session = session
+        // The cookies an answer sets belong to the session it was asked in.
+        let asked = cookies.session
         tasks[number] = Task { [weak self] in
             let outcome: Result<(Data, URLResponse), any Error>
             do {
@@ -116,7 +118,7 @@ public final class HTTPTransport: Transport {
             switch outcome {
             case .success(let (data, response)):
                 guard let http = response as? HTTPURLResponse else { return answer(.failed(number, .other)) }
-                self.cookies.take(from: http, for: url)
+                self.cookies.take(from: http, for: url, session: asked)
                 answer(Self.response(number, http, data))
             case .failure(let error):
                 if (error as? URLError)?.code == .cancelled || Task.isCancelled { return }
