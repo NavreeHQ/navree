@@ -276,3 +276,21 @@ private func labels(_ nodes: [Navree.Node]) -> [String] {
     #expect(ContentRules.cellControlLook(bar: .window) == .smallPushButton)
     #expect(ContentRules.cellControlLook(bar: .navigation) == .borderless)
 }
+
+@Test func aMacDetailsReadableWidthGrowsWithThePersonsText() {
+    #expect(CompositionRules.readableWidth(bar: .window, depth: .pushed, textScale: 1) == 704)
+    // Text a quarter larger: a line holds as many words.
+    #expect(CompositionRules.readableWidth(bar: .window, depth: .pushed, textScale: 1.25) == 880)
+    // Never narrower than the grouped form's own width.
+    #expect(CompositionRules.readableWidth(bar: .window, depth: .sheet, textScale: 0.9) == 704)
+    #expect(CompositionRules.readableWidth(bar: .navigation, depth: .pushed, textScale: 1.25) == nil)
+}
+
+@Test func aMacListsSymbolsStandInOneColumnAndItsBorderlessButtonsReadAsControls() {
+    // Customer, Payment and Ships from start at one edge, whatever each symbol's width.
+    #expect(ContentRules.symbolColumn(bar: .window) == 20)
+    #expect(ContentRules.symbolColumn(bar: .navigation) == nil)
+    // "Saved replies" in the accent on a Mac; the system's own tint on iPhone and iPad.
+    #expect(ContentRules.lowProminenceWords(bar: .window) == .accent)
+    #expect(ContentRules.lowProminenceWords(bar: .navigation) == .system)
+}

@@ -460,6 +460,7 @@ struct RetryRow: View {
 struct FactContent: View {
     let fact: Navree.Fact
     @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .body) private var column: CGFloat = CGFloat(ContentRules.symbolColumn(bar: .current) ?? 0)
 
     private var value: String {
         fact.value.flatMap { RecordRules.words(in: $0) }.joined(separator: " ")
@@ -479,7 +480,7 @@ struct FactContent: View {
         } else {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 if let icon = fact.icon {
-                    Glyph(icon: icon).foregroundStyle(.secondary)
+                    symbol(icon)
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(fact.label).font(.subheadline).foregroundStyle(.secondary)
@@ -495,9 +496,19 @@ struct FactContent: View {
 
     @ViewBuilder private var label: some View {
         if let icon = fact.icon {
-            Label { Text(fact.label) } icon: { Glyph(icon: icon).foregroundStyle(.secondary) }
+            Label { Text(fact.label) } icon: { symbol(icon) }
         } else {
             Text(fact.label)
+        }
+    }
+
+    /// A fact's symbol, in the column every symbol of the list stands in
+    /// where the system's lists give them one (``ContentRules/symbolColumn(bar:)``).
+    @ViewBuilder private func symbol(_ icon: Navree.Icon) -> some View {
+        if ContentRules.symbolColumn(bar: .current) != nil {
+            Glyph(icon: icon).foregroundStyle(.secondary).frame(width: column)
+        } else {
+            Glyph(icon: icon).foregroundStyle(.secondary)
         }
     }
 }

@@ -74,6 +74,30 @@ public struct ColumnWidth: Sendable, Hashable {
 }
 
 public enum ContentRules {
+    /// The width of the column a symbol beside a label stands in, where the
+    /// system's lists give their symbols one column (a Mac's, as its
+    /// sidebar does): every label then starts at one edge, whatever each
+    /// symbol's own width. Grown with the person's text. iPhone and iPad
+    /// lists already set a label's symbol in a column of their own (nil).
+    public static func symbolColumn(bar: ActionBar) -> Double? {
+        bar == .window ? 20 : nil
+    }
+
+    /// How a button of low prominence (a borderless button: "Saved replies")
+    /// writes its words: on a Mac in the accent colour, as the Mac's own
+    /// borderless buttons in content read as controls (Mail's "Show
+    /// Details", Finder's "Show More"); the system's borderless button
+    /// alone draws grey words there, which read as a label. iPhone and iPad
+    /// draw a borderless button in the tint already.
+    public enum LowProminenceWords: Sendable, Equatable {
+        case accent
+        case system
+    }
+
+    public static func lowProminenceWords(bar: ActionBar) -> LowProminenceWords {
+        bar == .window ? .accent : .system
+    }
+
     /// A screen that is mostly one list of records gets plain rows; anything
     /// else (a record's facts, sections, forms) gets inset groups.
     public static func list(_ body: Navree.Node) -> ListLayout {

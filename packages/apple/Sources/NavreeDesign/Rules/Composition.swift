@@ -85,12 +85,14 @@ public enum CompositionRules {
     /// "always centered inside the view's layout margin"). A destination's
     /// own screen (a dashboard of tiles) keeps the window's width, and so do
     /// iPhone and iPad, whose windows the system already sizes (`nil`).
-    public static func readableWidth(bar: ActionBar, depth: ScreenDepth) -> Double? {
-        bar == .window && depth != .root ? macReadableWidth : nil
+    public static func readableWidth(bar: ActionBar, depth: ScreenDepth, textScale: Double = 1) -> Double? {
+        bar == .window && depth != .root ? (macReadableWidth * max(textScale, 1)).rounded() : nil
     }
 
     /// The width a Mac's grouped form stops at, measured on macOS 27.2 at the
-    /// default text size.
+    /// default text size; it grows with the person's text (`textScale`, how
+    /// much larger than the default their body text is), so a line holds as
+    /// many words at every size.
     public static let macReadableWidth = 704.0
 
     // MARK: One leading edge

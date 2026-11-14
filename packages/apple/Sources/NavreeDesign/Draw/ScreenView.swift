@@ -38,6 +38,8 @@ public struct ScreenView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.navreeBesideList) private var besideList
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// How much larger than the default the person's body text is.
+    @ScaledMetric(relativeTo: .body) private var textScale: CGFloat = 1
 
     public init(screen: Navree.Screen, depth: ScreenDepth, appName: String = "", notice: Notice? = nil, failure: Notice? = nil) {
         // The head row's buttons go to the bar before the day control is
@@ -127,7 +129,7 @@ public struct ScreenView: View {
         } else if !panes.isEmpty {
             PaneScreenBody(panes: panes)
         } else if CompositionRules.isComposed(body) {
-            ComposedScreenBody(body: body, readable: CompositionRules.readableWidth(bar: .current, depth: depth))
+            ComposedScreenBody(body: body, readable: CompositionRules.readableWidth(bar: .current, depth: depth, textScale: Double(textScale)))
         } else if let table, sections.count == 1,
             ContentRules.table(table, width: width, accessibilityText: typeSize.isAccessibilitySize) == .columns
         {
@@ -148,6 +150,7 @@ public struct ScreenView: View {
                 }
             )
             .modifier(ListLook(layout: ContentRules.list(body)))
+            .modifier(ReadableList(width: CompositionRules.readableWidth(bar: .current, depth: depth, textScale: Double(textScale))))
             .sheetListFits(depth == .sheet)
             .modifier(Editing(table: table, region: sections.first { $0.table != nil }?.region, tree: body, reorders: sections.contains { $0.list?.reorder != nil }))
         }
@@ -588,7 +591,13 @@ struct Subtitle: ViewModifier {
             content.navigationSubtitle(text)
             #endif
         } else {
+            #if os(macOS)
+            // A Mac window's bar says this screen's own subtitle, none when it
+            // has none, never the subtitle of a sheet over it.
+            content.navigationSubtitle("")
+            #else
             content
+            #endif
         }
     }
 }
@@ -636,3 +645,21 @@ struct ListLook: ViewModifier {
     }
 }
 
+
+/// A list no wider than a readable width, when there is one: centred in its
+/// column by margins, so it still scrolls from the column's edge, as a grouped
+/// form's sections stop at their width in a wide window (System Settings).
+struct ReadableList: ViewModifier {
+    let width: Double?
+    @State private var room: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        if let width {
+            content
+                .contentMargins(.horizontal, max(0, (room - CGFloat(width)) / 2), for: .scrollContent)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { room = $0 }
+        } else {
+            content
+        }
+    }
+}
