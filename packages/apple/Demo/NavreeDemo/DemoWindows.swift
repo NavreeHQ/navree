@@ -5,7 +5,8 @@ import NavreeShell
 /// The demo's windows and the icons it offers, as its launch arguments say:
 /// `-NavreeWindowSize 1180x760` (a first window's size), `-NavreeMinimumSize
 /// 760x480`, `-NavreeToolbarLabels iconOnly|titleAndIcon|titleOnly`,
-/// `-NavreeTabs NO`. By default the system's own windows.
+/// `-NavreeTabs NO`. By default the system's own windows. On iPhone and iPad
+/// the person may choose between the saffron icon and the indigo one.
 enum DemoWindows {
     static func make(_ defaults: UserDefaults) -> WindowLook {
         WindowLook(
@@ -18,7 +19,14 @@ enum DemoWindows {
     }
 
     static func icons(_ defaults: UserDefaults) -> [AppIcon] {
+        #if os(iOS)
+        [
+            AppIcon(name: nil, label: "Saffron", preview: "AppIconPreview"),
+            AppIcon(name: "AppIconIndigo", label: "Indigo", preview: "AppIconIndigoPreview"),
+        ]
+        #else
         []
+        #endif
     }
 
     /// `1180x760` as a size in points.

@@ -216,7 +216,7 @@ struct ColumnPage: View {
                 #if !os(macOS)
                 if part == .list, state.chrome, let user = client.app?.user {
                     ToolbarItem(placement: .primaryAction) {
-                        AccountMenu(user: user, client: client).modifier(BarItemLook(.bar))
+                        AccountMenu(user: user, client: client, icons: configuration.icons).modifier(BarItemLook(.bar))
                     }
                 }
                 #endif
