@@ -16,6 +16,22 @@ import java.util.concurrent.atomic.AtomicBoolean
  * answer or a slow thread of the session before writes survives the wipe,
  * and nothing it reads is handed to the session after.
  */
+/**
+ * Runs the work of the end of a session so that it always lets the queue go
+ * on: [arm] sets the time limit before anything else runs (it is given
+ * [done] to call when the limit is reached), and a failure of any kind in
+ * [work] calls [done] at once. [done] may then be called more than once;
+ * [StoredState] takes only the first.
+ */
+fun endWithLimit(done: () -> Unit, arm: (release: () -> Unit) -> Unit, work: (done: () -> Unit) -> Unit) {
+    arm(done)
+    try {
+        work(done)
+    } catch (_: Throwable) {
+        done()
+    }
+}
+
 class StoredState(private val executor: (Runnable) -> Unit) {
     private val lock = Any()
     private val waiting = ArrayDeque<(() -> Unit) -> Unit>()
@@ -84,7 +100,8 @@ class StoredState(private val executor: (Runnable) -> Unit) {
                 val done = { if (finished.compareAndSet(false, true)) next() }
                 try {
                     task(done)
-                } catch (_: Exception) {
+                } catch (_: Throwable) {
+                    // A failure of any kind releases the queue.
                     done()
                 }
             },
