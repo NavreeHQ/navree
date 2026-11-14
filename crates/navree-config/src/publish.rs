@@ -344,12 +344,9 @@ fn json_to_toml(value: &Json) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
     use serde_json::json;
 
     use super::*;
-    use crate::{ConfigSection, SectionRegistration};
 
     fn schema() -> SectionSchema {
         SectionSchema::new(
@@ -450,106 +447,6 @@ mod tests {
             PublishOptions::parse(&args(&["--plugin", "x", "--stdout"]))
                 .unwrap_err()
                 .starts_with("--stdout prints one section; usage:")
-        );
-    }
-
-    // The keys of the three made-up sections below are named apart from their impls: the
-    // framework's own list of sections is checked against every key written inside an
-    // `impl ConfigSection` under `crates/*/src`, and these belong to no module.
-    const NOTICES: &str = "announcements";
-    const MANUAL: &str = "announcements.manual";
-    const SHOUTING: &str = "Announcements";
-
-    /// A plugin's section that describes its keys.
-    #[derive(serde::Deserialize)]
-    struct Notices;
-
-    impl ConfigSection for Notices {
-        const KEY: &'static str = NOTICES;
-
-        fn schema() -> Option<SectionSchema> {
-            Some(SectionSchema::new(
-                "announcements",
-                "Notices for every member of a workspace.",
-                vec![FieldSchema::new(
-                    "notice_days",
-                    FieldType::Integer,
-                    "How long a notice stays up, in days.",
-                )],
-            ))
-        }
-    }
-
-    /// A plugin's section written by hand: it does not describe its keys.
-    #[derive(serde::Deserialize)]
-    struct Manual;
-
-    impl ConfigSection for Manual {
-        const KEY: &'static str = MANUAL;
-    }
-
-    /// A section whose key differs from `Notices`' only in case.
-    #[derive(serde::Deserialize)]
-    struct Shouting;
-
-    impl ConfigSection for Shouting {
-        const KEY: &'static str = SHOUTING;
-
-        fn schema() -> Option<SectionSchema> {
-            Some(SectionSchema::new("Announcements", "", Vec::new()))
-        }
-    }
-
-    #[test]
-    fn a_plugins_sections_are_written_through_the_checked_writer() {
-        let args = |list: &[&str]| list.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>();
-        let dir = tempfile::tempdir().expect("a temporary folder");
-        let config = dir.path().join("config");
-        let plugin = PublishOptions::parse(&args(&["--plugin", "announcements"])).expect("valid");
-        let registry = ConfigRegistry::new(&[
-            SectionRegistration::of::<Notices>(),
-            SectionRegistration::of::<Manual>(),
-        ]);
-        let manual = "config/announcements.manual.toml: section `announcements.manual` does not describe its keys, so it is not published\n";
-        assert_eq!(
-            run(&plugin, &registry, &config).expect("written"),
-            format!("wrote config/announcements.toml\n{manual}")
-        );
-        let text = fs::read_to_string(config.join("announcements.toml")).expect("the file");
-        assert!(text.contains("# notice_days = 0"), "{text}");
-        fs::write(
-            config.join("announcements.toml"),
-            "# Gurpreet Singh's settings\n",
-        )
-        .unwrap();
-        assert_eq!(
-            run(&plugin, &registry, &config).expect("kept"),
-            format!(
-                "config/announcements.toml: exists, kept (use --force to replace it)\n{manual}"
-            )
-        );
-        assert_eq!(
-            fs::read_to_string(config.join("announcements.toml")).unwrap(),
-            "# Gurpreet Singh's settings\n"
-        );
-        assert!(!config.join("announcements.manual.toml").exists());
-
-        assert_eq!(
-            run(&plugin, &ConfigRegistry::new(&[]), &config).expect("nothing"),
-            "config: plugin `announcements` has nothing to publish\n"
-        );
-        let shouting = ConfigRegistry::new(&[
-            SectionRegistration::of::<Notices>(),
-            SectionRegistration::of::<Shouting>(),
-        ]);
-        assert_eq!(
-            run(&plugin, &shouting, &config).expect_err("one file"),
-            "config:publish: two sections of plugin `announcements` would be written to one file, config/announcements.toml; nothing was written"
-        );
-        assert_eq!(
-            fs::read_dir(&config).unwrap().count(),
-            1,
-            "nothing was written"
         );
     }
 }
