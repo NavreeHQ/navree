@@ -288,9 +288,11 @@ impl AuthService {
     /// [`CONFIRM_TTL_SECS`](crate::CONFIRM_TTL_SECS) seconds ago and not
     /// answered before, signed by one of the user's passkeys with user
     /// verification. The password or a code (for clients without passkeys)
-    /// are checked as [`confirm`](AuthService::confirm) checks them. The
-    /// session's sign-in counts as recent from now (`auth_time`, returned in
-    /// Unix seconds), as after `POST /auth/confirm`.
+    /// are checked as [`confirm`](AuthService::confirm) checks them. It
+    /// approves `action` only: the session's `authenticated_at` (what
+    /// `#[recent_auth]` routes read) stays as it was, so a confirmation of
+    /// one action is never a step-up for anything else. The time of the
+    /// confirmation is returned in Unix seconds.
     ///
     /// A refused passkey is [`AuthError::ConfirmationRefused`] (403
     /// `confirmation_refused`), audited as `auth.confirmation_refused`; a
@@ -369,7 +371,9 @@ impl AuthService {
             }
         }
         let now = self.clock.now();
-        if let Some(session_id) = session_id {
+        // A confirmation of one action approves that action only: the
+        // session's sign-in does not count as recent because of it.
+        if let (Some(session_id), None) = (session_id, action) {
             let user_id = user.id;
             self.write(Some(user_id), |uow| async move {
                 RefreshToken::query()

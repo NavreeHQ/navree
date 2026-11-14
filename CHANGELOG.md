@@ -16,6 +16,11 @@ every `@navree/*` package carries the same version.
   signed with a key the cached set has is verified without waiting for a fetch that another token
   started, and the tokens that need a fetch share one, still at most once every 30 seconds for a
   key id the set lacks. How long a key set is kept is unchanged.
+### Security
+
+- `AuthService::confirm_action` approves its action only: it no longer records the confirmation as
+  the session's `authenticated_at`, so `#[recent_auth]` routes and refreshed tokens keep the
+  sign-in time they had. `POST /auth/confirm` and `POST /auth/confirm/passkey` still step up.
 
 ### Fixed
 
