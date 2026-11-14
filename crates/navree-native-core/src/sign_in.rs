@@ -422,7 +422,7 @@ impl Core {
     /// Somebody may be signed in now: the shell says who, and everything on
     /// screen is theirs to see again.
     pub(crate) fn signed_in(&mut self) {
-        self.fetch_shell();
+        self.who_may_have_changed(true);
         for inner in self.inner.screens.values_mut() {
             inner.stale = true;
         }
@@ -454,7 +454,7 @@ impl Core {
             }
             None => self.dismissed(id),
         }
-        self.fetch_shell();
+        self.who_may_have_changed(true);
     }
 
     /// A session with no hand-over ended: where it came back to is opened
@@ -468,7 +468,7 @@ impl Core {
             return;
         };
         // Who is signed in may have changed, and with it everything on screen.
-        self.fetch_shell();
+        self.who_may_have_changed(true);
         for inner in self.inner.screens.values_mut() {
             inner.stale = true;
         }
