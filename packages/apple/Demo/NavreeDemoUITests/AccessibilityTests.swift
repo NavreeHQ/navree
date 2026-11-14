@@ -56,7 +56,9 @@ final class AccessibilityTests: XCTestCase {
         let first = again.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "CS-"))
         wait(first.firstMatch, "An order in the list")
         try tapFirst(first, "An order in the list")
-        wait(again.buttons["Close"].firstMatch, "The order's sheet")
+        // The sheet's leading control: Close for a glance, Cancel for a task.
+        let leading = again.buttons.matching(NSPredicate(format: "label IN %@", ["Close", "Cancel"])).firstMatch
+        wait(leading, "The order's sheet")
         settle(again)
         check(again, "store-02-order-sheet")
 
