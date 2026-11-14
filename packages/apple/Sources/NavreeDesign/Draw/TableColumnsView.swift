@@ -23,18 +23,20 @@ struct TableColumnsView: View {
     struct Column: Identifiable, Hashable {
         let id: Int
         let label: String
-        let width: ColumnWidth
+        let width: Double
+        /// The name's column, which takes what the others leave.
+        let flexible: Bool
     }
 
     @Environment(\.navree) private var context
+    /// The table's own width, as it was laid out.
+    @State private var available: Double?
 
     private var target: String { region ?? table.id ?? "" }
 
     var body: some View {
         let records = table.rows.enumerated().map { Record(id: $0.offset, cells: $0.element.cells, action: $0.element.action) }
-        let columns = ContentRules.shownColumns(table).map { index in
-            Column(id: index, label: table.columns[index].label, width: Self.width(of: index, in: table))
-        }
+        let columns = Self.columns(of: table, available: available)
         let last = records.last?.id
         VStack(spacing: 0) {
             Table(records) {
@@ -50,9 +52,13 @@ struct TableColumnsView: View {
                                 }
                             }
                     }
-                    .width(min: column.width.min, ideal: column.width.ideal, max: column.width.max ?? .infinity)
+                    // As wide as it asks, no more and no less (the table gives
+                    // no heed to an ideal width alone); the name, from its
+                    // least, takes what the others leave.
+                    .width(min: column.width, max: column.flexible ? .infinity : column.width)
                 }
             }
+            .onGeometryChange(for: Double.self) { Double($0.size.width) } action: { available = $0 }
             if let more = table.more {
                 let status = context.list(target)
                 if status.failed {
@@ -66,13 +72,24 @@ struct TableColumnsView: View {
         }
     }
 
-    /// A column's width from its widest words, its heading's or a cell's.
-    static func width(of index: Int, in table: Navree.Table) -> ColumnWidth {
-        let column = table.columns[index]
-        let cells = table.rows.prefix(60).compactMap { index < $0.cells.count ? $0.cells[index] : nil }
-        let controls = cells.contains { !RecordRules.controls(in: $0).isEmpty }
-        let words = [column.label] + cells.compactMap { RecordRules.words(in: $0).first }
-        return ContentRules.columnWidth(ContentRules.columnKind(column, controls: controls), widest: CellType.widest(words))
+    /// The columns shown, each as wide as its widest words ask (its heading's
+    /// or a cell's), as many as the table's width holds.
+    static func columns(of table: Navree.Table, available: Double?) -> [Column] {
+        let asked = ContentRules.shownColumns(table).map { index in
+            let column = table.columns[index]
+            let cells = table.rows.prefix(60).compactMap { index < $0.cells.count ? $0.cells[index] : nil }
+            let controls = cells.contains { !RecordRules.controls(in: $0).isEmpty }
+            let words = [column.label] + cells.flatMap { RecordRules.words(in: $0) }
+            let kind = ContentRules.columnKind(column, controls: controls)
+            return (place: index, kind: kind, secondary: column.secondary, width: ContentRules.columnWidth(kind, widest: CellType.widest(words)))
+        }
+        // Until the table is laid out, every column as wide as it asks.
+        let fitted = available.map { ContentRules.fittedColumns(asked, available: $0) } ?? asked.map { ($0.place, $0.width.ideal) }
+        return fitted.map { place, width in
+            let asks = asked.first { $0.place == place }?.width
+            let flexible = asks?.max == nil
+            return Column(id: place, label: table.columns[place].label, width: flexible ? asks?.min ?? width : width, flexible: flexible)
+        }
     }
 
     struct Cell: View {

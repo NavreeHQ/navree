@@ -157,6 +157,28 @@ import Testing
     #expect(ContentRules.columnWidth(.words, widest: 900).ideal == 260)
 }
 
+@Test func aNarrowWindowGivesUpSecondaryColumnsFirstAndTheNameTakesWhatIsLeft() {
+    func w(_ kind: ContentRules.ColumnKind, _ widest: Double) -> ColumnWidth { ContentRules.columnWidth(kind, widest: widest) }
+    // An order table: name, status, payment (secondary), total, ships to (secondary), placed.
+    let columns: [(place: Int, kind: ContentRules.ColumnKind, secondary: Bool, width: ColumnWidth)] = [
+        (0, .title, false, w(.title, 120)), (1, .status, false, w(.status, 60)), (3, .words, true, w(.words, 50)),
+        (4, .number, false, w(.number, 50)), (5, .words, true, w(.words, 170)), (6, .words, false, w(.words, 90)),
+    ]
+    // What they ask, with the table's room between and beside the columns.
+    let asked = columns.reduce(0) { $0 + $1.width.ideal } + 5 * 8 + 40
+    // Wide enough: every column, the name taking the room the others leave.
+    let wide = ContentRules.fittedColumns(columns, available: asked + 100)
+    #expect(wide.map(\.place) == [0, 1, 3, 4, 5, 6])
+    #expect(abs(wide.reduce(0) { $0 + $1.width } + 5 * 8 + 40 - (asked + 100)) < 0.001)
+    // A little short: the last secondary column goes.
+    #expect(ContentRules.fittedColumns(columns, available: asked - 20).map(\.place) == [0, 1, 3, 4, 6])
+    // Much shorter: both secondary columns, then the other words; never the name, the state or the number.
+    #expect(ContentRules.fittedColumns(columns, available: 480).map(\.place) == [0, 1, 4])
+    #expect(ContentRules.columnKind(Navree.Column(label: "Order", role: .title), controls: true) == .title)
+    // However narrow, the name keeps at least its least width.
+    #expect(ContentRules.fittedColumns(columns, available: 100).first?.width == w(.title, 120).min)
+}
+
 @Test func iOSHasNoCheckboxesOrRadioButtons() throws {
     let checkbox = try decode(Navree.Input.self, #"{"t":"toggle","kind":"checkbox"}"#)
     let radio = try decode(Navree.Input.self, #"{"t":"choice","kind":"radio","options":[{"value":"a","label":"A"},{"value":"b","label":"B"}]}"#)

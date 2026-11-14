@@ -120,8 +120,9 @@ public enum ContentRules {
     }
 
     public static func columnKind(_ column: Navree.Column, controls: Bool) -> ColumnKind {
-        if controls || column.role == .actions { return .controls }
+        // The name stays the name, even when it is a button (an order's number opening its peek).
         if column.role == .title { return .title }
+        if controls || column.role == .actions { return .controls }
         if column.numeric { return .number }
         if column.role == .status { return .status }
         return .words
@@ -143,6 +144,42 @@ public enum ContentRules {
         case .words: return ColumnWidth(min: 80, ideal: clamp(room, 80, 260), max: 320)
         }
     }
+
+    /// The columns a wide table shows across `available` points, by their
+    /// places, with the width each is given: all of them where they fit;
+    /// else, as Apple's apps give up columns as a window narrows, the
+    /// secondary columns go first, from the last, then any other column of
+    /// words, from the last (the name, the states, the numbers and the
+    /// controls stay). Each column is as wide as it asks, and the name takes
+    /// what is left, so the columns fill the table's width.
+    public static func fittedColumns(
+        _ columns: [(place: Int, kind: ColumnKind, secondary: Bool, width: ColumnWidth)], available: Double
+    ) -> [(place: Int, width: Double)] {
+        var shown = columns
+        func asked() -> Double {
+            shown.reduce(0) { $0 + $1.width.ideal } + Double(Swift.max(shown.count - 1, 0)) * columnGap + tableMargins
+        }
+        while asked() > available, let last = shown.lastIndex(where: { $0.secondary && $0.kind != .title }) {
+            shown.remove(at: last)
+        }
+        while asked() > available, let last = shown.lastIndex(where: { $0.kind == .words }) {
+            shown.remove(at: last)
+        }
+        let room = Double(Swift.max(shown.count - 1, 0)) * columnGap + tableMargins
+        let others = shown.filter { $0.width.max != nil }.reduce(0) { $0 + $1.width.ideal } + room
+        let names = shown.filter { $0.width.max == nil }
+        let rest = names.isEmpty ? 0 : Swift.max(0, available - others) / Double(names.count)
+        return shown.map { column in
+            (column.place, column.width.max == nil ? Swift.max(column.width.min, rest) : column.width.ideal)
+        }
+    }
+
+    /// The room the system's table keeps between two columns, as iPadOS 27.2
+    /// lays one out (measured from the headings: 8 points).
+    static let columnGap: Double = 8
+    /// The room the system's table keeps at its two sides together, as iPadOS
+    /// 27.2 lays one out (measured: 20 points each side).
+    static let tableMargins: Double = 40
 
     /// The room a cell of the system's table keeps round its words: its
     /// leading and trailing margins, and a little air.
