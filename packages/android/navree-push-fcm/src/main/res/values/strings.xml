@@ -4,6 +4,9 @@
     <string name="navree_notifications">Notifications</string>
     <!-- What the lock screen shows of a notification, under the app's name: nothing of what it says. -->
     <string name="navree_notification_public">New notification</string>
+    <!-- What a locked screen may show of a notification this app draws: empty for the system's way
+         (the person's setting decides), nothing for nothing at all on a secure locked screen. -->
+    <string name="navree_notification_lock_screen" translatable="false"></string>
 
     <!-- The app's Firebase project. An app sets these in its own res/values; empty means no push. -->
     <string name="navree_fcm_project_id" translatable="false"></string>
