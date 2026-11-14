@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Where the app stands in the system outside its windows: the Dock and the
@@ -68,12 +69,18 @@ public struct StatusItem: Sendable, Equatable {
     public var showsCount: Bool
     /// What a click opens.
     public var content: StatusContent
+    /// What the item says when the pointer rests on it.
+    public var tooltip: String?
 
-    public init(image: StatusImage, title: String? = nil, showsCount: Bool = true, content: StatusContent = .menu) {
+    public init(
+        image: StatusImage, title: String? = nil, showsCount: Bool = true, content: StatusContent = .menu,
+        tooltip: String? = nil
+    ) {
         self.image = image
         self.title = title
         self.showsCount = showsCount
         self.content = content
+        self.tooltip = tooltip
     }
 }
 
@@ -92,6 +99,38 @@ public enum StatusContent: Sendable, Equatable {
     /// A small window showing one destination's screen (`/today`), for what a
     /// menu cannot hold.
     case screen(String)
+    /// The whole app in a window that opens under the item, as the system's
+    /// own items' windows do, for an app in the menu bar only: its one
+    /// session, shown in a full window too when the person asks. A right
+    /// click opens a menu of the app's destinations, Open in Window,
+    /// Settings…, About and Quit.
+    case app(StatusWindow = StatusWindow())
+}
+
+/// The window an item in the menu bar opens with the whole app in it.
+public struct StatusWindow: Sendable, Equatable {
+    /// The size it opens at.
+    public var size: CGSize
+    /// The smallest the person may make it, when it is resizable.
+    public var minimumSize: CGSize
+    /// Whether the person may change its size.
+    public var resizable: Bool
+    /// Whether it stays open, above other windows, when the person clicks
+    /// elsewhere; else it closes, as a menu does.
+    public var pinned: Bool
+    /// Whether it opens as the app starts.
+    public var opensAtLaunch: Bool
+
+    public init(
+        size: CGSize = CGSize(width: 400, height: 560), minimumSize: CGSize = CGSize(width: 320, height: 400),
+        resizable: Bool = false, pinned: Bool = false, opensAtLaunch: Bool = false
+    ) {
+        self.size = size
+        self.minimumSize = minimumSize
+        self.resizable = resizable
+        self.pinned = pinned
+        self.opensAtLaunch = opensAtLaunch
+    }
 }
 
 /// Quick ways into the app from outside it.

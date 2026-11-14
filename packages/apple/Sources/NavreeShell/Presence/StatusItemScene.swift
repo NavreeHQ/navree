@@ -13,7 +13,9 @@ import SwiftUI
 /// known at run time, and a `MenuBarExtra` left out of the menu bar still
 /// makes an item. So the scene itself declares nothing.
 ///
-/// An item showing a small window with one destination's screen
+/// An item may instead hold the whole app (`StatusContent.app`): a window
+/// under the item with the app's one session in it, for an app in the menu
+/// bar only. An item showing a small window with one destination's screen
 /// (`StatusContent.screen`) is not built yet: it needs one session shared by
 /// the app's cores. Such an item stands nowhere and the app stays in the Dock.
 public struct NavreeStatusItem: Scene {
@@ -21,7 +23,7 @@ public struct NavreeStatusItem: Scene {
 
     public init(configuration: ShellConfiguration) {
         self.configuration = configuration
-        PresenceModel.shared.configure(configuration.presence)
+        PresenceModel.shared.configure(configuration)
     }
 
     public var body: some Scene {}

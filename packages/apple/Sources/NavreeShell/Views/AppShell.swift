@@ -29,6 +29,9 @@ public struct AppShell: View {
     @SceneStorage("navree.restorable") private var restorable = false
     /// This window's own name, so each window keeps what it showed apart.
     @SceneStorage("navree.scene") private var scene = ""
+    /// Whether the shell stands in the window under an item in the menu bar.
+    @Environment(\.navreeCompactWindow) private var compactWindow
+    @State private var shownWidth: CGFloat = 0
 
     public init(configuration: ShellConfiguration) {
         _session = State(initialValue: Session(configuration: configuration))
@@ -40,7 +43,11 @@ public struct AppShell: View {
                 Chrome(client: client, configuration: session.configuration, commands: session.commands)
                     .environment(\.navreeStartsEditing, session.configuration.launch.editing)
                     .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
-                        session.window(WindowRules.width(sizeClass: WindowRules.system(sizeClass), points: width))
+                        shownWidth = width
+                        session.window(StatusRules.width(compactWindow: compactWindow, sizeClass: WindowRules.system(sizeClass), points: width))
+                    }
+                    .onChange(of: compactWindow) { _, compact in
+                        session.window(StatusRules.width(compactWindow: compact, sizeClass: WindowRules.system(sizeClass), points: shownWidth))
                     }
                     .focusedSceneValue(\.navreeCommands, session.commands)
                     .modifier(OptionalConfirmation(commands: session.commands))
@@ -351,6 +358,10 @@ struct Chrome: View {
     let client: NativeClient
     let configuration: ShellConfiguration
     var commands: WindowCommands?
+    /// In the window under an item in the menu bar the destinations' sidebar
+    /// starts folded away, behind the toolbar's sidebar button.
+    @Environment(\.navreeCompactWindow) private var compactWindow
+    @State private var columns: NavigationSplitViewVisibility = .automatic
 
     var body: some View {
         switch client.nav.stage {
@@ -399,12 +410,13 @@ struct Chrome: View {
                 sidebar: DestinationSidebar(client: client)
             )
         case .sidebarStack:
-            NavigationSplitView {
+            NavigationSplitView(columnVisibility: $columns) {
                 DestinationSidebar(client: client)
                     .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
             } detail: {
                 StackView(stack: shown, client: client, configuration: configuration)
             }
+            .onChange(of: compactWindow, initial: true) { _, compact in columns = compact ? .detailOnly : .automatic }
         case .tabs:
             tabs
         }

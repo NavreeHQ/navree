@@ -40,6 +40,10 @@ public final class PresenceModel {
     public private(set) var front: String?
     /// How many main windows are open (a Mac's, minimised ones included).
     public private(set) var mainWindows = 0
+    /// Whether the window under the app's item in the menu bar is open.
+    public private(set) var statusWindowShown = false
+    /// Whether the shell the app's item holds stands under the item, not in a full window.
+    var shellUnderItem = true
 
     /// Where the app stands on a Mac.
     public var place: MacPlace { PresenceRules.place(presence, chosen: chosen) }
@@ -59,8 +63,10 @@ public final class PresenceModel {
     /// The quick actions last given to the system.
     @ObservationIgnored private var quickActions: [QuickAction]?
     #if os(macOS)
-    /// The app's item in the menu bar.
+    /// The app's item in the menu bar, opening a menu.
     @ObservationIgnored private let statusItem = StatusItemController()
+    /// The app's item in the menu bar, holding the whole app.
+    @ObservationIgnored private let statusPanel = StatusPanelController()
     /// The main windows, by their scene's name.
     @ObservationIgnored private var windows: [String: Weak<NSWindow>] = [:]
     @ObservationIgnored private var watching: [String: [any NSObjectProtocol]] = [:]
@@ -83,6 +89,15 @@ public final class PresenceModel {
     /// Whether the process is an app, whose icon and notifications the system
     /// serves: not a test runner.
     nonisolated static var isApp: Bool { Bundle.main.bundleURL.pathExtension == "app" }
+
+    /// Takes the app's whole configuration, for an item in the menu bar
+    /// holding the whole app; the first one given stands.
+    func configure(_ configuration: ShellConfiguration) {
+        #if os(macOS)
+        if statusPanel.configuration == nil { statusPanel.configuration = configuration }
+        #endif
+        configure(configuration.presence)
+    }
 
     /// Takes the app's configuration; the first one given stands.
     func configure(_ presence: Presence) {
@@ -160,16 +175,57 @@ public final class PresenceModel {
         #if os(macOS)
         guard launched, Self.isApp else { return }
         statusItem.apply(self)
+        statusPanel.apply(self)
         #endif
+    }
+
+    /// Whether the app's item in the menu bar holds the whole app: an app in
+    /// the menu bar only whose item opens a window with the app in it.
+    public var holdsApp: Bool {
+        place == .menuBar && StatusRules.holdsApp(presence.statusItem)
+    }
+
+    /// Opens the window under the app's item in the menu bar, when it has one
+    /// holding the whole app.
+    public func showStatusWindow() {
+        #if os(macOS)
+        statusPanel.show()
+        #endif
+    }
+
+    /// Closes the window under the app's item in the menu bar.
+    public func hideStatusWindow() {
+        #if os(macOS)
+        statusPanel.hide()
+        #endif
+    }
+
+    /// The app held by its item in the menu bar, in a full window, with the
+    /// app in the Dock while it is open.
+    public func openInWindow() {
+        #if os(macOS)
+        statusPanel.openInWindow()
+        #endif
+    }
+
+    func statusWindowChanged(shown: Bool) {
+        statusWindowShown = shown
     }
 
     #if os(macOS)
     /// The app's item in the menu bar while it has one: its button, and its
     /// menu as it is drawn when it opens.
     public var statusItemParts: (button: NSStatusBarButton?, menu: NSMenu?)? {
+        if let item = statusPanel.item { return (item.button, statusPanel.menu()) }
         guard let item = statusItem.item else { return nil }
         if let menu = item.menu { statusItem.menuNeedsUpdate(menu) }
         return (item.button, item.menu)
+    }
+
+    /// The window under the app's item holding the whole app, and the full
+    /// window the person opened it in.
+    public var statusWindows: (panel: NSWindow?, window: NSWindow?) {
+        (statusPanel.panel, statusPanel.window)
     }
     #endif
 
@@ -192,9 +248,8 @@ public final class PresenceModel {
         // The person's menu acts on a window's session: with none, it goes.
         // The destinations stay, to open a window at one of them.
         if order.isEmpty { user = nil }
-        #if os(macOS)
-        forget(window: scene)
-        #endif
+        // Its system window is let go when it closes: a shell moved to
+        // another window disappears from the first without its window closing.
     }
 
     /// A window came in front.
@@ -223,7 +278,8 @@ public final class PresenceModel {
     /// A main window's system window: counted, and watched for coming in
     /// front and for closing.
     func found(_ window: NSWindow, scene: String) {
-        guard windows[scene]?.object !== window else { return }
+        // The window under the item in the menu bar is no main window.
+        guard windows[scene]?.object !== window, !(window is StatusPanel) else { return }
         forget(window: scene)
         windows[scene] = Weak(window)
         let center = NotificationCenter.default
@@ -268,7 +324,7 @@ public final class PresenceModel {
         case .newWindow:
             pending = address
             #if os(macOS)
-            newWindow()
+            holdsApp ? showStatusWindow() : newWindow()
             #endif
         }
     }
@@ -276,6 +332,7 @@ public final class PresenceModel {
     /// Brings the main window forward, opening one when none is open.
     public func openMainWindow(with action: OpenWindowAction? = nil) {
         if let action { keep(action) }
+        if holdsApp { return openInWindow() }
         switch OpeningRules.target(front: front, windows: order) {
         case .window(let scene): bringForward(scene)
         case .newWindow: newWindow()
@@ -286,6 +343,8 @@ public final class PresenceModel {
     public func newWindow(with action: OpenWindowAction? = nil) {
         if let action { keep(action) }
         #if os(macOS)
+        // One session: the app held by its item comes into a window, never a second one.
+        if holdsApp { return openInWindow() }
         NSApp.activate()
         if let openWindow {
             openWindow(id: NavreeScene.main)
@@ -330,7 +389,10 @@ public final class PresenceModel {
 
     private func bringForward(_ scene: String) {
         #if os(macOS)
-        guard let window = windows[scene]?.object else { return }
+        guard let window = windows[scene]?.object else {
+            if holdsApp { showStatusWindow() }
+            return
+        }
         NSApp.activate()
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)

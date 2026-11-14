@@ -1,4 +1,6 @@
+import CoreGraphics
 import NavreeProtocol
+import NavreeRuntime
 import Testing
 
 @testable import NavreeShell
@@ -77,4 +79,49 @@ private let destinations = [
     #expect(parts.accessibilityLabel == "Orders")
     #expect(parts.title == "Orders")
     #expect(parts.image == .asset("Charkha"))
+}
+
+private let held = StatusItem(image: .symbol("shippingbox"), content: .app())
+
+@Test func anItemHoldingTheAppOpensAWindowInTheMenuBar() {
+    #expect(StatusRules.style(held) == .window)
+    #expect(StatusRules.holdsApp(held))
+    #expect(StatusRules.inserted(style: .window, item: held, place: .menuBar))
+    #expect(!StatusRules.inserted(style: .menu, item: held, place: .menuBar))
+    #expect(!StatusRules.holdsApp(menu))
+}
+
+@Test func anItemHoldingTheAppStandsInTheMenuBarOnlyNeverBesideTheDocksWindows() {
+    // Beside a Dock app's own windows it would be a second session.
+    #expect(PresenceRules.place(Presence(place: .both, statusItem: held), chosen: nil) == .menuBar)
+    #expect(PresenceRules.choices(Presence(choices: [.dock, .menuBar, .both], statusItem: held)) == [.dock, .menuBar])
+    #expect(PresenceRules.place(Presence(place: .menuBar, choices: [.dock, .menuBar], statusItem: held), chosen: .dock) == .dock)
+}
+
+@Test func theWindowOpensUnderTheItemCentredOnItAndKeptOnTheScreen() {
+    let screen = CGRect(x: 0, y: 0, width: 1440, height: 870)
+    let middle = StatusRules.windowFrame(item: CGRect(x: 900, y: 870, width: 32, height: 30), size: CGSize(width: 400, height: 560), screen: screen)
+    #expect(middle == CGRect(x: 716, y: 306, width: 400, height: 560))
+    // At the screen's edge it stays on the screen.
+    let edge = StatusRules.windowFrame(item: CGRect(x: 1400, y: 870, width: 32, height: 30), size: CGSize(width: 400, height: 560), screen: screen)
+    #expect(edge.maxX == 1432)
+    // A screen too short for it keeps it on the screen.
+    let short = StatusRules.windowFrame(item: CGRect(x: 900, y: 600, width: 32, height: 30), size: CGSize(width: 400, height: 900), screen: CGRect(x: 0, y: 0, width: 1440, height: 600))
+    #expect(short.minY == 8)
+}
+
+@Test func aRightClickOffersTheAppThenOpenInWindowSettingsAboutAndQuit() {
+    let entries = StatusRules.contextMenu(destinations: destinations, appName: "Charkha Bar", user: nil)
+    #expect(entries == [
+        .destination(destinations[0]), .destination(destinations[1]), .divider, .openInWindow, .settings,
+        .about("About Charkha Bar"), .divider, .quit("Quit Charkha Bar"),
+    ])
+    // Before the shell has come: no destinations, never "Open".
+    #expect(StatusRules.contextMenu(destinations: [], appName: "Charkha Bar", user: nil).first == .openInWindow)
+}
+
+@Test func theWindowUnderTheItemIsLaidOutAsACompactWindow() {
+    #expect(StatusRules.width(compactWindow: true, sizeClass: nil, points: 400) == .compact)
+    #expect(StatusRules.width(compactWindow: true, sizeClass: nil, points: 1200) == .compact)
+    #expect(StatusRules.width(compactWindow: false, sizeClass: nil, points: 1200) == .expanded)
 }
