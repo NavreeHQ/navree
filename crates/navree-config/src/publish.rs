@@ -304,6 +304,9 @@ fn placeholder(ty: &FieldType) -> String {
         FieldType::String | FieldType::Any | FieldType::Table | FieldType::Other(_) => {
             "\"\"".to_owned()
         }
+        FieldType::Driver { built_in, .. } => {
+            json_to_toml(&Json::String(built_in.first().cloned().unwrap_or_default()))
+        }
     }
 }
 
@@ -415,6 +418,15 @@ mod tests {
         assert!(text.contains("# retries = 0"), "{text}");
         let toml = json_to_toml(&json!({ "a": [1, "x\"y"], "b": true }));
         assert_eq!(toml, "{ \"a\" = [1, \"x\\\"y\"], \"b\" = true }");
+    }
+
+    #[test]
+    fn a_driver_field_publishes_its_first_built_in() {
+        let ty = FieldType::Driver {
+            built_in: vec!["memory".into(), "redis".into()],
+            register: "m.cache_store".into(),
+        };
+        assert_eq!(placeholder(&ty), "\"memory\"");
     }
 
     #[test]

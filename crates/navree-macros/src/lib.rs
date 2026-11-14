@@ -645,6 +645,8 @@ pub fn derive_searchable(input: TokenStream) -> TokenStream {
 /// | `skip` | field | leaves the field out of the description |
 /// | `env_fallback = ".."` | field | the environment variable the field falls back to |
 /// | `one_of = "a, b"` | field | the names the value can take |
+/// | `driver = "a, b"` | field | the built-in names of a driver selector; another name is one a module registers (with `register`) |
+/// | `register = ".."` | field | the method that registers more names (`m.cache_store`) |
 /// | `default = ".."` | field | the text shown as the default (types without `Debug`) |
 ///
 /// A field's name is its `serde` name (`rename`, `rename_all`), its type is
