@@ -104,6 +104,30 @@ fun webAddress(address: String): Boolean {
     return site.scheme == "https" || site.host in Origins.LOOPBACK
 }
 
+/**
+ * Whether a link the app was opened with can be the return of the sign-in
+ * session that is open: for a `callback` that is a whole address, the same
+ * scheme, host, port and path (any query); for a callback that is a scheme,
+ * that scheme; with no callback, an address of the app's origins. Any other
+ * link is an ordinary link, even while a sign-in is open.
+ */
+fun signInReturn(link: String, callback: String?, origins: Origins): Boolean {
+    if (link.isEmpty() || !clean(link)) return false
+    if (callback.isNullOrEmpty()) return origins.ours(link)
+    if (!callback.contains("://")) return schemeOf(link) == callback.lowercase(Locale.ROOT)
+    val wanted = Site.read(callback) ?: return false
+    val got = Site.read(link) ?: return false
+    return got.sameOrigin(wanted) && pathOf(link) == pathOf(callback)
+}
+
+/** The path of a whole address, without its query or fragment; `/` when it has none. */
+private fun pathOf(address: String): String {
+    val rest = address.substringAfter("://")
+    val start = rest.indexOfAny(charArrayOf('/', '?', '#'))
+    if (start < 0 || rest[start] != '/') return "/"
+    return rest.substring(start).substringBefore('?').substringBefore('#')
+}
+
 /** No whitespace, control or format character and no backslash anywhere. */
 internal fun clean(text: String): Boolean = text.none { c ->
     c.isWhitespace() || c.isISOControl() || c == '\\' || Character.getType(c) == Character.FORMAT.toInt()

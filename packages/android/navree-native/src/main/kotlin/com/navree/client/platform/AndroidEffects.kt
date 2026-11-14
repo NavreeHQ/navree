@@ -17,6 +17,7 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewDatabase
 import androidx.activity.ComponentActivity
+import androidx.browser.customtabs.CustomTabsClient
 import androidx.browser.customtabs.CustomTabsIntent
 import com.navree.client.BuildConfig
 import com.navree.client.R
@@ -201,12 +202,16 @@ class AndroidEffects(
         streams.closeAll()
     }
 
+    /** Where the open sign-in session comes back: its callback, as the core gave it. */
+    private var signInCallback: String? = null
+
     /**
-     * An address the app was opened with. While a sign-in session is open, it
-     * is the session coming back; otherwise it is a link to open.
+     * An address the app was opened with. While a sign-in session is open, a
+     * link that can be its return ([signInReturn]) ends it; any other link is
+     * a link to open.
      */
     fun opened(url: String) {
-        if (signingIn) {
+        if (signingIn && signInReturn(url, signInCallback, origins)) {
             signingIn = false
             driver.send(Events.signInDone(url))
         } else {
@@ -252,24 +257,40 @@ class AndroidEffects(
 
     /**
      * The system's sign-in session: Custom Tabs, which shares the browser's
-     * sign-ins unless the session must share nothing. It comes back to the
-     * app as a link ([opened]) or not at all ([resumed]).
+     * sign-ins unless the session must share nothing. A session that must
+     * share nothing opens only in a browser that says it can keep it apart
+     * (`CustomTabsClient.isEphemeralBrowsingSupported`); with none, no session
+     * opens and the core is told the person did not sign in. It comes back to
+     * the app as a link ([opened]) or not at all ([resumed]).
      */
     private fun signIn(effect: Effect.SignIn) {
         val context = activity ?: return post(Events.signInDone(null))
         // Only a web address opens in the sign-in session.
         if (!webAddress(effect.url)) return post(Events.signInDone(null))
+        if (effect.ephemeral && !ephemeralSupported(context)) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "no browser here keeps a sign-in session apart from its own")
+            return post(Events.signInDone(null))
+        }
         // The address carries the challenge and the state: opened exactly as it came. A
         // session already open is replaced by this one.
         val builder = CustomTabsIntent.Builder().setShowTitle(true)
         if (effect.ephemeral) builder.setEphemeralBrowsingEnabled(true)
         try {
             signingIn = true
+            signInCallback = effect.callback
             builder.build().launchUrl(context, Uri.parse(effect.url))
         } catch (_: ActivityNotFoundException) {
             signingIn = false
             post(Events.signInDone(null))
         }
+    }
+
+    /** Whether the browser that opens Custom Tabs here can keep a session apart from its own. */
+    private fun ephemeralSupported(context: Context): Boolean = try {
+        val browser = CustomTabsClient.getPackageName(context, null)
+        browser != null && CustomTabsClient.isEphemeralBrowsingSupported(context, browser)
+    } catch (_: Exception) {
+        false
     }
 
     private fun haptic(kind: String) {
