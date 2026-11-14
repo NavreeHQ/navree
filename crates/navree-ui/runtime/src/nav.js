@@ -1,6 +1,6 @@
 // Link boosting and regions: fetch a page, morph what changed, keep the shell
 // alive. A failed fetch falls back to a real navigation.
-import { active, all, attr, body, byId, clean, closest, cookies, emit, every, head, hidden, holds, make, on, one, ownModule, root, sameOrigin, set, setTitle, titleOf, unset } from "./dom.js";
+import { E, active, all, attr, body, byId, clean, closest, cookies, emit, every, head, hidden, holds, make, on, one, ownModule, root, sameOrigin, set, setTitle, titleOf, unset } from "./dom.js";
 import { morph, pieces } from "./morph.js";
 import { adoptToasts, announce, noteWrite, sameUser } from "./ui.js";
 
@@ -649,7 +649,8 @@ export function startRegions() {
 
 /** @param {EventTarget | null} target */
 function linkOf(target) {
-  const a = /** @type {HTMLAnchorElement | null} */ (closest(target, "a[href]"));
+  // A link in stored content is followed too: boosted, it goes where the browser would.
+  const a = /** @type {HTMLAnchorElement | null} */ (target instanceof Element ? E.closest.call(target, "a[href]") : null);
   if (!a || a.origin !== location.origin || a.target || a.hasAttribute("download") || a.hasAttribute("data-ui-noboost")) return null;
   if (!body().hasAttribute("data-ui-boost")) return null;
   // A link to a place on this page is the browser's.

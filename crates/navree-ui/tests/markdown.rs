@@ -42,7 +42,7 @@ fn a_copy_button_adds_the_core_runtime_and_nothing_else() {
 fn a_models_answer_reads_as_a_document() {
     let html = Markdown::new(REPLY).heading_level(2).to_html();
     assert!(
-        html.starts_with(r#"<div data-slot="markdown" data-untrusted>"#),
+        html.starts_with(r#"<div data-slot="markdown" data-ui-stored data-untrusted>"#),
         "{html}"
     );
     assert!(html.contains("<h3>Weekly summary</h3>"), "{html}");
@@ -97,7 +97,7 @@ fn the_fragment_has_no_wrapper_and_the_page_element_has_one() {
     let wrapped = Markdown::new("hi").to_html();
     assert_eq!(
         wrapped,
-        r#"<div data-slot="markdown" data-untrusted><p>hi</p></div>"#
+        r#"<div data-slot="markdown" data-ui-stored data-untrusted><p>hi</p></div>"#
     );
 }
 
@@ -105,7 +105,7 @@ fn the_fragment_has_no_wrapper_and_the_page_element_has_one() {
 fn an_empty_text_is_an_empty_element() {
     assert_eq!(
         Markdown::new("").to_html(),
-        r#"<div data-slot="markdown" data-untrusted></div>"#
+        r#"<div data-slot="markdown" data-ui-stored data-untrusted></div>"#
     );
 }
 

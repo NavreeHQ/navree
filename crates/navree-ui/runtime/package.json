@@ -5,7 +5,8 @@
   "description": "Builds navree-ui's committed browser assets. Contributors only: cargo build needs none of this.",
   "scripts": {
     "build": "node build.mjs",
-    "check": "node build.mjs --check"
+    "check": "node build.mjs --check",
+    "test": "node --test \"test/*.test.mjs\""
   },
   "devDependencies": {
     "esbuild": "0.25.12"
