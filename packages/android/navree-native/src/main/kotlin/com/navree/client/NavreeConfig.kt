@@ -60,6 +60,16 @@ data class NavreeConfig(
      * pictures load from the app's origins.
      */
     val pictureHosts: List<String> = emptyList(),
+    /**
+     * Hosts that may serve what a page shown in the web view loads inside it
+     * (a payment frame, a captcha, a font or a script from a CDN), such as
+     * `checkout.pay.example` or `*.cdn.example`, with a `:port` where it is
+     * not 443. Only the web view reads it: never for a page itself, a native
+     * request, a stream or a picture, and the client's own requests send it
+     * no cookie. None by default. A host the page's own content policy lets
+     * in is named here once more.
+     */
+    val webHosts: List<String> = emptyList(),
     /** How much of the app's screen the system may show elsewhere: see [ScreenPrivacy]. */
     val screen: ScreenPrivacy = ScreenPrivacy.None,
     /**

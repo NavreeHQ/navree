@@ -75,6 +75,26 @@ class OriginsTest {
     }
 
     @Test
+    fun a_web_host_is_for_the_web_view_alone() {
+        val origins = Origins("https://shop.example", webHosts = listOf("checkout.pay.example", "*.cdn.example", "maps.example:8443"))
+        assertTrue(origins.webHost("https://checkout.pay.example/frame"))
+        assertTrue(origins.webHost("https://in.cdn.example/app.js"))
+        assertTrue(origins.webHost("https://maps.example:8443/tile"))
+        assertFalse("its own port only", origins.webHost("https://maps.example/tile"))
+        assertFalse(origins.webHost("https://checkout.pay.example:8443/frame"))
+        assertFalse("not over plain http", origins.webHost("http://checkout.pay.example/frame"))
+        assertFalse("under the name, not ending in its letters", origins.webHost("https://evilcdn.example/app.js"))
+        assertFalse(origins.webHost("https://checkout.pay.example//evil.example/"))
+        assertFalse("never ours", origins.ours("https://checkout.pay.example/frame"))
+        assertFalse("never a native request", origins.mayLoad("https://checkout.pay.example/frame"))
+        assertNull("never a picture", origins.picture("https://checkout.pay.example/logo.png"))
+        val local = Origins("http://localhost:8095", loopbackHttp = true, webHosts = listOf("localhost:8097"))
+        assertTrue("plain http only to the machine itself, when the app allows it", local.webHost("http://localhost:8097/frame"))
+        assertFalse(Origins("https://shop.example", webHosts = listOf("localhost:8097")).webHost("http://localhost:8097/frame"))
+        assertFalse("an entry that does not read is none", Origins("https://shop.example", webHosts = listOf("https://pay.example", "pay.example:", "pay example")).webHost("https://pay.example/"))
+    }
+
+    @Test
     fun only_six_schemes_are_handed_to_the_system() {
         for (address in listOf("https://pay.example/invoice/7", "http://pay.example/", "mailto:help@shop.example", "tel:+919876543210", "sms:+919876543210", "geo:30.9,75.85", "MAILTO:help@shop.example")) {
             assertTrue(address, handedToSystem(address))
