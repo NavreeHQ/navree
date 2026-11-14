@@ -128,3 +128,9 @@ pub use environment::{
 };
 pub use error::{Error, ErrorKind};
 pub use value::{Kwargs, Value, ValueKind};
+
+/// Items Navree's own crates use; not public API.
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::environment::{Fingerprint, fingerprint};
+}

@@ -77,3 +77,4 @@ navree-testing = { workspace = true }
 tempfile = { workspace = true }
 zip = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
+tracing-subscriber = { workspace = true }

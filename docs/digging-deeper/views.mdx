@@ -114,6 +114,8 @@ impl Module for AnnouncementsModule {
 
 A file of the same name in a template folder wins, so the app changes a plugin's template by putting a file at `resources/views/announcements/list.html`. `plugin:publish announcements --tag views` copies the plugin's templates there to start from. It writes into `resources/views/<namespace>/` below the app's folder whatever `view.dirs` says; with `view.dirs` moved, copy the files into the first folder yourself.
 
+A plugin's templates stay under its namespace. A name a plugin gives `m.templates(..)` must start with `announcements/` too (and be a safe relative path), or be exactly the name of a template that a module it imports registers, which is the replacement rule above; any other name fails the boot and names the plugin, the template and the module. A template of a plugin that stands beside one of the app's with the same name but for its extension (`announcements/list.html` beside the app's `announcements/list.txt`) fails the boot as well, because a lookup without an extension takes `.html` first and a mail of that name adds an HTML part when `.html` exists: put the plugin's name in a template folder too (`plugin:publish announcements --tag views` copies it), or rename the app's. The app's own modules and the framework's register templates as before.
+
 ## Rendering templates
 
 Inject `Arc<Views>` and call `render(name, context)`. The context is any `Serialize` value: a struct, a map or `serde_json::json!`. Its fields are the template's variables.
@@ -235,6 +237,8 @@ impl BrandModule {
     }
 }
 ```
+
+A plugin's `m.view_environment(..)` may only add filters, tests, functions and globals whose names start with the plugin's namespace and an underscore (`announcements_badge`). Replacing or removing a template, a filter, a function or a global, adding a name without that prefix, and changing how templates escape, what an undefined value does, the limits, the whitespace settings or the loader each fail the boot and name the change. The app lets a plugin change more by calling the plugin's function from a module of its own (`m.view_environment(announcements::view_filters)`); a module of the app is never checked.
 
 ### Limits
 

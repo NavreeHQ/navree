@@ -214,6 +214,16 @@ impl Views {
         self.sources.provided_by_files(names)
     }
 
+    /// The name of every template file in the template directories.
+    pub(crate) fn file_names(&self) -> Result<Vec<String>, ViewError> {
+        self.sources.file_names()
+    }
+
+    /// What the environment holds now, to tell what a hook changed.
+    pub(crate) fn fingerprint(&self) -> navree_template::__private::Fingerprint {
+        navree_template::__private::fingerprint(&self.env)
+    }
+
     /// The first candidate for `name` that exists, with its full name.
     fn find(&self, name: &str) -> Result<(String, Template<'_>), ViewError> {
         let candidates = candidates(name);

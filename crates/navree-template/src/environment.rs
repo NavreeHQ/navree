@@ -1,7 +1,7 @@
 //! [`Environment`]: templates, filters, tests, globals and settings.
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -12,7 +12,7 @@ use crate::error::{Error, ErrorKind};
 use crate::escape::Mode;
 use crate::functions::{self, Callable, Function, FunctionResult};
 use crate::syntax::{Ast, Whitespace, parse};
-use crate::value::Value;
+use crate::value::{Repr, Value};
 use crate::vm;
 
 /// How printed values are escaped.
@@ -430,6 +430,197 @@ impl Environment {
     }
 }
 
+/// What an [`Environment`] holds at one moment, to tell afterwards what a
+/// change to it touched: every template, filter, test and global by name, with
+/// the identity of what each holds, and the loader, the escaping rule, the
+/// undefined behavior, the limits and the whitespace settings. It keeps a
+/// handle on each of them, so an identity is not taken for another's when a
+/// freed one's address is used again. Not public API; Navree's own crates use
+/// it.
+pub struct Fingerprint {
+    /// Each template's syntax tree: a template added again, with the same text
+    /// or not, has a new one.
+    templates: BTreeMap<String, Arc<Ast>>,
+    filters: BTreeMap<String, Arc<Callable>>,
+    tests: BTreeMap<String, Arc<Callable>>,
+    /// Functions and variables, by name; a function is its handle, a variable
+    /// its value.
+    globals: BTreeMap<String, Value>,
+    loader: Option<Arc<Loader>>,
+    auto_escape: Arc<AutoEscapeCallback>,
+    undefined: UndefinedBehavior,
+    limits: Limits,
+    whitespace: Whitespace,
+}
+
+/// The fingerprint of `env`. Not public API; Navree's own crates use it.
+pub fn fingerprint(env: &Environment) -> Fingerprint {
+    Fingerprint {
+        templates: env
+            .templates
+            .iter()
+            .map(|(name, compiled)| (name.clone(), compiled.ast.clone()))
+            .collect(),
+        filters: env
+            .filters
+            .iter()
+            .map(|(name, call)| (name.to_string(), call.clone()))
+            .collect(),
+        tests: env
+            .tests
+            .iter()
+            .map(|(name, call)| (name.to_string(), call.clone()))
+            .collect(),
+        globals: env
+            .globals
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.clone()))
+            .collect(),
+        loader: env.loader.clone(),
+        auto_escape: env.auto_escape.clone(),
+        undefined: env.undefined,
+        limits: env.limits,
+        whitespace: env.whitespace,
+    }
+}
+
+impl Fingerprint {
+    /// Every difference between this fingerprint and `after`, as the words
+    /// that finish the sentence "the hook ...": templates first, then filters,
+    /// tests and globals, each in name order (``adds the template `a.html` ``,
+    /// ``replaces the filter `money` ``, ``removes the function `now` ``), then
+    /// the settings (``changes the template loader``, ``changes how templates
+    /// escape``, ``changes what an undefined value does``, ``changes the
+    /// rendering limits``, ``changes the whitespace settings``). Not public
+    /// API; Navree's own crates use it.
+    pub fn changes(&self, after: &Fingerprint) -> Vec<String> {
+        self.differences(after, None)
+    }
+
+    /// The differences [`changes`](Fingerprint::changes) lists that a plugin
+    /// with `namespace` may not make: a filter, test, function or global added,
+    /// replaced or removed whose name starts with `namespace` and an underscore
+    /// is left out, and an addition of any other name says so (``adds the
+    /// filter `shout`, which does not start with `announcements_` ``). Templates
+    /// and settings are never left out. Not public API; Navree's own crates use
+    /// it.
+    pub fn changes_outside(&self, after: &Fingerprint, namespace: &str) -> Vec<String> {
+        self.differences(after, Some(namespace))
+    }
+
+    fn differences(&self, after: &Fingerprint, namespace: Option<&str>) -> Vec<String> {
+        let mut changes = Vec::new();
+        let names: BTreeSet<&String> = self
+            .templates
+            .keys()
+            .chain(after.templates.keys())
+            .collect();
+        for name in names {
+            match (self.templates.get(name), after.templates.get(name)) {
+                (None, Some(_)) => changes.push(format!("adds the template `{name}`")),
+                (Some(_), None) => changes.push(format!("removes the template `{name}`")),
+                (Some(before), Some(now)) if !Arc::ptr_eq(before, now) => {
+                    changes.push(format!("replaces the template `{name}`"));
+                }
+                _ => {}
+            }
+        }
+        for (kind, before, now) in [
+            ("filter", &self.filters, &after.filters),
+            ("test", &self.tests, &after.tests),
+        ] {
+            let names: BTreeSet<&String> = before.keys().chain(now.keys()).collect();
+            for name in names {
+                let (was, is) = (before.get(name), now.get(name));
+                let same = matches!((was, is), (Some(a), Some(b)) if Arc::ptr_eq(a, b));
+                record(
+                    &mut changes,
+                    name,
+                    was.map(|_| kind),
+                    is.map(|_| kind),
+                    same,
+                    namespace,
+                );
+            }
+        }
+        let names: BTreeSet<&String> = self.globals.keys().chain(after.globals.keys()).collect();
+        for name in names {
+            let (was, is) = (self.globals.get(name), after.globals.get(name));
+            let same = matches!((was, is), (Some(a), Some(b)) if a == b);
+            record(
+                &mut changes,
+                name,
+                was.map(global_kind),
+                is.map(global_kind),
+                same,
+                namespace,
+            );
+        }
+        let same_loader = match (&self.loader, &after.loader) {
+            (None, None) => true,
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        };
+        if !same_loader {
+            changes.push("changes the template loader".to_owned());
+        }
+        if !Arc::ptr_eq(&self.auto_escape, &after.auto_escape) {
+            changes.push("changes how templates escape".to_owned());
+        }
+        if self.undefined != after.undefined {
+            changes.push("changes what an undefined value does".to_owned());
+        }
+        if self.limits != after.limits {
+            changes.push("changes the rendering limits".to_owned());
+        }
+        if self.whitespace != after.whitespace {
+            changes.push("changes the whitespace settings".to_owned());
+        }
+        changes
+    }
+}
+
+/// What a global is called in a change: a function or a variable.
+fn global_kind(value: &Value) -> &'static str {
+    if matches!(value.0, Repr::Function(_)) {
+        "function"
+    } else {
+        "global"
+    }
+}
+
+/// Adds the change of the filter, test, function or global `name` to
+/// `changes`, if it is one. `was` and `is` are its kind before and after (none
+/// when it was not there, or is not), `same` whether what it holds is what it
+/// held. With a `namespace`, a name that starts with it and an underscore is
+/// not a change, and an addition of another name says it is outside.
+fn record(
+    changes: &mut Vec<String>,
+    name: &str,
+    was: Option<&str>,
+    is: Option<&str>,
+    same: bool,
+    namespace: Option<&str>,
+) {
+    let own = namespace.is_some_and(|namespace| {
+        name.strip_prefix(namespace)
+            .is_some_and(|rest| rest.starts_with('_'))
+    });
+    match (was, is) {
+        (None, Some(kind)) if !own => match namespace {
+            Some(namespace) => changes.push(format!(
+                "adds the {kind} `{name}`, which does not start with `{namespace}_`"
+            )),
+            None => changes.push(format!("adds the {kind} `{name}`")),
+        },
+        (Some(kind), None) if !own => changes.push(format!("removes the {kind} `{name}`")),
+        (Some(kind), Some(_)) if !same && !own => {
+            changes.push(format!("replaces the {kind} `{name}`"));
+        }
+        _ => {}
+    }
+}
+
 /// A template name's extension in lower case, past a trailing `.j2`, `.jinja`
 /// or `.jinja2`, and past the dots and spaces Windows ignores at the end of a
 /// file name.
@@ -496,5 +687,114 @@ impl Template<'_> {
     pub fn render(&self, ctx: impl Serialize) -> Result<String, Error> {
         let ctx = Value::from_serialize(&ctx)?;
         vm::render(self.env, &self.compiled, ctx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An environment with two templates, a global and a function of its own.
+    fn base() -> Environment {
+        let mut env = Environment::new();
+        env.add_template("mail/welcome.html", "<p>Welcome</p>")
+            .unwrap();
+        env.add_template("mail/bye.html", "<p>Bye</p>").unwrap();
+        env.add_global("brand", "Agra");
+        env.add_function("clock", || "IST");
+        env
+    }
+
+    #[test]
+    fn the_fingerprint_names_every_change() {
+        let mut env = base();
+        let before = fingerprint(&env);
+        assert!(
+            before.changes(&fingerprint(&env)).is_empty(),
+            "nothing changed"
+        );
+
+        env.add_template("mail/new.html", "<p>New</p>").unwrap();
+        env.add_template("mail/welcome.html", "<p>Hello</p>")
+            .unwrap();
+        env.remove_template("mail/bye.html");
+        env.add_filter("shout", |text: &str| text.to_uppercase());
+        env.add_filter("upper", |text: &str| text.to_lowercase());
+        env.add_test("big", |a: i64| a > 10);
+        env.add_global("brand", "Pune");
+        env.remove_global("clock");
+        env.add_function("greet", |name: &str| format!("Sat Sri Akal, {name}"));
+        env.set_loader(|_| Ok(None));
+        env.set_auto_escape_callback(|_| AutoEscape::None);
+        env.set_undefined_behavior(UndefinedBehavior::Strict);
+        let mut limits = env.limits();
+        limits.max_depth = 5;
+        env.set_limits(limits);
+        env.set_trim_blocks(true);
+        assert_eq!(
+            before.changes(&fingerprint(&env)),
+            [
+                "removes the template `mail/bye.html`",
+                "adds the template `mail/new.html`",
+                "replaces the template `mail/welcome.html`",
+                "adds the filter `shout`",
+                "replaces the filter `upper`",
+                "adds the test `big`",
+                "replaces the global `brand`",
+                "removes the function `clock`",
+                "adds the function `greet`",
+                "changes the template loader",
+                "changes how templates escape",
+                "changes what an undefined value does",
+                "changes the rendering limits",
+                "changes the whitespace settings",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_removed_filter_added_again_is_a_replacement_not_the_same_filter() {
+        let mut env = base();
+        env.add_filter("shout", |text: &str| text.to_uppercase());
+        let before = fingerprint(&env);
+        env.remove_filter("shout");
+        env.add_filter("shout", |text: &str| text.to_uppercase());
+        assert_eq!(
+            before.changes(&fingerprint(&env)),
+            ["replaces the filter `shout`"]
+        );
+    }
+
+    #[test]
+    fn names_under_a_namespace_are_not_changes_outside_it() {
+        let mut env = base();
+        env.add_filter("announcements_badge", |text: &str| format!("[{text}]"));
+        env.add_global("announcements_brand", "Ludhiana");
+        let before = fingerprint(&env);
+        // Its own names, replaced, removed and added: nothing outside its namespace.
+        env.add_filter("announcements_badge", |text: &str| format!("({text})"));
+        env.remove_global("announcements_brand");
+        env.add_function("announcements_clock", || "IST");
+        assert!(
+            before
+                .changes_outside(&fingerprint(&env), "announcements")
+                .is_empty()
+        );
+        assert_eq!(before.changes(&fingerprint(&env)).len(), 3);
+        // Another name, a name with the prefix but no underscore, a replaced built-in and a
+        // template are outside it.
+        env.add_filter("shout", |text: &str| text.to_uppercase());
+        env.add_filter("upper", |text: &str| text.to_lowercase());
+        env.add_test("announcementsbig", |a: i64| a > 10);
+        env.add_template("x.html", "<p>x</p>").unwrap();
+        assert_eq!(
+            before.changes_outside(&fingerprint(&env), "announcements"),
+            [
+                "adds the template `x.html`",
+                "adds the filter `shout`, which does not start with `announcements_`",
+                "replaces the filter `upper`",
+                "adds the test `announcementsbig`, which does not start with `announcements_`",
+            ]
+        );
     }
 }
