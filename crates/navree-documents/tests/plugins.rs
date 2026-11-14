@@ -249,7 +249,10 @@ async fn a_plugins_document_file_outside_its_namespace_fails_the_boot() {
         ),
         "{error}"
     );
-    assert!(!error.contains("which is not under its namespace"), "{error}");
+    assert!(
+        !error.contains("which is not under its namespace"),
+        "{error}"
+    );
 
     // The same paths from a module of the app boot, as in 1.2.
     let app = builder(dir.path()).module(CrmDocuments).build().await;
@@ -367,10 +370,7 @@ async fn a_plugin_replacing_an_app_document_file_fails_until_the_app_takes_it() 
 
     // A module of the app that embeds the path after the plugin's module, with contents of its
     // own or with the plugin's, clears it too.
-    for (contents, used) in [
-        ("the app's invoice", 1),
-        ("the plugin's invoice", 2),
-    ] {
+    for (contents, used) in [("the app's invoice", 1), ("the plugin's invoice", 2)] {
         let app = builder(dir.path())
             .module(PluginAfterImport("invoices/standard.html"))
             .module(AppDocuments(contents))

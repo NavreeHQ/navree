@@ -242,7 +242,10 @@ async fn a_plugins_template_outside_its_namespace_fails_the_boot() {
         ),
         "{error}"
     );
-    assert!(!error.contains("which is not under its namespace"), "{error}");
+    assert!(
+        !error.contains("which is not under its namespace"),
+        "{error}"
+    );
     let error = boot_with(options(&[]), RegistersAfterImport("mail/welcome.txt"))
         .await
         .expect_err("fails")
@@ -308,7 +311,8 @@ async fn a_plugins_environment_hook_adds_only_names_under_its_namespace() {
     app.shutdown().await.unwrap();
 
     // Each of these fails, naming the change.
-    let cases: [(fn(&mut Environment), &str); 6] = [
+    type Hook = fn(&mut Environment);
+    let cases: [(Hook, &str); 6] = [
         (
             |env| env.add_filter("money", |cents: i64| format!("${cents}")),
             "replaces the filter `money`",
@@ -383,7 +387,8 @@ impl Module for AppShout {
 
 #[tokio::test]
 async fn a_plugins_environment_hook_is_checked_whatever_the_order_of_the_modules() {
-    let shout: fn(&mut Environment) = |env| env.add_filter("shout", |text: &str| format!("{text}!"));
+    let shout: fn(&mut Environment) =
+        |env| env.add_filter("shout", |text: &str| format!("{text}!"));
     // The app's hook ran first, so the plugin's replaces a filter; the other way round it adds
     // one with no prefix: either way it fails, and the app's own hook is not checked.
     for apps_first in [true, false] {

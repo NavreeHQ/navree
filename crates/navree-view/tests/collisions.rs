@@ -539,15 +539,24 @@ async fn a_plugins_template_beside_an_app_template_of_the_same_stem_fails_the_bo
     let app = boot_with(options(&[both.path()]), vec![Box::new(AnnouncementsModule)])
         .await
         .expect("boots");
-    assert_eq!(render(&app, "announcements/list").await, "Meera Sharma's list");
+    assert_eq!(
+        render(&app, "announcements/list").await,
+        "Meera Sharma's list"
+    );
     app.shutdown().await.unwrap();
 
     // A template of the app that is no other extension of the same name is no problem.
     let unrelated = views_dir(&[("announcements/other.txt", "the app's other text")]);
-    let app = boot_with(options(&[unrelated.path()]), vec![Box::new(AnnouncementsModule)])
-        .await
-        .expect("boots");
-    assert_eq!(render(&app, "announcements/list").await, "the plugin's list");
+    let app = boot_with(
+        options(&[unrelated.path()]),
+        vec![Box::new(AnnouncementsModule)],
+    )
+    .await
+    .expect("boots");
+    assert_eq!(
+        render(&app, "announcements/list").await,
+        "the plugin's list"
+    );
     app.shutdown().await.unwrap();
 
     // The same pair from two modules of the app boots as in 1.2: the rule looks only at a
