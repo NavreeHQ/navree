@@ -20,7 +20,7 @@ use prost_reflect::DescriptorPool;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
-use crate::call::{Runtime, ServiceRuntime};
+use crate::call::{Runtime, ServiceRuntime, UndeclaredAudits};
 use crate::connect::Connect;
 use crate::edge::{Edge, EdgeParts, GrpcCore};
 use crate::health::ReadinessHealth;
@@ -341,6 +341,7 @@ async fn build(
             .collect(),
         default_timeout: options.default_timeout(http.timeout_secs),
         shutdown: ctx.shutdown_token(),
+        undeclared_audits: UndeclaredAudits::default(),
     });
     let core = GrpcCore::new(runtime.clone(), services, routes);
     let connect = options.connect.then(|| {
