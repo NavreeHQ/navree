@@ -4,7 +4,7 @@
 // so a morph needs no wiring and a name in stored markup can't shadow a method. The limits in
 // the markup are hints; the server holds every file to them. Text from the server goes in with
 // textContent, never as markup.
-import { T, all, attr, byId, closest, cookie, every, has, holds, on, set, unset } from "./dom.js";
+import { T, all, attr, byId, closest, cookie, every, has, holds, on, sameOrigin, set, unset } from "./dom.js";
 
 const ROOT = "[data-ui-upload]";
 const ROW = "[data-slot=upload-item]";
@@ -109,6 +109,9 @@ function fail(job, text) {
  */
 function req(job, method, url, body, type, up) {
   return new Promise((ok, no) => {
+    // As every fetch of the runtime: only to this site, so no file and no token goes anywhere
+    // else, and an answer that ended on another site is a failure.
+    if (!sameOrigin(url)) return no(0);
     const x = new XMLHttpRequest();
     job.x = x;
     x.open(method, url);
@@ -118,6 +121,7 @@ function req(job, method, url, body, type, up) {
     if (type) x.setRequestHeader("content-type", type);
     if (up) x.upload.onprogress = (e) => up(e.loaded);
     x.onload = () => {
+      if (!sameOrigin(x.responseURL || url)) return no(0);
       let json = {};
       try { json = JSON.parse(x.responseText); } catch {}
       ok({ status: x.status, json });

@@ -90,13 +90,27 @@ export const clean = (tree) => {
   for (const el of found) el.remove();
 };
 
-/** Whether `url` resolves to this origin. @param {string} url */
+/** Whether `url` resolves to this origin. @param {string | URL} url */
 export const sameOrigin = (url) => {
   try {
     return new URL(url, location.href).origin === location.origin;
   } catch {
     return false;
   }
+};
+
+/**
+ * Every fetch of the runtime. An address on another origin is refused before anything is sent, so no
+ * header and no token goes there, and an answer that ended on another origin (a redirect) is a failure,
+ * as a connection that failed is.
+ * @param {string | URL} url @param {RequestInit} [init] @returns {Promise<Response>}
+ */
+export const fetchHere = async (url, init) => {
+  if (sameOrigin(url)) {
+    const response = await fetch(url, init);
+    if (sameOrigin(response.url || location.href)) return response;
+  }
+  throw new TypeError("not this site");
 };
 
 /** What the runtime made and keeps on every page. An attribute would let stored markup ask for the same. @type {WeakSet<Node>} */

@@ -21,7 +21,7 @@
 //
 // Every read of the document goes through dom.js: a page element named like a document
 // member (`<img name="importNode">`) can't change what this does.
-import { active, adopt, attr, body, clean, closest, cookie, emit, every, has, hidden, holds, on, sameOrigin, scrolling, set, toggle, unset } from "./dom.js";
+import { active, adopt, attr, body, clean, closest, cookie, emit, every, fetchHere, has, hidden, holds, on, sameOrigin, scrolling, set, toggle, unset } from "./dom.js";
 
 const LIMIT = 10000;
 /** How near an end, in pixels, the reader is when its next page is asked for. */
@@ -272,7 +272,7 @@ async function load(list, dir) {
   const stop = new AbortController();
   const limit = setTimeout(() => stop.abort(), LIMIT);
   try {
-    const response = await fetch(sourceUrl(list, { dir, cursor: cursorOf(edge) }), { headers: HEADERS, signal: stop.signal });
+    const response = await fetchHere(sourceUrl(list, { dir, cursor: cursorOf(edge) }), { headers: HEADERS, signal: stop.signal });
     if (!response.ok) throw new Error(String(response.status));
     const html = await response.text();
     // The list changed while this was on its way: the answer is for a list that's gone.
@@ -347,7 +347,7 @@ async function live(list) {
     const all = items(parent);
     const ask = { dir: "live", since };
     if (all.length) Object.assign(ask, { from: cursorOf(all[0]), to: cursorOf(all[all.length - 1]) });
-    const response = await fetch(sourceUrl(list, ask), { headers: HEADERS, signal: stop.signal });
+    const response = await fetchHere(sourceUrl(list, ask), { headers: HEADERS, signal: stop.signal });
     if (!response.ok || state.gen !== gen || !list.isConnected) return;
     if (changes !== asked) {
       state.dirty = true;
@@ -403,7 +403,7 @@ async function seen(list) {
   const token = cookie("XSRF-TOKEN");
   if (token) headers["x-xsrf-token"] = token;
   try {
-    await fetch(url, { method: "POST", headers, body: "", credentials: "same-origin", signal: AbortSignal.timeout(LIMIT) });
+    await fetchHere(url, { method: "POST", headers, body: "", credentials: "same-origin", signal: AbortSignal.timeout(LIMIT) });
   } catch {} finally {
     state.seeing = false;
     if (state.unseen && list.isConnected) seen(list);

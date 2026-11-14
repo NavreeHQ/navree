@@ -4,7 +4,7 @@
 // the list is followed with `aria-activedescendant`, and the value lives in a native
 // <select> (`select-native`) that forms, `required`, reset and `change` already
 // understand. Placement of the popup is the overlay module's (`ui:place`).
-import { active, all, clean, cookie, every, make, on, one, sameOrigin } from "./dom.js";
+import { active, all, clean, cookie, every, fetchHere, make, on, one, sameOrigin } from "./dom.js";
 
 // The words, in English. The server sends only those a page changes (`data-l`), and a
 // test holds this list equal to the server's defaults.
@@ -715,7 +715,7 @@ async function find(root, q, after, more = "") {
   try {
     const url = new URL(src, location.href);
     if (!more) url.searchParams.set("q", q);
-    const res = await fetch(url, { headers: { "x-navree-ui": "1", accept: "text/html" }, signal: ctrl.signal });
+    const res = await fetchHere(url, { headers: { "x-navree-ui": "1", accept: "text/html" }, signal: ctrl.signal });
     if (s.seq !== mine) return;
     if (res.redirected && sameOrigin(res.url)) {
       location.assign(res.url);
@@ -774,7 +774,7 @@ async function create(root) {
     const headers = { "x-navree-ui": "1", accept: "text/html", "content-type": "application/x-www-form-urlencoded" };
     const token = cookie("XSRF-TOKEN");
     if (token) headers["x-xsrf-token"] = token;
-    const res = await fetch(how, { method: "POST", headers, body: new URLSearchParams({ name: text }) });
+    const res = await fetchHere(how, { method: "POST", headers, body: new URLSearchParams({ name: text }) });
     if (res.redirected && sameOrigin(res.url)) {
       location.assign(res.url);
       return;

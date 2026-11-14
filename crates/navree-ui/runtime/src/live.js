@@ -24,7 +24,7 @@
 // A region the server drew while what it shows was still changing (`data-ui-live-catch-up`)
 // can't hear what was said before its stream opened: it fetches once when the stream opens,
 // or at once when it joins one that is open. Any other region drawn with the page doesn't.
-import { cookies, every, hidden, on, sameOrigin } from "./dom.js";
+import { cookies, every, fetchHere, hidden, on, sameOrigin } from "./dom.js";
 
 /**
  * Asks the core runtime to fetch a region again, as a tab shown for the first time does. The
@@ -175,7 +175,7 @@ async function probe(s) {
   // A stream that answers nothing at all holds the question open: it is let go of.
   const giveUp = setTimeout(() => stop.abort(), PROBE_LIMIT);
   try {
-    const response = await fetch(s.url, { headers: { accept: "text/event-stream", "x-ui-probe": "1" }, signal: stop.signal, cache: "no-store" });
+    const response = await fetchHere(s.url, { headers: { accept: "text/event-stream", "x-ui-probe": "1" }, signal: stop.signal, cache: "no-store" });
     stop.abort();
     // A 204 is the stream's way of saying "stop"; a 401 or 403 says the reader may not have it.
     if (FINAL.has(response.status) && !s.es && streams.get(s.url) === s) {
