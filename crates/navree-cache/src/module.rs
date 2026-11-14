@@ -3,20 +3,23 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_config::{ConfigSection, ModuleBuilderConfigExt};
+use navree_config::__private::{
+    build_driver, check_registrations, contribute_slot, selector_error,
+};
+use navree_config::{ConfigSection, DriverName, DriverNameError, ModuleBuilderConfigExt};
 use navree_contracts::{BoxFuture, HealthCheck, HealthStatus};
 use navree_kernel::{
     CommandSpec, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_telemetry::Telemetry;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::cache::DEFAULT_TTL;
+use crate::drivers::{CacheBackend, ChosenBackend, SLOT};
 use crate::{Cache, CacheError, CacheStore, LockStore, Locks, MemoryLockStore, MemoryStore};
 
 /// Which backend stores cache entries and locks.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum CacheStoreKind {
     /// In-process: [`MemoryStore`] and [`MemoryLockStore`] (`"memory"`).
@@ -26,15 +29,62 @@ pub enum CacheStoreKind {
     /// providers named `redis`, which navree-redis's `RedisModule`
     /// registers. Shared by every process using the same Redis server.
     Redis,
+    /// A store a module registers under this name with
+    /// [`m.cache_store`](crate::ModuleBuilderCacheExt::cache_store)
+    /// (`"two_tier"`); its settings are `cache.{name}`. Holding a built-in
+    /// name, it is that built-in store.
+    Registered(DriverName),
 }
 
 impl CacheStoreKind {
-    /// The configuration name (`memory`, `redis`), also the store's name in
-    /// telemetry `CacheEvent`s.
+    /// The configuration name (`memory`, `redis`, or the name a store is
+    /// registered under), also the store's name in telemetry `CacheEvent`s.
     pub fn as_str(self) -> &'static str {
         match self {
             CacheStoreKind::Memory => "memory",
             CacheStoreKind::Redis => "redis",
+            CacheStoreKind::Registered(name) => name.as_str(),
+        }
+    }
+
+    /// The kind, with a `Registered` built-in name turned into that
+    /// built-in (`Registered("redis")` is `Redis`).
+    pub(crate) fn resolved(self) -> CacheStoreKind {
+        match self {
+            CacheStoreKind::Registered(name) => match name.as_str() {
+                "memory" => CacheStoreKind::Memory,
+                "redis" => CacheStoreKind::Redis,
+                _ => self,
+            },
+            other => other,
+        }
+    }
+}
+
+/// The configuration name, as [`as_str`](CacheStoreKind::as_str) gives it.
+impl Serialize for CacheStoreKind {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+/// `memory` and `redis` are the built-in stores; any other lower-case
+/// name (a letter, then letters, digits or `_`) is a store a module
+/// registers, which the boot resolves. Anything else is an error that lists
+/// the names and never repeats the value.
+impl<'de> Deserialize<'de> for CacheStoreKind {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = String::deserialize(deserializer)?;
+        match name.as_str() {
+            "memory" => Ok(CacheStoreKind::Memory),
+            "redis" => Ok(CacheStoreKind::Redis),
+            other => match DriverName::new(other) {
+                Ok(name) => Ok(CacheStoreKind::Registered(name)),
+                Err(DriverNameError::Invalid) => {
+                    Err(serde::de::Error::custom(selector_error("store", &SLOT)))
+                }
+                Err(error) => Err(serde::de::Error::custom(error)),
+            },
         }
     }
 }
@@ -55,7 +105,7 @@ impl CacheStoreKind {
 pub struct CacheOptions {
     /// The backend (default `memory`; `redis` needs navree-redis's
     /// `RedisModule`).
-    #[config(one_of = "memory, redis")]
+    #[config(driver = "memory, redis", register = "m.cache_store")]
     pub store: CacheStoreKind,
     /// Prepended to every cache key and lock name (default empty).
     pub prefix: String,
@@ -137,6 +187,7 @@ impl Module for CacheModule {
 
 fn register(m: &mut ModuleBuilder, options: Option<CacheOptions>) {
     m.global();
+    contribute_slot(m, SLOT);
     match options {
         Some(options) => {
             let options = Arc::new(options);
@@ -156,27 +207,62 @@ fn register(m: &mut ModuleBuilder, options: Option<CacheOptions>) {
     }
 
     let options_key = ProviderKey::of::<CacheOptions>();
+    let chosen_key = ProviderKey::of::<ChosenBackend>();
     m.factory(
-        Factory::<dyn CacheStore>::new(|r: Resolver| async move {
+        // Every registration of a store is checked, whichever is selected;
+        // a store a module registers is built here, once, for both halves.
+        Factory::<ChosenBackend>::new(|r: Resolver| async move {
             let options = r.get::<CacheOptions>().await?;
-            match options.store {
-                CacheStoreKind::Memory => Ok(Arc::new(MemoryStore::new()) as Arc<dyn CacheStore>),
-                kind => named_store::<dyn CacheStore>(&r, kind).await,
-            }
+            check_registrations(&r.app(), &SLOT, CacheOptions::schema())?;
+            let backend = match options.store.resolved() {
+                CacheStoreKind::Registered(name) => Some(
+                    build_driver::<CacheBackend>(
+                        &r.app(),
+                        &SLOT,
+                        "cache.store",
+                        name,
+                        format!("cache.{name}"),
+                        None,
+                    )
+                    .await?,
+                ),
+                _ => None,
+            };
+            Ok(Arc::new(ChosenBackend(backend)))
         })
         .deps(vec![options_key.clone()]),
     )
     .factory(
+        Factory::<dyn CacheStore>::new(|r: Resolver| async move {
+            let options = r.get::<CacheOptions>().await?;
+            let chosen = r.get::<ChosenBackend>().await?;
+            match options.store.resolved() {
+                CacheStoreKind::Memory => Ok(Arc::new(MemoryStore::new()) as Arc<dyn CacheStore>),
+                CacheStoreKind::Registered(_) => match &chosen.0 {
+                    Some(backend) => Ok(backend.store.clone()),
+                    None => Err(unbuilt(options.store)),
+                },
+                kind => named_store::<dyn CacheStore>(&r, kind).await,
+            }
+        })
+        .deps(vec![options_key.clone(), chosen_key.clone()]),
+    )
+    .factory(
         Factory::<dyn LockStore>::new(|r: Resolver| async move {
             let options = r.get::<CacheOptions>().await?;
-            match options.store {
+            let chosen = r.get::<ChosenBackend>().await?;
+            match options.store.resolved() {
                 CacheStoreKind::Memory => {
                     Ok(Arc::new(MemoryLockStore::new()) as Arc<dyn LockStore>)
                 }
+                CacheStoreKind::Registered(_) => match &chosen.0 {
+                    Some(backend) => Ok(backend.locks.clone()),
+                    None => Err(unbuilt(options.store)),
+                },
                 kind => named_store::<dyn LockStore>(&r, kind).await,
             }
         })
-        .deps(vec![options_key.clone()]),
+        .deps(vec![options_key.clone(), chosen_key]),
     )
     .factory(
         Factory::<Cache>::new(|r: Resolver| async move {
@@ -244,6 +330,12 @@ async fn named_store<T: ?Sized + Send + Sync + 'static>(
     })
 }
 
+/// The error of a half of a registered store whose backend is missing; the
+/// boot builds the backend first, so it is there.
+fn unbuilt(kind: CacheStoreKind) -> navree_kernel::BoxError {
+    format!("the cache store `{}` was not built", kind.as_str()).into()
+}
+
 /// Readiness: a value written to the cache can be read back.
 struct CacheHealth {
     cache: Arc<Cache>,
@@ -280,8 +372,51 @@ impl HealthCheck for CacheHealth {
 #[cfg(test)]
 mod tests {
     use navree_config::FieldType;
+    use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn cache_store_kind_keeps_copy_and_its_static_name() {
+        fn copy<T: Copy>(_: T) {}
+        let kind = CacheStoreKind::Registered(DriverName::from_static("two_tier"));
+        copy(kind);
+        let name: &'static str = kind.as_str();
+        assert_eq!(name, "two_tier");
+        assert_eq!(
+            CacheStoreKind::Registered(DriverName::from_static("redis")).resolved(),
+            CacheStoreKind::Redis
+        );
+    }
+
+    #[test]
+    fn cache_config_of_today_reads_as_before() {
+        for (text, kind) in [
+            ("memory", CacheStoreKind::Memory),
+            ("redis", CacheStoreKind::Redis),
+        ] {
+            assert_eq!(
+                serde_json::from_value::<CacheStoreKind>(json!(text)).unwrap(),
+                kind
+            );
+            assert_eq!(serde_json::to_value(kind).unwrap(), json!(text));
+            assert_eq!(kind.as_str(), text);
+        }
+        assert_eq!(
+            serde_json::to_value(CacheOptions::default()).unwrap()["store"],
+            "memory"
+        );
+        assert_eq!(CacheOptions::defaults().unwrap()["store"], "memory");
+        let read: CacheStoreKind = serde_json::from_value(json!("kulfi_box")).unwrap();
+        assert_eq!(read.as_str(), "kulfi_box");
+        let error = serde_json::from_value::<CacheStoreKind>(json!("carrier-pigeon"))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            error,
+            "the store must be `memory`, `redis` or the name of a cache store registered with m.cache_store (a lower-case letter, then lower-case letters, digits or _)"
+        );
+    }
 
     #[test]
     fn the_section_describes_itself() {
@@ -300,7 +435,13 @@ mod tests {
                 .find(|field| field.name == name)
                 .expect(name)
         };
-        assert_eq!(field("store").ty, FieldType::choice(&["memory", "redis"]));
+        assert_eq!(
+            field("store").ty,
+            FieldType::Driver {
+                built_in: vec!["memory".into(), "redis".into()],
+                register: "m.cache_store".into(),
+            }
+        );
         assert_eq!(field("prefix").ty, FieldType::String);
         assert_eq!(field("default_ttl_secs").ty, FieldType::Integer);
         let defaults = CacheOptions::defaults().expect("defaults");
