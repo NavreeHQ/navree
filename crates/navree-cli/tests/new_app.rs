@@ -1527,6 +1527,9 @@ fn the_ui_kit_shell_takes_contributed_links() {
         "{shell}"
     );
     assert!(shell.contains("AppShell::from_request_parts"), "{shell}");
-    assert!(shell.contains(".context(workspace.name.clone())"), "{shell}");
+    assert!(
+        shell.contains(".context(workspace.name.clone())"),
+        "{shell}"
+    );
     assert!(!shell.contains("for_request("), "{shell}");
 }

@@ -281,7 +281,8 @@ impl Module for Announcements {
                     .permission("announcements.read"),
             )
             .nav_item(ShellNavItem::new("Notice board", "/notice-board"));
-        m.value(Shell::new("Kesar").contributed()).exports::<Shell>();
+        m.value(Shell::new("Kesar").contributed())
+            .exports::<Shell>();
         m.controller::<NoticesHome>();
     }
 }
@@ -664,7 +665,12 @@ fn the_plugin_prelude_brings_the_link_card_and_permission_methods() {
         .module(with_the_preludes::Everything)
         .validate()
         .expect("the graph is valid");
-    assert!(report.modules.iter().any(|module| module.name == "Everything"));
+    assert!(
+        report
+            .modules
+            .iter()
+            .any(|module| module.name == "Everything")
+    );
     assert_eq!(
         TypeId::of::<navree::plugin::Permission>(),
         TypeId::of::<navree::contracts::Permission>()

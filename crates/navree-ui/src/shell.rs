@@ -2155,7 +2155,11 @@ mod tests {
     fn contributed_draws_nothing_without_a_request() {
         use http::header::HeaderMap;
         assert_eq!(
-            shell().contributed().page("Deals", "/deals").to_view().to_html(),
+            shell()
+                .contributed()
+                .page("Deals", "/deals")
+                .to_view()
+                .to_html(),
             shell().page("Deals", "/deals").to_view().to_html()
         );
         let applied = |shell: Shell| {

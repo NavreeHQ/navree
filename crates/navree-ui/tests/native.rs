@@ -1831,8 +1831,10 @@ struct Noticed(Uuid);
 
 impl Module for Noticed {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.factory(Factory::<Shell>::new(|_| async { Ok(Arc::new(shell().contributed())) }))
-            .exports::<Shell>();
+        m.factory(Factory::<Shell>::new(|_| async {
+            Ok(Arc::new(shell().contributed()))
+        }))
+        .exports::<Shell>();
         m.controller::<Pages>();
         m.permissions(&[Permission::new(
             "announcements.read",
