@@ -23,11 +23,74 @@ extension SettingsRules {
     }
 }
 
-/// The General pane: what the app offers on this device.
+/// The General pane: what the app offers on this device. On a Mac, where
+/// it stands (a radio group of the offered places) and opening at login (a
+/// checkbox the person alone turns on, with System Settings a click away when
+/// the system waits for their approval there).
 struct GeneralSettingsPane: View {
     let configuration: ShellConfiguration
 
     var body: some View {
+        #if os(macOS)
+        GeneralForm(presence: configuration.presence)
+        #else
         EmptyView()
+        #endif
     }
 }
+
+#if os(macOS)
+struct GeneralForm: View {
+    let presence: Presence
+    /// As the system says each time the pane shows: the app keeps nothing of it.
+    @State private var login: LoginStatus = .notRegistered
+    /// The system's reason when it did not do what the person asked.
+    @State private var problem: String?
+
+    var body: some View {
+        let model = PresenceModel.shared
+        let choices = PresenceRules.choices(presence)
+        let app = PresenceModel.appName
+        Form {
+            if !choices.isEmpty {
+                Section {
+                    Picker(String(localized: "Show \(app) in:"), selection: Binding(get: { model.place }, set: { model.choose($0) })) {
+                        ForEach(choices, id: \.self) { place in
+                            Text(Self.words(place)).tag(place)
+                        }
+                    }
+                    .pickerStyle(.radioGroup)
+                } footer: {
+                    if presence.dockWhileWindowOpen, choices.contains(.menuBar) {
+                        Text("In the menu bar only, \(app) is in the Dock while one of its windows is open.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if let row = LoginItemRules.row(status: login, offered: presence.offersOpenAtLogin) {
+                Section {
+                    Toggle(String(localized: "Open at login"), isOn: Binding(get: { row.on }, set: { on in
+                        problem = LoginItem.set(on)
+                        login = LoginItem.status
+                    }))
+                    .toggleStyle(.checkbox)
+                    if row.needsApproval {
+                        Button(String(localized: "Allow in System Settings…")) { LoginItem.openSystemSettings() }
+                    }
+                } footer: {
+                    if let problem { Text(problem).foregroundStyle(.secondary) }
+                }
+            }
+        }
+        .onAppear { login = LoginItem.status }
+    }
+
+    static func words(_ place: MacPlace) -> String {
+        switch place {
+        case .dock: String(localized: "Dock")
+        case .menuBar: String(localized: "Menu bar")
+        case .both: String(localized: "Dock and menu bar")
+        }
+    }
+}
+#endif
