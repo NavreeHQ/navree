@@ -145,12 +145,17 @@ final class SystemSignInOpener: NSObject, SignInOpener {
     func open(_ url: URL, returning: SignInReturn, ephemeral: Bool, done: @escaping @MainActor (URL?) -> Void)
         -> (any SignInHandle)?
     {
+        let ended = Ended()
         let session = ASWebAuthenticationSession(url: url, callback: returning.system) { returned, _ in
             // Closed by the person, refused or failed: nobody signed in.
-            Task { @MainActor in done(returned) }
+            Task { @MainActor in
+                ended.handle?.closed()
+                done(returned)
+            }
         }
         session.prefersEphemeralWebBrowserSession = ephemeral
         let handle = Handle(session)
+        ended.handle = handle
         #if canImport(UIKit)
         // The system opens a session only over an app in front: one asked
         // for as the app starts (a link it was opened with) waits for that.
@@ -175,6 +180,12 @@ final class SystemSignInOpener: NSObject, SignInOpener {
         return handle
     }
 
+    /// The handle a session's end reaches, once there is one.
+    @MainActor
+    final class Ended {
+        weak var handle: Handle?
+    }
+
     final class Handle: SignInHandle {
         let session: ASWebAuthenticationSession
         /// Waiting for the app to come to the front before it opens.
@@ -187,6 +198,9 @@ final class SystemSignInOpener: NSObject, SignInOpener {
             self.session = session
         }
 
+        /// Whether its sheet is up, counted among the system's sheets.
+        private var up = false
+
         /// Opens the session over the app's window; false where the app has
         /// no window yet or the system will not open it.
         @MainActor
@@ -195,13 +209,25 @@ final class SystemSignInOpener: NSObject, SignInOpener {
             let anchor = SheetAnchor(window)
             self.anchor = anchor
             session.presentationContextProvider = anchor
-            return session.start()
+            guard session.start() else { return false }
+            up = true
+            PresenceModel.shared.systemSheet(opened: true)
+            return true
+        }
+
+        /// Its sheet went, however it ended.
+        @MainActor
+        func closed() {
+            guard up else { return }
+            up = false
+            PresenceModel.shared.systemSheet(opened: false)
         }
 
         func cancel() {
             waiting?.cancel()
             waiting = nil
             session.cancel()
+            MainActor.assumeIsolated { closed() }
         }
     }
 }
@@ -238,9 +264,11 @@ enum Windows {
         NSApplication.shared.keyWindow ?? NSApplication.shared.windows.first
     }
 
-    /// What a system sheet stands over: the key window, else a window of its own.
+    /// What a system sheet stands over: the window holding the app its item
+    /// in the menu bar holds (opened for the sheet), else the key window, else
+    /// a window of its own.
     static var anchor: NSWindow? {
-        key ?? NSWindow()
+        PresenceModel.shared.windowForSystemSheets() ?? key ?? NSWindow()
     }
     #endif
 }

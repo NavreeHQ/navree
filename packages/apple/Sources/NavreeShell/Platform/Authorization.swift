@@ -345,11 +345,14 @@ final class SystemAuthorizationSheet: NSObject, AuthorizationSheet {
         controller.delegate = self
         controller.presentationContextProvider = anchor
         open[ObjectIdentifier(controller)] = (controller, anchor, done)
+        PresenceModel.shared.systemSheet(opened: true)
         controller.performRequests()
     }
 
     private func finish(_ controller: ObjectIdentifier, _ outcome: SheetOutcome) {
-        open.removeValue(forKey: controller)?.done(outcome)
+        guard let sheet = open.removeValue(forKey: controller) else { return }
+        PresenceModel.shared.systemSheet(opened: false)
+        sheet.done(outcome)
     }
 }
 
