@@ -157,7 +157,18 @@ impl Cache {
     /// launch's shell answered over the network as a shell, and the person it
     /// named owns what is kept. The one question every read and write asks.
     pub(crate) fn readable(&self) -> bool {
-        matches!((&self.owner, &self.named), (Owner::Of(owner), Some(named)) if owner == named)
+        matches!((&self.owner, &self.named), (Owner::Of(owner), Some(named)) if same_owner(owner, named))
+    }
+}
+
+/// Whether what is kept for `owner` is `named`'s: both visitors, or both the
+/// same id. A person named without an id owns nothing: name and email decide
+/// only whether the screens and what was typed are another person's.
+fn same_owner(owner: &Person, named: &Person) -> bool {
+    match (owner, named) {
+        (None, None) => true,
+        (Some(owner), Some(named)) => owner.id.is_some() && owner.id == named.id,
+        _ => false,
     }
 }
 
@@ -488,9 +499,15 @@ impl Core {
         };
         match &self.inner.cache.owner {
             Owner::Unread => return,
-            Owner::Of(owner) if *owner == named => {}
-            Owner::Of(_) => {
-                self.disown();
+            Owner::Of(owner) if same_owner(owner, &named) => {}
+            Owner::Of(owner) => {
+                // What is kept is emptied once; a person named without an id
+                // keeps nothing, so it stays empty while no id is given.
+                let kept_nothing = self.inner.cache.disk.is_empty()
+                    && owner.as_ref().is_some_and(|owner| owner.id.is_none());
+                if !kept_nothing {
+                    self.disown();
+                }
                 self.inner.cache.owner = Owner::Of(named);
                 self.boot();
             }
