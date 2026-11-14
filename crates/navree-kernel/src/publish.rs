@@ -355,26 +355,37 @@ const USAGE: &str =
 /// The tags `plugin:publish` takes, as its refusals list them.
 const TAGS: &str = "tags: views, locales, config, files";
 
-/// What `plugin:publish` did, for `run_with_args` to print and finish.
+/// What `plugin:publish` will do, every file checked and none written yet:
+/// `run_with_args` runs the app's `config:publish` from `config_args` first,
+/// then [`write`] writes the files, so a refusal from either check leaves
+/// nothing written.
 pub(crate) struct PublishRun {
-    /// The lines to print, in order: one per file in path order, then what
-    /// was left out.
-    pub(crate) lines: Vec<String>,
-    /// The arguments of the app's `config:publish` to run next
-    /// (`--plugin <namespace>`, and `--force` when given): set when the
-    /// config tag is asked for, the app has that command and this is no dry
-    /// run.
+    /// The arguments of the app's `config:publish` to run before the files
+    /// are written (`--plugin <namespace>`, and `--force` when given): set
+    /// when the config tag is asked for, the app has that command and this is
+    /// no dry run.
     pub(crate) config_args: Option<Vec<String>>,
     /// Whether `--dry-run` was given.
     pub(crate) dry_run: bool,
+    /// Whether `--force` was given.
+    force: bool,
+    /// The plugin's files under the tags asked for: their places in the app
+    /// and their bytes.
+    files: Vec<(String, &'static [u8])>,
+    /// What the check found, one line per file in path order, as a dry run
+    /// prints it.
+    checked: Vec<String>,
+    /// The lines printed after the files: what was left out.
+    notes: Vec<String>,
 }
 
 /// `plugin:publish <plugin> [--tag views|locales|config|files] [--force]
 /// [--dry-run]` with `args` (the words after the command), against `graph`,
-/// writing below `root` (the app's folder). `<plugin>` is a namespace or a
-/// plugin's name; without `--tag`, every tag. The files go through
-/// [`publish_files`]; the config tag is the app's `config:publish --plugin
-/// <namespace>`, which the caller runs from `config_args`. Prints nothing.
+/// for the app's folder `root`. `<plugin>` is a namespace or a plugin's
+/// name; without `--tag`, every tag. Every file is checked by
+/// [`publish_files`] as a dry run; nothing is written and nothing printed.
+/// The config tag is the app's `config:publish --plugin <namespace>`, which
+/// the caller runs from `config_args` before [`write`].
 pub(crate) fn run(graph: &Graph, args: &[String], root: &Path) -> Result<PublishRun, BoxError> {
     let mut plugin: Option<&str> = None;
     let mut tag: Option<&str> = None;
@@ -460,40 +471,36 @@ pub(crate) fn run(graph: &Graph, args: &[String], root: &Path) -> Result<Publish
     }
 
     let has_config = graph.has_command("config:publish");
-    let mut lines = Vec::new();
-    if files.is_empty() {
+    let mut notes = Vec::new();
+    let checked = if files.is_empty() {
         match tag {
             Some(asked) if asked != "config" => {
-                lines.push(format!(
+                notes.push(format!(
                     "{asked}: plugin `{namespace}` has nothing to publish"
                 ));
             }
             // Nothing at all will be published; with a `config:publish`
             // command, its own lines say whether a section was written.
             None if !has_config => {
-                lines.push(format!(
+                notes.push(format!(
                     "{namespace}: plugin `{namespace}` has nothing to publish"
                 ));
             }
             _ => {}
         }
+        Vec::new()
     } else {
-        let listed: Vec<(&str, &[u8])> = files
-            .iter()
-            .map(|(path, bytes)| (path.as_str(), *bytes))
-            .collect();
-        let published = publish_files(root, &listed, force, dry_run)
-            .map_err(|refused| format!("plugin:publish: {refused}"))?;
-        lines.extend(published.iter().map(|(path, outcome)| outcome.line(path)));
-    }
+        // Every check of the writer, as a dry run: nothing is written yet.
+        publish_lines(root, &files, force, true)?
+    };
 
     let mut config_args = None;
     if config {
         if !has_config {
-            lines
+            notes
                 .push("config: the app has no ConfigModule, so no section is published".to_owned());
         } else if dry_run {
-            lines.push(format!(
+            notes.push(format!(
                 "config: would run config:publish --plugin {namespace}"
             ));
         } else {
@@ -505,10 +512,47 @@ pub(crate) fn run(graph: &Graph, args: &[String], root: &Path) -> Result<Publish
         }
     }
     Ok(PublishRun {
-        lines,
         config_args,
         dry_run,
+        force,
+        files,
+        checked,
+        notes,
     })
+}
+
+/// [`publish_files`] on `files` below `root`, as a dry run (it writes
+/// nothing) or for real: the line of each file, in path order, or the
+/// refusal after `plugin:publish: `.
+fn publish_lines(
+    root: &Path,
+    files: &[(String, &'static [u8])],
+    force: bool,
+    dry_run: bool,
+) -> Result<Vec<String>, BoxError> {
+    let listed: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(path, bytes)| (path.as_str(), *bytes))
+        .collect();
+    let published = publish_files(root, &listed, force, dry_run)
+        .map_err(|refused| format!("plugin:publish: {refused}"))?;
+    Ok(published
+        .iter()
+        .map(|(path, outcome)| outcome.line(path))
+        .collect())
+}
+
+/// Writes the files [`run`] checked, below `root` (unless it was a dry run),
+/// and gives the lines to print: one per file in path order, then what was
+/// left out.
+pub(crate) fn write(root: &Path, planned: &PublishRun) -> Result<Vec<String>, BoxError> {
+    let mut lines = if planned.dry_run || planned.files.is_empty() {
+        planned.checked.clone()
+    } else {
+        publish_lines(root, &planned.files, planned.force, false)?
+    };
+    lines.extend(planned.notes.iter().cloned());
+    Ok(lines)
 }
 
 #[cfg(test)]
@@ -915,44 +959,51 @@ mod tests {
         let args = |list: &[&str]| list.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>();
         let no_config = "config: the app has no ConfigModule, so no section is published";
         let notices = graph(vec![Box::new(Notices)]);
-        let done = run(&notices, &args(&["announcements"]), &root.0).expect("published");
+        let planned = run(&notices, &args(&["announcements"]), &root.0).expect("checked");
+        assert!(
+            !root.0.join("resources").exists(),
+            "run checks every file and writes none"
+        );
         assert_eq!(
-            done.lines,
+            (planned.config_args.clone(), planned.dry_run),
+            (None, false)
+        );
+        assert_eq!(
+            write(&root.0, &planned).expect("published"),
             [
                 "resources/views/announcements/list.html: written",
                 no_config
             ]
         );
-        assert_eq!((done.config_args, done.dry_run), (None, false));
-        let done = run(
+        let planned = run(
             &notices,
             &args(&["announcements", "--tag", "files"]),
             &root.0,
         )
         .expect("nothing");
         assert_eq!(
-            done.lines,
+            write(&root.0, &planned).expect("nothing"),
             ["files: plugin `announcements` has nothing to publish"]
         );
-        let done = run(
+        let planned = run(
             &notices,
             &args(&["announcements", "--dry-run", "--force"]),
             &root.0,
         )
         .expect("dry run");
+        assert!(planned.dry_run);
         assert_eq!(
-            done.lines,
+            write(&root.0, &planned).expect("dry run"),
             [
                 "resources/views/announcements/list.html: exists, would be replaced",
                 no_config,
             ]
         );
-        assert!(done.dry_run);
 
         let empty = graph(vec![Box::new(Empty)]);
-        let done = run(&empty, &args(&["announcements"]), &root.0).expect("nothing at all");
+        let planned = run(&empty, &args(&["announcements"]), &root.0).expect("nothing at all");
         assert_eq!(
-            done.lines,
+            write(&root.0, &planned).expect("nothing at all"),
             [
                 "announcements: plugin `announcements` has nothing to publish",
                 no_config,
@@ -960,21 +1011,22 @@ mod tests {
         );
 
         let configured = graph(vec![Box::new(Empty), Box::new(ConfigCommand)]);
-        let done = run(&configured, &args(&["announcements", "--force"]), &root.0).expect("config");
-        assert!(
-            done.lines.is_empty(),
-            "config:publish says itself whether a section was written"
-        );
+        let planned =
+            run(&configured, &args(&["announcements", "--force"]), &root.0).expect("config");
         assert_eq!(
-            done.config_args,
+            planned.config_args,
             Some(args(&["--plugin", "announcements", "--force"]))
         );
-        let done =
+        assert!(
+            write(&root.0, &planned).expect("config").is_empty(),
+            "config:publish says itself whether a section was written"
+        );
+        let planned =
             run(&configured, &args(&["announcements", "--dry-run"]), &root.0).expect("dry run");
+        assert_eq!(planned.config_args, None);
         assert_eq!(
-            done.lines,
+            write(&root.0, &planned).expect("dry run"),
             ["config: would run config:publish --plugin announcements"]
         );
-        assert_eq!(done.config_args, None);
     }
 }
