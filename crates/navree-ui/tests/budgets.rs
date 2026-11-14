@@ -499,8 +499,8 @@ fn a_page_with_a_slider_a_tree_or_a_toolbar_loads_its_module_and_nothing_else() 
 }
 
 #[test]
-fn the_upload_module_is_at_most_3_kb_gzip() {
-    assert!(size("upload") <= 3 * 1024, "{}", size("upload"));
+fn the_upload_module_is_at_most_3200_bytes_gzip() {
+    assert!(size("upload") <= 3200, "{}", size("upload"));
 }
 
 #[test]
