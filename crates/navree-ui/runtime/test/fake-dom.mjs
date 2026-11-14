@@ -62,7 +62,12 @@ class FakeEventTarget {
       for (const l of [...(listeners.get(target) || [])]) {
         if (l.type !== event.type || (capture !== null && l.capture !== capture)) continue;
         if (l.once) target.removeEventListener(l.type, l.fn);
-        typeof l.fn === "function" ? l.fn.call(target, event) : l.fn.handleEvent(event);
+        // A listener that throws is reported and the event goes on, as in a browser.
+        try {
+          typeof l.fn === "function" ? l.fn.call(target, event) : l.fn.handleEvent(event);
+        } catch (error) {
+          globalThis.page?.errors.push(error);
+        }
       }
     };
     for (const target of [...path].reverse()) {
@@ -375,7 +380,7 @@ class FakeNode extends FakeEventTarget {
   }
   /** @param {string} selector */
   querySelector(selector) {
-    return this.querySelectorAll(selector)[0] || null;
+    return FakeNode.prototype.querySelectorAll.call(this, selector)[0] || null;
   }
 }
 
@@ -506,7 +511,10 @@ class FakeElement extends FakeNode {
     // What a click does by default: a link is followed, a submit button sends its form.
     const link = this.closest("a[href]");
     if (link) globalThis.location.assign(new URL(link.getAttribute("href"), globalThis.location.href).href);
-    else if (this instanceof FakeButton && (this.getAttribute("type") || "submit") === "submit") this.form?.requestSubmit(this);
+    else if (this instanceof FakeButton && (this.getAttribute("type") || "submit") === "submit") {
+      const form = this.form;
+      if (form) FakeForm.prototype.requestSubmit.call(form, this);
+    }
   }
   getBoundingClientRect() {
     return { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 };
@@ -834,6 +842,8 @@ export function install(options = {}) {
     pushed: [],
     /** The channels to other tabs the page opened. @type {any[]} */
     channels: [],
+    /** What listeners threw. @type {unknown[]} */
+    errors: [],
     doc,
   };
   const location = {

@@ -2,7 +2,9 @@
 // form, and work without this. Here: the selection across pages, dragging and
 // keying column widths and order, the grid keys, and keeping the address bar and
 // the form's controls true to what the server drew.
-import { closest, who } from "./dom.js";
+import { active, all, body, byId, closest, every, has, make, on, who } from "./dom.js";
+
+const FP = HTMLFormElement.prototype;
 
 const STICKY_SELECT = "[data-sticky=s]";
 
@@ -114,7 +116,7 @@ function drawSelection(root) {
 
 /** Goes to `url` through the runtime, in the region. @param {Element} root @param {string} url */
 function visit(root, url) {
-  const a = document.createElement("a");
+  const a = /** @type {HTMLAnchorElement} */ (make("a"));
   a.href = url;
   a.setAttribute("data-ui-in-region", "");
   a.hidden = true;
@@ -206,9 +208,9 @@ function resetControls(root) {
   const form = /** @type {HTMLFormElement | null} */ (root.querySelector("form[data-ui-target]"));
   if (!form) return;
   const state = new URL(root.getAttribute("data-ui-src") || location.href, location.href).searchParams;
-  for (const control of form.elements) {
+  for (const control of /** @type {any} */ (Object.getOwnPropertyDescriptor(FP, "elements")?.get).call(form)) {
     const input = /** @type {HTMLInputElement} */ (control);
-    if (control === document.activeElement) {
+    if (control === active()) {
       // Back or forward: the state is the URL's, even in the box being typed in.
       if (cameBack && input.nodeName === "INPUT" && input.type !== "hidden") input.value = state.get(input.name) || "";
       continue;
@@ -249,12 +251,12 @@ function sync(root) {
   if (root.hasAttribute("data-ui-grid")) setupGrid(root);
   const place = location.search.replace(/.*\b(page|cursor|before)=([^&]*).*/, "$2");
   const scroll = root.getAttribute("data-scroll-to");
-  if (scroll && any.uiPlace !== undefined && any.uiPlace !== place) document.getElementById(scroll)?.scrollIntoView();
+  if (scroll && any.uiPlace !== undefined && any.uiPlace !== place) byId(scroll)?.scrollIntoView();
   any.uiPlace = place;
 }
 
 function syncAll() {
-  for (const root of document.querySelectorAll("[data-ui-table]")) {
+  for (const root of every("[data-ui-table]")) {
     // The server drew the table: what came before a sort here is no longer the last it drew.
     if (!root.hasAttribute("data-ui-confirm")) /** @type {any} */ (root).uiBefore = null;
     sync(/** @type {HTMLElement} */ (root));
@@ -437,7 +439,7 @@ function sortHere(root, url) {
 // The server couldn't confirm: what was done here is undone, and the table shows what
 // the server last drew. Only a sort still waiting for its answer is undone: once the
 // server has drawn the table, that is what a later failure leaves on screen.
-document.addEventListener("ui:failed", (e) => {
+on(document, "ui:failed", (e) => {
   const root = /** @type {any} */ (/** @type {Element} */ (e.target).closest?.("[data-ui-table]"));
   if (!root) return;
   const waited = root.hasAttribute("data-ui-confirm");
@@ -483,7 +485,7 @@ function tick(root, keys, on) {
   drawSelection(root);
 }
 
-document.addEventListener("click", (e) => {
+on(document, "click", (e) => {
   const target = /** @type {Element} */ (e.target);
   const root = target.closest?.("[data-ui-table]");
   if (!root) return;
@@ -528,14 +530,14 @@ document.addEventListener("click", (e) => {
   }
   // A row in stored content is no row of the table's.
   const row = closest(target, "tr[data-ui-row-href]");
-  if (row && !target.closest("a,button,input,select,label,[popover]") && !getSelection()?.toString()) visit(document.body, row.getAttribute("data-ui-row-href") || "");
+  if (row && !target.closest("a,button,input,select,label,[popover]") && !getSelection()?.toString()) visit(body(), row.getAttribute("data-ui-row-href") || "");
 }, true);
 
 // What a bulk form posts: the browser's own fields hold only this page's ticks.
-document.addEventListener("formdata", (e) => {
+on(document, "formdata", (e) => {
   const form = /** @type {HTMLFormElement} */ (e.target);
-  if (!form.hasAttribute?.("data-ui-bulk")) return;
-  const root = form.closest("[data-ui-table]");
+  if (!(form instanceof HTMLFormElement) || !has(form, "data-ui-bulk")) return;
+  const root = closest(form, "[data-ui-table]");
   if (!root) return;
   const selection = load(root);
   const data = /** @type {FormDataEvent} */ (e).formData;
@@ -551,10 +553,10 @@ document.addEventListener("formdata", (e) => {
   }
 });
 
-document.addEventListener("submit", (e) => {
+on(document, "submit", (e) => {
   const form = /** @type {HTMLFormElement} */ (e.target);
-  if (!form.hasAttribute?.("data-ui-bulk")) return;
-  const root = form.closest("[data-ui-table]");
+  if (!(form instanceof HTMLFormElement) || !has(form, "data-ui-bulk")) return;
+  const root = closest(form, "[data-ui-table]");
   if (!root) return;
   const selection = load(root);
   const n = selectedCount(root, selection);
@@ -568,7 +570,7 @@ document.addEventListener("submit", (e) => {
     confirmed = null;
     return;
   }
-  const dialog = /** @type {HTMLDialogElement | null} */ (document.getElementById(root.id + "-confirm"));
+  const dialog = /** @type {HTMLDialogElement | null} */ (byId(root.id + "-confirm"));
   if (!dialog) return;
   e.preventDefault();
   const text = dialog.querySelector("[data-slot=dialog-description]");
@@ -576,19 +578,19 @@ document.addEventListener("submit", (e) => {
   /** @type {any} */ (dialog).uiSubmit = () => {
     confirmed = button;
     dialog.close();
-    form.requestSubmit(button);
+    FP.requestSubmit.call(form, button);
   };
   dialog.showModal();
 }, true);
 
-document.addEventListener("click", (e) => {
+on(document, "click", (e) => {
   const yes = /** @type {Element} */ (e.target).closest?.("[data-ui-confirm-yes]");
   if (yes) /** @type {any} */ (yes.closest("dialog"))?.uiSubmit?.();
 });
 
 /** Puts an edited cell back to what the server last said. @param {HTMLFormElement} form */
 function rollBack(form) {
-  const control = /** @type {any} */ (form.querySelector("input:not([type=hidden]),select"));
+  const control = /** @type {any} */ (all(form, "input:not([type=hidden]),select")[0]);
   if (!control) return;
   if (control.nodeName === "SELECT") for (const option of control.options) option.selected = option.defaultSelected;
   else control.value = control.defaultValue;
@@ -596,19 +598,19 @@ function rollBack(form) {
 
 /** Makes what the cell shows the value it goes back to. @param {HTMLFormElement} form */
 function settle(form) {
-  const control = /** @type {any} */ (form.querySelector("input:not([type=hidden]),select"));
+  const control = /** @type {any} */ (all(form, "input:not([type=hidden]),select")[0]);
   if (!control) return;
   if (control.nodeName === "SELECT") for (const option of control.options) option.defaultSelected = option.selected;
   else control.defaultValue = control.value;
 }
 
-document.addEventListener("change", (e) => {
+on(document, "change", (e) => {
   const control = /** @type {HTMLInputElement} */ (e.target);
   const form = control.closest?.("form[data-ui-edit]");
-  if (form) /** @type {HTMLFormElement} */ (form).requestSubmit();
+  if (form) FP.requestSubmit.call(form);
 });
 
-document.addEventListener("keydown", (e) => {
+on(document, "keydown", (e) => {
   const control = /** @type {HTMLInputElement} */ (e.target);
   const form = /** @type {HTMLFormElement | null} */ (control.closest?.("form[data-ui-edit]"));
   if (!form) return;
@@ -622,25 +624,26 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-document.addEventListener("ui:sent", (e) => {
+on(document, "ui:sent", (e) => {
   const { form, ok } = /** @type {CustomEvent} */ (e).detail;
-  if (form.hasAttribute?.("data-ui-edit")) {
+  if (!(form instanceof HTMLFormElement)) return;
+  if (has(form, "data-ui-edit")) {
     if (ok) settle(form);
     else rollBack(form);
     return;
   }
-  const root = form.closest?.("[data-ui-table]");
-  if (root && ok && form.hasAttribute("data-ui-bulk")) {
+  const root = closest(form, "[data-ui-table]");
+  if (root && ok && has(form, "data-ui-bulk")) {
     save(root, { mode: "ids", ids: [], ex: [], key: "" });
     drawSelection(root);
   }
 });
 
-document.addEventListener("ui:swap", syncAll);
+on(document, "ui:swap", syncAll);
 
 /* Resizing: with a pointer, or the arrow keys on the handle */
 
-document.addEventListener("pointerdown", (e) => {
+on(document, "pointerdown", (e) => {
   const handle = /** @type {Element} */ (e.target).closest?.("[data-slot=col-resize]");
   const root = handle?.closest("[data-ui-table]");
   if (!handle || !root) return;
@@ -652,18 +655,18 @@ document.addEventListener("pointerdown", (e) => {
   /** @type {HTMLElement} */ (handle).setPointerCapture?.(e.pointerId);
 });
 
-document.addEventListener("pointermove", (e) => {
+on(document, "pointermove", (e) => {
   if (resizing) setWidth(resizing.root, resizing.handle, resizing.width + (e.clientX - resizing.start) * resizing.side);
 });
 
-document.addEventListener("pointerup", () => {
+on(document, "pointerup", () => {
   if (!resizing) return;
   const root = resizing.root;
   resizing = null;
   commitWidths(root);
 });
 
-document.addEventListener("keydown", (e) => {
+on(document, "keydown", (e) => {
   const target = /** @type {HTMLElement} */ (e.target);
   const cell = target.matches?.("td[tabindex]") && target.closest("[data-ui-grid]") ? target : null;
   if (cell) {
@@ -689,18 +692,18 @@ document.addEventListener("keydown", (e) => {
 
 /* Reordering by dragging a heading */
 
-document.addEventListener("dragstart", (e) => {
+on(document, "dragstart", (e) => {
   const th = /** @type {Element} */ (e.target).closest?.("th[data-col]");
   if (!th || !/** @type {Element} */ (e.target).matches?.("[data-ui-col-drag]")) return;
   dragged = th.getAttribute("data-col");
   if (/** @type {DragEvent} */ (e).dataTransfer) /** @type {DataTransfer} */ (/** @type {DragEvent} */ (e).dataTransfer).effectAllowed = "move";
 });
 
-document.addEventListener("dragover", (e) => {
+on(document, "dragover", (e) => {
   if (dragged && /** @type {Element} */ (e.target).closest?.("th[data-col]")) e.preventDefault();
 });
 
-document.addEventListener("drop", (e) => {
+on(document, "drop", (e) => {
   const th = /** @type {Element} */ (e.target).closest?.("th[data-col]");
   const root = th?.closest("[data-ui-table]");
   if (!dragged || !th || !root) return;
@@ -713,13 +716,13 @@ document.addEventListener("drop", (e) => {
   visit(root, withParam(root, "cols", names.join(",")));
 });
 
-document.addEventListener("dragend", () => {
+on(document, "dragend", () => {
   dragged = null;
 });
 
 /* A long list of filter choices: narrowing it needs no request */
 
-document.addEventListener("input", (e) => {
+on(document, "input", (e) => {
   const find = /** @type {HTMLInputElement} */ (e.target);
   if (!find.matches?.("[data-ui-find-option]")) return;
   const needle = find.value.toLowerCase();
@@ -734,7 +737,7 @@ addEventListener("popstate", () => {
   cameBack = true;
 }, true);
 
-document.addEventListener("scroll", (e) => {
+on(document, "scroll", (e) => {
   const box = /** @type {Element} */ (e.target);
   if (box.matches?.("[data-slot=table-container]")) {
     const root = box.closest("[data-ui-table]");
@@ -743,7 +746,7 @@ document.addEventListener("scroll", (e) => {
 }, { capture: true, passive: true });
 
 addEventListener("resize", () => {
-  for (const root of document.querySelectorAll("[data-ui-table]")) measureSticky(root);
+  for (const root of every("[data-ui-table]")) measureSticky(root);
 });
 
 syncAll();
