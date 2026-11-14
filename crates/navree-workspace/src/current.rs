@@ -8,7 +8,7 @@ use std::sync::Arc;
 use http::request::Parts;
 pub use navree_access::PinnedWorkspace;
 use navree_access::{Ability, PrincipalAccess};
-use navree_contracts::{AuthState, AuthVia, RequestId};
+use navree_contracts::{AuthState, AuthVia, Principal, RequestId};
 use navree_db::Uow;
 use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, Guard, PathParams, RequestWorkspace, RouteMeta};
@@ -253,12 +253,6 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
         .map_err(|_| AppError::internal("CurrentWorkspace needs WorkspaceModule in the app"))?;
     let pinned = parts.extensions.get::<PinnedWorkspace>().map(|pin| pin.0);
     let workspaces = ctx.get::<Workspaces>().await.map_err(AppError::internal)?;
-    // The `session` resolver's choice may have gone stale (the workspace was
-    // deleted, the user left it): then it is forgotten and the resolvers
-    // after it answer, once. Every other resolver's answer stands.
-    let mut skip_session = false;
-    // A browser that has chosen nothing gets its first workspace, once.
-    let mut tried_default = false;
     let (
         resolver,
         workspace,
@@ -268,80 +262,7 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
             granted_by,
         },
         guest,
-    ) = loop {
-        let looked_up = match source {
-            Source::Configured => {
-                let found = if skip_session {
-                    resolve::identifier_without_session(&config, parts)
-                } else {
-                    resolve::identifier(&config, parts)
-                };
-                found.map(|(kind, identifier)| (Some(kind), identifier))
-            }
-            Source::PathParam(name) => path_param(parts, name).await?.map(|value| (None, value)),
-            Source::Named(id) => Some((None, id.to_string())),
-        }
-        // A pinned credential names its workspace when the request doesn't.
-        .or_else(|| pinned.map(|id| (None, id.to_string())));
-        let Some((resolver, identifier)) = looked_up else {
-            // With `workspace.session_default`, a browser signed in on its
-            // session that has not switched workspace yet is in the first one
-            // it belongs to, and keeps it until it switches.
-            if matches!(source, Source::Configured)
-                && !tried_default
-                && principal.via != AuthVia::Token
-                && config.session_default
-                && config.resolvers.contains(&ResolverKind::Session)
-            {
-                tried_default = true;
-                if resolve::choose_first_workspace(parts, &workspaces, principal.user_id).await {
-                    skip_session = false;
-                    continue;
-                }
-            }
-            return Err(app_error(WorkspaceError::NoWorkspace));
-        };
-        let from_session = resolver == Some(ResolverKind::Session);
-        let workspace = match workspaces.resolve(&identifier).await {
-            Ok(workspace) => workspace,
-            Err(WorkspaceError::WorkspaceNotFound(_)) if from_session => {
-                resolve::forget_session_choice(parts);
-                skip_session = true;
-                continue;
-            }
-            Err(error) => return Err(app_error(error)),
-        };
-        if pinned.is_some_and(|pin| pin != workspace.id) {
-            return Err(PinnedWorkspace::mismatch());
-        }
-        // A member or an organization grant; else, in a demo workspace with
-        // `workspace.demo.guest_role`, a guest.
-        let admitted = match workspaces
-            .admission(&workspace, principal.user_id)
-            .await
-            .map_err(app_error)?
-        {
-            Some(admission) => Some((admission, false)),
-            None => guest_member(&config, &workspace, principal.user_id).map(|member| {
-                (
-                    Admission {
-                        role: member.role(),
-                        member,
-                        granted_by: GrantedBy::Membership,
-                    },
-                    true,
-                )
-            }),
-        };
-        match admitted {
-            Some((admission, guest)) => break (resolver, workspace, admission, guest),
-            None if from_session => {
-                resolve::forget_session_choice(parts);
-                skip_session = true;
-            }
-            None => return Err(app_error(WorkspaceError::NotMember)),
-        }
-    };
+    ) = admit(parts, source, &config, &workspaces, &principal, pinned, true).await?;
     let demo = workspace.is_demo().then_some(config.demo.mode);
     if let Some(mode) = demo {
         check_demo_write(parts, &config, mode, &role)?;
@@ -389,6 +310,113 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
     Ok(current)
 }
 
+/// The workspace the request names and how `principal` enters it, on
+/// [`CurrentWorkspace`]'s rules: the identifier `source` gives, else the
+/// workspace of a pinned credential and no other; a member, an organization
+/// grant, or a demo workspace's guest role; a `session` choice that has gone
+/// stale passed over once. With `writes` (as [`CurrentWorkspace`] does), a
+/// browser that has chosen nothing gets its first workspace as its choice
+/// (`workspace.session_default`) and a stale choice is forgotten; without,
+/// nothing is written. Returns the resolver that named the workspace, the
+/// workspace, the admission and whether it is a guest's. [`CurrentWorkspace`]
+/// and [`workspace_of_request`] both decide here, so the two never differ on
+/// who may enter.
+async fn admit(
+    parts: &mut Parts,
+    source: &Source,
+    config: &WorkspaceConfig,
+    workspaces: &Workspaces,
+    principal: &Principal,
+    pinned: Option<Uuid>,
+    writes: bool,
+) -> Result<(Option<ResolverKind>, Workspace, Admission, bool), AppError> {
+    // The `session` resolver's choice may have gone stale (the workspace was
+    // deleted, the user left it): then it is forgotten and the resolvers
+    // after it answer, once. Every other resolver's answer stands.
+    let mut skip_session = false;
+    // A browser that has chosen nothing gets its first workspace, once.
+    let mut tried_default = false;
+    loop {
+        let looked_up = match source {
+            Source::Configured => {
+                let found = if skip_session {
+                    resolve::identifier_without_session(config, parts)
+                } else {
+                    resolve::identifier(config, parts)
+                };
+                found.map(|(kind, identifier)| (Some(kind), identifier))
+            }
+            Source::PathParam(name) => path_param(parts, name).await?.map(|value| (None, value)),
+            Source::Named(id) => Some((None, id.to_string())),
+        }
+        // A pinned credential names its workspace when the request doesn't.
+        .or_else(|| pinned.map(|id| (None, id.to_string())));
+        let Some((resolver, identifier)) = looked_up else {
+            // With `workspace.session_default`, a browser signed in on its
+            // session that has not switched workspace yet is in the first one
+            // it belongs to, and keeps it until it switches.
+            if writes
+                && matches!(source, Source::Configured)
+                && !tried_default
+                && principal.via != AuthVia::Token
+                && config.session_default
+                && config.resolvers.contains(&ResolverKind::Session)
+            {
+                tried_default = true;
+                if resolve::choose_first_workspace(parts, workspaces, principal.user_id).await {
+                    skip_session = false;
+                    continue;
+                }
+            }
+            return Err(app_error(WorkspaceError::NoWorkspace));
+        };
+        let from_session = resolver == Some(ResolverKind::Session);
+        let workspace = match workspaces.resolve(&identifier).await {
+            Ok(workspace) => workspace,
+            Err(WorkspaceError::WorkspaceNotFound(_)) if from_session => {
+                if writes {
+                    resolve::forget_session_choice(parts);
+                }
+                skip_session = true;
+                continue;
+            }
+            Err(error) => return Err(app_error(error)),
+        };
+        if pinned.is_some_and(|pin| pin != workspace.id) {
+            return Err(PinnedWorkspace::mismatch());
+        }
+        // A member or an organization grant; else, in a demo workspace with
+        // `workspace.demo.guest_role`, a guest.
+        let admitted = match workspaces
+            .admission(&workspace, principal.user_id)
+            .await
+            .map_err(app_error)?
+        {
+            Some(admission) => Some((admission, false)),
+            None => guest_member(config, &workspace, principal.user_id).map(|member| {
+                (
+                    Admission {
+                        role: member.role(),
+                        member,
+                        granted_by: GrantedBy::Membership,
+                    },
+                    true,
+                )
+            }),
+        };
+        match admitted {
+            Some((admission, guest)) => return Ok((resolver, workspace, admission, guest)),
+            None if from_session => {
+                if writes {
+                    resolve::forget_session_choice(parts);
+                }
+                skip_session = true;
+            }
+            None => return Err(app_error(WorkspaceError::NotMember)),
+        }
+    }
+}
+
 /// The request's workspace when it names one the signed-in user belongs
 /// to (resolved as [`CurrentWorkspace`] would, and kept for it); `None`
 /// otherwise, never an error.
@@ -416,43 +444,11 @@ pub(crate) async fn workspace_of_request(parts: &mut Parts) -> Option<Uuid> {
     let config = ctx.get::<WorkspaceConfig>().await.ok()?;
     let workspaces = ctx.get::<Workspaces>().await.ok()?;
     let pinned = parts.extensions.get::<PinnedWorkspace>().map(|pin| pin.0);
-    // A session choice that names a workspace that is gone, or one the user
-    // may no longer enter, is passed over once (and left in the session).
-    let mut skip_session = false;
-    loop {
-        let found = if skip_session {
-            resolve::identifier_without_session(&config, parts)
-        } else {
-            resolve::identifier(&config, parts)
-        };
-        let (resolver, identifier) = found
-            .map(|(kind, identifier)| (Some(kind), identifier))
-            .or_else(|| pinned.map(|id| (None, id.to_string())))?;
-        let from_session = resolver == Some(ResolverKind::Session);
-        let workspace = match workspaces.resolve(&identifier).await {
-            Ok(workspace) => workspace,
-            Err(WorkspaceError::WorkspaceNotFound(_)) if from_session && !skip_session => {
-                skip_session = true;
-                continue;
-            }
-            Err(_) => return None,
-        };
-        if pinned.is_some_and(|pin| pin != workspace.id) {
-            return None;
-        }
-        let admitted = match workspaces.admission(&workspace, principal.user_id).await {
-            Ok(Some(_)) => true,
-            Ok(None) => guest_member(&config, &workspace, principal.user_id).is_some(),
-            Err(_) => return None,
-        };
-        if admitted {
-            return Some(workspace.id);
-        }
-        if !from_session || skip_session {
-            return None;
-        }
-        skip_session = true;
-    }
+    // `CurrentWorkspace`'s own steps, writing nothing: a stale session choice is passed
+    // over and left in the session, and none is made for a browser that has none.
+    let source = Source::Configured;
+    let admitted = admit(parts, &source, &config, &workspaces, &principal, pinned, false).await;
+    admitted.ok().map(|(_, workspace, _, _)| workspace.id)
 }
 
 /// navree-workspace's [`RequestWorkspace`]: [`workspace_of_request`].
