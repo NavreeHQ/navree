@@ -142,15 +142,18 @@ struct ChartPart: View {
     private func xAxis(width: CGFloat) -> some AxisContent {
         // Bars are named under their middle; a line's times start at their place.
         let bars = chart.kind == .bar || chart.kind == .funnel
-        let marks = ticks(width: width)
-        let last = marks.last
-        return AxisMarks(values: marks.map { String($0) }) { value in
+        let marks = Set(ticks(width: width))
+        let last = marks.max()
+        // Every place along the foot is offered and only the chosen ones are
+        // named: on iOS a categorical axis draws a mark for every category,
+        // whatever values it is given (a Mac's draws only those).
+        return AxisMarks(values: domain) { value in
             let index = value.as(String.self).flatMap { Int($0) }
-            AxisValueLabel(
-                anchor: bars ? .top : index == 0 ? .topLeading : index == last && index == count - 1 ? .topTrailing : .top,
-                collisionResolution: .disabled
-            ) {
-                if let key = value.as(String.self), let index = Int(key), index < chart.labels.count {
+            if let index, marks.contains(index), index < chart.labels.count {
+                AxisValueLabel(
+                    anchor: bars ? .top : index == 0 ? .topLeading : index == last && index == count - 1 ? .topTrailing : .top,
+                    collisionResolution: .disabled
+                ) {
                     Text(chart.labels[index]).font(AxisType.font)
                 }
             }
