@@ -163,6 +163,9 @@ every `@navree/*` package carries the same version.
   `navree_notification_lock_screen` (`nothing`) keeps the notifications the library draws off a
   secure locked screen; the library leaves its web view folder out of backups and device
   transfers; the client hands an answer's `cache-control` to the core.
+- Navree Native: `native::Answer::cache` sets the `Cache-Control` of a written screen, and
+  `navree_native::KEEP_HEADER` and `PERSON_HEADER` name the headers `x-navree-keep` and
+  `x-navree-person`. Every native answer from a signed-in session carries `x-navree-person`.
 
 ### Changed
 
@@ -175,6 +178,13 @@ every `@navree/*` package carries the same version.
   signed with a key the cached set has is verified without waiting for a fetch that another token
   started, and the tokens that need a fetch share one, still at most once every 30 seconds for a
   key id the set lacks. How long a key set is kept is unchanged.
+- Navree Native: a native app keeps a page on the device between launches only when the page was
+  read with GET, answered with success, and its `Cache-Control` does not say `no-store`. Pages are
+  `no-store` by default, so nothing is kept unless a page allows it with `View::cache("private,
+  no-cache")`, or `native::Answer::cache("private, no-cache")` for a written screen. What is kept
+  belongs to the person it was answered for (by id) or to a visitor, and is shown only after the
+  app's shell has answered and named that same person. An app whose sign-in does not give the
+  framework its principal keeps nothing for signed-in people.
 
 ### Fixed
 
@@ -215,6 +225,18 @@ every `@navree/*` package carries the same version.
   push token; the cookie store's cookies go only to the app's own origins.
 - Navree Native: an Android app that shrinks its code keeps the core's native methods and the
   protocol's serializers.
+- Navree Native: what an app keeps between launches is emptied on any write, a new build and a
+  change of person; an error, a redirect or an answer to a post removes the kept page of its
+  address; after a page in the web view or a return to the front nothing kept is shown until the
+  shell has answered again.
+- Navree Native: a whole address leaves the core percent-encoded as a browser sends it; every
+  picture source reaches a client whole, as a `data:image/` source, or empty; an address that does
+  not read is reported by its kind, scheme and host.
+- Navree Native: a sign-in whose return says the person refused, with the sign-in's own state,
+  ends quietly; a return with another state changes nothing; the shell's sign-in callback is used
+  only when it is the app's own `https` link or scheme.
+- Navree Native: a client descriptor value that is not a token is written percent-encoded in
+  `X-Navree-Client` and read back; plain values are unchanged.
 
 ## [1.2.0] - 2026-11-13
 
