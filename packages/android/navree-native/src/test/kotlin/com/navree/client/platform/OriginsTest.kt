@@ -95,6 +95,25 @@ class OriginsTest {
     }
 
     @Test
+    fun a_wildcard_needs_two_labels_after_it_and_one_that_does_not_read_is_dropped_and_named() {
+        val origins = Origins(
+            "https://shop.example",
+            also = listOf("https://*.com", "https://*.shop.example"),
+            pictureHosts = listOf("*.com", "*.cdn.example"),
+            webHosts = listOf("*.net", "*.pay.example", "*.", "pay.example"),
+        )
+        assertFalse(origins.ours("https://evil.com/"))
+        assertTrue(origins.ours("https://patiala.shop.example/"))
+        assertNull(origins.picture("https://evil.com/lota.jpg"))
+        assertEquals("https://in.cdn.example/lota.jpg", origins.picture("https://in.cdn.example/lota.jpg"))
+        assertFalse(origins.webHost("https://evil.net/frame"))
+        assertTrue(origins.webHost("https://checkout.pay.example/frame"))
+        assertTrue(origins.webHost("https://pay.example/frame"))
+        assertEquals(listOf("https://*.com", "*.com", "*.net", "*."), origins.refused)
+        assertEquals(emptyList<String>(), Origins("https://shop.example", webHosts = listOf("pay.example")).refused)
+    }
+
+    @Test
     fun only_six_schemes_are_handed_to_the_system() {
         for (address in listOf("https://pay.example/invoice/7", "http://pay.example/", "mailto:help@shop.example", "tel:+919876543210", "sms:+919876543210", "geo:30.9,75.85", "MAILTO:help@shop.example")) {
             assertTrue(address, handedToSystem(address))

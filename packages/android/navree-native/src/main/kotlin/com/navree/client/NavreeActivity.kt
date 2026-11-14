@@ -67,6 +67,8 @@ class NavreeSession(
 
     init {
         driver.effects = effects
+        // Said once, at start: an entry of the configuration that does not read is left out.
+        for (entry in effects.origins.refused) android.util.Log.w("Navree", "left out of the configuration, it does not read: $entry")
         val device = Device.of(application)
         environment = Triple(device.dark, device.textPercent, device.locale)
         engine.core = Core(coreConfig(config, device, effects.caps, application.packageName).toString().encodeToByteArray())
