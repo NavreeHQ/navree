@@ -22,7 +22,7 @@
 //! - A control that asks a question first is held until the person answers:
 //!   yes runs what it was about to do, no lets it go.
 
-use navree_native::action::{Pair, Present};
+use navree_native::action::{Command, Pair, Present};
 use navree_native::node::{Field, Form, Method, Node};
 use navree_native::{Action, Input};
 
@@ -293,9 +293,12 @@ impl Core {
             }
             return;
         }
-        // What the field itself says happens as it changes.
+        // What the field itself says happens as it changes. No one tapped:
+        // a change may change what the screen shows and send the form the
+        // field stands in, and nothing else.
         match changed {
             Some(Action::Commands { list }) => {
+                let list = self.only_on_change(&handle, list);
                 let held = self
                     .view
                     .screens
@@ -308,6 +311,9 @@ impl Core {
                     });
                 self.commands(id, list, held.as_deref());
             }
+            Some(Action::Submit {
+                form: Some(other), ..
+            }) if other != handle => self.refused_on_change("another form"),
             Some(action @ Action::Submit { .. }) if typed => {
                 let timer = self.timer(
                     TYPING_PAUSE,
@@ -322,7 +328,39 @@ impl Core {
                 }
             }
             Some(action @ Action::Submit { .. }) => self.changed_fire(id, &handle, action),
+            Some(Action::Navigate { .. } | Action::Back | Action::Refresh) => {
+                self.refused_on_change("going somewhere")
+            }
+            Some(Action::Request { .. }) => self.refused_on_change("a request"),
+            Some(Action::Device(_)) => self.refused_on_change("a device call"),
+            Some(Action::Dismiss) => self.refused_on_change("closing"),
+            // An action this build does not know does nothing.
             _ => {}
+        }
+    }
+
+    /// The commands a change of a field in the form `handle` may run: those
+    /// that change what the screen shows, and sending that same form. Copying
+    /// and sending another form wait for a tap; each is said once.
+    fn only_on_change(&mut self, handle: &str, list: Vec<Command>) -> Vec<Command> {
+        let mut kept = Vec::with_capacity(list.len());
+        for command in list {
+            match command {
+                Command::Copy { .. } => self.refused_on_change("copying"),
+                Command::Submit { ref id } if id != handle => {
+                    self.refused_on_change("another form")
+                }
+                command => kept.push(command),
+            }
+        }
+        kept
+    }
+
+    /// Says, once for each kind while the core runs, that a field's change
+    /// asked for something only a tap may start, and that it was not done.
+    fn refused_on_change(&mut self, kind: &'static str) {
+        if self.inner.change_refused.insert(kind) {
+            self.report("changed", format!("a change of value may not start {kind}"));
         }
     }
 
