@@ -14,7 +14,6 @@
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "/a/%2e%2e/%2E%2E/etc", "reads": "inside", "address": "https://shop.example/etc"},
     {"origin": "https://shop.example", "also": [], "from": "/a/b", "href": "../../../x", "reads": "inside", "address": "https://shop.example/x"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "//shop.example/a", "reads": "inside", "address": "https://shop.example/a"},
-
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "//evil.example/x", "reads": "outside", "address": "https://evil.example/x"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "//evil.example/x?a=b://c", "reads": "outside", "address": "https://evil.example/x?a=b://c"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "https://shop.example.evil.example/", "reads": "outside", "address": "https://shop.example.evil.example/"},
@@ -28,7 +27,6 @@
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "mailto:", "reads": "outside", "address": "mailto:"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "tel:+919876543210", "reads": "outside", "address": "tel:+919876543210"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "tel:", "reads": "outside", "address": "tel:"},
-
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "", "reads": "refused"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "#top", "reads": "refused"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "https://shop.example//evil.example/x", "reads": "refused"},
@@ -62,7 +60,6 @@
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "JavaScript:1", "reads": "refused"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "data:text/html,x", "reads": "refused"},
     {"origin": "https://shop.example", "also": [], "from": "/", "href": "intent://x", "reads": "refused"},
-
     {"origin": "https://shop.example", "also": ["https://*.shop.example"], "from": "/", "href": "https://a.shop.example/x", "reads": "inside", "address": "https://a.shop.example/x"},
     {"origin": "https://shop.example", "also": ["https://*.shop.example"], "from": "/", "href": "https://evilshop.example/x", "reads": "outside", "address": "https://evilshop.example/x"},
     {"origin": "https://shop.example", "also": ["https://*.shop.example"], "from": "/", "href": "https://.shop.example/x", "reads": "outside", "address": "https://.shop.example/x"},
@@ -71,7 +68,11 @@
     {"origin": "https://shop.example", "also": ["https://*.shop.example"], "from": "https://a.shop.example/orders", "href": "//evil.example/x", "reads": "outside", "address": "https://evil.example/x"},
     {"origin": "https://shop.example", "also": ["https://*.shop.example"], "from": "https://a.shop.example/", "href": "https://shop.example/x", "reads": "inside", "address": "https://shop.example/x"},
     {"origin": "https://shop.example", "also": ["https://pay.example:8443"], "from": "/", "href": "https://pay.example:8443/pay", "reads": "inside", "address": "https://pay.example:8443/pay"},
-    {"origin": "https://shop.example", "also": ["https://pay.example:8443"], "from": "/", "href": "https://pay.example/pay", "reads": "outside", "address": "https://pay.example/pay"}
+    {"origin": "https://shop.example", "also": ["https://pay.example:8443"], "from": "/", "href": "https://pay.example/pay", "reads": "outside", "address": "https://pay.example/pay"},
+    {"origin": "https://shop.example", "also": [], "from": "/orders/7", "href": "a #x", "reads": "refused"},
+    {"origin": "https://shop.example", "also": [], "from": "/orders?page=1", "href": "?q #x", "reads": "refused"},
+    {"origin": "https://shop.example", "also": [], "from": "/", "href": "/a #x", "reads": "refused"},
+    {"origin": "https://shop.example", "also": [], "from": "/", "href": "https://shop.example/a #x", "reads": "refused"}
   ],
   "ours": [
     {"origin": "https://shop.example", "also": [], "address": "https://shop.example/", "ours": true},
