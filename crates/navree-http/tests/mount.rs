@@ -975,25 +975,101 @@ impl fmt::Display for LedgerClosed {
 
 impl std::error::Error for LedgerClosed {}
 
-/// Answers by path: a panic, two errors, a plain-text 404, a JSON 422, and
-/// 200 for any other path.
+/// Answers by path: a panic, two errors, and 200 for any other path.
 async fn torn(request: Request) -> Result<http::Response<Body>, BoxError> {
     match request.uri().path() {
         "/boom" => panic!("the khata of Amritsar is torn"),
         "/closed" => Err(LedgerClosed.into()),
         "/lost" => Err("the khata of Amritsar is lost".into()),
-        "/missing" => Ok(http::Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .header("content-type", "text/plain")
-            .body(Body::from("no such entry"))
-            .unwrap()),
-        "/rejected" => Ok(http::Response::builder()
-            .status(StatusCode::UNPROCESSABLE_ENTITY)
-            .header("content-type", "application/json")
-            .body(Body::from(r#"{"field":"amount"}"#))
-            .unwrap()),
         _ => Ok(http::Response::new(Body::from("the khata is open"))),
     }
+}
+
+/// Answers by path with error statuses of its own, each marked
+/// `x-ledger: khata`: a 422 with no body, a plain-text 422, a plain-text 404,
+/// a 500 and a 422 with JSON bodies of their own shape.
+async fn answers(request: Request) -> Result<http::Response<Body>, Infallible> {
+    let (status, content_type, body) = match request.uri().path() {
+        "/empty" => (StatusCode::UNPROCESSABLE_ENTITY, None, ""),
+        "/plain" => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Some("text/plain"),
+            "amount must be at least ₹1",
+        ),
+        "/missing" => (StatusCode::NOT_FOUND, Some("text/plain"), "no such entry"),
+        "/broken" => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Some("application/json"),
+            r#"{"fault":"the ledger of Jaipur is offline"}"#,
+        ),
+        "/rejected" => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Some("application/json"),
+            r#"{"field":"amount"}"#,
+        ),
+        _ => (StatusCode::OK, Some("text/plain"), "the khata is open"),
+    };
+    let mut response = http::Response::builder()
+        .status(status)
+        .header("x-ledger", "khata");
+    if let Some(content_type) = content_type {
+        response = response.header("content-type", content_type);
+    }
+    Ok(response.body(Body::from(body)).unwrap())
+}
+
+#[tokio::test]
+async fn a_mounted_services_own_answer_goes_out_as_it_wrote_it() {
+    let app = Setup::new(vec![
+        // A route's own plain-text 422, for comparison.
+        RouteDef::on(Method::GET, "/plain", || async {
+            http::Response::builder()
+                .status(StatusCode::UNPROCESSABLE_ENTITY)
+                .header("content-type", "text/plain")
+                .body(Body::from("amount must be at least ₹1"))
+                .unwrap()
+        })
+        .public(),
+    ])
+    .register(|m| {
+        m.mount(Mount::new("/khata", tower::service_fn(answers)).public());
+    })
+    .boot()
+    .await;
+    for (path, status, content_type, body) in [
+        ("/khata/empty", 422, None, ""),
+        (
+            "/khata/plain",
+            422,
+            Some("text/plain"),
+            "amount must be at least ₹1",
+        ),
+        ("/khata/missing", 404, Some("text/plain"), "no such entry"),
+        (
+            "/khata/broken",
+            500,
+            Some("application/json"),
+            r#"{"fault":"the ledger of Jaipur is offline"}"#,
+        ),
+        (
+            "/khata/rejected",
+            422,
+            Some("application/json"),
+            r#"{"field":"amount"}"#,
+        ),
+    ] {
+        let response = app.get(path).await;
+        assert_eq!(response.status.as_u16(), status, "{path}");
+        assert_eq!(response.header("content-type"), content_type, "{path}");
+        assert_eq!(response.header("x-ledger"), Some("khata"), "{path}");
+        assert_eq!(response.text(), body, "{path}");
+        assert!(response.header("x-request-id").is_some(), "{path}");
+    }
+    // A route's own answer of the same kind still takes the app's shape.
+    assert_eq!(
+        app.get("/api/plain").await.assert_error(400)["message"],
+        "amount must be at least ₹1"
+    );
 }
 
 #[tokio::test]
@@ -1022,14 +1098,6 @@ async fn a_panic_or_an_error_inside_a_mounted_service_answers_in_the_apps_error_
     let lost = app.get("/khata/lost").await;
     assert_eq!(lost.assert_error(500)["message"], "Internal server error");
     assert!(!lost.text().contains("Amritsar"), "{}", lost.text());
-    assert_eq!(
-        app.get("/khata/missing").await.assert_error(404)["message"],
-        "no such entry"
-    );
-    let rejected = app.get("/khata/rejected").await;
-    assert_eq!(rejected.status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(rejected.header("content-type"), Some("application/json"));
-    assert_eq!(rejected.body, r#"{"field":"amount"}"#.as_bytes());
 }
 
 /// Reads a response head off `stream`, up to its blank line, within 5 s.
