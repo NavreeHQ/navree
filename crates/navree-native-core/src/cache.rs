@@ -250,7 +250,7 @@ impl Core {
     /// Takes away what the client keeps for `url`, when the list says it
     /// keeps a page there; before the list is read, remembers a screen's page
     /// (`always`) to take away once it is.
-    fn forget_kept(&mut self, url: &str, always: bool) {
+    pub(crate) fn forget_kept(&mut self, url: &str, always: bool) {
         if !self.config.cache.persist {
             return;
         }

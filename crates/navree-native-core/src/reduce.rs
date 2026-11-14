@@ -1913,7 +1913,11 @@ impl Core {
                 url: page,
                 title,
                 why,
-            } => self.show_web(id, url, &page, title, why),
+            } => {
+                // A page for the web view is never kept: an older kept copy goes.
+                self.forget_kept(url, true);
+                self.show_web(id, url, &page, title, why);
+            }
         }
     }
 
