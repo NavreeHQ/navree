@@ -34,6 +34,8 @@ internal class Ui(
     val window: WindowInfo,
     val image: suspend (String) -> ByteArray?,
     val snackbars: SnackbarHostState,
+    /** The app's origins: the web view's page and frames stay on them. */
+    val origins: com.navree.client.platform.Origins,
 ) {
     /** The cards on screens that zoom into what they open: a screen opened from one of them is drawn growing out of it. */
     val zoomCards = HashSet<String>()
