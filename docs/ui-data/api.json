@@ -13894,7 +13894,7 @@
         "name": "debug",
         "generics": "",
         "args": "debug: bool",
-        "doc": "Turns the development details on or off. What is said here stands (production aside): an app with no configuration shows them only when this turns them on."
+        "doc": "Turns the development details on or off, whatever the build. What is said here stands, except in `production` and `staging`, where they are always off: an app with no configuration shows them only when this turns them on."
       },
       {
         "name": "labels",

@@ -172,7 +172,7 @@ More: [/docs/security/passwordless/](/docs/security/passwordless/).
 | `apple` | table of AppleApp | `"{}"` | `APP_AUTH__APPS__APPLE` | The Apple apps (iOS, iPadOS, macOS, watchOS, visionOS), by name. |
 | `android` | table of AndroidApp | `"{}"` | `APP_AUTH__APPS__ANDROID` | The Android apps, by name. |
 | `keep_browser_signed_in` | boolean | `false` | `APP_AUTH__APPS__KEEP_BROWSER_SIGNED_IN` | Whether a browser that signed in only to hand its sign-in over to an app stays signed in afterwards (default `false`: it is signed out, and only the app holds a session). A browser that was signed in before the hand-over stays signed in once the person confirms, unless the app's callback is a custom scheme (the browser is then signed out and the person signs in again for the app). |
-| `callback_page` | boolean | `true` | `APP_AUTH__APPS__CALLBACK_PAGE` | Whether the site answers `GET` on the path of each `https` callback with an empty page (`Cache-Control: no-store`, `Referrer-Policy: no-referrer`), for a browser the system did not hand to the app, so the code in its address is neither kept nor sent on (default `true`). Turn it off when the app serves that path itself. |
+| `callback_page` | boolean | `false` | `APP_AUTH__APPS__CALLBACK_PAGE` | Whether the site answers `GET` on the path of each `https` callback with an empty page (`Cache-Control: no-store`, `Referrer-Policy: no-referrer`), for a browser the system did not hand to the app, so the code in its address is neither kept nor sent on (default `false`). Turn it on when the site has no page of its own at that path; an app that serves that path itself leaves it off. |
 
 ## `billing`
 
@@ -1371,7 +1371,7 @@ More: [/docs/ui/errors-and-states/](/docs/ui/errors-and-states/).
 | `sign_in` | string |  | `APP_UI__SIGN_IN` | Where "Sign in" leads: a path on this site, or the address of a sign-in provider (default `/sign-in`). The page the user came from is added as `next`. |
 | `home` | string |  | `APP_UI__HOME` | Where "Go to home" leads (default `/`). |
 | `sign_in_redirect` | boolean |  | `APP_UI__SIGN_IN_REDIRECT` | Send a guest who asks for a page straight to sign in, instead of showing the sign-in state (default off). |
-| `debug` | boolean |  | `APP_UI__DEBUG` | Add the status, code, message and cause to error pages, marked "Development only" (default: on in a debug build, off in a release build). Always off in `production` and `staging`. |
+| `debug` | boolean |  | `APP_UI__DEBUG` | Add the status, code, message and cause to error pages, marked "Development only" (default: on in a build with debug assertions, off in a release build). Always off in `production` and `staging`. |
 
 ## `validation`
 
