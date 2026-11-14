@@ -54,6 +54,24 @@ every `@navree/*` package carries the same version.
   with `PERMISSION_DENIED`, and a service with no declaration fails the boot, as does a method
   declared under another name than the one the generated server trait spells (`GetDeal` for
   `get_deal`). `use navree::plugin::prelude::*;` brings `m.tonic_service`.
+- Links in the sidebar from any module: `m.nav_item(ShellNavItem::new(..))` (`navree::ui`), drawn by
+  a shell built with `Shell::contributed()` after its own groups, each only for readers who hold its
+  permission, decided on the server for every request, app-wide or in the request's workspace.
+  `GET /_navree/ui/navigation` answers the same links as JSON, and exists only when a module adds
+  one. A link whose address is not a path of the app stops the boot.
+- Helm takes links and dashboard cards from any module: `m.helm_nav(HelmLink::new(..))` and
+  `m.helm_widget(HelmWidget::new(..))`, each shown only to users who pass its check; a card's data
+  is read only for them.
+- Modules describe their permissions with `m.permissions(&[Permission::new(..)])`
+  (`navree::contracts`, also `navree::plugin::Permission`); `permission_catalog` lists them and
+  `access:explain` prints a permission's description. Describing a permission grants it to nobody.
+  A plugin's permissions start with its namespace, and its namespace may not be another module's
+  permission prefix. A plugin that reads a configuration section outside its namespace is warned
+  about at boot. Without `AccessModule` the permissions modules describe are not checked, and a
+  route cannot require one; a workspace's owner and the app's super-admin role hold every
+  permission, a plugin's included.
+- `navree::http::RequestWorkspace`: the workspace a request names, resolved without entering it;
+  `WorkspaceModule` provides it.
 
 ### Changed
 
@@ -110,6 +128,12 @@ every `@navree/*` package carries the same version.
   modules of an app that embed one document file path with different contents now log a warning at
   boot; the later module's file is still the one used. The app's own modules, the framework's
   packages and first-party plugins register as before.
+- `Shell::contributed` is a new inherent method: an app whose own trait gives `Shell` a method named
+  `contributed` calls it through the trait (`MyExt::contributed(shell)`).
+- `AppShell::context` is a new inherent method: an app whose own trait gives `AppShell` a method
+  named `context` calls it through the trait.
+- An app with `WorkspaceModule` lists one more provider and export, `dyn RequestWorkspace`, in
+  `check --graph` and `introspect --json`.
 
 ## [1.2.2] - 2026-11-14
 

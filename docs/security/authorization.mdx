@@ -231,6 +231,36 @@ Without an abilities function, `AccessOptions::default()` uses `default_abilitie
 
 A permission has at most 128 characters: ASCII letters, digits, `_`, `-`, `.`, `:` and `*`, starting with a letter or a digit, with a non-empty prefix and action. A role name has at most 64 of the same characters, without `*`.
 
+### Describing permissions
+
+A module, a plugin's among them, describes the permissions it uses, so the app and its tools can say what each one lets someone do:
+
+```rust
+use navree::plugin::Permission;
+use navree::plugin::prelude::*;
+
+m.permissions(&[
+    Permission::new("announcements.read", "Read the workspace's announcements"),
+    Permission::new("announcements.publish", "Publish an announcement to the workspace"),
+]);
+```
+
+Describing a permission grants it to nobody. `m.permissions` describes, `#[permissions(..)]` on a route (`.permissions(&[..])` on a `RouteDef`) requires, as [Checking routes](#checking-routes) shows, and a person holds one only when the app grants it: a workspace role's list under `workspace.roles` in the app's configuration, or a role of navree-access (`access:grant editor announcements.publish`). Until then a [sidebar link](/docs/ui/app-shell/#links-other-modules-add) or a [Helm card](/docs/tools/helm/#links-and-cards-from-other-modules) that asks for it is drawn for nobody.
+
+`navree::contracts::permission_catalog(ctx)` lists every permission the app's modules describe, with the module that described it, in module order:
+
+```rust
+for (module, permission) in navree::contracts::permission_catalog(&ctx) {
+    println!("{} ({}): {}", permission.name, module.name, permission.description);
+}
+```
+
+A name is two or more lower-case words joined by `.`, each a letter followed by up to 63 letters, digits or `_` (`announcements.publish`, `announcements.notice_board.publish`). A plugin that is not one of the framework's own packages describes only permissions that start with its namespace and `.`, and its namespace may not be the first word of the permission prefix of a subject from another crate (a plugin in the namespace `deals` next to the app's subject with the prefix `deals` stops the boot). A name two modules describe is a warning, or a boot error when one of the two is such a plugin.
+
+The name, namespace and prefix checks and the check of a name two modules describe run in `AccessModule` at boot. Without `AccessModule`, nothing checks them and nothing reads the descriptions, but roles still hold what `workspace.roles.{role}.permissions` lists, and no route can require a permission.
+
+The roles that hold every permission also hold a plugin's, from the moment it is installed: a workspace's `owner` (`all.*`) in that workspace, and the app's super-admin role. So a plugin does not guard a staff-only action with a permission that a workspace owner (in a SaaS app, a customer) holds.
+
 ### Managing roles in code
 
 `AccessService` manages roles. Writes take the unit of work to run in: a request's `Uow`, or one from `db.uow(..)` in jobs, seeders and commands.
@@ -610,6 +640,15 @@ Roles: (none)
 ```
 
 `explain` returns an `Explanation` with `allowed`, the deciding `rule` and the user's `roles`; it prints as above. `ability.relevant_rule(action, subject, record, field)` gives the deciding rule in code.
+
+When a module [describes](#describing-permissions) the permission the check stands for, `access:explain` prints its description last:
+
+```text
+User 01a17751-238d-7310-b5df-b4b75c48def9 may not `publish` announcements
+No rule matches: denied by default.
+Roles: (none)
+Permission `announcements.publish`: Publish an announcement to the workspace
+```
 
 ## The CRM's abilities
 
