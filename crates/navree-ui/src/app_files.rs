@@ -62,12 +62,24 @@
 //! let html = Shell::new("Kesar").logo(&MARK).page("Today", "/").to_view().to_html();
 //! assert!(html.contains(&format!(r#"<img src="{}""#, MARK.url())));
 //! ```
+//!
+//! A plugin builds its files with `.namespace("announcements")` ([`AppSheet::namespace`],
+//! [`AppFont::namespace`], [`AppImage::namespace`]): they are served as
+//! `/_navree/ui/app/announcements.banner-{hash}.css`, apart from a file of the app's own
+//! called `banner`. A plugin's file without its namespace, and two modules that give one file
+//! name to two different files, are said at boot: a warning between the app's own modules,
+//! and a boot error when a plugin is one of them.
+
+use std::collections::HashMap;
 
 use bytes::Bytes;
 use http::HeaderMap;
 use navree_http::response::{IntoResponse, Response};
+use navree_kernel::__private::{is_community_plugin, is_namespace};
+use navree_kernel::{AppContext, ModuleId, ModuleInfo};
 
 use crate::assets;
+use crate::island::IslandScript;
 
 /// Where the app's files are served, under the toolkit's mount.
 pub const APP_PATH: &str = "/_navree/ui/app";
@@ -108,6 +120,41 @@ const fn is_file_name(name: &str) -> bool {
     true
 }
 
+/// Whether two strings are the same, as a `const fn` can tell.
+const fn same(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut at = 0;
+    while at < a.len() {
+        if a[at] != b[at] {
+            return false;
+        }
+        at += 1;
+    }
+    true
+}
+
+/// `namespace`, once it is checked to be one: what every `namespace` method fails the build
+/// for.
+pub(crate) const fn checked_namespace(namespace: &'static str) -> &'static str {
+    assert!(
+        is_namespace(namespace),
+        "a namespace is a lower-case letter followed by up to 63 lower-case letters, digits or _"
+    );
+    namespace
+}
+
+/// The name a file is served under before its hash: `{namespace}.{name}`, or `name` alone
+/// when it has no namespace.
+pub(crate) fn stem_of(namespace: Option<&str>, name: &str) -> String {
+    match namespace {
+        Some(namespace) => format!("{namespace}.{name}"),
+        None => name.to_owned(),
+    }
+}
+
 /// A stylesheet of the app's own, compiled in with `include_bytes!` and served by the
 /// toolkit at `/_navree/ui/app/{name}-{hash}.css` as `immutable`. See [the module](self).
 ///
@@ -116,6 +163,7 @@ const fn is_file_name(name: &str) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AppSheet {
     name: &'static str,
+    namespace: Option<&'static str>,
     bytes: &'static [u8],
     hash: u64,
 }
@@ -135,9 +183,34 @@ impl AppSheet {
         );
         Self {
             name,
+            namespace: None,
             bytes,
             hash: fnv(FNV_START, bytes),
         }
+    }
+
+    /// Puts the file under `namespace`, a plugin's namespace (a lower-case letter followed by
+    /// up to 63 lower-case letters, digits or `_`): it is served as `{namespace}.{name}`, and
+    /// its name stays `name`. A namespace outside that grammar fails the build, and so does a
+    /// sheet named `face`: a font's rule is served under that name.
+    ///
+    /// ```
+    /// use navree_ui::AppSheet;
+    ///
+    /// static BANNER: AppSheet =
+    ///     AppSheet::new("banner", b".notice{border-color:var(--accent)}", 16 * 1024)
+    ///         .namespace("announcements");
+    ///
+    /// assert_eq!(BANNER.name(), "banner");
+    /// assert!(BANNER.url().starts_with("/_navree/ui/app/announcements.banner-"));
+    /// ```
+    pub const fn namespace(mut self, namespace: &'static str) -> Self {
+        assert!(
+            !same(self.name, "face"),
+            "a stylesheet named `face` cannot take a namespace: a font's rule is served under that name"
+        );
+        self.namespace = Some(checked_namespace(namespace));
+        self
     }
 
     /// Its name.
@@ -155,9 +228,15 @@ impl AppSheet {
         short(self.hash)
     }
 
-    /// Where it is served: `/_navree/ui/app/{name}-{hash}.css`.
+    /// The name it is served under before its hash: `{namespace}.{name}`, or `{name}`.
+    pub(crate) fn stem(&self) -> String {
+        stem_of(self.namespace, self.name)
+    }
+
+    /// Where it is served: `/_navree/ui/app/{name}-{hash}.css`, or
+    /// `/_navree/ui/app/{namespace}.{name}-{hash}.css` after [`namespace`](Self::namespace).
     pub fn url(&self) -> String {
-        format!("{APP_PATH}/{}-{}.css", self.name, self.hash())
+        format!("{APP_PATH}/{}-{}.css", self.stem(), self.hash())
     }
 }
 
@@ -202,6 +281,7 @@ impl FontDisplay {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AppFont {
     name: &'static str,
+    namespace: Option<&'static str>,
     family: &'static str,
     bytes: &'static [u8],
     weight: (u16, u16),
@@ -252,6 +332,7 @@ impl AppFont {
         );
         Self {
             name,
+            namespace: None,
             family,
             bytes,
             weight: (400, 400),
@@ -262,6 +343,26 @@ impl AppFont {
             face_hash: 0,
         }
         .rehash()
+    }
+
+    /// Puts the file under `namespace`, a plugin's namespace (a lower-case letter followed by
+    /// up to 63 lower-case letters, digits or `_`): the file and its rule are served as
+    /// `{namespace}.{name}`, and its name stays `name`. A namespace outside that grammar fails
+    /// the build.
+    ///
+    /// ```
+    /// use navree_ui::AppFont;
+    ///
+    /// // A woff2 file starts with its signature; a real plugin includes one with `include_bytes!`.
+    /// static DISPLAY: AppFont = AppFont::new("display", "Mukta", b"wOF2....", 200 * 1024)
+    ///     .namespace("announcements");
+    ///
+    /// assert_eq!(DISPLAY.name(), "display");
+    /// assert!(DISPLAY.url().starts_with("/_navree/ui/app/announcements.display-"));
+    /// ```
+    pub const fn namespace(mut self, namespace: &'static str) -> Self {
+        self.namespace = Some(checked_namespace(namespace));
+        self
     }
 
     /// Its weight: `600` for a semibold file.
@@ -333,16 +434,23 @@ impl AppFont {
         self.preload
     }
 
-    /// Where the file is served: `/_navree/ui/app/{name}-{hash}.woff2`.
-    pub fn url(&self) -> String {
-        format!("{APP_PATH}/{}-{}.woff2", self.name, short(self.file_hash))
+    /// The name it is served under before its hash: `{namespace}.{name}`, or `{name}`.
+    pub(crate) fn stem(&self) -> String {
+        stem_of(self.namespace, self.name)
     }
 
-    /// Where its `@font-face` rule is served: `/_navree/ui/app/{name}.face-{hash}.css`.
+    /// Where the file is served: `/_navree/ui/app/{name}-{hash}.woff2`, or
+    /// `/_navree/ui/app/{namespace}.{name}-{hash}.woff2` after [`namespace`](Self::namespace).
+    pub fn url(&self) -> String {
+        format!("{APP_PATH}/{}-{}.woff2", self.stem(), short(self.file_hash))
+    }
+
+    /// Where its `@font-face` rule is served: `/_navree/ui/app/{name}.face-{hash}.css`, with
+    /// `{namespace}.{name}` in place of `{name}` after [`namespace`](Self::namespace).
     pub fn face_url(&self) -> String {
         format!(
             "{APP_PATH}/{}.face-{}.css",
-            self.name,
+            self.stem(),
             short(self.face_hash)
         )
     }
@@ -532,6 +640,7 @@ const fn is_event_attribute(bytes: &[u8], at: usize) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AppImage {
     name: &'static str,
+    namespace: Option<&'static str>,
     bytes: &'static [u8],
     kind: ImageKind,
     hash: u64,
@@ -557,10 +666,33 @@ impl AppImage {
         };
         Self {
             name,
+            namespace: None,
             bytes,
             kind,
             hash: fnv(FNV_START, bytes),
         }
+    }
+
+    /// Puts the file under `namespace`, a plugin's namespace (a lower-case letter followed by
+    /// up to 63 lower-case letters, digits or `_`): it is served as `{namespace}.{name}`, and
+    /// its name stays `name`. A namespace outside that grammar fails the build.
+    ///
+    /// ```
+    /// use navree_ui::AppImage;
+    ///
+    /// static MARK: AppImage = AppImage::new(
+    ///     "mark",
+    ///     br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14"/></svg>"#,
+    ///     8 * 1024,
+    /// )
+    /// .namespace("announcements");
+    ///
+    /// assert_eq!(MARK.name(), "mark");
+    /// assert!(MARK.url().starts_with("/_navree/ui/app/announcements.mark-"));
+    /// ```
+    pub const fn namespace(mut self, namespace: &'static str) -> Self {
+        self.namespace = Some(checked_namespace(namespace));
+        self
     }
 
     /// Its name.
@@ -583,11 +715,18 @@ impl AppImage {
         short(self.hash)
     }
 
-    /// Where it is served: `/_navree/ui/app/{name}-{hash}.{ext}`.
+    /// The name it is served under before its hash: `{namespace}.{name}`, or `{name}`.
+    pub(crate) fn stem(&self) -> String {
+        stem_of(self.namespace, self.name)
+    }
+
+    /// Where it is served: `/_navree/ui/app/{name}-{hash}.{ext}`, or
+    /// `/_navree/ui/app/{namespace}.{name}-{hash}.{ext}` after
+    /// [`namespace`](Self::namespace).
     pub fn url(&self) -> String {
         format!(
             "{APP_PATH}/{}-{}.{}",
-            self.name,
+            self.stem(),
             self.hash(),
             self.kind.extension()
         )
@@ -628,7 +767,7 @@ pub(crate) struct Served {
 impl Served {
     fn image(image: &AppImage) -> Self {
         Self {
-            stem: image.name.to_owned(),
+            stem: image.stem(),
             ext: image.kind.extension(),
             content_type: image.kind.content_type(),
             hash: image.hash(),
@@ -642,7 +781,7 @@ impl Served {
 
     fn sheet(sheet: &AppSheet) -> Self {
         Self {
-            stem: sheet.name.to_owned(),
+            stem: sheet.stem(),
             ext: "css",
             content_type: "text/css; charset=utf-8",
             hash: sheet.hash(),
@@ -654,7 +793,7 @@ impl Served {
 
     fn font(font: &AppFont) -> Self {
         Self {
-            stem: font.name.to_owned(),
+            stem: font.stem(),
             ext: "woff2",
             content_type: "font/woff2",
             hash: short(font.file_hash),
@@ -668,7 +807,7 @@ impl Served {
     fn face(font: &AppFont) -> Self {
         let rule = font.face();
         Self {
-            stem: format!("{}.face", font.name),
+            stem: format!("{}.face", font.stem()),
             ext: "css",
             content_type: "text/css; charset=utf-8",
             hash: short(font.face_hash),
@@ -740,6 +879,162 @@ pub(crate) fn respond(file: &str, request: &HeaderMap, files: &[Served]) -> Resp
         );
     }
     response
+}
+
+/// A file a module contributed, whichever kind it is.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Value {
+    Sheet(AppSheet),
+    Font(AppFont),
+    Image(AppImage),
+    Script(IslandScript),
+}
+
+/// A file a module contributed, as the checks read it.
+struct Entry {
+    module: ModuleInfo,
+    /// The name it is served under before its hash.
+    stem: String,
+    /// The extension it is served with.
+    ext: &'static str,
+    /// The namespace it was built with.
+    namespace: Option<&'static str>,
+    value: Value,
+}
+
+impl Entry {
+    /// What the boot's messages call it: its served name without the hash
+    /// (`brand.css`, `announcements.banner.css`).
+    fn name(&self) -> String {
+        format!("{}.{}", self.stem, self.ext)
+    }
+}
+
+/// Whether `module` names itself one of the framework's own plugins.
+fn is_first_party_plugin(ctx: &AppContext, module: ModuleId) -> bool {
+    ctx.plugin(module).is_some() && !is_community_plugin(ctx, module)
+}
+
+/// Whether one name given to two different files by two modules is an error: either module
+/// belongs to a plugin the kernel does not find first-party, or either file is namespaced and
+/// its module is not a first-party plugin's. Between two of an app's own modules it is a
+/// warning.
+fn is_error(ctx: &AppContext, first: &Entry, later: &Entry) -> bool {
+    [first, later].into_iter().any(|entry| {
+        is_community_plugin(ctx, entry.module.id)
+            || (entry.namespace.is_some() && !is_first_party_plugin(ctx, entry.module.id))
+    })
+}
+
+/// Checks one set of files, modules in dependency order, and adds the errors to `errors`:
+/// a file of a plugin that is not under the plugin's namespace, and a name that two modules
+/// give to two different files when that is an error. When it is not, it is a warning: the
+/// first module's file is the one served, as it always was. Two modules that give one name
+/// the same file, and one module that gives it twice, say nothing.
+fn check(ctx: &AppContext, entries: &[Entry], errors: &mut Vec<String>) {
+    let mut owners: HashMap<String, &Entry> = HashMap::new();
+    for later in entries {
+        let name = later.name();
+        if is_community_plugin(ctx, later.module.id)
+            && let Some(plugin) = ctx.plugin(later.module.id)
+            && later.namespace != Some(plugin.namespace)
+        {
+            errors.push(format!(
+                "plugin `{}` contributes the static file `{name}`, which is not under its namespace: build it with .namespace(\"{}\")",
+                plugin.name, plugin.namespace
+            ));
+        }
+        let Some(first) = owners.get(&name).copied() else {
+            owners.insert(name, later);
+            continue;
+        };
+        if first.module.id == later.module.id || first.value == later.value {
+            continue;
+        }
+        let (one, other) = (first.module.name, later.module.name);
+        if is_error(ctx, first, later) {
+            errors.push(format!(
+                "static file `{name}` is contributed by both `{one}` and `{other}`; name one under its plugin's namespace"
+            ));
+        } else {
+            tracing::warn!(
+                target: "navree::ui",
+                "static file `{name}` is contributed by both `{one}` and `{other}`; `{one}`'s is served, and this becomes an error in 2.0"
+            );
+        }
+    }
+}
+
+/// The files the app's modules contributed, ready to serve: the island scripts and the
+/// app's sheets, fonts and pictures, each name once, the first module's file kept. Fails
+/// with every problem when a plugin contributes a file outside its namespace or when two
+/// modules give one name to two different files and a plugin is one of them (see
+/// [`check`]); between the app's own modules that is a warning.
+pub(crate) fn checked_files(
+    ctx: &AppContext,
+) -> Result<(Vec<crate::island::Served>, Vec<Served>), String> {
+    let sheets = ctx.contributions::<AppSheet>();
+    let fonts = ctx.contributions::<AppFont>();
+    let images = ctx.contributions::<AppImage>();
+    let scripts = ctx.contributions::<IslandScript>();
+
+    let mut app_files = Vec::new();
+    for contributed in &sheets {
+        let sheet = *contributed.value;
+        app_files.push(Entry {
+            module: contributed.module.clone(),
+            stem: sheet.stem(),
+            ext: "css",
+            namespace: sheet.namespace,
+            value: Value::Sheet(sheet),
+        });
+    }
+    for contributed in &fonts {
+        let font = *contributed.value;
+        app_files.push(Entry {
+            module: contributed.module.clone(),
+            stem: font.stem(),
+            ext: "woff2",
+            namespace: font.namespace,
+            value: Value::Font(font),
+        });
+    }
+    for contributed in &images {
+        let image = *contributed.value;
+        app_files.push(Entry {
+            module: contributed.module.clone(),
+            stem: image.stem(),
+            ext: image.kind.extension(),
+            namespace: image.namespace,
+            value: Value::Image(image),
+        });
+    }
+    let mut island_files = Vec::new();
+    for contributed in &scripts {
+        let script = *contributed.value;
+        island_files.push(Entry {
+            module: contributed.module.clone(),
+            stem: script.stem(),
+            ext: "js",
+            namespace: script.namespace,
+            value: Value::Script(script),
+        });
+    }
+
+    let mut errors = Vec::new();
+    check(ctx, &app_files, &mut errors);
+    check(ctx, &island_files, &mut errors);
+    if !errors.is_empty() {
+        return Err(errors.join("\n"));
+    }
+    Ok((
+        crate::island::served(scripts.iter().map(|contributed| *contributed.value)),
+        served(
+            sheets.iter().map(|contributed| *contributed.value),
+            fonts.iter().map(|contributed| *contributed.value),
+            images.iter().map(|contributed| *contributed.value),
+        ),
+    ))
 }
 
 #[cfg(test)]
@@ -927,6 +1222,127 @@ mod tests {
         assert_eq!(
             ImageKind::of(b"<svg viewBox=\"0 0 8 8\"><path opacity=\"1\" d=\"M0 0\"/><text>on time</text></svg>"),
             Some(ImageKind::Svg)
+        );
+    }
+
+    static BANNER: AppSheet = AppSheet::new("banner", b".notice{border-color:var(--accent)}", 1024)
+        .namespace("announcements");
+    static PLAIN_BANNER: AppSheet = AppSheet::new("banner", b".banner{}", 1024);
+    static NOTICE_FONT: AppFont =
+        AppFont::new("display", "Mukta", b"wOF2\0\0\0\0", 1024).namespace("announcements");
+    static NOTICE_MARK: AppImage = AppImage::new(
+        "mark",
+        br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>"#,
+        1024,
+    )
+    .namespace("announcements");
+    static NOTICE_CLOCK: crate::IslandScript = crate::IslandScript::new(
+        "clock",
+        b"export function mount(body) { body.textContent = 'IST'; }",
+        1024,
+    )
+    .namespace("announcements");
+
+    #[test]
+    fn namespaced_files_are_served_under_their_namespace() {
+        assert_eq!(BANNER.name(), "banner");
+        assert_eq!(
+            BANNER.url(),
+            format!("/_navree/ui/app/announcements.banner-{}.css", BANNER.hash())
+        );
+        assert_eq!(
+            NOTICE_FONT.url(),
+            format!(
+                "/_navree/ui/app/announcements.display-{}.woff2",
+                assets::content_hash(NOTICE_FONT.bytes())
+            )
+        );
+        assert!(
+            NOTICE_FONT
+                .face_url()
+                .starts_with("/_navree/ui/app/announcements.display.face-")
+        );
+        assert_eq!(
+            NOTICE_MARK.url(),
+            format!(
+                "/_navree/ui/app/announcements.mark-{}.svg",
+                NOTICE_MARK.hash()
+            )
+        );
+        assert_eq!(
+            NOTICE_CLOCK.url(),
+            format!(
+                "/_navree/ui/island/announcements.clock-{}.js",
+                NOTICE_CLOCK.hash()
+            )
+        );
+
+        // A namespaced file and a plain one of one name are two files.
+        let files = served([BANNER, PLAIN_BANNER], [NOTICE_FONT], [NOTICE_MARK]);
+        assert_eq!(files.len(), 5, "two sheets, a font, its rule, a picture");
+        let request = HeaderMap::new();
+        for url in [
+            BANNER.url(),
+            PLAIN_BANNER.url(),
+            NOTICE_FONT.url(),
+            NOTICE_FONT.face_url(),
+            NOTICE_MARK.url(),
+        ] {
+            let response = respond(url.rsplit('/').next().unwrap(), &request, &files);
+            assert_eq!(response.status(), http::StatusCode::OK, "{url}");
+            assert_eq!(
+                response.headers()[CACHE_CONTROL],
+                "public, max-age=31536000, immutable",
+                "{url}"
+            );
+        }
+        assert_eq!(
+            respond("notices.banner-000000000000.css", &request, &files).status(),
+            http::StatusCode::NOT_FOUND
+        );
+        let scripts = crate::island::served([NOTICE_CLOCK]);
+        let clock = crate::island::respond(
+            NOTICE_CLOCK.url().rsplit('/').next().unwrap(),
+            &request,
+            &scripts,
+        );
+        assert_eq!(clock.status(), http::StatusCode::OK);
+        assert_eq!(
+            crate::island::respond(
+                &format!("clock-{}.js", NOTICE_CLOCK.hash()),
+                &request,
+                &scripts
+            )
+            .status(),
+            http::StatusCode::NOT_FOUND
+        );
+
+        // A namespace outside the grammar, and a namespaced sheet named `face`, fail the build.
+        for bad in ["Announcements", "1notices", "notice-board", ""] {
+            assert!(
+                std::panic::catch_unwind(|| {
+                    AppSheet::new("banner", b"x", 8).namespace(bad)
+                })
+                .is_err(),
+                "{bad}"
+            );
+            assert!(
+                std::panic::catch_unwind(|| {
+                    crate::IslandScript::new("clock", b"x", 8).namespace(bad)
+                })
+                .is_err(),
+                "{bad}"
+            );
+        }
+        assert!(
+            std::panic::catch_unwind(|| {
+                AppSheet::new("face", b"x", 8).namespace("announcements")
+            })
+            .is_err()
+        );
+        assert!(
+            AppSheet::new("face", b"x", 8).url().contains("/face-"),
+            "a plain sheet may be called face"
         );
     }
 
