@@ -229,8 +229,21 @@
       "expect": {
         "changed": [],
         "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
           {"t":"stream_open","stream":2,"url":"https://shop.example/broadcasting/stream?topics=stats","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
         ]
+      }
+    },
+    {
+      "note": "The shell, asked again at once since the session may have changed unseen, names the person again.",
+      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
       }
     },
     {
@@ -241,12 +254,12 @@
           {"t":"screen","id":1}
         ],
         "effects": [
-          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/fragments/figures","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","figures"]],"timeout_ms":15000}
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/fragments/figures","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","figures"]],"timeout_ms":15000}
         ]
       }
     },
     {
-      "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "store/figures.json",
       "expect": {
         "changed": [

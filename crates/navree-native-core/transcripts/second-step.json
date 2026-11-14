@@ -135,7 +135,8 @@
           {"t":"screen","id":1}
         ],
         "effects": [
-          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       },
       "check": [
@@ -143,6 +144,18 @@
         {"at":"/front","is":1},
         {"at":"/app/user","is":null}
       ]
+    },
+    {
+      "note": "The shell, asked again at once since the session may have changed unseen, names the person again.",
+      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app-nobody.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      }
     },
     {
       "note": "The shell says who.",

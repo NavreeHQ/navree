@@ -34,6 +34,20 @@
         "changed": [
           {"t":"screen","id":1}
         ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell, asked again at once since the session may have changed unseen, names the person again.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
         "effects": []
       }
     },
@@ -46,7 +60,7 @@
           {"t":"screen","id":2}
         ],
         "effects": [
-          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       },
       "check": [
@@ -58,7 +72,7 @@
     },
     {
       "note": "The orders arrive as a tree. Its table stands in a live region, so the stream is opened; every form and field has an id of its own.",
-      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "store/orders.json",
       "expect": {
         "changed": [
@@ -86,7 +100,7 @@
           {"t":"screen","id":3}
         ],
         "effects": [
-          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
           {"t":"stream_close","stream":1}
         ]
       },
@@ -99,7 +113,7 @@
     },
     {
       "note": "The order arrives.",
-      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "store/order.json",
       "expect": {
         "changed": [
@@ -122,13 +136,13 @@
           {"t":"screen","id":4}
         ],
         "effects": [
-          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/orders/999999","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/orders/999999","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
     {
       "note": "The server answers 404 with a page that says so. It is a screen like any other.",
-      "send": {"t":"response","request":5,"status":404,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":6,"status":404,"content_type":"application/vnd.navree.native+json"},
       "body": "store/order-missing.json",
       "expect": {
         "changed": [

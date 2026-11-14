@@ -33,12 +33,26 @@
         "changed": [
           {"t":"screen","id":1}
         ],
-        "effects": []
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
       },
       "check": [
         {"at":"/destinations/0/stack","is":[1]},
         {"at":"/destinations/1/stack","is":[]}
       ]
+    },
+    {
+      "note": "The shell, asked again at once since the session may have changed unseen, names the person again.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      }
     },
     {
       "note": "A snapshot of another origin.",
@@ -101,6 +115,20 @@
       "expect": {
         "changed": [
           {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell, asked again at once since the session may have changed unseen, names the person again.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
         ],
         "effects": []
       }
