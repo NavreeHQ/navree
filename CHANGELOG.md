@@ -12,6 +12,10 @@ every `@navree/*` package carries the same version.
 - `@navree/nuxt` asks for Nuxt 4.6.4 or newer (`nuxt` peer `^4.6.4`, the module's own
   compatibility check too): 4.6.3 has two advisories against `@nuxt/nitro-server` and
   `@nuxt/schema` that 4.6.4 fixes.
+- Social sign-in fetches a provider's key set with no lock held on the cached key sets: a token
+  signed with a key the cached set has is verified without waiting for a fetch that another token
+  started, and the tokens that need a fetch share one, still at most once every 30 seconds for a
+  key id the set lacks. How long a key set is kept is unchanged.
 
 ### Fixed
 

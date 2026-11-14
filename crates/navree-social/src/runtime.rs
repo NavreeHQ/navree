@@ -2,7 +2,7 @@
 //! to an app: the options, the providers and the app's services.
 
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex, PoisonError};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -223,7 +223,14 @@ struct CachedSet {
 /// Fetched JSON Web Key Sets, by URL.
 #[derive(Default)]
 pub(crate) struct JwksCache {
-    sets: Mutex<HashMap<String, CachedSet>>,
+    /// The sets fetched so far. The lock is held only to read or store one,
+    /// never across a fetch, so a verification that finds its key never
+    /// waits for another request's fetch.
+    sets: StdMutex<HashMap<String, CachedSet>>,
+    /// The turn to fetch each URL: a request that needs a fetch takes it, so
+    /// the requests that need the same fetch wait for it and share what it
+    /// brought, instead of each making its own.
+    turns: StdMutex<HashMap<String, Arc<Mutex<()>>>>,
 }
 
 impl JwksCache {
@@ -232,6 +239,10 @@ impl JwksCache {
     /// with it, see [`jwks_lifetime`]), or when it lacks `kid` (a key
     /// rotation): then once, and not again within 30 seconds, so a token
     /// with a made-up key id cannot make every request fetch the set.
+    ///
+    /// The fetch runs with no lock on the cached sets: only the requests
+    /// that need it wait for it, one fetch at a time per URL, and a request
+    /// whose key is in a set that is fresh is answered at once.
     pub(crate) async fn get<F, Fut>(
         &self,
         url: &str,
@@ -243,26 +254,46 @@ impl JwksCache {
         F: FnOnce() -> Fut,
         Fut: Future<Output = Result<(JwkSet, Duration), SocialError>>,
     {
-        let mut sets = self.sets.lock().await;
-        if let Some(cached) = sets.get(url) {
-            let fresh = now < cached.expires;
-            let knows_kid = kid.is_none_or(|kid| cached.set.has_kid(kid));
-            let refetched_lately =
-                now.signed_duration_since(cached.fetched) < delta(JWKS_MIN_REFETCH);
-            if fresh && (knows_kid || refetched_lately) {
-                return Ok(cached.set.clone());
-            }
+        if let Some(set) = self.usable(url, kid, now) {
+            return Ok(set);
+        }
+        let turn = self.turn(url);
+        let _fetching = turn.lock().await;
+        // A request ahead of this one may have fetched the set meanwhile.
+        if let Some(set) = self.usable(url, kid, now) {
+            return Ok(set);
         }
         let (set, lifetime) = fetch().await?;
-        sets.insert(
-            url.to_owned(),
-            CachedSet {
-                set: set.clone(),
-                fetched: now,
-                expires: now + delta(lifetime),
-            },
-        );
+        self.sets
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(
+                url.to_owned(),
+                CachedSet {
+                    set: set.clone(),
+                    fetched: now,
+                    expires: now + delta(lifetime),
+                },
+            );
         Ok(set)
+    }
+
+    /// The cached set at `url` when it can answer a request for `kid` at
+    /// `now`: it is fresh, and has the key or was fetched less than 30
+    /// seconds ago.
+    fn usable(&self, url: &str, kid: Option<&str>, now: DateTime<Utc>) -> Option<JwkSet> {
+        let sets = self.sets.lock().unwrap_or_else(PoisonError::into_inner);
+        let cached = sets.get(url)?;
+        let fresh = now < cached.expires;
+        let knows_kid = kid.is_none_or(|kid| cached.set.has_kid(kid));
+        let refetched_lately = now.signed_duration_since(cached.fetched) < delta(JWKS_MIN_REFETCH);
+        (fresh && (knows_kid || refetched_lately)).then(|| cached.set.clone())
+    }
+
+    /// The turn to fetch the set at `url`.
+    fn turn(&self, url: &str) -> Arc<Mutex<()>> {
+        let mut turns = self.turns.lock().unwrap_or_else(PoisonError::into_inner);
+        turns.entry(url.to_owned()).or_default().clone()
     }
 }
 
@@ -344,6 +375,86 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(fetches.load(Ordering::SeqCst), 3);
+    }
+
+    /// A fetch that brings a set with the key `kid`.
+    async fn fetched(kid: &str) -> Result<(JwkSet, Duration), SocialError> {
+        Ok((set(kid), JWKS_TTL))
+    }
+
+    #[tokio::test]
+    async fn a_fetch_under_way_does_not_make_a_known_key_wait() {
+        let cache = Arc::new(JwksCache::default());
+        let url = "https://idp/keys";
+        cache
+            .get(url, Some("a"), at(0), || fetched("a"))
+            .await
+            .unwrap();
+
+        // A token naming a key the set lacks starts a fetch that is slow.
+        let started = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let slow = tokio::spawn({
+            let cache = cache.clone();
+            let started = started.clone();
+            let release = release.clone();
+            async move {
+                cache
+                    .get(url, Some("b"), at(40), move || async move {
+                        started.notify_one();
+                        release.notified().await;
+                        fetched("b").await
+                    })
+                    .await
+            }
+        });
+        started.notified().await;
+
+        // Meanwhile a token naming a key the set has is answered at once.
+        let no_fetch = || async { Err::<(JwkSet, Duration), _>(SocialError::NotBound) };
+        let known = cache.get(url, Some("a"), at(41), no_fetch);
+        let known = tokio::time::timeout(Duration::from_secs(2), known)
+            .await
+            .expect("a key in a fresh set does not wait for a fetch")
+            .unwrap();
+        assert!(known.has_kid("a"));
+
+        release.notify_one();
+        let keys = slow.await.unwrap().unwrap();
+        assert!(keys.has_kid("b"));
+    }
+
+    #[tokio::test]
+    async fn requests_for_unknown_keys_share_one_fetch() {
+        let cache = Arc::new(JwksCache::default());
+        let fetches = Arc::new(AtomicUsize::new(0));
+        let url = "https://idp/keys";
+        cache
+            .get(url, Some("a"), at(0), || fetched("a"))
+            .await
+            .unwrap();
+
+        // Many tokens with a key id the set lacks arrive together, after
+        // the refetch delay: one of them fetches the set again.
+        let mut tasks = Vec::new();
+        for _ in 0..8 {
+            let cache = cache.clone();
+            let fetches = fetches.clone();
+            tasks.push(tokio::spawn(async move {
+                cache
+                    .get(url, Some("z"), at(40), move || async move {
+                        fetches.fetch_add(1, Ordering::SeqCst);
+                        tokio::task::yield_now().await;
+                        fetched("a").await
+                    })
+                    .await
+            }));
+        }
+        for task in tasks {
+            let keys = task.await.unwrap().unwrap();
+            assert!(!keys.has_kid("z"));
+        }
+        assert_eq!(fetches.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]

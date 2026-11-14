@@ -132,7 +132,7 @@ Each provider asks for the scopes it needs to read a name and an email. Add more
 
 How Navree reads the user:
 
-- **Google, Apple, Microsoft and `oidc` providers:** from the ID token, verified against the provider's JSON Web Key Set (RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 or EdDSA, never HMAC or `none`). Key sets are fetched over TLS and kept as long as the provider's `Cache-Control: max-age` says (between five minutes and a day; an hour without one), and fetched once more when a token names a key id the set lacks, at most every 30 seconds. When the ID token has no email, Google and `oidc` providers fill it in from their userinfo endpoint.
+- **Google, Apple, Microsoft and `oidc` providers:** from the ID token, verified against the provider's JSON Web Key Set (RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 or EdDSA, never HMAC or `none`). Key sets are fetched over TLS and kept as long as the provider's `Cache-Control: max-age` says (between five minutes and a day; an hour without one), and fetched once more when a token names a key id the set lacks, at most every 30 seconds. That fetch runs apart from the others: a token signed with a key the cached set has is verified without waiting for it, and tokens that need the fetch share one. When the ID token has no email, Google and `oidc` providers fill it in from their userinfo endpoint.
 - **GitLab, Slack and LinkedIn:** from their userinfo endpoints, with the access token.
 - **GitHub, Discord and X:** from their APIs.
 
