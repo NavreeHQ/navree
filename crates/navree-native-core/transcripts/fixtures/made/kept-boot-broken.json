@@ -1,7 +1,7 @@
 {
  "shell": "{",
  "pages": [
-  "/orders"
+  "https://shop.example/orders"
  ],
  "owner": {
   "person": [

@@ -23,9 +23,12 @@
 
 use serde::{Deserialize, Serialize};
 
+use navree_native::node::Method;
+
 use crate::Core;
 use crate::effect::Effect;
-use crate::state::{Content, ScreenId};
+use crate::event::Response;
+use crate::state::{Asked, Content, Pending, ScreenId};
 
 /// A person as the core compares people: a name and an email. `None` is a
 /// visitor, signed in as nobody.
@@ -108,6 +111,62 @@ impl Cache {
 }
 
 impl Core {
+    /// The key a page is kept under: its whole address as it leaves the core,
+    /// so two spellings of one address are one page.
+    fn key_of(&self, url: &str) -> String {
+        self.inner
+            .origin
+            .absolute(url)
+            .unwrap_or_else(|| url.to_owned())
+    }
+
+    /// Reads what an answer says of keeping its page on the device. Only a
+    /// whole page, asked for with a `get`, answered with success and with
+    /// [`navree_native::KEEP_HEADER`], may be kept; any other answer takes
+    /// away what was kept for the address asked, and loses the header. An
+    /// answer that never came (no network) changes nothing.
+    pub(crate) fn keeping(&mut self, asked: &Asked, mut response: Response) -> Response {
+        if response.error.is_some() {
+            return response;
+        }
+        let kept = !asked.delete
+            && asked.method == Method::Get
+            && asked.region.is_none()
+            && (200..300).contains(&response.status)
+            && response.header(navree_native::KEEP_HEADER) == Some("1");
+        if !kept {
+            response
+                .headers
+                .retain(|(name, _)| !name.eq_ignore_ascii_case(navree_native::KEEP_HEADER));
+            // A screen's own page is taken away from the device whatever the
+            // list in memory says; another request's address only when listed.
+            let page = matches!(asked.purpose, Pending::Page { .. });
+            self.forget_kept(&asked.url, page);
+        }
+        response
+    }
+
+    /// Takes away what the client keeps for `url`: always when `always`, else
+    /// only when the list says it keeps a page there.
+    fn forget_kept(&mut self, url: &str, always: bool) {
+        if !self.config.cache.persist {
+            return;
+        }
+        let key = self.key_of(url);
+        let listed = self.inner.cache.disk.iter().any(|kept| *kept == key);
+        if !listed && !always {
+            return;
+        }
+        self.inner.cache.disk.retain(|kept| *kept != key);
+        self.effects.push(Effect::CacheWrite {
+            key: format!("page:{key}"),
+            value: None,
+        });
+        if listed {
+            self.boot();
+        }
+    }
+
     /// Hands the client the shell, the list of pages kept and their owner.
     /// Nothing is written before what was kept has been read and has an
     /// owner: a list written then would stand for nobody's pages.
@@ -154,32 +213,24 @@ impl Core {
             return;
         }
         if !keep {
-            let disk = &mut self.inner.cache.disk;
-            if disk.iter().any(|kept| kept == url) {
-                disk.retain(|kept| kept != url);
-                self.effects.push(Effect::CacheWrite {
-                    key: format!("page:{url}"),
-                    value: None,
-                });
-                self.boot();
-            }
-            return;
+            return self.forget_kept(url, false);
         }
         if !self.inner.cache.readable() {
             return;
         }
+        let key = self.key_of(url);
         let page = Page {
             status,
             body: body.to_owned(),
         };
         self.effects.push(Effect::CacheWrite {
-            key: format!("page:{url}"),
+            key: format!("page:{key}"),
             value: serde_json::to_string(&page).ok(),
         });
         let disk = &mut self.inner.cache.disk;
-        let listed = disk.last().is_some_and(|last| last == url);
-        disk.retain(|kept| kept != url);
-        disk.push(url.to_owned());
+        let listed = disk.last().is_some_and(|last| *last == key);
+        disk.retain(|kept| *kept != key);
+        disk.push(key);
         let dropped = (disk.len() > limit).then(|| disk.remove(0));
         if let Some(dropped) = dropped {
             self.effects.push(Effect::CacheWrite {
@@ -240,12 +291,13 @@ impl Core {
     /// Asks the client for the page it kept for `url`, when it keeps one and
     /// it may be read.
     fn read_kept(&mut self, url: &str) {
+        let key = self.key_of(url);
         if self.config.cache.persist
             && self.inner.cache.readable()
-            && self.inner.cache.disk.iter().any(|kept| kept == url)
+            && self.inner.cache.disk.iter().any(|kept| *kept == key)
         {
             self.effects.push(Effect::CacheRead {
-                key: format!("page:{url}"),
+                key: format!("page:{key}"),
             });
         }
     }
@@ -353,7 +405,7 @@ impl Core {
         let Some(value) = value else {
             return;
         };
-        if let Some(url) = key.strip_prefix("page:") {
+        if let Some(kept) = key.strip_prefix("page:") {
             if !self.inner.cache.readable() {
                 return;
             }
@@ -366,7 +418,9 @@ impl Core {
                 .screens
                 .values()
                 .filter(|screen| {
-                    screen.url == url && screen.loading && matches!(screen.content, Content::Blank)
+                    screen.loading
+                        && matches!(screen.content, Content::Blank)
+                        && self.key_of(&screen.url) == kept
                 })
                 .map(|screen| screen.id)
                 .collect();

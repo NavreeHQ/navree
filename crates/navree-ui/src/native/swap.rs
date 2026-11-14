@@ -1035,7 +1035,14 @@ pub(crate) async fn layer(
                 .extensions()
                 .get::<navree_kernel::AppContext>()
                 .cloned();
-            answer(stamped(native, ctx.as_ref()).await, request, next).await
+            // Only the answer to a read may be kept on the device: never what
+            // a write answered (a page meant to be seen once).
+            let read = matches!(*request.method(), http::Method::GET | http::Method::HEAD);
+            let mut response = answer(stamped(native, ctx.as_ref()).await, request, next).await;
+            if !read {
+                response.headers_mut().remove(navree_native::KEEP_HEADER);
+            }
+            response
         }
     })
 }
