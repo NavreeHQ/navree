@@ -12,6 +12,7 @@ use crate::builder::{ProviderDef, value_def};
 use crate::command::help_text;
 use crate::container::{AppInner, RequestScope};
 use crate::graph::{Graph, GraphReport, ROOT};
+use crate::introspect::introspect_json;
 use crate::{
     BootErrors, BoxError, CommandSpec, KernelError, Lifecycle, Module, ModuleId, PluginInfo,
     PluginsReport, ProviderKey, Resolver, Scope,
@@ -151,11 +152,19 @@ impl AppBuilder {
     ///   and prints a summary (or the module tree);
     /// - `help` / `list` prints the commands;
     /// - `introspect [--json]` validates the graph without constructing
-    ///   anything and prints it as JSON ([`GraphReport::to_json`]);
+    ///   anything and prints it as JSON ([`GraphReport::to_json`], with a
+    ///   `"plugins"` array as [`PluginsReport::to_json`] writes it);
+    /// - `plugins [--json]` validates the graph without constructing anything
+    ///   and prints its plugins and what each adds ([`PluginsReport`], or its
+    ///   JSON with `--json`);
     /// - `<name> [args...]` boots the app, runs the registered command, then
     ///   shuts the app down gracefully; a command marked
     ///   [offline](CommandSpec::offline) skips the boot and the shutdown hooks;
     /// - no command runs `serve` if a module registers it, else `help`.
+    ///
+    /// The built-in `plugins` yields: when a module registers a command of
+    /// that name, that command runs instead, with its arguments, and `help`
+    /// and `introspect` no longer list the built-in.
     pub async fn run_with_args(self, args: Vec<String>) -> Result<(), BoxError> {
         let mut args = args.into_iter();
         let command = args.next();
@@ -175,7 +184,35 @@ impl AppBuilder {
                 Ok(())
             }
             Some("introspect") => {
-                println!("{}", self.validate()?.to_json());
+                let graph = self.graph()?;
+                println!(
+                    "{}",
+                    introspect_json(&graph.report(), &graph.plugins_report())
+                );
+                Ok(())
+            }
+            Some("plugins") => {
+                let graph = self.graph()?;
+                if graph.has_command("plugins") {
+                    return self.boot_and_run(graph, "plugins".to_owned(), rest).await;
+                }
+                let mut json = false;
+                for arg in &rest {
+                    if arg == "--json" && !json {
+                        json = true;
+                    } else {
+                        return Err(format!(
+                            "plugins: unexpected argument `{arg}`; usage: plugins [--json]"
+                        )
+                        .into());
+                    }
+                }
+                let report = graph.plugins_report();
+                if json {
+                    println!("{}", report.to_json());
+                } else {
+                    println!("{report}");
+                }
                 Ok(())
             }
             Some("help" | "list" | "--help" | "-h") => {
