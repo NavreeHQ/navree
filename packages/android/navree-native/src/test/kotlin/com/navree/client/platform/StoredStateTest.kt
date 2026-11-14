@@ -83,6 +83,29 @@ class StoredStateTest {
     }
 
     @Test
+    fun closing_through_the_queue_never_drops_a_wipe_already_asked_for() {
+        val thread = ByHand()
+        val state = StoredState(thread.queued::addLast)
+        val order = ArrayList<String>()
+        var finish: (() -> Unit)? = null
+        state.end { done ->
+            order += "wipe"
+            // The cookie store answers; its cookies are written to disk before the wipe says it is done.
+            finish = {
+                order += "cookies flushed"
+                done()
+            }
+        }
+        // The person leaves the app while the wipe waits for the cookie store.
+        state.always { order += "thread shut down" }
+        thread.all()
+        assertEquals(listOf("wipe"), order)
+        finish!!()
+        thread.all()
+        assertEquals(listOf("wipe", "cookies flushed", "thread shut down"), order)
+    }
+
+    @Test
     fun the_end_of_a_session_arms_its_time_limit_before_anything_it_guards() {
         val order = ArrayList<String>()
         var limit: (() -> Unit)? = null
