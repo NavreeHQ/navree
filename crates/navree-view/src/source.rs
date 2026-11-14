@@ -74,6 +74,34 @@ impl Sources {
         Ok(files)
     }
 
+    /// Which of `names` a template file provides, and so wins over an embedded
+    /// template of that name: the file the loader finds when `reload` is on,
+    /// the file in the listing of the directories otherwise (what
+    /// [`read_all`](Sources::read_all) reads). Walks the directories only when
+    /// there is a name to look for.
+    pub(crate) fn provided_by_files(
+        &self,
+        reload: bool,
+        names: &[String],
+    ) -> Result<Vec<String>, ViewError> {
+        if names.is_empty() {
+            return Ok(Vec::new());
+        }
+        if reload {
+            return Ok(names
+                .iter()
+                .filter(|name| self.file(name).is_some())
+                .cloned()
+                .collect());
+        }
+        let files = self.files()?;
+        Ok(names
+            .iter()
+            .filter(|name| files.contains_key(name.as_str()))
+            .cloned()
+            .collect())
+    }
+
     /// The file that provides template `name`, if any.
     fn file(&self, name: &str) -> Option<PathBuf> {
         if !is_template_name(name) {

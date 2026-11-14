@@ -12,7 +12,7 @@ use navree_kernel::{
 
 use navree_template::Environment;
 
-use crate::{ViewOptions, Views};
+use crate::{ViewError, ViewOptions, Views};
 
 /// The global view module: provides and exports [`Views`].
 ///
@@ -108,12 +108,24 @@ fn register(m: &mut ModuleBuilder, options: Option<ViewOptions>) {
                 let source = source.clone();
                 async move {
                     let options = source.options(&r).await?;
-                    let embedded = embedded_templates(&r.app())?;
+                    let Found {
+                        templates,
+                        takeovers,
+                        mut errors,
+                    } = embedded_templates(&r.app());
+                    let names: Vec<String> =
+                        takeovers.iter().map(|taken| taken.name.clone()).collect();
                     // Reads template files: keep it off the async workers.
-                    let mut views = tokio::task::spawn_blocking(move || {
-                        Views::with_templates(&options, embedded)
+                    let (mut views, provided) = tokio::task::spawn_blocking(move || {
+                        let views = Views::with_templates(&options, templates)?;
+                        let provided = views.provided_by_files(&names)?;
+                        Ok::<_, ViewError>((views, provided))
                     })
                     .await??;
+                    errors.extend(settle(takeovers, &provided));
+                    if !errors.is_empty() {
+                        return Err(BoxError::from(errors.join("\n")));
+                    }
                     configure_environment(&r.app(), &mut views);
                     tracing::debug!(views = ?views, "views loaded");
                     Ok(Arc::new(views))
@@ -124,17 +136,50 @@ fn register(m: &mut ModuleBuilder, options: Option<ViewOptions>) {
         .exports::<Views>();
 }
 
+/// What the check of the embedded templates leaves.
+struct Found {
+    /// Every embedded template with its full name, in the order they win: the
+    /// last one given for a name is the one rendered.
+    templates: Vec<(String, &'static str)>,
+    /// What fails the boot at once.
+    errors: Vec<String>,
+    /// The replacements that fail the boot unless a template folder settles
+    /// them.
+    takeovers: Vec<Takeover>,
+}
+
+/// A template of a module of the app or of the framework that a module of a
+/// plugin it imports replaced, while the plugin's version is the one the app
+/// renders. A file of that name in a template folder, or a module of the app
+/// that registers the name after the plugin's module, makes the app's version
+/// the one rendered instead, and the replacement is only said at `info`.
+struct Takeover {
+    /// The template's full name.
+    name: String,
+    /// The module whose template was replaced.
+    first: &'static str,
+    /// The module of the plugin that replaced it.
+    second: &'static str,
+    /// The plugin's name.
+    plugin: &'static str,
+}
+
 /// Every embedded template with its full name (a plugin's under its
 /// namespace), modules in dependency order, so that a module's template
 /// replaces one of the same name from a module it imports. Two other modules
 /// that embed one name with different text are reported: a warning, or an
 /// error when either module belongs to a plugin the kernel does not find
 /// first-party. A module of such a plugin that replaces a template of a module
-/// it imports is an error too, unless the template is another such plugin's.
-fn embedded_templates(ctx: &AppContext) -> Result<Vec<(String, &'static str)>, String> {
+/// it imports is an error too, unless the template is another such plugin's or
+/// the app's own version is the one rendered: that is a [`Takeover`], settled
+/// by a template file once the files are read.
+fn embedded_templates(ctx: &AppContext) -> Found {
     let mut owners: HashMap<String, (ModuleInfo, &'static str)> = HashMap::new();
-    let mut embedded = Vec::new();
-    let mut errors = Vec::new();
+    let mut found = Found {
+        templates: Vec::new(),
+        errors: Vec::new(),
+        takeovers: Vec::new(),
+    };
     for contributed in ctx.contributions::<EmbeddedTemplates>() {
         let module = contributed.module;
         // A plugin's templates go under its namespace. A module that names no
@@ -158,24 +203,26 @@ fn embedded_templates(ctx: &AppContext) -> Result<Vec<(String, &'static str)>, S
                 && previous.id != module.id
                 && previous_source != source
             {
-                say_duplicate(ctx, &name, &previous, &module, &mut errors);
+                say_duplicate(ctx, &name, &previous, &module, &mut found);
             }
-            embedded.push((name, source));
+            found.templates.push((name, source));
         }
     }
-    if errors.is_empty() {
-        Ok(embedded)
-    } else {
-        Err(errors.join("\n"))
-    }
+    found
 }
 
 /// What it means that `module`, after `previous`, embeds the template `name`
-/// with other text. When `module` imports `previous` (a module may replace what
-/// it imports) there are three outcomes: said at `info` when `module` is not a
+/// with other text.
+///
+/// When a plugin's module replaced a template of the app or of the framework
+/// (a [`Takeover`] still open) and `module` belongs to no plugin, the app's
+/// version is the one rendered: said at `info`, and the takeover is closed.
+///
+/// Otherwise, when `module` imports `previous` (a module may replace what it
+/// imports) there are three outcomes: said at `info` when `module` is not a
 /// module of a plugin the kernel does not find first-party; when it is, a
 /// warning if `previous` belongs to such a plugin too (another plugin's
-/// template), and an error otherwise (a template of the app or of the
+/// template), and a takeover otherwise (a template of the app or of the
 /// framework). When it does not import `previous`, an error when either belongs
 /// to such a plugin, and otherwise a warning.
 fn say_duplicate(
@@ -183,9 +230,24 @@ fn say_duplicate(
     name: &str,
     previous: &ModuleInfo,
     module: &ModuleInfo,
-    errors: &mut Vec<String>,
+    found: &mut Found,
 ) {
     let (first, second) = (previous.name, module.name);
+    if ctx.plugin(module.id).is_none() {
+        let open = found
+            .takeovers
+            .iter()
+            .find(|taken| taken.name == name)
+            .map(|taken| (taken.first, taken.second, taken.plugin));
+        if let Some((replaced, replacing, plugin)) = open {
+            found.takeovers.retain(|taken| taken.name != name);
+            tracing::info!(
+                target: "navree::view",
+                "embedded template `{name}` of `{replaced}` is replaced by `{replacing}`'s, a module of the plugin `{plugin}`; `{second}`'s is used"
+            );
+            return;
+        }
+    }
     if imports(ctx, module.id, previous.id) {
         let community = ctx
             .plugin(module.id)
@@ -205,14 +267,16 @@ fn say_duplicate(
                 );
             }
             Some(plugin) => {
-                errors.push(format!(
-                    "embedded template `{name}` of `{first}` cannot be replaced by `{second}`, a module of the plugin `{}`; to use the plugin's version, copy it to resources/views/{name} or register it from a module of the app",
-                    plugin.name
-                ));
+                found.takeovers.push(Takeover {
+                    name: name.to_owned(),
+                    first,
+                    second,
+                    plugin: plugin.name,
+                });
             }
         }
     } else if is_community_plugin(ctx, previous.id) || is_community_plugin(ctx, module.id) {
-        errors.push(format!(
+        found.errors.push(format!(
             "embedded template `{name}` is registered by both `{first}` and `{second}`; a plugin's templates are under its namespace"
         ));
     } else {
@@ -221,6 +285,32 @@ fn say_duplicate(
             "embedded template `{name}` is registered by both `{first}` and `{second}`; `{second}`'s is used, and this becomes an error in 2.0"
         );
     }
+}
+
+/// The errors of the takeovers no template file settles. `provided` holds the
+/// names a template file provides, which win over an embedded template: a
+/// takeover of such a name is said at `info` instead.
+fn settle(takeovers: Vec<Takeover>, provided: &[String]) -> Vec<String> {
+    let mut errors = Vec::new();
+    for Takeover {
+        name,
+        first,
+        second,
+        plugin,
+    } in takeovers
+    {
+        if provided.contains(&name) {
+            tracing::info!(
+                target: "navree::view",
+                "embedded template `{name}` of `{first}` is replaced by `{second}`'s, a module of the plugin `{plugin}`; the file `{name}` in a template folder is used"
+            );
+        } else {
+            errors.push(format!(
+                "embedded template `{name}` of `{first}` cannot be replaced by `{second}`, a module of the plugin `{plugin}`; to use the plugin's version, copy it to resources/views/{name} or register it from a module of the app"
+            ));
+        }
+    }
+    errors
 }
 
 /// Templates a module embeds, contributed by `m.templates(..)` (names as
@@ -265,10 +355,12 @@ pub trait ModuleBuilderViewExt {
     /// namespace, see
     /// [`ModuleBuilderPluginTemplatesExt::plugin_templates`](crate::ModuleBuilderPluginTemplatesExt::plugin_templates)).
     /// A module of such a plugin may replace a template of a module it imports
-    /// only when that template is another plugin's, and is then warned about;
-    /// replacing a template of the app or of the framework fails the boot, and
-    /// the app takes a plugin's version of such a template by putting it in a
-    /// template folder or registering it from a module of its own.
+    /// when that template is another plugin's, and is then warned about.
+    /// Replacing a template of the app or of the framework fails the boot while
+    /// the plugin's version is the one rendered: it is not when a template
+    /// folder holds a file of that name, or when a module that belongs to no
+    /// plugin registers the name after the plugin's module. The replacement is
+    /// then said at `info` and the boot goes on.
     ///
     /// ```
     /// use navree_kernel::{Module, ModuleBuilder};
