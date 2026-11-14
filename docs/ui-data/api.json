@@ -4806,7 +4806,7 @@
         "name": "attr",
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
+        "doc": "Sets an attribute on the root element. As on any element, `style`, `srcdoc` and the `on*` handlers are never written, and a URL attribute is checked like an `Href`."
       },
       {
         "name": "option",
@@ -12813,7 +12813,7 @@
         "name": "attr",
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
+        "doc": "Sets an attribute on the root element. As on any element, `style`, `srcdoc` and the `on*` handlers are never written, and a URL attribute is checked like an `Href`."
       },
       {
         "name": "option",
@@ -13894,7 +13894,7 @@
         "name": "debug",
         "generics": "",
         "args": "debug: bool",
-        "doc": "Turns the development details on or off."
+        "doc": "Turns the development details on or off. What is said here stands (production aside): an app with no configuration shows them only when this turns them on."
       },
       {
         "name": "labels",
@@ -13906,7 +13906,7 @@
         "name": "configured",
         "generics": "",
         "args": "config: &Config",
-        "doc": "These options with the `ui` section of `config` applied. A `ui` section that is not valid (an address that is not usable, a value of the wrong type) is ignored; the boot uses `try_configured`, which reports it."
+        "doc": "These options with the `ui` section of `config` applied. A `ui` section that is not valid (an address that is not usable, a value of the wrong type) is ignored, and then the development details stay off unless the code turned them on; the boot uses `try_configured`, which reports it."
       },
       {
         "name": "try_configured",
@@ -17679,7 +17679,7 @@
         "name": "attr",
         "generics": "",
         "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
+        "doc": "Sets an attribute on the root element. As on any element, `style`, `srcdoc` and the `on*` handlers are never written, and a URL attribute is checked like an `Href`."
       },
       {
         "name": "option",
@@ -24346,13 +24346,13 @@
         "name": "send_to",
         "generics": "",
         "args": "url: impl AsRef<str>",
-        "doc": "Inside a form of yours: the module sends each chosen file at once to `url`, an address on this site whose route stores it and answers with its key (`Received::into_keyed_response`), and puts the key in a hidden field named like the upload, which the form posts in place of the file. With no script the file goes with the form, which must be a multipart form. Anything that is not an address on this site is ignored."
+        "doc": "Inside a form of yours: the module sends each chosen file at once to `url`, an address on this site whose route stores it and answers with its key, made for the person sending (`Received::into_keyed_response_for`), and puts the key in a hidden field named like the upload, which the form posts in place of the file. With no script the file goes with the form, which must be a multipart form. Anything that is not an address on this site is ignored."
       },
       {
         "name": "key",
         "generics": "",
         "args": "key: impl Into<String>",
-        "doc": "The key of a file already sent (`file_key`), which the form posts again: for a form drawn again after it was refused, so the file is not chosen twice. The field is then not required in the browser."
+        "doc": "The key of a file already sent (`file_key_for`), which the form posts again: for a form drawn again after it was refused, so the file is not chosen twice. The field is then not required in the browser."
       },
       {
         "name": "chunk_from",
