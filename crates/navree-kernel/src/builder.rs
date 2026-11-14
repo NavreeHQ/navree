@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::lifecycle::LifecycleDef;
 use crate::{
     BoxError, BoxFuture, CommandSpec, Injectable, IntoModules, KernelError, Lifecycle, Module,
-    ModuleId, ProviderKey, Resolver, Scope,
+    ModuleId, PluginInfo, ProviderKey, Resolver, Scope,
 };
 
 /// A contributed value, typed by `TypeId`, with the type's name for the
@@ -52,6 +52,10 @@ pub struct ModuleBuilder {
     pub(crate) contributions: Vec<Contribution>,
     pub(crate) lifecycles: Vec<LifecycleDef>,
     pub(crate) commands: Vec<CommandSpec>,
+    /// The plugin the module names itself, from the first `plugin` call.
+    pub(crate) plugin: Option<PluginInfo>,
+    /// Whether `plugin` was called more than once (a boot error).
+    pub(crate) plugin_twice: bool,
 }
 
 impl ModuleBuilder {
@@ -66,12 +70,45 @@ impl ModuleBuilder {
             contributions: Vec::new(),
             lifecycles: Vec::new(),
             commands: Vec::new(),
+            plugin: None,
+            plugin_twice: false,
         }
     }
 
     /// The id of the module being registered.
     pub fn module_id(&self) -> ModuleId {
         self.id
+    }
+
+    /// Names this module a plugin. Call it once in `register`; several modules
+    /// of one crate may each call it with the same [`PluginInfo`], and are then
+    /// one plugin. The kernel records it
+    /// ([`AppContext::plugin`](crate::AppContext::plugin), the `plugins`
+    /// command) and checks its name, crate, version and namespace at boot.
+    /// Naming a plugin grants nothing.
+    ///
+    /// ```no_run
+    /// use navree_kernel::{Module, ModuleBuilder, Navree};
+    ///
+    /// struct AnnouncementsModule;
+    ///
+    /// impl Module for AnnouncementsModule {
+    ///     fn register(&self, m: &mut ModuleBuilder) {
+    ///         m.plugin(navree_kernel::plugin_info!(title = "Announcements"));
+    ///     }
+    /// }
+    ///
+    /// fn main() -> Result<(), navree_kernel::BoxError> {
+    ///     Navree::app().module(AnnouncementsModule).run()
+    /// }
+    /// ```
+    pub fn plugin(&mut self, info: PluginInfo) -> &mut Self {
+        if self.plugin.is_some() {
+            self.plugin_twice = true;
+        } else {
+            self.plugin = Some(info);
+        }
+        self
     }
 
     /// Imports a module: its exports become visible to this module.
