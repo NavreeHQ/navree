@@ -320,6 +320,30 @@ pub(crate) fn route_matches(pattern: &str, url: &str) -> bool {
             .all(|(want, have)| *want == "*" || want == have)
 }
 
+/// What an address says of where it leads, and nothing of its path: its
+/// scheme and its host as written (`https://shop.example`, `javascript:`,
+/// `//shop.example`), or `a path`. A path, a query or a fragment can hold a
+/// token, so a report says this, never the address.
+pub(crate) fn site_of(address: &str) -> String {
+    let host = |rest: &str| {
+        rest.split(['/', '?', '#', '\\'])
+            .next()
+            .unwrap_or("")
+            .to_owned()
+    };
+    match (scheme_of(address), address.strip_prefix("//")) {
+        (Some(scheme), _) => {
+            let rest = &address[scheme.len() + 1..];
+            match rest.strip_prefix("//") {
+                Some(rest) => format!("{scheme}://{}", host(rest)),
+                None => format!("{scheme}:"),
+            }
+        }
+        (None, Some(rest)) => format!("//{}", host(rest)),
+        (None, None) => "a path".to_owned(),
+    }
+}
+
 /// What may be opened outside the app: a whole `http` or `https` address that
 /// reads, written again from its parts, or an address of a scheme the system
 /// handles (mail, the dialler, messages, maps). Nothing else.

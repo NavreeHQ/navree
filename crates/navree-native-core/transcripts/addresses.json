@@ -46,7 +46,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"report","what":"address","detail":"link: 　//evil.example/x"}
+          {"t":"report","what":"address","detail":"link: a path"}
         ]
       }
     },
@@ -56,7 +56,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"report","what":"address","detail":"link:  /orders"}
+          {"t":"report","what":"address","detail":"link: a path"}
         ]
       }
     },
@@ -66,7 +66,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"report","what":"address","detail":"link: /a/..//evil.example/x"}
+          {"t":"report","what":"address","detail":"link: a path"}
         ]
       }
     },
@@ -75,7 +75,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"report","what":"address","detail":"link: https://shop.example//evil.example/x"}
+          {"t":"report","what":"address","detail":"link: https://shop.example"}
         ]
       }
     },
@@ -85,7 +85,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"report","what":"address","detail":"link: https://shop.example@evil.example/"}
+          {"t":"report","what":"address","detail":"link: https://shop.example@evil.example"}
         ]
       }
     },
@@ -123,7 +123,7 @@
           {"t":"screen","id":2}
         ],
         "effects": [
-          {"t":"report","what":"address","detail":"redirect: 　//evil.example/x"}
+          {"t":"report","what":"address","detail":"redirect: a path"}
         ]
       },
       "check": [
@@ -151,7 +151,7 @@
           {"t":"screen","id":3}
         ],
         "effects": [
-          {"t":"report","what":"address","detail":"redirect: /.//evil.example/x"}
+          {"t":"report","what":"address","detail":"redirect: a path"}
         ]
       },
       "check": [

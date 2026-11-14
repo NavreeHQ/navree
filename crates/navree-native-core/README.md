@@ -180,7 +180,7 @@ One more part is read without a change to say so: `{"part":"snapshot"}`, below.
 | `timer`, `cancel_timer` | `timer`, `ms` | Answers with a `timer` event after that long; or no longer. |
 | `stream_open`, `stream_close` | `stream`, `url`, `headers` | Opens a stream of server-sent events at `url`, a whole address on one of the app's origins, and answers with `stream` events; or closes it. Only an event's name is passed on. The client does not reconnect by itself: the core asks. |
 | `exit` | | There is nothing to go back to: the system takes the back. |
-| `report` | `what`, `detail` | Something the app's developers will want to know. `what` is `address` when an address an answer gave (a link, a redirect, a form's target, a region's or a list's source, a shell entry) does not read and was not followed: `detail` names the kind and the address up to its query, once for an event. |
+| `report` | `what`, `detail` | Something the app's developers will want to know. `what` is `address` when an address an answer gave (a link, a redirect, a form's target, a region's or a list's source, a shell entry) does not read and was not followed: `detail` names the kind and the address's scheme and host (or `a path`), never its path, once for an event. |
 
 ## The view state
 
