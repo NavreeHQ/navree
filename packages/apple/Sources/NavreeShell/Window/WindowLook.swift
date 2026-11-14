@@ -8,8 +8,9 @@ public struct WindowLook: Sendable, Equatable {
     public var idealSize: CGSize?
     /// The smallest a main window may become; the content's own when nil.
     public var minimumSize: CGSize?
-    /// Whether toolbar items show their symbols, their words or both, until the
-    /// person chooses otherwise from the toolbar's menu.
+    /// Whether toolbar items show their symbols, their words or both, as each
+    /// window's toolbar first shows them; the person may choose otherwise
+    /// from the toolbar's menu.
     public var toolbarLabels: ToolbarLabels
     /// Whether main windows may be merged as tabs; when they may, the person's
     /// own setting decides.
@@ -26,15 +27,16 @@ public struct WindowLook: Sendable, Equatable {
     }
 }
 
-/// How toolbar items are labelled: the system's `ToolbarLabelStyle`.
+/// How toolbar items are labelled, as the toolbar's own menu names the
+/// choices.
 public enum ToolbarLabels: String, Sendable, Equatable, CaseIterable {
     /// As the system labels them.
     case automatic
-    /// Their symbols.
+    /// Their symbols (Icon Only).
     case iconOnly
-    /// Their symbols with their words under them.
+    /// Their symbols with their words under them (Icon and Text).
     case titleAndIcon
-    /// Their words.
+    /// Their words (Text Only).
     case titleOnly
 }
 
