@@ -388,3 +388,82 @@ async fn a_connection_whose_workspace_is_gone_is_still_a_customers() {
         .await
         .assert_error_code(403, "unverified_domain");
 }
+
+#[tokio::test]
+async fn the_routes_store_the_flag_on_a_workspace_connection_as_before() {
+    let world = support::world().await;
+    let fake = SsoFake::new();
+    let workspace = workspace_of(&world).await;
+    let (_admin, token) = world.sso_admin().await;
+    let input = json!({
+        "owner": { "type": "workspace", "id": workspace },
+        "name": "Ludhiana Okta",
+        "settings": { "protocol": "saml", "metadata_xml": fake.metadata_xml() },
+        "provisioning": { "allow_unverified_emails": true },
+    });
+    let created = world
+        .app
+        .client()
+        .post("/api/sso/connections")
+        .bearer(&token)
+        .json(&input)
+        .send()
+        .await
+        .assert_status(201)
+        .assert_json_path("provisioning.allow_unverified_emails", json!(true))
+        .json_value();
+    let id = created["id"].as_str().unwrap();
+    world
+        .app
+        .client()
+        .patch(&format!("/api/sso/connections/{id}"))
+        .bearer(&token)
+        .json(&json!({ "provisioning": { "allow_unverified_emails": true, "jit": true } }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("provisioning.allow_unverified_emails", json!(true));
+}
+
+#[tokio::test]
+async fn an_update_cannot_change_a_connections_owner() {
+    let world = support::world().await;
+    let fake = SsoFake::new();
+    let workspace = workspace_of(&world).await;
+    let (_admin, token) = world.sso_admin().await;
+    let input = json!({
+        "owner": { "type": "workspace", "id": workspace },
+        "name": "Ludhiana Okta",
+        "settings": { "protocol": "saml", "metadata_xml": fake.metadata_xml() },
+        "provisioning": { "allow_unverified_emails": true },
+    });
+    let created = world
+        .app
+        .client()
+        .post("/api/sso/connections")
+        .bearer(&token)
+        .json(&input)
+        .send()
+        .await
+        .assert_status(201)
+        .assert_json_path("slug", json!("ludhiana-okta"))
+        .json_value();
+    let id = created["id"].as_str().unwrap();
+    let slug = created["slug"].as_str().unwrap();
+
+    world
+        .app
+        .client()
+        .patch(&format!("/api/sso/connections/{id}"))
+        .bearer(&token)
+        .json(&json!({ "owner": { "type": "app" }, "name": "Ludhiana Login" }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("owner", json!({ "type": "workspace", "id": workspace }))
+        .assert_json_path("name", json!("Ludhiana Login"));
+    world
+        .saml_sign_in(&fake, slug, "simran.kaur@gmail.test", &[])
+        .await
+        .assert_error_code(403, "unverified_domain");
+}
