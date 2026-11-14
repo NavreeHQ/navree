@@ -429,7 +429,7 @@ async fn the_plugins_report_needs_no_boot_and_lists_what_each_module_adds() {
         module.contributions,
         [
             ("navree_kernel::plugin::Publishable", 2),
-            ("plugins::Notice", 1)
+            ("plugins::Notice", 1),
         ]
     );
     assert_eq!(
@@ -461,4 +461,50 @@ fn a_community_plugin_using_plugin_info_is_not_first_party() {
     assert!(!report.plugins[0].first_party);
     let json: serde_json::Value = serde_json::from_str(&report.to_json()).expect("JSON");
     assert_eq!(json["plugins"][0]["first_party"], false);
+}
+
+#[tokio::test]
+async fn the_plugins_command_prints_the_report_and_yields_to_a_module_command() {
+    let built = Arc::new(AtomicUsize::new(0));
+    for args in [vec!["plugins"], vec!["plugins", "--json"]] {
+        Navree::app()
+            .module(Announcements {
+                built: built.clone(),
+            })
+            .run_with_args(args.into_iter().map(String::from).collect())
+            .await
+            .expect("listed");
+    }
+    assert_eq!(built.load(Ordering::SeqCst), 0, "plugins starts nothing");
+    let error = Navree::app()
+        .module(Announcements { built })
+        .run_with_args(vec!["plugins".into(), "--yaml".into()])
+        .await
+        .expect_err("unknown argument");
+    assert_eq!(
+        error.to_string(),
+        "plugins: unexpected argument `--yaml`; usage: plugins [--json]"
+    );
+
+    let seen = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    struct OwnPlugins(Arc<std::sync::Mutex<Vec<String>>>);
+    impl Module for OwnPlugins {
+        fn register(&self, m: &mut ModuleBuilder) {
+            let seen = self.0.clone();
+            m.command(CommandSpec::new(
+                "plugins",
+                "The app's own list",
+                move |_, args| {
+                    seen.lock().unwrap().extend(args);
+                    async { Ok(()) }
+                },
+            ));
+        }
+    }
+    Navree::app()
+        .module(OwnPlugins(seen.clone()))
+        .run_with_args(vec!["plugins".into(), "--json".into()])
+        .await
+        .expect("the app's own command");
+    assert_eq!(*seen.lock().unwrap(), ["--json"]);
 }

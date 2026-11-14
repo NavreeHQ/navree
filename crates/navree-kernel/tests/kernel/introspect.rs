@@ -57,6 +57,7 @@ fn the_report_lists_modules_providers_and_commands() {
         .expect("DealsModule");
     assert_eq!(deals["global"], false);
     assert_eq!(deals["root"], false);
+    assert_eq!(deals["type"], std::any::type_name::<DealsModule>());
     let service = deals["providers"]
         .as_array()
         .unwrap()
@@ -101,8 +102,11 @@ fn the_command_list_starts_with_the_built_ins() {
         .iter()
         .map(|c| c["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["check", "help", "introspect", "deals:close"]);
-    let close = &json["commands"][3];
+    assert_eq!(
+        names,
+        ["check", "help", "introspect", "plugins", "deals:close"]
+    );
+    let close = &json["commands"][4];
     assert_eq!(close["module"], "DealsModule");
     assert_eq!(json["commands"][0]["module"], Value::Null);
 }
@@ -122,9 +126,33 @@ fn strings_are_escaped() {
     let report = Navree::app().module(Quoted).validate().unwrap();
     let json: Value = serde_json::from_str(&report.to_json()).expect("valid JSON");
     assert_eq!(
-        json["commands"][3]["about"],
+        json["commands"][4]["about"],
         "Prints \"hi\"\\ and a\ttab\nthen a line \u{1}"
     );
+}
+
+#[test]
+fn a_built_in_that_yields_is_left_out_of_the_command_list() {
+    struct OwnPlugins;
+    impl Module for OwnPlugins {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.command(CommandSpec::new(
+                "plugins",
+                "The app's own list",
+                |_, _| async { Ok(()) },
+            ));
+        }
+    }
+    let report = Navree::app().module(OwnPlugins).validate().unwrap();
+    let json: Value = serde_json::from_str(&report.to_json()).expect("valid JSON");
+    let names: Vec<&str> = json["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["check", "help", "introspect", "plugins"]);
+    assert_eq!(json["commands"][3]["module"], "OwnPlugins");
 }
 
 #[tokio::test]
