@@ -60,7 +60,9 @@ impl Schedule {
     ///
     /// [`ModuleBuilderScheduleExt::schedule`] also contributes the job's
     /// [`JobRegistration`], so queue workers can run it without a separate
-    /// `m.job::<J>()` (registering it twice is harmless).
+    /// `m.job::<J>()` in the same module (registering it twice there is
+    /// harmless; a job type scheduled in one module and registered in another
+    /// logs a warning at boot).
     pub fn job<J: Job + Clone>(&mut self, job: J) -> &mut TaskBuilder {
         self.job_with(move |_run: &LocalRun| job.clone())
     }
