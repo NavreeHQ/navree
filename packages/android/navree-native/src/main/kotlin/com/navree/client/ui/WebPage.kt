@@ -25,6 +25,7 @@ import com.navree.client.core.Failure
 import com.navree.client.platform.OriginWebClient
 import com.navree.client.platform.Origins
 import com.navree.client.platform.WebRules
+import com.navree.client.platform.guardDocuments
 import com.navree.client.webViewToken
 
 /**
@@ -35,13 +36,15 @@ import com.navree.client.webViewToken
  * web chrome, and has no bridge to the app: no script interface, no file or
  * content access, no pop-ups, no mixed content.
  *
- * The page, and every frame in it, stays on the app's origins
- * ([OriginWebClient]): a link the person taps is handed to the core, which
- * decides where it leads (a native screen, the system browser, nothing); any
- * other way of leaving is stopped. The page's title reaches the app bar only
- * from a page on the app's origins. When the web view's process ends, the page
- * is loaded again once in a new web view, and after that the screen says it
- * failed, with "try again".
+ * The page stays on the app's origins, and what it loads inside it comes
+ * from them or from the app's web hosts ([OriginWebClient], and a check at
+ * the start of every document, [guardDocuments]): a link the person taps is
+ * handed to the core, which decides where it leads (a native screen, the
+ * system browser, nothing); any other way of leaving is stopped, and a page
+ * taken off the origins ends as a failed screen. The page's title reaches the
+ * app bar only from a page on the app's origins. When the web view's process
+ * ends, the page is loaded again once in a new web view, and after that the
+ * screen says it failed, with "try again".
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -88,6 +91,10 @@ internal fun WebPage(
                             settings.safeBrowsingEnabled = true
                             settings.userAgentString = settings.userAgentString + " " + webViewToken()
                             CookieManager.getInstance().setAcceptCookie(true)
+                            // Cookies of a frame from another site are refused (the system's default, said here).
+                            CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
+                            // Before the first load, so it runs in every document of every frame.
+                            guardDocuments(this, origins)
                             webViewClient = OriginWebClient(
                                 origins,
                                 onLink = { link(it) },

@@ -62,7 +62,7 @@ class NavreeSession(
         origin,
         config.googleClientId,
         config.push,
-        origins = Origins(config.origin, config.also, config.loopbackHttp, config.pictureHosts),
+        origins = Origins(config.origin, config.also, config.loopbackHttp, config.pictureHosts, config.webHosts),
         loopbackHttp = config.loopbackHttp,
     )
 

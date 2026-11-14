@@ -6,6 +6,10 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import java.io.ByteArrayInputStream
 
 /** What becomes of a navigation the web view is about to make. */
@@ -33,9 +37,11 @@ enum class WebRequest {
 }
 
 /**
- * The web view's rules: the page stays on the app's origins, and so does
- * every frame inside it. Plain functions of what the web view reports, so
- * each can be tested without one.
+ * The web view's rules: the page itself stays on the app's origins; what it
+ * loads inside it (scripts, styles, pictures, frames) comes from the app's
+ * origins or from a host the app names for the web view ([Origins.webHost]).
+ * Plain functions of what the web view reports, so each can be tested
+ * without one.
  */
 object WebRules {
     /**
@@ -44,26 +50,36 @@ object WebRules {
      * are; one that would leave the origins is stopped, and handed to the core
      * only when the person started it. A redirect on the origins is part of
      * loading what was asked for. A frame inside the page goes on only on the
-     * app's origins.
+     * app's origins or a web host.
      */
-    fun navigation(ours: Boolean, mainFrame: Boolean, redirect: Boolean, gesture: Boolean): WebNavigation = when {
-        !mainFrame -> if (ours) WebNavigation.Load else WebNavigation.Stop
+    fun navigation(ours: Boolean, webHost: Boolean, mainFrame: Boolean, redirect: Boolean, gesture: Boolean): WebNavigation = when {
+        !mainFrame -> if (ours || webHost) WebNavigation.Load else WebNavigation.Stop
         ours -> if (redirect) WebNavigation.Load else WebNavigation.Core
         gesture -> WebNavigation.Core
         else -> WebNavigation.Stop
     }
 
     /**
-     * A request the web view is about to send, from any frame, by any method:
-     * only to the app's origins. A page or a form posted elsewhere keeps the
-     * page in front; anything else elsewhere is refused. A picture or a font
-     * written into the page itself (`data:`, `blob:`) is not sent anywhere and
-     * is let through, unless it asks for a document, which would be a page
-     * that is not the app's in a frame.
+     * Whether a navigation of the main frame that is not loaded leaves the
+     * screen with nothing to show: a redirect away from the origins (of the
+     * first load, or of a page posted), which the screen then shows as failed.
      */
-    fun request(ours: Boolean, mainFrame: Boolean, scheme: String?, accept: String?): WebRequest = when {
+    fun leftByRedirect(mainFrame: Boolean, redirect: Boolean, navigation: WebNavigation): Boolean =
+        mainFrame && redirect && navigation != WebNavigation.Load
+
+    /**
+     * A request the web view is about to send, from any frame, by any method,
+     * as far as its first address. The page itself only to the app's
+     * origins; a page or a form posted elsewhere keeps the page in front.
+     * What a page loads inside it: the app's origins and the web hosts. A
+     * picture or a font written into the page itself (`data:`, `blob:`) is
+     * not sent anywhere and is let through, unless it asks for a document,
+     * which would be a page that is not the app's in a frame.
+     */
+    fun request(ours: Boolean, webHost: Boolean, mainFrame: Boolean, scheme: String?, accept: String?): WebRequest = when {
         ours -> WebRequest.Send
         mainFrame -> WebRequest.KeepPage
+        webHost -> WebRequest.Send
         (scheme == "data" || scheme == "blob") && !asksForDocument(accept) -> WebRequest.Send
         else -> WebRequest.Refuse
     }
@@ -78,8 +94,55 @@ object WebRules {
      */
     fun reloadAfterGone(times: Int): Boolean = times <= 1
 
+    /**
+     * The script that runs at the start of every document in every frame,
+     * before the document's own scripts: a document whose origin is not one
+     * of [origins] (as `[scheme, host, port]`, a host may start with `*.`) is
+     * stopped and emptied before anything of it is drawn or run. A document
+     * with no origin of its own (a sandboxed frame, a `data:` page) is
+     * stopped too. Anything the script cannot read leaves the document as it
+     * is: the request checks before it still hold.
+     */
+    fun documentScript(origins: List<Triple<String, String, Int>>): String {
+        val rules = buildJsonArray {
+            for ((scheme, host, port) in origins) {
+                add(
+                    buildJsonArray {
+                        add(JsonPrimitive(scheme))
+                        add(JsonPrimitive(host))
+                        add(JsonPrimitive(port))
+                    },
+                )
+            }
+        }
+        return "(function(){function stop(){window.stop();var d=document.documentElement;if(d)d.remove()}" +
+            "try{var r=$rules,o=self.origin;if(o==='null'){stop();return}" +
+            "var u=new URL(o),s=u.protocol.slice(0,-1),h=u.hostname,p=u.port?+u.port:(s==='http'?80:443);" +
+            "for(var i=0;i<r.length;i++){var x=r[i],n=x[1];if(x[0]===s&&x[2]===p&&(n===h||(n.indexOf('*.')===0&&h.length>n.length-1&&h.slice(1-n.length)===n.slice(1))))return}" +
+            "stop()}catch(e){}})();"
+    }
+
     private fun asksForDocument(accept: String?): Boolean =
         accept != null && (accept.contains("text/html", ignoreCase = true) || accept.contains("application/xhtml", ignoreCase = true))
+}
+
+/**
+ * Adds [WebRules.documentScript] to a web view, to run at the start of every
+ * document in every frame, the one check that also sees a document reached
+ * by a redirect the web view's callbacks are never told of (a frame's, a
+ * posted form's). Call before the first load. Where the system's web view
+ * lacks the feature (`WebViewFeature.DOCUMENT_START_SCRIPT`), nothing is
+ * added and the request checks of [OriginWebClient] are what holds. Answers
+ * whether the script was added.
+ */
+fun guardDocuments(view: WebView, origins: Origins): Boolean {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return false
+    return try {
+        WebViewCompat.addDocumentStartJavaScript(view, WebRules.documentScript(origins.documentOrigins()), setOf("*"))
+        true
+    } catch (_: Exception) {
+        false
+    }
 }
 
 /**
@@ -94,14 +157,16 @@ open class OriginWebClient(
     private val onLink: (String) -> Unit,
     /** The page started (true) or finished (false) loading. */
     private val onLoading: (Boolean) -> Unit = {},
-    /** A page that is not on the app's origins began to load in the main frame, and was stopped. */
+    /** The main frame was taken off the app's origins (a redirect, a page that began to load elsewhere) and stopped. */
     private val onLeft: () -> Unit = {},
     /** The web view's process ended; the web view can no longer be used. */
     private val onGone: (WebView) -> Unit = {},
 ) : WebViewClient() {
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         val url = request.url.toString()
-        return when (WebRules.navigation(origins.ours(url), request.isForMainFrame, request.isRedirect, request.hasGesture())) {
+        val navigation = WebRules.navigation(origins.ours(url), origins.webHost(url), request.isForMainFrame, request.isRedirect, request.hasGesture())
+        if (WebRules.leftByRedirect(request.isForMainFrame, request.isRedirect, navigation)) onLeft()
+        return when (navigation) {
             WebNavigation.Load -> false
             WebNavigation.Core -> {
                 onLink(url)
@@ -115,7 +180,7 @@ open class OriginWebClient(
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
         val url = request.url.toString()
         val accept = request.requestHeaders?.entries?.firstOrNull { it.key.equals("accept", ignoreCase = true) }?.value
-        return when (WebRules.request(origins.ours(url), request.isForMainFrame, request.url.scheme?.lowercase(), accept)) {
+        return when (WebRules.request(origins.ours(url), origins.webHost(url), request.isForMainFrame, request.url.scheme?.lowercase(), accept)) {
             WebRequest.Send -> null
             WebRequest.KeepPage -> empty(204, "No Content")
             WebRequest.Refuse -> empty(403, "Forbidden")

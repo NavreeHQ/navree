@@ -30,12 +30,22 @@ class Origins(
     loopbackHttp: Boolean = false,
     /** Hosts pictures may also come from, over `https`, such as `images.shop.example` or `*.cdn.example`. */
     pictureHosts: List<String> = emptyList(),
+    /**
+     * Hosts that may serve what a page in the web view loads inside it
+     * (scripts, styles, fonts, pictures, frames), never the page itself and
+     * never a native request: `pay.example`, `*.cdn.example`, with a `:port`
+     * where it is not 443. Over `https`; plain `http` only to the machine
+     * itself, as for the origins.
+     */
+    webHosts: List<String> = emptyList(),
 ) {
+    private val loopback = loopbackHttp
     private val home: Site? = Site.read(origin)?.takeIf { it.allowed(loopbackHttp) && it.bare }
     private val others: List<Site> = also.mapNotNull { text -> Site.read(text, wildcard = true)?.takeIf { it.allowed(loopbackHttp) && it.bare } }
     private val pictures: List<String> = pictureHosts.mapNotNull { host ->
         host.lowercase(Locale.ROOT).takeIf { Site.hostReads(it, wildcard = true) }
     }
+    private val web: List<Pair<String, Int?>> = webHosts.mapNotNull { hostRule(it) }
     private val base: HttpUrl? = home?.let { origin.toHttpUrlOrNull() }
 
     /** Whether the configured origin can be used at all. */
@@ -74,8 +84,46 @@ class Origins(
         site.scheme == "https" && site.port == 443 && pictures.any { Site.hostCovers(it, site.host) }
     } ?: false)
 
+    /**
+     * Whether this whole address is on a host of [webHosts]: what a page in
+     * the web view may load inside it beside the app's own origins. Never
+     * asked of a page itself, a native request, a stream or a picture.
+     */
+    fun webHost(address: String): Boolean {
+        val site = Site.read(address) ?: return false
+        val secure = site.scheme == "https"
+        if (!secure && !(loopback && site.host in LOOPBACK)) return false
+        return web.any { (host, port) -> Site.hostCovers(host, site.host) && site.port == (port ?: if (secure) 443 else 80) }
+    }
+
+    /**
+     * The origins a document in the web view may have, as `[scheme, host,
+     * port]` (a host may start with `*.`): the app's own and those of
+     * [webHosts]. What the web view's document-start check compares with.
+     */
+    fun documentOrigins(): List<Triple<String, String, Int>> = buildList {
+        for (site in listOfNotNull(home) + others) add(Triple(site.scheme, site.host, site.port))
+        for ((host, port) in web) {
+            add(Triple("https", host, port ?: 443))
+            if (loopback && host in LOOPBACK) add(Triple("http", host, port ?: 80))
+        }
+    }
+
     internal companion object {
         val LOOPBACK = setOf("localhost", "127.0.0.1", "10.0.2.2", "[::1]")
+
+        /** A host, or a `*.` pattern, with an optional `:port`; null when it does not read. */
+        fun hostRule(text: String): Pair<String, Int?>? {
+            val entry = text.trim().lowercase(Locale.ROOT)
+            if (entry.isEmpty() || !clean(entry)) return null
+            val colon = if (entry.startsWith("[")) entry.indexOf("]:").let { if (it < 0) -1 else it + 1 } else entry.lastIndexOf(':')
+            val host = if (colon < 0) entry else entry.substring(0, colon)
+            val portText = if (colon < 0) null else entry.substring(colon + 1)
+            val reads = host in LOOPBACK || Site.hostReads(host, wildcard = true)
+            if (!reads) return null
+            val port = portText?.let { text -> text.takeIf { it.isNotEmpty() && it.length <= 5 && it.all { c -> c in '0'..'9' } }?.toInt()?.takeIf { it in 1..65535 } ?: return null }
+            return host to port
+        }
     }
 }
 
