@@ -100,6 +100,17 @@ impl<R: TableRow, F: FilterBar> ViewPost<R, F> {
                 target: self.table.clone(),
             })
     }
+
+    /// Refuses, saving nothing: says why, with `status`, and redraws the table. A person
+    /// who already keeps the most views a table allows (`TooManyViews`) is answered this way.
+    pub fn refused(&self, status: StatusCode, text: impl Into<String>) -> Reply {
+        Reply::ops_or_redirect(self.query.href())
+            .toast(ToastTone::Danger, text)
+            .op(Op::Invalidate {
+                target: self.table.clone(),
+            })
+            .status(status)
+    }
 }
 
 impl<R, F> FromRequest for ViewPost<R, F>

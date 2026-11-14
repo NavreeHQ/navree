@@ -215,6 +215,49 @@ A tick in a filter's list, a radio and a select apply at once. The search box an
 | `.debounce(wait)` | how long typing in the search or a text filter waits for a pause: 100 ms unless this says otherwise |
 | `.prefetch()` | fetches the table's own links (sort, page, filter chips, details) when the pointer rests on one, so the next state is often there before the click; off unless asked |
 
+## Saved views
+
+`.views(&views, url)` adds a Views menu: a link for each view a person saved, and a form that saves the table's current state under a name. A view is a name and a query string, so applying one is following a link, and it goes through the same allow-list as any URL. `list_views`, `save_view` and `delete_view` keep the views in the table `navree_ui_table_views` (a collection of that name on MongoDB), found by an owner string and a table id that you give them.
+
+The owner is whatever you scope views by, and the table knows nothing more of it: two people with the same owner string share their views. In an app with workspaces, put the workspace into the owner, so that each workspace's people have views of their own and a person who belongs to two workspaces keeps two sets:
+
+```rust,ignore
+use navree::db::Uow;
+use navree::http::StatusCode;
+use navree::ui::Reply;
+use navree::ui::table::{TooManyViews, ViewOp, ViewPost, delete_view, save_view};
+
+async fn views(
+    uow: Uow,
+    workspace: CurrentWorkspace,
+    user: CurrentUser,
+    post: ViewPost<Deal>,
+) -> Result<Reply> {
+    // The workspace is in the owner: these are the person's views in this workspace.
+    let owner = format!("{}:{}", workspace.id, user.id);
+    let text = match post.op() {
+        ViewOp::Save => {
+            let saved = save_view(&uow, &owner, "deals", post.name(), post.query(), post.is_default())
+                .await;
+            if let Err(error) = &saved
+                && let Some(full) = TooManyViews::of(error)
+            {
+                return Ok(post.refused(StatusCode::UNPROCESSABLE_ENTITY, full.to_string()));
+            }
+            saved?;
+            "View saved."
+        }
+        ViewOp::Delete => {
+            delete_view(&uow, &owner, post.view()).await?;
+            "View deleted."
+        }
+    };
+    Ok(post.done(text))
+}
+```
+
+An owner keeps at most 50 views of one table (`MAX_SAVED_VIEWS`). `save_view` refuses another with `TooManyViews` and writes nothing, not even a change of the default; `ViewPost::refused` answers the form with the reason, as above, and if you let the error go up it is the 500 any error from the store is. `list_views` shows at most 200. The count is read before the view is written, so two views that one owner saves in the same instant can both be saved when one place was left. Where columns are [taken away](#columns-a-person-may-not-use) from a person, make the same call on the `ViewPost` before saving, so that no view holds one.
+
 ## Exporting
 
 `.export(url)` adds a link that carries the table's state to a route of yours, and `TableQuery::export_csv(builder, &uow, "deals.csv", map)` answers it with a CSV file of the current search, filters, sort and columns. It reads from your scoped query inside the request's unit of work, a chunk at a time, and keeps what it has written in memory only up to 8 MiB before it goes to a temporary file.
@@ -241,7 +284,7 @@ RouteDef::on(Method::GET, "/deals/export", || async { "the file" })
 - **One table per URL.** Its state lives in plain query parameters, so two tables on one page would share it: give the second its own route or [region](/docs/ui/regions/).
 - **NULL is the smallest value on every store:** ascending puts NULLs first, descending last. On PostgreSQL, index such a column as `(col NULLS FIRST, id)`.
 - **Huge tables** want an index per sort column, ending in the key. A search or text filter is `contains`, which reads every row unless the column has a trigram index on PostgreSQL. On numbered pages, a row added or deleted between pages moves what follows by one; `#[table(cursor)]` pages don't.
-- **Stored views** are kept where the rows are: the table `navree_ui_table_views` on an SQL database, which you create in a migration, and the collection of that name on MongoDB, which MongoDB creates with the first view (index `(owner, table_id)` for a long list).
+- **Stored views** are kept where the rows are: the table `navree_ui_table_views` on an SQL database, which you create in a migration, and the collection of that name on MongoDB, which MongoDB creates with the first view (index `(owner, table_id)` for a long list). An owner keeps at most 50 per table; see [Saved views](#saved-views).
 - **A row's actions** are links, or a small form each, inside the row. If you draw your own controls in a cell, keep it that way: a submit button in every row tied to one form by `form=` makes Chromium recount the form's controls across the page for each one that moves, which on a phone costs most of a second per sort at 1,000 rows.
 
 ## Speed
