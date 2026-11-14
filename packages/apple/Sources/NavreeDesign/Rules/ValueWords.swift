@@ -20,13 +20,37 @@ public struct ValueStyle: Sendable, Equatable {
 
 public enum ValueWords {
     /// The style of a chart's values: from the page's words for them, else
-    /// the unit its value axis or series names.
+    /// the unit its value axis or series names. Words that write a value in
+    /// more than one number (a duration's `7 h 6 min`) give no one unit: the
+    /// axis then reads in the unit the chart names (`8 h`, `4 h`, `0 h`), never
+    /// in the last unit of those words.
     public static func style(_ chart: Navree.Chart) -> ValueStyle {
         let shown = chart.series.lazy.flatMap(\.shown).first { $0.contains(where: \.isNumber) }
-        if let shown { return style(of: shown) }
+        if let shown, !compound(shown) { return style(of: shown) }
         let unit = chart.y?.unit ?? chart.series.lazy.compactMap(\.unit).first
         guard let unit, !unit.isEmpty else { return ValueStyle() }
         return unit == "₹" || unit == "INR" ? ValueStyle(prefix: "₹", indian: true) : ValueStyle(suffix: unit == "%" ? "%" : " " + unit)
+    }
+
+    /// Whether words write one value in more than one number, as a duration
+    /// (`7 h 6 min`) or a time of day (`7:15`) does. The digits of one number
+    /// may hold its grouping commas and its decimal point.
+    public static func compound(_ words: String) -> Bool {
+        var numbers = 0
+        var inNumber = false
+        var previous: Character?
+        for character in words {
+            if character.isNumber {
+                if !inNumber { numbers += 1 }
+                inNumber = true
+            } else if inNumber, character == "," || character == ".", previous?.isNumber == true {
+                // A separator inside a number: the number goes on if a digit follows.
+            } else {
+                inNumber = false
+            }
+            previous = character
+        }
+        return numbers > 1
     }
 
     /// The style of one value as the page wrote it.
