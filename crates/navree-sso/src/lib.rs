@@ -75,6 +75,8 @@ pub use events::{SsoDomainVerified, SsoUserProvisioned};
 pub use fake::{FakeResponse, SsoFake};
 pub use migration::SSO_MIGRATIONS;
 pub use module::SsoModule;
+#[doc(hidden)]
+pub use options::SsoTenantOptions;
 pub use options::{DomainOptions, OidcOptions, SamlOptions, SsoOptions};
 pub use profile::SsoProfile;
 pub use service::{OidcCallback, Sso, SsoRedirect, SsoSignIn};

@@ -13,4 +13,5 @@ mod provisioning;
 mod saml_flow;
 mod samples;
 mod secrets;
+mod tenants;
 mod wrapping;

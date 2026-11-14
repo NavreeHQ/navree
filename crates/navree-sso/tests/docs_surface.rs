@@ -19,7 +19,7 @@ use navree_sso::{
     Protocol, Provisioning, RoleRule, SSO_MIGRATIONS, SamlOptions, SamlSettings,
     ServiceProviderInfo, SignatureError, Sso, SsoConnection, SsoDiscovery, SsoDomain,
     SsoDomainVerified, SsoError, SsoFake, SsoModule, SsoOptions, SsoOwner, SsoProfile, SsoRedirect,
-    SsoSignIn, SsoUserProvisioned, StaticTxtResolver, TxtResolver, XmlError,
+    SsoSignIn, SsoTenantOptions, SsoUserProvisioned, StaticTxtResolver, TxtResolver, XmlError,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -70,6 +70,18 @@ fn the_documented_options_and_their_defaults() {
     let _ = SsoModule::from_config();
     assert_eq!(SSO_MIGRATIONS, "sso");
     assert_eq!(MANAGE_PERMISSION, "sso.manage");
+}
+
+#[test]
+fn the_documented_tenant_key() {
+    let SsoTenantOptions {
+        unverified_emails, ..
+    } = SsoTenantOptions::default();
+    assert!(!unverified_emails);
+    assert_eq!(
+        <SsoTenantOptions as navree_config::ConfigSection>::KEY,
+        "sso.tenants"
+    );
 }
 
 #[test]
