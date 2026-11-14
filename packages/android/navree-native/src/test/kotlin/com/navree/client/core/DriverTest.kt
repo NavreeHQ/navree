@@ -90,6 +90,26 @@ class DriverTest {
     }
 
     @Test
+    fun an_effect_that_fails_is_reported_and_the_effects_after_it_still_run() {
+        val engine = Scripted(
+            ArrayDeque(listOf("""{"changed":[],"effects":[{"t":"fetch","request":1,"method":"get","url":"https://shop.example/","headers":[["x-navree-region","बिक्री"]]},{"t":"haptic","kind":"success"}]}""")),
+            emptyMap(),
+        )
+        val driver = Driver(engine)
+        val problems = ArrayList<String>()
+        driver.problems = { problems += it }
+        val ran = ArrayList<Effect>()
+        driver.effects = EffectRunner { effect ->
+            if (effect is Effect.Fetch) throw IllegalArgumentException("Unexpected char")
+            ran += effect
+        }
+        driver.send(Events.start)
+        assertEquals(listOf(Effect.Haptic("success")), ran)
+        assertEquals(1, problems.size)
+        assertTrue("named by its kind, not by what it held", "Fetch" in problems.single() && "बिक्री" !in problems.single())
+    }
+
+    @Test
     fun a_core_that_refuses_an_event_changes_nothing() {
         val engine = Scripted(ArrayDeque(listOf("""{"error":"the event does not read"}""")), emptyMap())
         val driver = Driver(engine)
@@ -254,6 +274,13 @@ class ConfigTest {
     fun the_package_name_is_the_apps_id() {
         val config = coreConfig(NavreeConfig(origin = "https://store.example.in", name = "Store", seed = null), device, emptyList(), "in.example.store")
         assertEquals("in.example.store", config["app_id"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun the_other_origins_the_app_allows_are_the_cores_too() {
+        val config = coreConfig(NavreeConfig(origin = "https://store.example.in", name = "Store", seed = null, also = listOf("https://*.store.example.in")), device, emptyList())
+        assertEquals(listOf("https://*.store.example.in"), config["also"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertNull("none unless named", coreConfig(NavreeConfig(origin = "https://store.example.in", name = "Store", seed = null), device, emptyList())["also"])
     }
 
     @Test

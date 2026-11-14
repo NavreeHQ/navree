@@ -95,7 +95,20 @@ class Driver(private val engine: Engine) {
             return
         }
         for (change in (update["changed"] as? JsonArray).orEmpty()) refresh(change as? JsonObject ?: continue)
-        for (effect in (update["effects"] as? JsonArray).orEmpty()) effects.run(Effect.read(effect))
+        for (effect in (update["effects"] as? JsonArray).orEmpty()) carryOut(Effect.read(effect))
+    }
+
+    /**
+     * Carries out one effect. One that fails is reported and the rest go on:
+     * no single effect, from a page the core keeps or from a live answer, ends
+     * the app. What failed is named by its kind only, never by what it held.
+     */
+    private fun carryOut(effect: Effect) {
+        try {
+            effects.run(effect)
+        } catch (e: Exception) {
+            problems("an effect failed: ${effect::class.simpleName}: ${e::class.simpleName}")
+        }
     }
 
     private fun refresh(change: JsonObject) {
