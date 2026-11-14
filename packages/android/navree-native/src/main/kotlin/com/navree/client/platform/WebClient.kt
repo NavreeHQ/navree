@@ -98,9 +98,14 @@ object WebRules {
      * The script that runs at the start of every document in every frame,
      * before the document's own scripts: a document whose origin is not one
      * of [origins] (as `[scheme, host, port]`, a host may start with `*.`) is
-     * stopped and emptied before anything of it is drawn or run. A document
-     * with no origin of its own (a sandboxed frame, a `data:` page) is
-     * stopped too.
+     * stopped and emptied before anything of it is drawn or run.
+     *
+     * A document with no origin of its own (a sandboxed frame) is judged by
+     * its address: on the app's origins or a web host's it is left alone,
+     * anywhere else it is emptied. An `about:` document (`about:srcdoc`,
+     * `about:blank`) holds only what the page around it wrote, and that page
+     * passed this check itself, so it is left alone. A `data:` or `blob:`
+     * document with no origin is emptied: nothing shows where it came from.
      *
      * At the start of a document its tree may not exist yet, so emptying it
      * takes three steps: `window.stop()`, which aborts the parser and drops
@@ -127,10 +132,13 @@ object WebRules {
             "try{new MutationObserver(function(l){for(var i=0;i<l.length;i++){var a=l[i].addedNodes;for(var j=0;j<a.length;j++){var n=a[j];if(n.parentNode)n.parentNode.removeChild(n)}}})" +
             ".observe(document,{childList:true,subtree:true})}catch(e){}" +
             "var d=document.documentElement;if(d)d.remove()}" +
-            "try{var r=$rules,o=self.origin;if(o==='null'){stop();return}" +
-            "var u=new URL(o),s=u.protocol.slice(0,-1),h=u.hostname,p=u.port?+u.port:(s==='http'?80:443);" +
-            "for(var i=0;i<r.length;i++){var x=r[i],n=x[1];if(x[0]===s&&x[2]===p&&(n===h||(n.indexOf('*.')===0&&h.length>n.length-1&&h.slice(1-n.length)===n.slice(1))))return}" +
-            "stop()}catch(e){stop()}})();"
+            "var r=$rules;" +
+            "function at(a){var u=new URL(a),s=u.protocol.slice(0,-1);if(s!=='http'&&s!=='https')return false;" +
+            "var h=u.hostname,p=u.port?+u.port:(s==='http'?80:443);" +
+            "for(var i=0;i<r.length;i++){var x=r[i],n=x[1];if(x[0]===s&&x[2]===p&&(n===h||(n.indexOf('*.')===0&&h.length>n.length-1&&h.slice(1-n.length)===n.slice(1))))return true}" +
+            "return false}" +
+            "try{var o=self.origin;if(o!=='null'){if(!at(o))stop();return}" +
+            "var l=location.href;if(l.indexOf('about:')===0)return;if(!at(l))stop()}catch(e){stop()}})();"
     }
 
     private fun asksForDocument(accept: String?): Boolean =

@@ -115,6 +115,9 @@ class WebOriginsTest {
                     "/out-slow" -> moved(302, "$elsewhere/through-a-slow-redirect")
                     "/post-redirect" -> html("<form id=\"f\" method=\"post\" action=\"/keep-method\"><input name=\"a\" value=\"1\"></form><script>document.getElementById('f').submit()</script>")
                     "/keep-method" -> moved(307, "$elsewhere/posted-through-a-redirect")
+                    "/sandboxed-here" -> html("<p>a sandboxed frame of the app</p><iframe sandbox=\"allow-scripts\" src=\"/sandboxed\"></iframe>")
+                    "/sandboxed" -> html("<p>sandboxed</p><script>new Image().src = '$base/ran-sandboxed'</script>")
+                    "/sandboxed-out" -> html("<p>a sandboxed frame through a redirect</p><iframe sandbox=\"allow-scripts\" src=\"/out?sandboxed\"></iframe>")
                     "/named-frame" -> html("<p>a frame of a named host</p><iframe src=\"$namedBase/frame\"></iframe>")
                     else -> MockResponse.Builder().code(204).build()
                 }
@@ -200,6 +203,17 @@ class WebOriginsTest {
         android.util.Log.i("WebOriginsTest", "asked of the other origin through a posted form's 307: $otherAsked")
         if (guarded) assertFalse("the page the form was posted to ran", appAsked.any { it.endsWith(" /ran") })
         assertTrue("the screen was told the page left", left.get() || origins.ours(shown() ?: base))
+
+        // A sandboxed frame has no origin of its own: the check goes by its address. One on the app's
+        // origin is left alone and runs; one the app's server redirects elsewhere is emptied.
+        open("/sandboxed-here")
+        compose.waitUntil(10_000) { appAsked.any { it.endsWith(" /ran-sandboxed") } }
+        otherAsked.clear()
+        open("/sandboxed-out")
+        Thread.sleep(1_000)
+        val ranElsewhere = appAsked.any { it.endsWith(" /ran") }
+        android.util.Log.i("WebOriginsTest", "a sandboxed frame redirected elsewhere: asked of the other origin $otherAsked, its page ran: $ranElsewhere")
+        if (guarded) assertFalse("the sandboxed frame redirected elsewhere ran", ranElsewhere)
 
         // A frame of a host the app names for the web view loads, and runs.
         open("/named-frame")
