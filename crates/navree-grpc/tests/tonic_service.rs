@@ -6,12 +6,13 @@
 mod support;
 
 use std::convert::Infallible;
-use std::sync::Arc;
+use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use navree_contracts::{AuditKind, AuditSink, AuthState};
+use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, BoxError};
 use navree_db::Uow;
 use navree_grpc::testing::TestChannel;
 use navree_grpc::{
@@ -21,7 +22,7 @@ use navree_grpc::{
 use navree_http::{Authenticator, HttpServer};
 use navree_kernel::{BoxFuture, Module, ModuleBuilder, ModuleId};
 use navree_testing::{TestApp, TestAppBuilder};
-use tokio::sync::mpsc;
+use tokio::sync::{Semaphore, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::server::NamedService;
 use tonic_health::pb::HealthCheckRequest;
@@ -391,11 +392,9 @@ async fn a_refused_call_to_an_undeclared_method_is_audited_as_a_refused_guard_is
         .unwrap_err();
     assert_eq!(status.code(), Code::PermissionDenied);
     assert_eq!(ledger.calls(), 0);
-    let denied = audit
-        .entries()
-        .into_iter()
-        .find(|entry| entry.action == "access.denied")
-        .expect("the refusal is audited");
+    // The entry is written after the answer.
+    until("the refusal is audited", || !denied(&audit).is_empty()).await;
+    let denied = denied(&audit).remove(0);
     assert_eq!(denied.kind, AuditKind::Security);
     assert_eq!(denied.metadata["check"], "undeclared");
     assert_eq!(denied.metadata["route"], "/crm.deals.v1.Deals/ListDeals");
@@ -407,6 +406,222 @@ async fn a_refused_call_to_an_undeclared_method_is_audited_as_a_refused_guard_is
     let entries = audit.entries().len();
     assert!(harpreet.get_deal(get_deal()).await.is_ok());
     assert_eq!(audit.entries().len(), entries);
+}
+
+/// The app's `access.denied` entries.
+fn denied(audit: &RecordingAudit) -> Vec<AuditEntry> {
+    audit
+        .entries()
+        .into_iter()
+        .filter(|entry| entry.action == "access.denied")
+        .collect()
+}
+
+/// Waits, up to five seconds, until `done` holds.
+async fn until(what: &str, done: impl Fn() -> bool) {
+    let waited = tokio::time::timeout(Duration::from_secs(5), async {
+        while !done() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(waited.is_ok(), "{what}");
+}
+
+/// The path of every refusal of an undeclared method logged on
+/// `navree::security` on this thread while [`RefusalLog::capture`]'s guard
+/// lives.
+#[derive(Clone, Default)]
+struct RefusalLog(Arc<Mutex<Vec<String>>>);
+
+impl RefusalLog {
+    fn capture(&self) -> tracing::subscriber::DefaultGuard {
+        share_log_interest();
+        tracing::subscriber::set_default(self.clone())
+    }
+
+    fn paths(&self) -> Vec<String> {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+impl tracing::Subscriber for RefusalLog {
+    fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
+        metadata.target() == "navree::security"
+    }
+
+    fn new_span(&self, _span: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+
+    fn record(&self, _span: &tracing::span::Id, _values: &tracing::span::Record<'_>) {}
+
+    fn record_follows_from(&self, _span: &tracing::span::Id, _follows: &tracing::span::Id) {}
+
+    fn event(&self, event: &tracing::Event<'_>) {
+        if event.metadata().target() != "navree::security" {
+            return;
+        }
+        let mut fields = RefusalFields::default();
+        event.record(&mut fields);
+        if fields.message == "a call to a method without an access declaration was refused" {
+            self.0.lock().unwrap().push(fields.path);
+        }
+    }
+
+    fn enter(&self, _span: &tracing::span::Id) {}
+
+    fn exit(&self, _span: &tracing::span::Id) {}
+}
+
+/// The `message` and `path` fields of a log event.
+#[derive(Default)]
+struct RefusalFields {
+    message: String,
+    path: String,
+}
+
+impl tracing::field::Visit for RefusalFields {
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        if field.name() == "path" {
+            self.path = value.to_owned();
+        }
+    }
+
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn fmt::Debug) {
+        match field.name() {
+            "message" => self.message = format!("{value:?}"),
+            "path" => self.path = format!("{value:?}"),
+            _ => {}
+        }
+    }
+}
+
+/// Keeps two idle log subscribers for the whole run, so tracing asks every
+/// live subscriber whether a log statement is wanted: while only one is
+/// registered, the answer would come from whichever thread reaches the
+/// statement first, and a test without a subscriber could switch a statement
+/// off for a test that captures it.
+fn share_log_interest() {
+    static IDLE: OnceLock<[tracing::Dispatch; 2]> = OnceLock::new();
+    IDLE.get_or_init(|| {
+        let idle = || tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
+        [idle(), idle()]
+    });
+}
+
+#[tokio::test]
+async fn refused_calls_from_one_address_in_a_minute_are_each_logged_and_audited_once() {
+    let log = RefusalLog::default();
+    let _guard = log.capture();
+    let audit = RecordingAudit::default();
+    let ledger = Ledger::default();
+    let app = wrapped(deals(&ledger).method(GrpcMethod::new("get_deal").public()))
+        .override_value::<dyn AuditSink>(Arc::new(audit.clone()))
+        .build()
+        .await;
+    // Every in-process call comes from the same address.
+    let mut guest = DealsClient::new(TestChannel::new(&app));
+    for _ in 0..2 {
+        let status = guest
+            .list_deals(ListDealsRequest::default())
+            .await
+            .unwrap_err();
+        assert_eq!(status.code(), Code::PermissionDenied);
+    }
+    until("the first refusal is audited", || !denied(&audit).is_empty()).await;
+    // Time for a second write to land, had one been started.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(denied(&audit).len(), 1, "one entry a minute per address");
+    assert_eq!(log.paths(), ["/crm.deals.v1.Deals/ListDeals"; 2]);
+    assert_eq!(ledger.calls(), 0);
+}
+
+#[tokio::test]
+async fn a_refused_call_keeps_the_first_128_bytes_of_its_path() {
+    let log = RefusalLog::default();
+    let _guard = log.capture();
+    let audit = RecordingAudit::default();
+    let app = wrapped(deals(&Ledger::default()).method(GrpcMethod::new("get_deal").public()))
+        .override_value::<dyn AuditSink>(Arc::new(audit.clone()))
+        .build()
+        .await;
+    let path = format!("/crm.deals.v1.Deals/{}", "X".repeat(280));
+    assert_eq!(path.len(), 300);
+    let mut client = tonic::client::Grpc::new(TestChannel::new(&app));
+    assert!(client.ready().await.is_ok());
+    let refused: Result<tonic::Response<Deal>, Status> = client
+        .unary(
+            tonic::Request::new(get_deal()),
+            http::uri::PathAndQuery::try_from(path.as_str()).unwrap(),
+            tonic_prost::ProstCodec::<GetDealRequest, Deal>::default(),
+        )
+        .await;
+    assert_eq!(refused.unwrap_err().code(), Code::PermissionDenied);
+    until("the refusal is audited", || !denied(&audit).is_empty()).await;
+    assert_eq!(denied(&audit)[0].metadata["route"], &path[..128]);
+    assert_eq!(log.paths(), [&path[..128]]);
+}
+
+/// An `AuditSink` whose writes wait until it is opened.
+#[derive(Clone)]
+struct HeldAudit {
+    gate: Arc<Semaphore>,
+    started: Arc<AtomicUsize>,
+    written: RecordingAudit,
+}
+
+impl HeldAudit {
+    fn new() -> Self {
+        Self {
+            gate: Arc::new(Semaphore::new(0)),
+            started: Arc::default(),
+            written: RecordingAudit::default(),
+        }
+    }
+
+    fn started(&self) -> usize {
+        self.started.load(Ordering::SeqCst)
+    }
+
+    fn open(&self) {
+        self.gate.add_permits(16);
+    }
+}
+
+impl AuditSink for HeldAudit {
+    fn record(&self, entry: AuditEntry) -> BoxFuture<'_, Result<(), BoxError>> {
+        self.started.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async move {
+            let _open = self.gate.acquire().await;
+            self.written.record(entry).await
+        })
+    }
+}
+
+#[tokio::test]
+async fn a_refused_call_is_answered_while_its_audit_entry_waits_for_the_sink() {
+    let audit = HeldAudit::new();
+    let app = wrapped(deals(&Ledger::default()).method(GrpcMethod::new("get_deal").public()))
+        .override_value::<dyn AuditSink>(Arc::new(audit.clone()))
+        .build()
+        .await;
+    let mut guest = DealsClient::new(TestChannel::new(&app));
+    let refused = tokio::time::timeout(
+        Duration::from_secs(5),
+        guest.list_deals(ListDealsRequest::default()),
+    )
+    .await
+    .expect("answered without waiting for the audit sink");
+    assert_eq!(refused.unwrap_err().code(), Code::PermissionDenied);
+    until("the write has started", || audit.started() == 1).await;
+    assert!(audit.written.entries().is_empty(), "the sink is still held");
+
+    audit.open();
+    until("the write lands once the sink opens", || {
+        audit.written.entries().len() == 1
+    })
+    .await;
 }
 
 #[tokio::test]

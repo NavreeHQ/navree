@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::future::Future;
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::Duration;
@@ -39,6 +40,9 @@ pub(crate) struct Runtime {
     pub(crate) mappers: Vec<ErrorMapper>,
     pub(crate) default_timeout: Duration,
     pub(crate) shutdown: CancellationToken,
+    /// The client addresses whose refused call to an undeclared method was
+    /// audited in the last minute.
+    pub(crate) undeclared_audits: UndeclaredAudits,
 }
 
 impl Runtime {
@@ -534,12 +538,27 @@ fn security_entry(parts: &Parts, meta: &RouteMeta, check: &str) -> AuditEntry {
     entry
 }
 
+/// The most bytes of a refused call's path that its log line and its audit
+/// entry keep.
+const UNDECLARED_PATH_BYTES: usize = 128;
+
+/// At most one audit entry per client address in this window.
+const UNDECLARED_AUDIT_WINDOW: Duration = Duration::from_secs(60);
+
+/// The most client addresses [`UndeclaredAudits`] remembers at once, and so
+/// the most refusals of undeclared methods audited in a minute.
+const UNDECLARED_AUDIT_ADDRESSES: usize = 4096;
+
 /// Records a refused call to a wrapped server's method that has no
-/// declaration: a warning on `navree::security`, and, when the app has an
-/// audit sink, an `access.denied` security entry (`check` `undeclared`), as a
-/// guard's refusal records. The call is refused before authentication, so
-/// the entry names no user.
-pub(crate) async fn record_undeclared(runtime: &Runtime, parts: &Parts, path: &str) {
+/// declaration. Every such call logs a warning on `navree::security`. When
+/// the app has an audit sink, the first one from a client address in a
+/// minute is also an `access.denied` security entry (`check` `undeclared`),
+/// as a guard's refusal records, written on the app's task tracker, so the
+/// refusal never waits for the sink. Both keep at most the first 128 bytes of
+/// the path. The call is refused before authentication, so the entry names
+/// no user.
+pub(crate) fn record_undeclared(runtime: &Runtime, parts: &Parts, path: &str) {
+    let path = cut(path, UNDECLARED_PATH_BYTES);
     tracing::warn!(
         target: "navree::security",
         path,
@@ -549,13 +568,96 @@ pub(crate) async fn record_undeclared(runtime: &Runtime, parts: &Parts, path: &s
             .map(tracing::field::display),
         "a call to a method without an access declaration was refused"
     );
-    if let Some(sink) = &runtime.audit {
-        let meta = RouteMeta {
-            method: "GRPC".to_owned(),
-            full_path: path.to_owned(),
-            ..RouteMeta::default()
-        };
-        record_security(sink.as_ref(), security_entry(parts, &meta, "undeclared")).await;
+    let Some(sink) = &runtime.audit else {
+        return;
+    };
+    let ip = parts
+        .extensions
+        .get::<ClientIp>()
+        .map_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED), |ClientIp(ip)| *ip);
+    if !runtime.undeclared_audits.admit(ip, Instant::now()) {
+        return;
+    }
+    let Some(ctx) = runtime.ctx.upgrade() else {
+        return;
+    };
+    let meta = RouteMeta {
+        method: "GRPC".to_owned(),
+        full_path: path.to_owned(),
+        ..RouteMeta::default()
+    };
+    let entry = security_entry(parts, &meta, "undeclared");
+    let sink = sink.clone();
+    ctx.tracker().spawn(async move {
+        record_security(sink.as_ref(), entry).await;
+    });
+}
+
+/// `text` cut to at most `max` bytes, at a character boundary.
+fn cut(text: &str, max: usize) -> &str {
+    if text.len() <= max {
+        return text;
+    }
+    let mut end = max;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
+/// The client addresses whose refused call to an undeclared method was
+/// audited in the last minute: at most one entry per address a minute, and
+/// at most [`UNDECLARED_AUDIT_ADDRESSES`] addresses remembered. While that
+/// many are remembered and none is a minute old, a refusal from a new
+/// address is logged and not audited.
+#[derive(Default)]
+pub(crate) struct UndeclaredAudits(Mutex<AuditWindow>);
+
+#[derive(Default)]
+struct AuditWindow {
+    /// When each address's last entry was recorded.
+    seen: HashMap<IpAddr, Instant>,
+    /// While the map is full: no address expires before this instant, so no
+    /// sweep is needed until then.
+    full_until: Option<Instant>,
+}
+
+impl UndeclaredAudits {
+    /// Whether a refused call from `ip` at `now` is audited: the first one of
+    /// the address's minute, while there is room for its address.
+    pub(crate) fn admit(&self, ip: IpAddr, now: Instant) -> bool {
+        let mut window = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        window.admit(ip, now, UNDECLARED_AUDIT_ADDRESSES)
+    }
+}
+
+impl AuditWindow {
+    fn admit(&mut self, ip: IpAddr, now: Instant, cap: usize) -> bool {
+        let fresh = |at: Instant| now.duration_since(at) < UNDECLARED_AUDIT_WINDOW;
+        if let Some(at) = self.seen.get_mut(&ip) {
+            if fresh(*at) {
+                return false;
+            }
+            *at = now;
+            return true;
+        }
+        if self.seen.len() >= cap {
+            if self.full_until.is_some_and(|until| now < until) {
+                return false;
+            }
+            self.seen.retain(|_, at| fresh(*at));
+            if self.seen.len() >= cap {
+                self.full_until = self
+                    .seen
+                    .values()
+                    .min()
+                    .map(|oldest| *oldest + UNDECLARED_AUDIT_WINDOW);
+                return false;
+            }
+            self.full_until = None;
+        }
+        self.seen.insert(ip, now);
+        true
     }
 }
 
@@ -716,5 +818,33 @@ mod tests {
         ));
         let get = declared(without_default.wrapped_access("/crm.deals.v1.Deals/GetDeal"));
         assert!(get.access.public);
+    }
+
+    #[test]
+    fn an_address_is_audited_once_a_minute_and_only_while_there_is_room_for_it() {
+        let start = Instant::now();
+        let at = |secs: u64| start + Duration::from_secs(secs);
+        let address = |n: u32| IpAddr::V4(Ipv4Addr::from(n));
+        let mut window = AuditWindow::default();
+        assert!(window.admit(address(1), at(0), 2));
+        assert!(!window.admit(address(1), at(59), 2), "once a minute");
+        assert!(window.admit(address(2), at(1), 2));
+
+        // Two addresses fill it: a third waits until the oldest is a minute
+        // old, and takes its place.
+        assert!(!window.admit(address(3), at(30), 2));
+        assert!(!window.admit(address(3), at(59), 2));
+        assert!(window.admit(address(3), at(60), 2));
+        assert_eq!(window.seen.len(), 2);
+        assert!(window.admit(address(1), at(61), 2), "its minute is over");
+        assert_eq!(window.seen.len(), 2);
+    }
+
+    #[test]
+    fn a_path_is_cut_at_a_character_boundary() {
+        assert_eq!(cut("/crm.deals.v1.Deals/GetDeal", 128), "/crm.deals.v1.Deals/GetDeal");
+        assert_eq!(cut("/crm.deals.v1.Deals/GetDeal", 4), "/crm");
+        // `₹` is three bytes.
+        assert_eq!(cut("₹₹", 4), "₹");
     }
 }

@@ -474,7 +474,7 @@ where
         WrappedAccess::NoMethod => return Status::unimplemented("").into_http(),
         WrappedAccess::Undeclared => {
             let (head, _body) = request.into_parts();
-            record_undeclared(&info.runtime, &head, &info.path).await;
+            record_undeclared(&info.runtime, &head, &info.path);
             return status_from_error(&AppError::forbidden()).into_http();
         }
     };
