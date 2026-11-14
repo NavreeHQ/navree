@@ -80,7 +80,7 @@ mod upload;
 pub use disk::{ByteStream, Disk, FileMeta};
 pub use error::{StorageError, UploadRejection};
 pub use module::StorageModule;
-pub use options::{AzureConfig, DiskConfig, GcsConfig, S3Config, StorageOptions};
+pub use options::{AzureConfig, DiskConfig, GcsConfig, RegisteredDisk, S3Config, StorageOptions};
 pub use presign::{PresignPut, PresignedUpload, upload_path};
 pub use storage::Storage;
 pub use sync::{SyncFailure, SyncOptions, SyncReport};

@@ -136,12 +136,28 @@ fn unknown_keys_and_drivers_are_errors() {
     .unwrap_err()
     .to_string();
     assert!(typo.contains("acces_key"), "{typo}");
-    let driver = serde_json::from_value::<StorageOptions>(json!({
+
+    // A lower-case name is a driver a module registers (the boot fails when
+    // none does); any other `driver` is an error that never repeats it.
+    let options = parse(json!({
+        "default": "uploads",
         "disks": { "uploads": { "driver": "ftp" } }
+    }));
+    let DiskConfig::Registered(disk) = &options.disks["uploads"] else {
+        panic!("a disk of a registered driver");
+    };
+    assert_eq!(disk.driver().as_str(), "ftp");
+    assert_eq!(options.disks["uploads"].driver(), "ftp");
+    let driver = serde_json::from_value::<StorageOptions>(json!({
+        "disks": { "uploads": { "driver": "f-t-p" } }
     }))
     .unwrap_err()
     .to_string();
-    assert!(driver.contains("ftp"), "{driver}");
+    assert!(
+        driver.contains("the driver must be `local`, `memory`, `s3`, `gcs`, `azure` or the name of a disk driver registered with m.disk_driver"),
+        "{driver}"
+    );
+    assert!(!driver.contains("f-t-p"), "{driver}");
 }
 
 /// The validation error of a single disk `uploads`.

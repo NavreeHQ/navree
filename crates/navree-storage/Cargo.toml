@@ -50,6 +50,8 @@ percent-encoding = { workspace = true }
 reqwest = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 serde = { workspace = true }
+# The table of a disk whose driver a module registers, kept as its settings.
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

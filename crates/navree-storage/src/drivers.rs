@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::path::normalize;
 use crate::provider::Provider;
 use crate::store::{Local, Memory, Prefixed, Store};
-use crate::{DiskConfig, StorageError};
+use crate::{DiskConfig, RegisteredDisk, StorageError};
 
 /// A disk's store, and the provider that signs its URLs (cloud disks).
 pub(crate) struct Backend {
@@ -35,6 +35,8 @@ pub(crate) fn build(name: &str, config: &DiskConfig) -> Result<Backend, StorageE
             store: Arc::new(Memory::new()),
             provider: None,
         },
+        // Its factory is async and needs the app: only the module builds it.
+        DiskConfig::Registered(disk) => return Err(registered_by_a_module(name, disk)),
         #[cfg(feature = "s3")]
         DiskConfig::S3(config) => cloud::s3(name, config, &cloud::process_env())?,
         #[cfg(feature = "gcs")]
@@ -67,6 +69,15 @@ pub(crate) fn build(name: &str, config: &DiskConfig) -> Result<Backend, StorageE
             .provider
             .map(|provider| provider.with_prefix(prefix)),
     })
+}
+
+/// The error of disk `name`, whose driver a module registers, where no
+/// driver was built for it (`Storage::new`, which has no app).
+pub(crate) fn registered_by_a_module(name: &str, disk: &RegisteredDisk) -> StorageError {
+    StorageError::InvalidOptions(format!(
+        "disk `{name}`: the `{}` driver is registered by a module; StorageModule builds it at boot",
+        disk.driver()
+    ))
 }
 
 #[cfg(any(feature = "s3", feature = "gcs", feature = "azure"))]

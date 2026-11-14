@@ -7,7 +7,7 @@ use std::sync::Arc;
 use navree_config::ConfigSection;
 
 use crate::signing::Signer;
-use crate::{Disk, StorageError, StorageOptions, drivers};
+use crate::{Disk, DiskConfig, StorageError, StorageOptions, drivers};
 
 /// The app's disks, by name (what `StorageModule` provides).
 #[derive(Clone)]
@@ -25,8 +25,18 @@ impl Storage {
     /// read cloud credential files. Inside an async runtime call it from
     /// `tokio::task::spawn_blocking` (the module does). Cloud disks make no
     /// request until they are used.
+    ///
+    /// A disk whose driver a module registers is refused
+    /// ([`StorageError::InvalidOptions`]): its driver is built at boot by
+    /// `StorageModule`, which needs the app.
     pub fn new(options: &StorageOptions, signing_key: &[u8]) -> Result<Self, StorageError> {
         options.validate().map_err(StorageError::InvalidOptions)?;
+        // Refused before any disk is built (no local root is created).
+        for (name, config) in &options.disks {
+            if let DiskConfig::Registered(disk) = config {
+                return Err(drivers::registered_by_a_module(name, disk));
+            }
+        }
         let signer = Arc::new(Signer::new(signing_key));
         let mut disks = BTreeMap::new();
         for (name, config) in &options.disks {

@@ -2,13 +2,27 @@
 //! [`S3Config`], [`GcsConfig`] and [`AzureConfig`].
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::PathBuf;
 
-use navree_config::ConfigSection;
+use navree_config::__private::selector_error;
+use navree_config::{ConfigSection, DriverName, DriverNameError, DriverSlot};
 use navree_contracts::Secret;
-use serde::Deserialize;
+use serde::de::{self, DeserializeOwned};
+use serde::{Deserialize, Deserializer};
+use serde_json::{Map, Value as Json};
 
+use crate::StorageError;
 use crate::path::normalize;
+
+/// The selector `storage.disks.{disk}.driver`, its built-in drivers and the
+/// method that registers more.
+pub(crate) const SLOT: DriverSlot = DriverSlot::new(
+    "storage.disks.*.driver",
+    &["local", "memory", "s3", "gcs", "azure"],
+    "m.disk_driver",
+    "disk driver",
+);
 
 /// `StorageModule` settings: configuration section `storage`.
 ///
@@ -65,9 +79,13 @@ impl Default for StorageOptions {
     }
 }
 
-/// One disk: where its files live (`driver = "..."`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-#[serde(tag = "driver", rename_all = "snake_case")]
+/// One disk: where its files live (`driver = "..."`): a built-in driver,
+/// or a driver a module registers with `m.disk_driver`.
+///
+/// A `driver` that is neither a built-in driver nor a lower-case name (a
+/// letter, then letters, digits or `_`) is an error that lists the
+/// built-in drivers and never repeats the value.
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum DiskConfig {
     /// Files under a directory of the local filesystem (`driver = "local"`),
@@ -77,7 +95,6 @@ pub enum DiskConfig {
         root: PathBuf,
         /// The URL the root is publicly served from (a CDN or a static file
         /// server), for [`Disk::url`](crate::Disk::url).
-        #[serde(default)]
         public_url: Option<String>,
     },
     /// Files in process memory, lost on restart (`driver = "memory"`); for
@@ -93,6 +110,10 @@ pub enum DiskConfig {
     /// An Azure Blob Storage container (`driver = "azure"`). Needs the
     /// crate's `azure` feature (navree's `storage-azure`).
     Azure(AzureConfig),
+    /// A driver a module registers under its name (`driver = "sanduk"`),
+    /// with the rest of the disk's table as its settings. Only the
+    /// configuration gives one: `StorageModule` builds its driver at boot.
+    Registered(RegisteredDisk),
 }
 
 impl DiskConfig {
@@ -104,7 +125,8 @@ impl DiskConfig {
         }
     }
 
-    /// The driver name: `local`, `memory`, `s3`, `gcs` or `azure`.
+    /// The driver name: `local`, `memory`, `s3`, `gcs`, `azure`, or the
+    /// name a driver is registered under.
     pub fn driver(&self) -> &'static str {
         match self {
             Self::Local { .. } => "local",
@@ -112,6 +134,7 @@ impl DiskConfig {
             Self::S3(_) => "s3",
             Self::Gcs(_) => "gcs",
             Self::Azure(_) => "azure",
+            Self::Registered(disk) => disk.driver().as_str(),
         }
     }
 
@@ -119,7 +142,7 @@ impl DiskConfig {
     pub(crate) fn public_url(&self) -> Option<&str> {
         match self {
             Self::Local { public_url, .. } => public_url.as_deref(),
-            Self::Memory => None,
+            Self::Memory | Self::Registered(_) => None,
             Self::S3(config) => config.public_url.as_deref(),
             Self::Gcs(config) => config.public_url.as_deref(),
             Self::Azure(config) => config.public_url.as_deref(),
@@ -129,12 +152,177 @@ impl DiskConfig {
     /// The key prefix of a cloud disk, if any.
     pub(crate) fn prefix(&self) -> Option<&str> {
         match self {
-            Self::Local { .. } | Self::Memory => None,
+            Self::Local { .. } | Self::Memory | Self::Registered(_) => None,
             Self::S3(config) => config.prefix.as_deref(),
             Self::Gcs(config) => config.prefix.as_deref(),
             Self::Azure(config) => config.prefix.as_deref(),
         }
     }
+}
+
+/// A disk table that names a built-in driver: what `DiskConfig` read
+/// before a module could register one, kept as it was so every built-in
+/// table, its defaults and its errors read the same.
+#[derive(Deserialize)]
+#[serde(
+    tag = "driver",
+    rename_all = "snake_case",
+    expecting = "internally tagged enum DiskConfig"
+)]
+enum BuiltInDisk {
+    Local {
+        root: PathBuf,
+        #[serde(default)]
+        public_url: Option<String>,
+    },
+    Memory,
+    S3(S3Config),
+    Gcs(GcsConfig),
+    Azure(AzureConfig),
+}
+
+impl BuiltInDisk {
+    /// The same disk as a [`DiskConfig`].
+    fn into_config(self) -> DiskConfig {
+        match self {
+            BuiltInDisk::Local { root, public_url } => DiskConfig::Local { root, public_url },
+            BuiltInDisk::Memory => DiskConfig::Memory,
+            BuiltInDisk::S3(config) => DiskConfig::S3(config),
+            BuiltInDisk::Gcs(config) => DiskConfig::Gcs(config),
+            BuiltInDisk::Azure(config) => DiskConfig::Azure(config),
+        }
+    }
+}
+
+/// A table whose `driver` is a built-in driver reads as that driver did; a
+/// `driver` that is another lower-case name is a driver a module registers
+/// (the rest of the table is its settings, read by its factory); another
+/// `driver` string is an error that lists the built-in drivers and never
+/// repeats the value. A table with no `driver`, or a `driver` that is not a
+/// string, fails as it always did.
+impl<'de> Deserialize<'de> for DiskConfig {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = Json::deserialize(deserializer)?;
+        let registered = match value.get("driver") {
+            Some(Json::String(driver)) if !SLOT.built_in().contains(&driver.as_str()) => {
+                match DriverName::new(driver) {
+                    Ok(name) => Some(name),
+                    Err(DriverNameError::Invalid) => {
+                        return Err(de::Error::custom(selector_error("driver", &SLOT)));
+                    }
+                    Err(error) => return Err(de::Error::custom(error)),
+                }
+            }
+            _ => None,
+        };
+        match (registered, value) {
+            (Some(driver), Json::Object(mut settings)) => {
+                settings.remove("driver");
+                Ok(DiskConfig::Registered(RegisteredDisk { driver, settings }))
+            }
+            (_, value) => BuiltInDisk::deserialize(value)
+                .map(BuiltInDisk::into_config)
+                .map_err(de::Error::custom),
+        }
+    }
+}
+
+/// A disk whose driver a module registers: the driver's name and the rest
+/// of the disk's table (its settings). It has no public constructor: such
+/// a disk is configured, and `StorageModule` builds its driver at boot.
+///
+/// Its `Debug` output names the driver and the keys of the table, never a
+/// value, so a password in the table is not printed.
+///
+/// ```
+/// use navree_storage::{DiskConfig, StorageOptions};
+///
+/// let options: StorageOptions = serde_json::from_value(serde_json::json!({
+///     "default": "invoices",
+///     "disks": {
+///         "invoices": { "driver": "sanduk", "host": "files.ludhiana.example", "password": "s3cret" }
+///     }
+/// }))
+/// .unwrap();
+/// let DiskConfig::Registered(disk) = &options.disks["invoices"] else {
+///     panic!("a disk of a registered driver");
+/// };
+/// assert_eq!(disk.driver().as_str(), "sanduk");
+/// assert_eq!(
+///     format!("{disk:?}"),
+///     r#"RegisteredDisk { driver: "sanduk", keys: ["host", "password"] }"#
+/// );
+/// ```
+#[derive(Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct RegisteredDisk {
+    driver: DriverName,
+    settings: Map<String, Json>,
+}
+
+impl RegisteredDisk {
+    /// The name the driver is registered under.
+    pub fn driver(&self) -> DriverName {
+        self.driver
+    }
+
+    /// The disk's table without `driver`, typed. An error names the driver
+    /// and never a value of the table.
+    pub fn settings<T: DeserializeOwned>(&self) -> Result<T, StorageError> {
+        serde_json::from_value(Json::Object(self.settings.clone())).map_err(|error| {
+            StorageError::InvalidOptions(format!(
+                "the settings of a `{}` disk do not read: {}",
+                self.driver,
+                redact_values(&error.to_string())
+            ))
+        })
+    }
+}
+
+/// The driver and the keys of the table, sorted; never a value.
+impl fmt::Debug for RegisteredDisk {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut keys: Vec<&str> = self.settings.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        f.debug_struct("RegisteredDisk")
+            .field("driver", &self.driver)
+            .field("keys", &keys)
+            .finish()
+    }
+}
+
+/// Masks the strings a `Deserialize` implementation quotes in its errors
+/// (`invalid type: string "…"`), keeping keys and expected types.
+fn redact_values(message: &str) -> String {
+    const MARKER: &str = "string \"";
+    let mut out = String::with_capacity(message.len());
+    let mut rest = message;
+    while let Some(start) = rest.find(MARKER) {
+        out.push_str(&rest[..start]);
+        out.push_str("string [redacted]");
+        let quoted = &rest[start + MARKER.len()..];
+        rest = match closing_quote(quoted) {
+            Some(end) => &quoted[end + 1..],
+            None => "",
+        };
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The byte index of the closing `"` in `text`; `\"` does not close it.
+fn closing_quote(text: &str) -> Option<usize> {
+    let mut escaped = false;
+    for (i, c) in text.char_indices() {
+        if escaped {
+            escaped = false;
+        } else if c == '\\' {
+            escaped = true;
+        } else if c == '"' {
+            return Some(i);
+        }
+    }
+    None
 }
 
 impl From<S3Config> for DiskConfig {
@@ -400,6 +588,8 @@ fn validate_disk(disk: &DiskConfig) -> Result<(), String> {
             }
         }
         DiskConfig::Memory => {}
+        // A registered driver's factory reads and checks its settings at boot.
+        DiskConfig::Registered(_) => {}
         DiskConfig::S3(config) => {
             compiled_in("s3", cfg!(feature = "s3"), "storage-s3")?;
             required("bucket", &config.bucket, "s3")?;
@@ -473,6 +663,7 @@ fn is_http_url(url: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use navree_config::FieldType;
+    use serde::Deserialize;
 
     use super::*;
 
@@ -536,5 +727,152 @@ mod tests {
         for value in ["s3cr3t-value", "gcs-key-value", "azure-key-value"] {
             assert!(!text.contains(value), "{text}");
         }
+    }
+
+    #[test]
+    fn registered_disk_debug_never_prints_a_value() {
+        let disk: DiskConfig = serde_json::from_value(serde_json::json!({
+            "driver": "sanduk",
+            "host": "files.ludhiana.example",
+            "password": "s3cret-₹",
+        }))
+        .unwrap();
+        assert_eq!(disk.driver(), "sanduk");
+        let DiskConfig::Registered(registered) = &disk else {
+            panic!("a disk of a registered driver: {disk:?}");
+        };
+        assert_eq!(registered.driver().as_str(), "sanduk");
+        let debug = format!("{disk:?}");
+        assert_eq!(
+            debug,
+            r#"Registered(RegisteredDisk { driver: "sanduk", keys: ["host", "password"] })"#
+        );
+
+        // The settings read without `driver`, and an error never quotes
+        // a value of the table.
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        struct Port {
+            host: u16,
+        }
+        for error in [
+            registered.settings::<u16>().unwrap_err().to_string(),
+            registered.settings::<Port>().unwrap_err().to_string(),
+        ] {
+            assert!(
+                error.starts_with("invalid storage options: the settings of a `sanduk` disk do not read: "),
+                "{error}"
+            );
+            for value in ["files.ludhiana.example", "s3cret-₹"] {
+                assert!(!error.contains(value), "{error}");
+            }
+        }
+        let error = registered.settings::<Port>().unwrap_err().to_string();
+        assert!(error.contains("string [redacted]"), "{error}");
+        #[derive(Debug, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        #[allow(dead_code)]
+        struct Sanduk {
+            host: String,
+            password: Secret<String>,
+        }
+        let settings: Sanduk = registered.settings().unwrap();
+        assert_eq!(settings.host, "files.ludhiana.example");
+
+        // A valid-looking name reads as a registered driver; anything else
+        // is the selector's error, which never repeats the value.
+        let error = serde_json::from_value::<DiskConfig>(serde_json::json!({"driver": "f-t-p"}))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            error,
+            "the driver must be `local`, `memory`, `s3`, `gcs`, `azure` or the name of a disk driver registered with m.disk_driver (a lower-case letter, then lower-case letters, digits or _)"
+        );
+        assert!(single_disk_options(disk).validate().is_ok());
+    }
+
+    /// Options with the single disk `uploads`.
+    fn single_disk_options(disk: DiskConfig) -> StorageOptions {
+        StorageOptions {
+            default: "uploads".to_owned(),
+            disks: BTreeMap::from([("uploads".to_owned(), disk)]),
+            base_url: None,
+        }
+    }
+
+    #[test]
+    fn storage_config_of_today_reads_as_before() {
+        let read = |value: Json| serde_json::from_value::<DiskConfig>(value);
+        let defaults = StorageOptions::default();
+        assert_eq!(defaults.disks["local"], DiskConfig::local("storage/app"));
+        assert_eq!(StorageOptions::defaults().unwrap()["default"], "local");
+        let section: StorageOptions = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert_eq!(section, defaults);
+
+        assert_eq!(
+            read(serde_json::json!({"driver": "memory"})).unwrap(),
+            DiskConfig::Memory
+        );
+        assert_eq!(
+            read(serde_json::json!({"driver": "local", "root": "storage/app"})).unwrap(),
+            DiskConfig::local("storage/app")
+        );
+        assert_eq!(
+            read(serde_json::json!({
+                "driver": "local",
+                "root": "storage/app/public",
+                "public_url": "https://cdn.amritsar.example",
+            }))
+            .unwrap(),
+            DiskConfig::Local {
+                root: "storage/app/public".into(),
+                public_url: Some("https://cdn.amritsar.example".to_owned()),
+            }
+        );
+        assert_eq!(
+            read(serde_json::json!({
+                "driver": "s3",
+                "bucket": "ludhiana-invoices",
+                "region": "ap-south-1",
+                "endpoint": "https://s3.ap-south-1.amazonaws.com",
+                "access_key": "AKIALUDHIANA",
+                "secret_key": "s3cr3t",
+                "session_token": "token",
+                "path_style": true,
+                "prefix": "production",
+                "public_url": "https://cdn.ludhiana.example",
+            }))
+            .unwrap(),
+            DiskConfig::S3(S3Config {
+                session_token: Some(Secret::new("token".to_owned())),
+                ..S3Config::new("ludhiana-invoices")
+                    .region("ap-south-1")
+                    .endpoint("https://s3.ap-south-1.amazonaws.com")
+                    .credentials("AKIALUDHIANA", "s3cr3t")
+                    .path_style(true)
+                    .prefix("production")
+                    .public_url("https://cdn.ludhiana.example")
+            })
+        );
+        assert_eq!(
+            read(serde_json::json!({"driver": "azure", "account": "amritsar", "bucket": "archive"}))
+                .unwrap(),
+            DiskConfig::Azure(AzureConfig::new("amritsar", "archive"))
+        );
+
+        // The errors of today.
+        let missing = read(serde_json::json!({"root": "storage/app"}))
+            .unwrap_err()
+            .to_string();
+        assert!(missing.contains("driver"), "{missing}");
+        let typo = read(serde_json::json!({"driver": "s3", "bucket": "b", "acces_key": "x"}))
+            .unwrap_err()
+            .to_string();
+        assert!(typo.contains("acces_key"), "{typo}");
+        let not_a_table = read(serde_json::json!("local")).unwrap_err().to_string();
+        assert!(
+            not_a_table.contains("internally tagged enum DiskConfig"),
+            "{not_a_table}"
+        );
     }
 }
