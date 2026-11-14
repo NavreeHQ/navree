@@ -45,6 +45,7 @@ mod key;
 mod lazy;
 mod lifecycle;
 mod module;
+mod plugin;
 mod resolver;
 
 pub use app::{App, AppBuilder, AppContext, Contributed, ModuleInfo, Navree, WeakAppContext};
@@ -57,7 +58,14 @@ pub use key::{ModuleId, ProviderKey, Scope};
 pub use lazy::Lazy;
 pub use lifecycle::Lifecycle;
 pub use module::{CodeConfigured, ConfiguredModule, Injectable, IntoModules, Module};
+pub use plugin::PluginInfo;
 pub use resolver::Resolver;
+
+/// Items Navree's own crates and macros use; not public API.
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::plugin::{default_namespace, is_namespace, namespace_text};
+}
 
 /// A boxed error that can cross module and task boundaries.
 pub type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
