@@ -1,5 +1,6 @@
 //! [`PagesOptions`]: where the error pages send people, what they show, and whether
-//! a development build shows more.
+//! they show development details (on in a build with debug assertions, off in a release
+//! build, always off in `production` and `staging`).
 
 use navree_config::{Config, ConfigError, ConfigSection, Environment};
 use serde::Deserialize;
@@ -25,8 +26,8 @@ pub struct UiOptions {
     /// the sign-in state (default off).
     pub sign_in_redirect: Option<bool>,
     /// Add the status, code, message and cause to error pages, marked
-    /// "Development only" (default: on in a debug build, off in a release build).
-    /// Always off in `production` and `staging`.
+    /// "Development only" (default: on in a build with debug assertions, off in a release
+    /// build). Always off in `production` and `staging`.
     pub debug: Option<bool>,
 }
 
@@ -60,8 +61,12 @@ impl UiOptions {
 /// sign_in = "/sign-in"        # where "Sign in" leads; the page the user came from is added as `next`
 /// home = "/"                  # where "Go to home" leads
 /// sign_in_redirect = false    # send a guest straight to sign in, instead of showing a page
-/// debug = false               # add details to error pages; unset, on only in a debug build in a named environment that is not production
+/// debug = false               # add details to error pages; unset, on in a build with debug assertions and off in a release build
 /// ```
+///
+/// The details are always off in `production` and `staging`, whatever the build, the
+/// configuration or the code say, and off for an app with no configuration unless
+/// [`PagesOptions::debug`]`(true)` turned them on.
 #[derive(Clone, Debug)]
 #[must_use]
 #[non_exhaustive]
@@ -120,8 +125,9 @@ impl PagesOptions {
         self
     }
 
-    /// Turns the development details on or off. What is said here stands (production
-    /// aside): an app with no configuration shows them only when this turns them on.
+    /// Turns the development details on or off, whatever the build. What is said here
+    /// stands, except in `production` and `staging`, where they are always off: an app with
+    /// no configuration shows them only when this turns them on.
     pub fn debug(mut self, debug: bool) -> Self {
         self.debug = debug;
         self.debug_chosen = true;
