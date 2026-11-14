@@ -136,7 +136,7 @@ A screen written for native clients says the same on its answer: `native::Answer
 
 What is kept belongs to a visitor or to the signed-in person's id. Every native answer names that person in `X-Navree-Person`, which the framework's own sign-in gives it; an app that signs people in its own way makes `CurrentPrincipal` its principal, or nothing is kept for its signed-in people.
 
-A kept page is a head start, never the answer. At the next launch it is drawn only after the shell has answered over the network and named the same person as the shell that was kept. Until then the screen shows that it is loading; with another person, or nobody signed in, everything kept is thrown away; with no network the kept page is not drawn at all, and the screen shows what any page that could not load shows. The fresh answer always takes the kept page's place.
+A kept page is a head start, never the answer: it is shown at once, marked as kept, nothing is sent from it, and the fresh answer takes its place as soon as it arrives. So a kept page can be on the screen for a moment after the session it was answered for has ended, until the app learns that. A page that must never be on the screen after its session ended, even for a moment, is not marked as keepable: leave it `no-store`, the default. At the next launch it is drawn only after the shell has answered over the network and named the same person as the shell that was kept. Until then the screen shows that it is loading; with another person, or nobody signed in, everything kept is thrown away; with no network the kept page is not drawn at all, and the screen shows what any page that could not load shows. The fresh answer always takes the kept page's place.
 
 ## Grades and coverage
 
