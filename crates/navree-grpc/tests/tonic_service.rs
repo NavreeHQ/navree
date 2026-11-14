@@ -506,7 +506,7 @@ async fn a_wrapped_client_stream_is_not_held_to_the_body_read_pace_once_let_in()
     let app = wrapped(deals(&ledger).authenticated())
         .config("http.addr", "127.0.0.1:0")
         .config("http.shutdown_grace_secs", 1)
-        .config("http.server.body_read_timeout_ms", 100)
+        .config("http.server.body_read_timeout_ms", 250)
         .build()
         .await;
     serving(&app, async {
@@ -544,7 +544,7 @@ async fn a_wrapped_client_stream_is_not_held_to_the_body_read_pace_once_let_in()
             .into_inner();
         sender.send(event("first")).await.unwrap();
         assert_eq!(echoed.message().await.unwrap(), Some(event("first")));
-        tokio::time::sleep(Duration::from_millis(400)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
         sender.send(event("second")).await.unwrap();
         assert_eq!(echoed.message().await.unwrap(), Some(event("second")));
         drop(sender);
