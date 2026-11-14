@@ -43,7 +43,8 @@ pub struct MailOptions {
     /// (default `hello@example.com`). Empty means no default: every message
     /// must then set its own sender.
     pub from: String,
-    /// How messages are delivered (default [`TransportConfig::Log`]).
+    /// How messages are delivered (default [`TransportConfig::Log`]), or
+    /// the name of a transport registered with m.mail_transport.
     pub transport: TransportConfig,
     /// The queue [`Mailer::queue`](crate::Mailer::queue) dispatches to
     /// (default: the job's own queue, `default`).
@@ -89,21 +90,22 @@ impl Default for MailOptions {
 }
 
 impl MailOptions {
-    /// The sender parses, every transport builds (no connection is made),
+    /// The sender parses, every transport builds (no connection is made;
+    /// a transport a module registers is built by its factory at boot),
     /// and tracking has the delivery log it needs. The boot calls this.
     fn check(&self) -> Result<(), String> {
         if !self.from.is_empty() {
             mailbox("from", &self.from).map_err(|error| format!("`from`: {error}"))?;
         }
         self.transport
-            .build()
+            .check_settings()
             .map_err(|error| format!("`transport`: {error}"))?;
         for (name, transport) in &self.transports {
             if name.is_empty() {
                 return Err("`transports`: a transport name must not be empty".to_owned());
             }
             transport
-                .build()
+                .check_settings()
                 .map_err(|error| format!("`transports.{name}`: {error}"))?;
         }
         if self.tracking.is_on() && !self.delivery.enabled {
