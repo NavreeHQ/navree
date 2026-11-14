@@ -172,6 +172,7 @@ More: [/docs/security/passwordless/](/docs/security/passwordless/).
 | `apple` | table of AppleApp | `"{}"` | `APP_AUTH__APPS__APPLE` | The Apple apps (iOS, iPadOS, macOS, watchOS, visionOS), by name. |
 | `android` | table of AndroidApp | `"{}"` | `APP_AUTH__APPS__ANDROID` | The Android apps, by name. |
 | `keep_browser_signed_in` | boolean | `false` | `APP_AUTH__APPS__KEEP_BROWSER_SIGNED_IN` | Whether a browser that signed in only to hand its sign-in over to an app stays signed in afterwards (default `false`: it is signed out, and only the app holds a session). A browser that was signed in before the hand-over stays signed in once the person confirms, unless the app's callback is a custom scheme (the browser is then signed out and the person signs in again for the app). |
+| `callback_page` | boolean | `true` | `APP_AUTH__APPS__CALLBACK_PAGE` | Whether the site answers `GET` on the path of each `https` callback with an empty page (`Cache-Control: no-store`, `Referrer-Policy: no-referrer`), for a browser the system did not hand to the app, so the code in its address is neither kept nor sent on (default `true`). Turn it off when the app serves that path itself. |
 
 ## `billing`
 

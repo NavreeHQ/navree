@@ -67,7 +67,7 @@ const MAX_PATH_LEN: usize = 1024;
 /// assertions are accepted beside `auth.passkeys.origins`. In production
 /// list the Play App Signing certificate; a debug certificate only for
 /// development builds.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, ConfigSection)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
 #[config(key = "auth.apps", docs = "/docs/security/passwordless/", validate = Self::check_values)]
 #[serde(default)]
 #[non_exhaustive]
@@ -89,6 +89,25 @@ pub struct AppsOptions {
     /// unless the app's callback is a custom scheme (the browser is then
     /// signed out and the person signs in again for the app).
     pub keep_browser_signed_in: bool,
+    /// Whether the site answers `GET` on the path of each `https` callback
+    /// with an empty page (`Cache-Control: no-store`, `Referrer-Policy:
+    /// no-referrer`), for a browser the system did not hand to the app, so
+    /// the code in its address is neither kept nor sent on (default
+    /// `true`). Turn it off when the app serves that path itself.
+    pub callback_page: bool,
+}
+
+impl Default for AppsOptions {
+    fn default() -> Self {
+        Self {
+            paths: Vec::new(),
+            exclude: Vec::new(),
+            apple: BTreeMap::new(),
+            android: BTreeMap::new(),
+            keep_browser_signed_in: false,
+            callback_page: true,
+        }
+    }
 }
 
 /// An Apple app (`auth.apps.apple.<name>`).
@@ -407,6 +426,90 @@ impl AppsOptions {
         self.apple.values().any(|app| app.callback.is_some())
             || self.android.values().any(|app| app.callback.is_some())
     }
+
+    /// Every app's callback, by its configuration key
+    /// (`auth.apps.apple.<name>`).
+    fn callbacks(&self) -> impl Iterator<Item = (String, &str)> {
+        let apple = self.apple.iter().filter_map(|(name, app)| {
+            Some((format!("auth.apps.apple.{name}"), app.callback.as_deref()?))
+        });
+        let android = self.android.iter().filter_map(|(name, app)| {
+            Some((format!("auth.apps.android.{name}"), app.callback.as_deref()?))
+        });
+        apple.chain(android)
+    }
+
+    /// Checks that every `https` callback is on the host of `site` (the
+    /// app's address, `app.url`): an https callback is an app link of the
+    /// site, which the system opens in the app only for the site the app is
+    /// associated with. Elsewhere the code would go to a page the site does
+    /// not answer for. A `site` that is not `https` (a development address
+    /// such as `http://localhost:3000`) checks nothing.
+    pub(crate) fn check_callback_hosts(&self, site: &str) -> Result<(), Vec<String>> {
+        let Some(host) = url::Url::parse(site)
+            .ok()
+            .filter(|site| site.scheme() == "https")
+            .and_then(|site| site.host_str().map(str::to_ascii_lowercase))
+        else {
+            return Ok(());
+        };
+        let errors: Vec<String> = self
+            .callbacks()
+            .filter(|(_, callback)| {
+                url::Url::parse(callback).ok().is_some_and(|url| {
+                    url.scheme() == "https"
+                        && url.host_str().map(str::to_ascii_lowercase).as_deref()
+                            != Some(host.as_str())
+                })
+            })
+            .map(|(key, _)| {
+                format!(
+                    "{key}.callback must be on the site's own host ({host}, from app.url): an \
+                     https callback is an app link of the site"
+                )
+            })
+            .collect();
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
+    /// The paths the site answers with an empty page for a browser that
+    /// lands on an `https` callback ([`callback_page`](Self::callback_page)):
+    /// each once, and only a plain path a route can be (not `/`).
+    pub(crate) fn callback_page_paths(&self) -> Vec<String> {
+        if !self.callback_page {
+            return Vec::new();
+        }
+        let mut paths: Vec<String> = self
+            .callbacks()
+            .filter_map(|(_, callback)| url::Url::parse(callback).ok())
+            .filter(|url| url.scheme() == "https")
+            .map(|url| url.path().to_owned())
+            .filter(|path| is_plain_path(path))
+            .collect();
+        paths.sort();
+        paths.dedup();
+        paths
+    }
+}
+
+/// Whether `path` is `/` and segments of unreserved characters, with no
+/// empty, `.` or `..` segment and no trailing slash (not `/` itself).
+#[cfg_attr(not(feature = "session"), allow(dead_code))]
+fn is_plain_path(path: &str) -> bool {
+    path.len() > 1
+        && path.starts_with('/')
+        && path[1..].split('/').all(|segment| {
+            !segment.is_empty()
+                && segment != "."
+                && segment != ".."
+                && segment
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~'))
+        })
 }
 
 /// Checks an app's hand-over callback: an absolute `https` URL with a host
@@ -507,10 +610,18 @@ fn is_package_name(name: &str) -> bool {
         })
 }
 
-/// `auth.apps` from the app's `Config`, or the defaults (no apps).
+/// `auth.apps` from the app's `Config`, or the defaults (no apps). With an
+/// `https` `app.url`, an `https` callback on another host fails the boot.
 pub(crate) async fn apps_options(r: &Resolver) -> Result<AppsOptions, BoxError> {
     match r.app().try_get::<Config>().await {
-        Some(config) => Ok(config.typed::<AppsOptions>()?),
+        Some(config) => {
+            let apps = config.typed::<AppsOptions>()?;
+            if let Some(site) = config.app_url() {
+                apps.check_callback_hosts(&site)
+                    .map_err(|errors| errors.join("; "))?;
+            }
+            Ok(apps)
+        }
         None => Ok(AppsOptions::default()),
     }
 }
@@ -795,6 +906,90 @@ mod tests {
         assert!(with("com.example.orders:/signed-in", true).is_ok());
         assert!(with("javascript:alert(1)", true).is_err());
         assert!(!configured().has_hand_over());
+    }
+
+    #[test]
+    fn https_callbacks_are_on_the_sites_own_host() {
+        let apps = load(
+            ConfigSources::new()
+                .set("auth.apps.apple.main.team_id", "ABCDE12345")
+                .set("auth.apps.apple.main.bundle_id", "com.example.orders")
+                .set(
+                    "auth.apps.apple.main.callback",
+                    "https://example.com/app/signed-in",
+                )
+                .set("auth.apps.android.main.package", "com.example.orders")
+                .set("auth.apps.android.main.fingerprints", json!([FINGERPRINT]))
+                .set(
+                    "auth.apps.android.main.callback",
+                    "com.example.orders:/signed-in",
+                )
+                .set("auth.apps.android.main.custom_scheme", true),
+        )
+        .unwrap();
+        assert_eq!(apps.check_callback_hosts("https://example.com"), Ok(()));
+        assert_eq!(
+            apps.check_callback_hosts("https://EXAMPLE.com:8443/shop"),
+            Ok(())
+        );
+        let errors = apps
+            .check_callback_hosts("https://shop.example.com")
+            .unwrap_err();
+        // The https callback only: a custom scheme has no host to check.
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(
+            errors[0].starts_with("auth.apps.apple.main.callback must be on the site's own host"),
+            "{errors:?}"
+        );
+        assert!(errors[0].contains("shop.example.com"), "{errors:?}");
+        // A development address is not the site the apps are linked to.
+        assert_eq!(apps.check_callback_hosts("http://localhost:3000"), Ok(()));
+    }
+
+    #[test]
+    fn the_site_answers_each_https_callback_path_once() {
+        let mut apps = load(
+            ConfigSources::new()
+                .set("auth.apps.apple.main.team_id", "ABCDE12345")
+                .set("auth.apps.apple.main.bundle_id", "com.example.orders")
+                .set(
+                    "auth.apps.apple.main.callback",
+                    "https://example.com/app/signed-in?from=ios",
+                )
+                .set("auth.apps.apple.kiosk.team_id", "ABCDE12345")
+                .set("auth.apps.apple.kiosk.bundle_id", "com.example.kiosk")
+                .set("auth.apps.apple.kiosk.callback", "https://example.com/")
+                .set("auth.apps.android.main.package", "com.example.orders")
+                .set("auth.apps.android.main.fingerprints", json!([FINGERPRINT]))
+                .set(
+                    "auth.apps.android.main.callback",
+                    "https://example.com/app/signed-in",
+                )
+                .set("auth.apps.android.legacy.package", "com.example.legacy")
+                .set("auth.apps.android.legacy.fingerprints", json!([FINGERPRINT]))
+                .set(
+                    "auth.apps.android.legacy.callback",
+                    "com.example.legacy:/signed-in",
+                )
+                .set("auth.apps.android.legacy.custom_scheme", true),
+        )
+        .unwrap();
+        assert!(apps.callback_page);
+        // Once for both apps; never the site's root; never a scheme.
+        assert_eq!(apps.callback_page_paths(), ["/app/signed-in"]);
+        apps.callback_page = false;
+        assert!(apps.callback_page_paths().is_empty());
+        for (path, plain) in [
+            ("/app/signed-in", true),
+            ("/a.b/c_d~e-f", true),
+            ("/", false),
+            ("/app/", false),
+            ("/app//in", false),
+            ("/app/../in", false),
+            ("/app/%7Bid%7D", false),
+        ] {
+            assert_eq!(is_plain_path(path), plain, "{path}");
+        }
     }
 
     #[test]

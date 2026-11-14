@@ -921,8 +921,46 @@ impl Controller for AppSignInController {
                     ..api("Sign an app in with a hand-over code", &[400, 403, 429])
                 }),
         );
+
+        // A browser the system did not hand to the app lands on the
+        // callback with the code in its address: an empty page that keeps
+        // nothing and sends nothing on (`auth.apps.callback_page`).
+        let own = [
+            APP_SIGN_IN_PATH,
+            APP_SIGN_IN_FINISH_PATH,
+            crate::APPLE_ASSOCIATION_PATH,
+            crate::ANDROID_ASSOCIATION_PATH,
+            self.sign_in.as_str(),
+        ];
+        for path in self.apps.callback_page_paths() {
+            if own.contains(&path.as_str()) {
+                continue;
+            }
+            routes.push(
+                RouteDef::on(Method::GET, format!("!{path}"), || async {
+                    callback_page()
+                })
+                .public(),
+            );
+        }
         routes
     }
+}
+
+/// The page of an app's `https` callback, for a browser the system did not
+/// hand to the app: empty, never cached, never sent on as a referrer.
+fn callback_page() -> Response {
+    let mut response = Html(
+        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
+         <meta name=\"referrer\" content=\"no-referrer\">\n<title></title>\n</head>\n\
+         <body></body>\n</html>\n",
+    )
+    .into_response();
+    let headers = response.headers_mut();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    headers.insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+    headers.insert(X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    response
 }
 
 /// Exchanges one client may attempt per minute.
