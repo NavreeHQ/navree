@@ -63,6 +63,24 @@ class HttpTest {
     }
 
     @Test
+    fun an_answers_cache_control_reaches_the_core_and_no_other_header_beside_the_navree_ones() {
+        val answer = okhttp3.Headers.headersOf(
+            "Content-Type", "application/vnd.navree.native+json",
+            "Cache-Control", "private, no-store",
+            "X-Navree-Shell", "9f3c",
+            "Set-Cookie", "session=s1",
+            "Location", "/orders",
+            "X-Other", "1",
+        )
+        val passed = passedHeaders(answer)
+        assertEquals(listOf("cache-control" to "private, no-store", "x-navree-shell" to "9f3c"), passed.sortedBy { it.first })
+        val event = com.navree.client.core.Events.response(5, 200, "application/vnd.navree.native+json", null, passed, "{}")
+        val names = event["headers"]!!.toString()
+        assertTrue(names, names.contains("[\"cache-control\",\"private, no-store\"]"))
+        assertTrue(names, !names.contains("session") && !names.contains("x-other"))
+    }
+
+    @Test
     fun clear_text_is_offered_only_where_the_app_allows_plain_http() {
         assertEquals(1, connectionSpecs(loopbackHttp = false).size)
         assertTrue(connectionSpecs(loopbackHttp = false).single().isTls)
