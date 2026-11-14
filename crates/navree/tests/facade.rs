@@ -1632,7 +1632,9 @@ fn only_first_party_packages_name_themselves_plugins_and_from_their_own_module_t
         rust_files(&src, &mut files);
         for file in files {
             let text = std::fs::read_to_string(&file).expect("a source file");
-            let names_a_plugin = text
+            // A file's unit tests come last, and a test's stand-in plugin is not the package's.
+            let shipped = text.split("#[cfg(test)]").next().unwrap_or_default();
+            let names_a_plugin = shipped
                 .lines()
                 .filter(|line| !line.trim_start().starts_with("//"))
                 .map(without_strings)
@@ -1663,6 +1665,8 @@ fn only_first_party_packages_name_themselves_plugins_and_from_their_own_module_t
 /// A line of source without the text inside its string literals, so a message that tells the
 /// reader to write `plugin_info!(..)` is not read as a call of it.
 fn without_strings(line: &str) -> String {
+    // A quote written as a character opens no string.
+    let line = line.replace("'\"'", "' '");
     let mut code = String::with_capacity(line.len());
     let mut inside = false;
     let mut chars = line.chars();
@@ -1692,6 +1696,10 @@ fn a_message_that_mentions_the_macro_is_not_a_call_of_it() {
     assert!(
         without_strings(r#"let info = PluginInfo::new("navree-flags", "x");"#)
             .contains("PluginInfo::new(")
+    );
+    assert!(
+        without_strings(r#"if c == '"' { m.plugin(navree_kernel::plugin_info!()); }"#)
+            .contains("plugin_info!")
     );
 }
 
