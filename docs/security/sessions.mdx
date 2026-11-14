@@ -118,7 +118,7 @@ The route accepts a request only when its access token's `auth_time` is at most 
 {"statusCode": 403, "message": "Please confirm your identity to continue", "error": "Forbidden", "code": "reauthentication_required"}
 ```
 
-That covers an older sign-in, an [impersonation](/docs/security/impersonation/) session (it never signed in, so it has no `auth_time`), and requests authenticated another way, such as a [session cookie](/docs/basics/sessions-and-csrf/) or an [API key strategy](/docs/security/authentication/#writing-your-own-strategy). The client then [confirms](#confirming-the-password-or-a-code) and retries.
+That covers an older sign-in, an [impersonation](/docs/security/impersonation/) session (it never signed in, so it has no `auth_time`), and requests authenticated another way that carries no sign-in time, such as an [API key strategy](/docs/security/authentication/#writing-your-own-strategy). A browser on its [session cookie](/docs/basics/sessions-and-csrf/) has one: the time it signed in, or last stepped up. So does the session a native app gets from a [sign-in hand-over](/docs/security/passwordless/#signing-an-app-in-through-the-systems-sign-in-session): it keeps the time of the browser session it came from. Confirming one action with `confirm_action` does not count, only `POST /api/auth/confirm` and its passkey form do. The client then [confirms](#confirming-the-password-or-a-code) and retries.
 
 - `#[recent_auth]` takes between 1 and 10,080 minutes (a week); anything else is a compile error. It can sit on the impl block, where it applies to every route, and a route's own replaces the impl block's.
 - It is a guard, not an access declaration: the route still needs `#[authenticated]`, `#[roles]`, `#[permissions]` or `#[can]`.
@@ -358,7 +358,7 @@ app.client()
 
 ## Push devices end with their session
 
-With both the `auth` and `notify` features of the facade, a native app's [push devices](/docs/digging-deeper/notification-channels/) belong to the session that registered them. Signing out, `DELETE /api/auth/sessions/{id}` and logging out everywhere delete them at once; before every push, the channel asks `navree::auth::AuthLiveSessions` which of the devices' sessions are live, and deletes the devices of the others (revoked by a password change or reset, offboarded, expired) instead of sending to them. A signed-out phone gets nothing.
+With both the `auth` and `notify` features of the facade, a native app's [push devices](/docs/digging-deeper/notification-channels/) belong to the session that registered them, which for a client with a bearer token is the session its token's `sid` names. Signing out, `DELETE /api/auth/sessions/{id}` and logging out everywhere delete them at once; before every push, the channel asks `navree::auth::AuthLiveSessions` which of the devices' sessions are live, and deletes the devices of the others (revoked by a password change or reset, offboarded, expired) instead of sending to them. A signed-out phone gets nothing.
 
 <LinkCards>
   <LinkCard href="/docs/security/impersonation/" title="Impersonation">

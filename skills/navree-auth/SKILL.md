@@ -60,7 +60,7 @@ reference `users` use `.after(["auth"])`.
 | `POST /2fa/enable`, `/2fa/confirm`, `/2fa/verify`, `/2fa/disable`, `/2fa/recovery-codes` | mixed | TOTP two-factor |
 | `GET /sessions`, `DELETE /sessions/{id}`, `POST /confirm` `{password}` or `{code}` | signed in | sessions; step-up confirmation |
 | `POST /confirm/options` `{ticket?}`, `POST /confirm/passkey` `{credential}` | signed in | passkey step-up and confirming one action (`auth.passkeys.enabled`) |
-| `GET /auth/app/sign-in`, `GET /auth/app/finish` (outside `/api`), `POST /app/exchange` `{platform, app, code, code_verifier}` | public | a native app takes over a sign-in from the system's sign-in session (PKCE S256; apps of `auth.apps` with a `callback`) |
+| `GET /auth/app/sign-in`, `GET /auth/app/finish`, `POST /auth/app/confirm` (all outside `/api`), `POST /app/exchange` `{platform, app, code, code_verifier}` | public | a native app takes over a sign-in from the system's sign-in session (PKCE S256; apps of `auth.apps` with a `callback`) |
 | `POST /impersonate/{user}` `{reason}`, `DELETE /impersonate` | `users.impersonate` / signed in | impersonation (`auth.impersonation.enabled`) |
 | `POST /magic-link`, `/magic-link/verify`, `/otp`, `/otp/verify` | public | passwordless (`auth.magic_link.enabled`, `auth.otp.enabled`) |
 | `/passkeys/register/options`, `/passkeys/register`, `/passkeys/login/options`, `/passkeys/login`, `GET /passkeys`, `DELETE /passkeys/{id}` | mixed | passkeys (`auth.passkeys.enabled`) |
@@ -100,7 +100,8 @@ recent sign-in: build a `ConfirmAction` from the server's own record and
 check the passkey assertion with
 `auth.confirm_action(&claims, &action, ConfirmProof::Passkey(credential), &meta)`.
 The challenge was derived from the same action, so a confirmation of ₹100
-never approves ₹1,00,000. Results a client posts back later carry a sealed
+never approves ₹1,00,000. It approves that action only: it does not step the
+session up, so `#[recent_auth]` and `auth_time` stay as they were. Results a client posts back later carry a sealed
 one-time ticket (`dyn navree::contracts::CallTickets`). Native apps: passkey
 origins and the association files of `auth.apps`. All in
 `references/sessions-and-sign-in.md`.
@@ -206,7 +207,10 @@ refresh tokens, unexchanged codes, remembered consent). It returns
 `attempt.domain()`. Access JWTs already issued live out `auth.jwt.access_ttl_secs`
 (15 minutes) but can't be refreshed. Your module can take part:
 `m.credential_revoker::<R>()` (`navree::contracts::ModuleBuilderRevocationExt`)
-with `R: CredentialRevoker` and `revoke_for_users(&[Uuid])`. A failing revoker
+with `R: CredentialRevoker` and `revoke_for_users(&[Uuid])`. Override
+`end_sign_ins_of` too if the module holds more that signs a person in (it is
+asked when a magic link or code gives a never-verified account to its
+mailbox's owner; the default is `revoke_for_users`). A failing revoker
 yields `AuthError::Revocation` after all others ran; repeat the call. Finding a
 domain's users scans the users' emails in pages: for an offboarding, not a
 request.
@@ -368,6 +372,9 @@ needs a real `users` row). To test sign-in itself, post to
 - Adding `SessionModule`'s authenticator next to `AuthModule`: an app has one
   `dyn Authenticator`.
 - Unverified emails aren't blocked: check `user.email_verified_at` where it matters.
+  A magic link or emailed code that signs in to a never-verified account ends
+  everything the registrant had on it (sessions, password, passkeys, two-factor,
+  module credentials) and gives it to the mailbox's owner.
 - Writing a "danger zone" route without `#[recent_auth]` or
   `#[not_while_impersonating]`: impersonation sessions and old tokens pass
   plain `#[authenticated]`.

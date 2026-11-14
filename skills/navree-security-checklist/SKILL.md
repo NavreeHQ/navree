@@ -129,10 +129,23 @@ Go through it in order; each item says how to check.
 - [ ] A compressed page with a secret and reflected input in one body, on cookie
   auth that a cross-site request carries, can give the secret away through its
   length (BREACH): put `#[no_compression]` (`.no_compression()`) on the route or
-  send `Cache-Control: no-transform`, or keep the secret off that page.
+  send `Cache-Control: no-transform`, or keep the secret off that page. Both
+  opt-outs hold for the UI toolkit's brotli too, and `http.compression = false`
+  turns every compressor off. The session's CSRF token is already masked afresh
+  in every page Navree writes; in markup of your own write
+  `navree::http::csrf::page_token(&session.csrf_token())`.
 - [ ] With `SessionModule` (cookie sessions): CSRF stays on; `session.csrf_except`
   only covers signed webhooks; `session.secure = true`; call
-  `session.regenerate()` on sign-in and `invalidate()` on sign-out.
+  `session.regenerate()` on sign-in and `invalidate()` on sign-out. A Navree UI
+  form refuses a post that carries a cookie, sends neither `Sec-Fetch-Site` nor
+  `Origin` and has no token the session's check took.
+- [ ] Accounts: registration does not prove an address. A never-verified account
+  signed in to by a magic link or an emailed code goes to the mailbox's owner
+  (its other sessions, password, passkeys, two-factor and module credentials
+  end); the verification link alone ends nothing. Social sign-in links to an
+  existing user by email only when the user's own address is verified too.
+  Where an unverified password sign-in must not work, add a sign-in policy that
+  refuses `SignInMethod::Password` while `email_verified_at` is empty.
 - [ ] Browser sign-in through `AuthPages` / `AuthService::sign_in_session`:
   `session.secure` and `session.host_prefix` are on in production (the cookie
   is `__Host-navree_session`); `auth.session.lifetime_hours` and
@@ -141,6 +154,17 @@ Go through it in order; each item says how to check.
   the pages; a `next` only ever leads to a page of the site (the pages check
   it); impersonation stays off unless `auth.impersonation.enabled` and its
   permission are granted to few.
+- [ ] Navree UI pages: a table column a person may not use is taken away with
+  `TableQuery::without_columns` (`#[col(hidden)]` is no permission), the route
+  that serves a table's CSV export is throttled (100,000 rows by default), rich
+  text shown from the database sits inside an element marked `data-ui-stored`,
+  an `HtmlPolicy` allows none of the attributes the page acts on, and a sortable
+  in an app with workspaces uses unique list keys or a `ListScope`.
+- [ ] With workspaces and the assistant (`ai`): a conversation answers only to
+  the workspace it began in, and the assistant's routes run behind
+  `InWorkspace::guard()` (by themselves with navree-ai's `workspace` feature).
+- [ ] An app with no configuration shows an error page's "Development only"
+  details only if the code calls `PagesOptions::debug(true)`.
 
 ## 7. Secrets and errors
 
@@ -167,6 +191,9 @@ Go through it in order; each item says how to check.
 
 - [ ] Uploads use `store_upload` with `UploadRules` (content-sniffed types,
   size limit); `original_name` is never used as a path.
+- [ ] A Navree UI form's file field: the route its upload posts to answers with
+  `Received::into_keyed_response_for(&signer, owner.as_str())` and an
+  `UploadOwner`, so a file key is taken only from the person it was made for.
 - [ ] Temporary URLs have short expiries and aren't logged.
 - [ ] `HttpClient` keeps `ssrf.block_private = true` when any URL comes from
   users; internal services are listed in `ssrf.allow_hosts`.

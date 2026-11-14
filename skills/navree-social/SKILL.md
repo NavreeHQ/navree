@@ -82,7 +82,12 @@ client_id = "0oa8f2kq1xYz3AbC4d5e"
 
 1. A `social_accounts` row for (provider, provider user id) signs in its user.
 2. `link_by_email = "verified"` (default): a **verified** provider email
-   matching a user links and signs in. Unverified emails never link.
+   matching a user links and signs in, but only when the user's own address
+   is verified too (`email_verified_at` set). Unverified provider emails never
+   link; a user whose own address was never verified is refused as under
+   `"never"` (rule 4: 409 `email_taken`, audited `social.link_refused`), and
+   links on the next sign-in once the address is verified. Connecting a
+   provider from a signed-in session (`intent=link`) works either way.
    Microsoft emails are unverified unless the token has `xms_edov`; GitHub
    uses the primary verified address; Discord's `verified`; X's
    `confirmed_email` (scope `users.email`).
@@ -180,8 +185,10 @@ bundle id); the returned ID token must have the same `sub`; Apple tokens
 are stored encrypted **whatever `store_tokens` says**, with their client
 (`social_account_clients`). Revoked at Apple by `unlink`,
 `Social::revoke_tokens(user_id)` and `AuthService::revoke_all_credentials`
-(credential revoker `social`, kind `social_provider_tokens`). An account
-deletion route: `auth.revoke_all_credentials(user.id).await?` then delete
+(credential revoker `social`, kind `social_provider_tokens`). When a magic
+link or an emailed code gives a never-verified account to its mailbox's
+owner, the revoker's `end_sign_ins_of` also unlinks the account's provider
+accounts (kind `social_accounts`). An account deletion route: `auth.revoke_all_credentials(user.id).await?` then delete
 the user.
 
 Apple notifications (`POST /api/auth/social/apple/notifications`, register

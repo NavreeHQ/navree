@@ -3,7 +3,7 @@
 ## Sessions
 
 - A session is a refresh-token family. Access tokens carry `sid` (the
-  session) and `auth_time` (last sign-in or confirmation, Unix seconds).
+  session) and `auth_time` (last sign-in or step-up confirmation, Unix seconds).
 - `GET /api/auth/sessions` -> `{data: [{id, ip, user_agent, device,
   last_used_at, authenticated_at, expires_at, current, impersonator_id,
   platform}]}`; `DELETE /api/auth/sessions/{id}` -> 204 (404 for unknown or
@@ -33,6 +33,9 @@
   &meta)`; a confirmation of another amount, record, session or user, a
   replay, no UV or past 120 s is 403 `confirmation_refused`. Password and
   code proofs are accepted too (they prove the person, not the action).
+  `confirm_action` approves that action only: it is not a step-up, the
+  session's `authenticated_at` and `#[recent_auth]` stay as they were. Only
+  `POST /api/auth/confirm` and `/confirm/passkey` step up.
 - Challenge: `auth.confirmation_options(user_id, sid, &action)`, or a page's
   `confirm` ticket posted to `POST /api/auth/confirm/options {ticket}`.
 
@@ -63,13 +66,38 @@
   system's sign-in session at `GET /auth/app/sign-in?platform=apple|android
   &app=<bundle id|package>&code_challenge=<b64url SHA-256(verifier)>
   &code_challenge_method=S256&state=..`; after the sign-in pages (`next` =
-  `/auth/app/finish`) the browser is sent to `<callback>?code=..&state=..`
+  `/auth/app/finish?attempt=<random>`; a sign-in page of your own keeps the
+  whole `next`) the browser is sent to `<callback>?code=..&state=..`
   (60 s, one use); the app posts `{platform, app, code, code_verifier}` to
   `POST /api/auth/app/exchange` with `X-XSRF-TOKEN` -> 200 user and its own
   session cookie. Wrong verifier, another app, used, expired, no S256
   challenge, unknown app or callback: 400 `invalid_hand_over`. The browser
   is signed out after unless it was signed in before or
   `auth.apps.keep_browser_signed_in`.
+  - Only a sign-in that came back with the hand-over's own `attempt` is
+    handed over: a sign-in made in that browser for anything else while the
+    hand-over waits ends it with 400 `invalid_hand_over`. Opening
+    `GET /auth/app/sign-in` signs nobody out.
+  - A browser already signed in when the hand-over began gets the
+    framework's own page ("<app> wants to sign in as <person>", Continue or
+    Cancel), answered with `POST /auth/app/confirm` (session CSRF token plus a
+    one-time value); Cancel sends the callback `error=access_denied&state=..`.
+    For a custom-scheme app the page says "sign in again": Continue signs the
+    browser out first.
+  - The app's session keeps the sign-in time of the browser session the code
+    came from (`#[recent_auth]` sees it). After a sign-in made for the
+    hand-over it ends as a "remember me" sign-in made then would; after a
+    confirmed browser it ends with that browser session (at the latest as a
+    "remember me" one would), and the code is refused once that browser
+    session has ended. The exchange asks the sign-in policies as
+    `SignInMethod::AppHandOver { platform, app }` (single sign-on lets it
+    through); a code issued before an upgrade is refused.
+  - With an `https` `app.url`, an `https` callback on another host fails the
+    boot; the callback's scheme is read in any case (`HTTPS://` is https).
+    `auth.apps.callback_page = true` (off by default) has the site answer
+    `GET` on each https callback's path with an empty `no-store`,
+    `no-referrer` page, for a browser the system did not hand to the app;
+    leave it off when the app serves that path itself.
 - A platform sign-in in the app answering `two_factor_required` (navree-social's
   native session route): finish on `GET /sign-in/two-factor?next=..` inside
   the app, or `POST /api/auth/session/2fa/verify {code}`.
@@ -103,6 +131,14 @@ permission = "users.impersonate"
 - Magic links: `POST /api/auth/magic-link {email}` -> 202 always; mail links
   `{auth.magic_link.url}?token=..`; `POST /api/auth/magic-link/verify
   {token}` -> login response (or 2FA challenge). Single use, 15 minutes.
+  Signing in this way to an account whose address was never verified gives
+  the account to the mailbox's owner: first every other session and refresh
+  token ends, its password is cleared (set one with "forgot password"), its
+  passkeys and two-factor enrolment are removed, each module's
+  `CredentialRevoker` ends what it issued (`end_sign_ins_of`; social also
+  unlinks provider accounts), then the address is verified. Audited
+  `auth.unverified_account_claimed`. A verified account is left as it is, and
+  the registration verification link only marks the address verified.
 - Codes: `POST /api/auth/otp {email}`, `POST /api/auth/otp/verify {email,
   code}`; 6 digits, 10 minutes, burned after `auth.otp.max_attempts` (5),
   counted by the login throttle.

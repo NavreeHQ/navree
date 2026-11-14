@@ -106,6 +106,11 @@ pub fn answer(mv: &Move, lists: &[ListState]) -> Reply {
 Run the check and the write inside `Move::transaction`, which locks the lists
 the move touches before you read them, so two moves at once queue instead of
 both taking the last free place. Keep a long list by rank (`Move::place`).
+The keys of the lists come from the browser: make them unique per workspace,
+or use `Move::transaction_scoped` with a `ListScope` naming the caller's
+workspace or board (`sortable::lock_lists_scoped` and
+`sortable::renew_ranks_scoped` take the same scope), so a key of another
+scope is a list that isn't there.
 The whole story, with the code, is in
 [Drag and drop](https://navree.com/docs/ui/drag-and-drop/).
 

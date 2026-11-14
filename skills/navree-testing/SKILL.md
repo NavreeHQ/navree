@@ -104,6 +104,12 @@ for server-sent events). Assertions chain and print the body on failure:
 `assert_validation_error("field")`; then `json_value()`, `json::<T>()`,
 `header("location")`, `text()`.
 
+A Navree UI form refuses a post that carries a cookie and sends neither
+`Sec-Fetch-Site` nor `Origin` unless the session's CSRF check took its token. In
+an app with no session layer, a test that posts a form with a cookie adds
+`.header("sec-fetch-site", "same-origin")`, as a browser does; a post with no
+cookie needs nothing.
+
 ## Apps with AuthModule
 
 `acting_as` needs the test authenticator: build with `.fake_auth()` (then

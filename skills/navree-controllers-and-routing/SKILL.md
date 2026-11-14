@@ -163,7 +163,10 @@ count as an access declaration), `#[audit(action = "posts.exported")]`
 request = T, response = T, status = 201, responses(400, 404))]` (OpenAPI;
 see `navree-openapi`), `#[page]` (route or impl: its errors are pages
 in an app with Navree UI) and `#[json_only]` (route or impl: its errors
-are always JSON). Durations: `"500ms"`, `"5s"`, `"1m"`, `"1h"`.
+are always JSON). `#[no_compression]` (route) leaves its responses
+uncompressed, as does a response with `Cache-Control: no-transform` and
+`http.compression = false`; the UI toolkit's brotli for pages and ops answers
+follows the same three. Durations: `"500ms"`, `"5s"`, `"1m"`, `"1h"`.
 
 ## Responses
 

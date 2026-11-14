@@ -65,7 +65,7 @@ A list wider than its box scrolls sideways, with a fade on the side where more w
 
 ## Load a panel on demand
 
-`Tab::lazy(src)` makes the panel a [region](/docs/ui/regions/): it loads the first time its tab is shown, keeps what it got, and `.fresh()` loads it again each time. `src` answers the panel's content as a fragment.
+`Tab::lazy(src)` makes the panel a [region](/docs/ui/regions/): it loads the first time its tab is shown, keeps what it got, and `.fresh()` loads it again each time. `src` answers the panel's content as a fragment, and is an address on your site: one that is not a `LocalHref` (or is `#`) leaves the panel with no source, so nothing is fetched for it.
 
 ```rust
 use navree::ui::*;
