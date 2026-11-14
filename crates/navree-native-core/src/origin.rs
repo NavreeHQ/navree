@@ -139,6 +139,11 @@ fn readable(text: &str) -> bool {
             .any(|c| c == '\\' || c.is_control() || (c.is_whitespace() && c != ' '))
 }
 
+/// `text` without its fragment.
+fn before_fragment(text: &str) -> &str {
+    text.split('#').next().unwrap_or("")
+}
+
 /// The scheme an address starts with, in lower case, when it has one.
 fn scheme_of(text: &str) -> Option<String> {
     let (scheme, _) = text.split_once(':')?;
@@ -175,6 +180,10 @@ fn host_reads(host: &str) -> bool {
 /// Reads `scheme://host[:port][/path][?query][#fragment]`, for `http` and
 /// `https` only, by the rules at the top of this file.
 fn split(text: &str) -> Option<Parts> {
+    // What is left once the fragment is cut is held to the same rules.
+    if !readable(before_fragment(text)) {
+        return None;
+    }
     let (scheme, rest) = text.split_once("://")?;
     let scheme = scheme.to_ascii_lowercase();
     if scheme != "http" && scheme != "https" {
@@ -404,7 +413,13 @@ impl Origin {
     }
 
     fn read(&self, href: &str, from: &str) -> Reading {
-        if !readable(href) || href.starts_with('#') {
+        // The address, what is left of it once its fragment is cut, and the
+        // page it stands on are all held to the same rules.
+        if !readable(href)
+            || href.starts_with('#')
+            || !readable(before_fragment(href))
+            || !readable(from)
+        {
             return Reading::Refused;
         }
         // The page the address stands on: a path on the app's own origin, or
@@ -862,6 +877,58 @@ mod tests {
             "",
         ] {
             assert_eq!(https_address(refused), None, "{refused:?}");
+        }
+    }
+
+    #[test]
+    fn what_is_left_once_the_fragment_is_cut_is_read_by_the_same_rules() {
+        let origin = origin();
+        for (href, from) in [
+            ("a #x", "/orders/7"),
+            ("?q #x", "/orders?page=1"),
+            ("/a #x", "/"),
+            ("/a?b #x", "/"),
+            ("https://shop.example/a #x", "/"),
+            ("//shop.example/a #x", "/"),
+        ] {
+            assert_eq!(origin.resolve(href, from), Target::Refused, "{href:?}");
+        }
+        // A space inside the fragment changes nothing: the fragment is dropped.
+        assert_eq!(origin.resolve("/a#x y", "/"), inside("/a"));
+        // The page an address stands on is held to the same rules.
+        for from in [" /orders", "/orders\n", "/a\u{3000}b"] {
+            assert_eq!(origin.resolve("edit", from), Target::Refused, "{from:?}");
+        }
+    }
+
+    /// Whatever `resolve` calls inside, `absolute` gives a whole address for.
+    #[test]
+    fn every_address_read_as_inside_leaves_whole() {
+        let text = include_str!("../vectors/addresses.json");
+        let vectors: Vectors = serde_json::from_str(text).expect("the vectors read");
+        let mut hrefs: Vec<(Origin, String, String)> = vectors
+            .resolve
+            .iter()
+            .map(|case| {
+                (
+                    Origin::parse(&case.origin, &case.also, true).expect("an origin"),
+                    case.href.clone(),
+                    case.from.clone(),
+                )
+            })
+            .collect();
+        for href in [
+            "a b#c d", "?a b", "/a b?c d", "x/../y z", "/%zz", "/a%2", "/ü#ü", "?#",
+        ] {
+            hrefs.push((origin(), href.to_owned(), "/orders/7".to_owned()));
+        }
+        for (origin, href, from) in &hrefs {
+            if let Target::Inside(url) = origin.resolve(href, from) {
+                assert!(
+                    whole(origin, &url).is_some(),
+                    "{href:?} on {from:?} is inside as {url:?}, and does not leave whole"
+                );
+            }
         }
     }
 
