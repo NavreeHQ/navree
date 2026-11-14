@@ -127,6 +127,34 @@ import Testing
     }
     #expect(ContentRules.table(orders, width: .compact) == .rows)
     #expect(ContentRules.table(orders, width: .regular) == .columns)
+    // At an accessibility text size, rows at every width.
+    #expect(ContentRules.table(orders, width: .regular, accessibilityText: true) == .rows)
+    #expect(ContentRules.table(orders, width: .compact, accessibilityText: true) == .rows)
+}
+
+@Test func aWideTablesColumnsAreAsWideAsWhatTheyHoldAndTheNameTakesWhatIsLeft() {
+    func column(_ role: Navree.ColumnRole?, numeric: Bool = false) -> Navree.Column {
+        Navree.Column(label: "x", numeric: numeric, role: role)
+    }
+    #expect(ContentRules.columnKind(column(.title), controls: false) == .title)
+    #expect(ContentRules.columnKind(column(.trailing, numeric: true), controls: false) == .number)
+    #expect(ContentRules.columnKind(column(.status), controls: false) == .status)
+    #expect(ContentRules.columnKind(column(nil), controls: true) == .controls)
+    #expect(ContentRules.columnKind(column(nil), controls: false) == .words)
+    // The name asks for room and has no most: it takes what the others leave.
+    let name = ContentRules.columnWidth(.title, widest: 150)
+    #expect(name.max == nil && name.ideal >= 240)
+    // A price asks for less than a place's name; neither for the name's room.
+    let price = ContentRules.columnWidth(.number, widest: 40)
+    let place = ContentRules.columnWidth(.words, widest: 130)
+    #expect(price.ideal < place.ideal)
+    #expect(place.ideal < name.ideal)
+    #expect(price.ideal >= price.min && price.ideal <= price.max ?? .infinity)
+    // A column of buttons is as wide as its buttons, no wider and no narrower.
+    let restock = ContentRules.columnWidth(.controls, widest: 70)
+    #expect(restock.min == restock.ideal && restock.ideal == restock.max)
+    // Long words do not stretch a column without end.
+    #expect(ContentRules.columnWidth(.words, widest: 900).ideal == 260)
 }
 
 @Test func iOSHasNoCheckboxesOrRadioButtons() throws {

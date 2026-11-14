@@ -59,6 +59,20 @@ public struct Keyboard: Sendable, Equatable {
     public var autocorrects: Bool
 }
 
+/// A wide table's column width in points.
+public struct ColumnWidth: Sendable, Hashable {
+    public var min: Double
+    public var ideal: Double
+    /// None for a column that takes what room is left.
+    public var max: Double?
+
+    public init(min: Double, ideal: Double, max: Double?) {
+        self.min = min
+        self.ideal = ideal
+        self.max = max
+    }
+}
+
 public enum ContentRules {
     /// A screen that is mostly one list of records gets plain rows; anything
     /// else (a record's facts, sections, forms) gets inset groups.
@@ -82,11 +96,57 @@ public enum ContentRules {
     }
 
     /// Records as rows on a compact width; columns on a regular one when there
-    /// are more than two to show.
-    public static func table(_ table: Navree.Table, width: WidthClass) -> TableLayout {
-        guard width == .regular else { return .rows }
+    /// are more than two to show. At an accessibility text size records are
+    /// rows at every width, as Apple's apps give up columns there: seven
+    /// columns of that text leave a heading two letters and a name a syllable
+    /// a line.
+    public static func table(_ table: Navree.Table, width: WidthClass, accessibilityText: Bool = false) -> TableLayout {
+        guard width == .regular, !accessibilityText else { return .rows }
         return table.columns.count > 2 ? .columns : .rows
     }
+
+    /// What a wide table's column holds, for its width.
+    public enum ColumnKind: Sendable, Equatable {
+        /// The record's name: the column that takes what room is left.
+        case title
+        /// A number or an amount, short and set to the trailing edge.
+        case number
+        /// A state in words beside a dot.
+        case status
+        /// The record's controls: as wide as its buttons, no wider.
+        case controls
+        /// Any other words.
+        case words
+    }
+
+    public static func columnKind(_ column: Navree.Column, controls: Bool) -> ColumnKind {
+        if controls || column.role == .actions { return .controls }
+        if column.role == .title { return .title }
+        if column.numeric { return .number }
+        if column.role == .status { return .status }
+        return .words
+    }
+
+    /// A wide table's column width in points: its least, the width it asks
+    /// for, and its most (none for the name, which takes what is left). Each
+    /// column asks for room for its widest words (its heading's or a cell's,
+    /// measured as drawn) and the cell's margins, within a range for what it
+    /// holds, so a name is not wrapped to four lines beside half-empty columns.
+    public static func columnWidth(_ kind: ColumnKind, widest: Double) -> ColumnWidth {
+        let room = (widest + cellMargins).rounded(.up)
+        func clamp(_ value: Double, _ low: Double, _ high: Double) -> Double { Swift.min(Swift.max(value, low), high) }
+        switch kind {
+        case .title: return ColumnWidth(min: 180, ideal: Swift.max(room, 240), max: nil)
+        case .number: return ColumnWidth(min: 64, ideal: clamp(room, 64, 160), max: clamp(room, 64, 160) + 40)
+        case .status: return ColumnWidth(min: 90, ideal: clamp(room, 90, 200), max: 260)
+        case .controls: return ColumnWidth(min: room, ideal: room, max: room)
+        case .words: return ColumnWidth(min: 80, ideal: clamp(room, 80, 260), max: 320)
+        }
+    }
+
+    /// The room a cell of the system's table keeps round its words: its
+    /// leading and trailing margins, and a little air.
+    static let cellMargins: Double = 24
 
     /// The columns a wide table shows, by their places: all but the subtitle
     /// column, whose words a narrow row puts under the name and which the
