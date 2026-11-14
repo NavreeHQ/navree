@@ -158,3 +158,12 @@ private let held = StatusItem(image: .symbol("shippingbox"), content: .app())
     // 24-point controls in a 40-point bar, not the unified bar's 36-point circles.
     #expect(StatusRules.windowBar == .compact)
 }
+
+@Test func theFullWindowIsNeverNarrowerThanItsColumnsNeed() {
+    // A sidebar at its least (180) beside a detail at its least (400).
+    #expect(StatusRules.fullWindowMinimum(configured: CGSize(width: 480, height: 400), columns: CGSize(width: 579.5, height: 120))
+        == CGSize(width: 580, height: 400))
+    // The app's own least size where it is wider.
+    #expect(StatusRules.fullWindowMinimum(configured: CGSize(width: 900, height: 600), columns: CGSize(width: 580, height: 120))
+        == CGSize(width: 900, height: 600))
+}

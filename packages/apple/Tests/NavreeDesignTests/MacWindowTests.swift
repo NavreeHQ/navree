@@ -301,3 +301,9 @@ private func labels(_ nodes: [Navree.Node]) -> [String] {
     // On iPhone and iPad the button and VoiceOver's default action.
     #expect(ContentRules.rowOpening(bar: .navigation) == .button)
 }
+
+@Test func aMacWindowsDetailKeepsTheWidthEveryScreenIsLaidOutFor() {
+    // The width of the window under an item in the menu bar: the window holds
+    // the sidebar's least beside it rather than squeezing the detail.
+    #expect(NavigationRules.detailMinimumWidth == 400)
+}

@@ -59,6 +59,15 @@ public enum StatusRules {
     /// (``CompositionRules/blockRoom(bar:)``).
     public static let windowBar = WindowBar.compact
 
+    /// The least content size of an item's full window: what the app asks
+    /// for, and no narrower than the shell's columns need side by side (the
+    /// width SwiftUI gives them at their least), so no column hangs out of
+    /// the window. Their least height is not taken: a split view's says
+    /// nothing of the content's.
+    public static func fullWindowMinimum(configured: CGSize, columns: CGSize) -> CGSize {
+        CGSize(width: max(configured.width, columns.width.rounded(.up)), height: configured.height)
+    }
+
     /// The style the item opens in: a menu. A small window showing one
     /// destination's screen is not built yet (it needs one session shared by
     /// the app's cores), so an item that asks for one has no style and does

@@ -11,10 +11,13 @@ struct HeldShell: View {
     var body: some View {
         AppShell(configuration: configuration)
             .environment(\.navreeCompactWindow, PresenceModel.shared.shellUnderItem)
-            // Any size the window is given: the hosting view otherwise shrinks
-            // the window to a screen whose content has a size of its own (a
-            // page the server could not find).
-            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+            // Any size the window under the item is given: the hosting view
+            // otherwise shrinks it to a screen whose content has a size of its
+            // own (a page the server could not find). In the full window its
+            // columns keep their least widths, which the window then holds.
+            .frame(
+                minWidth: PresenceModel.shared.shellUnderItem ? 0 : nil, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity
+            )
     }
 }
 
@@ -274,7 +277,11 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
             smallest = options.minimumSize
         } else if sender === window {
             let content = configuration?.windows.minimumSize ?? CGSize(width: 480, height: 400)
-            smallest = sender.frameRect(forContentRect: CGRect(origin: .zero, size: content)).size
+            let configured = sender.frameRect(forContentRect: CGRect(origin: .zero, size: content)).size
+            // And what the shell's columns need (the sidebar's least and the
+            // detail's), as the hosting controller sets the window's least content.
+            let columns = sender.frameRect(forContentRect: CGRect(origin: .zero, size: sender.contentMinSize)).size
+            smallest = CGSize(width: max(configured.width, columns.width), height: max(configured.height, columns.height))
         } else {
             return frameSize
         }
@@ -336,6 +343,29 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         Self.layOutToolbarAgain(window)
+        keepColumnsWhole(window, shell: shell)
+    }
+
+    /// The full window never narrower than the shell's columns need side by
+    /// side (the sidebar's least and the detail's), nor than the app asks:
+    /// it opens at least that wide and a drag stops there, so no column
+    /// hangs out of the window.
+    private func keepColumnsWhole(_ window: NSWindow, shell: NSViewController) {
+        DispatchQueue.main.async { [weak self, weak window] in
+            MainActor.assumeIsolated {
+                guard let window, let hosting = shell as? NSHostingController<HeldShell> else { return }
+                shell.view.layoutSubtreeIfNeeded()
+                let columns = hosting.sizeThatFits(in: CGSize(width: 1, height: 1))
+                let least = StatusRules.fullWindowMinimum(
+                    configured: self?.configuration?.windows.minimumSize ?? CGSize(width: 480, height: 400), columns: columns
+                )
+                window.contentMinSize = least
+                let content = window.contentRect(forFrameRect: window.frame).size
+                if content.width < least.width || content.height < least.height {
+                    window.setContentSize(CGSize(width: max(content.width, least.width), height: max(content.height, least.height)))
+                }
+            }
+        }
     }
 
     /// The shell's toolbar, made while it stood in the window under the item

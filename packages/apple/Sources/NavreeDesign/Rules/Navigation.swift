@@ -91,6 +91,14 @@ public enum NavigationRules {
     /// open beside the list says what it is at its own head, as Mail writes
     /// a message's subject at the top of the message. A navigation bar
     /// (iPhone, iPad) shows every column's title itself.
+    /// The least width a Mac window's detail keeps beside its sidebar: the
+    /// width of the window under an item in the menu bar, which every screen
+    /// is laid out for. As the window narrows past the sidebar and that, the
+    /// sidebar folds away, as AppKit's own sidebars do (Mail, Notes: a
+    /// sidebar item collapses from a window resize by default), rather than
+    /// squeezing the detail until its words wrap and its bar's items fold.
+    public static let detailMinimumWidth = 400.0
+
     public static func titleInContent(bar: ActionBar, besideList: Bool) -> Bool {
         bar == .window && besideList
     }
