@@ -888,7 +888,7 @@ impl<'a, 'd> Walker<'a, 'd> {
         mut self,
         roots: &'a [Box<dyn Module>],
     ) -> Result<Result<Vec<Registered>, Vec<KernelError>>, Restart> {
-        let root_id = ModuleId::with_name::<AppRoot>("App");
+        let root_id = ModuleId::named::<AppRoot>("App");
         let mut root = ModuleBuilder::new(root_id, root_id.name());
         root.global = true;
         self.registered.insert(root_id);

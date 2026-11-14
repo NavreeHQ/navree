@@ -480,9 +480,9 @@ impl AppContext {
         let graph = &self.inner.graph;
         let mut collected = Vec::new();
         for &m in &graph.order {
-            for (type_id, value) in &graph.modules[m].contributions {
-                if *type_id == TypeId::of::<C>()
-                    && let Ok(value) = value.clone().downcast::<C>()
+            for contribution in &graph.modules[m].contributions {
+                if contribution.type_id == TypeId::of::<C>()
+                    && let Ok(value) = contribution.value.clone().downcast::<C>()
                 {
                     collected.push(Contributed {
                         module: self.module_info(m),
