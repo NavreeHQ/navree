@@ -37,6 +37,7 @@ public struct ScreenView: View {
     @Environment(\.navree) private var context
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.navreeBesideList) private var besideList
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     public init(screen: Navree.Screen, depth: ScreenDepth, appName: String = "", notice: Notice? = nil, failure: Notice? = nil) {
         // The head row's buttons go to the bar before the day control is
@@ -125,7 +126,9 @@ public struct ScreenView: View {
             PaneScreenBody(panes: panes)
         } else if CompositionRules.isComposed(body) {
             ComposedScreenBody(body: body)
-        } else if let table, sections.count == 1, ContentRules.table(table, width: width) == .columns {
+        } else if let table, sections.count == 1,
+            ContentRules.table(table, width: width, accessibilityText: typeSize.isAccessibilitySize) == .columns
+        {
             TableColumnsView(table: table, region: sections[0].region)
         } else {
             SectionsList(
