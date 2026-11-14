@@ -100,10 +100,13 @@ fn config_check_knows_the_tenants_section() {
     let report = CheckReport::run(&unset, &registrations, &CheckOptions::default()).unwrap();
     assert!(report.is_ok());
 
-    let misspelt = ConfigSources::new().set("sso.tenants.unverfied_emails", true);
+    // `sso.tenants` is a framework section, so `config:check` leaves the keys
+    // below it to the section (as it does for `auth.apps`); a misspelt
+    // section name beside it is reported.
+    let misspelt = ConfigSources::new().set("sso.tenant.unverified_emails", true);
     let report = CheckReport::run(&misspelt, &registrations, &CheckOptions::default()).unwrap();
     let keys: Vec<&str> = report.unknown.iter().map(|u| u.key.as_str()).collect();
-    assert_eq!(keys, ["sso.tenants.unverfied_emails"]);
+    assert_eq!(keys, ["sso.tenant"]);
 }
 
 #[tokio::test]
