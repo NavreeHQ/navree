@@ -2,10 +2,11 @@
 
 use std::sync::Arc;
 
+use crate::disk_driver_store::DriverStore;
 use crate::path::normalize;
 use crate::provider::Provider;
 use crate::store::{Local, Memory, Prefixed, Store};
-use crate::{DiskConfig, RegisteredDisk, StorageError};
+use crate::{DiskConfig, DiskDriver, RegisteredDisk, StorageError};
 
 /// A disk's store, and the provider that signs its URLs (cloud disks).
 pub(crate) struct Backend {
@@ -14,8 +15,14 @@ pub(crate) struct Backend {
 }
 
 /// Builds the store of disk `name`. Blocking: creates local roots and may
-/// read credential files.
-pub(crate) fn build(name: &str, config: &DiskConfig) -> Result<Backend, StorageError> {
+/// read credential files. `registered` is the driver a module registered
+/// for a disk of [`DiskConfig::Registered`], which `StorageModule` built at
+/// boot.
+pub(crate) fn build(
+    name: &str,
+    config: &DiskConfig,
+    registered: Option<Arc<dyn DiskDriver>>,
+) -> Result<Backend, StorageError> {
     let backend = match config {
         DiskConfig::Local { root, .. } => {
             let local_root =
@@ -35,8 +42,16 @@ pub(crate) fn build(name: &str, config: &DiskConfig) -> Result<Backend, StorageE
             store: Arc::new(Memory::new()),
             provider: None,
         },
-        // Its factory is async and needs the app: only the module builds it.
-        DiskConfig::Registered(disk) => return Err(registered_by_a_module(name, disk)),
+        // Its driver's factory is async and needs the app: only the module
+        // builds it. Such a disk has no URL provider, so its links go
+        // through the app's own signed routes, as a memory disk's do.
+        DiskConfig::Registered(disk) => match registered {
+            Some(driver) => Backend {
+                store: Arc::new(DriverStore(driver)),
+                provider: None,
+            },
+            None => return Err(registered_by_a_module(name, disk)),
+        },
         #[cfg(feature = "s3")]
         DiskConfig::S3(config) => cloud::s3(name, config, &cloud::process_env())?,
         #[cfg(feature = "gcs")]

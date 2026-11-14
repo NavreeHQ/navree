@@ -80,7 +80,8 @@ impl Default for StorageOptions {
 }
 
 /// One disk: where its files live (`driver = "..."`): a built-in driver,
-/// or a driver a module registers with `m.disk_driver`.
+/// or a driver a module registers with
+/// [`m.disk_driver`](crate::ModuleBuilderStorageExt::disk_driver).
 ///
 /// A `driver` that is neither a built-in driver nor a lower-case name (a
 /// letter, then letters, digits or `_`) is an error that lists the
