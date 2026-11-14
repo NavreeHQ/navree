@@ -646,23 +646,31 @@ impl Pages {
         self.answer(&uow, id, "resend", outcome).await
     }
 
-    /// `GET /inventory`.
+    /// `GET /inventory`. The products and their stock show nothing of one
+    /// person, so a private cache may keep the page, and a native app may keep
+    /// it on the device between launches; it is always asked again.
     async fn inventory(
         &self,
         shell: AppShell,
         uow: Uow,
         query: TableQuery<ProductRow>,
-    ) -> Result<AppPage> {
+    ) -> Result<Response> {
         let page = query
             .load_as(Product::query(), &uow, |record| {
                 ProductRow::from(record.into_inner())
             })
             .await?;
-        Ok(shell.page("Inventory").crumb("Dashboard", "/").body((
-            inventory_table(&query, &page),
-            // Where a native client's tap on a row opens the product.
-            crate::views::native_only(empty_sheet()),
-        )))
+        Ok(shell
+            .page("Inventory")
+            .crumb("Dashboard", "/")
+            .body((
+                inventory_table(&query, &page),
+                // Where a native client's tap on a row opens the product.
+                crate::views::native_only(empty_sheet()),
+            ))
+            .to_view()
+            .cache("private, no-cache")
+            .into_response())
     }
 
     /// `GET /inventory/{id}/peek`: the product in a sheet, opened. With
