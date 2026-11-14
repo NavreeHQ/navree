@@ -41,7 +41,7 @@ navree new blog --navree-path ~/code/navree      # depend on that checkout
 - The name uses lower-case letters and digits separated by single `-` or
   `_`, starts with a letter, and is not a Rust keyword, `std`, `test` or
   `navree`. The directory must not exist or must be empty.
-- The app depends on the published crate, `navree = "1.2.1"` (the CLI's own
+- The app depends on the published crate, `navree = "1.2.2"` (the CLI's own
   version). With `--navree-path`, or when the CLI was installed from a
   clone, it depends on that checkout by `path` instead.
 - `navree new` doesn't run Cargo. It runs `git init` (no commit) unless the
