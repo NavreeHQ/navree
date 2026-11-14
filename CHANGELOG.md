@@ -140,6 +140,8 @@ every `@navree/*` package carries the same version.
 - The UI runtime acts on no hook inside an element marked `data-ui-stored`, and an op or command that
   names an id never finds an element there. `Markdown` carries the mark; wrap rich text you show from
   the database in it too. A code block's copy button, marked `data-ui-own`, still works inside.
+- The page's post form (`ui-post`) posts only for a button the toolkit drew for it, which the renderer
+  marks `data-ui-post`, and a button in stored content sends no form.
 
 ## [1.2.0] - 2026-11-13
 

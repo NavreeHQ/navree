@@ -882,6 +882,20 @@ export function install(options = {}) {
     Document: FakeDocument,
     DocumentFragment: FakeFragment,
     RadioNodeList: class {},
+    // A form's fields, as a browser reads them: each named control, and the submitter's own.
+    FormData: class extends FormData {
+      /** @param {any} [form] @param {any} [submitter] */
+      constructor(form, submitter) {
+        super();
+        if (!form) return;
+        for (const el of form.elements) {
+          if (!el.name || el.disabled || el instanceof FakeButton) continue;
+          if ((el.type === "checkbox" || el.type === "radio") && !el.checked) continue;
+          this.append(el.name, el.value);
+        }
+        if (submitter?.name) this.append(submitter.name, submitter.getAttribute("value") || "");
+      }
+    },
     DOMParser: class {
       /** @param {string} text */
       parseFromString(text) {

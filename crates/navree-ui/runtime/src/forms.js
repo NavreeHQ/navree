@@ -2,7 +2,7 @@
 // `data-ui-form`, a fetch whose answer is ops or a page.
 import { applyEnvelope } from "./ops.js";
 import { forget, go, pageSwaps, showPage, startRegions, whileWriting } from "./nav.js";
-import { active, all, attr, body, byId, closest, cookies, emit, has, make, on, sameOrigin, set, unset, toggle } from "./dom.js";
+import { active, all, attr, body, byId, closest, cookies, emit, has, make, on, sameOrigin, set, stored, unset, toggle } from "./dom.js";
 import { toast } from "./ui.js";
 
 const OPS = "application/vnd.navree.ops+json";
@@ -202,11 +202,12 @@ function filter(form) {
 
 /** Wires up forms. */
 export function startForms() {
-  // A menu's post item belongs to the page's one post form, `ui-post`, and says where to post.
+  // A menu's post item belongs to the page's one post form, `ui-post`, and says where to post: the
+  // server marks the buttons it draws for it `data-ui-post`.
   // A page that doesn't have it (the item came in with a fragment) gets it now, ahead of the
   // click's own submit: the runtime posts it with the session's token in the header.
   on(document, "click", (e) => {
-    if (!closest(e.target, "button[form=ui-post]") || byId("ui-post")) return;
+    if (!closest(e.target, "button[form=ui-post][data-ui-post]") || byId("ui-post")) return;
     const form = make("form");
     set(form, "id", "ui-post");
     set(form, "method", "post");
@@ -220,6 +221,13 @@ export function startForms() {
     const form = /** @type {HTMLFormElement} */ (e.target);
     if (e.defaultPrevented) return;
     const submitter = /** @type {HTMLElement | null} */ (e.submitter);
+    // A button in stored content sends nothing. The page's post form sends only for a button the
+    // server drew for it (`data-ui-post`), whose `formaction` it takes: any other that names the
+    // form, or a form of that name in stored content, would post with the page's token.
+    if ((submitter && stored(submitter)) || (attr(form, "id") === "ui-post" && (stored(form) || !submitter || !has(submitter, "data-ui-post")))) {
+      e.preventDefault();
+      return;
+    }
     if (has(form, "data-ui-target")) {
       e.preventDefault();
       filter(form);
