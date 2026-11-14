@@ -265,10 +265,10 @@ impl Upload {
     }
 
     /// Inside a form of yours: the module sends each chosen file at once to `url`, an
-    /// address on this site whose route stores it and answers with its key
-    /// ([`Received::into_keyed_response`](crate::Received::into_keyed_response)), and puts the
-    /// key in a hidden field named like the upload, which the form posts in place of the
-    /// file. With no script the file goes with the form, which must be a multipart form.
+    /// address on this site whose route stores it and answers with its key, made for the person
+    /// sending ([`Received::into_keyed_response_for`](crate::Received::into_keyed_response_for)),
+    /// and puts the key in a hidden field named like the upload, which the form posts in place
+    /// of the file. With no script the file goes with the form, which must be a multipart form.
     /// Anything that is not an address on this site is ignored.
     pub fn send_to(mut self, url: impl AsRef<str>) -> Self {
         self.send = LocalHref::parse(url.as_ref())
@@ -277,7 +277,7 @@ impl Upload {
         self
     }
 
-    /// The key of a file already sent ([`file_key`](crate::upload::file_key)), which the
+    /// The key of a file already sent ([`file_key_for`](crate::upload::file_key_for)), which the
     /// form posts again: for a form drawn again after it was refused, so the file is not
     /// chosen twice. The field is then not required in the browser.
     pub fn key(mut self, key: impl Into<String>) -> Self {

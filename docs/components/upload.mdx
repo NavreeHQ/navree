@@ -164,15 +164,22 @@ let form = FormView::<Claim>::new()
     .upload("receipt", Upload::new("receipt", "Receipt").limits(limits).send_to("/claims/receipt"));
 
 // POST /claims/receipt
-async fn receipt(uploads: Inject<Uploads>, signer: Inject<UrlSigner>, mut form: Multipart) -> Response {
+async fn receipt(
+    uploads: Inject<Uploads>,
+    signer: Inject<UrlSigner>,
+    owner: UploadOwner,
+    mut form: Multipart,
+) -> Response {
     match uploads.receive(&mut form).await {
-        Ok(received) => received.into_keyed_response(&signer),
+        Ok(received) => received.into_keyed_response_for(&signer, owner.as_str()),
         Err(error) => error.into_response(),
     }
 }
 ```
 
-The module puts the key in a hidden field, and the form posts it in place of the file; `Submit` reads it back as the path. A key is the path signed with the app's key (`navree_ui::upload::file_key`) and good for a day, so a path a browser makes up, or a key it changes, is refused ("choose the file again"). A form that is refused for another reason comes back with the key of the file it already stored, so the person does not choose it twice. The form waits to be sent while a file is still on its way, and says so at the field; until the key is in, the field asks the browser for nothing. A sent file's row has a Remove button: it takes the key out of the form, and a required field asks for a file again.
+The module puts the key in a hidden field, and the form posts it in place of the file; `Submit` reads it back as the path. A key is the path signed with the app's key (`navree_ui::upload::file_key_for`) and good for a day. It is made for the person who sent the file: `UploadOwner` is the signed-in person's id, and nothing for a guest, and the form reads a posted key as the person posting. It is also made for the folder the file is in, and the field takes it only for a file directly in the folder of its own `Uploads`, as long as the file is still within that upload's size and kind limits. So a path a browser makes up, a key it changes, a key made for another person, another field's folder or a file that no longer fits, is refused ("choose the file again"). A guest has no identity to bind a key to, so a key made for a guest can be posted by any guest. A form that is refused for another reason comes back with the key of the file it already stored, so the person does not choose it twice.
+
+`file_key` and `file_path` sign and read a path alone, for an app that reads its keys itself; a form's file field does not take such a key, and `Received::into_keyed_response` makes them. Use `into_keyed_response_for` for the route a form's file field sends its file to. The form waits to be sent while a file is still on its way, and says so at the field; until the key is in, the field asks the browser for nothing. A sent file's row has a Remove button: it takes the key out of the form, and a required field asks for a file again.
 
 ## States
 

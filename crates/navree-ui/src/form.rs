@@ -92,9 +92,10 @@ pub enum Widget {
     /// `String` or an `Option<String>`): the field gets the stored file's path on its
     /// disk. With [`FormView::upload`] and [`Upload::send_to`](crate::Upload::send_to)
     /// the module sends a chosen file at once and the form posts its key
-    /// ([`file_key`](crate::upload::file_key)); with no script the form is a multipart
-    /// form and [`Submit`] stores the file through the app's `Uploads`. A key that was
-    /// not signed by the app, or has expired, is refused.
+    /// ([`file_key_for`](crate::upload::file_key_for)); with no script the form is a
+    /// multipart form and [`Submit`] stores the file through the app's `Uploads`. A key is
+    /// refused unless the app signed it for the person posting and for the folder of the
+    /// field's `Uploads`, it has not expired, and its file still fits the field's limits.
     File,
 }
 
@@ -1936,15 +1937,47 @@ async fn uploads_for(ctx: Option<&AppContext>, name: &str) -> Option<Arc<crate::
 /// The prefix of the pair that carries why the upload refused a file field's file.
 const FILE_REFUSED: &str = "\0refused:";
 
+/// The path the key `key`, posted under the file field `name`, names for `owner`: when the app
+/// signed it for this person and for the folder of the field's `Uploads`, and the file it names
+/// still fits that upload's limits now. Anything else is no file.
+#[cfg(feature = "storage")]
+async fn file_of_key(
+    ctx: Option<&AppContext>,
+    signer: Option<&navree_http::UrlSigner>,
+    owner: &str,
+    name: &str,
+    key: &str,
+) -> Option<String> {
+    let uploads = uploads_for(ctx, name).await?;
+    let path = crate::upload::file_path_for(signer?, owner, &uploads.folder(), key)?;
+    uploads.still_fits(&path).await.then_some(path)
+}
+
+/// Without the `storage` feature a form has no `Uploads` to hold a key to: no key is a file.
+#[cfg(not(feature = "storage"))]
+async fn file_of_key(
+    ctx: Option<&AppContext>,
+    signer: Option<&navree_http::UrlSigner>,
+    owner: &str,
+    name: &str,
+    key: &str,
+) -> Option<String> {
+    let _ = (ctx, signer, owner, name, key);
+    None
+}
+
 /// Each file field's value as the form reads it, and as a refused form shows it again, and the
 /// errors of the file fields. The value is the path of the file the post brought; else of the
-/// file its key names ([`file_key`](crate::upload::file_key), signed by the app): a key that
-/// does not read is no file, and an error. A refused form shows the key of each file, so it is
-/// not chosen again.
-fn file_values<T: Form>(
+/// file its key names ([`file_key_for`](crate::upload::file_key_for), signed by the app for the
+/// person posting and the folder of the field's upload, for a file that still fits the field's
+/// limits): a key that does not read is no file, and an error. A refused form shows the key of
+/// each file, made for the same person, so it is not chosen again.
+async fn file_values<T: Form>(
     pairs: Pairs,
     posted: Posted,
     signer: Option<&navree_http::UrlSigner>,
+    owner: &str,
+    ctx: Option<&AppContext>,
     words: &AppMessages,
 ) -> (Pairs, Pairs, FieldErrors) {
     let mut errors = FieldErrors::new();
@@ -1982,24 +2015,25 @@ fn file_values<T: Form>(
         let path = match brought {
             Some(path) => Some(path),
             None => match keys.get(name) {
-                Some(key) => {
-                    match signer.and_then(|signer| crate::upload::file_path(signer, key)) {
-                        Some(path) => Some(path),
-                        None => {
-                            errors.insert(
-                                name.to_owned(),
-                                vec![words.render(name, "form.file", &[])],
-                            );
-                            None
-                        }
+                Some(key) => match file_of_key(ctx, signer, owner, name, key).await {
+                    Some(path) => Some(path),
+                    None => {
+                        errors.insert(
+                            name.to_owned(),
+                            vec![words.render(name, "form.file", &[])],
+                        );
+                        None
                     }
-                }
+                },
                 None => None,
             },
         };
         if let Some(path) = path {
             if let Some(signer) = signer {
-                shown.push((name.to_owned(), crate::upload::file_key(signer, &path)));
+                shown.push((
+                    name.to_owned(),
+                    crate::upload::file_key_for(signer, owner, &path),
+                ));
             }
             read.push((name.to_owned(), path));
         }
@@ -3014,12 +3048,16 @@ where
                 Some(ctx) => ctx.try_get::<navree_http::UrlSigner>().await,
                 None => None,
             };
+            let owner = crate::upload::UploadOwner::of(&parts);
             let (values, echoed, errors) = file_values::<T>(
                 values,
                 stored,
                 signer.as_deref(),
+                owner.as_str(),
+                ctx.as_ref(),
                 &words::<T>(&language.messages),
-            );
+            )
+            .await;
             (values, Some(echoed), errors)
         } else {
             (values, None, FieldErrors::new())
