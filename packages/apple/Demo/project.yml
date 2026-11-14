@@ -26,6 +26,14 @@ targets:
     sources:
       - path: NavreeDemo
         excludes: ["*.icon"]
+      # The app's icon and the one a person may choose instead, each an Icon
+      # Composer file kept whole.
+      - path: NavreeDemo/AppIcon.icon
+        type: file
+        buildPhase: resources
+      - path: NavreeDemo/AppIconIndigo.icon
+        type: file
+        buildPhase: resources
       # The toolkit's own stylesheets, for the recorded web page.
       - path: ../../../crates/navree-ui/dist/navree-ui.css
         buildPhase: resources
@@ -43,6 +51,8 @@ targets:
       path: Generated/NavreeDemo-Info.plist
       properties:
         CFBundleDisplayName: Charkha
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NavreeOrigin: http://127.0.0.1:8095
         # Plain http only to this machine, for a store demo run locally; an
         # app's real origin is https with no exception.
@@ -84,6 +94,9 @@ targets:
       - path: NavreeDemo
         excludes: ["*.icon"]
       - path: NavreeDemoMac
+      - path: NavreeDemo/AppIcon.icon
+        type: file
+        buildPhase: resources
       - path: ../../../crates/navree-ui/dist/navree-ui.css
         buildPhase: resources
       - path: ../../../crates/navree-ui/dist/charts-styles.css
@@ -96,6 +109,9 @@ targets:
       properties:
         CFBundleDisplayName: Charkha
         CFBundleName: Charkha
+        # The version the About window shows, from the project.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NavreeOrigin: http://127.0.0.1:8095
         LSApplicationCategoryType: public.app-category.business
         NSAppTransportSecurity:
@@ -122,6 +138,9 @@ targets:
       - path: NavreeDemo
         excludes: ["*.icon"]
       - path: NavreeDemoMac
+      - path: NavreeDemo/AppIcon.icon
+        type: file
+        buildPhase: resources
       - path: ../../../crates/navree-ui/dist/navree-ui.css
         buildPhase: resources
       - path: ../../../crates/navree-ui/dist/charts-styles.css
