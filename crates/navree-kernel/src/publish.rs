@@ -196,9 +196,12 @@ impl std::error::Error for PublishRefused {}
 /// file beside its destination and renamed over it: an existing file is
 /// never opened for writing, so a hard link to it elsewhere keeps its
 /// content, and a link put in its place after the check is replaced, not
-/// followed. Each folder is checked again as it is used. An error while
-/// writing stops at that file; the files before it are written, and the
-/// error says so.
+/// followed. Each folder is checked again as it is used, and the new file
+/// must still be below `root`, links resolved, just before it is renamed
+/// into place. On Windows, a rename that another program (a virus scanner,
+/// an indexer) blocks for a moment is tried again for up to a second. An
+/// error while writing stops at that file; the files before it are written,
+/// and the error says so.
 pub fn publish_files(
     root: &Path,
     files: &[(&str, &[u8])],
@@ -240,10 +243,20 @@ pub fn publish_files(
     if dry_run {
         return Ok(outcomes);
     }
-    for (&(path, bytes), (_, published)) in files.iter().zip(&outcomes) {
-        if *published == Published::Written {
-            write_file(root, path, bytes)?;
-        }
+    let to_write: Vec<(&str, &[u8])> = files
+        .iter()
+        .zip(&outcomes)
+        .filter(|(_, (_, published))| *published == Published::Written)
+        .map(|(&file, _)| file)
+        .collect();
+    let Some(&(first, _)) = to_write.first() else {
+        return Ok(outcomes);
+    };
+    // The app's folder with its links resolved: every new file must still be
+    // below it when it is renamed into place.
+    let real_root = fs::canonicalize(root).map_err(|error| cannot_write(first, &error))?;
+    for (path, bytes) in to_write {
+        write_file(root, &real_root, path, bytes)?;
     }
     Ok(outcomes)
 }
@@ -300,8 +313,16 @@ fn changed_while_writing(problem: &str, path: &str) -> PublishRefused {
 
 /// Writes `bytes` to `path` below `root`: creates each missing folder (one
 /// that turns out to exist is checked again), writes the bytes to a new file
-/// beside the destination, and renames that file over the destination.
-fn write_file(root: &Path, path: &str, bytes: &[u8]) -> Result<(), PublishRefused> {
+/// beside the destination, checks that the new file's folder, links
+/// resolved, is still below `real_root` (`root` with its links resolved),
+/// and renames the new file over the destination. A refused or failed file
+/// is removed.
+fn write_file(
+    root: &Path,
+    real_root: &Path,
+    path: &str,
+    bytes: &[u8],
+) -> Result<(), PublishRefused> {
     for (end, _) in path.match_indices('/') {
         let folder = &path[..end];
         match fs::create_dir(root.join(folder)) {
@@ -329,11 +350,47 @@ fn write_file(root: &Path, path: &str, bytes: &[u8]) -> Result<(), PublishRefuse
     let written = file.write_all(bytes);
     // Closed before the rename, which Windows needs.
     drop(file);
-    if let Err(error) = written.and_then(|()| fs::rename(&temporary, &destination)) {
+    let folder = temporary.parent().unwrap_or(root);
+    let refused = match written.and_then(|()| fs::canonicalize(folder)) {
+        Err(error) => Some(cannot_write(path, &error)),
+        // A folder on the way was swapped for a link after it was checked:
+        // the new file is not below the app's folder.
+        Ok(real_folder) if !real_folder.starts_with(real_root) => Some(changed_while_writing(
+            &format!("the folder of {path} is a symbolic link or inside one"),
+            path,
+        )),
+        Ok(_) => rename(&temporary, &destination)
+            .err()
+            .map(|error| cannot_write(path, &error)),
+    };
+    if let Some(refused) = refused {
         let _ = fs::remove_file(&temporary);
-        return Err(cannot_write(path, &error));
+        return Err(refused);
     }
     Ok(())
+}
+
+/// `fs::rename`, tried again for a moment on Windows, where a program that
+/// has just opened the new file (a virus scanner, an indexer) makes it fail
+/// with "access is denied" (os error 5) or a sharing violation (os error
+/// 32): four more tries, after 10, 40, 160 and 640 milliseconds.
+#[cfg(windows)]
+fn rename(from: &Path, to: &Path) -> io::Result<()> {
+    for wait in [10, 40, 160, 640] {
+        match fs::rename(from, to) {
+            Err(error) if matches!(error.raw_os_error(), Some(5 | 32)) => {
+                std::thread::sleep(std::time::Duration::from_millis(wait));
+            }
+            other => return other,
+        }
+    }
+    fs::rename(from, to)
+}
+
+/// `fs::rename`: elsewhere a rename is not blocked by an open file.
+#[cfg(not(windows))]
+fn rename(from: &Path, to: &Path) -> io::Result<()> {
+    fs::rename(from, to)
 }
 
 /// `<path> is a symbolic link or inside one; nothing was written`.
@@ -863,10 +920,40 @@ mod tests {
         let root = TempFolder::new("writer-changed");
         fs::create_dir(root.0.join("resources")).unwrap();
         fs::write(root.0.join("resources/a"), "a file").unwrap();
-        let refused = write_file(&root.0, "resources/a/one.css", b"x").expect_err("a file");
+        let real_root = fs::canonicalize(&root.0).unwrap();
+        let refused =
+            write_file(&root.0, &real_root, "resources/a/one.css", b"x").expect_err("a file");
         assert_eq!(
             refused.to_string(),
             "resources/a is a file where a folder is needed; it changed while publishing, and the files before resources/a/one.css were written"
+        );
+    }
+
+    /// A new file whose folder, links resolved, is no longer below the app's folder just
+    /// before the rename (a folder swapped for a link after it was checked) is not renamed
+    /// into place, and the new file is removed.
+    #[test]
+    fn a_file_whose_folder_left_the_app_while_writing_is_not_put_in_place() {
+        let root = TempFolder::new("writer-swapped");
+        fs::create_dir(root.0.join("app")).unwrap();
+        fs::create_dir(root.0.join("elsewhere")).unwrap();
+        // As if the app's folder, links resolved, were `elsewhere`.
+        let elsewhere = fs::canonicalize(root.0.join("elsewhere")).unwrap();
+        let refused = write_file(
+            &root.0.join("app"),
+            &elsewhere,
+            "resources/banner.css",
+            b"body{}",
+        )
+        .expect_err("outside the app");
+        assert_eq!(
+            refused.to_string(),
+            "the folder of resources/banner.css is a symbolic link or inside one; it changed while publishing, and the files before resources/banner.css were written"
+        );
+        assert_eq!(
+            fs::read_dir(root.0.join("app/resources")).unwrap().count(),
+            0,
+            "neither the file nor the new file beside it is left"
         );
     }
 
