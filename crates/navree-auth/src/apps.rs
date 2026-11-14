@@ -93,7 +93,8 @@ pub struct AppsOptions {
     /// with an empty page (`Cache-Control: no-store`, `Referrer-Policy:
     /// no-referrer`), for a browser the system did not hand to the app, so
     /// the code in its address is neither kept nor sent on (default
-    /// `true`). Turn it off when the app serves that path itself.
+    /// `false`). Turn it on when the site has no page of its own at that
+    /// path; an app that serves that path itself leaves it off.
     pub callback_page: bool,
 }
 
@@ -105,7 +106,7 @@ impl Default for AppsOptions {
             apple: BTreeMap::new(),
             android: BTreeMap::new(),
             keep_browser_signed_in: false,
-            callback_page: true,
+            callback_page: false,
         }
     }
 }
@@ -460,7 +461,7 @@ impl AppsOptions {
             .callbacks()
             .filter(|(_, callback)| {
                 url::Url::parse(callback).ok().is_some_and(|url| {
-                    url.scheme() == "https"
+                    is_https_scheme(&url)
                         && url.host_str().map(str::to_ascii_lowercase).as_deref()
                             != Some(host.as_str())
                 })
@@ -489,7 +490,7 @@ impl AppsOptions {
         let mut paths: Vec<String> = self
             .callbacks()
             .filter_map(|(_, callback)| url::Url::parse(callback).ok())
-            .filter(|url| url.scheme() == "https")
+            .filter(is_https_scheme)
             .map(|url| url.path().to_owned())
             .filter(|path| is_plain_path(path))
             .collect();
@@ -532,8 +533,10 @@ fn check_callback(
             && url.password().is_none()
             && url.fragment().is_none()
             && callback.len() <= 2048;
-        match url.scheme() {
-            "https" => plain && url.host_str().is_some_and(|host| !host.is_empty()),
+        if is_https_scheme(&url) {
+            return plain && url.host_str().is_some_and(|host| !host.is_empty());
+        }
+        match url.scheme().to_ascii_lowercase().as_str() {
             "http" | "javascript" | "data" | "file" | "blob" | "about" | "ftp" | "ws" | "wss"
             | "intent" | "content" | "mailto" | "tel" | "sms" => false,
             _ => custom_scheme && plain,
@@ -545,6 +548,19 @@ fn check_callback(
              Link), or a custom scheme with {key}.custom_scheme = true"
         ));
     }
+}
+
+/// Whether `url`'s scheme is `https`, in any case: the one reading of a
+/// callback's scheme, for the configuration check and the hand-over alike.
+fn is_https_scheme(url: &url::Url) -> bool {
+    url.scheme().eq_ignore_ascii_case("https")
+}
+
+/// Whether `text` is an absolute `https` URL (`HTTPS://` too), read as
+/// [`check_callback`] reads a callback.
+#[cfg_attr(not(feature = "session"), allow(dead_code))]
+pub(crate) fn is_https_url(text: &str) -> bool {
+    url::Url::parse(text).is_ok_and(|parsed| is_https_scheme(&parsed))
 }
 
 /// Whether `origin` is an Android app's passkey origin:
@@ -950,6 +966,31 @@ mod tests {
     }
 
     #[test]
+    fn an_upper_case_scheme_is_https_everywhere() {
+        let apps = load(
+            ConfigSources::new()
+                .set("auth.apps.apple.main.team_id", "ABCDE12345")
+                .set("auth.apps.apple.main.bundle_id", "com.example.orders")
+                .set(
+                    "auth.apps.apple.main.callback",
+                    "HTTPS://example.com/app/signed-in",
+                ),
+        )
+        .expect("an https callback needs no custom_scheme");
+        assert!(is_https_url("HTTPS://example.com/app/signed-in"));
+        assert!(!is_https_url("com.example.orders:/signed-in"));
+        assert_eq!(apps.check_callback_hosts("https://example.com"), Ok(()));
+        assert_eq!(
+            apps.check_callback_hosts("https://shop.example.com")
+                .map_err(|errors| errors.len()),
+            Err(1)
+        );
+        let mut apps = apps;
+        apps.callback_page = true;
+        assert_eq!(apps.callback_page_paths(), ["/app/signed-in"]);
+    }
+
+    #[test]
     fn the_site_answers_each_https_callback_path_once() {
         let mut apps = load(
             ConfigSources::new()
@@ -980,11 +1021,12 @@ mod tests {
                 .set("auth.apps.android.legacy.custom_scheme", true),
         )
         .unwrap();
-        assert!(apps.callback_page);
+        // Off by default: an app may serve that path itself.
+        assert!(!apps.callback_page);
+        assert!(apps.callback_page_paths().is_empty());
+        apps.callback_page = true;
         // Once for both apps; never the site's root; never a scheme.
         assert_eq!(apps.callback_page_paths(), ["/app/signed-in"]);
-        apps.callback_page = false;
-        assert!(apps.callback_page_paths().is_empty());
         for (path, plain) in [
             ("/app/signed-in", true),
             ("/a.b/c_d~e-f", true),

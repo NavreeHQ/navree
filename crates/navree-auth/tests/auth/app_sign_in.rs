@@ -17,7 +17,8 @@ use navree_auth::{
     SignInAttempt, SignInMethod, SignInPolicy, User,
 };
 use navree_contracts::{AuditSink, Clock as _, FixedClock};
-use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
+use navree_http::response::Html;
+use navree_http::{AppError, Controller, IntoResponse, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_session::{Session, SessionModule, SessionOptions};
 use navree_testing::{TestApp, TestAppBuilder, TestClient, TestResponse};
@@ -759,6 +760,257 @@ async fn the_confirmation_works_once_for_its_own_hand_over() {
         .assert_status(200);
 }
 
+/// Signs the browser out on the sign-out page.
+async fn sign_out(client: &TestClient) {
+    let token = csrf(client).await;
+    client
+        .post("/sign-out")
+        .header("accept", "text/html")
+        .form(&[("_csrf", token.as_str())])
+        .send()
+        .await
+        .assert_status(303);
+}
+
+/// A hand-over of the Apple app with `challenge` started in `browser`, which
+/// is signed in already, and confirmed on the page: the code of the
+/// callback.
+async fn confirmed_code(browser: &TestClient, challenge: &str, state: &str) -> String {
+    start(browser, challenge, state).await.assert_status(303);
+    let (_, token, csrf_token) = confirmation(&get(browser, "/auth/app/finish").await);
+    callback_code(
+        &answer(browser, &token, &csrf_token, "continue").await,
+        state,
+    )
+}
+
+/// The reasons of the refused hand-overs so far.
+fn refusal_reasons(sink: &RecordingSink) -> Vec<String> {
+    sink.with_action("auth.app_sign_in_refused")
+        .iter()
+        .map(|entry| entry.metadata["reason"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+// A browser signed in without "remember me" lasts a day (24 hours by
+// default): the app's session a confirmed hand-over gives ends with that
+// browser session, not 30 days after the sign-in.
+#[tokio::test]
+async fn a_confirmed_hand_over_from_a_session_without_remember_me_ends_when_that_session_does() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    create_user(&app, "simran@example.com").await;
+    let browser = app.client();
+    sign_in_form(&browser, "simran@example.com", "/")
+        .await
+        .assert_status(303);
+    let browser_session = current_session(&browser).await;
+    let signed_in_at = unix(&browser_session, "authenticated_at");
+    let browser_ends = unix(&browser_session, "expires_at");
+    assert_eq!(browser_ends, signed_in_at + 24 * 3600);
+
+    clock.advance(Duration::from_secs(3600));
+    let (verifier, challenge) = pkce("not-remembered");
+    let code = confirmed_code(&browser, &challenge, "s-20").await;
+    let phone = phone(&app).await;
+    exchange(&phone, "apple", &code, &verifier)
+        .await
+        .assert_status(200);
+
+    let session = current_session(&phone).await;
+    assert_eq!(unix(&session, "authenticated_at"), signed_in_at);
+    assert_eq!(unix(&session, "expires_at"), browser_ends);
+    clock.advance(Duration::from_secs(23 * 3600 - 60));
+    whoami(&phone).await.assert_status(200);
+    clock.advance(Duration::from_secs(61));
+    whoami(&phone).await.assert_status(401);
+}
+
+// A code is worth only what its browser session still is: once the person
+// signs that browser out, a confirmed hand-over's code signs no app in.
+#[tokio::test]
+async fn a_confirmed_hand_overs_code_is_refused_once_the_browser_is_signed_out() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    create_user(&app, "simran@example.com").await;
+    let browser = app.client();
+    sign_in_form(&browser, "simran@example.com", "/")
+        .await
+        .assert_status(303);
+    let (verifier, challenge) = pkce("signed-out");
+    let code = confirmed_code(&browser, &challenge, "s-21").await;
+    sign_out(&browser).await;
+    whoami(&browser).await.assert_status(401);
+
+    let phone = phone(&app).await;
+    refused(exchange(&phone, "apple", &code, &verifier).await);
+    whoami(&phone).await.assert_status(401);
+    assert_eq!(
+        refusal_reasons(&sink),
+        ["the browser session the code came from has ended"]
+    );
+}
+
+// Signing out everywhere ends the sign-in a code came from, and the code
+// with it: a sign-in made for the hand-over (the browser kept signed in) and
+// a confirmed one alike.
+#[tokio::test]
+async fn a_code_is_refused_once_the_person_signs_out_everywhere() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = builder(&clock, &sink)
+        .config("auth.apps.keep_browser_signed_in", true)
+        .build()
+        .await;
+    let user = create_user(&app, "simran@example.com").await;
+    let auth = app.get::<AuthService>().await;
+    let (verifier, challenge) = pkce("everywhere");
+    let (sheet, code) = sheet_sign_in(&app, "simran@example.com", &challenge).await;
+    whoami(&sheet).await.assert_status(200);
+    auth.logout(None, user.id, true).await.unwrap();
+    whoami(&sheet).await.assert_status(401);
+    let phone = phone(&app).await;
+    refused(exchange(&phone, "apple", &code, &verifier).await);
+    whoami(&phone).await.assert_status(401);
+
+    let browser = app.client();
+    sign_in_form(&browser, "simran@example.com", "/")
+        .await
+        .assert_status(303);
+    let (verifier, challenge) = pkce("everywhere-confirmed");
+    let code = confirmed_code(&browser, &challenge, "s-22").await;
+    auth.logout(None, user.id, true).await.unwrap();
+    refused(exchange(&phone, "apple", &code, &verifier).await);
+    whoami(&phone).await.assert_status(401);
+    assert_eq!(
+        refusal_reasons(&sink),
+        [
+            "the sign-in the code came from has ended",
+            "the browser session the code came from has ended",
+        ]
+    );
+}
+
+// The confirmation page never writes the session's CSRF token as it is: each
+// page carries a mask of its own, and each mask posts.
+#[tokio::test]
+async fn the_confirmation_pages_token_differs_between_renders_and_each_posts() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    create_user(&app, "simran@example.com").await;
+    let browser = app.client();
+    sign_in_form(&browser, "simran@example.com", "/")
+        .await
+        .assert_status(303);
+    let session_token = browser.cookie("XSRF-TOKEN").expect("the XSRF-TOKEN cookie");
+    let (verifier, challenge) = pkce("masked");
+    start(&browser, &challenge, "s-23").await.assert_status(303);
+    let (_, token, first) = confirmation(&get(&browser, "/auth/app/finish").await);
+    let (_, same, second) = confirmation(&get(&browser, "/auth/app/finish").await);
+    assert_eq!(token, same, "one hand-over, one value");
+    assert_ne!(first, second, "a fresh mask on every page");
+    assert_ne!(first, session_token);
+    assert_ne!(second, session_token);
+
+    // The first page's token posts.
+    let code = callback_code(&answer(&browser, &token, &first, "continue").await, "s-23");
+    exchange(&phone(&app).await, "apple", &code, &verifier)
+        .await
+        .assert_status(200);
+    // And the second's, for the next hand-over of the same browser.
+    start(&browser, &challenge, "s-24").await.assert_status(303);
+    let (_, token, _) = confirmation(&get(&browser, "/auth/app/finish").await);
+    let code = callback_code(&answer(&browser, &token, &second, "continue").await, "s-24");
+    exchange(&phone(&app).await, "apple", &code, &verifier)
+        .await
+        .assert_status(200);
+}
+
+// The callback's scheme is read as a URL's, in any case: `HTTPS://` is an
+// https callback, so a confirmed browser's sign-in is handed over and the
+// browser stays signed in (a custom scheme would sign it out).
+#[tokio::test]
+async fn an_upper_case_https_callback_is_an_https_callback() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = builder(&clock, &sink)
+        .config(
+            "auth.apps.apple.orders.callback",
+            "HTTPS://example.com/app/signed-in",
+        )
+        .build()
+        .await;
+    let user = create_user(&app, "simran@example.com").await;
+    let browser = app.client();
+    sign_in_form(&browser, "simran@example.com", "/")
+        .await
+        .assert_status(303);
+    let (verifier, challenge) = pkce("upper-case");
+    start(&browser, &challenge, "s-25").await.assert_status(303);
+    let (page, token, csrf_token) = confirmation(&get(&browser, "/auth/app/finish").await);
+    assert!(
+        page.contains("com.example.orders wants to sign in as"),
+        "{page}"
+    );
+    let code = callback_code(
+        &answer(&browser, &token, &csrf_token, "continue").await,
+        "s-25",
+    );
+    whoami(&browser)
+        .await
+        .assert_status(200)
+        .assert_json_path("id", json!(user.id));
+    exchange(&phone(&app).await, "apple", &code, &verifier)
+        .await
+        .assert_status(200);
+}
+
+/// How many of `responses` send the browser to the app's callback with a
+/// code.
+fn codes_among(responses: &[TestResponse]) -> usize {
+    responses
+        .iter()
+        .filter(|response| {
+            response.status().as_u16() == 303
+                && response
+                    .header("location")
+                    .is_some_and(|to| to.starts_with(CALLBACK) && to.contains("code="))
+        })
+        .count()
+}
+
+// The hand-over's one-time values work once also for requests sent at the
+// same time, before either has saved the session: the attempt a sign-in
+// came back with, and the answer of the confirmation page, each give one
+// code between two requests.
+#[tokio::test]
+async fn an_attempt_or_a_confirmation_used_twice_at_once_issues_one_code() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    create_user(&app, "simran@example.com").await;
+    let (_, challenge) = pkce("at-once");
+
+    let sheet = app.client();
+    start(&sheet, &challenge, "s-26").await.assert_status(303);
+    let to_sign_in = get(&sheet, "/auth/app/finish").await.assert_status(303);
+    let back = finish_with_attempt(&location(&to_sign_in));
+    sign_in_form(&sheet, "simran@example.com", &back)
+        .await
+        .assert_status(303);
+    let (one, two) = tokio::join!(get(&sheet, &back), get(&sheet, &back));
+    assert_eq!(codes_among(&[one, two]), 1);
+
+    let browser = app.client();
+    sign_in_form(&browser, "simran@example.com", "/")
+        .await
+        .assert_status(303);
+    start(&browser, &challenge, "s-27").await.assert_status(303);
+    let (_, token, csrf_token) = confirmation(&get(&browser, "/auth/app/finish").await);
+    let (one, two) = tokio::join!(
+        answer(&browser, &token, &csrf_token, "continue"),
+        answer(&browser, &token, &csrf_token, "continue")
+    );
+    assert_eq!(codes_among(&[one, two]), 1);
+}
+
 /// The `next` of the sign-in page a hand-over sends the browser to: the
 /// finish address with the hand-over's `attempt`.
 fn finish_with_attempt(sign_in: &str) -> String {
@@ -895,12 +1147,15 @@ async fn a_sign_in_made_for_something_else_is_never_handed_to_an_https_app() {
 }
 
 // When the system does not open the app, the browser lands on the https
-// callback itself, with the code in its address: the site answers with an
-// empty page that keeps nothing and sends nothing on.
+// callback itself, with the code in its address: a site that turns the page
+// on answers with an empty page that keeps nothing and sends nothing on.
 #[tokio::test]
 async fn the_site_answers_its_callback_address_with_an_empty_page() {
     let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
-    let app = app(&clock, &sink).await;
+    let app = builder(&clock, &sink)
+        .config("auth.apps.callback_page", true)
+        .build()
+        .await;
     let landed = get(&app.client(), "/app/signed-in?code=Tq7uX0b2&state=s-1")
         .await
         .assert_status(200);
@@ -910,13 +1165,59 @@ async fn the_site_answers_its_callback_address_with_an_empty_page() {
     assert!(!page.contains("Tq7uX0b2"), "{page}");
     assert!(!page.contains("<script"), "{page}");
 
-    // An app that answers that address itself turns it off.
-    let app = builder(&clock, &sink)
-        .config("auth.apps.callback_page", false)
-        .build()
-        .await;
+    // Off by default: the framework takes no path of the app's.
+    let app = builder(&clock, &sink).build().await;
     let response = get(&app.client(), "/app/signed-in?code=Tq7uX0b2").await;
     assert_eq!(response.status().as_u16(), 404);
+}
+
+/// An app's own page at the path of its https callback.
+struct OwnCallbackController;
+
+impl Injectable for OwnCallbackController {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(OwnCallbackController) })
+    }
+}
+
+impl Controller for OwnCallbackController {
+    fn prefix(&self) -> &'static str {
+        "!/"
+    }
+
+    fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        vec![
+            RouteDef::on(Method::GET, "!/app/signed-in", || async {
+                Html("<p>Open the orders app to continue.</p>").into_response()
+            })
+            .public(),
+        ]
+    }
+}
+
+struct OwnCallbackModule;
+
+impl Module for OwnCallbackModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.controller::<OwnCallbackController>();
+    }
+}
+
+// An app that serves the path of its https callback itself boots as
+// configured, and its own page answers there.
+#[tokio::test]
+async fn an_app_with_its_own_route_at_the_callback_path_boots_by_default() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = builder(&clock, &sink)
+        .module(OwnCallbackModule)
+        .try_build()
+        .await
+        .expect("the app boots with its own route at the callback path");
+    let page = get(&app.client(), "/app/signed-in?code=Tq7uX0b2")
+        .await
+        .assert_status(200)
+        .text();
+    assert!(page.contains("Open the orders app to continue."), "{page}");
 }
 
 #[tokio::test]
@@ -940,6 +1241,7 @@ async fn an_https_callback_must_be_on_the_sites_own_host() {
     assert!(!error.contains("legacy"), "{error}");
     let app = builder(&clock, &sink)
         .config("app.url", "https://example.com")
+        .config("auth.apps.callback_page", true)
         .build()
         .await;
     get(&app.client(), "/app/signed-in")

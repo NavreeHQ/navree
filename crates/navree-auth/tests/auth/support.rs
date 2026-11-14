@@ -107,6 +107,20 @@ pub async fn create_user(app: &TestApp, email: &str) -> User {
         .expect("the user is created")
 }
 
+/// Marks `user`'s address verified through the service, as following the
+/// verification link does.
+pub async fn verify_email(app: &TestApp, user: &User) {
+    app.get::<AuthService>()
+        .await
+        .verify_email(
+            user.id,
+            &navree_crypto::sha256_hex(user.email.as_bytes()),
+            &ClientMeta::default(),
+        )
+        .await
+        .expect("the address is verified");
+}
+
 /// `POST /api/auth/login`.
 pub async fn login(client: &TestClient, email: &str, password: &str) -> TestResponse {
     client
