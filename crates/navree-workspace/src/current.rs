@@ -11,7 +11,7 @@ use navree_access::{Ability, PrincipalAccess};
 use navree_contracts::{AuthState, AuthVia, RequestId};
 use navree_db::Uow;
 use navree_http::extract::FromRequestParts;
-use navree_http::{AppError, Guard, PathParams, RouteMeta};
+use navree_http::{AppError, Guard, PathParams, RequestWorkspace, RouteMeta};
 use navree_kernel::{AppContext, BoxError, BoxFuture};
 use navree_orm::Builder;
 use navree_orm::binding::{RouteBinding, RouteKey};
@@ -394,6 +394,74 @@ async fn resolve_request(parts: &mut Parts, source: &Source) -> Result<CurrentWo
 /// otherwise, never an error.
 pub(crate) async fn try_resolve(parts: &mut Parts) -> Option<CurrentWorkspace> {
     resolve_request(parts, &Source::Configured).await.ok()
+}
+
+/// The id of the workspace the request names, when its principal may enter
+/// it: found on [`CurrentWorkspace`]'s rules (a member, an organization
+/// grant, a demo workspace's guest role; a stale session choice passed over
+/// once; a pinned credential's workspace and no other), with nothing
+/// written. The workspace is not entered on the unit of work, no
+/// [`CurrentWorkspace`] is kept, and the session's choice is neither made
+/// nor forgotten. `None` for a guest, a request naming no workspace or one
+/// the principal may not enter, and on every error.
+pub(crate) async fn workspace_of_request(parts: &mut Parts) -> Option<Uuid> {
+    if let Some(current) = parts.extensions.get::<CurrentWorkspace>() {
+        return Some(current.id());
+    }
+    let ctx = parts.extensions.get::<AppContext>().cloned()?;
+    let principal = parts
+        .extensions
+        .get::<AuthState>()
+        .and_then(|state| state.0.clone())?;
+    let config = ctx.get::<WorkspaceConfig>().await.ok()?;
+    let workspaces = ctx.get::<Workspaces>().await.ok()?;
+    let pinned = parts.extensions.get::<PinnedWorkspace>().map(|pin| pin.0);
+    // A session choice that names a workspace that is gone, or one the user
+    // may no longer enter, is passed over once (and left in the session).
+    let mut skip_session = false;
+    loop {
+        let found = if skip_session {
+            resolve::identifier_without_session(&config, parts)
+        } else {
+            resolve::identifier(&config, parts)
+        };
+        let (resolver, identifier) = found
+            .map(|(kind, identifier)| (Some(kind), identifier))
+            .or_else(|| pinned.map(|id| (None, id.to_string())))?;
+        let from_session = resolver == Some(ResolverKind::Session);
+        let workspace = match workspaces.resolve(&identifier).await {
+            Ok(workspace) => workspace,
+            Err(WorkspaceError::WorkspaceNotFound(_)) if from_session && !skip_session => {
+                skip_session = true;
+                continue;
+            }
+            Err(_) => return None,
+        };
+        if pinned.is_some_and(|pin| pin != workspace.id) {
+            return None;
+        }
+        let admitted = match workspaces.admission(&workspace, principal.user_id).await {
+            Ok(Some(_)) => true,
+            Ok(None) => guest_member(&config, &workspace, principal.user_id).is_some(),
+            Err(_) => return None,
+        };
+        if admitted {
+            return Some(workspace.id);
+        }
+        if !from_session || skip_session {
+            return None;
+        }
+        skip_session = true;
+    }
+}
+
+/// navree-workspace's [`RequestWorkspace`]: [`workspace_of_request`].
+pub(crate) struct WorkspaceOfRequest;
+
+impl RequestWorkspace for WorkspaceOfRequest {
+    fn resolve<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Option<Uuid>> {
+        Box::pin(workspace_of_request(parts))
+    }
 }
 
 /// Treats the request as one inside workspace `id`, checked as any other.

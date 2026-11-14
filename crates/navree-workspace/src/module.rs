@@ -10,7 +10,10 @@ use navree_contracts::{Clock, ModuleBuilderConformityExt, PermissionCheck, ZoneS
 use navree_db::{Backend, Db, DbOptions, Executor as _, MigrationSet, ModuleBuilderDbExt};
 use navree_http::extract::Request;
 use navree_http::middleware::{Next, from_fn};
-use navree_http::{AppError, GlobalLayer, IntoResponse, LayerSlot, ModuleBuilderHttpExt, Response};
+use navree_http::{
+    AppError, GlobalLayer, IntoResponse, LayerSlot, ModuleBuilderHttpExt, RequestWorkspace,
+    Response,
+};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Injectable, Lifecycle, Module,
     ModuleBuilder, ProviderKey, Resolver,
@@ -24,7 +27,7 @@ use crate::commands::{DEMO_RESET_COMMAND, commands};
 use crate::conformity::{self, EntityClass};
 use crate::controller::{InvitationController, WorkspaceController};
 use crate::core::Core;
-use crate::current::{ScopedSubject, TenantCell};
+use crate::current::{ScopedSubject, TenantCell, WorkspaceOfRequest};
 use crate::demo::{DEMO_HEADER, DemoSeeder, DemoWorkspaces};
 use crate::directory::{TableUserDirectory, UserDirectory};
 use crate::entity::{
@@ -65,6 +68,8 @@ use crate::{
 /// - a `dyn PermissionCheck`, so `navree_contracts::permitted` answers
 ///   questions about a workspace with the member's role there (evaluated
 ///   as behind [`InWorkspace`](crate::InWorkspace));
+/// - a `dyn RequestWorkspace` (navree-http), so a shell asking for links
+///   learns the request's workspace without entering it;
 /// - [`WorkspaceZones`] and [`OrganizationZones`], the `dyn ZoneSource`s
 ///   of workspaces and organizations (their `timezone` and `country`) for
 ///   navree-time;
@@ -262,6 +267,12 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
             })
             .deps(vec![ProviderKey::of::<Core>()]),
         )
+        // The request's workspace for a shell asking for links, resolved
+        // without entering it.
+        .factory(Factory::<dyn RequestWorkspace>::new(|_| async {
+            Ok(Arc::new(WorkspaceOfRequest) as Arc<dyn RequestWorkspace>)
+        }))
+        .exports::<dyn RequestWorkspace>()
         .factory(
             Factory::<Invitations>::new(|r: Resolver| async move {
                 Ok(Arc::new(Invitations::new(
