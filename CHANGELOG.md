@@ -76,6 +76,18 @@ every `@navree/*` package carries the same version.
   holds every plugin's `read` permissions.
 - `navree::http::RequestWorkspace`: the workspace a request names, resolved without entering it;
   `WorkspaceModule` provides it.
+- Drivers by name: a module registers a driver under a name of its own for every driver kind
+  (`m.cache_store`, `m.queue_store`, `m.session_store`, `m.backplane`, `m.mail_transport`,
+  `m.disk_driver`, `m.sms_driver`, `m.whatsapp_driver`, `m.notification_channel`,
+  `m.search_engine`, `m.ai_provider`, all through `navree::plugin::prelude`), and the kind's
+  setting (`cache.store`, `queue.driver`, `session.store`, `realtime.backplane`, `mail.transport`,
+  `storage.disks.{disk}.driver`, `notify.sms.driver`, `notify.whatsapp.driver`, `search.engine`,
+  `ai.providers.{name}.driver`) takes that name; the driver reads its own settings below it. A name
+  no module registers, a registration under a built-in name or under a key of the section, and one
+  name registered twice fail the boot naming the registration method, and `config:check` says the
+  same; `config:schema` lists the built-in and registered names. The new public traits
+  `DiskDriver`, `AiDriver` and `ChannelDriver` describe a disk, an AI provider and a notification
+  channel. `CustomEvent` is a telemetry event a module names itself.
 
 ### Changed
 
@@ -142,6 +154,28 @@ every `@navree/*` package carries the same version.
   template prints values as they are); the page still renders. A page of a plugin that is not one
   of the framework's own packages renders only an HTML template, and one that names another stops
   the boot.
+- A driver setting (`cache.store`, `queue.driver`, `session.store`, `realtime.backplane`,
+  `notify.sms.driver`, `notify.whatsapp.driver`, `search.engine`, a disk's or an AI provider's
+  `driver`) now reads any lower-case name, and a name no module registers fails the boot, naming
+  the method that registers one, instead of failing as the configuration is read; a value that is
+  not such a name fails as before, with a message that lists the built-in names and never repeats
+  the value. Values that worked before read, print and boot as before. `config:schema` describes
+  these settings as built-in names or a registered one.
+- `CacheStoreKind`, `QueueDriver`, `SessionStoreKind`, `BackplaneKind`, `TransportConfig`,
+  `DiskConfig`, `SmsDriverKind`, `WhatsAppDriverKind`, `Channel`, `Engine`, `EventKind`,
+  `TelemetryEvent`, `Delivery`, `FieldType` and `ConfigError` gain a variant (they are
+  `#[non_exhaustive]`). `Notification::to_channel` and `Notifiable::route_channel` are new provided
+  methods: a type that also implements another trait with a method of that name in scope must call
+  it through that trait. A tenant's mail transport cannot name a registered transport.
+- `Interest::ALL` now includes `EventKind::Custom`, so a sink that takes every kind receives a
+  module's custom events. `Channel`'s error for a name it does not know is now
+  ``unknown notification channel `{name}` ``, where it said `unknown variant`; the notification
+  preference routes answer it in their 422 body. `AiOptions::check()` still reports a registered
+  driver's name as an unknown driver; only the configuration and `AiModule` accept it.
+- `Channel`, `CacheStoreKind`, `QueueDriver`, `SmsDriverKind` and `WhatsAppDriverKind` serialize as
+  their name in every format. 1.2's derive wrote a variant index in binary formats such as bincode
+  or postcard, so a value 1.2 wrote in such a format does not read back in 1.3. JSON, TOML and the
+  configuration read as before.
 
 ## [1.2.2] - 2026-11-14
 

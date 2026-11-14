@@ -39,6 +39,8 @@ pub use navree_view::TemplateDir;
 /// not in `navree::prelude`, so a glob import of it never makes an app's own
 /// method of the same name ambiguous.
 pub mod prelude {
+    #[cfg(feature = "ai")]
+    pub use navree_ai::ModuleBuilderAiProviderExt as _;
     #[cfg(feature = "cache")]
     pub use navree_cache::ModuleBuilderCacheExt as _;
     pub use navree_contracts::ModuleBuilderLocalesExt as _;
@@ -49,6 +51,20 @@ pub mod prelude {
     pub use navree_helm::ModuleBuilderHelmPanelExt as _;
     #[cfg(feature = "http")]
     pub use navree_http::ModuleBuilderMountExt as _;
+    #[cfg(feature = "mail")]
+    pub use navree_mail::ModuleBuilderMailTransportExt as _;
+    #[cfg(feature = "notify")]
+    pub use navree_notify::ModuleBuilderNotifyChannelsExt as _;
+    #[cfg(feature = "queue")]
+    pub use navree_queue::ModuleBuilderQueueExt as _;
+    #[cfg(feature = "realtime")]
+    pub use navree_realtime::ModuleBuilderBackplaneExt as _;
+    #[cfg(feature = "search")]
+    pub use navree_search::ModuleBuilderSearchExt as _;
+    #[cfg(feature = "session")]
+    pub use navree_session::ModuleBuilderSessionExt as _;
+    #[cfg(feature = "storage")]
+    pub use navree_storage::ModuleBuilderStorageExt as _;
     #[cfg(feature = "ui")]
     pub use navree_ui::ModuleBuilderShellExt as _;
     #[cfg(feature = "view")]
