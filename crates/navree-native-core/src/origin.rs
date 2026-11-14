@@ -355,9 +355,27 @@ pub(crate) fn openable(address: &str) -> Option<String> {
     }
     match scheme_of(address).as_deref() {
         Some("http" | "https") => split(address).map(|parts| parts.with_fragment()),
-        Some(scheme) if HANDED_TO_SYSTEM.contains(&scheme) => Some(address.to_owned()),
+        Some(scheme) if HANDED_TO_SYSTEM.contains(&scheme) => Some(for_system(address)),
         _ => None,
     }
+}
+
+/// An address of a scheme the system handles, as it is handed over. A phone
+/// number is ordinarily written with spaces (`tel:+91 98140 12345`), and a
+/// browser follows such a link; the number part of a `tel:` or `sms:`
+/// address (up to its first `;`, `?` or `#`) is written without its ASCII
+/// spaces, so every system is handed one form. Nothing else is changed.
+fn for_system(address: &str) -> String {
+    let Some(scheme) = scheme_of(address).filter(|scheme| matches!(scheme.as_str(), "tel" | "sms"))
+    else {
+        return address.to_owned();
+    };
+    let start = scheme.len() + 1;
+    let end = address[start..]
+        .find([';', '?', '#'])
+        .map_or(address.len(), |at| start + at);
+    let number: String = address[start..end].chars().filter(|c| *c != ' ').collect();
+    format!("{}{number}{}", &address[..start], &address[end..])
 }
 
 /// A whole `https` address that reads, written again from its parts.
@@ -517,7 +535,7 @@ impl Origin {
         }
         match scheme_of(href).as_deref() {
             Some("http" | "https") => self.web(href),
-            Some(scheme) if HANDED_TO_SYSTEM.contains(&scheme) => Reading::Other(href.to_owned()),
+            Some(scheme) if HANDED_TO_SYSTEM.contains(&scheme) => Reading::Other(for_system(href)),
             Some(_) => Reading::Refused,
             None => {
                 let text = href.split('#').next().unwrap_or("");
@@ -927,6 +945,11 @@ mod tests {
         assert_eq!(
             openable("tel:+919876543210").as_deref(),
             Some("tel:+919876543210")
+        );
+        // A device call's address is handed over as a link's is.
+        assert_eq!(
+            openable("sms:+91 98765 43210?body=On my way").as_deref(),
+            Some("sms:+919876543210?body=On my way")
         );
         for refused in [
             "/orders",
