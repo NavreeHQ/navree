@@ -190,7 +190,12 @@ impl Module for Shelf {
         ModuleId::of::<Holder<String>>()
     }
     fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(PluginInfo::new("navree-plugin-weather", "alloc", "weather", "1.0.0"));
+        m.plugin(PluginInfo::new(
+            "navree-plugin-weather",
+            "alloc",
+            "weather",
+            "1.0.0",
+        ));
     }
 }
 
@@ -202,7 +207,10 @@ fn two_crates_claiming_one_plugin_name_fail_the_boot() {
         .validate()
         .expect("Holder<alloc::string::String> names alloc");
     let errors: BootErrors = Navree::app()
-        .module(Claims("WeatherModule", weather("plugins", "weather", "1.0.0")))
+        .module(Claims(
+            "WeatherModule",
+            weather("plugins", "weather", "1.0.0"),
+        ))
         .module(Shelf)
         .validate()
         .expect_err("two crates, one name");
@@ -260,7 +268,10 @@ fn one_plugin_described_two_ways_fails_the_boot() {
     let described = "plugin `navree-plugin-weather` is described differently by `WeatherModule` and `WeatherAdmin`; give every module of a plugin the same plugin_info!(..)";
     // Another title.
     let app = Navree::app()
-        .module(Claims("WeatherModule", weather("plugins", "weather", "1.0.0")))
+        .module(Claims(
+            "WeatherModule",
+            weather("plugins", "weather", "1.0.0"),
+        ))
         .module(Claims(
             "WeatherAdmin",
             weather("plugins", "weather", "1.0.0").title("Weather"),
@@ -268,8 +279,14 @@ fn one_plugin_described_two_ways_fails_the_boot() {
     assert_eq!(errors(app), described);
     // Another namespace, a reserved one: the second module cannot slip past NamespaceReserved.
     let app = Navree::app()
-        .module(Claims("WeatherModule", weather("plugins", "weather", "1.0.0")))
-        .module(Claims("WeatherAdmin", weather("plugins", "workspace", "1.0.0")));
+        .module(Claims(
+            "WeatherModule",
+            weather("plugins", "weather", "1.0.0"),
+        ))
+        .module(Claims(
+            "WeatherAdmin",
+            weather("plugins", "workspace", "1.0.0"),
+        ));
     assert_eq!(errors(app), described);
 }
 
@@ -277,7 +294,10 @@ fn one_plugin_described_two_ways_fails_the_boot() {
 fn two_plugins_with_one_namespace_fail_the_boot() {
     let forecast = PluginInfo::new("navree-plugin-forecast", "plugins", "weather", "1.0.0");
     let app = Navree::app()
-        .module(Claims("WeatherModule", weather("plugins", "weather", "1.0.0")))
+        .module(Claims(
+            "WeatherModule",
+            weather("plugins", "weather", "1.0.0"),
+        ))
         .module(Claims("ForecastModule", forecast));
     assert_eq!(
         errors(app),
@@ -304,10 +324,9 @@ fn files_to_publish_from_a_module_that_is_no_plugin_fail_the_boot() {
 struct Ships(PublishTag, Vec<&'static str>);
 impl Module for Ships {
     fn register(&self, m: &mut ModuleBuilder) {
-        let files = self
-            .1
-            .iter()
-            .fold(Publishable::new(self.0), |files, path| files.file(*path, b"x"));
+        let files = self.1.iter().fold(Publishable::new(self.0), |files, path| {
+            files.file(*path, b"x")
+        });
         m.plugin(plugin_info!(namespace = "announcements"))
             .contribute(files);
     }

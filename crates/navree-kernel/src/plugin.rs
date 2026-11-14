@@ -606,7 +606,10 @@ mod tests {
         assert!(names_crate("navree_plugin_a::T", "navree_plugin_a"));
         assert!(!names_crate("x_navree_plugin_a::T", "navree_plugin_a"));
         assert!(!names_crate("navree_plugin_ab::T", "navree_plugin_a"));
-        assert!(!names_crate("a::B<x_navree_plugin_a::T>", "navree_plugin_a"));
+        assert!(!names_crate(
+            "a::B<x_navree_plugin_a::T>",
+            "navree_plugin_a"
+        ));
         assert!(names_crate(
             "navree_config::client::ClientModule<reqwest::Client, navree_plugin_github::GithubOptions>",
             "navree_plugin_github"
