@@ -3,6 +3,7 @@
 
 use navree_kernel::{BootErrors, KernelError, Module, ModuleBuilder, ModuleId, Navree};
 use navree_kernel::{PluginInfo, plugin_info};
+use navree_kernel::{PublishTag, Publishable};
 
 /// The text of the errors `app` fails to validate with.
 fn errors(app: navree_kernel::AppBuilder) -> String {
@@ -278,4 +279,78 @@ fn two_plugins_with_one_namespace_fail_the_boot() {
         errors(app),
         "plugins `navree-plugin-weather` and `navree-plugin-forecast` both use the namespace `weather`; set another with plugin_info!(namespace = \"..\") in one of them"
     );
+}
+
+struct LooseFiles;
+impl Module for LooseFiles {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(Publishable::new(PublishTag::Files).file("banner.css", b"body{}"));
+    }
+}
+
+#[test]
+fn files_to_publish_from_a_module_that_is_no_plugin_fail_the_boot() {
+    assert_eq!(
+        errors(Navree::app().module(LooseFiles)),
+        "module `LooseFiles` has files to publish but does not name itself a plugin; call m.plugin(plugin_info!()) in its register"
+    );
+}
+
+/// A plugin whose files are given by the test.
+struct Ships(PublishTag, Vec<&'static str>);
+impl Module for Ships {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let files = self
+            .1
+            .iter()
+            .fold(Publishable::new(self.0), |files, path| files.file(*path, b"x"));
+        m.plugin(plugin_info!(namespace = "announcements"))
+            .contribute(files);
+    }
+}
+
+#[test]
+fn an_unsafe_publish_path_fails_the_boot() {
+    let rule = "is not a safe relative path inside its folder (no `..`, no leading `/`, no `\\`, no `:`, none of `<>\"|?*`, no segment ending in `.` or a space, no device name such as `con` or `nul`, no two names that differ only in case); fix the path in the plugin";
+    for (tag, paths, named) in [
+        (
+            PublishTag::Views,
+            vec!["list.html", "../escape.html"],
+            ("views", "../escape.html"),
+        ),
+        (
+            PublishTag::Views,
+            vec!["list.html", "List.html"],
+            ("views", "List.html"),
+        ),
+        (
+            PublishTag::Locales,
+            vec!["announcements.ftl"],
+            ("locales", "announcements.ftl"),
+        ),
+        (PublishTag::Files, vec!["con.css"], ("files", "con.css")),
+    ] {
+        assert_eq!(
+            errors(Navree::app().module(Ships(tag, paths))),
+            format!(
+                "plugin `navree-kernel`: the {} file `{}` {rule}",
+                named.0, named.1
+            )
+        );
+    }
+    // Safe as the plugin's own path (241 bytes), but its destination
+    // `resources/views/announcements/<path>` is 271 bytes: `check` refuses what
+    // `plugin:publish` would refuse, and names the plugin's path.
+    let long: &'static str = format!("{}/{}", "a".repeat(120), "b".repeat(120)).leak();
+    assert_eq!(
+        errors(Navree::app().module(Ships(PublishTag::Views, vec![long]))),
+        format!("plugin `navree-kernel`: the views file `{long}` {rule}")
+    );
+    Navree::app()
+        .module(Ships(
+            PublishTag::Locales,
+            vec!["en/announcements.ftl", "pa-IN/announcements.ftl"],
+        ))
+        .validate()
+        .expect("safe paths boot");
 }

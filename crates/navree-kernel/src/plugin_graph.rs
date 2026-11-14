@@ -1,13 +1,19 @@
 //! The boot checks of plugins, over the module graph.
 
+use std::any::TypeId;
+
 use crate::KernelError;
-use crate::graph::Graph;
+use crate::graph::{Graph, ModuleNode};
 use crate::plugin::{
-    FIRST_PARTY, PluginInfo, RESERVED_NAMESPACES, is_first_party, is_namespace, names_crate,
+    FIRST_PARTY, PluginInfo, PublishTag, Publishable, RESERVED_NAMESPACES, destination,
+    is_first_party, is_namespace, names_crate,
 };
+use crate::publish::{first_case_collision, is_locale_path, is_safe_relative_path};
 
 /// A module that names a plugin and passed the checks of its own plugin info.
 struct Member<'g> {
+    /// The module's index in the graph.
+    index: usize,
     /// The module's name.
     module: &'static str,
     /// The module's full type path.
@@ -34,7 +40,13 @@ impl Graph {
     ///    type of the listed crate) go into `first_party`;
     /// 6. a plugin that is not first-party in a reserved namespace:
     ///    `NamespaceReserved`;
-    /// 7. a second plugin on a namespace already used: `NamespaceTaken`.
+    /// 7. a second plugin on a namespace already used: `NamespaceTaken`;
+    /// 8. files to publish ([`Publishable`]) from a module that names no
+    ///    plugin: `PublishableOutsidePlugin`; a file of a plugin whose path, or
+    ///    whose place in the app, is not a safe relative path (or, under
+    ///    `locales`, does not start with a locale): `UnsafePublishPath`; per
+    ///    plugin and tag, the first safe path that differs from an earlier one
+    ///    only in case: `UnsafePublishPath`.
     pub(crate) fn check_plugins(&mut self, errors: &mut Vec<KernelError>) {
         let version = env!("CARGO_PKG_VERSION");
         // Each plugin's modules, plugins in first-seen order.
@@ -65,6 +77,7 @@ impl Graph {
                 continue;
             }
             let member = Member {
+                index: m,
                 module: module.name,
                 type_name: module.id.type_name(),
                 info,
@@ -141,6 +154,74 @@ impl Graph {
                 None => namespaces.push((namespace, plugin)),
             }
         }
+
+        // The safe paths of each plugin's files, with their tags, in module
+        // then registration order.
+        let mut safe_paths: Vec<Vec<(PublishTag, &str)>> = vec![Vec::new(); plugins.len()];
+        for m in self.import_order() {
+            let module = &self.modules[m];
+            let files: Vec<&Publishable> = shipped(module).collect();
+            if files.is_empty() {
+                continue;
+            }
+            if module.plugin.is_none() {
+                errors.push(KernelError::PublishableOutsidePlugin {
+                    module: module.name,
+                });
+                continue;
+            }
+            // A module left out in steps 2 and 3 is left out here too.
+            let Some(group) = plugins
+                .iter()
+                .position(|members| members.iter().any(|member| member.index == m))
+            else {
+                continue;
+            };
+            // The plugin's info is its first module's (step 4).
+            let info = plugins[group][0].info;
+            for publishable in files {
+                let tag = publishable.tag();
+                for (path, _) in publishable.files() {
+                    let safe = is_safe_relative_path(path)
+                        && (tag != PublishTag::Locales || is_locale_path(path))
+                        && is_safe_relative_path(&destination(tag, info.namespace, path));
+                    if safe {
+                        safe_paths[group].push((tag, path));
+                    } else {
+                        errors.push(KernelError::UnsafePublishPath {
+                            plugin: info.name,
+                            tag: tag.as_str(),
+                            path: path.to_owned(),
+                        });
+                    }
+                }
+            }
+        }
+        for (members, paths) in plugins.iter().zip(&safe_paths) {
+            for &tag in PublishTag::ALL {
+                let of_tag = paths
+                    .iter()
+                    .filter(|(of, _)| *of == tag)
+                    .map(|&(_, path)| path);
+                if let Some(path) = first_case_collision(of_tag) {
+                    errors.push(KernelError::UnsafePublishPath {
+                        plugin: members[0].info.name,
+                        tag: tag.as_str(),
+                        path: path.to_owned(),
+                    });
+                }
+            }
+        }
+
         self.first_party.extend(first_party);
     }
+}
+
+/// The files `module` ships to publish, in registration order.
+fn shipped(module: &ModuleNode) -> impl Iterator<Item = &Publishable> {
+    module
+        .contributions
+        .iter()
+        .filter(|contribution| contribution.type_id == TypeId::of::<Publishable>())
+        .filter_map(|contribution| contribution.value.downcast_ref::<Publishable>())
 }
