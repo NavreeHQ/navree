@@ -114,7 +114,7 @@ A plugin ships its own Fluent files in its binary with `m.locales(navree::embed_
 
 A message id of a plugin that is not one of the framework's own starts with its namespace: `announcements-title` for the namespace `announcements`, and a term starts with `-announcements-`. An id outside it fails the boot, and `i18n:check` lists it with the plugin and the file. Two plugins that define one id are a problem too.
 
-The app's own message wins over a plugin's with the same id, and the plugin's other messages still load. A plugin's messages count in `i18n:check` and `i18n:missing` like yours, and its file is shown as `navree-plugin-announcements:locales/en/announcements.ftl`.
+The app's own message wins over a plugin's with the same id in each locale the app defines it in, and the plugin's other messages still load; in a locale where the app has no message of that id, the plugin's is used there. A plugin's messages count in `i18n:check` and `i18n:missing` like yours, so a plugin that ships a language you support only in part has the rest listed as missing until you write those messages. Its file is shown as `navree-plugin-announcements:locales/en/announcements.ftl`.
 
 To edit a plugin's translations, copy them into your files:
 

@@ -54,7 +54,7 @@ They are cached for good (`immutable`) under the current hash, and an older hash
 
 ## Files of a plugin
 
-A plugin builds its files with `.namespace("announcements")`, on an `AppSheet`, an `AppFont`, an `AppImage` or an [island script](/docs/ui/islands/): the file is served as `{namespace}.{name}`, so the sheet below is `/_navree/ui/app/announcements.banner-3f9a1c07b2de.css`, and an app's own `banner` sheet is another file. The namespace is the plugin's own: a lower-case letter followed by up to 63 lower-case letters, digits or `_`, and anything else fails the build. `name()` still gives `banner`. A stylesheet named `face` cannot take a namespace, because a font's rule is served under that name.
+A plugin builds its files with `.namespace("announcements")`, on an `AppSheet`, an `AppFont`, an `AppImage` or an [island script](/docs/ui/islands/): the file is served as `{namespace}.{name}`, so the sheet below is `/_navree/ui/app/announcements.banner-956f449c1307.css`, and an app's own `banner` sheet is another file. The namespace is the plugin's own: a lower-case letter followed by up to 63 lower-case letters, digits or `_`, and anything else fails the build. `name()` still gives `banner`. A stylesheet named `face` cannot take a namespace, because a font's rule is served under that name.
 
 ```rust
 use navree::ui::*;

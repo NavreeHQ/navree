@@ -43,23 +43,29 @@ every `@navree/*` package carries the same version.
   key that is not a safe file name, or a link in the file's place, is refused, also with `--force`,
   and an existing file is replaced by a rename instead of being written through. Its usage line and
   description name `--plugin <namespace>`.
-- Two modules that give one name to two different things say so at boot: an embedded template, a
-  static file, a job and a configuration section read by two types each log a warning
-  (`config:check` lists the section too). The boot fails instead when one of the two modules
-  belongs to a plugin that is not one of the framework's own; for a static file it also fails when
-  one of the two is under a plugin's namespace and comes from a module that is not one of the
-  framework's own plugins. Which one is used does not change. A module that replaces a template of
-  a module it imports is still only an `info` line, except a module of a plugin that is not one of
-  the framework's own: that is a warning when the template is another plugin's, and fails the boot
-  for any other template while the plugin's version is the one rendered. It is not when the app
-  has a file of that name in a template folder, or a module of the app registers the template
-  after the plugin's module; an `info` line then says so. `i18n:publish validation` writes through
-  the same checked writer as `plugin:publish`: a link in a file's place, or in the place of one of
-  its folders, is refused, and a file that `--force` replaces is replaced by a rename; its usage
-  line names `<plugin>`, and the text for an unknown name lists the plugins that ship translations.
-  `AppSheet`, `AppFont`, `AppImage` and `IslandScript` have a new inherent method `namespace`: an
-  app whose own extension trait gives them a method of that name calls it through the trait
-  (`MyExt::namespace(sheet, ..)`).
+- Two modules that use one name say so at boot: an embedded template or a static file with
+  different content, a job name (also for one job type registered in two modules) and a
+  configuration section read by two types each log a warning (`config:check` lists the section
+  too). The boot fails instead when one of the two modules belongs to a plugin that is not one of
+  the framework's own; for a static file it also fails when one of the two is under a plugin's
+  namespace and comes from a module that is not one of the framework's own plugins. Which one is
+  used does not change. A module that replaces a template of a module it imports is now an `info`
+  line (in 1.2 it was a `debug` event), except a module of a plugin that is not one of the
+  framework's own: that is a warning when the template is another plugin's, and fails the boot for
+  any other template while the plugin's version is the one rendered. It is not when the app has a
+  file of that name in a template folder (the name letter for letter), or a module of the app
+  registers the template after the plugin's module, with the plugin's text or its own; an `info`
+  line then says so. A module of the app is one that names no plugin and is in no crate that a
+  plugin of the app names. `i18n:publish validation` writes through the same checked writer as
+  `plugin:publish`: a link in a file's place, or in the place of one of its folders, is refused,
+  and a file that `--force` replaces is replaced by a rename; its usage line names `<plugin>`, and
+  the text for an unknown name lists the plugins that ship translations. `AppSheet`, `AppFont`,
+  `AppImage` and `IslandScript` have a new inherent method `namespace`: an app whose own extension
+  trait gives them a method of that name calls it through the trait (`MyExt::namespace(sheet, ..)`).
+  Their `Debug` output now has a `namespace` field. A glob import of `navree::contracts::*` or
+  `navree::view::*` brings in the two new extension traits, so an app's own `ModuleBuilder` method
+  called `locales` or `plugin_templates` is ambiguous there. One listener type subscribed to one
+  event in two modules registers one job name twice, and now logs the job warning.
 
 ## [1.2.2] - 2026-11-14
 
