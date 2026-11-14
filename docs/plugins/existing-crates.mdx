@@ -61,6 +61,8 @@ base_url = "https://khata.example/ludhiana"
 - **Boot errors**: without `.connect(..)` the boot fails with ``ClientModule `khata` has no connect function: call .connect(..)``, and a connect function that fails stops the boot with its error.
 - **Readiness**: an `Ok` from the check is up, an error is down with its message. The message is shown in the readiness report, so it must hold no secret.
 - **The plugin**: a plugin's modules are types of its own crate, or `ClientModule`s whose options type is: `.plugin(navree::plugin_info!())` ties the module to the crate that defines its options type. `.plugin(..)` needs an options type: without one, no type of the plugin's crate would tie the module to it.
+- **A common client type**: a `ClientModule` exports its client as the plain type, so one of a type other modules also export (`reqwest::Client`, say) makes every plain lookup of that type in the app ambiguous; wrap the client in a type of the plugin's own crate.
+- **No time limit on connecting**: the connect function runs at boot with no time limit of its own, so a service that never answers holds the boot; put a time limit inside it (`tokio::time::timeout(..)` around the connection).
 
 Add the module to the app like any other: `.module(khata_client())`.
 
@@ -144,6 +146,8 @@ A guest's `GET /khata/entries` is a 401; a signed-in user's answers `https://kha
 
 The service gets the request as the app received it, but for its URI: the scheme and authority as received, and for the path `/` followed by the rest of the path below the prefix, exactly as received, then `?` and the query as received. `/khata` arrives as `/`, `/khata/entries?month=kartik` as `/entries?month=kartik`. Nothing is decoded, so `%2F`, `%3F` and `%23` reach the service as they were sent, and can't turn into a segment, a query or a fragment (`/khata/v1/items%3Fx` arrives as `/v1/items%3Fx`). The router's decoded copy of the path is not passed on: read the path from the URI. A service decodes its own path, and must treat it as untrusted: the router doesn't refuse `:` or a drive letter.
 
+The service also sees the request's headers and authority exactly as the client sent them, forwarding headers such as `X-Original-URL`, `X-Rewrite-URL` and `X-Forwarded-Prefix` included, so a service that takes its path or builds its links from them is responsible for checking them. Sequences such as `..;` and a doubly encoded path (`%252e%252e`) reach it exactly as the client sent them too, since the router reads them as names, so a service that treats `;` as a separator or decodes its path a second time is responsible for refusing them.
+
 With no `.methods(..)`, every method reaches the service, extension methods such as `PROPFIND` included, and `HEAD` and `OPTIONS` too. `.methods(&[Method::GET, Method::POST])` limits it to those: another method is a 405 with an `Allow` header, as for a route.
 
 ### What runs before it
@@ -182,7 +186,7 @@ A mount fails the boot, with the app's other route problems, when:
 - another mount is at, under or above its prefix;
 - `.methods(&[])` names no method.
 
-`navree routes` lists each mount as one row, with the method `*` (or its methods), the path `/khata/{*rest}`, its access and its module, and ends with `N routes, M mounts`; `routes --json` marks it with `"mount": true`. `navree::http::route_table` returns the routes only.
+`navree routes` lists each mount as one row, with the method `*` (or its methods), the path `/khata/{*rest}`, its access and its module, and ends with `N routes, M mounts`; `routes --json` marks it with `"mount": true`. `navree::http::route_table` returns the routes only, so what reads it leaves mounts out: the tenant isolation suite and the generated OpenAPI document don't cover a mounted service, which is tested and described on its own.
 
 ## A tonic service
 
@@ -208,7 +212,7 @@ impl Module for KhataDealsModule {
 }
 ```
 
-- **Access**: the service default (`.public()`, `.authenticated()`, `.roles(..)`, `.permissions(..)`, `.can(action, subject)` and `.guard(..)`) covers every method without its own declaration; `.method(GrpcMethod::new(..))` gives one method its own, which replaces the default, guards included. A call to a method with neither is refused with `PERMISSION_DENIED`, and a path that names no method with `UNIMPLEMENTED`; neither reaches the server.
+- **Access**: the service default (`.public()`, `.authenticated()`, `.roles(..)`, `.permissions(..)`, `.can(action, subject)` and `.guard(..)`) covers every method without its own declaration; `.method(GrpcMethod::new(..))` gives one method its own, which replaces the default, guards included. A call to a method with neither is refused with `PERMISSION_DENIED`, and recorded as `access.denied` in the audit log as a guard's refusal is; a path that names no method is `UNIMPLEMENTED`. Neither reaches the server.
 - **Method names**: name a method as the generated server trait spells it, `get_deal` for `GetDeal` and `get_http_status` for `GetHTTPStatus` (a leading `r#` is set aside). Another spelling fails the boot: ``gRPC method `GetDeal` of `crm.deals.v1.Deals` (module `KhataDealsModule`) is not a Rust method name: write `get_deal` (the name the generated server trait spells)``. A name in that form that matches no method of the server, a typo, can't be detected, so give the service default the strictest access and loosen it per method.
 - **Checked at boot**: a service with no access declaration at all (a guard alone is none), a method of its own without one, a method declared twice, a method whose `can` names a field of the message (a wrapped server's messages aren't read before it runs: write the service with `#[grpc_service]` for a check on a record), and a service named like `GrpcModule`'s own health or reflection service while that one is on (set `grpc.health = false` to serve your own) each fail the boot, as do two services of one name.
 - **Before the server reads a message** the call passes authentication, the access check, guards, the route authorizer and the deadline, so a refused call is answered without reading its messages. The server then runs in a unit of work, which commits when its response head is HTTP 200 with no error `grpc-status` and rolls back otherwise. A method that answers with a stream commits when its head is sent, and its messages run outside the unit of work. A head that carries an error `grpc-status` is answered with that status; one that is not HTTP 200 and carries no error `grpc-status` is answered with the gRPC status the gRPC specification gives its HTTP status, so a 503 stays `UNAVAILABLE`.
