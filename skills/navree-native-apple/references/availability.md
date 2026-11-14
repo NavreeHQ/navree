@@ -68,7 +68,7 @@ own or what a server reply may start.
 | Confirm one action (a passkey assertion over the action's details) | the same API | iOS 15 | ADP | in the client, offered by a build signed with the origin as its associated domain; the server side is done |
 | App lock | `LAContext` | iOS 8 | free (`NSFaceIDUsageDescription`) | not yet |
 | Push | APNs: `UNUserNotificationCenter`, `registerForRemoteNotifications` | iOS 10; macOS 10.14; watchOS 3 | ADP | in the client, offered by a build signed for push (`NavreeAppDelegate` passes the token on, the core posts it); the server side is done (`notify.push.apns`) |
-| Local notifications and the badge | `UNNotificationRequest`, `setBadgeCount` | iOS 10 (badge 16) | free | not yet |
+| Local notifications and the badge | `UNNotificationRequest`, `setBadgeCount`; on a Mac `NSDockTile.badgeLabel` | iOS 10 (badge 16); macOS 10.14 (Dock tile 10.5) | free | in Navree: `set_badge` from a reply or a tap, `notify` and `cancel_notification` (`local_notification` in `caps`): the count on the Home Screen icon once the person allows notifications, on a Mac's Dock icon, or on the app's item in the menu bar; signing out clears the count and the notifications ([`presence.md`](presence.md)) |
 | Photos | `PhotosPicker` (no library permission) | iOS 16 (picker 14) | free | not yet |
 | Files | `fileImporter` | iOS 14 | free | in Navree (the file field) |
 | Camera | `UIImagePickerController`, AVFoundation | iOS | free (`NSCameraUsageDescription`) | not yet |
