@@ -54,6 +54,90 @@ fn claims(ctx: &AppContext) -> Vec<String> {
         .collect()
 }
 
+/// The driver selectors the modules contributed, each key once.
+pub(crate) fn slots(ctx: &AppContext) -> Vec<crate::DriverSlot> {
+    unique_slots(
+        ctx.contributions::<crate::DriverSlot>()
+            .into_iter()
+            .map(|contributed| (*contributed.value).clone()),
+    )
+}
+
+/// The driver selectors of the modules that read their section: a module
+/// given its options in code (`for_root(options)`) does not read the value
+/// of its selector.
+fn value_slots(ctx: &AppContext) -> Vec<crate::DriverSlot> {
+    let in_code: Vec<ModuleId> = ctx
+        .contributions::<navree_kernel::CodeConfigured>()
+        .into_iter()
+        .map(|contributed| contributed.module.id)
+        .collect();
+    unique_slots(
+        ctx.contributions::<crate::DriverSlot>()
+            .into_iter()
+            .filter(|contributed| !in_code.contains(&contributed.module.id))
+            .map(|contributed| (*contributed.value).clone()),
+    )
+}
+
+/// `slots`, each key once (the first wins).
+fn unique_slots(slots: impl Iterator<Item = crate::DriverSlot>) -> Vec<crate::DriverSlot> {
+    let mut unique: Vec<crate::DriverSlot> = Vec::new();
+    for slot in slots {
+        if !unique.iter().any(|known| known.key() == slot.key()) {
+            unique.push(slot);
+        }
+    }
+    unique
+}
+
+/// The drivers the modules registered.
+pub(crate) fn drivers(ctx: &AppContext) -> Vec<crate::RegisteredDriver> {
+    ctx.contributions::<crate::RegisteredDriver>()
+        .into_iter()
+        .map(|contributed| (*contributed.value).clone())
+        .collect()
+}
+
+/// What `config:check` reports for the app of `ctx`, without booting it:
+/// the sections, the unknown keys (none at or below a table a registered
+/// driver reads), the keys set twice, the web app's settings, each
+/// configured driver name that does not resolve, and each registration of
+/// a driver that is refused, in the words the boot uses.
+///
+/// Not public API: the command and Navree's tests call it.
+#[doc(hidden)]
+pub async fn check_report(
+    ctx: &AppContext,
+    options: &CheckOptions,
+) -> Result<CheckReport, BoxError> {
+    let sources = ctx.get::<ConfigSources>().await?;
+    let registrations = registrations(ctx);
+    let slots = slots(ctx);
+    let drivers = drivers(ctx);
+    let mut claims = claims(ctx);
+    if slots.iter().any(|slot| slot.key().contains('*'))
+        && let Ok(config) = Config::load(&sources)
+    {
+        claims.extend(crate::driver::registered_tables(&config, &slots, &drivers));
+    }
+    let mut report = CheckReport::run_with_claims(&sources, &registrations, &claims, options)?
+        .with_web_app(&sources, std::path::Path::new(WEB_APP_ENV))
+        .with_drivers(&sources, &value_slots(ctx), &drivers);
+    let registry = ConfigRegistry::new(&registrations);
+    let records = ctx.contributions::<crate::driver::DriverRecord>();
+    for slot in &slots {
+        let section_keys = crate::driver::section_keys(&registry, slot);
+        for message in crate::driver::registration_problems(slot, &section_keys, &records) {
+            report.errors.push(crate::ConfigError::Driver {
+                key: slot.key().to_owned(),
+                message,
+            });
+        }
+    }
+    Ok(report)
+}
+
 /// `config:show [section] [--defaults] [--origin] [--fallbacks] [--json]`.
 pub(crate) fn show() -> CommandSpec {
     CommandSpec::new(
@@ -86,7 +170,8 @@ pub(crate) fn schema() -> CommandSpec {
         "config:schema",
         "Print the JSON Schema of the configuration (for editors): [--out <file>]",
         |ctx: AppContext, args: Vec<String>| async move {
-            let registry = ConfigRegistry::new(&registrations(&ctx));
+            let registry = ConfigRegistry::new(&registrations(&ctx))
+                .with_drivers(&slots(&ctx), &drivers(&ctx));
             let mut text = serde_json::to_string_pretty(&registry.schema_document())?;
             text.push('\n');
             match args.as_slice() {
@@ -137,14 +222,7 @@ pub(crate) fn check() -> CommandSpec {
         |ctx: AppContext, args: Vec<String>| async move {
             let options = CheckOptions::parse(&args)?;
             let sections = crate::registry::section_collisions(&ctx);
-            let sources = ctx.get::<ConfigSources>().await?;
-            let report = CheckReport::run_with_claims(
-                &sources,
-                &registrations(&ctx),
-                &claims(&ctx),
-                &options,
-            )?
-            .with_web_app(&sources, std::path::Path::new(WEB_APP_ENV));
+            let report = check_report(&ctx, &options).await?;
             print!("{}", report.render_with(&sections));
             let problems = report.problems() + sections.errors.len();
             if problems == 0 {

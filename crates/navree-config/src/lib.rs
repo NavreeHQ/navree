@@ -139,6 +139,7 @@ pub mod __private {
     pub use serde_json::{Map, Value};
 
     // The machinery the driver kinds of Navree share (see `DriverSlot`).
+    pub use crate::commands::check_report;
     pub use crate::driver::{
         DriverFactory, DriverRecord, build_driver, check_registrations, contribute_slot,
         register_driver, registration_problems, selector_error,

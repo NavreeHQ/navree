@@ -237,8 +237,8 @@ impl Config {
     }
 
     /// The value at `key`, with `app` and `app.*` read through the view that
-    /// resolves the short names of the app settings.
-    fn lookup(&self, key: &str) -> Option<&Value> {
+    /// resolves the short names of the app settings. It notes no read.
+    pub(crate) fn lookup(&self, key: &str) -> Option<&Value> {
         match (&self.app, key) {
             (Some(app), "app") => Some(app.as_ref()),
             (Some(app), key) if key.starts_with("app.") => app.lookup(&key["app.".len()..]),

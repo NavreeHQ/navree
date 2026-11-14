@@ -28,9 +28,13 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Contributed, ModuleBuilder};
 use serde::de::{self, DeserializeOwned};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::{Value as Json, json};
 
+use crate::check::CheckReport;
 use crate::schema::SectionSchema;
-use crate::{Config, ModuleBuilderConfigExt};
+use crate::usage::covers;
+use crate::value::{Kind, Value};
+use crate::{Config, ConfigError, ConfigRegistry, ConfigSources, ModuleBuilderConfigExt};
 
 /// The most distinct driver names one process holds.
 const LIMIT: usize = 1024;
@@ -708,19 +712,19 @@ fn built_ins(slot: &DriverSlot) -> String {
 
 /// The names `slot` knows: its built-in names in order, then the names
 /// registered for it in name order.
-fn known(slot: &DriverSlot, drivers: &[RegisteredDriver]) -> String {
-    let registered: BTreeSet<&str> = drivers
+fn known_names(slot: &DriverSlot, drivers: &[RegisteredDriver]) -> Vec<&'static str> {
+    let registered: BTreeSet<&'static str> = drivers
         .iter()
         .filter(|driver| driver.slot() == slot.key())
         .map(|driver| driver.name().as_str())
         .filter(|name| !slot.built_in().contains(name))
         .collect();
-    slot.built_in()
-        .iter()
-        .copied()
-        .chain(registered)
-        .collect::<Vec<_>>()
-        .join(", ")
+    slot.built_in().iter().copied().chain(registered).collect()
+}
+
+/// [`known_names`], joined by `, `.
+fn known(slot: &DriverSlot, drivers: &[RegisteredDriver]) -> String {
+    known_names(slot, drivers).join(", ")
 }
 
 /// `{key}` names `{name}`, which no module registered for `slot`.
@@ -783,6 +787,199 @@ fn failed(slot: &DriverSlot, name: &str, module: &str, error: &BoxError) -> Stri
         slot.what(),
         slot.register()
     )
+}
+
+/// Whether a module registered `name` for `slot`.
+fn is_registered(slot: &DriverSlot, name: &str, drivers: &[RegisteredDriver]) -> bool {
+    drivers
+        .iter()
+        .any(|driver| driver.slot() == slot.key() && driver.name().as_str() == name)
+}
+
+/// The tables of the `*` slot `slot` in `config`, by name, each with the
+/// driver it names: the value at the key below the table, or, for a slot
+/// that defaults to the table's name, the table's own name. An empty table
+/// counts.
+pub(crate) fn instance_tables(config: &Config, slot: &DriverSlot) -> Vec<(String, Option<String>)> {
+    let Some((prefix, suffix)) = slot.key().split_once(".*.") else {
+        return Vec::new();
+    };
+    let Some(Value {
+        kind: Kind::Table(tables),
+        ..
+    }) = config.lookup(prefix)
+    else {
+        return Vec::new();
+    };
+    tables
+        .iter()
+        .filter(|(_, table)| table.is_table())
+        .map(|(name, table)| {
+            let driver = table
+                .lookup(suffix)
+                .and_then(Value::scalar_string)
+                .or_else(|| slot.table_name.then(|| name.clone()));
+            (name.clone(), driver)
+        })
+        .collect()
+}
+
+/// The keys of the tables of the `*` slots among `slots` whose driver a
+/// module registered (`storage.disks.uploads`): the driver reads such a
+/// table whole, so none of its keys is unknown.
+pub(crate) fn registered_tables(
+    config: &Config,
+    slots: &[DriverSlot],
+    drivers: &[RegisteredDriver],
+) -> Vec<String> {
+    let mut tables = Vec::new();
+    for slot in slots {
+        let Some((prefix, _)) = slot.key().split_once(".*.") else {
+            continue;
+        };
+        for (table, driver) in instance_tables(config, slot) {
+            if driver.is_some_and(|driver| is_registered(slot, &driver, drivers)) {
+                tables.push(format!("{prefix}.{table}"));
+            }
+        }
+    }
+    tables
+}
+
+/// The driver names `config` gives `slot`, each with its key: the value at
+/// the slot's key, or, for a `*` slot, each table's driver
+/// (`storage.disks.uploads.driver`).
+fn configured(config: &Config, slot: &DriverSlot) -> Vec<(String, String)> {
+    match slot.key().split_once(".*.") {
+        None => config
+            .lookup(slot.key())
+            .and_then(Value::scalar_string)
+            .map(|name| (slot.key().to_owned(), name))
+            .into_iter()
+            .collect(),
+        Some((prefix, suffix)) => instance_tables(config, slot)
+            .into_iter()
+            .filter_map(|(table, driver)| {
+                driver.map(|driver| (format!("{prefix}.{table}.{suffix}"), driver))
+            })
+            .collect(),
+    }
+}
+
+/// The keys of the sections that failed to read or validate.
+fn failing_sections(errors: &[ConfigError]) -> Vec<String> {
+    let mut keys = Vec::new();
+    for error in errors {
+        match error {
+            ConfigError::Invalid { problems } => keys.extend(failing_sections(problems)),
+            ConfigError::Section { key, .. }
+            | ConfigError::Validation { key, .. }
+            | ConfigError::MissingSection { key } => keys.push(key.clone()),
+            _ => {}
+        }
+    }
+    keys
+}
+
+/// What [`CheckReport::with_drivers`] adds: an error for each configured
+/// driver name of `slots` that is neither built in nor registered (not for
+/// a slot whose section already has an error), and no unknown key at or
+/// below a table a registered driver reads.
+pub(crate) fn check_names(
+    report: &mut CheckReport,
+    sources: &ConfigSources,
+    slots: &[DriverSlot],
+    drivers: &[RegisteredDriver],
+) {
+    if slots.is_empty() {
+        return;
+    }
+    let Ok(config) = Config::load(sources) else {
+        return;
+    };
+    let tables = registered_tables(&config, slots, drivers);
+    report
+        .unknown
+        .retain(|unknown| !tables.iter().any(|table| covers(table, &unknown.key)));
+    let failing = failing_sections(&report.errors);
+    for slot in slots {
+        if failing.iter().any(|section| covers(section, slot.key())) {
+            continue;
+        }
+        for (key, name) in configured(&config, slot) {
+            if DriverName::is_valid(&name)
+                && !slot.built_in().contains(&name.as_str())
+                && !is_registered(slot, &name, drivers)
+            {
+                let message = unregistered(slot, &key, &name, drivers);
+                report.errors.push(ConfigError::Driver { key, message });
+            }
+        }
+    }
+}
+
+/// The top-level keys of the section `slot` is in, as the registry
+/// describes it; none for a `*` slot.
+pub(crate) fn section_keys(registry: &ConfigRegistry, slot: &DriverSlot) -> Vec<String> {
+    if slot.key().contains('*') {
+        return Vec::new();
+    }
+    registry
+        .section(section_of(slot.key()))
+        .and_then(|section| section.schema.as_ref())
+        .map(|schema| schema.fields.iter().map(|field| field.name.clone()).collect())
+        .unwrap_or_default()
+}
+
+/// For each slot: its key, its built-in names then the names registered
+/// for it in name order, and its method.
+pub(crate) fn slot_names(
+    slots: &[DriverSlot],
+    drivers: &[RegisteredDriver],
+) -> Vec<(&'static str, Vec<String>, &'static str)> {
+    slots
+        .iter()
+        .map(|slot| {
+            let names = known_names(slot, drivers)
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
+            (slot.key(), names, slot.register())
+        })
+        .collect()
+}
+
+/// Closes, in the JSON Schema `root`, the open choice of each slot whose
+/// key has no `*` to the names that boot (see [`slot_names`]), keeping the
+/// field's description.
+pub(crate) fn close_choices(root: &mut Json, slots: &[(&'static str, Vec<String>, &'static str)]) {
+    for (key, names, register) in slots {
+        if key.contains('*') {
+            continue;
+        }
+        let pointer: String = key
+            .split('.')
+            .map(|segment| {
+                format!(
+                    "/properties/{}",
+                    segment.replace('~', "~0").replace('/', "~1")
+                )
+            })
+            .collect();
+        let Some(node) = root.pointer_mut(&pointer) else {
+            continue;
+        };
+        let description = node.get("description").cloned();
+        let mut closed = json!({
+            "type": "string",
+            "enum": names,
+            "x-navree-register": register,
+        });
+        if let Some(description) = description {
+            closed["description"] = description;
+        }
+        *node = closed;
+    }
 }
 
 #[cfg(test)]
