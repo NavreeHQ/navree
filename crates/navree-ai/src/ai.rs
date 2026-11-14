@@ -186,14 +186,33 @@ impl Finisher {
 
 impl Ai {
     /// An `Ai` with `options` and no app (no shared cache: budgets and the
-    /// embeddings cache live in this value's memory). Invalid options fail.
+    /// embeddings cache live in this value's memory). Invalid options fail,
+    /// and so does a provider whose driver is not built in: a driver a
+    /// module registers is built by `AiModule`.
     pub fn new(options: AiOptions) -> Result<Ai, AiError> {
         Self::build(options, None)
     }
 
-    /// The `Ai` of [`AiModule`](crate::AiModule).
+    /// An `Ai` of built-in drivers only, checked as [`AiOptions::check`]
+    /// checks.
     pub(crate) fn build(options: AiOptions, app: Option<WeakAppContext>) -> Result<Ai, AiError> {
         let errors = options.check();
+        if !errors.is_empty() {
+            return Err(AiError::config(errors.join("; ")));
+        }
+        Self::build_with(options, app, BTreeMap::new())
+    }
+
+    /// The `Ai` of [`AiModule`](crate::AiModule): `registered` holds the
+    /// driver of each provider table whose driver a module registers, by
+    /// the table's name, which the module built; every other provider gets
+    /// its built-in driver.
+    pub(crate) fn build_with(
+        options: AiOptions,
+        app: Option<WeakAppContext>,
+        registered: BTreeMap<String, Arc<dyn Driver>>,
+    ) -> Result<Ai, AiError> {
+        let errors = options.check_with(true);
         if !errors.is_empty() {
             return Err(AiError::config(errors.join("; ")));
         }
@@ -209,6 +228,10 @@ impl Ai {
             }
         }
         for name in names {
+            if let Some(driver) = registered.get(&name) {
+                drivers.insert(name, driver.clone());
+                continue;
+            }
             let config = options.providers.get(&name).cloned().unwrap_or_default();
             if provider::missing_key(&name, &config) {
                 tracing::warn!(
