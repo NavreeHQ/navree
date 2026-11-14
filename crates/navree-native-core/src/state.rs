@@ -1017,8 +1017,11 @@ pub(crate) struct Inner {
     pub routes: Vec<Route>,
     /// Who the shell is for now, and who was last signed in. When the person
     /// changes, nothing of the one before may show.
-    pub user: Option<(String, Option<String>)>,
-    pub person: Option<(String, Option<String>)>,
+    pub user: Option<crate::cache::Who>,
+    pub person: Option<crate::cache::Who>,
+    /// Who the shell about to be installed names, when its answer said it by
+    /// id: taken by the install.
+    pub naming: Option<crate::cache::Who>,
     pub has_shell: bool,
     /// An address the app was opened with before the shell had arrived.
     pub launch: Option<String>,

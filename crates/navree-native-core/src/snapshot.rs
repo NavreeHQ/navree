@@ -99,12 +99,15 @@ pub struct Snapshot {
 }
 
 /// A name for the person a shell is for, which says nothing of them.
-fn person_of(user: Option<&(String, Option<String>)>) -> Option<String> {
-    user.map(|(name, email)| {
-        crate::sign_in::fingerprint(&format!(
+fn person_of(user: Option<&crate::cache::Who>) -> Option<String> {
+    user.map(|who| match who {
+        crate::cache::Who::Named(name, email) => crate::sign_in::fingerprint(&format!(
             "navree-person\n{name}\n{}",
             email.as_deref().unwrap_or("")
-        ))
+        )),
+        crate::cache::Who::Id { id } => {
+            crate::sign_in::fingerprint(&format!("navree-person-id\n{id}"))
+        }
     })
 }
 

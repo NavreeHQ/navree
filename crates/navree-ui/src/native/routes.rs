@@ -119,6 +119,24 @@ async fn shell_of(ctx: &AppContext, parts: &Parts) -> Option<crate::shell::AppSh
     Some(shell.for_request("/", &parts.headers))
 }
 
+/// The value of [`navree_native::PERSON_HEADER`] for the person signed in,
+/// by the id the app's sign-in gives them, written header-safe: each byte of
+/// it outside `!` to `~`, and `%`, as `%` and two hex digits. `None` when
+/// nobody is signed in. It is the person's own id, in an answer only their
+/// own session gets, on their own device, so it is not hidden.
+fn person(user: Option<uuid::Uuid>) -> Option<HeaderValue> {
+    let id = user?.to_string();
+    let mut out = String::with_capacity(id.len());
+    for byte in id.bytes() {
+        if (0x21..=0x7e).contains(&byte) && byte != b'%' {
+            out.push(char::from(byte));
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    HeaderValue::from_str(&out).ok()
+}
+
 /// The app's shell as a native client draws it, for this request: the
 /// person signed in and their menu are theirs.
 async fn document(ctx: &AppContext, parts: &Parts) -> Response {
@@ -144,7 +162,10 @@ async fn document(ctx: &AppContext, parts: &Parts) -> Response {
         }
     };
     let body = serde_json::to_string(&document).unwrap_or_else(|_| String::from("{}"));
-    (
+    let signed_in = navree_http::CurrentPrincipal::from_parts(parts)
+        .ok()
+        .map(|principal| principal.0.user_id);
+    let mut response = (
         [
             (
                 CONTENT_TYPE,
@@ -156,7 +177,14 @@ async fn document(ctx: &AppContext, parts: &Parts) -> Response {
         ],
         body,
     )
-        .into_response()
+        .into_response();
+    // Who is signed in, so a client tells two people of one name apart.
+    if let Some(value) = person(signed_in) {
+        response
+            .headers_mut()
+            .insert(navree_native::PERSON_HEADER, value);
+    }
+    response
 }
 
 impl Controller for Routes {
@@ -199,6 +227,16 @@ impl Controller for Routes {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_shell_names_the_person_signed_in_by_their_id_and_nobody_by_nothing() {
+        let id = uuid::Uuid::parse_str("0193a4b2-7c1d-7e3f-9a2b-5c6d7e8f9a0b").unwrap();
+        assert_eq!(
+            person(Some(id)).unwrap(),
+            "0193a4b2-7c1d-7e3f-9a2b-5c6d7e8f9a0b"
+        );
+        assert_eq!(person(None), None);
+    }
 
     #[test]
     fn a_stamp_changes_with_the_app_and_nothing_else() {

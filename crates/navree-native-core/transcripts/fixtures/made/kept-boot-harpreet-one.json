@@ -1,0 +1,12 @@
+{
+ "shell": "{\n \"navree\": 1,\n \"build\": \"152bd84abf4d\",\n \"name\": \"Charkha Supply Co.\",\n \"context\": \"Store operations\",\n \"home\": \"/\",\n \"nav\": {\n  \"groups\": [\n   {\n    \"label\": \"Store\",\n    \"items\": [\n     {\n      \"label\": \"Overview\",\n      \"href\": \"/\"\n     },\n     {\n      \"label\": \"Orders\",\n      \"href\": \"/orders\",\n      \"badge\": \"12\"\n     },\n     {\n      \"label\": \"Inventory\",\n      \"href\": \"/inventory\"\n     }\n    ]\n   }\n  ]\n },\n \"user\": {\n  \"name\": \"Harpreet Singh\",\n  \"menu\": [\n   {\n    \"t\": \"link\",\n    \"label\": \"Profile\",\n    \"action\": {\n     \"t\": \"navigate\",\n     \"href\": \"/profile\"\n    }\n   },\n   {\n    \"t\": \"button\",\n    \"label\": \"Sign out\",\n    \"action\": {\n     \"t\": \"request\",\n     \"method\": \"post\",\n     \"href\": \"/sign-out\"\n    }\n   }\n  ]\n },\n \"routes\": [\n  {\n   \"match\": \"/orders/new\",\n   \"present\": \"sheet\"\n  },\n  {\n   \"match\": \"/sign-in\",\n   \"present\": \"full\",\n   \"chrome\": false\n  },\n  {\n   \"match\": \"/orders/*\"\n  },\n  {\n   \"match\": \"/help\",\n   \"present\": \"external\"\n  },\n  {\n   \"match\": \"/reports\",\n   \"present\": \"root\"\n  }\n ]\n}\n",
+ "pages": [
+  "https://shop.example/orders"
+ ],
+ "owner": {
+  "person": {
+   "id": "7f1c2a90-0001-4000-8000-00000000a001"
+  }
+ },
+ "build": "152bd84abf4d"
+}

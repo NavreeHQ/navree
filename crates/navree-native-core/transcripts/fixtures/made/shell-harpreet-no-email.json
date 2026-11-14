@@ -1,0 +1,73 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "name": "Charkha Supply Co.",
+ "context": "Store operations",
+ "home": "/",
+ "nav": {
+  "groups": [
+   {
+    "label": "Store",
+    "items": [
+     {
+      "label": "Overview",
+      "href": "/"
+     },
+     {
+      "label": "Orders",
+      "href": "/orders",
+      "badge": "12"
+     },
+     {
+      "label": "Inventory",
+      "href": "/inventory"
+     }
+    ]
+   }
+  ]
+ },
+ "user": {
+  "name": "Harpreet Singh",
+  "menu": [
+   {
+    "t": "link",
+    "label": "Profile",
+    "action": {
+     "t": "navigate",
+     "href": "/profile"
+    }
+   },
+   {
+    "t": "button",
+    "label": "Sign out",
+    "action": {
+     "t": "request",
+     "method": "post",
+     "href": "/sign-out"
+    }
+   }
+  ]
+ },
+ "routes": [
+  {
+   "match": "/orders/new",
+   "present": "sheet"
+  },
+  {
+   "match": "/sign-in",
+   "present": "full",
+   "chrome": false
+  },
+  {
+   "match": "/orders/*"
+  },
+  {
+   "match": "/help",
+   "present": "external"
+  },
+  {
+   "match": "/reports",
+   "present": "root"
+  }
+ ]
+}

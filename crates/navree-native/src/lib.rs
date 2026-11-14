@@ -139,6 +139,12 @@ pub const EMBED_HEADER: &str = "x-navree-embed";
 /// the shell never carry it.
 pub const KEEP_HEADER: &str = "x-navree-keep";
 
+/// The response header on the shell's answer that names the person signed
+/// in, by the id the app's sign-in gives them, percent-encoded where it is not
+/// visible ASCII. Absent when nobody is signed in. A client compares people by
+/// it, and by name and email when an older server does not send it.
+pub const PERSON_HEADER: &str = "x-navree-person";
+
 /// The product a native client's web view adds to its user agent:
 /// `NavreeNative/1 (platform=ios; lib=0.3.0)`. See [`WebViewToken`].
 pub const USER_AGENT_PRODUCT: &str = "NavreeNative";
