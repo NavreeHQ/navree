@@ -59,20 +59,20 @@ public final class HTTPTransport: Transport {
     }
 
     /// The request as it goes over the wire, or `nil` for an address that is
-    /// not the origin's own.
+    /// not the origin's own or a header that cannot be sent as it is.
     public func urlRequest(for request: FetchRequest) -> URLRequest? {
         guard let url = cookies.site?.inside(request.url) else { return nil }
+        let cookie = cookies.header(for: url)
+        let token = request.xsrf ? cookies.xsrfToken(for: url) : nil
+        var headers = request.headers
+        if let cookie { headers.append(("Cookie", cookie)) }
+        if let token { headers.append(("x-xsrf-token", token)) }
+        guard Self.areSendable(headers) else { return nil }
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = request.method.uppercased()
         urlRequest.timeoutInterval = TimeInterval(max(request.timeoutMs, 1)) / 1000
-        for (name, value) in request.headers {
+        for (name, value) in headers {
             urlRequest.setValue(value, forHTTPHeaderField: name)
-        }
-        if let cookie = cookies.header(for: url) {
-            urlRequest.setValue(cookie, forHTTPHeaderField: "Cookie")
-        }
-        if request.xsrf, let token = cookies.xsrfToken(for: url) {
-            urlRequest.setValue(token, forHTTPHeaderField: "x-xsrf-token")
         }
         switch request.body {
         case .form(let text)?, .json(let text)?:
@@ -86,6 +86,17 @@ public final class HTTPTransport: Transport {
             if request.method.lowercased() != "get" { urlRequest.httpBody = Data() }
         }
         return urlRequest
+    }
+
+    /// Whether every header can go on the wire as it is: a name of visible
+    /// ASCII with no colon, and a value of printable ASCII, spaces and tabs.
+    /// Anything else (a letter of another script, a line break) is never
+    /// sent, and the request is answered as one that failed.
+    nonisolated static func areSendable(_ headers: [(String, String)]) -> Bool {
+        headers.allSatisfy { name, value in
+            !name.isEmpty && name.utf8.allSatisfy { (0x21...0x7E).contains($0) && $0 != 0x3A }
+                && value.utf8.allSatisfy { (0x20...0x7E).contains($0) || $0 == 0x09 }
+        }
     }
 
     public func fetch(_ request: FetchRequest, answer: @escaping @MainActor (Response) -> Void) {
@@ -152,10 +163,11 @@ public final class HTTPTransport: Transport {
         stream: Int, url: String, headers: [(String, String)], report: @escaping @MainActor (CoreEvent.StreamState) -> Void
     ) {
         guard let address = cookies.site?.inside(url) else { return report(.closed(status: nil)) }
+        var sent = [("Accept", "text/event-stream")] + headers
+        if let cookie = cookies.header(for: address) { sent.append(("Cookie", cookie)) }
+        guard Self.areSendable(sent) else { return report(.closed(status: nil)) }
         var request = URLRequest(url: address)
-        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
-        if let cookie = cookies.header(for: address) { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
+        for (name, value) in sent { request.setValue(value, forHTTPHeaderField: name) }
         let streams = streams
         open[stream] = Task { [weak self] in
             var status: Int?
