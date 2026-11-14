@@ -29,7 +29,8 @@ impl GraphReport {
     /// ([`ModuleId::type_name`](crate::ModuleId::type_name)): for reading, not
     /// for matching. `commands` lists the built-ins (`module: null`), then
     /// every module's commands; a built-in that yields to a module command of
-    /// its name (`plugins`) is left out. Nothing is constructed to produce it.
+    /// its name (`plugins`, `plugin:publish`) is left out. Nothing is
+    /// constructed to produce it.
     /// The `introspect` command adds a `"plugins"` array, as
     /// [`PluginsReport::to_json`] writes it.
     pub fn to_json(&self) -> String {

@@ -1,12 +1,17 @@
 //! Publishing the files a plugin ships into the app: the rule every published
-//! path follows, and the checked writer every publishing command writes
-//! through.
+//! path follows, the checked writer every publishing command writes through,
+//! and the work of the `plugin:publish` built-in.
 
 use std::collections::HashSet;
 use std::fmt;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
+
+use crate::BoxError;
+use crate::graph::Graph;
+use crate::plugin::{PublishTag, destination};
+use crate::plugin_graph::shipped;
 
 /// Whether `path` is a safe relative path inside a publish folder: non-empty,
 /// at most 255 bytes, with `/` as the only separator; every segment non-empty,
@@ -292,11 +297,173 @@ fn cannot_write(path: &str, error: &io::Error) -> PublishRefused {
     PublishRefused(format!("cannot write {path}: {error}"))
 }
 
+/// The usage line `plugin:publish` repeats in its refusals.
+const USAGE: &str =
+    "usage: plugin:publish <plugin> [--tag views|locales|config|files] [--force] [--dry-run]";
+
+/// The tags `plugin:publish` takes, as its refusals list them.
+const TAGS: &str = "tags: views, locales, config, files";
+
+/// What `plugin:publish` did, for `run_with_args` to print and finish.
+pub(crate) struct PublishRun {
+    /// The lines to print, in order: one per file in path order, then what
+    /// was left out.
+    pub(crate) lines: Vec<String>,
+    /// The arguments of the app's `config:publish` to run next
+    /// (`--plugin <namespace>`, and `--force` when given): set when the
+    /// config tag is asked for, the app has that command and this is no dry
+    /// run.
+    pub(crate) config_args: Option<Vec<String>>,
+    /// Whether `--dry-run` was given.
+    pub(crate) dry_run: bool,
+}
+
+/// `plugin:publish <plugin> [--tag views|locales|config|files] [--force]
+/// [--dry-run]` with `args` (the words after the command), against `graph`,
+/// writing below `root` (the app's folder). `<plugin>` is a namespace or a
+/// plugin's name; without `--tag`, every tag. The files go through
+/// [`publish_files`]; the config tag is the app's `config:publish --plugin
+/// <namespace>`, which the caller runs from `config_args`. Prints nothing.
+pub(crate) fn run(graph: &Graph, args: &[String], root: &Path) -> Result<PublishRun, BoxError> {
+    let mut plugin: Option<&str> = None;
+    let mut tag: Option<&str> = None;
+    let (mut force, mut dry_run) = (false, false);
+    let mut words = args.iter();
+    while let Some(arg) = words.next() {
+        match arg.as_str() {
+            "--tag" if tag.is_none() => match words.next() {
+                Some(word) => tag = Some(word.as_str()),
+                None => return Err(format!("plugin:publish: --tag needs a tag ({TAGS})").into()),
+            },
+            "--force" => force = true,
+            "--dry-run" => dry_run = true,
+            word if plugin.is_none() && !word.starts_with('-') => plugin = Some(word),
+            other => {
+                return Err(
+                    format!("plugin:publish: unexpected argument `{other}`; {USAGE}").into(),
+                );
+            }
+        }
+    }
+    let Some(word) = plugin else {
+        return Err(format!("plugin:publish: name the plugin to publish; {USAGE}").into());
+    };
+    // The file tags asked for, and whether the config tag is.
+    let (tags, config): (Vec<PublishTag>, bool) = match tag {
+        None => (PublishTag::ALL.to_vec(), true),
+        Some("config") => (Vec::new(), true),
+        Some(name) => match PublishTag::from_name(name) {
+            Some(tag) => (vec![tag], false),
+            None => {
+                return Err(format!("plugin:publish: unknown tag `{name}` ({TAGS})").into());
+            }
+        },
+    };
+
+    let report = graph.plugins_report();
+    let found = report
+        .plugins
+        .iter()
+        .find(|plugin| plugin.info.namespace == word)
+        .or_else(|| report.plugins.iter().find(|plugin| plugin.info.name == word));
+    let Some(found) = found else {
+        let namespaces: Vec<&str> = report
+            .plugins
+            .iter()
+            .map(|plugin| plugin.info.namespace)
+            .collect();
+        let known = if namespaces.is_empty() {
+            "none".to_owned()
+        } else {
+            namespaces.join(", ")
+        };
+        return Err(
+            format!("plugin:publish: no plugin is named `{word}` (plugins: {known})").into(),
+        );
+    };
+    let (name, namespace) = (found.info.name, found.info.namespace);
+
+    // Every file of the plugin under the tags asked for: its modules in
+    // dependency order, then their files in registration order.
+    let mut files: Vec<(String, &'static [u8])> = Vec::new();
+    for &m in &graph.order {
+        let module = &graph.modules[m];
+        if module.plugin.as_ref().map(|info| info.name) != Some(name) {
+            continue;
+        }
+        for publishable in shipped(module) {
+            let tag = publishable.tag();
+            if tags.contains(&tag) {
+                files.extend(
+                    publishable
+                        .files()
+                        .map(|(path, bytes)| (destination(tag, namespace, path), bytes)),
+                );
+            }
+        }
+    }
+
+    let has_config = graph.has_command("config:publish");
+    let mut lines = Vec::new();
+    if files.is_empty() {
+        match tag {
+            Some(asked) if asked != "config" => {
+                lines.push(format!("{asked}: plugin `{namespace}` has nothing to publish"));
+            }
+            // Nothing at all will be published; with a `config:publish`
+            // command, its own lines say whether a section was written.
+            None if !has_config => {
+                lines.push(format!(
+                    "{namespace}: plugin `{namespace}` has nothing to publish"
+                ));
+            }
+            _ => {}
+        }
+    } else {
+        let listed: Vec<(&str, &[u8])> = files
+            .iter()
+            .map(|(path, bytes)| (path.as_str(), *bytes))
+            .collect();
+        let published = publish_files(root, &listed, force, dry_run)
+            .map_err(|refused| format!("plugin:publish: {refused}"))?;
+        lines.extend(
+            published
+                .iter()
+                .map(|(path, outcome)| outcome.line(path)),
+        );
+    }
+
+    let mut config_args = None;
+    if config {
+        if !has_config {
+            lines.push(
+                "config: the app has no ConfigModule, so no section is published".to_owned(),
+            );
+        } else if dry_run {
+            lines.push(format!(
+                "config: would run config:publish --plugin {namespace}"
+            ));
+        } else {
+            let mut forwarded = vec!["--plugin".to_owned(), namespace.to_owned()];
+            if force {
+                forwarded.push("--force".to_owned());
+            }
+            config_args = Some(forwarded);
+        }
+    }
+    Ok(PublishRun {
+        lines,
+        config_args,
+        dry_run,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
     use super::*;
+    use crate::Publishable;
 
     /// A new, empty folder `navree-kernel-<name>-<process id>` in the
     /// system's temporary folder, removed on drop.
@@ -576,5 +743,109 @@ mod tests {
         )
         .expect("an app inside a linked folder publishes");
         assert!(root.0.join("real/resources/announcements/banner.css").is_file());
+    }
+
+    /// A plugin with the namespace `announcements` and one views file,
+    /// `list.html`.
+    struct Notices;
+
+    impl crate::Module for Notices {
+        fn register(&self, m: &mut crate::ModuleBuilder) {
+            m.plugin(crate::plugin_info!(namespace = "announcements"))
+                .contribute(Publishable::new(PublishTag::Views).file("list.html", b"<ul></ul>"));
+        }
+    }
+
+    /// A plugin with the namespace `announcements` and no file.
+    struct Empty;
+
+    impl crate::Module for Empty {
+        fn register(&self, m: &mut crate::ModuleBuilder) {
+            m.plugin(crate::plugin_info!(namespace = "announcements"));
+        }
+    }
+
+    /// A module with an offline `config:publish` command, as `ConfigModule`
+    /// has.
+    struct ConfigCommand;
+
+    impl crate::Module for ConfigCommand {
+        fn register(&self, m: &mut crate::ModuleBuilder) {
+            m.command(
+                crate::CommandSpec::new(
+                    "config:publish",
+                    "Write a section's file",
+                    |_, _| async { Ok(()) },
+                )
+                .offline(),
+            );
+        }
+    }
+
+    /// The validated graph of an app of `roots`.
+    fn graph(roots: Vec<Box<dyn crate::Module>>) -> Graph {
+        Graph::build(&roots, &[]).expect("a valid graph")
+    }
+
+    #[test]
+    fn the_publish_lines_say_what_was_done_and_what_was_left() {
+        let root = TempFolder::new("publish-lines");
+        let args = |list: &[&str]| list.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>();
+        let no_config = "config: the app has no ConfigModule, so no section is published";
+        let notices = graph(vec![Box::new(Notices)]);
+        let done = run(&notices, &args(&["announcements"]), &root.0).expect("published");
+        assert_eq!(
+            done.lines,
+            ["resources/views/announcements/list.html: written", no_config]
+        );
+        assert_eq!((done.config_args, done.dry_run), (None, false));
+        let done = run(&notices, &args(&["announcements", "--tag", "files"]), &root.0)
+            .expect("nothing");
+        assert_eq!(
+            done.lines,
+            ["files: plugin `announcements` has nothing to publish"]
+        );
+        let done = run(
+            &notices,
+            &args(&["announcements", "--dry-run", "--force"]),
+            &root.0,
+        )
+        .expect("dry run");
+        assert_eq!(
+            done.lines,
+            [
+                "resources/views/announcements/list.html: exists, would be replaced",
+                no_config,
+            ]
+        );
+        assert!(done.dry_run);
+
+        let empty = graph(vec![Box::new(Empty)]);
+        let done = run(&empty, &args(&["announcements"]), &root.0).expect("nothing at all");
+        assert_eq!(
+            done.lines,
+            [
+                "announcements: plugin `announcements` has nothing to publish",
+                no_config,
+            ]
+        );
+
+        let configured = graph(vec![Box::new(Empty), Box::new(ConfigCommand)]);
+        let done = run(&configured, &args(&["announcements", "--force"]), &root.0).expect("config");
+        assert!(
+            done.lines.is_empty(),
+            "config:publish says itself whether a section was written"
+        );
+        assert_eq!(
+            done.config_args,
+            Some(args(&["--plugin", "announcements", "--force"]))
+        );
+        let done = run(&configured, &args(&["announcements", "--dry-run"]), &root.0)
+            .expect("dry run");
+        assert_eq!(
+            done.lines,
+            ["config: would run config:publish --plugin announcements"]
+        );
+        assert_eq!(done.config_args, None);
     }
 }

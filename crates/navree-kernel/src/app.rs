@@ -13,6 +13,7 @@ use crate::command::help_text;
 use crate::container::{AppInner, RequestScope};
 use crate::graph::{Graph, GraphReport, ROOT};
 use crate::introspect::introspect_json;
+use crate::publish;
 use crate::{
     BootErrors, BoxError, CommandSpec, KernelError, Lifecycle, Module, ModuleId, PluginInfo,
     PluginsReport, ProviderKey, Resolver, Scope,
@@ -157,14 +158,23 @@ impl AppBuilder {
     /// - `plugins [--json]` validates the graph without constructing anything
     ///   and prints its plugins and what each adds ([`PluginsReport`], or its
     ///   JSON with `--json`);
+    /// - `plugin:publish <plugin> [--tag views|locales|config|files] [--force]
+    ///   [--dry-run]` validates the graph without constructing anything and
+    ///   copies the files the plugin (a namespace or a plugin's name) ships
+    ///   into the app's folders below the current directory, one line per
+    ///   file; an existing file is kept without `--force`, every path is
+    ///   checked before the first write, and `--dry-run` writes nothing. The
+    ///   `config` tag (and no `--tag`) runs the app's
+    ///   `config:publish --plugin <namespace>`, when the app has that command;
     /// - `<name> [args...]` boots the app, runs the registered command, then
     ///   shuts the app down gracefully; a command marked
     ///   [offline](CommandSpec::offline) skips the boot and the shutdown hooks;
     /// - no command runs `serve` if a module registers it, else `help`.
     ///
-    /// The built-in `plugins` yields: when a module registers a command of
-    /// that name, that command runs instead, with its arguments, and `help`
-    /// and `introspect` no longer list the built-in.
+    /// The built-ins `plugins` and `plugin:publish` yield: when a module
+    /// registers a command of one of these names, that command runs instead,
+    /// with its arguments, and `help` and `introspect` no longer list the
+    /// built-in.
     pub async fn run_with_args(self, args: Vec<String>) -> Result<(), BoxError> {
         let mut args = args.into_iter();
         let command = args.next();
@@ -212,6 +222,26 @@ impl AppBuilder {
                     println!("{}", report.to_json());
                 } else {
                     println!("{report}");
+                }
+                Ok(())
+            }
+            Some("plugin:publish") => {
+                let graph = self.graph()?;
+                if graph.has_command("plugin:publish") {
+                    return self
+                        .boot_and_run(graph, "plugin:publish".to_owned(), rest)
+                        .await;
+                }
+                let done = publish::run(&graph, &rest, &std::env::current_dir()?)?;
+                for line in &done.lines {
+                    println!("{line}");
+                }
+                if let Some(args) = done.config_args {
+                    self.boot_and_run(graph, "config:publish".to_owned(), args)
+                        .await?;
+                }
+                if done.dry_run {
+                    println!("Nothing was written (--dry-run).");
                 }
                 Ok(())
             }

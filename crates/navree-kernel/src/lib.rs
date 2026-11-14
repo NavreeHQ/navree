@@ -26,6 +26,11 @@
 //! Wiring errors (missing or private providers, cycles, scope inversions,
 //! modules configured twice) fail the boot and name the module and the type.
 //! The kernel has no global statics.
+//!
+//! A module names itself a plugin with [`ModuleBuilder::plugin`] and
+//! [`plugin_info!`]; [`AppContext::plugins`] reports the plugins, and the
+//! built-in commands `plugins` and `plugin:publish` list them and copy the
+//! files they ship into the app.
 #![forbid(unsafe_code)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
