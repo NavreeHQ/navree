@@ -36,7 +36,10 @@
  * Errors: a call never crashes on bad input. navree_core_new answers NULL for
  * a configuration it can't read. navree_core_send and navree_core_view answer
  * {"error":"..."} for an event or a query they can't read, for a NULL core,
- * and for a failure inside the core, after which the core answers only errors.
+ * and for a failure inside the core. After such a failure the core has
+ * stopped for good: what it held is dropped, nothing it had queued is sent,
+ * and every later navree_core_send and navree_core_view answers an error. A
+ * client says the app must be started again; it still frees the handle.
  */
 
 #ifndef NAVREE_CORE_H

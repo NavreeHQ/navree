@@ -15,8 +15,11 @@
 //! - Every [`NavreeBytes`] that comes back is given to [`navree_bytes_free`]
 //!   exactly once, and a handle is not used after [`navree_core_free`].
 //!
-//! No call panics across the boundary: a panic inside the core is caught and
-//! the call answers `{"error":"..."}`.
+//! No call panics across the boundary. A panic inside the core is caught, the
+//! call answers `{"error":"..."}`, and the core stops for good: what it held
+//! is dropped, nothing it had queued is sent, and every later call on the
+//! handle answers the same error. A client shows that the app must be started
+//! again.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Mutex;
@@ -25,8 +28,20 @@ use crate::{Config, Core, Event, Query};
 
 /// A core behind the C interface.
 pub struct NavreeCore {
-    core: Mutex<Core>,
+    core: Mutex<Slot>,
 }
+
+/// What a handle holds.
+enum Slot {
+    /// A core in use.
+    Live(Box<Core>),
+    /// A core that failed inside a call. Its state, and every effect it had
+    /// queued, were thrown away; every later call answers [`STOPPED`].
+    Stopped,
+}
+
+/// What every call answers once the core has stopped.
+const STOPPED: &str = "the core stopped after a failure inside it and can't be used again";
 
 /// Bytes the core owns: UTF-8 JSON, `len` bytes at `ptr`, not ended by a
 /// zero. An empty answer has a null `ptr` and a `len` of zero.
@@ -74,10 +89,38 @@ unsafe fn taken<'a>(ptr: *const u8, len: usize) -> &'a [u8] {
 
 fn new(config: &[u8]) -> Option<Box<NavreeCore>> {
     let config: Config = serde_json::from_slice(config).ok()?;
-    let core = catch_unwind(|| Core::new(config)).ok()?;
+    let core = catch_unwind(|| Box::new(Core::new(config))).ok()?;
     Some(Box::new(NavreeCore {
-        core: Mutex::new(core),
+        core: Mutex::new(Slot::Live(core)),
     }))
+}
+
+/// Runs `call` on the handle's core, one call at a time. A failure inside
+/// it, or an answer that does not write, stops the core for good: what it
+/// held is dropped, so nothing it had queued is sent with a later answer,
+/// and this call and every later one answer an error.
+fn using(
+    handle: &NavreeCore,
+    call: impl FnOnce(&mut Core) -> serde_json::Result<Vec<u8>>,
+) -> Vec<u8> {
+    // A lock poisoned by a failure that escaped is a stopped core too.
+    let mut slot = handle
+        .core
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Slot::Live(core) = &mut *slot else {
+        return error(STOPPED);
+    };
+    match catch_unwind(AssertUnwindSafe(|| call(core))) {
+        Ok(Ok(bytes)) => bytes,
+        Ok(Err(_)) | Err(_) => {
+            let failed = std::mem::replace(&mut *slot, Slot::Stopped);
+            // Dropping plain data does not fail; if it ever did, the failure
+            // still stays on this side, and the slot already says stopped.
+            let _ = catch_unwind(AssertUnwindSafe(|| drop(failed)));
+            error(STOPPED)
+        }
+    }
 }
 
 fn send(handle: &NavreeCore, event: &[u8]) -> Vec<u8> {
@@ -85,15 +128,11 @@ fn send(handle: &NavreeCore, event: &[u8]) -> Vec<u8> {
         Ok(event) => event,
         Err(problem) => return error(&format!("the event does not read: {problem}")),
     };
-    let Ok(mut core) = handle.core.lock() else {
-        return error("the core stopped after an earlier failure");
-    };
-    match catch_unwind(AssertUnwindSafe(|| core.send(event))) {
-        Ok(update) => {
-            serde_json::to_vec(&update).unwrap_or_else(|_| error("the update does not write"))
-        }
-        Err(_) => error("the core failed on this event"),
-    }
+    using(handle, |core| {
+        #[cfg(test)]
+        tests::before_send(core);
+        serde_json::to_vec(&core.send(event))
+    })
 }
 
 fn view(handle: &NavreeCore, query: &[u8]) -> Vec<u8> {
@@ -105,13 +144,7 @@ fn view(handle: &NavreeCore, query: &[u8]) -> Vec<u8> {
             Err(problem) => return error(&format!("the query does not read: {problem}")),
         }
     };
-    let Ok(core) = handle.core.lock() else {
-        return error("the core stopped after an earlier failure");
-    };
-    match catch_unwind(AssertUnwindSafe(|| core.part(&query))) {
-        Ok(part) => serde_json::to_vec(&part).unwrap_or_else(|_| error("the view does not write")),
-        Err(_) => error("the core failed on this query"),
-    }
+    using(handle, |core| serde_json::to_vec(&core.part(&query)))
 }
 
 /// Makes a core from a configuration, as JSON. Null when the configuration
@@ -325,6 +358,25 @@ pub mod jni {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
+
+    type Hook = Box<dyn FnOnce(&mut Core)>;
+
+    thread_local! {
+        /// What the next `send` on this thread does to the core before the
+        /// event, so a test can make the core fail halfway through a call.
+        static BEFORE_SEND: RefCell<Option<Hook>> = RefCell::new(None);
+    }
+
+    pub(super) fn before_send(core: &mut Core) {
+        if let Some(hook) = BEFORE_SEND.with(|hook| hook.borrow_mut().take()) {
+            hook(core);
+        }
+    }
+
+    fn on_next_send(hook: impl FnOnce(&mut Core) + 'static) {
+        BEFORE_SEND.with(|slot| *slot.borrow_mut() = Some(Box::new(hook)));
+    }
 
     fn text(bytes: NavreeBytes) -> String {
         // SAFETY: `bytes` came from this interface just now and is freed once, here.
@@ -359,6 +411,39 @@ mod tests {
             let query = br#"{"part":"nav"}"#;
             let nav = text(navree_core_view(core, query.as_ptr(), query.len()));
             assert!(nav.contains(r#""stage":"starting""#), "{nav}");
+            navree_core_free(core);
+        }
+    }
+
+    #[test]
+    fn a_core_that_failed_inside_stays_stopped_and_sends_nothing_it_had_queued() {
+        // SAFETY: as above; the handle is used until it is freed and not after.
+        unsafe {
+            let core = navree_core_new(CONFIG.as_ptr(), CONFIG.len());
+            let start = br#"{"t":"start"}"#;
+            assert!(text(navree_core_send(core, start.as_ptr(), start.len())).contains("fetch"));
+
+            // The core queues something to send and then fails before the
+            // call ends.
+            on_next_send(|core| {
+                core.effects.push(crate::Effect::CacheClear);
+                panic!("a failure inside the core");
+            });
+            let back = br#"{"t":"back"}"#;
+            let failed = text(navree_core_send(core, back.as_ptr(), back.len()));
+            assert!(failed.contains(r#""error""#), "{failed}");
+
+            // Every later call answers that the core is stopped, and what it
+            // had queued is never sent.
+            for _ in 0..2 {
+                let later = text(navree_core_send(core, back.as_ptr(), back.len()));
+                assert!(later.contains("stopped"), "{later}");
+                assert!(!later.contains("cache_clear"), "{later}");
+            }
+            let all = text(navree_core_view(core, std::ptr::null(), 0));
+            assert!(all.contains("stopped"), "{all}");
+            let nav = br#"{"part":"nav"}"#;
+            assert!(text(navree_core_view(core, nav.as_ptr(), nav.len())).contains("stopped"));
             navree_core_free(core);
         }
     }
