@@ -18,7 +18,7 @@ use navree_access::READ;
 use navree_db::{Backend, Executor};
 use navree_http::response::{Html, IntoResponse, Response};
 use navree_http::{AppError, Json};
-use navree_ui::pages::{FROM_HEADER, REGION_HEADER};
+use navree_ui::pages::{FROM_HEADER, region_asked};
 use serde_json::{Map, json};
 
 use crate::cx::Cx;
@@ -89,10 +89,8 @@ async fn count_of(cx: &Cx, resource: &dyn ErasedResource) -> Option<u64> {
 pub(crate) async fn counts(Panel { cx, session, .. }: Panel, headers: HeaderMap) -> Response {
     let result = async {
         refuse_other_sites(&headers)?;
-        if let Some(region) = headers
-            .get(REGION_HEADER)
-            .and_then(|value| value.to_str().ok())
-        {
+        if let Some(region) = region_asked(&headers) {
+            let region = region.as_str();
             let base = cx.core.options.base();
             // The page the group stands on, for the link it marks: one of the panel's.
             let at = headers
