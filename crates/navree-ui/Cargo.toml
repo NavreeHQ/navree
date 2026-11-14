@@ -85,6 +85,7 @@ futures-util = { workspace = true }
 http = { workspace = true }
 http-body = { workspace = true }
 navree-config = { workspace = true }
+navree-contracts = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 # `Markdown`: CommonMark read into safe events by navree-markdown (the reader the API reference

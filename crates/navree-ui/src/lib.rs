@@ -167,8 +167,8 @@ pub use select::{
     Select, SelectLabels,
 };
 pub use shell::{
-    AppPage, AppShell, Collapse, NativeClient, NativeFamily, NativeShellPart, NativeShellParts,
-    NativeSignIn, NavGroup, NavItem, Shell, ShellLayout, UserMenu,
+    AppPage, AppShell, Collapse, ModuleBuilderShellExt, NativeClient, NativeFamily, NativeShellPart,
+    NativeShellParts, NativeSignIn, NavGroup, NavItem, Shell, ShellLayout, ShellNavItem, UserMenu,
 };
 pub use sortable::{
     Arranged, GridColumns, GridFit, GridOrder, GridTile, Landing, ListState, Move, MoveError,
