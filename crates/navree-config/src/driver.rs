@@ -1133,7 +1133,9 @@ pub(crate) fn slot_names(
 
 /// Closes, in the JSON Schema `root`, the open choice of each slot whose
 /// key has no `*` to the names that boot (see [`slot_names`]), keeping the
-/// field's description.
+/// field's description. Only a field that describes itself as driver names
+/// is closed: a setting that also takes a URL or a table, such as
+/// `mail.transport`, keeps the schema it has.
 pub(crate) fn close_choices(root: &mut Json, slots: &[(&'static str, Vec<String>, &'static str)]) {
     for (key, names, register) in slots {
         if key.contains('*') {
@@ -1151,6 +1153,9 @@ pub(crate) fn close_choices(root: &mut Json, slots: &[(&'static str, Vec<String>
         let Some(node) = root.pointer_mut(&pointer) else {
             continue;
         };
+        if node.get("x-navree-register").is_none() {
+            continue;
+        }
         let description = node.get("description").cloned();
         let mut closed = json!({
             "type": "string",
@@ -1344,6 +1349,44 @@ mod tests {
             selector_error("store", &cache),
             "the store must be `memory`, `redis` or the name of a cache store registered with m.cache_store (a lower-case letter, then lower-case letters, digits or _)"
         );
+    }
+
+    #[test]
+    fn only_a_selector_that_describes_itself_as_driver_names_is_closed() {
+        let transport = serde_json::json!({ "description": "a name, a URL or a table" });
+        let mut document = serde_json::json!({
+            "properties": {
+                "vault": {
+                    "properties": {
+                        "kind": {
+                            "type": "string",
+                            "anyOf": [{ "enum": ["memory"] }],
+                            "x-navree-register": "m.vault_kind",
+                        },
+                        "transport": transport.clone(),
+                    },
+                },
+            },
+        });
+        close_choices(
+            &mut document,
+            &[
+                (
+                    "vault.kind",
+                    vec!["memory".to_owned(), "chest".to_owned()],
+                    "m.vault_kind",
+                ),
+                (
+                    "vault.transport",
+                    vec!["memory".to_owned()],
+                    "m.vault_transport",
+                ),
+            ],
+        );
+        let vault = &document["properties"]["vault"]["properties"];
+        assert_eq!(vault["kind"]["enum"], serde_json::json!(["memory", "chest"]));
+        assert_eq!(vault["kind"].get("anyOf"), None, "the choice is closed");
+        assert_eq!(vault["transport"], transport, "a free setting stays free");
     }
 
     /// A format that is not human-readable (as bincode or postcard are),
