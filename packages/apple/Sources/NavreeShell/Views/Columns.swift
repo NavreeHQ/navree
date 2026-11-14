@@ -58,6 +58,7 @@ struct ColumnsStack<Sidebar: View>: View {
                     detail: {
                         if let first = detail.first {
                             PageView(id: first, depth: 1, modal: nil, client: client, configuration: configuration)
+                                .environment(\.navreeBesideList, true)
                         } else {
                             // The window keeps the list's name while nothing is open beside it.
                             NothingChosen()
@@ -79,6 +80,7 @@ struct ColumnsStack<Sidebar: View>: View {
             PageView(
                 id: id, depth: stack.firstIndex(of: id) ?? 1, modal: nil, client: client, configuration: configuration
             )
+            .environment(\.navreeBesideList, true)
         }
     }
 
@@ -213,7 +215,7 @@ struct ColumnPage: View {
                 #if !os(macOS)
                 if part == .list, state.chrome, let user = client.app?.user {
                     ToolbarItem(placement: .primaryAction) {
-                        AccountMenu(user: user, client: client)
+                        AccountMenu(user: user, client: client).modifier(BarItemLook(.bar))
                     }
                 }
                 #endif

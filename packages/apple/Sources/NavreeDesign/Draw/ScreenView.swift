@@ -36,9 +36,10 @@ public struct ScreenView: View {
 
     @Environment(\.navree) private var context
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.navreeBesideList) private var besideList
 
     public init(screen: Navree.Screen, depth: ScreenDepth, appName: String = "", notice: Notice? = nil, failure: Notice? = nil) {
-        self.screen = PagerRules.lifted(screen)
+        self.screen = ActionRules.lifted(PagerRules.lifted(screen), depth: depth)
         self.depth = depth
         self.appName = appName
         self.notice = notice
@@ -71,6 +72,13 @@ public struct ScreenView: View {
             .modifier(TitleDisplay(mode: PagerRules.titleMode(depth, pager: screen.pager)))
             .modifier(PagerInBar(pager: screen.pager))
             .toolbar {
+                // The list's sort and filters, then what it makes new at the
+                // trailing end, as Mail's filter and compose stand.
+                if let query, query.hasFilters || !query.sorts.isEmpty {
+                    ToolbarItem(placement: .primaryAction) {
+                        QueryButtons(query: query).modifier(BarItemLook(.bar))
+                    }
+                }
                 // A screen with no list of its own (a designed one) has no
                 // section at its end: its destructive actions end its menu.
                 let listed = !CompositionRules.isComposed(screen.body) && PaneRules.panes(in: screen.body).isEmpty
@@ -86,11 +94,6 @@ public struct ScreenView: View {
                 }
                 let foot = ActionRules.footToolbars(screen.body)
                 if !foot.isEmpty { FootToolbar(toolbars: foot) }
-                if let query, query.hasFilters || !query.sorts.isEmpty {
-                    ToolbarItem(placement: .primaryAction) {
-                        QueryButtons(query: query)
-                    }
-                }
             }
             .modifier(SearchModifier(query: query, placement: PresentationRules.search(width: width)))
             .modifier(Refresh(enabled: screen.refresh))
@@ -120,8 +123,10 @@ public struct ScreenView: View {
         } else {
             SectionsList(
                 tree: body, sections: sections, notice: notice, table: table,
+                heading: NavigationRules.titleInContent(bar: .current, besideList: besideList) ? screen.title : nil,
                 key: table.flatMap { $0.id } ?? sections.first { $0.table != nil }?.region ?? "",
-                destructive: actions.filter(Self.isDestructive).compactMap { node -> Navree.Button? in
+                // On a Mac, what destroys is a command of the menu bar only.
+                destructive: ActionBar.current == .window ? [] : actions.filter(Self.isDestructive).compactMap { node -> Navree.Button? in
                     if case .button(let button) = node { return button }
                     return nil
                 }
@@ -149,6 +154,12 @@ public struct ScreenView: View {
     }
 }
 
+extension EnvironmentValues {
+    /// Set on a screen open beside its list (and on what is pushed over it)
+    /// in a window of columns: where a Mac window's one title is the list's.
+    @Entry public var navreeBesideList: Bool = false
+}
+
 extension OverlayPresenter {
     static func isOverlay(_ node: Navree.Node) -> Bool {
         switch node {
@@ -167,6 +178,8 @@ struct SectionsList: View {
     let sections: [ListSection]
     let notice: Notice?
     let table: Navree.Table?
+    /// The screen's title, where its content says it at its head.
+    let heading: String?
     let key: String
     let destructive: [Navree.Button]
     @Environment(\.navree) private var context
@@ -178,6 +191,12 @@ struct SectionsList: View {
 
     var body: some View {
         List(selection: selection) {
+            if let heading {
+                Text(heading)
+                    .font(.title2.weight(.bold))
+                    .accessibilityAddTraits(.isHeader)
+                    .listRowSeparator(.hidden)
+            }
             if let notice {
                 Section { NoticeRow(notice: notice) }
             }
@@ -531,10 +550,10 @@ struct ListLook: ViewModifier {
         case .insetGrouped: content.listStyle(.insetGrouped)
         }
         #else
-        switch layout {
-        case .plain: content.listStyle(.plain)
-        case .insetGrouped: content.listStyle(.inset)
-        }
+        // A Mac's lists are inset, as Mail's messages and the sidebar are:
+        // one leading edge for the list and its title, and the chosen row a
+        // rounded shape inset from the column's edges.
+        content.listStyle(.inset)
         #endif
     }
 }

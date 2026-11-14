@@ -45,7 +45,7 @@ private struct EditingBars<Wrapped: View>: View {
                 .environment(\.editMode, $mode)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        EditButton().environment(\.editMode, $mode)
+                        EditButton().environment(\.editMode, $mode).modifier(BarItemLook(.bar))
                     }
                     if mode.isEditing, let table {
                         ToolbarItemGroup(placement: .bottomBar) { chosenBar(table) }

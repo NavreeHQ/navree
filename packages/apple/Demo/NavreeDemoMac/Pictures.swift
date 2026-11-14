@@ -12,6 +12,8 @@ import SwiftUI
 /// `key:<cmd|opt|shift>-...-<key>` (presses that shortcut on the menu bar,
 /// as the keyboard would); `picture:<name>` (each window as `<name>-<n>.png`);
 /// `views:<name>` (the window's views, their appearance and materials);
+/// `toolbar:<name>` (the toolbar's items, their words and the column each
+/// stands over);
 /// `appearance:<dark|light|system>`; `quit`.
 struct DemoPictures: ViewModifier {
     func body(content: Content) -> some View {
@@ -76,6 +78,9 @@ enum WindowPictures {
             case "views":
                 write(views(), to: out.appendingPathComponent("\(argument).txt"))
                 log.append("views \(argument).txt")
+            case "toolbar":
+                write(toolbar(), to: out.appendingPathComponent("\(argument).txt"))
+                log.append("toolbar \(argument).txt")
             case "appearance":
                 // The app's appearance: `dark`, `light`, or `system`.
                 NSApp.appearance = argument == "dark" ? NSAppearance(named: .darkAqua)
@@ -143,6 +148,66 @@ enum WindowPictures {
         }
         walk(window, depth: 0)
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// The window in front's toolbar, item by item from the leading end: what
+    /// each is, its words, where it stands in the window, and over which of
+    /// the split view's columns, so a picture's toolbar can be read against
+    /// the columns under it.
+    static func toolbar() -> String {
+        guard let window = windows.first else { return "no window\n" }
+        var lines: [String] = []
+        let columns = splitColumns(in: window)
+        lines.append("columns " + columns.map { "\(Int($0.minX))-\(Int($0.maxX))" }.joined(separator: " | "))
+        let items = window.toolbar?.items ?? []
+        for item in items {
+            var line = item.itemIdentifier.rawValue
+            let words = [item.label, item.paletteLabel, item.toolTip ?? ""].filter { !$0.isEmpty }
+            if !words.isEmpty { line += " \"" + words.joined(separator: "\" \"") + "\"" }
+            if let view = item.view, view.window != nil {
+                let frame = view.convert(view.bounds, to: nil)
+                line += " at \(Int(frame.minX))-\(Int(frame.maxX))"
+                if let column = columns.firstIndex(where: { $0.minX <= frame.midX && frame.midX < $0.maxX }) {
+                    line += " over column \(column + 1)"
+                }
+                let texts = labels(in: view)
+                if !texts.isEmpty { line += " says \"" + texts.joined(separator: "\" \"") + "\"" }
+            } else {
+                line += " (not shown)"
+            }
+            if !item.isEnabled { line += " (disabled)" }
+            lines.append(line)
+        }
+        lines.append("title \"\(window.title)\" subtitle \"\(window.subtitle)\"")
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// The columns of the window's split view, from the leading edge.
+    static func splitColumns(in window: NSWindow) -> [CGRect] {
+        guard let root = window.contentView else { return [] }
+        var found: NSSplitView?
+        func walk(_ view: NSView) {
+            if found == nil, let split = view as? NSSplitView, split.isVertical { found = split; return }
+            view.subviews.forEach(walk)
+        }
+        walk(root)
+        return (found?.arrangedSubviews ?? []).filter { !$0.isHidden && $0.frame.width > 1 }
+            .map { $0.convert($0.bounds, to: nil) }
+    }
+
+    /// The words a view and the views in it say to VoiceOver.
+    static func labels(in view: NSView) -> [String] {
+        var found: [String] = []
+        func walk(_ element: Any, depth: Int) {
+            guard depth < 8 else { return }
+            let object = element as AnyObject
+            for words in [object.accessibilityLabel?() ?? nil, object.accessibilityTitle?() ?? nil] {
+                if let words, !words.isEmpty, !found.contains(words) { found.append(words) }
+            }
+            for child in (object.accessibilityChildren?() ?? nil) ?? [] { walk(child, depth: depth + 1) }
+        }
+        walk(view, depth: 0)
+        return found
     }
 
     /// The window in front's views, each with its frame in the window, the

@@ -309,7 +309,7 @@ struct ScreenPage: View {
         }
         if depth == 0, modal == nil, state.chrome, AccountPlacement.inToolbar, let user = client.app?.user {
             ToolbarItem(placement: .primaryAction) {
-                AccountMenu(user: user, client: client)
+                AccountMenu(user: user, client: client).modifier(BarItemLook(.bar))
             }
             ToolbarSpacer(.fixed, placement: .primaryAction)
         }
@@ -318,6 +318,7 @@ struct ScreenPage: View {
                 ShareLink(item: url) {
                     Label("Share", systemImage: Symbols.standard(.share) ?? "square.and.arrow.up")
                 }
+                .modifier(BarItemLook(.bar))
             }
         }
         if depth == 0, let modal, !Self.hasCancel(state), let dismissal = ModalRules.dismissal(modal) {

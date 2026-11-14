@@ -54,7 +54,9 @@ public final class WindowCommands {
     /// the list's too (its making something new keeping ⌘N).
     var commands: [(node: Navree.Node, screen: ScreenID)] {
         guard let shown = client.nav.front else { return [] }
-        let own = CommandRules.leaves(front?.screen?.actions ?? [])
+        // A page's head row is the screen's actions, as its bar has them.
+        let depth: ScreenDepth = client.nav.modals.isEmpty ? .pushed : .sheet
+        let own = CommandRules.leaves(front?.screen.map { ActionRules.lifted($0, depth: depth).actions } ?? [])
         guard let list = besideList, list != shown, let root = client.screen(list)?.screen else {
             return own.map { ($0, shown) }
         }
