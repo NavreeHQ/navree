@@ -5,7 +5,7 @@
 mod support;
 
 use navree_kernel::{App, BootErrors, Module, ModuleBuilder, Navree, PluginInfo, PublishTag};
-use navree_view::template::{AutoEscape, Environment};
+use navree_view::template::{AutoEscape, Environment, Value};
 use navree_view::{
     ModuleBuilderPluginTemplatesExt, ModuleBuilderViewExt, TemplateDir, ViewModule, ViewOptions,
     Views,
@@ -405,4 +405,73 @@ async fn a_plugins_environment_hook_is_checked_whatever_the_order_of_the_modules
         );
         assert!(!error.contains("in `AppShout`"), "{apps_first}: {error}");
     }
+}
+
+/// A module of the app that sets the global `company`, plain text.
+struct AppCompany;
+impl Module for AppCompany {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.view_environment(|env| env.add_global("company", "Sharma & Sons"));
+    }
+}
+
+#[tokio::test]
+async fn a_plugins_hook_putting_an_app_global_back_marked_safe_fails_the_boot() {
+    // The same text, marked safe: equal to the plain one, but it prints as it is.
+    let put_back: fn(&mut Environment) =
+        |env| env.add_global("company", Value::from_safe_string("Sharma & Sons".to_owned()));
+    let print_company = |app: &App| {
+        let ctx = app.ctx().clone();
+        async move {
+            ctx.get::<Views>()
+                .await
+                .unwrap()
+                .render_source("probe.html", "{{ company }}", json!({}))
+                .unwrap()
+        }
+    };
+
+    let error = Navree::app()
+        .module(ViewModule::for_root(options(&[])))
+        .module(AppCompany)
+        .module(Hook(put_back))
+        .boot()
+        .await
+        .expect_err("fails")
+        .to_string();
+    assert!(
+        error.contains(
+            "plugin `navree-plugin-announcements`: m.view_environment in `Hook` replaces the global `company`; a plugin's environment hook only adds filters, tests, functions and globals named `announcements_..`"
+        ),
+        "{error}"
+    );
+
+    // The app's own global alone prints escaped; the same put-back from a module of the app
+    // boots and acts, as in 1.2.
+    let app = Navree::app()
+        .module(ViewModule::for_root(options(&[])))
+        .module(AppCompany)
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(print_company(&app).await, "Sharma &amp; Sons");
+    app.shutdown().await.unwrap();
+    let app = Navree::app()
+        .module(ViewModule::for_root(options(&[])))
+        .module(AppCompany)
+        .module(AppHook(put_back))
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(print_company(&app).await, "Sharma & Sons");
+    app.shutdown().await.unwrap();
+
+    // A global of its own, under its namespace, boots.
+    let app = boot_with(
+        options(&[]),
+        Hook(|env| env.add_global("announcements_company", "Meera Sharma Ltd")),
+    )
+    .await
+    .expect("boots");
+    app.shutdown().await.unwrap();
 }

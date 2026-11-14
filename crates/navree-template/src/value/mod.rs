@@ -578,6 +578,39 @@ fn container_eq(a: &Value, b: &Value) -> bool {
 
 impl Eq for Value {}
 
+impl Value {
+    /// Whether `other` is this very value, not only an equal one: the same
+    /// shared string, sequence, map, function, macro, module or loop, with the
+    /// same mark, or the same scalar (a float bit for bit, so `NaN` is the
+    /// same as itself and `0.0` is not `-0.0`). A value built again from equal
+    /// contents is another value, and a string marked safe is not the plain
+    /// one it equals. Not public API; the environment's fingerprint uses it.
+    pub(crate) fn is_identical(&self, other: &Value) -> bool {
+        match (&self.0, &other.0) {
+            (Repr::Undefined(a), Repr::Undefined(b)) => a == b,
+            (Repr::None, Repr::None) => true,
+            (Repr::Bool(a), Repr::Bool(b)) => a == b,
+            (Repr::Int(a), Repr::Int(b)) => a == b,
+            (Repr::Float(a), Repr::Float(b)) => a.to_bits() == b.to_bits(),
+            (Repr::Str(a, a_safety), Repr::Str(b, b_safety)) => {
+                Arc::ptr_eq(a, b) && a_safety == b_safety
+            }
+            (Repr::Seq(a, a_kind, a_shape), Repr::Seq(b, b_kind, b_shape)) => {
+                Arc::ptr_eq(a, b) && a_kind == b_kind && a_shape == b_shape
+            }
+            (Repr::Map(a, a_shape), Repr::Map(b, b_shape))
+            | (Repr::Kwargs(a, a_shape), Repr::Kwargs(b, b_shape)) => {
+                Arc::ptr_eq(a, b) && a_shape == b_shape
+            }
+            (Repr::Function(a), Repr::Function(b)) => Arc::ptr_eq(a, b),
+            (Repr::Macro(a), Repr::Macro(b)) => Arc::ptr_eq(a, b),
+            (Repr::Module(a), Repr::Module(b)) => Arc::ptr_eq(a, b),
+            (Repr::Loop(a), Repr::Loop(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        }
+    }
+}
+
 impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Value) -> Option<Ordering> {
         Some(self.cmp(other))
