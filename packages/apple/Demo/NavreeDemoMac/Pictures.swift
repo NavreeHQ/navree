@@ -156,7 +156,10 @@ enum WindowPictures {
 
     /// The windows on screen, the one in front first.
     static var windows: [NSWindow] {
-        NSApp.orderedWindows.filter { $0.isVisible && $0.frame.width > 100 }
+        let ordered = NSApp.orderedWindows.filter { $0.isVisible && $0.frame.width > 100 }
+        // The window under an item in the menu bar is a panel the ordered list leaves out.
+        let panels = NSApp.windows.filter { $0 is NSPanel && $0.isVisible && $0.frame.width > 100 && !ordered.contains($0) }
+        return ordered + panels
     }
 
     static func resize(_ size: String) {
