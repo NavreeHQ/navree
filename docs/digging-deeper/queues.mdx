@@ -200,6 +200,8 @@ impl ContactsModule {
 }
 ```
 
+Register each job type in one module. A job name that two modules register logs a warning at boot and the first module's handler runs; when one of the two belongs to a plugin that is not one of the framework's own, the boot fails. A job type that a module both registers and schedules is one registration.
+
 Dispatching a type that no module registered fails at once with `QueueError::UnknownJob`. The framework's own jobs register themselves: `mail.send` (`MailModule`), `notify.send` (`NotifyModule`), each queued listener's job (`listen` and `on`) and each scheduled job (`m.schedule`).
 
 ### Job options

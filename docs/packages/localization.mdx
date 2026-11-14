@@ -108,6 +108,22 @@ Navree::app().module(I18nModule::for_root(I18nOptions {
 
 `embed_locales!` reads the directory, relative to your crate's `Cargo.toml`, when you build, so a syntax error in a Fluent file becomes a compile error naming the file and line. Editing a file rebuilds the crate; a new file is picked up on the next build of the crate.
 
+### Translations a plugin ships
+
+A plugin ships its own Fluent files in its binary with `m.locales(navree::embed_locales!("locales"))`, from `navree::plugin::prelude`. Its crate needs no `i18n` feature: an app without `I18nModule` ignores the files, and an app with it reads them after its own.
+
+A message id of a plugin that is not one of the framework's own starts with its namespace: `announcements-title` for the namespace `announcements`, and a term starts with `-announcements-`. An id outside it fails the boot, and `i18n:check` lists it with the plugin and the file. Two plugins that define one id are a problem too.
+
+The app's own message wins over a plugin's with the same id, and the plugin's other messages still load. A plugin's messages count in `i18n:check` and `i18n:missing` like yours, and its file is shown as `navree-plugin-announcements:locales/en/announcements.ftl`.
+
+To edit a plugin's translations, copy them into your files:
+
+```sh
+navree i18n:publish announcements
+```
+
+`i18n:publish <plugin>` takes the plugin's namespace or its name. It writes `<i18n.dir>/<locale>/<namespace>/` for each locale of `i18n.locales`, from the plugin's files of that locale or, failing that, of another locale of the same language, and keeps files that exist unless you add `--force`. A locale the plugin has no messages for is reported and skipped. Published files are your own, so they win over the plugin's. `plugin:publish <plugin> --tag locales` writes `locales/<locale>/<namespace>/` below the app's folder whatever `i18n.dir` says.
+
 ## Writing translations
 
 Each locale has a directory under `locales/`, and each directory holds any number of `.ftl` files, also in subdirectories. The file names are only for you: every message of a locale shares one namespace, and a message defined twice is an error.
@@ -335,7 +351,7 @@ navree-i18n ships the validation messages in English, French, German, Spanish, I
 navree i18n:publish validation
 ```
 
-It writes `locales/<locale>/validation.ftl` for each supported locale whose language is shipped, and keeps files that exist unless you add `--force`.
+It writes `locales/<locale>/validation.ftl` for each supported locale whose language is shipped, and keeps files that exist unless you add `--force`. The command is `i18n:publish validation` or `i18n:publish <plugin>` (see [translations a plugin ships](#translations-a-plugin-ships)).
 
 ## Mail and notifications
 
@@ -478,6 +494,7 @@ async fn plurals_follow_the_language() {
 | `i18n:check` | Parses every file and reports problems and missing messages; exits 1 on a problem |
 | `i18n:missing <locale>` | Lists the ids a locale is missing |
 | `i18n:publish validation [--force]` | Copies the shipped validation messages into `locales/` |
+| `i18n:publish <plugin> [--force]` | Copies a plugin's translations into `i18n.dir` |
 
 <LinkCards>
   <LinkCard href="/docs/basics/validation/" title="Validation">

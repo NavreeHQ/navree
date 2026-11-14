@@ -52,6 +52,25 @@ Each file is named by its content hash and served from the toolkit's mount, unde
 
 They are cached for good (`immutable`) under the current hash, and an older hash still gets the file, uncached, so a page that stays open across a deploy keeps working. A stylesheet comes with its brotli form. A name that the app didn't contribute is a 404, and a path can't reach out of the mount.
 
+## Files of a plugin
+
+A plugin builds its files with `.namespace("announcements")`, on an `AppSheet`, an `AppFont`, an `AppImage` or an [island script](/docs/ui/islands/): the file is served as `{namespace}.{name}`, so the sheet below is `/_navree/ui/app/announcements.banner-3f9a1c07b2de.css`, and an app's own `banner` sheet is another file. The namespace is the plugin's own: a lower-case letter followed by up to 63 lower-case letters, digits or `_`, and anything else fails the build. `name()` still gives `banner`. A stylesheet named `face` cannot take a namespace, because a font's rule is served under that name.
+
+```rust
+use navree::ui::*;
+
+/// The plugin's stylesheet, compiled into its crate.
+static BANNER: AppSheet =
+    AppSheet::new("banner", b".notice{border-color:var(--accent)}", 16 * 1024).namespace("announcements");
+
+// In the plugin's module: m.plugin(navree::plugin_info!(namespace = "announcements")).contribute(BANNER);
+fn page() -> View {
+    View::new("Notices").stylesheet(&BANNER)
+}
+```
+
+A file of a plugin that is not under that plugin's namespace fails the boot. Two modules that give one name to two files with different bytes log a warning, and the first module's file is served. The boot fails instead when one of the two modules belongs to a plugin that is not one of the framework's own, or when a file under a namespace comes from a module that is not one of the framework's own plugins.
+
 ## Pictures
 
 The app's mark, its logo or an illustration every page shows is an `AppImage`: an SVG, PNG, WebP, JPEG, AVIF, GIF or ICO file compiled in, told apart by its first bytes, and contributed like a sheet. It is served under its hash and cached for good. A picture is inert because of how it is used: an `<img>` never runs an SVG's script, and opened on its own it is served under a content security policy that runs nothing, loads nothing and sandboxes it (`default-src 'none'; style-src 'unsafe-inline'; sandbox`). As a guard against mistakes, an SVG file with a `<script>` or `<foreignObject>` element, an `on…=` event attribute or a `javascript:` address fails the build, but that check can be got round and is not what makes the file safe. Never write an `AppImage`'s bytes into a page, with `SafeHtml::trusted` or as an inline `<svg>`: there only the page's own policy would stand between its script and the reader.
