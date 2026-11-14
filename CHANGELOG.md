@@ -66,6 +66,19 @@ every `@navree/*` package carries the same version.
   `navree::view::*` brings in the two new extension traits, so an app's own `ModuleBuilder` method
   called `locales` or `plugin_templates` is ambiguous there. One listener type subscribed to one
   event in two modules registers one job name twice, and now logs the job warning.
+- A module of a plugin that is not one of the framework's own keeps to the plugin's namespace in
+  what it registers for the app's templates and documents: a template it registers with
+  `m.templates` starts with the namespace and a slash (or is exactly the name of a template that a
+  module it imports registers, which the replacement rule decides); a template under the namespace
+  may not stand beside a template of the app with the same name but for its extension, unless the
+  app has the plugin's name too; its `m.view_environment` may only add filters, tests, functions
+  and globals whose names start with the namespace and an underscore; and its
+  `m.document_files` paths are under the namespace. Each refusal fails the boot, names the plugin
+  and the change, and says what to do instead. Replacing a document file of a module it imports
+  follows the template rule, with a file in a `documents.templates` folder or a later module of the
+  app as the ways out. Two modules of an app that embed one document file path with different
+  contents now log a warning at boot; the later module's file is still the one used. The app's own
+  modules, the framework's packages and first-party plugins register as before.
 
 ## [1.2.2] - 2026-11-14
 

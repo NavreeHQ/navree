@@ -119,6 +119,8 @@ impl Module for Probe {
             env!("CARGO_PKG_VERSION"),
         ))
         .templates(&[("mail/welcome.html", "Welcome from the probe")])
+        // A first-party plugin may replace a filter, as a module of today does.
+        .view_environment(|env| env.add_filter("money", |cents: i64| format!("${cents}")))
         .job::<Digest>()
         .contribute(PROBE_BRAND)
         .config_section::<TimeNotices>();
@@ -231,6 +233,14 @@ async fn a_first_party_plugin_collides_like_a_module_of_today() {
             .render("mail/welcome", serde_json::json!({}))
             .unwrap(),
         "Welcome from the CRM"
+    );
+    assert_eq!(
+        app.get::<Views>()
+            .await
+            .render_source("probe.txt", "{{ 500|money }}", serde_json::json!({}))
+            .unwrap(),
+        "$500",
+        "the first-party plugin's hook acted"
     );
     let sheet = app
         .client()

@@ -74,6 +74,12 @@ impl Sources {
         Ok(files)
     }
 
+    /// The name of every template file in the directories, as
+    /// [`read_all`](Sources::read_all) reads them.
+    pub(crate) fn file_names(&self) -> Result<Vec<String>, ViewError> {
+        Ok(self.files()?.into_keys().collect())
+    }
+
     /// Which of `names` a template file provides, and so wins over an embedded
     /// template of that name: the names in the listing of the directories,
     /// which is what [`read_all`](Sources::read_all) reads. A name counts

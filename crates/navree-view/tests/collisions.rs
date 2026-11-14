@@ -466,3 +466,93 @@ async fn a_plugin_replacing_another_plugins_template_it_imports_is_warned_about(
     );
     app.shutdown().await.unwrap();
 }
+
+/// The plugin, with only its list under its namespace.
+struct ListPlugin;
+impl Module for ListPlugin {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(announcements())
+            .plugin_templates(TemplateDir::from(ANNOUNCEMENT_VIEWS));
+    }
+}
+
+/// A module of the app with the template `name`.
+struct AppTemplate(&'static str);
+impl Module for AppTemplate {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.templates(&[(self.0, "the app's template")]);
+    }
+}
+
+/// Two modules of the app with a summary each, one text and one HTML.
+struct AppSummaryText;
+impl Module for AppSummaryText {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.templates(&[("reports/summary.txt", "the app's summary")]);
+    }
+}
+struct AppSummaryHtml;
+impl Module for AppSummaryHtml {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.templates(&[("reports/summary.html", "the app's summary")]);
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugins_template_beside_an_app_template_of_the_same_stem_fails_the_boot() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let error = "plugin `navree-plugin-announcements`: its template `announcements/list.html` stands beside the app's `announcements/list.txt`, and a lookup of `announcements/list` or a mail of that name would take the plugin's; put `announcements/list.html` in a template folder too (plugin:publish announcements --tag views copies it) or rename the app's `announcements/list.txt`";
+
+    // The app has `announcements/list.txt` as a file in a template folder, or embedded.
+    let dir = views_dir(&[("announcements/list.txt", "the app's text list")]);
+    let text = boot_with(options(&[dir.path()]), vec![Box::new(ListPlugin)])
+        .await
+        .expect_err("fails")
+        .to_string();
+    assert!(text.contains(error), "{text}");
+    let text = boot(vec![
+        Box::new(ListPlugin),
+        Box::new(AppTemplate("announcements/list.txt")),
+    ])
+    .await
+    .expect_err("fails")
+    .to_string();
+    assert!(text.contains(error), "{text}");
+    // Whatever the order of the modules.
+    let text = boot(vec![
+        Box::new(AppTemplate("announcements/list.txt")),
+        Box::new(ListPlugin),
+    ])
+    .await
+    .expect_err("fails")
+    .to_string();
+    assert!(text.contains(error), "{text}");
+
+    // The app keeps its boot by having the plugin's name too, in a folder: that file wins.
+    let both = views_dir(&[
+        ("announcements/list.txt", "the app's text list"),
+        ("announcements/list.html", "Meera Sharma's list"),
+    ]);
+    let app = boot_with(options(&[both.path()]), vec![Box::new(ListPlugin)])
+        .await
+        .expect("boots");
+    assert_eq!(render(&app, "announcements/list").await, "Meera Sharma's list");
+    app.shutdown().await.unwrap();
+
+    // A template of the app that is no other extension of the same name is no problem.
+    let unrelated = views_dir(&[("announcements/other.txt", "the app's other text")]);
+    let app = boot_with(options(&[unrelated.path()]), vec![Box::new(ListPlugin)])
+        .await
+        .expect("boots");
+    assert_eq!(render(&app, "announcements/list").await, "the plugin's list");
+    app.shutdown().await.unwrap();
+
+    // The same pair from two modules of the app boots as in 1.2: the rule looks only at a
+    // plugin that is not first-party.
+    let app = boot(vec![Box::new(AppSummaryText), Box::new(AppSummaryHtml)])
+        .await
+        .expect("boots");
+    assert_eq!(render(&app, "reports/summary").await, "the app's summary");
+    app.shutdown().await.unwrap();
+}
