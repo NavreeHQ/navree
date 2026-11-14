@@ -86,7 +86,7 @@ Every address the core is given, by a page, an answer, a redirect, a link from o
 
 **A client asks again.** Before it fetches an address, streams from it or loads it in the web view, a client asks "is this ours?" of what **its platform's own parser** reads, because that parser is what connects: the text holds no white space, control character or backslash; the platform reads it as `http` or `https` with no user information; and its scheme, host and port are an origin of the app (`*.name` for one label or more under `name`, at a label's edge; plain `http` only to a loopback host when the build allows it). `vectors/addresses.json` holds the addresses every client must read the same way as the core: `resolve` (how an address found on a page reads, and the whole address that leaves; what turns on the path, such as `//` after dot segments, is decided here, by the core alone) and `ours` (only cases the client's rule above decides). The core's tests run them, and so must each client's.
 
-**What opens outside.** An `open_url` effect holds only a whole `http` or `https` address that reads, written again from its parts (its fragment kept), or a `mailto`, `tel`, `sms` or `geo` one. A newer app (`upgrade`) is offered only at an `https` address; any other is dropped, and `upgrade.url` is empty.
+**What opens outside.** An `open_url` effect holds only a whole `http` or `https` address that reads, written again from its parts (its fragment kept), or a `mailto`, `tel`, `sms` or `geo` one. The system's own (mail, the dialler, messages, maps) open only when a tap stands behind them: a link or a button the person tapped, a message's button, a device call, a link tapped in the web view. An answer by itself (a redirect, a `navigate` or `navigate_external` op, the way in after a session ended) may take the person to a web page outside the app, such as a payment page, and never to those: what it asked is refused and said with a `report` (`what: "address"`, the kind and the scheme only). (`transcripts/outside-taps.json`) A newer app (`upgrade`) is offered only at an `https` address; any other is dropped, and `upgrade.url` is empty.
 
 ## Events
 
@@ -117,7 +117,7 @@ Every event is an object whose `t` names it. A field shown with `?` may be left 
 | `more` | `screen`, `id`, `before?` | The end of a list or table is near; with `before`, the start of a list that has rows before its first. |
 | `region_go` | `screen`, `region`, `href` | A table goes to another address of itself: a sort, another page. |
 | `message_shown`, `message_action` | `id` | A message went away; its button was tapped. |
-| `web_link` | `screen`, `url` | A link was tapped in the web view. |
+| `web_link` | `screen`, `url` | A link was tapped in the web view. A client sends it only for a navigation the person started (on Android, a request with a gesture; on Apple's systems, a link activated), never for one the page's script made: the core takes it as a tap, which may open the dialler or messages. |
 | `open_link` | `url` | The app was opened with an address. |
 | `notification` | `href` | A notification was tapped. |
 | `window` | `width` | The window's width changed class: `compact`, `medium`, `expanded`. |
@@ -167,7 +167,7 @@ One more part is read without a change to say so: `{"part":"snapshot"}`, below.
 |---|---|---|
 | `fetch` | `request`, `method`, `url`, `headers`, `body?`, `timeout_ms`, `xsrf?` | Sends the request with its cookies, follows no redirect, and answers with a `response` event carrying `request`. `method` is `get`, `post` or `delete`. `body` is `{"t":"form","text":"a=1&b=2"}` (send `text` as it is), `{"t":"multipart","parts":[…]}` (write the parts, putting in the bytes kept under each `token`) or `{"t":"json","text":"{…}"}` (send `text` as it is, which may be empty: the framework's own routes speak JSON, and the answer's body is handed back as any other). With `xsrf`, the `XSRF-TOKEN` cookie, decoded, also goes in `x-xsrf-token`. A request for one region or for a list's next rows carries `x-navree-region` with the region's id, percent-encoded: each byte of its UTF-8 outside `!` to `~`, and `%`, is written as `%` and two hex digits, so a plain ASCII id goes as it is. `url` is a whole address on one of the app's origins (see "Addresses"). |
 | `cancel` | `request` | May drop the request: its answer is no longer wanted. |
-| `open_url` | `url`, `inside?` | Opens the address outside the app; with `inside`, in the system's browser inside the app. Only a whole `http` or `https` address, or a `mailto`, `tel`, `sms` or `geo` one. |
+| `open_url` | `url`, `inside?` | Opens the address outside the app; with `inside`, in the system's browser inside the app. Only a whole `http` or `https` address, or a `mailto`, `tel`, `sms` or `geo` one, and the last four only when a tap stands behind them. |
 | `sign_in` | `url`, `callback?`, `ephemeral?` | Opens the system's sign-in session, and answers with `sign_in_done`. With `ephemeral`, the session shares nothing with the system's browser. |
 | `message` | `id`, `tone`, `text?`, `title?`, `notice?`, `action?` | Shows a short message, and answers with `message_shown` when it has gone. `notice` is a message of the core's own, for the client to word. |
 | `haptic` | `kind` | Plays a haptic. |

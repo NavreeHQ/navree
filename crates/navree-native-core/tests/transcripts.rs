@@ -671,6 +671,7 @@ const REQUIRED: &[&str] = &[
     "keep-also",
     "keep-stale-shell",
     "changed-limits",
+    "outside-taps",
 ];
 
 #[test]

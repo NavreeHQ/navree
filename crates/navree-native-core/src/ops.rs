@@ -25,6 +25,7 @@ use crate::Core;
 use crate::effect::{Change, Effect};
 use crate::forms::field_view;
 use crate::origin::Target;
+use crate::reduce::By;
 use crate::state::{
     Content, Focus, FormMeta, FormView, Message, MessageInner, Notice, RegionMeta, ScreenId,
     ScreenView,
@@ -192,7 +193,9 @@ impl Core {
                     // where a post would otherwise lead.
                     let said = (present != Present::Auto).then_some(present);
                     match (self.resolve(&href, current), said) {
-                        (Target::Outside(url), _) => self.open_outside(&url, false),
+                        (Target::Outside(url), _) => {
+                            self.open_outside(&url, false, By::Answer("navigate"))
+                        }
                         (Target::Refused, _) => self.said_refused("navigate", &href),
                         (Target::Inside(url), Some(said)) => {
                             current = self.go_as(Some(current), &url, said).unwrap_or(current)
@@ -214,7 +217,9 @@ impl Core {
                 Op::NavigateExternal { href } => {
                     left = true;
                     match self.resolve(&href, current) {
-                        Target::Outside(url) => self.open_outside(&url, false),
+                        Target::Outside(url) => {
+                            self.open_outside(&url, false, By::Answer("navigate"))
+                        }
                         Target::Inside(url) => self.open_ours_outside(&url),
                         Target::Refused => self.said_refused("navigate", &href),
                     }

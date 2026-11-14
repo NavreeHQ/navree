@@ -177,7 +177,7 @@ fn before_fragment(text: &str) -> &str {
 }
 
 /// The scheme an address starts with, in lower case, when it has one.
-fn scheme_of(text: &str) -> Option<String> {
+pub(crate) fn scheme_of(text: &str) -> Option<String> {
     let (scheme, _) = text.split_once(':')?;
     let mut chars = scheme.chars();
     let first = chars.next()?;
