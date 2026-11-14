@@ -205,3 +205,21 @@ private func labels(_ nodes: [Navree.Node]) -> [String] {
     #expect(!records.isEmpty)
     #expect(records.allSatisfy { $0.action != nil })
 }
+
+@Test func aMacsTableNamesARecordInWordsWhereItsRowOpensItAndSetsItsControlsAsSmallPushButtons() throws {
+    let orders = try corpusScreen("store-orders.json")
+    var first: Navree.TableRow?
+    orders.body.walk { node in
+        if first == nil, case .table(let table) = node { first = table.rows.first }
+    }
+    let record = try #require(first)
+    // The order's name cell holds the web page's button to its glance; on a Mac the row's click is that way in.
+    #expect(ContentRules.nameWords(record.cells[0], opening: .choosing, opens: true) == ["CS-220480", "Tejinder Randhawa"])
+    // iPad keeps the name's own button, and a record that opens nothing keeps its cell as it is.
+    #expect(ContentRules.nameWords(record.cells[0], opening: .firstCell, opens: true) == nil)
+    #expect(ContentRules.nameWords(record.cells[0], opening: .choosing, opens: false) == nil)
+    // A name cell of words only is drawn as it is.
+    #expect(ContentRules.nameWords(.text(Navree.Text(value: "Chakla belan")), opening: .choosing, opens: true) == nil)
+    #expect(ContentRules.cellControlLook(bar: .window) == .smallPushButton)
+    #expect(ContentRules.cellControlLook(bar: .navigation) == .borderless)
+}

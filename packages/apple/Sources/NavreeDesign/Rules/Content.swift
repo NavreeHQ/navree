@@ -207,6 +207,34 @@ public enum ContentRules {
         bar == .window ? .choosing : .firstCell
     }
 
+    /// The words a record's name cell shows in their place, where a click on
+    /// its row opens the record: the cell's button or link to it (the web
+    /// page's link, which the row's click now is) becomes its words, so it
+    /// reads as the record's name in the label's colour and not as a second,
+    /// dimmed control. `nil` where the cell's own control is the way in (a tap
+    /// on its name), or where it holds none.
+    public static func nameWords(_ cell: Navree.Node, opening: TableOpening, opens: Bool) -> [String]? {
+        guard opening == .choosing, opens, RecordRules.firstAction(in: cell, form: nil) != nil else { return nil }
+        let words = RecordRules.words(in: cell)
+        return words.isEmpty ? nil : words
+    }
+
+    /// How a control in a wide table's cell is drawn.
+    public enum CellControlLook: Sendable, Equatable {
+        /// The words alone, in the tint: iPad, where a borderless button is
+        /// the tint's words.
+        case borderless
+        /// The system's push button at its small size: a Mac, where a
+        /// borderless button is grey words that read as no control at all,
+        /// and a table row's own control is a small push button (as System
+        /// Settings' and Mail's lists set theirs).
+        case smallPushButton
+    }
+
+    public static func cellControlLook(bar: ActionBar) -> CellControlLook {
+        bar == .window ? .smallPushButton : .borderless
+    }
+
     /// The control a field's input becomes on iPhone and iPad.
     public static func control(_ input: Navree.Input) -> ControlKind {
         switch input {
