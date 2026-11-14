@@ -233,7 +233,7 @@ pub enum Effect {
     /// Something the app's developers will want to know: an answer that did
     /// not read, a kind this build has never heard of.
     Report {
-        /// What it is about: `decode`, `kind`, `depth`.
+        /// What it is about: `decode`, `kind`, `depth`, `address`.
         what: String,
         /// The detail.
         detail: String,

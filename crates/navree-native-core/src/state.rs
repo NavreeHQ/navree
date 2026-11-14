@@ -1004,6 +1004,8 @@ pub(crate) struct Inner {
     /// Requests whose address was not on one of the app's origins: never
     /// sent, they fail before the update goes out.
     pub unsent: Vec<u64>,
+    /// An address an answer gave did not read, and that was said, in this event.
+    pub refusal_said: bool,
     pub screens: BTreeMap<ScreenId, ScreenInner>,
     /// The build the kept trees belong to.
     pub build: Option<String>,

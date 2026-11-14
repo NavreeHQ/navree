@@ -36,7 +36,10 @@ impl Core {
             None => self.inner.origin.resolve(href, "/"),
         };
         match target {
-            Target::Refused => from,
+            Target::Refused => {
+                self.said_refused("link", href);
+                from
+            }
             Target::Outside(url) => {
                 self.open_outside(&url, false);
                 from

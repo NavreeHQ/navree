@@ -193,7 +193,7 @@ impl Core {
                     let said = (present != Present::Auto).then_some(present);
                     match (self.resolve(&href, current), said) {
                         (Target::Outside(url), _) => self.open_outside(&url, false),
-                        (Target::Refused, _) => {}
+                        (Target::Refused, _) => self.said_refused("navigate", &href),
                         (Target::Inside(url), Some(said)) => {
                             current = self.go_as(Some(current), &url, said).unwrap_or(current)
                         }
@@ -216,7 +216,7 @@ impl Core {
                     match self.resolve(&href, current) {
                         Target::Outside(url) => self.open_outside(&url, false),
                         Target::Inside(url) => self.open_ours_outside(&url),
-                        Target::Refused => {}
+                        Target::Refused => self.said_refused("navigate", &href),
                     }
                 }
                 Op::Reload => {
@@ -908,9 +908,15 @@ impl Core {
         let mut old = std::mem::take(regions);
         inner.regions.clear();
         let mut wants = Vec::new();
+        // The first source that does not read, said once the survey is done.
+        let refused: std::cell::RefCell<Option<String>> = std::cell::RefCell::default();
         let inside = |href: &str| match self.inner.origin.resolve(href, url) {
             Target::Inside(url) => Some(url),
-            _ => None,
+            Target::Refused => {
+                refused.borrow_mut().get_or_insert_with(|| href.to_owned());
+                None
+            }
+            Target::Outside(_) => None,
         };
         // The lists that ask what changed in them: one that was asking goes on.
         let mut asking = std::mem::take(&mut inner.live_lists);
@@ -972,6 +978,9 @@ impl Core {
             if !overlays.iter().any(|other| other == id) {
                 overlays.push(id.to_owned());
             }
+        }
+        if let Some(href) = refused.into_inner() {
+            self.said_refused("region", &href);
         }
         for region in wants {
             self.fetch_region(id, &region, None);

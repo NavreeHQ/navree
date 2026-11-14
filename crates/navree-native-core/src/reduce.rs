@@ -513,6 +513,16 @@ impl Core {
         }
     }
 
+    /// Says, once for the event, that an address an answer gave does not
+    /// read and was not followed: of what kind, and its text up to its query.
+    pub(crate) fn said_refused(&mut self, kind: &str, address: &str) {
+        if std::mem::replace(&mut self.inner.refusal_said, true) {
+            return;
+        }
+        let text = address.split(['?', '#']).next().unwrap_or("");
+        self.report("address", format!("{kind}: {text}"));
+    }
+
     /// Asks the client to open an address outside the app: the one way an
     /// `open_url` effect is made. Only a whole `http` or `https` address that
     /// reads, written again from its parts, or an address of a scheme the
@@ -565,11 +575,16 @@ impl Core {
                 ..Response::default()
             }),
             // A redirect that leads nowhere a client goes, or one too many.
-            _ => Some(Response {
+            target => {
+                if target == Target::Refused {
+                    self.said_refused("redirect", &location);
+                }
+                Some(Response {
                 request: response.request,
                 status: 502,
                 ..Response::default()
-            }),
+                })
+            }
         }
     }
 
@@ -871,11 +886,10 @@ impl Core {
         let mut items: Vec<(Option<String>, NavItem)> = Vec::new();
         for group in shell.nav.groups {
             for item in group.items {
-                if matches!(
-                    self.inner.origin.resolve(&item.href, "/"),
-                    Target::Inside(_)
-                ) {
-                    items.push((group.label.clone(), item));
+                match self.inner.origin.resolve(&item.href, "/") {
+                    Target::Inside(_) => items.push((group.label.clone(), item)),
+                    Target::Refused => self.said_refused("shell", &item.href),
+                    Target::Outside(_) => {}
                 }
             }
         }
@@ -1092,7 +1106,7 @@ impl Core {
         let url = match self.resolve(href, under) {
             Target::Inside(url) => url,
             Target::Outside(url) => return self.open_outside(&url, false),
-            Target::Refused => return,
+            Target::Refused => return self.said_refused("navigate", href),
         };
         if let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&under),
@@ -2165,6 +2179,7 @@ impl Core {
 
     fn settle(&mut self) -> Update {
         self.fail_unsent();
+        self.inner.refusal_said = false;
         self.ensure_front();
         let front = self.front();
         let stacked = self.view.front_stack().len() > 1;
@@ -2430,6 +2445,82 @@ mod tests {
             matches!(opened[..], [Effect::StreamOpen { url, .. }] if url == "https://shop.example/stream?topics=stats"),
             "{opened:?}"
         );
+    }
+
+    fn reports(update: &Update) -> Vec<String> {
+        update
+            .effects
+            .iter()
+            .filter_map(|effect| match effect {
+                Effect::Report { what, detail } if what == "address" => Some(detail.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn an_address_an_answer_gave_that_does_not_read_is_said_once() {
+        let mut core = started();
+        let tap = |href: &str| Event::Act {
+            screen: Some(1),
+            action: navree_native::Action::Navigate {
+                href: href.to_owned(),
+                present: Present::Auto,
+            },
+            form: None,
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        };
+        let update = core.send(tap("/a/..//evil.example/x?token=s3cret#top"));
+        assert_eq!(reports(&update), ["link: /a/..//evil.example/x"]);
+        // A redirect that does not read.
+        let update = core.send(tap("/orders"));
+        let request = update
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(request) => Some(request.request),
+                _ => None,
+            })
+            .unwrap();
+        let update = core.send(Event::Response(Response {
+            request,
+            status: 302,
+            location: Some(" /sign-in?next=/orders".to_owned()),
+            ..Response::default()
+        }));
+        assert_eq!(reports(&update), ["redirect:  /sign-in"]);
+        // Another site is not refused, and is not said.
+        assert!(reports(&core.send(tap("https://evil.example/x"))).is_empty());
+        // A link from outside the app is the system's, and is not said.
+        assert!(reports(&core.send(Event::OpenLink {
+            url: " https://shop.example/x".to_owned()
+        }))
+        .is_empty());
+    }
+
+    #[test]
+    fn a_shell_with_many_entries_that_do_not_read_is_said_once() {
+        let mut core = Core::new(Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        ));
+        core.send(Event::Start);
+        let shell = include_str!("../transcripts/fixtures/made/shell-routes.json")
+            .replace(r#""href": "/orders""#, r#""href": " /orders""#)
+            .replace(r#""href": "/inventory""#, r#""href": "/a\\b""#);
+        let update = core.send(Event::Response(Response {
+            request: 1,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: shell,
+            ..Response::default()
+        }));
+        assert_eq!(reports(&update), ["shell:  /orders"]);
+        assert_eq!(core.view.destinations.len(), 1);
     }
 
     /// Every `open_url` effect is made in one place, and no address is
