@@ -21,7 +21,7 @@ import SwiftUI
 /// its words and its frame in the window, in points from its top leading
 /// corner: where each word and control stands);
 /// `click:<x>,<y>` or `click:<words>` (a click of the mouse at that point of
-/// the window in front, or in the middle of the first element whose words
+/// the key window (else the window in front), or in the middle of the first element whose words
 /// are those, else hold them, as a person's click comes: through the app's
 /// event queue);
 /// `choose:<row>` (a row of the window's table chosen through the table's
@@ -417,7 +417,9 @@ enum WindowPictures {
     /// argument: a press and a release of the mouse's button, posted to the
     /// app's event queue as the window server delivers a person's.
     static func click(_ argument: String) -> String {
-        guard let window = windows.first else { return "no window" }
+        // The key window, which may be a panel or a sheet (neither is among
+        // the ordered windows), else the window in front.
+        guard let window = NSApp.keyWindow ?? windows.first else { return "no window" }
         let numbers = argument.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
         var point: CGPoint?
         if numbers.count == 2 {

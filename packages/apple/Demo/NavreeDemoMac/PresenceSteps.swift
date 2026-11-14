@@ -18,7 +18,17 @@ import NavreeShell
 /// - `close`: the window in front closed, as its close button does, then `presence`;
 /// - `panel:<name>`: the window under an item holding the whole app, opened
 ///   as a click opens it and pictured as the window server composes it, as
-///   `<name>-light.png` and `<name>-dark.png`; `hidepanel` closes it;
+///   `<name>-light.png` and `<name>-dark.png`, with a sheet up in it alone
+///   (`<name>-sheet-…`) and with the panel (`<name>-whole-…`), and the
+///   sheet's frame against the panel's; `hidepanel` closes it;
+/// - `statusclick`, `statusclick:right`: a click on the item's button as the
+///   mouse sends it, then whether the panel is open and the button pressed;
+///   for a right click, the menu that opened (closed again a moment later);
+/// - `keypress:<escape|return>`: that key sent to the key window, then the
+///   key window and the panel's state; `panelstate`: that state alone;
+/// - `panelsize:<width>x<height>`: the open panel made that size, its top kept;
+/// - `deactivate`: the app sent to the background (the Finder brought
+///   forward), then the panel's state;
 /// - `openinwindow`, `closewindow`: that app in a full window and back, each
 ///   then `presence`;
 /// - `typetext:<words>`: words typed into the first field of the key window;
@@ -87,17 +97,59 @@ enum PresenceSteps {
             try? await Task.sleep(for: .seconds(4))
             guard let panel = model.statusWindows.panel, panel.isVisible else { return ["panel \(argument): no window under the item"] }
             var lines = ["panel \(argument): \(Int(panel.frame.width))x\(Int(panel.frame.height)) at \(NSStringFromRect(panel.frame)), under the item at \(model.statusItemParts?.button?.window.map { NSStringFromRect($0.frame) } ?? "none"), key \(panel.isKeyWindow), level \(panel.level.rawValue), main windows \(model.mainWindows)"]
+            if let sheet = panel.attachedSheet {
+                lines.append("  sheet \(Int(sheet.frame.width))x\(Int(sheet.frame.height)) at \(NSStringFromRect(sheet.frame)), \(Self.overhang(sheet.frame, panel.frame))")
+            }
             for look in ["light", "dark"] {
                 NSApp.appearance = NSAppearance(named: look == "dark" ? .darkAqua : .aqua)
                 try? await Task.sleep(for: .seconds(1.5))
                 lines.append("  " + composed(panel, name: "\(argument)-\(look)", out: out))
-                // A sheet up in it is a window of its own.
+                // A sheet up in it is a window of its own: pictured alone, and
+                // with the panel as the window server composes the two.
                 if let sheet = panel.attachedSheet {
                     lines.append("  sheet: " + composed(sheet, name: "\(argument)-sheet-\(look)", out: out))
+                    lines.append("  together: " + composed([sheet, panel], name: "\(argument)-whole-\(look)", out: out))
                 }
             }
             NSApp.appearance = nil
             return lines
+        case "statusclick":
+            return await statusClick(right: argument == "right")
+        case "keypress":
+            // A key as the keyboard sends it to the key window, through the app's event queue.
+            let before = NSApp.keyWindow
+            guard let window = before, let key = Self.keys[argument] else { return ["keypress \(argument): no key window or no such key"] }
+            for type in [NSEvent.EventType.keyDown, .keyUp] {
+                if let event = NSEvent.keyEvent(
+                    with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: window.windowNumber, context: nil, characters: key.characters,
+                    charactersIgnoringModifiers: key.characters, isARepeat: false, keyCode: key.code
+                ) {
+                    NSApp.postEvent(event, atStart: false)
+                }
+            }
+            try? await Task.sleep(for: .seconds(2))
+            return ["keypress \(argument) in \(Self.describe(before)): key window now \(Self.describe(NSApp.keyWindow)), " + panelState()]
+        case "deactivate":
+            // The app sent to the background as a click in another app's window
+            // sends it: the Finder brought forward, the app yielding to it.
+            let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first
+            NSApp.yieldActivation(toApplicationWithBundleIdentifier: "com.apple.finder")
+            let asked = finder?.activate(from: .current, options: []) ?? false
+            try? await Task.sleep(for: .seconds(2))
+            return ["deactivate: the Finder asked to come forward \(asked), app now \(NSApp.isActive ? "active" : "not active"), " + panelState()]
+        case "panelstate":
+            return ["panelstate: " + panelState()]
+        case "panelsize":
+            // The panel made that size, as a person drags its edge, its top kept.
+            let numbers = argument.split(separator: "x").compactMap { Double($0) }
+            guard numbers.count == 2, let panel = model.statusWindows.panel, panel.isVisible else { return ["panelsize \(argument): no panel open"] }
+            var frame = panel.frame
+            frame.origin.y += frame.height - numbers[1]
+            frame.size = CGSize(width: numbers[0], height: numbers[1])
+            panel.setFrame(frame, display: true)
+            try? await Task.sleep(for: .seconds(1))
+            return ["panelsize \(argument): \(Int(panel.frame.width))x\(Int(panel.frame.height)), smallest \(Int(panel.contentMinSize.width))x\(Int(panel.contentMinSize.height)), resizable \(panel.styleMask.contains(.resizable))"]
         case "composedwindow":
             // The app's full window, as the window server composes it.
             guard let window = model.statusWindows.window, window.isVisible else { return ["composedwindow \(argument): no full window"] }
@@ -196,6 +248,93 @@ enum PresenceSteps {
         else { return [line] }
         try? png.write(to: out.appendingPathComponent("\(name).png"))
         return [line + ", pictured \(name).png"]
+    }
+
+    /// Keys a step can press, with their characters and key codes.
+    static let keys: [String: (characters: String, code: UInt16)] = [
+        "escape": ("\u{1b}", 53), "return": ("\r", 36),
+    ]
+
+    /// How far a sheet stands outside the window it is on, or that it fits.
+    static func overhang(_ sheet: CGRect, _ window: CGRect) -> String {
+        let leading = max(window.minX - sheet.minX, 0), trailing = max(sheet.maxX - window.maxX, 0)
+        let below = max(window.minY - sheet.minY, 0)
+        if leading == 0, trailing == 0, below == 0 { return "inside the panel" }
+        return "outside the panel by \(Int(leading)) leading, \(Int(trailing)) trailing, \(Int(below)) below"
+    }
+
+    static func describe(_ window: NSWindow?) -> String {
+        guard let window else { return "none" }
+        let kind = window is NSPanel && window.sheetParent == nil ? "panel" : window.sheetParent != nil ? "sheet" : "window"
+        return "\(kind) \"\(window.title)\""
+    }
+
+    /// Whether the window under the item is open, its sheet, and how the item's button looks.
+    static func panelState() -> String {
+        let model = PresenceModel.shared
+        let panel = model.statusWindows.panel
+        let button = model.statusItemParts?.button
+        return "panel shown \(model.statusWindowShown), visible \(panel?.isVisible ?? false), sheet \(panel?.attachedSheet.map { "up \"\($0.title)\"" } ?? "none"), item pressed \(button?.isHighlighted ?? false)"
+    }
+
+    /// A click on the item's button, as the mouse sends it, through the app's
+    /// event queue to the item's own window: a left click, or a right click,
+    /// whose menu is written down as it opens and then closed.
+    static func statusClick(right: Bool) async -> [String] {
+        guard let button = PresenceModel.shared.statusItemParts?.button, let window = button.window else {
+            return ["statusclick: no item in the menu bar"]
+        }
+        let middle = button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
+        let types: [NSEvent.EventType] = right ? [.rightMouseDown, .rightMouseUp] : [.leftMouseDown, .leftMouseUp]
+        let events = types.compactMap { type in
+            NSEvent.mouseEvent(
+                with: type, location: middle, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == types[0] ? 1 : 0
+            )
+        }
+        let opened = OpenedMenu()
+        let watching = right ? NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { note in
+            nonisolated(unsafe) let menu = note.object as? NSMenu
+            MainActor.assumeIsolated {
+                guard let menu else { return }
+                opened.items = menu.items.map { item in
+                    item.isSeparatorItem ? "---" : item.isSectionHeader ? "[\(item.title)]" : item.title
+                }
+                // Closed as the person would close it, a moment after it opened,
+                // from the menu's own run loop.
+                menu.perform(#selector(NSMenu.cancelTracking), with: nil, afterDelay: 1.5, inModes: [.common])
+            }
+        } : nil
+        defer { if let watching { NotificationCenter.default.removeObserver(watching) } }
+        let before = panelState()
+        events.forEach { NSApp.postEvent($0, atStart: false) }
+        try? await Task.sleep(for: .seconds(right ? 3 : 2))
+        var lines = ["statusclick\(right ? ":right" : "") (before: \(before)): " + panelState()]
+        if right { lines.append("  menu that opened: " + (opened.items.isEmpty ? "none" : opened.items.joined(separator: " | "))) }
+        return lines
+    }
+
+    final class OpenedMenu {
+        var items: [String] = []
+    }
+
+    /// Windows as the window server composes them together, each in its place,
+    /// the first in front.
+    static func composed(_ windows: [NSWindow], name: String, out: URL) -> String {
+        typealias Capture = @convention(c) (CGRect, CFArray, UInt32) -> Unmanaged<CGImage>?
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImageFromArray") else {
+            return "\(name): the window server cannot picture windows here"
+        }
+        let capture = unsafeBitCast(symbol, to: Capture.self)
+        // The windows' numbers as the array's own values, not as objects.
+        var values = windows.map { UnsafeRawPointer(bitPattern: UInt($0.windowNumber)) }
+        guard let numbers = CFArrayCreate(kCFAllocatorDefault, &values, values.count, nil) else { return "\(name): no picture" }
+        // Their frames' shadows left out, at the screen's scale.
+        guard let image = capture(.null, numbers, (1 << 0) | (1 << 3))?.takeRetainedValue(),
+            let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+        else { return "\(name): no picture" }
+        try? png.write(to: out.appendingPathComponent("\(name).png"))
+        return "pictured \(name).png \(image.width)x\(image.height) pixels"
     }
 
     /// A window as the window server composes it, its material included: an
