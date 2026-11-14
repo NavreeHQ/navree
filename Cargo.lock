@@ -4136,6 +4136,7 @@ dependencies = [
  "navree-http",
  "navree-http-client",
  "navree-i18n",
+ "navree-i18n-macros",
  "navree-integrations",
  "navree-kernel",
  "navree-lighthouse",
