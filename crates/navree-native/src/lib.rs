@@ -133,6 +133,12 @@ pub const CLIENT_HEADER: &str = "x-navree-client";
 /// in one by the [`WebViewToken`] in its user agent.
 pub const EMBED_HEADER: &str = "x-navree-embed";
 
+/// The response header, with the value `1`, on a page's answer whose page may
+/// be kept on the device between launches: its `Cache-Control` does not say
+/// `no-store`. An answer without it is not kept. Ops, refusals, redirects and
+/// the shell never carry it.
+pub const KEEP_HEADER: &str = "x-navree-keep";
+
 /// The product a native client's web view adds to its user agent:
 /// `NavreeNative/1 (platform=ios; lib=0.3.0)`. See [`WebViewToken`].
 pub const USER_AGENT_PRODUCT: &str = "NavreeNative";

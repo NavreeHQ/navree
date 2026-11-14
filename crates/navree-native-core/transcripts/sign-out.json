@@ -42,7 +42,7 @@
     },
     {
       "note": "The page names the same stamp: the shell held is the one it stands in.",
-      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-shell","shell-ravneet"]]},
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-shell","shell-ravneet"],["x-navree-keep","1"]]},
       "body": "made/home.json",
       "expect": {
         "changed": [
@@ -198,7 +198,7 @@
     },
     {
       "note": "Here the stamp is in the envelope itself, where a server may also write it. It is the new shell's: nothing more is asked.",
-      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-keep","1"]]},
       "body": "made/home-harpreet.json",
       "expect": {
         "changed": [

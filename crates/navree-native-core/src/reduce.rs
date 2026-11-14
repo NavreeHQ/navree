@@ -75,6 +75,8 @@ pub(crate) enum Shown {
         screen: Box<Screen>,
         status: u16,
         body: String,
+        /// The answer said the page may be kept on the device.
+        keep: bool,
     },
     /// The page in the web view.
     Web {
@@ -792,6 +794,8 @@ impl Core {
                 self.remember_shell(response.body);
                 self.inner.shell_stamp = stamp;
                 self.inner.seen_stamp = None;
+                // The person is the server's word now: what was kept for them may be drawn.
+                self.shell_confirmed();
             }
             Ok(_) => self.shell_failed(Failure::Protocol),
             Err(error) => {
@@ -1835,8 +1839,9 @@ impl Core {
                 screen,
                 status,
                 body,
+                keep,
             } => {
-                self.remember(url, status, &body);
+                self.remember(url, status, &body, keep);
                 self.show_native(id, url, *screen, status, false);
             }
             Shown::Web {
@@ -1882,6 +1887,7 @@ impl Core {
             screen: Box::new(screen),
             status,
             body,
+            keep: read.keep,
         })
     }
 

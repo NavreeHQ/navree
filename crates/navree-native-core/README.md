@@ -270,6 +270,16 @@ A redirect that leaves the app's origins opens outside the app and is never fetc
 - **The person.** When the shell's user becomes nobody, every screen is emptied and what was kept is thrown away, but the addresses stay, so the same person signing in again is back where they were. When it becomes someone else, nothing of the person before stays, not even where they were.
 - **A newer server.** A kind of node, action, command, control or op this build has never heard of costs that one thing: its stand-in is drawn, or the page is the web view's, or the screen is fetched again. A word a closed list lacks is read as the field's default.
 
+## What is kept between launches
+
+With `cache.persist`, the core hands the client things to keep for the next launch, with `cache_write`, under keys the client need not understand.
+
+- **The shell**, always: the app opens with its bars drawn.
+- **A page**, only when its answer carried `x-navree-keep: 1`. The server sends it when the page's `Cache-Control` does not say `no-store` (`View::cache("private, no-cache")` lets a page be kept). An answer without it takes away what was kept for its address. Pages kept in memory while the app runs are as before. (`transcripts/keep.json`)
+- **A kept page is drawn only after this launch's shell has answered over the network and named the person the kept shell named.** Before that, a kept page is not even read. Another person, or nobody: everything kept is thrown away. A shell that can't be reached: no kept page is drawn, and the screen shows what a screen that could not load shows. The fresh answer always takes a kept page's place.
+
+**What a client must do with what it keeps** (the cache and the snapshot): store it so that it can't be read while the device is locked, where the system offers that; leave it out of backups and of a move to another device; and empty it on `forget_session` and `cache_clear`, in the order the effects arrive.
+
 ## The conversations
 
 `transcripts/` holds each conversation with a server as a sequence of events in and the updates expected out, to be read by a person and replayed by the tests: opening the app, pages, every way a link is presented, route rules, back, refresh, forms (messages at fields, one send at a time, redirects, files), every op and command, regions, live regions, lists by cursor, the table's query, the web view's page, an app too old, kinds a build has never heard of, a session that ends, a page that moved, where a post leads, device calls, a sign-in with a provider, a sign-in handed over from the system's session, a second step, push, signing out on purpose, a launch that is restored, tabs, lists that change by revision, tables row by row, rows moved, fields that act as they change, ranges, searched options, ticked menu items, questions, a post from a menu an answer brought, tasks, the health charts and a day pager stepped in place, a pager in a screen's bar, parts added to a card and a carousel, the part a screen was opened from, a destination's page pushed as a detail, failures, answers nobody waits for any more, links from outside, addresses that do not read and an id in another script, a change of person, and what is kept between launches. The bodies in `transcripts/fixtures/store` are what the store demo answered; those in `fixtures/made` are written by hand.
