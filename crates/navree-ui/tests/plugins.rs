@@ -20,7 +20,8 @@ use navree_kernel::{
 };
 use navree_testing::{TestApp, TestAppBuilder, principal};
 use navree_ui::{
-    AppShell, ModuleBuilderShellExt, NavGroup, NavItem, Shell, ShellNavItem, UiModule, icons,
+    AppShell, ErrorShell, ModuleBuilderShellExt, NavGroup, NavItem, Shell, ShellNavItem, UiModule,
+    icons,
 };
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -755,4 +756,62 @@ async fn an_app_with_no_contributed_links_has_no_navigation_route() {
     assert_eq!(toolkit, 5);
     let response = app.client().get(NAVIGATION).send().await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+/// The pretty plugin, a community plugin of this crate.
+const PRETTY: PluginInfo = PluginInfo::new(
+    "navree-plugin-pretty",
+    env!("CARGO_CRATE_NAME"),
+    "pretty",
+    "1.0.0",
+);
+
+/// A module of the pretty plugin that builds the shell of the app's error pages.
+struct PrettyShell;
+
+impl Module for PrettyShell {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(PRETTY)
+            .contribute(ErrorShell::new(|_| async { None }));
+    }
+}
+
+/// A module of the app, naming no plugin, that contributes the same shell.
+struct OwnShell;
+
+impl Module for OwnShell {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(ErrorShell::new(|_| async { None }));
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugins_error_shell_fails_the_boot() {
+    let refusal = "plugin `navree-plugin-pretty` builds the shell of the app's error pages (an ErrorShell in `PrettyShell`); only the app chooses that: contribute it from a module of the app";
+    let alone = boot_error(builder(Shell::new("Kesar")).module(PrettyShell)).await;
+    // Whatever the order, beside the app's own shell.
+    let after_the_apps = boot_error(
+        builder(Shell::new("Kesar"))
+            .module(OwnShell)
+            .module(PrettyShell),
+    )
+    .await;
+    let before_the_apps = boot_error(
+        builder(Shell::new("Kesar"))
+            .module(PrettyShell)
+            .module(OwnShell),
+    )
+    .await;
+    for error in [alone, after_the_apps, before_the_apps] {
+        assert!(error.contains(refusal), "{error}");
+    }
+
+    // The same contribution from a module that names no plugin boots.
+    if let Err(error) = builder(Shell::new("Kesar"))
+        .module(OwnShell)
+        .try_build()
+        .await
+    {
+        panic!("{error}");
+    }
 }

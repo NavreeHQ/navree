@@ -191,6 +191,11 @@ pub trait ModuleBuilderHttpExt {
 
     /// Lets `pages` answer errors in another form than JSON: a page for a
     /// browser, say. The app uses the first one contributed.
+    ///
+    /// A module of a plugin that is not one of the framework's own packages
+    /// may not call this: [`build_router`](crate::build_router) refuses it,
+    /// which stops the boot, and the app registers such a plugin's pages from
+    /// a module of its own.
     fn error_pages(&mut self, pages: impl crate::ErrorPages) -> &mut Self;
 }
 
