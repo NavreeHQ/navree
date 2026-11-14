@@ -1167,12 +1167,18 @@ pub(crate) async fn context_layer(request: Request, next: Next) -> Response {
 }
 
 /// Names on a native answer the person it was made for, as the shell's
-/// answer names them; nobody signed in names nobody.
+/// answer names them. Nobody signed in names nobody: a name a handler or an
+/// upstream put on the answer is taken off.
 fn made_for(response: &mut Response, user: Option<uuid::Uuid>) {
-    if let Some(value) = super::routes::person(user) {
-        response
-            .headers_mut()
-            .insert(navree_native::PERSON_HEADER, value);
+    match super::routes::person(user) {
+        Some(value) => {
+            response
+                .headers_mut()
+                .insert(navree_native::PERSON_HEADER, value);
+        }
+        None => {
+            response.headers_mut().remove(navree_native::PERSON_HEADER);
+        }
     }
 }
 
@@ -1431,10 +1437,17 @@ mod tests {
             person(&kept).as_deref(),
             Some("0193a4b2-7c1d-7e3f-9a2b-5c6d7e8f9a0b")
         );
-        // Nobody signed in: no name.
+        // Nobody signed in: no name, also when a handler put one on.
         let mut kept = answer(true);
         made_for(&mut kept, None);
         assert_eq!(person(&kept), None);
+        let mut passed_on = answer(false);
+        passed_on.headers_mut().insert(
+            navree_native::PERSON_HEADER,
+            HeaderValue::from_static("0193a4b2-0000-7000-8000-00000000hs02"),
+        );
+        made_for(&mut passed_on, None);
+        assert_eq!(person(&passed_on), None);
         // An answer that may not be kept names them too.
         let mut not_kept = answer(false);
         made_for(&mut not_kept, Some(id));
