@@ -252,7 +252,7 @@ impl Graph {
 }
 
 /// The files `module` ships to publish, in registration order.
-fn shipped(module: &ModuleNode) -> impl Iterator<Item = &Publishable> {
+pub(crate) fn shipped(module: &ModuleNode) -> impl Iterator<Item = &Publishable> {
     module
         .contributions
         .iter()
