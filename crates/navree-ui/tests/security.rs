@@ -1614,3 +1614,30 @@ async fn only_the_apps_island_scripts_are_served() {
         .assert_status(400);
     assert!(out.text().contains("Invalid URL"), "{}", out.text());
 }
+
+/// The session's token goes into a page masked afresh each time it is written: one form
+/// drawn twice carries two strings, each of which holds the token, so a compressed page
+/// says nothing of it. A value that is not a session token is written as it is.
+#[test]
+fn a_form_carries_the_sessions_token_masked_afresh() {
+    use navree_http::csrf::unmask_token;
+
+    let token = "Agra4Pune7Kota2Surat9Patna1Ranchi8Mysore";
+    let carried = |html: &str| {
+        let marker = r#"name="_csrf" value=""#;
+        let start = html.find(marker).expect("a token field") + marker.len();
+        let value = html[start..].split('"').next();
+        value.unwrap_or_default().to_owned()
+    };
+    let form = || render(&FormView::<Login>::new().post("/login").csrf(token).into());
+    let (first, second) = (carried(&form()), carried(&form()));
+    assert_ne!(first, second);
+    for value in [&first, &second] {
+        assert!(!value.contains(token), "{value}");
+        assert_eq!(unmask_token(value).as_deref(), Some(token));
+    }
+    let field = carried(&render(&navree_ui::form::csrf_field(token).into()));
+    assert_eq!(unmask_token(&field).as_deref(), Some(token));
+    let html = render(&navree_ui::form::csrf_field("tok").into());
+    assert!(html.contains(r#"name="_csrf" value="tok""#), "{html}");
+}

@@ -31,8 +31,9 @@ fn is_reserved(key: &str) -> bool {
     key == TOKEN_KEY || key == LIFETIME_KEY
 }
 
-/// The length of CSRF tokens (base62 characters).
-pub(crate) const TOKEN_LEN: usize = 40;
+/// The length of CSRF tokens (base62 characters): the one pages tell a token by
+/// to mask it ([`navree_http::csrf::page_token`]).
+pub(crate) const TOKEN_LEN: usize = navree_http::csrf::TOKEN_LEN;
 
 /// A new random session id.
 fn new_id() -> String {
@@ -286,7 +287,10 @@ impl Session {
     }
 
     /// The CSRF token of the session (40 characters), created on first use.
-    /// The response also carries it in the `XSRF-TOKEN` cookie.
+    /// The response also carries it in the `XSRF-TOKEN` cookie. Written into a
+    /// body, it goes masked afresh in every response
+    /// ([`navree_http::csrf::page_token`], which navree-ui's forms call
+    /// themselves); the check takes the token or any mask of it.
     pub fn csrf_token(&self) -> String {
         let mut state = self.lock();
         state.token_requested = true;

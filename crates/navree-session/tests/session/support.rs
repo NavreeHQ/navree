@@ -79,6 +79,13 @@ async fn token(session: Session) -> Json<Value> {
     Json(json!({ "id": session.id(), "token": session.csrf_token() }))
 }
 
+/// A page with a plain form, its token written as a page writes it: masked
+/// for this answer.
+async fn form_page(session: Session) -> String {
+    let token = navree_http::csrf::page_token(&session.csrf_token());
+    format!(r#"<form method="post"><input type="hidden" name="_csrf" value="{token}"></form>"#)
+}
+
 async fn put_then_fail(session: Session) -> navree_http::Result<Json<Value>> {
     let attempts = session.get::<u32>("attempts").unwrap_or(0) + 1;
     session.insert("attempts", &attempts)?;
@@ -113,6 +120,7 @@ impl Controller for ProbeController {
             RouteDef::on(Method::POST, "/flush", flush).public(),
             RouteDef::on(Method::POST, "/remember", remember).public(),
             RouteDef::on(Method::GET, "/token", token).public(),
+            RouteDef::on(Method::GET, "/form", form_page).public(),
             RouteDef::on(Method::GET, "/untouched", untouched).public(),
             RouteDef::on(Method::POST, "/fail", put_then_fail).public(),
             RouteDef::on(Method::POST, "/write", write).public(),

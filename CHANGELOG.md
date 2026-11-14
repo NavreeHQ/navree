@@ -95,6 +95,11 @@ every `@navree/*` package carries the same version.
   pipeline's gzip: a route with `no_compression`, a response with `Cache-Control: no-transform` and
   `http.compression = false` leave the body uncompressed. `navree_http::may_compress` is the rule
   both read.
+- A page carries the session's CSRF token masked afresh in every answer
+  (`navree_http::csrf::page_token`): Navree UI's forms and post form, Helm's pages and native
+  screens write a different string each time, and the session's check takes the token as it is or
+  any mask of it, in the `_csrf` field and in both headers. The `XSRF-TOKEN` cookie still holds the
+  token as it is.
 
 ## [1.2.0] - 2026-11-13
 

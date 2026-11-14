@@ -63,7 +63,7 @@ RouteDef::on(Method::GET, "/search", search).no_compression();
 
 Each of these holds for every compressor of the app: the HTTP pipeline's gzip and the UI toolkit's brotli for pages and ops answers.
 
-Keeping the secret out of pages that reflect input, or masking it with fresh random bytes on each response, works too. JSON APIs that authenticate with a bearer token in a header aren't exposed: a cross-site request can't add the header.
+Keeping the secret out of pages that reflect input, or masking it with fresh random bytes on each response, works too. The session's CSRF token is masked that way already wherever Navree writes it into a body (Navree UI's forms, Helm's pages, native screens); in markup of your own, write `navree::http::csrf::page_token(&session.csrf_token())`, which the check takes as it takes the token (see [the token in pages](/docs/basics/sessions-and-csrf/#the-token-in-pages)). The `XSRF-TOKEN` cookie holds the token as it is: a header carries it, not a body. JSON APIs that authenticate with a bearer token in a header aren't exposed: a cross-site request can't add the header.
 
 ## Status codes
 

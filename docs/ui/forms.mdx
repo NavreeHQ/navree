@@ -210,7 +210,7 @@ The runtime keeps the page and shows only the errors, so the label matters for t
 - A body that isn't a urlencoded form gets 415; `GET` and `HEAD` get 405; past 1,000 fields, 413.
 - Only the struct's own fields are read: a `#[form(skip)]` field stays out of the client's reach.
 - A rejected form never writes back what a password input holds. A `String` field named `password`, or ending in it (`new_password`, `password_confirmation`), is drawn as one; `#[form(widget = password)]` makes any other field one, which is what a token or a key needs. `Rejected`'s `Debug` holds field names and errors, not values.
-- Behind a session, a plain form with JavaScript off proves itself with the token field: `FormView::csrf(session.csrf_token())`. The runtime sends the token as a header itself.
+- Behind a session, a plain form with JavaScript off proves itself with the token field: `FormView::csrf(session.csrf_token())`. The field holds the token [masked](/docs/basics/sessions-and-csrf/#the-token-in-pages), a fresh string in every page. The runtime sends the token as a header itself.
 
 Rules run once every field has the right type, so a form with a wrongly typed value reports the type errors first and the rules after they are fixed.
 

@@ -156,8 +156,10 @@ async fn changes_need_the_csrf_token() {
     let html = get(&client, "/admin").await.text();
     let token = csrf(&html);
     assert!(!token.is_empty());
-    // It is the session's token, the one the `XSRF-TOKEN` cookie holds.
-    assert_eq!(client.cookie("XSRF-TOKEN").as_deref(), Some(token.as_str()));
+    // It is the session's token, the one the `XSRF-TOKEN` cookie holds, masked.
+    let cookie = client.cookie("XSRF-TOKEN").expect("the token cookie");
+    assert_ne!(cookie, token);
+    assert_eq!(navree_http::csrf::unmask_token(&token), Some(cookie));
 
     client
         .post("/admin/api/resources/deals")

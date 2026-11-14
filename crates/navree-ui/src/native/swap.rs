@@ -184,7 +184,7 @@ pub(crate) fn native_ops(ops: &[Op]) -> Option<Vec<navree_native::Op>> {
                 {
                     action.fields.push(navree_native::action::Pair {
                         name: crate::form::CSRF_FIELD.to_owned(),
-                        value: token.to_owned(),
+                        value: navree_http::csrf::page_token(token),
                     });
                 }
                 O::Toast(said)

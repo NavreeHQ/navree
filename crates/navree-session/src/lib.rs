@@ -53,7 +53,10 @@
 //! handler as it came, the field included, so nothing of a file is read or
 //! held to find the token. A first part that is another field or a file,
 //! anything before the first delimiter, and a part's head that could be read
-//! two ways do not count. Paths matching
+//! two ways do not count. In the header and in the field alike, the token may
+//! come as it is (the cookie's value) or masked, as a page writes it: a fresh
+//! mask in every response ([`navree_http::csrf::page_token`]), so a compressed
+//! page says nothing of it. Paths matching
 //! [`SessionOptions::csrf_except`] are exempt from both
 //! checks. A path a module names with
 //! [`SameOriginOnly`](navree_http::csrf::SameOriginOnly) (navree-ui's appearance route,

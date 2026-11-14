@@ -30,7 +30,8 @@ pub(crate) type DataFn =
 /// ```
 ///
 /// The template (a navree-view template; the app needs `ViewModule`) gets
-/// `title`, `user` (`{id, name, email}`), `csrf_token`, `path` (the panel's
+/// `title`, `user` (`{id, name, email}`), `csrf_token` (the session's token,
+/// masked afresh for each page, for a form's `_csrf` field), `path` (the panel's
 /// path) and `data` (what [`data`](HelmPage::data) returns, else `null`).
 #[derive(Clone)]
 pub struct HelmPage {
