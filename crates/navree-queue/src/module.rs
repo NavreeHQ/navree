@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use navree_config::__private::{build_driver, check_registrations, contribute_slot};
 use navree_config::{Config, ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::{Clock, Dispatcher, JobMonitor, JobRegistration};
 use navree_db::{Db, ModuleBuilderDbExt};
@@ -13,6 +14,7 @@ use navree_realtime::ModuleBuilderRealtimeExt;
 use navree_schedule::ModuleBuilderScheduleExt;
 use navree_telemetry::{Telemetry, TracePolicy, TracePolicySection};
 
+use crate::drivers::{CheckedStores, SLOT};
 use crate::operations::{QueueMonitor, authorize_channel};
 use crate::store::{DatabaseStore, MemoryStore, Store};
 use crate::{
@@ -78,10 +80,14 @@ impl Module for QueueModule {
 
 fn register(m: &mut ModuleBuilder, options: Option<QueueOptions>) {
     m.global();
-    let mut queue_deps = vec![ProviderKey::of::<QueueOptions>()];
+    contribute_slot(m, SLOT);
+    let mut queue_deps = vec![
+        ProviderKey::of::<QueueOptions>(),
+        ProviderKey::of::<CheckedStores>(),
+    ];
     match options {
         Some(options) => {
-            if options.driver == QueueDriver::Database {
+            if options.driver.resolved() == QueueDriver::Database {
                 queue_deps.push(ProviderKey::of::<Db>());
             }
             let options = Arc::new(options);
@@ -101,9 +107,20 @@ fn register(m: &mut ModuleBuilder, options: Option<QueueOptions>) {
     }
     m.exports::<QueueOptions>()
         .factory(
+            // Every registration of a queue store is checked, whichever is
+            // selected and whether or not `Queue` is replaced.
+            Factory::<CheckedStores>::new(|r: Resolver| async move {
+                r.get::<QueueOptions>().await?;
+                check_registrations(&r.app(), &SLOT, QueueOptions::schema())?;
+                Ok(Arc::new(CheckedStores))
+            })
+            .deps(vec![ProviderKey::of::<QueueOptions>()]),
+        )
+        .factory(
             Factory::<Queue>::new(|r: Resolver| async move {
                 let options = r.get::<QueueOptions>().await?;
-                let store = match options.driver {
+                r.get::<CheckedStores>().await?;
+                let store = match options.driver.resolved() {
                     QueueDriver::Database => {
                         Store::Database(DatabaseStore::new((*r.get::<Db>().await?).clone()))
                     }
@@ -118,6 +135,18 @@ fn register(m: &mut ModuleBuilder, options: Option<QueueOptions>) {
                         )?;
                         Store::Custom("Redis", store)
                     }
+                    QueueDriver::Registered(name) => Store::Custom(
+                        name.as_str(),
+                        build_driver::<dyn QueueStore>(
+                            &r.app(),
+                            &SLOT,
+                            "queue.driver",
+                            name,
+                            format!("queue.{name}"),
+                            None,
+                        )
+                        .await?,
+                    ),
                 };
                 let app = r.app();
                 let clock = app.try_get::<dyn Clock>().await;

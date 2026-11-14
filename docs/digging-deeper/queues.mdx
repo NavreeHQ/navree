@@ -52,7 +52,7 @@ queues = ["high", "default"] # what `queue:work` processes, highest priority fir
 
 | Key | Default | Meaning |
 |---|---|---|
-| `queue.driver` | `database` | `database`, `memory` or `redis` (needs `RedisModule`). |
+| `queue.driver` | `database` | `database`, `memory`, `redis` (needs `RedisModule`), or the name of a store a module registers with `m.queue_store` (see [writing a driver](#writing-a-driver)). Any other value fails the boot. |
 | `queue.default_queue` | `default` | The queue of jobs dispatched with an empty queue name, and what workers process when `queues` is empty. Must not be empty. |
 | `queue.workers` | `4` | Concurrent jobs per `queue:work` process. At least 1. |
 | `queue.poll_interval_ms` | `1000` | How long an idle worker waits before polling again. At least 1. |
@@ -126,6 +126,52 @@ m.factory(
         .named("redis"),
 );
 ```
+
+#### A store a module registers
+
+A module can also register a store under a name of its own, and `queue.driver` selects it by that name, as it selects `database`, `memory` or `redis`. `m.queue_store` comes with `use navree::plugin::prelude::*;`. Its factory gets a `DriverContext` (the store's name, the app and its settings) and returns your `QueueStore`:
+
+```rust title="src/modules/depot/mod.rs"
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+use serde::Deserialize;
+
+/// The store's settings: `[queue.amritsar_queue]`.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct AmritsarSettings {
+    depot: String,
+}
+
+pub struct DepotModule;
+
+impl Module for DepotModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.queue_store("amritsar_queue", |ctx| async move {
+            let settings: AmritsarSettings = ctx.settings()?;
+            Ok(AmritsarStore::connect(&settings.depot).await?)
+        });
+    }
+}
+```
+
+Add the module to the app beside `QueueModule`, and select the store in the configuration. Its settings are the table below its name:
+
+```toml title="config/app.toml"
+[queue]
+driver = "amritsar_queue"
+
+[queue.amritsar_queue]
+depot = "depot.amritsar.example:7000"
+```
+
+Environment variables reach the settings too: `APP_QUEUE__AMRITSAR_QUEUE__DEPOT=depot.amritsar.example:7000`. In code, `QueueModule::for_root(QueueOptions { driver: QueueDriver::Registered(DriverName::from_static("amritsar_queue")), ..QueueOptions::default() })` selects the same store (`DriverName` is in `navree::plugin`).
+
+A store's name is a lower-case letter followed by up to 63 lower-case letters, digits or `_`. `ctx.settings()` reads `[queue.amritsar_queue]` into your type (its `Default` when the table is missing), and an error names the key, never a value; `ctx.settings_key()` is `queue.amritsar_queue`. A registered store keeps every rule of the `QueueStore` trait above, and jobs, retries, [batches and operations](/docs/digging-deeper/batches-and-operations/) work as they do on any `QueueStore`: batches still need the `database` or `memory` driver.
+
+These fail the boot, naming `m.queue_store` and the module that registered the name: a name that is not such a word, a built-in name (`database`, `memory`, `redis`), a name equal to a key of `[queue]` (`driver`, `default_queue`, `workers`, `poll_interval_ms`, `queues`, `operations`), and one name registered by two modules, even when another store is selected and when a test replaces `Queue` with a `QueueFake`. So does `queue.driver` naming a store no module registers (the message lists the stores that are known), and a factory that returns an error.
+
+`config:check` reports the same problems, in the same words, without booting the app, and `config:schema` lists the registered stores beside the built-in ones.
 
 ## Creating jobs
 
