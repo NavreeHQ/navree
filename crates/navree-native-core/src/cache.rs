@@ -203,7 +203,14 @@ impl Core {
     }
 
     fn show_kept(&mut self, id: ScreenId, status: u16, body: &str) {
-        let Ok(read) = crate::decode::envelope(body, &self.config) else {
+        let Some(from) = self.view.screens.get(&id).map(|view| view.url.clone()) else {
+            return;
+        };
+        let sources = crate::decode::Sources {
+            origin: &self.inner.origin,
+            from: &from,
+        };
+        let Ok(read) = crate::decode::envelope_with(body, &self.config, Some(&sources)) else {
             return;
         };
         let (Some(screen), true) = (read.envelope.screen, read.missing.is_empty()) else {

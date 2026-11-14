@@ -134,7 +134,7 @@ fn button(
 /// Names what this build can't draw in `node`, and puts what stands in for a
 /// part in its place: the `alt` of a kind or a plugin view it does not have,
 /// the stand-in of a device call it was not built with.
-fn check(node: &mut Node, config: &Config, missing: &mut Vec<String>) {
+fn check(node: &mut Node, config: &Config, missing: &mut Vec<String>, pictures: Pictures<'_>) {
     loop {
         match node {
             Node::Unknown(unknown) => match unknown.alt.take() {
@@ -182,6 +182,20 @@ fn check(node: &mut Node, config: &Config, missing: &mut Vec<String>) {
             .iter_mut()
             .for_each(|row| one(&mut row.action, missing)),
         Node::FeedRow(row) => one(&mut row.action, missing),
+        Node::Image(image) => {
+            if let Some(pictures) = pictures {
+                image.src = pictures.source(&image.src);
+            }
+        }
+        Node::Avatar(avatar) => {
+            if let Some(pictures) = pictures {
+                avatar.src = avatar
+                    .src
+                    .take()
+                    .map(|src| pictures.source(&src))
+                    .filter(|src| !src.is_empty());
+            }
+        }
         Node::Figure(figure) => one(&mut figure.action, missing),
         Node::Toolbar(toolbar) => {
             toolbar
@@ -228,19 +242,24 @@ fn check(node: &mut Node, config: &Config, missing: &mut Vec<String>) {
         match slot {
             Slot::Many(list) => list
                 .iter_mut()
-                .for_each(|child| check(child, config, missing)),
+                .for_each(|child| check(child, config, missing, pictures)),
             Slot::Maybe(child) => {
                 if let Some(child) = child.as_deref_mut() {
-                    check(child, config, missing);
+                    check(child, config, missing, pictures);
                 }
             }
-            Slot::One(child) => check(child, config, missing),
+            Slot::One(child) => check(child, config, missing, pictures),
         }
     }
 }
 
 /// A table row that arrives by itself is looked at as one in a table is.
-fn check_row(row: &mut TableRow, config: &Config, missing: &mut Vec<String>) {
+fn check_row(
+    row: &mut TableRow,
+    config: &Config,
+    missing: &mut Vec<String>,
+    pictures: Pictures<'_>,
+) {
     if let Err(why) = settle(&mut row.action, config).map(|stand_in| {
         if stand_in.is_some() {
             row.action = None;
@@ -249,12 +268,42 @@ fn check_row(row: &mut TableRow, config: &Config, missing: &mut Vec<String>) {
         missing.push(why);
     }
     row.nodes_mut()
-        .for_each(|node| check(node, config, missing));
+        .for_each(|node| check(node, config, missing, pictures));
 }
 
-fn check_screen(screen: &mut Screen, config: &Config, missing: &mut Vec<String>) {
+fn check_screen(
+    screen: &mut Screen,
+    config: &Config,
+    missing: &mut Vec<String>,
+    pictures: Pictures<'_>,
+) {
     for root in crate::tree::roots_mut(screen) {
-        check(root, config, missing);
+        check(root, config, missing, pictures);
+    }
+}
+
+/// Where the pictures of an answer are read from: the app's origin and the
+/// page they stand on. `None` leaves every source as it came.
+pub(crate) type Pictures<'a> = Option<&'a Sources<'a>>;
+
+/// The app's origin and the page an answer's pictures stand on.
+pub(crate) struct Sources<'a> {
+    pub origin: &'a Origin,
+    pub from: &'a str,
+}
+
+impl Sources<'_> {
+    /// A picture's source as a client is given it: a source on one of the
+    /// app's origins as its whole address, a whole `https` address of
+    /// another host written again from its parts (a client loads it or not
+    /// by its own list of picture hosts), and anything else as nothing,
+    /// which a client draws as its placeholder.
+    fn source(&self, src: &str) -> String {
+        match self.origin.resolve(src, self.from) {
+            Target::Inside(url) => self.origin.absolute(&url).unwrap_or_default(),
+            Target::Outside(url) if url.starts_with("https://") => url,
+            Target::Outside(_) | Target::Refused => String::new(),
+        }
     }
 }
 
@@ -285,13 +334,25 @@ pub(crate) fn with_room<T: Send>(read: impl FnOnce() -> T + Send) -> Option<T> {
     }
 }
 
-/// Reads an envelope. `Err` when it is not one at all, or speaks another
-/// major of the protocol.
+/// Reads an envelope, its pictures' sources left as they came. `Err` when it
+/// is not one at all, or speaks another major of the protocol. The core reads
+/// every answer with [`envelope_with`]; this is for the tests of the reading.
+#[cfg(test)]
 pub(crate) fn envelope(body: &str, config: &Config) -> Result<Read, Failure> {
-    with_room(|| envelope_here(body, config)).unwrap_or(Err(Failure::Protocol))
+    envelope_with(body, config, None)
 }
 
-fn envelope_here(body: &str, config: &Config) -> Result<Read, Failure> {
+/// Reads an envelope, and writes each picture's source in it as a client is
+/// given it (see [`Sources`]).
+pub(crate) fn envelope_with(
+    body: &str,
+    config: &Config,
+    pictures: Pictures<'_>,
+) -> Result<Read, Failure> {
+    with_room(|| envelope_here(body, config, pictures)).unwrap_or(Err(Failure::Protocol))
+}
+
+fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<Read, Failure> {
     let mut read = Read {
         envelope: blank(),
         missing: Vec::new(),
@@ -328,22 +389,22 @@ fn envelope_here(body: &str, config: &Config) -> Result<Read, Failure> {
     // a screen stands on its own.
     read.envelope.inline_icons();
     if let Some(screen) = &mut read.envelope.screen {
-        check_screen(screen, config, &mut read.missing);
+        check_screen(screen, config, &mut read.missing, pictures);
     }
     for op in &mut read.envelope.ops {
         match op {
             Op::Morph { node, .. } | Op::Replace { node, .. } => {
-                check(node, config, &mut read.missing)
+                check(node, config, &mut read.missing, pictures)
             }
             Op::Append { nodes, .. } | Op::Prepend { nodes, .. } | Op::Merge { nodes, .. } => {
                 nodes
                     .iter_mut()
-                    .for_each(|node| check(node, config, &mut read.missing));
+                    .for_each(|node| check(node, config, &mut read.missing, pictures));
             }
             Op::Rows { rows, .. } => rows
                 .iter_mut()
-                .for_each(|row| check_row(row, config, &mut read.missing)),
-            Op::Row { row, .. } => check_row(row, config, &mut read.missing),
+                .for_each(|row| check_row(row, config, &mut read.missing, pictures)),
+            Op::Row { row, .. } => check_row(row, config, &mut read.missing, pictures),
             Op::Unknown => read.reload = true,
             _ => {}
         }
@@ -389,7 +450,8 @@ pub(crate) fn read(response: Response, asked: &str, origin: &Origin, config: &Co
     if media == CONTENT_TYPE {
         let header = response.header(SHELL_STAMP_HEADER).map(str::to_owned);
         let keep = response.header(navree_native::KEEP_HEADER) == Some("1");
-        return match envelope(&response.body, config) {
+        let sources = Sources { origin, from: &url };
+        return match envelope_with(&response.body, config, Some(&sources)) {
             Ok(mut read) => {
                 read.keep = keep;
                 let own = (!read.envelope.shell.is_empty()).then(|| read.envelope.shell.clone());
@@ -639,6 +701,56 @@ mod tests {
             content_type: Some(content_type.to_owned()),
             body: body.to_owned(),
             ..Response::default()
+        }
+    }
+
+    #[test]
+    fn a_picture_source_is_a_whole_address_or_nothing() {
+        let origin = Origin::parse("https://shop.example", &[], false).unwrap();
+        let config = config();
+        let picture = |src: &str| {
+            let src = serde_json::to_string(src).unwrap();
+            let tree = format!(
+                r#"{{"t":"stack","children":[{{"t":"image","src":{src}}},{{"t":"avatar","name":"Ravneet Kaur","src":{src}}}]}}"#
+            );
+            let Answer::Tree { read, .. } = read(
+                response(200, CONTENT_TYPE, &body(&tree)),
+                "/products/7",
+                &origin,
+                &config,
+            ) else {
+                panic!("not a tree");
+            };
+            let screen = read.envelope.screen.unwrap();
+            let Node::Stack(stack) = screen.body else {
+                panic!("not a stack");
+            };
+            let (Node::Image(image), Node::Avatar(avatar)) = (&stack.children[0], &stack.children[1])
+            else {
+                panic!("not an image and an avatar");
+            };
+            // The avatar holds the same, or nothing.
+            assert_eq!(avatar.src.clone().unwrap_or_default(), image.src);
+            image.src.clone()
+        };
+        for (src, becomes) in [
+            ("/pictures/kesar.jpg", "https://shop.example/pictures/kesar.jpg"),
+            ("kesar 250 g.jpg", "https://shop.example/kesar%20250%20g.jpg"),
+            ("https://shop.example/a.png", "https://shop.example/a.png"),
+            ("//cdn.example/a.png", "https://cdn.example/a.png"),
+            ("HTTPS://CDN.Example/ü.png#x", "https://cdn.example/%C3%BC.png#x"),
+            ("http://cdn.example/a.png", ""),
+            ("/\\evil.example/a.png", ""),
+            ("//evil.example\\a.png", ""),
+            (" /a.png", ""),
+            ("data:image/png;base64,AAAA", ""),
+            ("javascript:1", ""),
+            ("file:///etc/hosts", ""),
+            ("https://user@cdn.example/a.png", ""),
+            ("mailto:a@shop.example", ""),
+            ("", ""),
+        ] {
+            assert_eq!(picture(src), becomes, "{src:?}");
         }
     }
 
