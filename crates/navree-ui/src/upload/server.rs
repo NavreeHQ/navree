@@ -648,6 +648,10 @@ impl Uploads {
     /// part may come twice: the last one sent stays. Every part but the last is exactly the
     /// size [`begin`](Self::begin) named; the last is what is left.
     ///
+    /// A part takes the same turn as a [`finish`](Self::finish) of its upload, so one sent
+    /// while the upload is being put together waits for it, and is then refused as the upload
+    /// is gone: the file is made from the parts that were checked.
+    ///
     /// # Errors
     /// The upload is not this owner's or is gone, the part is out of place, of the wrong size,
     /// or larger than a part may be, or the storage fails.
@@ -658,6 +662,10 @@ impl Uploads {
         index: u32,
         body: Bytes,
     ) -> Result<(), UploadError> {
+        if !valid_id(id) {
+            return Err(self.error(UploadCode::Unknown, ""));
+        }
+        let _turn = turn(self.turn_key(id)).await;
         let session = self.session(owner, id).await?;
         let chunks = session.size.div_ceil(session.chunk);
         if u64::from(index) >= chunks {
@@ -683,8 +691,10 @@ impl Uploads {
     /// The kind is read from the file's first bytes with the sniffer a plain post uses, and a
     /// file of a kind that is not accepted is thrown away with its parts.
     ///
-    /// The finishes of one upload take turns: one sent at the same moment as another waits for
-    /// it, then finds the upload finished, so the file is put together and stored once.
+    /// The finishes and the parts of one upload take turns: one sent at the same moment as
+    /// another waits for it, then finds the upload finished, so the file is put together and
+    /// stored once, from the parts that were checked. The file starts with the very bytes its
+    /// kind was read from.
     ///
     /// # Errors
     /// The upload is not this owner's or is gone, a part is missing, the kind is not accepted,
@@ -709,8 +719,10 @@ impl Uploads {
                 Err(_) => return Err(failed()),
             }
         }
-        let first = paths.first().ok_or_else(bad)?;
-        let first = self.disk.get(first).await.map_err(|_| failed())?;
+        let first = match paths.first() {
+            Some(path) => self.disk.get(path).await.map_err(|_| failed())?,
+            None => return Err(bad()),
+        };
         let head = &first[..first.len().min(SNIFF_BYTES)];
         let sniffed = sniff_type(head, Some(session.name.as_str()));
         if !self.limits.allows(&sniffed.mime) {
@@ -718,21 +730,8 @@ impl Uploads {
             return Err(self.error(UploadCode::WrongType, &session.name));
         }
         let path = upload_path(&self.dir, &sniffed.mime);
-        let disk = self.disk.clone();
-        let parts = Arc::new(paths);
-        let joined = stream::try_unfold(0_usize, move |at| {
-            let disk = disk.clone();
-            let parts = Arc::clone(&parts);
-            async move {
-                match parts.get(at) {
-                    Some(path) => {
-                        let bytes = disk.get(path).await?;
-                        Ok::<_, StorageError>(Some((bytes, at + 1)))
-                    }
-                    None => Ok(None),
-                }
-            }
-        });
+        // The file starts with the very bytes that were sniffed, not a second read of part 0.
+        let joined = join_parts(self.disk.clone(), first, paths.split_off(1));
         let written = self
             .disk
             .put_stream(&path, joined)
@@ -911,6 +910,32 @@ fn part_size(session: &Session, index: u64) -> u64 {
     }
 }
 
+/// The bytes of a file put together: `first`, the part that was read to tell its kind, then the
+/// parts at `rest` read from `disk` one at a time.
+fn join_parts(
+    disk: Disk,
+    first: Bytes,
+    rest: Vec<String>,
+) -> impl futures_util::Stream<Item = Result<Bytes, StorageError>> {
+    let rest = Arc::new(rest);
+    stream::try_unfold((Some(first), 0_usize), move |(head, at)| {
+        let disk = disk.clone();
+        let rest = Arc::clone(&rest);
+        async move {
+            if let Some(head) = head {
+                return Ok::<_, StorageError>(Some((head, (None, at))));
+            }
+            match rest.get(at) {
+                Some(path) => {
+                    let bytes = disk.get(path).await?;
+                    Ok(Some((bytes, (None, at + 1))))
+                }
+                None => Ok(None),
+            }
+        }
+    })
+}
+
 /// Where an owner's sessions are kept: 32 hexadecimal digits of the SHA-256 of `owner`, so
 /// an owner's uploads are counted by listing one directory, and no owner names a path.
 fn owner_key(owner: &str) -> String {
@@ -920,8 +945,9 @@ fn owner_key(owner: &str) -> String {
         .collect()
 }
 
-/// Locks by name, held while an upload is begun for an owner or finished: one at a time each,
-/// in this process. An entry lives as long as somebody holds or waits for its lock.
+/// Locks by name, held while an upload is begun for an owner, one of its parts is kept, or it is
+/// finished or stopped: one at a time each, in this process. An entry lives as long as somebody
+/// holds or waits for its lock.
 static TURNS: LazyLock<Mutex<HashMap<String, Weak<tokio::sync::Mutex<()>>>>> =
     LazyLock::new(Mutex::default);
 
@@ -1069,5 +1095,74 @@ mod tests {
         assert_eq!(UploadCode::TooLarge.status(), StatusCode::PAYLOAD_TOO_LARGE);
         assert_eq!(UploadCode::Unknown.status(), StatusCode::NOT_FOUND);
         assert_eq!(UploadCode::WrongType.as_str(), "wrong_type");
+    }
+
+    fn memory_disk() -> Disk {
+        use navree_storage::{DiskConfig, Storage, StorageOptions};
+
+        let mut options = StorageOptions {
+            default: "scratch".into(),
+            ..StorageOptions::default()
+        };
+        options.disks.clear();
+        options.disks.insert("scratch".into(), DiskConfig::Memory);
+        Storage::new(&options, b"signing key")
+            .expect("a memory storage")
+            .default_disk()
+    }
+
+    /// A part takes the turn the finish of its upload takes: one sent while the upload is being
+    /// put together waits for it, so it cannot replace a part that was already checked.
+    #[tokio::test]
+    async fn a_part_waits_for_the_turn_of_its_upload() {
+        let uploads = Uploads::new(
+            memory_disk(),
+            "photos",
+            UploadLimits::new(1024 * 1024).accept(["image/png"]),
+        )
+        .chunk_bytes(MIN_CHUNK);
+        let ticket = uploads
+            .begin(
+                "u",
+                ChunkStart {
+                    name: "a.png".to_owned(),
+                    size: MIN_CHUNK,
+                },
+            )
+            .await
+            .unwrap();
+        let part = Bytes::from(vec![7_u8; MIN_CHUNK as usize]);
+
+        let held = turn(uploads.turn_key(&ticket.id)).await;
+        let mut sent = Box::pin(uploads.put_chunk("u", &ticket.id, 0, part));
+        let early = tokio::time::timeout(Duration::from_millis(300), &mut sent).await;
+        assert!(
+            early.is_err(),
+            "the part is kept while the turn of its upload is held"
+        );
+        drop(held);
+        sent.await.expect("the part is kept once the turn is free");
+    }
+
+    /// The file starts with the part that was read to tell its kind, not a second read of it:
+    /// part 0 is not on the disk here at all.
+    #[tokio::test]
+    async fn a_file_is_joined_from_the_bytes_held_and_the_parts_after_them() {
+        use futures_util::TryStreamExt;
+
+        let disk = memory_disk();
+        disk.put("p/00000001", Bytes::from_static(b"two-"))
+            .await
+            .unwrap();
+        disk.put("p/00000002", Bytes::from_static(b"three"))
+            .await
+            .unwrap();
+        let joined = join_parts(
+            disk,
+            Bytes::from_static(b"one-"),
+            vec!["p/00000001".to_owned(), "p/00000002".to_owned()],
+        );
+        let parts: Vec<Bytes> = joined.try_collect().await.unwrap();
+        assert_eq!(parts.concat(), b"one-two-three".to_vec());
     }
 }
