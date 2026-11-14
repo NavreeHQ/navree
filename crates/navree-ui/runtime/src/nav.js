@@ -308,7 +308,8 @@ const loads = new Set();
 
 /**
  * Goes to `url` like a boosted link. An answer that was on its way while something was written is fetched
- * again, twice at most (`tried`): a page that is written to as often as it is asked for shows what came.
+ * again, twice at most (`tried`): a page that is written to as often as it is asked for then loads for real,
+ * which shows what is there now and nothing from before a write.
  * @param {string} url @param {{region?: string, push?: boolean}} [how] @param {number} [tried]
  */
 export async function go(url, how = {}, tried = 0) {
@@ -335,11 +336,13 @@ export async function go(url, how = {}, tried = 0) {
   tablePending(table, true);
   // As a region's refresh: an answer fetched before a write, a sign-out or another tab's change is from
   // before it, and is fetched again (a write began here overtakes this outright: see `whileWriting`).
-  const since = epoch, more = tried < 2;
+  const since = epoch;
+  // Asked again twice already, the page loads for real instead.
+  const again = () => (tried < 2 ? go(url, how, tried + 1) : location.assign(url));
   try {
     const response = await fetchPage(url);
     if (stale()) return;
-    if (more && epoch !== since) return go(url, how, tried + 1);
+    if (epoch !== since) return again();
     if (table && !response.ok) {
       tableFailed(table, url, response.status);
       return;
@@ -348,7 +351,7 @@ export async function go(url, how = {}, tried = 0) {
       location.assign(url);
       return;
     }
-    if ((await showPage(response, { ...how, url: response.url || url, since: more ? since : undefined })) && !stale()) return go(url, how, tried + 1);
+    if ((await showPage(response, { ...how, url: response.url || url, since })) && !stale()) return again();
   } catch {
     if (stale()) return;
     if (table) tableFailed(table, url, 0);

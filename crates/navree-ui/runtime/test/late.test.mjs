@@ -103,9 +103,9 @@ test("a page dropped as overtaken while its styles load leaves no history entry"
   assert.equal($("main").textContent, "Deal 5");
 });
 
-// Something written on every answer would have a navigation, or a region, fetch for ever. It asks again
-// twice at most, then shows what came.
-test("a page whose every answer is overtaken by a write is shown after at most three fetches", async () => {
+// Something written on every answer would have a navigation, or a region, fetch for ever. Each asks again
+// twice at most. A page then loads for real, which shows nothing from before a write; a region draws what came.
+test("a page whose every answer is overtaken by a write loads for real after three fetches", async () => {
   history.replaceState(null, "", "/deals/5");
   $("main").innerHTML = `<a id="six" href="/deals/6">6</a>`;
   page.fetched.length = 0;
@@ -121,10 +121,11 @@ test("a page whose every answer is overtaken by a write is shown after at most t
   $("six").click();
   await settle();
   assert.equal(page.fetched.length, 3);
-  assert.equal($("main").textContent, "Deal 6, answer 3");
-  assert.deepEqual(page.pushed, ["https://app.test/deals/6"]);
-  assert.deepEqual(page.assigned, []);
+  assert.equal($("main").textContent.includes("Deal 6"), false, "no answer from before a write is shown");
+  assert.deepEqual(page.pushed, []);
+  assert.deepEqual(page.assigned, ["https://app.test/deals/6"]);
   page.answers.length = 0;
+  page.assigned.length = 0;
 });
 
 test("a region whose every answer is overtaken by a write is drawn after at most three fetches", async () => {
