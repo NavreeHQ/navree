@@ -27,13 +27,16 @@
 #             exists and the app is not installed yet)
 #   WAIT      seconds after launch before looking for a still screen (10)
 #   SETTLE    seconds to wait at most for the screen to stop changing (60)
+#   STILL     how many screenshots in a row, two seconds apart, must match
+#             the one before (2)
 #
-# The picture is taken once two screenshots two seconds apart are the same,
-# or after SETTLE seconds. The status bar shows 9:41, full battery and Wi-Fi.
+# The picture is taken once STILL screenshots in a row are the same as the
+# one before, or after SETTLE seconds. The status bar shows 9:41, full
+# battery and Wi-Fi.
 set -euo pipefail
 
 if [ $# -lt 3 ]; then
-    sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
 fi
 udid="$1"
@@ -46,6 +49,7 @@ bundle="com.navree.demo"
 app="${APP:-$here/build/DerivedData/Build/Products/Debug-iphonesimulator/NavreeDemo.app}"
 wait_first="${WAIT:-10}"
 settle="${SETTLE:-60}"
+needed="${STILL:-2}"
 
 state="$(xcrun simctl list devices -j | jq -r --arg u "$udid" '.devices[][] | select(.udid == $u) | .state')"
 if [ -z "$state" ]; then
@@ -119,12 +123,14 @@ while [ $SECONDS -lt $end ]; do
     sleep 2
     xcrun simctl io "$udid" screenshot --type=png "$current" >/dev/null 2>&1
     if cmp -s "$previous" "$current"; then
-        still=1
-        break
+        still=$((still + 1))
+        [ $still -ge "$needed" ] && break
+    else
+        still=0
     fi
     mv "$current" "$previous"
 done
-if [ $still = 1 ]; then
+if [ $still -ge "$needed" ]; then
     mv "$current" "$out"
 else
     mv "$previous" "$out"
