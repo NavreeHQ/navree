@@ -125,7 +125,7 @@ public struct ScreenView: View {
         } else if !panes.isEmpty {
             PaneScreenBody(panes: panes)
         } else if CompositionRules.isComposed(body) {
-            ComposedScreenBody(body: body)
+            ComposedScreenBody(body: body, readable: CompositionRules.readableWidth(bar: .current, depth: depth))
         } else if let table, sections.count == 1,
             ContentRules.table(table, width: width, accessibilityText: typeSize.isAccessibilitySize) == .columns
         {

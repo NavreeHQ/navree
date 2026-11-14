@@ -223,7 +223,23 @@ enum Surfaces {
         #if os(iOS)
         Color(uiColor: .secondarySystemGroupedBackground)
         #else
-        Color(nsColor: .controlBackgroundColor)
+        // As a grouped form's sections stand on a Mac window (System
+        // Settings): the system's lightest fill laid on the window's ground,
+        // which the control background (the ground's own white) never showed;
+        // as one solid colour, so a ring drawn round a mark in the card's
+        // colour still cuts it out.
+        Color(nsColor: NSColor(name: nil) { appearance in
+            var solid = NSColor.windowBackgroundColor
+            appearance.performAsCurrentDrawingAppearance {
+                if let ground = NSColor.windowBackgroundColor.usingColorSpace(.sRGB),
+                    let fill = NSColor.quaternarySystemFill.usingColorSpace(.sRGB),
+                    let laid = ground.blended(withFraction: fill.alphaComponent, of: fill.withAlphaComponent(1))
+                {
+                    solid = laid
+                }
+            }
+            return solid
+        })
         #endif
     }
 }
