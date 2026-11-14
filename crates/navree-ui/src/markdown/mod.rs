@@ -280,12 +280,15 @@ fn code_block(language: &str, code: &str, copy: bool, labels: &MarkdownLabels) -
     // The bar is the toolkit's own (`data-ui-own`): its copy button works inside stored text.
     let own = button.is_some();
     let bar = (!language.is_empty() || button.is_some()).then(|| {
-        el("div").slot("code-block-bar").flag("data-ui-own", own).children((
-            el("span")
-                .slot("code-block-language")
-                .child(language.to_owned()),
-            button,
-        ))
+        el("div")
+            .slot("code-block-bar")
+            .flag("data-ui-own", own)
+            .children((
+                el("span")
+                    .slot("code-block-language")
+                    .child(language.to_owned()),
+                button,
+            ))
     });
     el("div")
         .slot("code-block")

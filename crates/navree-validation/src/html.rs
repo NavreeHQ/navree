@@ -48,7 +48,9 @@ const PAGE_ATTRIBUTE_PREFIXES: [&str; 2] = ["data-ui-", "data-genui"];
 /// Whether the page acts on `attribute` (see [`PAGE_ATTRIBUTES`]), in any case.
 pub(crate) fn acts_on_page(attribute: &str) -> bool {
     let name = attribute.to_ascii_lowercase();
-    PAGE_ATTRIBUTE_PREFIXES.iter().any(|prefix| name.starts_with(prefix))
+    PAGE_ATTRIBUTE_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
         || PAGE_ATTRIBUTES.contains(&name.as_str())
 }
 
