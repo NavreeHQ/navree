@@ -65,7 +65,8 @@ every `@navree/*` package carries the same version.
   so is one whose token the session's check took, as a test client or a native app sends it. A
   form compares the `Origin` as the session layer does (host and port) and, when the request
   carries its own scheme, the scheme too. In an app with no session layer, a test that posts a
-  form with a cookie sends `sec-fetch-site: same-origin`, as a browser does.
+  form with a cookie adds `sec-fetch-site: same-origin` to its request, as a browser sends it:
+  the test client does not add it.
 - A form's file field takes a file key only from the person it was made for, for a file directly
   in the folder of its own `Uploads`, as long as the file is still within that upload's size and
   kind limits. The route a field's upload sends its file to answers with
@@ -114,17 +115,18 @@ every `@navree/*` package carries the same version.
   its own address for real). A region, a lazy tab or a lazy sidebar group whose source is not a
   `LocalHref` (or is `#`) has no source: it is drawn once and never fetched, and a poll, feed or
   stream given with it is left out. A whole address of the site's own
-  (`https://example.com/fragments/kpis`) is refused like any other, so write the path; a refused
-  source is named in the log as a warning, once. A region is polled once a second at the most,
-  whatever its `poll` says.
+  (`https://example.com/fragments/kpis`) is refused like any other, so write the path; a source
+  that is a whole address, of this site or another, is named in the log as a warning, once,
+  without its query. A region is polled once a second at the most, whatever its `poll` says.
 - Every `View` answers with `X-Navree-Page: 1`, and the UI runtime takes an answer into the page
   only when it carries it (the build is checked as before): a page without it loads for real, and
   a region's answer without it is not drawn. A region's source answers with a `View`, or with
   `pages::region_answer(node)` for a part of a page alone; Helm's menu counts and Lighthouse's
   overview region answer that way.
 - A boosted navigation fetched before a write, a sign-out or another tab's change is fetched again
-  rather than shown (twice at the most, then the page loads for real); a navigation that
-  began before a form's post never replaces the form's answer; a region's fetch begun on one page
+  rather than shown (twice at the most; then a page loads for real, and a link that redraws its
+  region alone, such as a table's sort, draws what came); a navigation that began before a
+  form's post never replaces the form's answer; a region's fetch begun on one page
   never lands in the next page's region of the same id; and a page dropped as overtaken adds no
   history entry.
 - A table's selection kept in the tab is cleared when another person signs in, a palette's recent
