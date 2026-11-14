@@ -5,7 +5,7 @@
 //! under keys the client need not understand, the shell, the list of pages
 //! kept and their owner (`boot`), and each page whose answer said it may be
 //! kept ([`navree_native::KEEP_HEADER`], sent when the page's `Cache-Control`
-//! does not say `no-store`) under `page:<address>`. An answer that does not
+//! does not say `no-store`) under `page:<owner>:<address>`. An answer that does not
 //! say so removes what was kept for its address.
 //!
 //! What is kept has an **owner**: the person, or the visitor, its pages were
@@ -177,6 +177,19 @@ fn same_owner(owner: &Person, named: &Person) -> bool {
 }
 
 impl Core {
+    /// The client's key for the page kept for `key`: the owner of what is kept
+    /// and the page's whole address (`page:<id>:<address>`, or
+    /// `page:visitor:<address>`). Two cores over one store, each naming its
+    /// own person, never read or write each other's pages.
+    fn device_key(&self, key: &str) -> String {
+        let owner = match &self.inner.cache.owner {
+            Owner::Of(None) => "visitor",
+            Owner::Of(Some(who)) => who.id().unwrap_or("nobody"),
+            Owner::Unread | Owner::Empty => "nobody",
+        };
+        format!("page:{owner}:{key}")
+    }
+
     /// The key a page is kept under: its whole address as it leaves the core,
     /// so two spellings of one address are one page.
     fn key_of(&self, url: &str) -> String {
@@ -321,7 +334,7 @@ impl Core {
         }
         self.inner.cache.disk.retain(|kept| *kept != key);
         self.effects.push(Effect::CacheWrite {
-            key: format!("page:{key}"),
+            key: self.device_key(&key),
             value: None,
         });
         self.boot();
@@ -385,7 +398,7 @@ impl Core {
             body: body.to_owned(),
         };
         self.effects.push(Effect::CacheWrite {
-            key: format!("page:{key}"),
+            key: self.device_key(&key),
             value: serde_json::to_string(&page).ok(),
         });
         let disk = &mut self.inner.cache.disk;
@@ -395,7 +408,7 @@ impl Core {
         let dropped = (disk.len() > limit).then(|| disk.remove(0));
         if let Some(dropped) = dropped {
             self.effects.push(Effect::CacheWrite {
-                key: format!("page:{dropped}"),
+                key: self.device_key(&dropped),
                 value: None,
             });
         }
@@ -498,7 +511,7 @@ impl Core {
                 self.inner.cache.asked.push(key.clone());
             }
             self.effects.push(Effect::CacheRead {
-                key: format!("page:{key}"),
+                key: self.device_key(&key),
             });
         }
     }
@@ -637,15 +650,15 @@ impl Core {
         // What was taken away before the list was read stays away.
         let removed = std::mem::take(&mut self.inner.cache.removed);
         let before = pages.len();
+        self.inner.cache.owner = Owner::Of(owner);
         for key in removed.iter().filter(|key| pages.contains(key)) {
             self.effects.push(Effect::CacheWrite {
-                key: format!("page:{key}"),
+                key: self.device_key(key),
                 value: None,
             });
         }
         pages.retain(|kept| !removed.contains(kept));
         self.inner.cache.disk = pages;
-        self.inner.cache.owner = Owner::Of(owner);
         self.inner.cache.kept_build = build;
         // This launch's build may be known before the list was read.
         let emptied = self.inner.build.is_some() && self.build_known();
@@ -663,7 +676,8 @@ impl Core {
         let Some(value) = value else {
             return;
         };
-        if let Some(kept) = key.strip_prefix("page:") {
+        if let Some(kept) = key.strip_prefix(&self.device_key("")).map(str::to_owned) {
+            let kept = kept.as_str();
             // A read asked before what is kept was last emptied, or never
             // asked, is dropped: it may be someone else's page.
             let Some(at) = self

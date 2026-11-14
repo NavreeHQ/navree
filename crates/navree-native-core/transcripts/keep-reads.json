@@ -46,7 +46,7 @@
           {"t":"screen","id":2}
         ],
         "effects": [
-          {"t":"cache_read","key":"page:https://shop.example/orders"},
+          {"t":"cache_read","key":"page:0193a4b2-0000-7000-8000-00000000ra01:https://shop.example/orders"},
           {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
@@ -94,7 +94,7 @@
     },
     {
       "note": "The client's answer to the read asked for Ravneet arrives now. It is not drawn for Harpreet.",
-      "send": {"t":"cache","key":"page:https://shop.example/orders"},
+      "send": {"t":"cache","key":"page:0193a4b2-0000-7000-8000-00000000ra01:https://shop.example/orders"},
       "body": "made/kept-orders.json",
       "expect": {
         "changed": [],

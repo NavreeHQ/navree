@@ -284,6 +284,8 @@ With `cache.persist`, the core hands the client things to keep for the next laun
 - **Taking away and emptying reach the device whatever the core holds.** Any read answered without the header before the list was read (a page, a search form's query, an answer for the web view) is taken away once the list is read and holds it. Nothing is written to the device for a page that was never kept. A write, a new build and a change of person empty the device's store even when nothing is listed. The build the pages were answered by is kept beside them, so a deploy between launches empties them. (`transcripts/keep-store.json`)
 - **A kept page is drawn only for the read that asked for it.** A read that was on its way when what is kept was emptied (a change of person, a write, a new build), or that was never asked, is dropped when its answer comes. (`transcripts/keep-reads.json`)
 
+**One core for the app.** A client runs one core for the app, not one for each window or scene: what is kept on the device is one store, and a core is the one that knows whose it is. Pages are kept under their owner (`page:<id>:<address>`, `page:visitor:<address>`), so two cores over one store, one naming a person and one a visitor, never read or write each other's pages; but `boot` is one list, so a second core makes the first lose its head starts. (`two_cores_over_one_store_never_mix_their_owners_pages` in `src/reduce.rs`)
+
 **What a client must do with what it keeps** (the cache and the snapshot): store it so that it can't be read while the device is locked, where the system offers that; leave it out of backups and of a move to another device; and empty it on `forget_session` and `cache_clear`, in the order the effects arrive.
 
 ## The conversations
