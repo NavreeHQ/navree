@@ -1389,7 +1389,10 @@ fn every_framework_module_passes_the_plugin_checks_and_names_only_first_party_pl
             "CryptoModule",
             Navree::app().module(CryptoModule::from_config()),
         ),
-        ("HttpModule", Navree::app().module(HttpModule::from_config())),
+        (
+            "HttpModule",
+            Navree::app().module(HttpModule::from_config()),
+        ),
         (
             "HttpClientModule",
             Navree::app().module(HttpClientModule::from_config()),
@@ -1403,11 +1406,23 @@ fn every_framework_module_passes_the_plugin_checks_and_names_only_first_party_pl
             "CacheModule",
             Navree::app().module(CacheModule::from_config()),
         ),
-        ("EventsModule", Navree::app().module(EventsModule::for_root())),
-        ("ViewModule", Navree::app().module(ViewModule::from_config())),
+        (
+            "EventsModule",
+            Navree::app().module(EventsModule::for_root()),
+        ),
+        (
+            "ViewModule",
+            Navree::app().module(ViewModule::from_config()),
+        ),
         ("UiModule", Navree::app().module(UiModule::from_config())),
-        ("TimeModule", Navree::app().module(TimeModule::from_config())),
-        ("MailModule", Navree::app().module(MailModule::from_config())),
+        (
+            "TimeModule",
+            Navree::app().module(TimeModule::from_config()),
+        ),
+        (
+            "MailModule",
+            Navree::app().module(MailModule::from_config()),
+        ),
         (
             "QueueModule",
             Navree::app().module(QueueModule::from_config()),
@@ -1424,7 +1439,10 @@ fn every_framework_module_passes_the_plugin_checks_and_names_only_first_party_pl
             "StorageModule",
             Navree::app().module(StorageModule::from_config()),
         ),
-        ("AuthModule", Navree::app().module(AuthModule::from_config())),
+        (
+            "AuthModule",
+            Navree::app().module(AuthModule::from_config()),
+        ),
         (
             "AccessModule",
             Navree::app().module(AccessModule::for_root(AccessOptions::default())),
@@ -1487,7 +1505,10 @@ fn every_framework_module_passes_the_plugin_checks_and_names_only_first_party_pl
             "ObserveModule",
             Navree::app().module(ObserveModule::from_config()),
         ),
-        ("HelmModule", Navree::app().module(HelmModule::from_config())),
+        (
+            "HelmModule",
+            Navree::app().module(HelmModule::from_config()),
+        ),
         (
             "LighthouseModule",
             Navree::app().module(LighthouseModule::from_config()),
