@@ -4,7 +4,7 @@
 //! Both are offline: they run against the module graph, without booting the
 //! app, so they open no database connection and start no server.
 
-use navree_kernel::{AppContext, BoxError, CommandSpec};
+use navree_kernel::{AppContext, BoxError, CommandSpec, ModuleId};
 
 use crate::check::{CheckOptions, CheckReport, WEB_APP_ENV};
 use crate::publish::{PublishOptions, run as publish_section};
@@ -17,6 +17,33 @@ fn registrations(ctx: &AppContext) -> Vec<SectionRegistration> {
         .into_iter()
         .map(|contributed| (*contributed.value).clone())
         .collect()
+}
+
+/// The sections the modules of the plugin with `namespace` registered,
+/// without booting the app; an error when no plugin has that namespace.
+fn plugin_registrations(
+    ctx: &AppContext,
+    namespace: &str,
+) -> Result<Vec<SectionRegistration>, String> {
+    let report = ctx.plugins();
+    // A plugin has at least one module: no module, no plugin.
+    let modules: Vec<ModuleId> = report
+        .plugins
+        .iter()
+        .filter(|plugin| plugin.info.namespace == namespace)
+        .flat_map(|plugin| plugin.modules.iter().map(|module| module.id))
+        .collect();
+    if modules.is_empty() {
+        return Err(format!(
+            "config:publish: no plugin has the namespace `{namespace}`"
+        ));
+    }
+    Ok(ctx
+        .contributions::<SectionRegistration>()
+        .into_iter()
+        .filter(|contributed| modules.contains(&contributed.module.id))
+        .map(|contributed| (*contributed.value).clone())
+        .collect())
 }
 
 /// The keys the modules claimed.
@@ -79,13 +106,19 @@ pub(crate) fn schema() -> CommandSpec {
 
 /// `config:publish <section> [--force] [--stdout]`: writes `config/<section>.toml`
 /// with every key commented out beside its default.
+/// `config:publish --plugin <namespace> [--force]`: writes such a file for
+/// every section the modules of that plugin register.
 pub(crate) fn publish() -> CommandSpec {
     CommandSpec::new(
         "config:publish",
-        "Write config/<section>.toml with every key commented out beside its default: <section> [--force] [--stdout]",
+        "Write config/<section>.toml with every key commented out beside its default: <section> [--force] [--stdout] | --plugin <namespace> [--force]",
         |ctx: AppContext, args: Vec<String>| async move {
             let options = PublishOptions::parse(&args)?;
-            let registry = ConfigRegistry::new(&registrations(&ctx));
+            let sections = match &options.plugin {
+                Some(namespace) => plugin_registrations(&ctx, namespace)?,
+                None => registrations(&ctx),
+            };
+            let registry = ConfigRegistry::new(&sections);
             print!(
                 "{}",
                 publish_section(&options, &registry, std::path::Path::new("config"))?
