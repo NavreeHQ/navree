@@ -136,6 +136,7 @@ pub(crate) fn check() -> CommandSpec {
         "Check the configuration: invalid sections, unknown keys, keys set in .env and in a config file, settings web/.env.local repeats; --env <name> checks that environment (its config/env/<name>.toml is read), and production adds the production profile",
         |ctx: AppContext, args: Vec<String>| async move {
             let options = CheckOptions::parse(&args)?;
+            let sections = crate::registry::section_collisions(&ctx);
             let sources = ctx.get::<ConfigSources>().await?;
             let report = CheckReport::run_with_claims(
                 &sources,
@@ -144,11 +145,12 @@ pub(crate) fn check() -> CommandSpec {
                 &options,
             )?
             .with_web_app(&sources, std::path::Path::new(WEB_APP_ENV));
-            print!("{}", report.render());
-            if report.is_ok() {
+            print!("{}", report.render_with(&sections));
+            let problems = report.problems() + sections.errors.len();
+            if problems == 0 {
                 Ok(())
             } else {
-                Err(format!("config:check found {} problem(s)", report.problems()).into())
+                Err(format!("config:check found {problems} problem(s)").into())
             }
         },
     )

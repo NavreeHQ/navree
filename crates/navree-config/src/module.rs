@@ -141,6 +141,8 @@ struct ConfigDiagnostics {
 impl Lifecycle for ConfigDiagnostics {
     fn on_bootstrap(&self, ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
         Box::pin(async move {
+            // Two types on one section stop the boot whatever `strict_config` says.
+            crate::registry::check_section_collisions(&ctx)?;
             let strict = self.config.app().is_ok_and(|app| app.strict_config);
             let mut problems: Vec<String> = Vec::new();
             for shadow in self.config.shadowed() {
@@ -371,6 +373,11 @@ pub trait ModuleBuilderConfigExt {
     /// The section is also registered with the app
     /// ([`SectionRegistration`]), so `config:check` can read it without
     /// booting.
+    ///
+    /// A section belongs to one type. Two different types on one key log a
+    /// warning at boot and in `config:check` (each type still reads the
+    /// section); the boot and `config:check` fail instead when one of the two
+    /// modules belongs to a plugin that is not one of the framework's own.
     fn config<T: ConfigSection>(&mut self) -> &mut Self;
 
     /// Registers `T` with the app ([`SectionRegistration`]) without building
