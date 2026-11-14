@@ -263,9 +263,9 @@ fn plugin_steps(i18n: &I18n, plugin: &PluginLocales) -> Vec<Step> {
             .iter()
             .find(|(canonical, _)| *canonical == locale)
             .or_else(|| {
-                parents.iter().find_map(|parent| {
-                    locales.iter().find(|(canonical, _)| canonical == parent)
-                })
+                parents
+                    .iter()
+                    .find_map(|parent| locales.iter().find(|(canonical, _)| canonical == parent))
             })
             .or_else(|| {
                 locales.iter().find(|(canonical, _)| {
