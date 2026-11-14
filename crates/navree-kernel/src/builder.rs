@@ -12,8 +12,16 @@ use crate::{
     ModuleId, ProviderKey, Resolver, Scope,
 };
 
-/// A contributed value, typed by `TypeId`.
-pub(crate) type Contribution = (TypeId, Arc<dyn Any + Send + Sync>);
+/// A contributed value, typed by `TypeId`, with the type's name for the
+/// per-type counts of the plugins report.
+pub(crate) struct Contribution {
+    /// The type of the value.
+    pub(crate) type_id: TypeId,
+    /// `std::any::type_name` of the value's type.
+    pub(crate) type_name: &'static str,
+    /// The value, an `Arc<C>` behind `dyn Any`.
+    pub(crate) value: Arc<dyn Any + Send + Sync>,
+}
 
 /// A constructed provider value: an `Arc<T>` behind `dyn Any`.
 pub(crate) type Instance = Arc<dyn Any + Send + Sync>;
@@ -157,7 +165,11 @@ impl ModuleBuilder {
     /// [`AppContext::contributions`](crate::AppContext::contributions)
     /// (routes, migrations, job registrations, ...).
     pub fn contribute<C: Send + Sync + 'static>(&mut self, c: C) -> &mut Self {
-        self.contributions.push((TypeId::of::<C>(), Arc::new(c)));
+        self.contributions.push(Contribution {
+            type_id: TypeId::of::<C>(),
+            type_name: std::any::type_name::<C>(),
+            value: Arc::new(c),
+        });
         self
     }
 
@@ -308,5 +320,22 @@ fn into_kernel_error(error: BoxError, provider: String) -> KernelError {
     match error.downcast::<KernelError>() {
         Ok(kernel) => *kernel,
         Err(source) => KernelError::Construction { provider, source },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contribute_records_the_type_name_for_the_counts() {
+        struct Notice;
+        let mut m = ModuleBuilder::new(ModuleId::of::<Notice>(), "Notice");
+        m.contribute(1_u8)
+            .contribute(2_u8)
+            .contribute(String::from("Ludhiana"));
+        let names: Vec<&str> = m.contributions.iter().map(|c| c.type_name).collect();
+        assert_eq!(names, ["u8", "u8", "alloc::string::String"]);
+        assert_eq!(m.contributions[2].type_id, TypeId::of::<String>());
     }
 }
