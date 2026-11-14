@@ -25,7 +25,8 @@ pub const PAGE_CSP: &str = "default-src 'none'; script-src 'self'; style-src 'se
 /// The `Speculation-Rules` header's name.
 const SPECULATION_RULES: HeaderName = HeaderName::from_static("speculation-rules");
 
-/// The header on every page a [`View`] answers: the runtime takes an answer into the page it
+/// The header on every page a [`View`] answers, and on every fragment
+/// [`region_answer`](crate::pages::region_answer) answers: the runtime takes an answer into the page it
 /// shows only when it carries this, which no file the app serves as it is can (an upload served
 /// back, a page a proxy writes). The page's build is the second check.
 pub(crate) const PAGE_HEADER: HeaderName = HeaderName::from_static("x-navree-page");
@@ -722,7 +723,8 @@ impl IntoResponse for View {
     }
 }
 
-/// On a response a [`View`] made. A region's fetch answered with one, successfully, is the
+/// On a response a [`View`] or [`region_answer`](crate::pages::region_answer) made. A region's
+/// fetch answered with one, successfully, is the
 /// region's fragment, whatever its body uses: the reply layer says so in `X-Navree-Fragment`,
 /// so the runtime draws it in place rather than taking a page that loads the runtime for a
 /// page of its own (somewhere else, such as a sign-in page).

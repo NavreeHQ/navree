@@ -861,10 +861,18 @@ impl Shell {
         let home = self.home.as_str();
         let mut div = el("div").slot("sidebar-group");
         if let Some(live) = &group.live {
+            div = div.attr("id", live.id.clone());
+        }
+        // A source that is not on this site, or `#`, is none: the group is drawn as it is and
+        // never fetched, so nothing that goes with a source is written.
+        if let Some((live, src)) = group
+            .live
+            .as_ref()
+            .and_then(|live| crate::table::region::region_source(&live.src).map(|src| (live, src)))
+        {
             div = div
-                .attr("id", live.id.clone())
                 .flag("data-ui-region", true)
-                .attr("data-ui-src", live.src.clone())
+                .attr("data-ui-src", src)
                 .attr_opt("data-ui-live-src", live.stream.clone())
                 .attr_opt("data-ui-live-event", live.event.clone())
                 .flag("data-ui-live-catch-up", live.catch_up)
@@ -2007,6 +2015,47 @@ mod tests {
         );
         assert!(answer.contains("1,000+"), "{answer}");
         assert!(shell(None).live_group("other", "/").is_none());
+    }
+
+    #[test]
+    fn a_group_whose_source_is_refused_is_drawn_as_it_is_and_never_fetched() {
+        for src in [
+            "https://other.example/menu",
+            "//other.example/menu",
+            "javascript:x",
+            "#",
+        ] {
+            let html = Shell::new("Agra")
+                .group(
+                    NavGroup::new("Sales")
+                        .item(NavItem::new("Deals", "/deals"))
+                        .lazy("menu", src),
+                )
+                .group(
+                    NavGroup::new("Inbox")
+                        .item(NavItem::new("Open", "/inbox"))
+                        .live("views", src, "/events", Some("views")),
+                )
+                .page("Deals", "/deals")
+                .to_view()
+                .to_html();
+            assert!(
+                html.contains(r#"<div data-slot="sidebar-group" id="menu">"#),
+                "{src}: {html}"
+            );
+            assert!(
+                html.contains(r#"<div data-slot="sidebar-group" id="views">"#),
+                "{src}: {html}"
+            );
+            for name in [
+                "data-ui-region",
+                "data-ui-src",
+                "data-ui-lazy",
+                "data-ui-live-src",
+            ] {
+                assert!(!html.contains(name), "{src}: {name} in {html}");
+            }
+        }
     }
 
     #[test]
