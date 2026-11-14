@@ -186,6 +186,9 @@ impl Lifecycle for ConfigDiagnostics {
                     problems.push(message);
                 }
             }
+            for message in crate::plugin_sections::outside_namespace(&ctx) {
+                tracing::warn!(target: "navree::config", "{message}");
+            }
             if self.config.behaves_like_production() {
                 for finding in crate::check::production_profile(&self.config)
                     .into_iter()
