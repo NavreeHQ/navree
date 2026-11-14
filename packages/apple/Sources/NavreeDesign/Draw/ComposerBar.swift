@@ -29,7 +29,6 @@ struct ComposerBar: View {
                     }
                     Spacer(minLength: 0)
                 }
-                .controlSize(.small)
             }
             HStack(alignment: .bottom, spacing: 8) {
                 ZStack(alignment: .topLeading) {
@@ -63,6 +62,7 @@ struct ComposerBar: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.circle)
+                .modifier(FingerTarget())
                 .disabled(!ComposerRules.canSend(text) || found.send.disabled || found.send.pending)
                 .keyboardShortcut(.return, modifiers: .command)
             }
