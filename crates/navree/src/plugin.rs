@@ -29,15 +29,23 @@ pub use navree_view::TemplateDir;
 
 pub use navree_config::ClientModule;
 
+/// A permission a module describes with `m.permissions(..)`; describing grants it to nobody.
+pub use navree_contracts::Permission;
+
 /// The `ModuleBuilder` extension traits of plugins, imported as `_`. They are
 /// not in `navree::prelude`, so a glob import of it never makes an app's own
 /// method of the same name ambiguous.
 pub mod prelude {
     pub use navree_contracts::ModuleBuilderLocalesExt as _;
+    pub use navree_contracts::ModuleBuilderPermissionsExt as _;
     #[cfg(feature = "grpc")]
     pub use navree_grpc::ModuleBuilderTonicExt as _;
+    #[cfg(feature = "helm")]
+    pub use navree_helm::ModuleBuilderHelmPanelExt as _;
     #[cfg(feature = "http")]
     pub use navree_http::ModuleBuilderMountExt as _;
+    #[cfg(feature = "ui")]
+    pub use navree_ui::ModuleBuilderShellExt as _;
     #[cfg(feature = "view")]
     pub use navree_view::ModuleBuilderPluginTemplatesExt as _;
 }
