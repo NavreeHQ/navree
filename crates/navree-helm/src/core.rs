@@ -19,7 +19,7 @@ pub(crate) struct Core {
     pub(crate) options: Arc<HelmOptions>,
     pub(crate) registry: Registry,
     pub(crate) messages: Messages,
-    /// The app's templates (`ViewModule`), for view fields and pages.
+    /// The app's templates (`ViewModule`), for view fields, pages and dashboard cards.
     pub(crate) app_views: Option<Arc<Views>>,
     pub(crate) metrics: Option<navree_bounded::Cache<String, Arc<MetricResult>>>,
     /// The sidebar's counts, per user, access and workspace.
@@ -34,7 +34,7 @@ pub(crate) struct Core {
 
 impl Core {
     /// Builds the registry and everything else; fails the boot with the
-    /// first problem in a resource or page.
+    /// first problem in a resource, a page, a link or a card.
     pub(crate) async fn new(app: AppContext, options: Arc<HelmOptions>) -> Result<Core, BoxError> {
         let registry = Registry::build(&app, options.clone()).await?;
         let app_views = app.try_get::<Views>().await;
@@ -56,6 +56,13 @@ impl Core {
                 return Err(format!(
                     "Helm page `{}` renders an app template, so the app needs ViewModule",
                     page.page.slug
+                )
+                .into());
+            }
+            if let Some(card) = registry.widgets().first() {
+                return Err(format!(
+                    "Helm widget `{}` renders an app template, so the app needs ViewModule",
+                    card.widget.key
                 )
                 .into());
             }
