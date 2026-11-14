@@ -233,8 +233,12 @@ struct DateControl: View {
     var body: some View {
         if value.wrappedValue.isEmpty {
             LabeledContent(label) {
-                Button("Set") { value.wrappedValue = WebDate.text(Date(), kind: input.kind) }
+                TargetRoom {
+                    Button { value.wrappedValue = WebDate.text(Date(), kind: input.kind) } label: {
+                        Text("Set").modifier(TargetFill())
+                    }
                     .buttonStyle(.borderless)
+                }
             }
         } else {
             DatePicker(
@@ -304,9 +308,14 @@ struct FileControl: View {
 
     var body: some View {
         LabeledContent(label) {
-            Button(chosen.isEmpty ? String(localized: "Choose…") : chosen.joined(separator: ", ")) { importing = true }
+            TargetRoom {
+                Button { importing = true } label: {
+                    Text(chosen.isEmpty ? String(localized: "Choose…") : chosen.joined(separator: ", "))
+                        .lineLimit(2)
+                        .modifier(TargetFill())
+                }
                 .buttonStyle(.borderless)
-                .lineLimit(2)
+            }
         }
         .fileImporter(
             isPresented: $importing, allowedContentTypes: FileRules.types(input.accept),

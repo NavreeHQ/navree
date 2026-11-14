@@ -56,6 +56,21 @@ private let systemLight: [(String, ContrastRules.RGB)] = [
     #expect(HitRules.outset(glyph: 44) == 0)
 }
 
+@Test func aBorderlessControlsTargetIsAtLeastFortyFourPointsEachWayOnIPhoneAndIPadAndWhatItDrawsOnAMac() {
+    // "Saved replies" in the body type: 20.5 points tall as drawn.
+    let words = HitRules.target(drawn: (width: 104, height: 20.5), bar: .navigation)
+    #expect(words.width == 104 && words.height == 44)
+    // A symbol alone: both ways.
+    let symbol = HitRules.target(drawn: (width: 17, height: 20), bar: .navigation)
+    #expect(symbol.width == 44 && symbol.height == 44)
+    // What is larger already keeps its size.
+    let large = HitRules.target(drawn: (width: 120, height: 61), bar: .navigation)
+    #expect(large.width == 120 && large.height == 61)
+    // A Mac's pointer: what is drawn.
+    let mac = HitRules.target(drawn: (width: 104, height: 16), bar: .window)
+    #expect(mac.width == 104 && mac.height == 16)
+}
+
 @Test func aRingsNumberFollowsEveryTextSize() {
     // At the size the ring was drawn for: 0.3 of the ring, as before.
     #expect(RingRules.centreSize(diameter: 188, textScale: 1, ringScale: 1) == 188 * 0.3)
