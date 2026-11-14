@@ -770,17 +770,42 @@ fn native(mut view: View, request: &Arc<scope::Request>) -> Response {
         .map(|note| note.shell_stamp(request.sign_in.as_deref(), &request.shell_parts))
         .unwrap_or_default();
     let parts = view.native_parts();
-    let (envelope, answered) = match rows_after(&page, request) {
+    let rows = rows_after(&page, request);
+    // Only a whole page may be kept on the device, and only when its author
+    // let a private cache keep it: never rows, a region or a failed page.
+    let keep = rows.is_none()
+        && request.region.is_none()
+        && parts.status.is_success()
+        && may_keep(parts.cache);
+    let (envelope, answered) = match rows {
         Some(rows) => rows,
         None => envelope(page, request),
     };
     let mut response = respond(parts.status, parts.cache, envelope, request, &shell);
+    if keep {
+        response
+            .headers_mut()
+            .insert(navree_native::KEEP_HEADER, HeaderValue::from_static("1"));
+    }
     for cookie in parts.cookies.iter() {
         response.headers_mut().append(SET_COOKIE, cookie.clone());
     }
     vary_also(&mut response, parts.vary);
     response.extensions_mut().insert(answered);
     response
+}
+
+/// Whether a page whose `Cache-Control` is `cache` may be kept on a native
+/// client's device between launches: the rule a browser keeps. `no-store`
+/// anywhere in it means no; anything else (`private`, `no-cache`,
+/// `max-age=…`, `public`) means yes; a value that can't be read means no.
+fn may_keep(cache: &str) -> bool {
+    let value = cache.trim();
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte == b' ' || byte.is_ascii_graphic())
+        && !value.to_ascii_lowercase().contains("no-store")
 }
 
 /// A query value as the text it stands for. `None` when the bytes are not text.
@@ -1333,6 +1358,77 @@ mod tests {
         );
         assert!(deepest(&op) > navree_native::MAX_DEPTH);
         assert!(said(op).await.contains("depth"));
+    }
+
+    #[test]
+    fn a_page_may_be_kept_on_the_device_unless_its_cache_says_no_store() {
+        for kept in [
+            "private, no-cache",
+            "private",
+            "no-cache",
+            "max-age=60",
+            "public, max-age=300",
+            "Private, No-Cache",
+        ] {
+            assert!(may_keep(kept), "{kept:?}");
+        }
+        for not_kept in [
+            "no-store",
+            "private, no-store",
+            "No-Store",
+            "no-cache,no-store,must-revalidate",
+            "",
+            "  ",
+            "private\u{7}",
+            "privé",
+        ] {
+            assert!(!may_keep(not_kept), "{not_kept:?}");
+        }
+    }
+
+    #[test]
+    fn a_native_answer_says_its_page_may_be_kept_only_when_the_page_allows_it() {
+        let client = navree_native::Client::new(
+            navree_native::Platform::Android,
+            navree_native::FormFactor::Phone,
+        );
+        let answer = |view: View, region: Option<&str>| {
+            let mut request = scope::Request::new(client.clone(), "/catalogue");
+            request.region = region.map(str::to_owned);
+            let request = Arc::new(request);
+            let response = scope::sync(Asked::Native(request.clone()), || view_for(view, &request));
+            response
+                .headers()
+                .get(navree_native::KEEP_HEADER)
+                .map(|value| value.to_str().unwrap_or("").to_owned())
+        };
+        let page = |cache: Option<&'static str>| {
+            let view = View::new("Catalogue").body(Text::new("Kesar, 250 g"));
+            match cache {
+                Some(cache) => view.cache(cache),
+                None => view,
+            }
+        };
+        assert_eq!(
+            answer(page(Some("private, no-cache")), None).as_deref(),
+            Some("1")
+        );
+        // A page says `no-store` unless its author says otherwise.
+        assert_eq!(answer(page(None), None), None);
+        assert_eq!(answer(page(Some("private, no-store")), None), None);
+        // A region of a page is never kept by itself.
+        assert_eq!(
+            answer(page(Some("private, no-cache")), Some("figures")),
+            None
+        );
+        // Nor a page that failed.
+        assert_eq!(
+            answer(
+                page(Some("private, no-cache")).status(StatusCode::NOT_FOUND),
+                None
+            ),
+            None
+        );
     }
 
     #[test]
