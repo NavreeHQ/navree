@@ -182,20 +182,12 @@ fn check(node: &mut Node, config: &Config, missing: &mut Vec<String>, pictures: 
             .iter_mut()
             .for_each(|row| one(&mut row.action, missing)),
         Node::FeedRow(row) => one(&mut row.action, missing),
-        Node::Image(image) => {
-            if let Some(pictures) = pictures {
-                image.src = pictures.source(&image.src);
-            }
-        }
-        Node::Avatar(avatar) => {
-            if let Some(pictures) = pictures {
-                avatar.src = avatar
-                    .src
-                    .take()
-                    .map(|src| pictures.source(&src))
-                    .filter(|src| !src.is_empty());
-            }
-        }
+        _ => {}
+    }
+    if let Some(pictures) = pictures {
+        pictures.of(node);
+    }
+    match node {
         Node::Figure(figure) => one(&mut figure.action, missing),
         Node::Toolbar(toolbar) => {
             toolbar
@@ -293,6 +285,41 @@ pub(crate) struct Sources<'a> {
 }
 
 impl Sources<'_> {
+    /// Writes the pictures `node` holds itself, as a node or in a field, as
+    /// a client is given them. Its children are their own.
+    pub(crate) fn of(&self, node: &mut Node) {
+        let avatar = |avatar: &mut navree_native::node::Avatar| {
+            avatar.src = avatar
+                .src
+                .take()
+                .map(|src| self.source(&src))
+                .filter(|src| !src.is_empty());
+        };
+        match node {
+            Node::Image(image) => image.src = self.source(&image.src),
+            Node::Avatar(inner) => avatar(inner),
+            Node::FeedRow(row) => row.actor.iter_mut().for_each(avatar),
+            Node::Message(message) => message.avatar.iter_mut().for_each(avatar),
+            _ => {}
+        }
+    }
+
+    /// Writes every picture in `node` and under it as a client is given them.
+    pub(crate) fn within(&self, node: &mut Node) {
+        self.of(node);
+        for slot in slots(node) {
+            match slot {
+                Slot::Many(list) => list.iter_mut().for_each(|child| self.within(child)),
+                Slot::Maybe(child) => {
+                    if let Some(child) = child.as_deref_mut() {
+                        self.within(child);
+                    }
+                }
+                Slot::One(child) => self.within(child),
+            }
+        }
+    }
+
     /// A picture's source as a client is given it: a source on one of the
     /// app's origins as its whole address, a whole `https` address of
     /// another host written again from its parts (a client loads it or not
@@ -422,8 +449,23 @@ fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<
     Ok(read)
 }
 
-/// Reads a response. `asked` is the address the request went to.
+/// Reads a response. `asked` is the address the request went to. The core
+/// reads every answer with [`read_on`]; this is for the tests of the reading.
+#[cfg(test)]
 pub(crate) fn read(response: Response, asked: &str, origin: &Origin, config: &Config) -> Answer {
+    read_on(response, asked, None, origin, config)
+}
+
+/// Reads a response for a part of the page at `page` (a region, a list's
+/// rows): its pictures are read against the page, as a browser reads them
+/// against the document. `None` reads them against the answer's own address.
+pub(crate) fn read_on(
+    response: Response,
+    asked: &str,
+    page: Option<&str>,
+    origin: &Origin,
+    config: &Config,
+) -> Answer {
     if let Some(error) = response.error {
         return Answer::Failed(match error {
             TransportError::Timeout => Failure::Timeout,
@@ -458,7 +500,10 @@ pub(crate) fn read(response: Response, asked: &str, origin: &Origin, config: &Co
     if media == CONTENT_TYPE {
         let header = response.header(SHELL_STAMP_HEADER).map(str::to_owned);
         let keep = response.header(navree_native::KEEP_HEADER) == Some("1");
-        let sources = Sources { origin, from: &url };
+        let sources = Sources {
+            origin,
+            from: page.unwrap_or(&url),
+        };
         return match envelope_with(&response.body, config, Some(&sources)) {
             Ok(mut read) => {
                 read.keep = keep;
@@ -780,6 +825,112 @@ mod tests {
         ] {
             assert_eq!(picture(src), becomes, "{src:?}");
         }
+    }
+
+    #[test]
+    fn a_picture_held_in_a_field_of_a_part_is_written_whole_too() {
+        let origin = Origin::parse("https://shop.example", &[], false).unwrap();
+        let tree = r#"{"t":"stack","children":[
+            {"t":"feed_row","actor":{"name":"Harpreet Singh","src":"/people/7.png"}},
+            {"t":"message","author":"Ravneet Kaur","avatar":{"name":"Ravneet Kaur","src":"me.png"},"body":[{"t":"image","src":"//evil.example\\a.png"}]}
+        ]}"#;
+        let Answer::Tree { read, .. } = read(
+            response(200, CONTENT_TYPE, &body(tree)),
+            "/inbox/7",
+            &origin,
+            &config(),
+        ) else {
+            panic!("not a tree");
+        };
+        let Node::Stack(stack) = read.envelope.screen.unwrap().body else {
+            panic!("not a stack");
+        };
+        let (Node::FeedRow(row), Node::Message(message)) = (&stack.children[0], &stack.children[1])
+        else {
+            panic!("not a feed row and a message");
+        };
+        assert_eq!(
+            row.actor.as_ref().and_then(|actor| actor.src.as_deref()),
+            Some("https://shop.example/people/7.png")
+        );
+        assert_eq!(
+            message
+                .avatar
+                .as_ref()
+                .and_then(|avatar| avatar.src.as_deref()),
+            Some("https://shop.example/me.png")
+        );
+        assert!(matches!(&message.body[0], Node::Image(image) if image.src.is_empty()));
+    }
+
+    #[test]
+    fn a_part_of_a_page_reads_its_pictures_against_the_page() {
+        let origin = Origin::parse("https://shop.example", &[], false).unwrap();
+        let mut answer = response(
+            200,
+            CONTENT_TYPE,
+            &body(r#"{"t":"image","src":"thumb.png"}"#),
+        );
+        answer.url = "https://shop.example/fragments/figures".to_owned();
+        let Answer::Tree { read, .. } = read_on(
+            answer,
+            "/fragments/figures",
+            Some("/products/7"),
+            &origin,
+            &config(),
+        ) else {
+            panic!("not a tree");
+        };
+        assert!(matches!(
+            read.envelope.screen.unwrap().body,
+            Node::Image(image) if image.src == "https://shop.example/products/thumb.png"
+        ));
+    }
+
+    /// Every field the protocol types as a picture is one the rewrite reaches:
+    /// a kind or a field added later fails here until it is.
+    #[test]
+    fn the_rewrite_reaches_every_picture_the_protocol_has() {
+        fn refs(at: &str, value: &serde_json::Value, found: &mut Vec<String>) {
+            match value {
+                serde_json::Value::Object(map) => {
+                    if let Some(target) = map.get("$ref").and_then(serde_json::Value::as_str)
+                        && (target.ends_with("/Avatar") || target.ends_with("/Image"))
+                    {
+                        found.push(format!("{at} {target}"));
+                    }
+                    for (key, inner) in map {
+                        let at = if key == "properties" || at.ends_with("properties") {
+                            format!("{at}/{key}")
+                        } else {
+                            at.to_owned()
+                        };
+                        refs(&at, inner, found);
+                    }
+                }
+                serde_json::Value::Array(list) => {
+                    list.iter().for_each(|inner| refs(at, inner, found));
+                }
+                _ => {}
+            }
+        }
+        let document = navree_native::schema::document();
+        let mut found = Vec::new();
+        for (name, definition) in document["$defs"].as_object().unwrap() {
+            refs(name, definition, &mut found);
+        }
+        found.sort();
+        found.dedup();
+        assert_eq!(
+            found,
+            [
+                "FeedRow/properties/actor #/$defs/Avatar",
+                "Message/properties/avatar #/$defs/Avatar",
+                "Node #/$defs/Avatar",
+                "Node #/$defs/Image",
+            ],
+            "a picture the core does not write whole"
+        );
     }
 
     #[test]

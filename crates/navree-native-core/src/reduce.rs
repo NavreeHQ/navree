@@ -811,7 +811,8 @@ impl Core {
         match decode::with_room(move || serde_json::from_value::<Shell>(value))
             .unwrap_or_else(|| Err(serde::de::Error::custom("the shell could not be read")))
         {
-            Ok(shell) if shell.navree == MAJOR => {
+            Ok(mut shell) if shell.navree == MAJOR => {
+                self.shell_pictures(&mut shell);
                 // The stamp of the shell now held: its own, or the one its answer named.
                 let stamp = (!shell.stamp.is_empty())
                     .then(|| shell.stamp.clone())
@@ -838,14 +839,30 @@ impl Core {
     /// Draws the app from the shell kept at the last launch. False when it
     /// does not read.
     pub(crate) fn shell_from_cache(&mut self, body: &str) -> bool {
-        if let Some(Ok(shell)) = decode::with_room(|| serde_json::from_str::<Shell>(body))
+        if let Some(Ok(mut shell)) = decode::with_room(|| serde_json::from_str::<Shell>(body))
             && shell.navree == MAJOR
         {
+            self.shell_pictures(&mut shell);
             self.inner.cache.shell = Some(body.to_owned());
             self.install(shell);
             return true;
         }
         false
+    }
+
+    /// Writes the pictures of the shell's user menu as a client is given
+    /// them, read against the app's home.
+    fn shell_pictures(&self, shell: &mut Shell) {
+        let Some(user) = shell.user.as_mut() else {
+            return;
+        };
+        let sources = decode::Sources {
+            origin: &self.inner.origin,
+            from: "/",
+        };
+        // Read where there is room for it, like the trees of a page.
+        let menu = &mut user.menu;
+        decode::with_room(|| menu.iter_mut().for_each(|node| sources.within(node)));
     }
 
     /// The address a destination opens at.
@@ -1951,7 +1968,23 @@ impl Core {
             Pending::PushGone => return self.push_gone_answered(),
             _ => {}
         }
-        let answer = decode::read(response, &asked.url, &self.inner.origin, &self.config);
+        // A part of a page reads its pictures against the page it stands on.
+        let page = match asked.purpose {
+            Pending::Region { screen, .. }
+            | Pending::More { screen, .. }
+            | Pending::Before { screen, .. }
+            | Pending::Changes { screen, .. } => {
+                self.view.screens.get(&screen).map(|view| view.url.clone())
+            }
+            _ => None,
+        };
+        let answer = decode::read_on(
+            response,
+            &asked.url,
+            page.as_deref(),
+            &self.inner.origin,
+            &self.config,
+        );
         // A redirect is measured against the address that was asked for first.
         let Asked {
             purpose,
@@ -2556,6 +2589,36 @@ mod tests {
                 url: " https://shop.example/x".to_owned()
             }))
             .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_picture_in_the_shell_s_user_menu_is_written_whole() {
+        let mut core = Core::new(Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        ));
+        core.send(Event::Start);
+        let shell = include_str!("../transcripts/fixtures/made/shell-routes.json").replacen(
+            r#""menu": ["#,
+            r#""menu": [{"t": "image", "src": "me.png"}, {"t": "avatar", "name": "R", "src": "javascript:1"},"#,
+            1,
+        );
+        core.send(Event::Response(Response {
+            request: 1,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: shell,
+            ..Response::default()
+        }));
+        let menu = &core.view.app.as_ref().unwrap().user.as_ref().unwrap().menu;
+        assert!(
+            matches!(&menu[0], navree_native::node::Node::Image(image) if image.src == "https://shop.example/me.png"),
+            "{menu:?}"
+        );
+        assert!(
+            matches!(&menu[1], navree_native::node::Node::Avatar(avatar) if avatar.src.is_none()),
+            "{menu:?}"
         );
     }
 
