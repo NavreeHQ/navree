@@ -7,6 +7,19 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Security
+
+- A single sign-on connection owned by a workspace or an organization creates accounts only for
+  addresses in its verified domains: a customer's connection with `allow_unverified_emails` no
+  longer creates accounts outside its verified domains; set `sso.tenants.unverified_emails = true`
+  to keep 1.2.1's behaviour. Connections owned by the app are unchanged, and people already linked
+  through a connection keep signing in. The boot names every connection of a workspace or an
+  organization that has `allow_unverified_emails` on, and a first sign-in it refuses answers 403
+  `unverified_domain`, is audited as `sso.login_refused` and is logged (one line an hour per
+  connection). The `sso.tenants` section is new in this patch release so that an app can keep the
+  earlier behaviour. A page that lets a workspace's administrators manage their connection sets
+  the connection's `owner` itself and checks it before every change (see Single sign-on).
+
 ## [1.2.1] - 2026-11-14
 
 ### Upgrading
