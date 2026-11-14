@@ -1013,3 +1013,90 @@ mod masked_tokens {
         }
     }
 }
+
+/// The session layer vouches for a request (`TokenChecked` in its extensions) only when it
+/// compared the session's token and the token matched; a form's origin check reads it.
+mod vouched {
+    use navree_http::csrf::{TokenChecked, mask_token};
+    use navree_http::extract::Request;
+    use navree_http::middleware::{self, Next};
+    use navree_http::response::Response;
+    use navree_http::{GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
+    use navree_kernel::{Module, ModuleBuilder};
+    use navree_session::SessionModule;
+    use navree_testing::TestClient;
+
+    use super::plain_forms::signed_in;
+    use crate::support;
+
+    /// What the handler at `/api/probe/vouched` says of a request.
+    async fn said(client: &TestClient, post: bool, header: Option<&str>) -> String {
+        let mut request = if post {
+            client.post("/api/probe/vouched")
+        } else {
+            client.get("/api/probe/vouched")
+        };
+        if let Some(token) = header {
+            request = request.header("x-csrf-token", token);
+        }
+        request.send().await.assert_status(200).text()
+    }
+
+    #[tokio::test]
+    async fn only_a_matching_token_puts_the_mark_on_the_request() {
+        let (app, client, token) = signed_in().await;
+        let masked = mask_token(&token);
+        for given in [token.as_str(), masked.as_str()] {
+            assert_eq!(said(&client, true, Some(given)).await, "checked", "{given}");
+        }
+        // In a form's field: on the request rebuilt without it, which the handler gets.
+        let field = client
+            .post("/api/probe/vouched")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(format!("_csrf={masked}"))
+            .send()
+            .await
+            .assert_status(200);
+        assert_eq!(field.text(), "checked");
+        // A method that changes nothing is not checked, so nothing vouches for it.
+        assert_eq!(said(&client, false, None).await, "unchecked");
+        // No session cookie: no token was compared.
+        assert_eq!(said(&app.client(), true, None).await, "unchecked");
+        // A wrong token never reaches the handler.
+        client
+            .post("/api/probe/vouched")
+            .header("x-csrf-token", "wrong")
+            .send()
+            .await
+            .assert_error(403, "Invalid CSRF token");
+    }
+
+    /// Puts the mark on every request, outside the session layer.
+    struct Planted;
+
+    impl Module for Planted {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.http_layer(GlobalLayer::new(LayerSlot::Edge, "plant", |_, router| {
+                Ok(router.layer(middleware::from_fn(plant)))
+            }));
+        }
+    }
+
+    async fn plant(mut request: Request, next: Next) -> Response {
+        request.extensions_mut().insert(TokenChecked);
+        next.run(request).await
+    }
+
+    #[tokio::test]
+    async fn a_mark_from_before_the_session_layer_is_taken_away() {
+        let app = support::base()
+            .module(SessionModule::for_root(Default::default()))
+            .module(Planted)
+            .build()
+            .await;
+        let client = app.client();
+        client.csrf_cookie().await;
+        assert_eq!(said(&client, false, None).await, "unchecked");
+        assert_eq!(said(&app.client(), true, None).await, "unchecked");
+    }
+}

@@ -112,10 +112,13 @@ every `@navree/*` package carries the same version.
   finished file starts with the first part as it was checked.
 - `.attr(..)` on `Select`, `Combobox` and `MultiSelect` refuses `style`, `srcdoc` and `on*` and
   checks URL attributes, as it does on any element.
-- A form's `Submit` and the appearance route refuse a request that carries a cookie and sends
-  neither `Sec-Fetch-Site` nor `Origin`; a request with no cookie is still taken. A form compares
-  the `Origin` as the session layer does (host and port) and, when the request carries its own
-  scheme, the scheme too.
+- A form's `Submit` (and a table's bulk form, a move, a grid order) refuses a post that carries a
+  cookie, sends neither `Sec-Fetch-Site` nor `Origin`, and has no CSRF token the session's check
+  compared and took (`navree_http::csrf::TokenChecked`); the appearance route, which takes no
+  token, refuses one with a cookie other than its own. A post with no cookie is still taken, and
+  so is one whose token the session's check took, as a test client or a native app sends it. A
+  form compares the `Origin` as the session layer does (host and port) and, when the request
+  carries its own scheme, the scheme too.
 - Error pages show their "Development only" details only when the code (`PagesOptions::debug`)
   or the `ui` section turns them on, or, in a build with debug assertions, when the configuration
   names an environment that is not `production` or `staging`. An app with no configuration shows

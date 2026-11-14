@@ -79,6 +79,20 @@ async fn token(session: Session) -> Json<Value> {
     Json(json!({ "id": session.id(), "token": session.csrf_token() }))
 }
 
+/// Whether the session layer vouched for the request: it checked the CSRF token and
+/// the token matched.
+async fn vouched(parts: http::request::Parts) -> &'static str {
+    if parts
+        .extensions
+        .get::<navree_http::csrf::TokenChecked>()
+        .is_some()
+    {
+        "checked"
+    } else {
+        "unchecked"
+    }
+}
+
 /// A page with a plain form, its token written as a page writes it: masked
 /// for this answer.
 async fn form_page(session: Session) -> String {
@@ -121,6 +135,8 @@ impl Controller for ProbeController {
             RouteDef::on(Method::POST, "/remember", remember).public(),
             RouteDef::on(Method::GET, "/token", token).public(),
             RouteDef::on(Method::GET, "/form", form_page).public(),
+            RouteDef::on(Method::GET, "/vouched", vouched).public(),
+            RouteDef::on(Method::POST, "/vouched", vouched).public(),
             RouteDef::on(Method::GET, "/untouched", untouched).public(),
             RouteDef::on(Method::POST, "/fail", put_then_fail).public(),
             RouteDef::on(Method::POST, "/write", write).public(),
