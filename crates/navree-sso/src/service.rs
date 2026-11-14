@@ -499,10 +499,12 @@ impl Sso {
     }
 
     /// The connections with `allow_unverified_emails` on, oldest first, for
-    /// the boot's lines. Only the owner and the provisioning rules are read;
-    /// a row whose owner or rules don't read is left out.
+    /// the boot's lines. The database returns the rows whose rules mention
+    /// the setting and `true`; decoding the rules decides. A row whose owner
+    /// or rules don't read is left out.
     pub(crate) async fn flagged_connections(&self) -> Result<Vec<Flagged>, SsoError> {
         let rows = sso_connection::Model::query()
+            .where_(sso_connection::Model::PROVISIONING.like("%\"allow_unverified_emails\"%true%"))
             .order_by(sso_connection::Model::CREATED_AT)
             .get(&self.db)
             .await?
