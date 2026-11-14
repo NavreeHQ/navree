@@ -144,7 +144,7 @@ import Testing
 @Test func aGaugeWritesItsNumberLargeAndItsUnitUnderIt() {
     #expect(GaugeRules.split("44.2 mL/kg/min") == ("44.2", "mL/kg/min"))
     #expect(GaugeRules.split("0.93") == ("0.93", nil))
-    #expect(GaugeRules.split("1,420 steps") == ("1,420", "steps"))
+    #expect(GaugeRules.split("2,640 steps") == ("2,640", "steps"))
     #expect(GaugeRules.split("Very high") == ("Very high", nil))
 }
 
@@ -194,7 +194,7 @@ import Testing
     #expect(ClockRules.momentEntry("Woke up", at: 7.1166, uses24: true, locale: india) == "Woke up, 07:07")
     #expect(ClockRules.momentEntry("Woke up at 7:07 am", at: 7.1166, uses24: true, locale: india) == "Woke up at 7:07 am")
     #expect(ClockRules.holdsTime("Woke up, 6:30 am"))
-    #expect(!ClockRules.holdsTime("Most active hour, 1,420 steps"))
+    #expect(!ClockRules.holdsTime("Busiest hour, 2,640 steps"))
 }
 
 @Test func momentsTooCloseOnTheDialStandApartAndTheRestStay() {
@@ -217,7 +217,7 @@ import Testing
 // MARK: Keys, shares, calendars, matrices
 
 @Test func aKeySaysThePagesOwnWordsBesideTheName() {
-    #expect(KeyRules.entry("Deep", detail: "15.6% of the night") == "Deep · 15.6% of the night")
+    #expect(KeyRules.entry("Deep", detail: "21.4% of the night") == "Deep · 21.4% of the night")
     #expect(KeyRules.entry("Deep", detail: nil) == "Deep")
     #expect(KeyRules.entry("Deep", detail: "") == "Deep")
 }
@@ -352,14 +352,14 @@ import Testing
 
 @Test func aChartDoesNotRepeatTheWordsTheScreenSetOverIt() {
     let siblings: [Navree.Node] = [
-        .text(Navree.Text(style: .headline, value: "Steps, last 30 days")),
-        .text(Navree.Text(value: "Goal met on 10 of 30 days")),
-        .chart(Navree.Chart(title: "Steps, last 30 days")),
+        .text(Navree.Text(style: .headline, value: "Walks, last four weeks")),
+        .text(Navree.Text(value: "Goal met on 12 of 28 days")),
+        .chart(Navree.Chart(title: "Walks, last four weeks")),
     ]
     let above = HeadingRules.wordsAbove(siblings, index: 2)
-    #expect(above == ["Steps, last 30 days", "Goal met on 10 of 30 days"])
-    #expect(!HeadingRules.showsTitle("Steps, last 30 days", wordsAbove: above))
-    #expect(HeadingRules.showsTitle("Load by week", wordsAbove: ["Training"]))
+    #expect(above == ["Walks, last four weeks", "Goal met on 12 of 28 days"])
+    #expect(!HeadingRules.showsTitle("Walks, last four weeks", wordsAbove: above))
+    #expect(HeadingRules.showsTitle("Distance by week", wordsAbove: ["Running"]))
     #expect(!HeadingRules.showsTitle(nil, wordsAbove: []))
     #expect(HeadingRules.wordsAbove(siblings, index: 0) == [])
 }
