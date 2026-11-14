@@ -29,8 +29,8 @@ import XCTest
 /// - `NAVREE_VOICEOVER=0`: leave VoiceOver off.
 /// - `NAVREE_VOICEOVER_STEPS`: how many elements VoiceOver moves through on
 ///   one screen at most (80).
-/// - `NAVREE_SCROLL_SHOTS`: on the folder's screens, how many more pictures
-///   to take, each a swipe further down (0).
+/// - `NAVREE_SCROLL_SHOTS`: on the store's day and the folder's screens, how
+///   many more pictures to take, each a swipe further down (0).
 final class AccessibilityTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = true
@@ -51,10 +51,14 @@ final class AccessibilityTests: XCTestCase {
         wait(orders.firstMatch, "An order in the list")
         check(app, "store-01-orders")
 
-        try tapFirst(orders, "An order in the list")
-        wait(app.buttons["Close"].firstMatch, "The order's sheet")
-        settle(app)
-        check(app, "store-02-order-sheet")
+        // A launch of its own for the tap: VoiceOver has moved through the list.
+        let again = launchStore(["-NavreeSelect", "/orders"])
+        let first = again.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "CS-"))
+        wait(first.firstMatch, "An order in the list")
+        try tapFirst(first, "An order in the list")
+        wait(again.buttons["Close"].firstMatch, "The order's sheet")
+        settle(again)
+        check(again, "store-02-order-sheet")
 
         let pushed = launchStore(["-NavreeSelect", "/orders", "-NavreeStack", "/orders=\(orderAddress)"])
         wait(pushed.buttons["BackButton"].firstMatch, "The order, pushed")
@@ -68,10 +72,12 @@ final class AccessibilityTests: XCTestCase {
         wait(app.cells.firstMatch, "A product in the list")
         check(app, "store-04-inventory")
 
-        try tapFirst(app.cells, "A product in the list")
-        wait(app.buttons["Cancel"].firstMatch, "The restock sheet")
-        settle(app)
-        check(app, "store-05-restock")
+        let again = launchStore(["-NavreeSelect", "/inventory"])
+        wait(again.cells.firstMatch, "A product in the list")
+        try tapFirst(again.cells, "A product in the list")
+        wait(again.buttons["Cancel"].firstMatch, "The restock sheet")
+        settle(again)
+        check(again, "store-05-restock")
     }
 
     @MainActor
@@ -79,7 +85,7 @@ final class AccessibilityTests: XCTestCase {
         let app = launchStore(["-NavreeSelect", "/"])
         wait(app.navigationBars.firstMatch, "The store's day")
         settle(app)
-        check(app, "store-06-today")
+        check(app, "store-06-today", scrolls: scrolls)
     }
 
     // MARK: The inbox and the board
@@ -92,10 +98,12 @@ final class AccessibilityTests: XCTestCase {
         settle(app)
         check(app, "inbox-01-list")
 
-        try tapFirst(app.cells, "A conversation in the list")
-        wait(app.buttons["BackButton"].firstMatch, "The conversation")
-        settle(app)
-        check(app, "inbox-02-thread")
+        let again = launch(origin: origin, [])
+        wait(again.cells.firstMatch, "A conversation in the list")
+        try tapFirst(again.cells, "A conversation in the list")
+        wait(again.buttons["BackButton"].firstMatch, "The conversation")
+        settle(again)
+        check(again, "inbox-02-thread")
     }
 
     @MainActor
@@ -130,11 +138,15 @@ final class AccessibilityTests: XCTestCase {
             let name = screen == "/" ? "home" : screen.replacingOccurrences(of: "/", with: "-")
                 .replacingOccurrences(of: "=", with: "-").replacingOccurrences(of: "?", with: "-")
                 .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
-            check(app, String(format: "folder-%02d-%@", index + 1, name), scrolls: Int(environment["NAVREE_SCROLL_SHOTS"] ?? "") ?? 0)
+            check(app, String(format: "folder-%02d-%@", index + 1, name), scrolls: scrolls)
         }
     }
 
     // MARK: Launching
+
+    private var scrolls: Int {
+        Int(environment["NAVREE_SCROLL_SHOTS"] ?? "") ?? 0
+    }
 
     /// The order pushed in the store's walk: one the store demo seeds, or the
     /// recorded one.
