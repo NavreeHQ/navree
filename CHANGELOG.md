@@ -7,6 +7,21 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Upgrading
+
+- To see before upgrading whether the single sign-on change below affects your app, list the
+  connections that have `allow_unverified_emails` on (on MySQL and MariaDB, select
+  `HEX(owner_id)`):
+
+  ```sql
+  SELECT slug, owner_type, owner_id FROM sso_connections
+  WHERE provisioning LIKE '%"allow_unverified_emails":true%';
+  ```
+
+  Those owned by a workspace or an organization stop creating accounts outside their verified
+  domains unless you set `sso.tenants.unverified_emails = true`. Those owned by the app keep
+  working, and the boot names them in an `info` line: check that your own staff made each one.
+
 ### Security
 
 - A single sign-on connection owned by a workspace or an organization creates accounts only for
@@ -16,9 +31,17 @@ every `@navree/*` package carries the same version.
   through a connection keep signing in. The boot names every connection of a workspace or an
   organization that has `allow_unverified_emails` on, and a first sign-in it refuses answers 403
   `unverified_domain`, is audited as `sso.login_refused` and is logged (one line an hour per
-  connection). The `sso.tenants` section is new in this patch release so that an app can keep the
-  earlier behaviour. A page that lets a workspace's administrators manage their connection sets
-  the connection's `owner` itself and checks it before every change (see Single sign-on).
+  connection in each process). The `sso.tenants` section is new in this patch release so that an
+  app can keep the earlier behaviour, and it is read also when `SsoModule::for_root` is used. A
+  page that lets a workspace's administrators manage their connection sets the connection's
+  `owner` itself and checks it before every change (see Single sign-on).
+
+### Fixed
+
+- A module given its options in code (`for_root`) is no longer reported for keys of a section
+  nested in its own that is registered and read on its own, such as `auth.apps`, `notify.push`,
+  `observe.tracing` or `sso.tenants`; `app.strict_config` no longer stops the boot on them. Other
+  keys of the module's section are still reported.
 
 ## [1.2.1] - 2026-11-14
 
