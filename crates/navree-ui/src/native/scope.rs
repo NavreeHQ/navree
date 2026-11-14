@@ -188,7 +188,8 @@ pub(crate) fn read(headers: &HeaderMap, url: &str) -> Reading {
 /// A header value a native client wrote header-safe: each `%` and two hex
 /// digits is the byte they name. A `%` that is not followed by two hex digits
 /// stays as it is, and so does a value whose bytes are not UTF-8 once read,
-/// so an id an older client sent as it was reads as that id.
+/// or that holds a control character once read (a line break, a NUL), so an
+/// id an older client sent as it was reads as that id.
 fn percent_decoded(value: &str) -> String {
     let bytes = value.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
@@ -209,7 +210,10 @@ fn percent_decoded(value: &str) -> String {
             at += 1;
         }
     }
-    String::from_utf8(out).unwrap_or_else(|_| value.to_owned())
+    match String::from_utf8(out) {
+        Ok(read) if !read.chars().any(char::is_control) => read,
+        _ => value.to_owned(),
+    }
 }
 
 /// Runs `future` with `asked` current.
@@ -389,6 +393,12 @@ mod tests {
         assert_eq!(percent_decoded("a%zzb"), "a%zzb");
         assert_eq!(percent_decoded("%e0%a4"), "%e0%a4");
         assert_eq!(percent_decoded("%41%42"), "AB");
+        // What would hold a control character once read stays as it was written.
+        assert_eq!(percent_decoded("a%0D%0Ab"), "a%0D%0Ab");
+        assert_eq!(percent_decoded("a%00"), "a%00");
+        assert_eq!(percent_decoded("a%7Fb"), "a%7Fb");
+        assert_eq!(percent_decoded("a%C2%85b"), "a%C2%85b");
+        assert_eq!(percent_decoded("a%09b%20c"), "a%09b%20c");
     }
 
     #[test]
