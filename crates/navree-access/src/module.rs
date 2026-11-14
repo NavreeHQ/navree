@@ -112,6 +112,7 @@ fn register(m: &mut ModuleBuilder, options: AccessOptions) {
                 let db = r.get::<Db>().await?;
                 let options = r.get::<AccessOptions>().await?;
                 let subjects = Subjects::collect(&r.app())?;
+                crate::catalog::check(&r.app())?;
                 Ok(Arc::new(AbilityFactory::new(
                     db,
                     options,
