@@ -23,7 +23,7 @@ use crate::{ViewOptions, Views};
 ///
 /// Templates come from the configured directories and from templates that
 /// modules embed with [`ModuleBuilderViewExt::templates`] (a plugin's, with
-/// [`ModuleBuilderPluginViewsExt::plugin_templates`](crate::ModuleBuilderPluginViewsExt::plugin_templates),
+/// [`ModuleBuilderPluginTemplatesExt::plugin_templates`](crate::ModuleBuilderPluginTemplatesExt::plugin_templates),
 /// are under its namespace). They are read
 /// and compiled when the app boots (off the async workers): a syntax error
 /// fails the boot, naming the template.
@@ -129,7 +129,8 @@ fn register(m: &mut ModuleBuilder, options: Option<ViewOptions>) {
 /// replaces one of the same name from a module it imports. Two other modules
 /// that embed one name with different text are reported: a warning, or an
 /// error when either module belongs to a plugin the kernel does not find
-/// first-party.
+/// first-party. A module of such a plugin that replaces a template of a module
+/// it imports is an error too, unless the template is another such plugin's.
 fn embedded_templates(ctx: &AppContext) -> Result<Vec<(String, &'static str)>, String> {
     let mut owners: HashMap<String, (ModuleInfo, &'static str)> = HashMap::new();
     let mut embedded = Vec::new();
@@ -170,10 +171,13 @@ fn embedded_templates(ctx: &AppContext) -> Result<Vec<(String, &'static str)>, S
 }
 
 /// What it means that `module`, after `previous`, embeds the template `name`
-/// with other text: said at `info` when `module` imports `previous` (a module
-/// may replace what it imports), said at `warn` instead when `module` belongs
-/// to a plugin the kernel does not find first-party, an error when either
-/// belongs to one, and otherwise a warning.
+/// with other text. When `module` imports `previous` (a module may replace what
+/// it imports) there are three outcomes: said at `info` when `module` is not a
+/// module of a plugin the kernel does not find first-party; when it is, a
+/// warning if `previous` belongs to such a plugin too (another plugin's
+/// template), and an error otherwise (a template of the app or of the
+/// framework). When it does not import `previous`, an error when either belongs
+/// to such a plugin, and otherwise a warning.
 fn say_duplicate(
     ctx: &AppContext,
     name: &str,
@@ -187,18 +191,24 @@ fn say_duplicate(
             .plugin(module.id)
             .filter(|_| is_community_plugin(ctx, module.id));
         match community {
-            Some(plugin) => {
+            None => {
+                tracing::info!(
+                    target: "navree::view",
+                    "embedded template `{name}` of `{first}` is replaced by `{second}`'s"
+                );
+            }
+            Some(plugin) if is_community_plugin(ctx, previous.id) => {
                 tracing::warn!(
                     target: "navree::view",
                     "embedded template `{name}` of `{first}` is replaced by `{second}`'s, a module of the plugin `{}`",
                     plugin.name
                 );
             }
-            None => {
-                tracing::info!(
-                    target: "navree::view",
-                    "embedded template `{name}` of `{first}` is replaced by `{second}`'s"
-                );
+            Some(plugin) => {
+                errors.push(format!(
+                    "embedded template `{name}` of `{first}` cannot be replaced by `{second}`, a module of the plugin `{}`; to use the plugin's version, copy it to resources/views/{name} or register it from a module of the app",
+                    plugin.name
+                ));
             }
         }
     } else if is_community_plugin(ctx, previous.id) || is_community_plugin(ctx, module.id) {
@@ -250,9 +260,15 @@ pub trait ModuleBuilderViewExt {
     /// module's template overrides one of the same name from a module it
     /// imports (directly or not). Two other modules that embed one name with
     /// different text log a warning at boot and the later module's template is
-    /// used; when one of the two is a plugin, the boot fails (a plugin's
-    /// templates are under its namespace, see
-    /// [`ModuleBuilderPluginViewsExt::plugin_templates`](crate::ModuleBuilderPluginViewsExt::plugin_templates)).
+    /// used; when one of the two belongs to a plugin that is not one of the
+    /// framework's own, the boot fails (a plugin's templates are under its
+    /// namespace, see
+    /// [`ModuleBuilderPluginTemplatesExt::plugin_templates`](crate::ModuleBuilderPluginTemplatesExt::plugin_templates)).
+    /// A module of such a plugin may replace a template of a module it imports
+    /// only when that template is another plugin's, and is then warned about;
+    /// replacing a template of the app or of the framework fails the boot, and
+    /// the app takes a plugin's version of such a template by putting it in a
+    /// template folder or registering it from a module of its own.
     ///
     /// ```
     /// use navree_kernel::{Module, ModuleBuilder};

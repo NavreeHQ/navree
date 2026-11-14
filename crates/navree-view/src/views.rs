@@ -34,7 +34,12 @@ use crate::{ViewError, ViewOptions, filters};
 /// modules an app has in dependency order, so a module's template replaces
 /// one of the same name from a module it imports; two other modules that
 /// embed one name log a warning (the later one's is used), and fail the boot
-/// when one of them is a plugin.
+/// when one of them belongs to a plugin that is not one of the framework's
+/// own. A module of such a plugin may replace a template of a module it
+/// imports only when that template is another plugin's, and is then warned
+/// about; replacing a template of the app or of the framework fails the boot,
+/// and the app takes a plugin's version of such a template by putting it in a
+/// template folder or registering it from a module of its own.
 ///
 /// **Escaping**: a template's name picks its mode, in any case and also before
 /// a trailing `.j2`, `.jinja` or `.jinja2`. `.txt` and `.md` print values as they

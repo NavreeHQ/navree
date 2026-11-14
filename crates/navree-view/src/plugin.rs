@@ -1,4 +1,4 @@
-//! [`TemplateDir`] and [`ModuleBuilderPluginViewsExt`]: the templates a plugin
+//! [`TemplateDir`] and [`ModuleBuilderPluginTemplatesExt`]: the templates a plugin
 //! ships in its binary.
 
 use navree_kernel::{ModuleBuilder, PublishTag, Publishable};
@@ -42,7 +42,7 @@ impl From<&'static [(&'static str, &'static str)]> for TemplateDir {
 ///
 /// ```
 /// use navree_kernel::{Module, ModuleBuilder};
-/// use navree_view::{ModuleBuilderPluginViewsExt, TemplateDir};
+/// use navree_view::{ModuleBuilderPluginTemplatesExt, TemplateDir};
 ///
 /// const VIEWS: &[(&str, &str)] = &[(
 ///     "list.html",
@@ -58,7 +58,7 @@ impl From<&'static [(&'static str, &'static str)]> for TemplateDir {
 ///     }
 /// }
 /// ```
-pub trait ModuleBuilderPluginViewsExt {
+pub trait ModuleBuilderPluginTemplatesExt {
     /// Registers `dir` under the plugin's namespace (`list.html` becomes
     /// `announcements/list.html`) and makes it publishable (tag `views`). The
     /// namespace is read when the app boots, so `m.plugin(..)` may come before
@@ -69,7 +69,7 @@ pub trait ModuleBuilderPluginViewsExt {
     fn plugin_templates(&mut self, dir: TemplateDir) -> &mut Self;
 }
 
-impl ModuleBuilderPluginViewsExt for ModuleBuilder {
+impl ModuleBuilderPluginTemplatesExt for ModuleBuilder {
     fn plugin_templates(&mut self, dir: TemplateDir) -> &mut Self {
         self.contribute(EmbeddedTemplates {
             templates: dir.files().to_vec(),

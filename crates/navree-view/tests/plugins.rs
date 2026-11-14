@@ -5,7 +5,7 @@
 mod support;
 
 use navree_kernel::{Module, ModuleBuilder, Navree, PluginInfo, PublishTag};
-use navree_view::{ModuleBuilderPluginViewsExt, TemplateDir, ViewModule, Views};
+use navree_view::{ModuleBuilderPluginTemplatesExt, TemplateDir, ViewModule, Views};
 use serde_json::json;
 
 use crate::support::{options, views_dir};
