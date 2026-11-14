@@ -1664,6 +1664,17 @@ impl AppShell {
             context: None,
         }
     }
+
+    /// This shell with the links other modules add that the reader of the request of `parts`
+    /// may open, for a shell that asks for them ([`Shell::contributed`]): decided on the
+    /// server for this request. The extractor and the native shell document both take their
+    /// links from here, so a page and the document it stands in list the same links.
+    pub(crate) async fn with_contributed(mut self, parts: &mut Parts) -> AppShell {
+        if self.shell.contributed {
+            self.links = links::drawn(parts).await;
+        }
+        self
+    }
 }
 
 impl FromRequestParts for AppShell {
@@ -1671,21 +1682,15 @@ impl FromRequestParts for AppShell {
 
     async fn from_request_parts(parts: &mut Parts) -> Result<Self, Self::Rejection> {
         let Scoped(shell) = Scoped::<Shell>::from_request_parts(parts).await?;
-        // The links other modules add, those this request's reader may open: decided on the
-        // server for this request, only for a shell that asks for them.
-        let drawn = if shell.contributed {
-            links::drawn(parts).await
-        } else {
-            Vec::new()
-        };
-        let mut applied = Self::read(
+        let applied = Self::read(
             shell,
             parts.uri.path().to_owned(),
             parts.uri.query().map(str::to_owned),
             &parts.headers,
         );
-        applied.links = drawn;
-        Ok(applied)
+        // The links other modules add, those this request's reader may open: decided on the
+        // server for this request, only for a shell that asks for them.
+        Ok(applied.with_contributed(parts).await)
     }
 }
 
