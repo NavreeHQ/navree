@@ -68,10 +68,10 @@ jobs:
           ndk="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ndk/aarch64-linux-android26-clang" \
           CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="$LINK" \
-            cargo rustc -p navree-native-core --release --features jni --target aarch64-linux-android --crate-type cdylib
+            cargo rustc -p navree-native-core --locked --release --features jni --target aarch64-linux-android --crate-type cdylib
           CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$ndk/x86_64-linux-android26-clang" \
           CARGO_TARGET_X86_64_LINUX_ANDROID_RUSTFLAGS="$LINK" \
-            cargo rustc -p navree-native-core --release --features jni --target x86_64-linux-android --crate-type cdylib
+            cargo rustc -p navree-native-core --locked --release --features jni --target x86_64-linux-android --crate-type cdylib
           for target in aarch64-linux-android x86_64-linux-android; do
             library="target/$target/release/libnavree_native_core.so"
             # The five functions of the C interface and the four native methods
