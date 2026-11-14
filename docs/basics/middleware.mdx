@@ -330,7 +330,7 @@ impl KhataTimeoutModule {
     fn wire(&self, m: &mut ModuleBuilder) {
         m.http_layer(GlobalLayer::new(LayerSlot::Context, "timeout", |_ctx, router| {
             Ok(router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
-                Duration::from_millis(50),
+                Duration::from_secs(1),
             ))))
         }))
         // The timeout's error answers 503 instead of 500.
@@ -341,7 +341,7 @@ impl KhataTimeoutModule {
 }
 ```
 
-A request that takes longer than 50 milliseconds gets a 503 in the [error format](/docs/basics/errors/), with the message `The khata took too long.`; a quicker one gets its own answer. The same `FallibleLayer` goes on one hand-written route with `Endpoint::layer(..)`, and on a router with `Router::route_layer(..)`. A service that is not ready answers as its error does. See [connecting an existing crate](/docs/plugins/existing-crates/#tower-middleware).
+A request that takes longer than a second gets a 503 in the [error format](/docs/basics/errors/), with the message `The khata took too long.`; a quicker one gets its own answer. The same `FallibleLayer` goes on one hand-written route with `Endpoint::layer(..)`, and on a router with `Router::route_layer(..)`. A service that is not ready answers as its error does. See [connecting an existing crate](/docs/plugins/existing-crates/#tower-middleware).
 
 ## The order, all together
 

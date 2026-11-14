@@ -104,7 +104,7 @@ impl KhataTimeoutModule {
             |_ctx, router| {
                 Ok(
                     router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
-                        Duration::from_millis(50),
+                        Duration::from_secs(1),
                     ))),
                 )
             },
@@ -129,7 +129,7 @@ impl Controller for KhataController {
         vec![
             RouteDef::on(Method::GET, "/fast", || async { "on time" }).public(),
             RouteDef::on(Method::GET, "/slow", || async {
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                tokio::time::sleep(Duration::from_secs(5)).await;
                 "late"
             })
             .public(),

@@ -123,7 +123,7 @@ impl Service<Request> for Rewrapped {
     }
 }
 
-/// A timeout of 50 ms around the whole app, in the `Context` slot.
+/// A timeout of one second around the whole app, in the `Context` slot.
 fn timeout(m: &mut ModuleBuilder) {
     m.http_layer(GlobalLayer::new(
         LayerSlot::Context,
@@ -131,7 +131,7 @@ fn timeout(m: &mut ModuleBuilder) {
         |_, router| {
             Ok(
                 router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
-                    Duration::from_millis(50),
+                    Duration::from_secs(1),
                 ))),
             )
         },
@@ -141,7 +141,7 @@ fn timeout(m: &mut ModuleBuilder) {
 fn routes() -> Vec<RouteDef> {
     vec![
         RouteDef::on(Method::GET, "/slow", || async {
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            tokio::time::sleep(Duration::from_secs(5)).await;
             "late"
         })
         .public(),

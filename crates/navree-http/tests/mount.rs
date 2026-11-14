@@ -846,10 +846,10 @@ async fn a_mount_that_names_its_methods_answers_any_other_as_a_route_does() {
     assert_eq!((permits.asked.get(), ledger.calls()), (1, 1));
 }
 
-/// Answers `/slow` after two seconds and any other path at once.
+/// Answers `/slow` after five seconds and any other path at once.
 async fn slow_or_fast(request: Request) -> Result<http::Response<Body>, Infallible> {
     if request.uri().path() == "/slow" {
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        tokio::time::sleep(Duration::from_secs(5)).await;
     }
     Ok(http::Response::new(Body::from("on time")))
 }
@@ -893,7 +893,7 @@ async fn a_mount_is_one_route_for_its_throttle_timeout_and_body_limit() {
     let app = mounted(|| {
         Mount::new("/khata", tower::service_fn(slow_or_fast))
             .authenticated()
-            .timeout(Duration::from_millis(100))
+            .timeout(Duration::from_secs(1))
     })
     .boot()
     .await;
