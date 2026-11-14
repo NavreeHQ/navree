@@ -251,6 +251,21 @@ public enum ContentRules {
         bar == .window ? .choosing : .firstCell
     }
 
+    /// How a row whose detail holds a button saying its title again (a board
+    /// card's peek) opens what that button opens.
+    public enum RowOpening: Sendable, Equatable {
+        /// The button alone, and VoiceOver's default action on the row
+        /// (iPhone and iPad, where the row is the finger's target anyway).
+        case button
+        /// A click anywhere on the row too, as a Mac's list opens a row
+        /// with one click, the button inside it still taking its own.
+        case click
+    }
+
+    public static func rowOpening(bar: ActionBar) -> RowOpening {
+        bar == .window ? .click : .button
+    }
+
     /// The words a record's name cell shows in their place, where a click on
     /// its row opens the record: the cell's button or link to it (the web
     /// page's link, which the row's click now is) becomes its words, so it

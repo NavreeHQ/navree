@@ -294,3 +294,10 @@ private func labels(_ nodes: [Navree.Node]) -> [String] {
     #expect(ContentRules.lowProminenceWords(bar: .window) == .accent)
     #expect(ContentRules.lowProminenceWords(bar: .navigation) == .system)
 }
+
+@Test func aClickAnywhereOnAMacRowOpensWhatItsTitleButtonOpens() {
+    // A board card on a Mac opens its peek from a click anywhere on it.
+    #expect(ContentRules.rowOpening(bar: .window) == .click)
+    // On iPhone and iPad the button and VoiceOver's default action.
+    #expect(ContentRules.rowOpening(bar: .navigation) == .button)
+}

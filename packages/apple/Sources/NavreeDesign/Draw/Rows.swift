@@ -607,8 +607,15 @@ struct RowOffersActions: ViewModifier {
 
         func body(content: Content) -> some View {
             if let button, let action = button.action {
-                content.accessibilityAction {
-                    context.send(.act(action, Place(form: form.map(FormRef.init))))
+                let open = { context.send(.act(action, Place(form: form.map(FormRef.init)))) }
+                switch ContentRules.rowOpening(bar: .current) {
+                case .button:
+                    content.accessibilityAction { open() }
+                case .click:
+                    content
+                        .contentShape(Rectangle())
+                        .onTapGesture { open() }
+                        .accessibilityAction { open() }
                 }
             } else {
                 content
