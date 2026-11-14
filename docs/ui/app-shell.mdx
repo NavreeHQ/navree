@@ -117,7 +117,7 @@ let actions = ability.only([
 
 ## Links other modules add
 
-A module, a plugin's among them, adds links to the app's sidebar with `m.nav_item(..)`, and asks for a [permission](/docs/security/authorization/#describing-permissions) a link needs:
+A module, a plugin's among them, adds links to the app's sidebar with `m.nav_item(..)`, and asks for a [permission](/docs/security/authorization/#describing-permissions) a link needs. The module below is a plugin's, and belongs in the plugin's own crate (`navree-plugin-announcements`): `m.plugin(navree::plugin_info!(..))` names the crate it is written in, so pasted into an app's crate it would treat every subject of the app as the plugin's. A module of the app adds links the same way, without `m.plugin`:
 
 ```rust
 use navree::plugin::Permission;

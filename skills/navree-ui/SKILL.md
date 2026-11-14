@@ -737,9 +737,11 @@ Workspaces: add `WorkspaceModule::from_config()` and set
 `workspace.resolvers = ["session", "header"]` and
 `workspace.session_default = true` (a browser that has chosen none is in the
 first workspace its account belongs to). `WorkspaceSwitcher` is an
-extractor and a component (`AppPage::actions(switcher)`); `CurrentWorkspace`
-gives the workspace, the role and `has_permission`; read and write a
-workspace's rows through `WorkspaceRepo::<Model>`.
+extractor and a component: put it in the sidebar's header with
+`AppShell::header_slot(switcher)`, or beside the page heading
+(`AppPage::actions(switcher)`); `CurrentWorkspace` gives the workspace, the
+role and `has_permission`; read and write a workspace's rows through
+`WorkspaceRepo::<Model>`.
 
 The shell is registered once and static, so draw the person and the
 workspace per request: take the `AppShell` extractor and set
@@ -757,10 +759,6 @@ app made by `navree new` does this in one extractor, `Desk`
 Do not write code for these, and do not stand in for them with raw elements.
 Tell the owner they are coming.
 
-- **A workspace switcher in the shell's sidebar header.**
-  `navree_workspace::WorkspaceSwitcher` draws one; put it beside the page
-  heading (`AppPage::actions`) or in the shell's search slot, and show the
-  workspace's name under the app's with `AppShell::context` (see above).
 - **A rich text editor.** Islands are shipped (`Island` with an
   `IslandScript`, the docs page `ui/islands`), but no editor is.
 - **Static files past the app's own stylesheet, fonts and pictures.** The

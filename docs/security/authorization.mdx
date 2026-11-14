@@ -265,8 +265,10 @@ The roles that already hold every permission hold a plugin's too, from the momen
 
 - a workspace's `owner` (`all.*`), in that workspace;
 - an organization's `owner`, in each of its workspaces: with organizations on, it enters each of them as its `owner`;
+- an organization role the app maps to the workspace role `owner` (`workspace_role = "owner"` under `workspace.organizations.roles`), in each workspace of the organization its members reach;
 - the app's super-admin role;
-- any role the app grants `all.*`, in `workspace.roles` or with navree-access.
+- any role the app grants `all.*`, in `workspace.roles` or with navree-access;
+- a role the app's abilities function gives `manage` on `all` (`rules.can(MANAGE, ALL)`), app-wide.
 
 A role granted one action on `all` holds that action of every plugin: `all.read` holds `announcements.read`. So a plugin does not guard a staff-only action with a permission that a workspace owner (in a SaaS app, a customer) holds.
 
