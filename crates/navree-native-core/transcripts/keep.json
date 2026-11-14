@@ -207,12 +207,12 @@
           {"t":"nav"}
         ],
         "effects": [
-          {"t":"cache_read","key":"page:https://shop.example/orders"}
+          {"t":"cache_read","key":"page:0193a4b2-0000-7000-8000-00000000ra01:https://shop.example/orders"}
         ]
       }
     },
     {
-      "send": {"t":"cache","key":"page:https://shop.example/orders"},
+      "send": {"t":"cache","key":"page:0193a4b2-0000-7000-8000-00000000ra01:https://shop.example/orders"},
       "body": "made/kept-orders.json",
       "expect": {
         "changed": [
@@ -397,7 +397,7 @@
     },
     {
       "note": "Even a kept page the client hands over unasked is not drawn.",
-      "send": {"t":"cache","key":"page:https://shop.example/orders"},
+      "send": {"t":"cache","key":"page:0193a4b2-0000-7000-8000-00000000ra01:https://shop.example/orders"},
       "body": "made/kept-orders.json",
       "expect": {
         "changed": [],

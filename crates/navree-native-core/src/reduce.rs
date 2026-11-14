@@ -2734,9 +2734,127 @@ mod tests {
         assert!(
             update.effects.iter().any(|effect| matches!(
                 effect,
-                Effect::CacheWrite { key, value: None } if key == "page:https://shop.example/orders"
+                Effect::CacheWrite { key, value: None }
+                    if key == "page:0193a4b2-0000-7000-8000-00000000ra01:https://shop.example/orders"
             )),
             "{update:?}"
+        );
+    }
+
+    /// A client's store, shared by the cores that run over it: what each
+    /// writes, empties and reads, in the order the effects come.
+    #[derive(Default)]
+    struct Store(std::collections::BTreeMap<String, String>);
+
+    impl Store {
+        /// Sends `event` to `core` and carries out what it asks of the store,
+        /// answering its reads at once.
+        fn send(&mut self, core: &mut Core, event: Event) {
+            let mut events = vec![event];
+            while let Some(event) = events.pop() {
+                for effect in core.send(event).effects {
+                    match effect {
+                        Effect::CacheWrite {
+                            key,
+                            value: Some(value),
+                        } => {
+                            self.0.insert(key, value);
+                        }
+                        Effect::CacheWrite { key, value: None } => {
+                            self.0.remove(&key);
+                        }
+                        Effect::CacheClear => self.0.clear(),
+                        Effect::CacheRead { key } => events.insert(
+                            0,
+                            Event::Cache {
+                                value: self.0.get(&key).cloned(),
+                                key,
+                            },
+                        ),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    fn kept_core() -> Core {
+        let mut config = Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        );
+        config.cache.persist = true;
+        Core::new(config)
+    }
+
+    fn native(request: u64, body: &str, person: Option<&str>, keep: bool) -> Event {
+        let mut headers = Vec::new();
+        if keep {
+            headers.push(("x-navree-keep".to_owned(), "1".to_owned()));
+        }
+        if let Some(person) = person {
+            headers.push(("x-navree-person".to_owned(), person.to_owned()));
+        }
+        Event::Response(Response {
+            request,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            headers,
+            body: body.to_owned(),
+            ..Response::default()
+        })
+    }
+
+    /// Two cores over one store, one still naming Ravneet and one naming a
+    /// visitor, never mix their pages: the next launch draws nothing of
+    /// Ravneet's for a visitor.
+    #[test]
+    fn two_cores_over_one_store_never_mix_their_owners_pages() {
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        let shell = include_str!("../transcripts/fixtures/store/shell.json");
+        let nobody = include_str!("../transcripts/fixtures/made/shell-nobody.json");
+        let hers = include_str!("../transcripts/fixtures/made/home.json");
+        let visitors = include_str!("../transcripts/fixtures/made/welcome.json");
+        let mut store = Store::default();
+        // A window signed out keeps the visitor's first page.
+        let mut a = kept_core();
+        store.send(&mut a, Event::Start);
+        store.send(&mut a, native(1, nobody, None, false));
+        store.send(&mut a, native(2, visitors, None, true));
+        // Another window, where Ravneet is signed in, asks for its first page.
+        let mut b = kept_core();
+        store.send(&mut b, Event::Start);
+        store.send(&mut b, native(1, shell, Some(RAVNEET), false));
+        // Ravneet's page answers, and is kept as hers.
+        store.send(&mut b, native(2, hers, Some(RAVNEET), true));
+        // The signed-out window keeps another page, and writes its list again,
+        // still a visitor's, with its first page on it.
+        store.send(
+            &mut a,
+            Event::Act {
+                screen: None,
+                action: navree_native::Action::navigate("/catalogue"),
+                form: None,
+                overlay: None,
+                text: None,
+                now: None,
+                ask: None,
+                from: None,
+            },
+        );
+        store.send(&mut a, native(3, visitors, None, true));
+        // The next launch, as a visitor.
+        let mut c = kept_core();
+        store.send(&mut c, Event::Start);
+        store.send(&mut c, native(1, nobody, None, false));
+        let front = c.front().unwrap();
+        let drawn = c.view.screens[&front]
+            .screen()
+            .map(|screen| screen.title.clone());
+        assert_ne!(
+            drawn.as_deref(),
+            Some("Overview"),
+            "Ravneet's page was drawn"
         );
     }
 
