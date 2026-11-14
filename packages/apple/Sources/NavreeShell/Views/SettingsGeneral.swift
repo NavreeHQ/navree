@@ -64,6 +64,8 @@ struct GeneralForm: View {
                     if presence.dockWhileWindowOpen, choices.contains(.menuBar) {
                         Text("In the menu bar only, \(app) is in the Dock while one of its windows is open.")
                             .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: 280, alignment: .leading)
                     }
                 }
             }
@@ -78,10 +80,16 @@ struct GeneralForm: View {
                         Button(String(localized: "Allow in System Settings…")) { LoginItem.openSystemSettings() }
                     }
                 } footer: {
-                    if let problem { Text(problem).foregroundStyle(.secondary) }
+                    if let problem {
+                        Text(problem)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: 280, alignment: .leading)
+                    }
                 }
             }
         }
+        .padding(20)
         .onAppear { login = LoginItem.status }
     }
 
