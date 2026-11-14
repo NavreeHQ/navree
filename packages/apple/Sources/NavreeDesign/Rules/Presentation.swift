@@ -150,13 +150,17 @@ public enum PresentationRules {
         width == .compact ? .underTitle : .toolbar
     }
 
-    /// Whether the search field joins the bar only once the screen has first
-    /// appeared. A field under the title does: given with a list that is there
-    /// from the bar's very first layout (a screen kept from the last launch,
-    /// drawn as the app opens), iOS lays the bar out with its large title
-    /// already folded, though nothing was scrolled. Joining a moment later, the
-    /// bar grows under the large title, as when the list comes from the server.
-    public static func searchWaitsForFirstAppearance(_ placement: SearchPlacement) -> Bool {
+    /// Whether the list under a search field joins its screen only once the
+    /// screen has first appeared. A list under a field under the title does:
+    /// given with the field at the bar's very first layout (a screen kept from
+    /// the last launch, drawn as the app opens), iOS 27.2 lays the bar out
+    /// with its large title already folded, though nothing was scrolled, every
+    /// time; and a field that joins the bar after the list (as this client
+    /// tried) folds it about one launch in twelve. The bar is laid out once,
+    /// with its large title and the field and nothing under them yet, and the
+    /// list comes a moment later, as it does whenever it comes from the
+    /// server; nothing of the bar changes after its first layout.
+    public static func listWaitsForFirstAppearance(_ placement: SearchPlacement) -> Bool {
         placement == .underTitle
     }
 }
