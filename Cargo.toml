@@ -6,7 +6,7 @@ members = ["crates/*", "apps/board-demo", "apps/store-demo", "apps/inbox-demo", 
 exclude = ["bench", "fuzz"]
 
 [workspace.package]
-version = "1.2.1"
+version = "1.2.2"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT OR Apache-2.0"
@@ -21,82 +21,82 @@ missing_docs = "warn"
 # ---------------------------------------------------------------------------
 # Navree crates (paths; members use `{ workspace = true }`)
 # ---------------------------------------------------------------------------
-navree = { path = "crates/navree", version = "=1.2.1" }
-navree-kernel = { path = "crates/navree-kernel", version = "=1.2.1" }
-navree-openapi = { path = "crates/navree-openapi", version = "=1.2.1" }
-navree-bounded = { path = "crates/navree-bounded", version = "=1.2.1" }
-navree-glob = { path = "crates/navree-glob", version = "=1.2.1" }
-navree-markdown = { path = "crates/navree-markdown", version = "=1.2.1" }
-navree-phone = { path = "crates/navree-phone", version = "=1.2.1" }
-navree-contracts = { path = "crates/navree-contracts", version = "=1.2.1" }
-navree-telemetry = { path = "crates/navree-telemetry", version = "=1.2.1" }
-navree-macros = { path = "crates/navree-macros", version = "=1.2.1" }
-navree-config = { path = "crates/navree-config", version = "=1.2.1" }
-navree-log = { path = "crates/navree-log", version = "=1.2.1" }
-navree-crypto = { path = "crates/navree-crypto", version = "=1.2.1" }
-navree-http = { path = "crates/navree-http", version = "=1.2.1" }
-navree-events = { path = "crates/navree-events", version = "=1.2.1" }
-navree-view = { path = "crates/navree-view", version = "=1.2.1" }
-navree-template = { path = "crates/navree-template", version = "=1.2.1" }
-navree-cache = { path = "crates/navree-cache", version = "=1.2.1" }
-navree-http-client = { path = "crates/navree-http-client", version = "=1.2.1" }
-navree-db = { path = "crates/navree-db", version = "=1.2.1" }
-navree-testing = { path = "crates/navree-testing", version = "=1.2.1" }
-navree-observe = { path = "crates/navree-observe", version = "=1.2.1" }
-navree-api = { path = "crates/navree-api", version = "=1.2.1" }
-navree-mail = { path = "crates/navree-mail", version = "=1.2.1" }
-navree-realtime = { path = "crates/navree-realtime", version = "=1.2.1" }
-navree-storage = { path = "crates/navree-storage", version = "=1.2.1" }
-navree-session = { path = "crates/navree-session", version = "=1.2.1" }
-navree-validation = { path = "crates/navree-validation", version = "=1.2.1" }
-navree-validation-macros = { path = "crates/navree-validation-macros", version = "=1.2.1" }
-navree-ui-macros = { path = "crates/navree-ui-macros", version = "=1.2.1" }
-navree-queue = { path = "crates/navree-queue", version = "=1.2.1" }
-navree-audit = { path = "crates/navree-audit", version = "=1.2.1" }
-navree-access = { path = "crates/navree-access", version = "=1.2.1" }
-navree-schedule = { path = "crates/navree-schedule", version = "=1.2.1" }
-navree-notify = { path = "crates/navree-notify", version = "=1.2.1" }
-navree-auth = { path = "crates/navree-auth", version = "=1.2.1" }
-navree-workspace = { path = "crates/navree-workspace", version = "=1.2.1" }
-navree-dock = { path = "crates/navree-dock", version = "=1.2.1" }
-navree-social = { path = "crates/navree-social", version = "=1.2.1" }
-navree-webhooks = { path = "crates/navree-webhooks", version = "=1.2.1" }
-navree-integrations = { path = "crates/navree-integrations", version = "=1.2.1" }
-navree-oauth = { path = "crates/navree-oauth", version = "=1.2.1" }
-navree-flags = { path = "crates/navree-flags", version = "=1.2.1" }
-navree-settings = { path = "crates/navree-settings", version = "=1.2.1" }
-navree-search = { path = "crates/navree-search", version = "=1.2.1" }
-navree-graphql = { path = "crates/navree-graphql", version = "=1.2.1" }
-navree-billing = { path = "crates/navree-billing", version = "=1.2.1" }
-navree-grpc = { path = "crates/navree-grpc", version = "=1.2.1" }
-navree-ui = { path = "crates/navree-ui", version = "=1.2.1" }
-navree-native = { path = "crates/navree-native", version = "=1.2.1" }
-navree-mcp = { path = "crates/navree-mcp", version = "=1.2.1" }
-navree-ai = { path = "crates/navree-ai", version = "=1.2.1" }
-navree-lighthouse = { path = "crates/navree-lighthouse", version = "=1.2.1" }
-navree-redis = { path = "crates/navree-redis", version = "=1.2.1" }
-navree-logbook = { path = "crates/navree-logbook", version = "=1.2.1" }
-navree-micro = { path = "crates/navree-micro", version = "=1.2.1" }
-navree-fleet = { path = "crates/navree-fleet", version = "=1.2.1" }
-navree-helm = { path = "crates/navree-helm", version = "=1.2.1" }
-navree-harbor = { path = "crates/navree-harbor", version = "=1.2.1" }
-navree-schema = { path = "crates/navree-schema", version = "=1.2.1" }
-navree-orm = { path = "crates/navree-orm", version = "=1.2.1" }
-navree-orm-macros = { path = "crates/navree-orm-macros", version = "=1.2.1" }
-navree-mongo = { path = "crates/navree-mongo", version = "=1.2.1" }
-navree-navigator = { path = "crates/navree-navigator", version = "=1.2.1" }
-navree-i18n = { path = "crates/navree-i18n", version = "=1.2.1" }
-navree-pdf = { path = "crates/navree-pdf", version = "=1.2.1" }
-navree-i18n-macros = { path = "crates/navree-i18n-macros", version = "=1.2.1" }
-navree-browser = { path = "crates/navree-browser", version = "=1.2.1" }
-navree-time = { path = "crates/navree-time", version = "=1.2.1" }
-navree-sso = { path = "crates/navree-sso", version = "=1.2.1" }
-navree-documents = { path = "crates/navree-documents", version = "=1.2.1", default-features = false }
-navree-sheets = { path = "crates/navree-sheets", version = "=1.2.1" }
-navree-workflows = { path = "crates/navree-workflows", version = "=1.2.1" }
-navree-media = { path = "crates/navree-media", version = "=1.2.1" }
-navree-directory = { path = "crates/navree-directory", version = "=1.2.1" }
-navree-domains = { path = "crates/navree-domains", version = "=1.2.1" }
+navree = { path = "crates/navree", version = "=1.2.2" }
+navree-kernel = { path = "crates/navree-kernel", version = "=1.2.2" }
+navree-openapi = { path = "crates/navree-openapi", version = "=1.2.2" }
+navree-bounded = { path = "crates/navree-bounded", version = "=1.2.2" }
+navree-glob = { path = "crates/navree-glob", version = "=1.2.2" }
+navree-markdown = { path = "crates/navree-markdown", version = "=1.2.2" }
+navree-phone = { path = "crates/navree-phone", version = "=1.2.2" }
+navree-contracts = { path = "crates/navree-contracts", version = "=1.2.2" }
+navree-telemetry = { path = "crates/navree-telemetry", version = "=1.2.2" }
+navree-macros = { path = "crates/navree-macros", version = "=1.2.2" }
+navree-config = { path = "crates/navree-config", version = "=1.2.2" }
+navree-log = { path = "crates/navree-log", version = "=1.2.2" }
+navree-crypto = { path = "crates/navree-crypto", version = "=1.2.2" }
+navree-http = { path = "crates/navree-http", version = "=1.2.2" }
+navree-events = { path = "crates/navree-events", version = "=1.2.2" }
+navree-view = { path = "crates/navree-view", version = "=1.2.2" }
+navree-template = { path = "crates/navree-template", version = "=1.2.2" }
+navree-cache = { path = "crates/navree-cache", version = "=1.2.2" }
+navree-http-client = { path = "crates/navree-http-client", version = "=1.2.2" }
+navree-db = { path = "crates/navree-db", version = "=1.2.2" }
+navree-testing = { path = "crates/navree-testing", version = "=1.2.2" }
+navree-observe = { path = "crates/navree-observe", version = "=1.2.2" }
+navree-api = { path = "crates/navree-api", version = "=1.2.2" }
+navree-mail = { path = "crates/navree-mail", version = "=1.2.2" }
+navree-realtime = { path = "crates/navree-realtime", version = "=1.2.2" }
+navree-storage = { path = "crates/navree-storage", version = "=1.2.2" }
+navree-session = { path = "crates/navree-session", version = "=1.2.2" }
+navree-validation = { path = "crates/navree-validation", version = "=1.2.2" }
+navree-validation-macros = { path = "crates/navree-validation-macros", version = "=1.2.2" }
+navree-ui-macros = { path = "crates/navree-ui-macros", version = "=1.2.2" }
+navree-queue = { path = "crates/navree-queue", version = "=1.2.2" }
+navree-audit = { path = "crates/navree-audit", version = "=1.2.2" }
+navree-access = { path = "crates/navree-access", version = "=1.2.2" }
+navree-schedule = { path = "crates/navree-schedule", version = "=1.2.2" }
+navree-notify = { path = "crates/navree-notify", version = "=1.2.2" }
+navree-auth = { path = "crates/navree-auth", version = "=1.2.2" }
+navree-workspace = { path = "crates/navree-workspace", version = "=1.2.2" }
+navree-dock = { path = "crates/navree-dock", version = "=1.2.2" }
+navree-social = { path = "crates/navree-social", version = "=1.2.2" }
+navree-webhooks = { path = "crates/navree-webhooks", version = "=1.2.2" }
+navree-integrations = { path = "crates/navree-integrations", version = "=1.2.2" }
+navree-oauth = { path = "crates/navree-oauth", version = "=1.2.2" }
+navree-flags = { path = "crates/navree-flags", version = "=1.2.2" }
+navree-settings = { path = "crates/navree-settings", version = "=1.2.2" }
+navree-search = { path = "crates/navree-search", version = "=1.2.2" }
+navree-graphql = { path = "crates/navree-graphql", version = "=1.2.2" }
+navree-billing = { path = "crates/navree-billing", version = "=1.2.2" }
+navree-grpc = { path = "crates/navree-grpc", version = "=1.2.2" }
+navree-ui = { path = "crates/navree-ui", version = "=1.2.2" }
+navree-native = { path = "crates/navree-native", version = "=1.2.2" }
+navree-mcp = { path = "crates/navree-mcp", version = "=1.2.2" }
+navree-ai = { path = "crates/navree-ai", version = "=1.2.2" }
+navree-lighthouse = { path = "crates/navree-lighthouse", version = "=1.2.2" }
+navree-redis = { path = "crates/navree-redis", version = "=1.2.2" }
+navree-logbook = { path = "crates/navree-logbook", version = "=1.2.2" }
+navree-micro = { path = "crates/navree-micro", version = "=1.2.2" }
+navree-fleet = { path = "crates/navree-fleet", version = "=1.2.2" }
+navree-helm = { path = "crates/navree-helm", version = "=1.2.2" }
+navree-harbor = { path = "crates/navree-harbor", version = "=1.2.2" }
+navree-schema = { path = "crates/navree-schema", version = "=1.2.2" }
+navree-orm = { path = "crates/navree-orm", version = "=1.2.2" }
+navree-orm-macros = { path = "crates/navree-orm-macros", version = "=1.2.2" }
+navree-mongo = { path = "crates/navree-mongo", version = "=1.2.2" }
+navree-navigator = { path = "crates/navree-navigator", version = "=1.2.2" }
+navree-i18n = { path = "crates/navree-i18n", version = "=1.2.2" }
+navree-pdf = { path = "crates/navree-pdf", version = "=1.2.2" }
+navree-i18n-macros = { path = "crates/navree-i18n-macros", version = "=1.2.2" }
+navree-browser = { path = "crates/navree-browser", version = "=1.2.2" }
+navree-time = { path = "crates/navree-time", version = "=1.2.2" }
+navree-sso = { path = "crates/navree-sso", version = "=1.2.2" }
+navree-documents = { path = "crates/navree-documents", version = "=1.2.2", default-features = false }
+navree-sheets = { path = "crates/navree-sheets", version = "=1.2.2" }
+navree-workflows = { path = "crates/navree-workflows", version = "=1.2.2" }
+navree-media = { path = "crates/navree-media", version = "=1.2.2" }
+navree-directory = { path = "crates/navree-directory", version = "=1.2.2" }
+navree-domains = { path = "crates/navree-domains", version = "=1.2.2" }
 
 # ---------------------------------------------------------------------------
 # Runtime, async and HTTP (Tokio family)

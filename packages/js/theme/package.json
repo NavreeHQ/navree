@@ -1,6 +1,6 @@
 {
   "name": "@navree/theme",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "The Navree theme: Tailwind CSS 4 tokens, shadcn/ui and shadcn-vue colors, every built-in theme in light and dark, self-hosted fonts, and the tokens as data.",
   "license": "MIT OR Apache-2.0",
   "author": "Amritpal Singh",
