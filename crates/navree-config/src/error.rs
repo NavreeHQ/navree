@@ -99,6 +99,17 @@ pub enum ConfigError {
         /// The underlying error.
         source: std::io::Error,
     },
+    /// A driver selector names a driver that does not resolve, or a
+    /// registration is refused (see `CheckReport::with_drivers`).
+    #[error("{key}: {message}")]
+    Driver {
+        /// The key of the selector (`cache.store`,
+        /// `storage.disks.uploads.driver`).
+        key: String,
+        /// What is wrong, naming the driver and the method that registers
+        /// one: the sentence the boot fails with.
+        message: String,
+    },
 }
 
 /// Masks the strings a `Deserialize` implementation quotes in its errors
@@ -151,6 +162,19 @@ mod tests {
         assert_eq!(
             redact_values("missing configuration field \"url\""),
             "missing configuration field \"url\""
+        );
+    }
+
+    #[test]
+    fn driver_errors_name_the_key() {
+        let error = super::ConfigError::Driver {
+            key: "cache.store".into(),
+            message: "cache store `two_tier` is registered by both `A` and `B`; register it once"
+                .into(),
+        };
+        assert_eq!(
+            error.to_string(),
+            "cache.store: cache store `two_tier` is registered by both `A` and `B`; register it once"
         );
     }
 }
