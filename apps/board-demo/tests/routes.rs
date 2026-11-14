@@ -117,7 +117,12 @@ async fn post_move(
     action: &str,
     fields: &[(&str, String)],
 ) -> (u16, String) {
-    let response = client.post(action).form(fields).send().await;
+    let response = client
+        .post(action)
+        .header("sec-fetch-site", "same-origin")
+        .form(fields)
+        .send()
+        .await;
     let location = response.header("location").unwrap_or_default().to_owned();
     (response.status().as_u16(), location)
 }
@@ -131,6 +136,7 @@ async fn the_next_page_starts_right_after_the_last_card_drawn_even_after_fresh_r
     assert_eq!(
         client
             .post(&format!("/as/{lead}"))
+            .header("sec-fetch-site", "same-origin")
             .form(&[("go", "")])
             .send()
             .await
@@ -256,6 +262,7 @@ async fn the_board_is_shown_as_a_member_until_someone_chooses_otherwise() {
     let review = order(&db, "review").await;
     let refused = client
         .post("/board/moves")
+        .header("sec-fetch-site", "same-origin")
         .header("x-navree-ui", "1")
         .form(&[
             ("item", review[0].to_string()),
@@ -290,6 +297,7 @@ async fn choosing_who_to_show_the_board_as_takes_a_post_from_this_site() {
 
     let chosen = client
         .post(&format!("/as/{lead}"))
+        .header("sec-fetch-site", "same-origin")
         .form(&[("go", "")])
         .send()
         .await;
@@ -328,6 +336,7 @@ async fn when_the_last_card_drawn_has_left_the_column_the_next_page_skips_nothin
     let lead = lead(&db).await;
     client
         .post(&format!("/as/{lead}"))
+        .header("sec-fetch-site", "same-origin")
         .form(&[("go", "")])
         .send()
         .await;
@@ -363,7 +372,12 @@ async fn signing_out_takes_a_post_from_this_site() {
         .send()
         .await;
     assert_eq!(forged.status(), 403);
-    let own = client.post("/sign-out").form(&[("go", "")]).send().await;
+    let own = client
+        .post("/sign-out")
+        .header("sec-fetch-site", "same-origin")
+        .form(&[("go", "")])
+        .send()
+        .await;
     assert_eq!(own.status(), 303);
 }
 
@@ -377,6 +391,7 @@ async fn comments_and_history_take_ids_the_database_gives() {
     for body in ["First look done.", "Second look done."] {
         let posted = client
             .post(&format!("/cards/{card}/comments"))
+            .header("sec-fetch-site", "same-origin")
             .form(&[("body", body)])
             .send()
             .await;
