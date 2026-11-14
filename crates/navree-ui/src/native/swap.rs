@@ -1253,9 +1253,10 @@ async fn answer(native: Arc<scope::Request>, mut request: Request, next: Next) -
         });
         if let Some(ops) = said.filter(|ops| !ops.is_empty()) {
             let (parts, _) = crate::module::to_ops(response, envelope, status).into_parts();
+            // `no-transform` from the handler stays: the envelope is not squeezed either.
             let mut native = respond(
                 parts.status,
-                "no-store",
+                crate::module::replaced_cache(&parts.headers),
                 Envelope::ops(assets::BUILD, ops),
                 &native,
                 "",
@@ -1293,7 +1294,13 @@ async fn answer(native: Arc<scope::Request>, mut request: Request, next: Next) -
             },
             &native,
         );
-        let mut wrapped = respond(parts.status, "no-store", envelope, &native, "");
+        let mut wrapped = respond(
+            parts.status,
+            crate::module::replaced_cache(&parts.headers),
+            envelope,
+            &native,
+            "",
+        );
         for value in parts.headers.get_all(SET_COOKIE) {
             wrapped.headers_mut().append(SET_COOKIE, value.clone());
         }

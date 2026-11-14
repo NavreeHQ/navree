@@ -58,8 +58,23 @@ impl Controller for Pages {
                 Reply::redirect("/next").toast(ToastTone::Success, "Done")
             })
             .public(),
+            RouteDef::on(Method::POST, "!/act-long", || async { long_reply() }).public(),
+            RouteDef::on(Method::POST, "!/act-as-is", || async {
+                let mut response = long_reply().into_response();
+                response.headers_mut().insert(
+                    http::header::CACHE_CONTROL,
+                    http::HeaderValue::from_static("private, no-transform"),
+                );
+                response
+            })
+            .public(),
         ]
     }
+}
+
+/// A reply whose ops are long enough to be worth compressing.
+fn long_reply() -> Reply {
+    Reply::redirect("/next").toast(ToastTone::Success, "Saved. ".repeat(400))
 }
 
 struct App;
@@ -207,6 +222,74 @@ async fn a_page_that_says_no_transform_is_not_compressed_by_the_toolkit_either()
             "{accept}"
         );
         assert_eq!(coding(&app, "/as-is", accept).await, None, "{accept}");
+    }
+}
+
+/// A reply posted at `path` by the runtime, or by a native client with `native`, to a
+/// client that takes `accept`.
+async fn posted(
+    app: &TestApp,
+    path: &str,
+    native: bool,
+    accept: &str,
+) -> navree_testing::TestResponse {
+    const PHONE: &str =
+        "platform=android; os=16; form=phone; app=0.1.0; vocab=1; locale=en-IN; tz=Asia/Kolkata";
+    let request = app.client().post(path).header("accept-encoding", accept);
+    let request = if native {
+        request
+            .header("x-navree-native", "1")
+            .header("x-navree-client", PHONE)
+    } else {
+        request.header("x-navree-ui", "1")
+    };
+    let response = request.send().await;
+    assert_eq!(response.status(), StatusCode::OK, "{path}");
+    response
+}
+
+#[tokio::test]
+async fn a_reply_that_says_no_transform_keeps_it_as_ops_and_is_not_compressed() {
+    let app = app().await;
+    for accept in ["br", "gzip, br"] {
+        // Without it, ops this long are squeezed.
+        let squeezed = posted(&app, "/act-long", false, "br").await;
+        assert_eq!(squeezed.header("content-encoding"), Some("br"));
+        let kept = posted(&app, "/act-as-is", false, accept).await;
+        assert_eq!(
+            kept.header("content-type"),
+            Some("application/vnd.navree.ops+json"),
+            "{accept}"
+        );
+        assert_eq!(
+            kept.header("cache-control"),
+            Some("no-store, no-transform"),
+            "{accept}"
+        );
+        assert_eq!(kept.header("content-encoding"), None, "{accept}");
+        assert!(kept.text().contains("Saved."), "{accept}");
+    }
+}
+
+#[tokio::test]
+async fn a_reply_that_says_no_transform_keeps_it_for_a_native_client_and_is_not_compressed() {
+    let app = app().await;
+    for accept in ["br", "gzip, br"] {
+        let squeezed = posted(&app, "/act-long", true, "br").await;
+        assert_eq!(squeezed.header("content-encoding"), Some("br"));
+        let kept = posted(&app, "/act-as-is", true, accept).await;
+        assert_eq!(
+            kept.header("content-type"),
+            Some("application/vnd.navree.native+json"),
+            "{accept}"
+        );
+        assert_eq!(
+            kept.header("cache-control"),
+            Some("no-store, no-transform"),
+            "{accept}"
+        );
+        assert_eq!(kept.header("content-encoding"), None, "{accept}");
+        assert!(kept.text().contains("Saved."), "{accept}");
     }
 }
 
