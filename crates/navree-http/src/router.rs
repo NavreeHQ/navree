@@ -28,7 +28,7 @@ use crate::extract::{ProxyTrust, Request};
 use crate::handler::{BoxedService, Endpoint};
 use crate::limiter::{Limiter, RateLimitStore};
 use crate::middleware::from_fn_with_state;
-use crate::mount::{MountEntry, check_mounts, collect_mounts};
+use crate::mount::{MountEndpoint, MountEntry, check_mounts, collect_mounts};
 use crate::network::rate_limit_key;
 use crate::pipeline::{
     self, CheckStages, ContextState, GuardStages, Requester, Stages, TimeoutOverride, X_REQUEST_ID,
@@ -42,17 +42,18 @@ use crate::{
     RouteMeta, routing,
 };
 
-/// Builds the app's full router: every controller route on Navree's
-/// [`Router`](routing::Router) behind its per-route pipeline, the single 404,
-/// the contributed [`GlobalLayer`]s and the fixed global layers. Used by
-/// `serve` and by tests.
+/// Builds the app's full router: every controller route and every
+/// [`Mount`](crate::Mount) on Navree's [`Router`](routing::Router) behind its
+/// per-route pipeline, the single 404, the contributed [`GlobalLayer`]s and
+/// the fixed global layers. Used by `serve` and by tests.
 ///
 /// Fails, listing every problem, when a route has no access declaration, is
 /// mounted twice (the same method on paths that differ only in parameter
 /// names counts) or has an invalid path, or when routes need an
-/// [`Authenticator`] or a [`RouteAuthorizer`] that is not registered.
-/// `HttpModule` runs this check at boot, so these mistakes stop the app
-/// before it binds a port.
+/// [`Authenticator`] or a [`RouteAuthorizer`] that is not registered; and
+/// when a mount has no access declaration, needs either of them, has a bad
+/// prefix or overlaps a route or another mount. `HttpModule` runs this check
+/// at boot, so these mistakes stop the app before it binds a port.
 pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
     let server = ctx
         .get::<HttpServer>()
@@ -90,6 +91,11 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
     let mut errors = Vec::new();
     for route in routes {
         if let Err(error) = mount(&mut routes_router, finder.as_mut(), route, &shared) {
+            errors.push(error);
+        }
+    }
+    for entry in mounts {
+        if let Err(error) = mount_service(&mut routes_router, entry, &shared) {
             errors.push(error);
         }
     }
@@ -455,15 +461,10 @@ struct Shared {
     rate_limits: Option<Arc<dyn RateLimitStore>>,
 }
 
-/// Mounts a route on `router` behind its per-route pipeline.
-fn mount(
-    router: &mut routing::Router,
-    finder: Option<&mut RouteFinder>,
-    route: Mounted,
-    shared: &Shared,
-) -> Result<(), String> {
-    let meta = Arc::new(route.meta);
-    let runtime = Arc::new(RouteRuntime {
+/// The per-route state of a route or a mount with `meta`.
+fn runtime(meta: RouteMeta, shared: &Shared) -> Arc<RouteRuntime> {
+    let meta = Arc::new(meta);
+    Arc::new(RouteRuntime {
         throttle: meta.throttle.map(|t| {
             let name = format!("http:route:{} {}", meta.method, meta.full_path);
             Limiter::new(name, t.limit, t.per, shared.rate_limits.clone())
@@ -481,7 +482,18 @@ fn mount(
         body_limit: meta.body_limit.unwrap_or(shared.body_limit),
         ipv6_prefix: shared.ipv6_prefix,
         meta: meta.clone(),
-    });
+    })
+}
+
+/// Mounts a route on `router` behind its per-route pipeline.
+fn mount(
+    router: &mut routing::Router,
+    finder: Option<&mut RouteFinder>,
+    route: Mounted,
+    shared: &Shared,
+) -> Result<(), String> {
+    let runtime = runtime(route.meta, shared);
+    let meta = runtime.meta.clone();
     let method = meta
         .method
         .parse::<Method>()
@@ -506,6 +518,44 @@ fn mount(
                 meta.module.unwrap_or("?")
             )
         })
+}
+
+/// Mounts a mount on `router` as one route: one per-route pipeline (one
+/// [`RouteRuntime`], so one throttle budget) in front of its
+/// [`MountEndpoint`], at `{prefix}` and `{prefix}/{*rest}`, for every method
+/// or for each declared one. Not in the error pages' route finder.
+fn mount_service(
+    router: &mut routing::Router,
+    entry: MountEntry,
+    shared: &Shared,
+) -> Result<(), String> {
+    let MountEntry {
+        prefix,
+        service,
+        meta,
+        methods,
+        module,
+    } = entry;
+    let endpoint = BoxCloneSyncService::new(RouteService {
+        runtime: runtime(meta, shared),
+        inner: BoxCloneSyncService::new(MountEndpoint::new(&prefix, service)),
+    });
+    let failed = |error: routing::RouteError| format!("mount `{prefix}` in `{module}`: {error}");
+    for pattern in [prefix.clone(), format!("{prefix}/{{*rest}}")] {
+        match &methods {
+            None => router
+                .try_route_any(&pattern, || endpoint.clone())
+                .map_err(&failed)?,
+            Some(methods) => {
+                for method in methods {
+                    router
+                        .try_route_service(method.clone(), &pattern, || endpoint.clone())
+                        .map_err(&failed)?;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The per-route state: metadata, throttle, authorizer, audit sink.

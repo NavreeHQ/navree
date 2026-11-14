@@ -1,21 +1,26 @@
 //! [`Mount`]: any tower service under a path prefix, inside the app's
 //! pipeline, and [`ModuleBuilderMountExt`], how a module declares one.
 
+use std::convert::Infallible;
 use std::fmt;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use bytes::Bytes;
-use http::Method;
-use navree_kernel::{AppContext, BoxError, ModuleBuilder};
+use http::header::UPGRADE;
+use http::uri::PathAndQuery;
+use http::{Method, StatusCode, Uri};
+use navree_kernel::{AppContext, BoxError, BoxFuture, ModuleBuilder};
 use tower::util::BoxCloneSyncService;
 use tower::{Service, ServiceExt};
 
-use crate::body::{Body, HttpBody};
+use crate::body::{Body, BodyLimit, HttpBody, body_error_in};
+use crate::error::AppError;
 use crate::extract::Request;
-use crate::response::Response;
+use crate::response::{IntoResponse, Response};
 use crate::router::access_problems;
-use crate::routing::{PathPattern, Segment};
+use crate::routing::{PathParams, PathPattern, Segment};
 use crate::{CanSpec, Guard, RouteMeta, Throttle};
 
 /// A mounted service as the app holds it: the app's request and response,
@@ -24,6 +29,13 @@ pub(crate) type MountService = BoxCloneSyncService<Request, Response, BoxError>;
 
 /// What a prefix must look like: the text of every refused prefix.
 const PREFIX_RULE: &str = "a prefix starts with `/` but not with `/_`, has no `{`, `}`, `*`, `..` or `//`, and does not end with `/`";
+
+/// The message of a request that would take over the connection.
+const TAKES_OVER: &str =
+    "A mounted service answers requests; it does not take over the connection.";
+
+/// The message of a path with an empty segment below a prefix.
+const EMPTY_SEGMENT: &str = "Invalid URL: the path has an empty segment";
 
 /// Any tower service under a path prefix, inside the app's pipeline.
 ///
@@ -40,6 +52,29 @@ const PREFIX_RULE: &str = "a prefix starts with `/` but not with `/_`, has no `{
 /// declaration fails the boot, and so does one whose prefix is malformed,
 /// starts with `/_` (the framework's own paths), or overlaps a route or
 /// another mount.
+///
+/// The service sees the request as the app received it but for its URI:
+/// scheme and authority as received, and for the path `/` followed by the
+/// rest of the path below the prefix as written (`/` for the prefix itself),
+/// then `?` and the query as written. Nothing is decoded, so `%2F`, `%3F` and
+/// `%23` reach the service as they were sent. Before that the router has
+/// refused a `.` or `..` segment (raw, encoded, or once the rest of the path
+/// is decoded), a backslash, a NUL and bytes that are not UTF-8; the mount
+/// refuses an empty segment below the prefix (`//`, also once `%2F` is read
+/// as `/`) with 400. `/khata/` and the prefix in another case are not found.
+/// A service that decodes its own path still treats it as untrusted input.
+///
+/// A request with an `Upgrade` header (a WebSocket or h2c handshake) and a
+/// `CONNECT` are answered 501 after the access check and never reach the
+/// service: a mounted service answers requests, it does not take over the
+/// connection. The body is cut off at the mount's limit also when it comes
+/// without a length. A panic in the service answers 500, as in a handler. An
+/// error of the service answers 500 with the error as its source, which the
+/// app's error mappings (`m.map_error`) see and the log records; one that
+/// comes from the body's limit or the server's read timeout answers 413 or
+/// 408, as the body extractors do. The service's responses go out as written,
+/// except that an error status with no body or a short plain-text one takes
+/// the app's JSON error shape.
 ///
 /// The service is built in `register`; it reaches the app's providers through
 /// the `AppContext` in each request's extensions.
@@ -306,7 +341,9 @@ pub(crate) fn check_prefix(prefix: &str) -> Result<Vec<&str>, Option<String>> {
     if !in_grammar {
         return Err(None);
     }
-    PathPattern::parse(prefix).map_err(|error| Some(error.to_string()))?;
+    if let Err(error) = PathPattern::parse(prefix) {
+        return Err(Some(error.to_string()));
+    }
     // Parsed without a parameter: every segment is static, as written.
     Ok(prefix.split('/').skip(1).collect())
 }
@@ -388,6 +425,120 @@ pub(crate) fn check_mounts(
         checked.push((mount.prefix.as_str(), segments, mount.module));
     }
     errors
+}
+
+/// A mount's service as the endpoint of its route. The route's pipeline has
+/// run before it: authentication, the access check, guards, the throttle, the
+/// timeout and the declared body length. It refuses a request that would take
+/// over the connection, hands the service the path below the prefix and a
+/// body cut off at the route's limit, and turns the service's error into the
+/// app's.
+#[derive(Clone)]
+pub(crate) struct MountEndpoint {
+    prefix: Arc<str>,
+    service: MountService,
+}
+
+impl MountEndpoint {
+    /// The endpoint of `service` at `prefix`.
+    pub(crate) fn new(prefix: &str, service: MountService) -> Self {
+        Self {
+            prefix: Arc::from(prefix),
+            service,
+        }
+    }
+}
+
+impl Service<Request> for MountEndpoint {
+    type Response = Response;
+    type Error = Infallible;
+    type Future = BoxFuture<'static, Result<Response, Infallible>>;
+
+    /// Always ready: the service's readiness is asked for each call.
+    #[inline]
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Infallible>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, request: Request) -> Self::Future {
+        let prefix = self.prefix.clone();
+        let service = self.service.clone();
+        Box::pin(async move { Ok(serve_mounted(&prefix, service, request).await) })
+    }
+}
+
+/// One request to a mount, after its route's pipeline let it in.
+async fn serve_mounted(prefix: &str, service: MountService, mut request: Request) -> Response {
+    if takes_over(&request) {
+        return AppError::from_status(StatusCode::NOT_IMPLEMENTED)
+            .with_detail(TAKES_OVER)
+            .into_response();
+    }
+    let uri = match under(request.uri(), prefix) {
+        Ok(uri) => uri,
+        Err(error) => return error.into_response(),
+    };
+    *request.uri_mut() = uri;
+    // No request passed on can take the connection over, whatever it says.
+    request
+        .extensions_mut()
+        .remove::<hyper::upgrade::OnUpgrade>();
+    // The router's decoded capture of the rest of the path goes too: the
+    // service reads its path from the URI, as written.
+    request.extensions_mut().remove::<PathParams>();
+    // The pipeline checked a declared length; a body sent without one stops
+    // at the same limit, whoever reads it.
+    let limit = BodyLimit::of(request.extensions());
+    let request = request.map(|body| Body::new(http_body_util::Limited::new(body, limit)));
+    match service.oneshot(request).await {
+        Ok(response) => response,
+        Err(error) => match body_error_in(&*error) {
+            Some(body) => AppError::rejection(body.status(), body.to_string()).into_response(),
+            None => AppError::internal(error).into_response(),
+        },
+    }
+}
+
+/// Whether `request` would take over the connection: `CONNECT` (a tunnel, or
+/// an HTTP/2 extended `CONNECT` such as a WebSocket), or an `Upgrade` header
+/// (a WebSocket or h2c handshake).
+fn takes_over(request: &Request) -> bool {
+    request.method() == Method::CONNECT || request.headers().contains_key(UPGRADE)
+}
+
+/// The URI a mounted service gets for `uri`: scheme and authority as
+/// received, the path below `prefix` as written (`/` for the prefix itself),
+/// then the query as written. A path below the prefix with an empty segment,
+/// raw or once `%2F` (either case) is read as `/`, is a 400.
+pub(crate) fn under(uri: &Uri, prefix: &str) -> Result<Uri, AppError> {
+    let rest = uri
+        .path()
+        .strip_prefix(prefix)
+        .ok_or_else(AppError::not_found)?;
+    let rest = match rest {
+        "" => "/",
+        rest if rest.starts_with('/') => rest,
+        // The router sends a mount only its prefix and the paths below it;
+        // the endpoint does not count on that.
+        _ => return Err(AppError::not_found()),
+    };
+    // Raw, then as decoded: `%2F` in either case is a `/` to a service that
+    // decodes its path. No other escape decodes to `/`, and `%252F` stays a
+    // name.
+    if rest.contains("//") || rest.replace("%2F", "/").replace("%2f", "/").contains("//") {
+        return Err(AppError::bad_request(EMPTY_SEGMENT));
+    }
+    let target = match uri.query() {
+        Some(query) => format!("{rest}?{query}"),
+        None => rest.to_owned(),
+    };
+    let mut parts = uri.clone().into_parts();
+    parts.path_and_query = Some(
+        target
+            .parse::<PathAndQuery>()
+            .map_err(|_| AppError::bad_request("Invalid URL"))?,
+    );
+    Uri::from_parts(parts).map_err(|_| AppError::bad_request("Invalid URL"))
 }
 
 #[cfg(test)]
