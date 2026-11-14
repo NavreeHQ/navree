@@ -1,8 +1,11 @@
 //! [`RealtimeOptions`]: the `realtime` configuration section.
 
-use navree_config::{ConfigSection, ConfigTable};
+use navree_config::__private::{selector_error, selector_name};
+use navree_config::{ConfigSection, ConfigTable, DriverName, DriverNameError};
 use navree_contracts::Secret;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+
+use crate::drivers::SLOT;
 
 /// Settings of the realtime server (configuration section `realtime`; every
 /// key optional).
@@ -15,7 +18,7 @@ use serde::Deserialize;
 /// allowed_origins = ["http://localhost:3000"]
 /// activity_timeout_secs = 120
 /// relay_url = "auto"            # workers hand broadcasts to `serve`
-/// backplane = "none"            # or "redis": share broadcasts and presence across processes
+/// backplane = "none"            # or "redis", or a backplane a module registers: share broadcasts and presence across processes
 ///
 /// [realtime.streams]            # live streams to pages (`GET /broadcasting/stream`)
 /// names = 32                    # topics and channels one stream may name
@@ -67,7 +70,7 @@ pub struct RealtimeOptions {
     /// disconnections over Redis; it needs `RedisModule` and a
     /// [`secret`](RealtimeOptions::secret), because a subscription signed
     /// by one process is checked by another.
-    #[config(one_of = "none, redis")]
+    #[config(driver = "none, redis", register = "m.backplane")]
     pub backplane: BackplaneKind,
     /// The live streams pages listen to (`realtime.streams`).
     #[config(table)]
@@ -110,8 +113,7 @@ impl Default for StreamOptions {
 
 /// What connects the realtime hubs of an app's processes
 /// (`realtime.backplane`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum BackplaneKind {
     /// Nothing (`"none"`, the default): each process reaches its own
@@ -122,14 +124,57 @@ pub enum BackplaneKind {
     /// Redis pub/sub (`"redis"`): the `dyn Backplane` provider named
     /// `redis`, which navree-redis's `RedisModule` registers.
     Redis,
+    /// A backplane a module registers under this name with
+    /// [`m.backplane`](crate::ModuleBuilderBackplaneExt::backplane)
+    /// (`"kabootar"`); its settings are `realtime.{name}`. Holding a
+    /// built-in name, it is that built-in backplane.
+    Registered(DriverName),
 }
 
 impl BackplaneKind {
-    /// The configuration name: `none` or `redis`.
+    /// The configuration name: `none`, `redis`, or the name a backplane is
+    /// registered under.
     pub fn as_str(self) -> &'static str {
         match self {
             BackplaneKind::None => "none",
             BackplaneKind::Redis => "redis",
+            BackplaneKind::Registered(name) => name.as_str(),
+        }
+    }
+
+    /// The kind, with a `Registered` built-in name turned into that
+    /// built-in (`Registered("redis")` is `Redis`).
+    pub(crate) fn resolved(self) -> BackplaneKind {
+        match self {
+            BackplaneKind::Registered(name) => match name.as_str() {
+                "none" => BackplaneKind::None,
+                "redis" => BackplaneKind::Redis,
+                _ => self,
+            },
+            other => other,
+        }
+    }
+}
+
+/// `none` and `redis` are the built-in backplanes, also when written as a
+/// table whose only key is the name (`{ redis = {} }`); any other lower-case
+/// name (a letter, then letters, digits or `_`) is a backplane a module
+/// registers, which the boot resolves. Anything else, a table of any other
+/// key included, is an error that lists the names and never repeats the
+/// value.
+impl<'de> Deserialize<'de> for BackplaneKind {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = selector_name(deserializer, "backplane", &SLOT)?;
+        match name.as_str() {
+            "none" => Ok(BackplaneKind::None),
+            "redis" => Ok(BackplaneKind::Redis),
+            other => match DriverName::new(other) {
+                Ok(name) => Ok(BackplaneKind::Registered(name)),
+                Err(DriverNameError::Invalid) => {
+                    Err(serde::de::Error::custom(selector_error("backplane", &SLOT)))
+                }
+                Err(error) => Err(serde::de::Error::custom(error)),
+            },
         }
     }
 }
@@ -182,7 +227,7 @@ impl RealtimeOptions {
         if self.streams.lifetime_secs == 0 {
             errors.push("realtime.streams.lifetime_secs must be at least 1".to_owned());
         }
-        if self.backplane != BackplaneKind::None && self.secret.expose().is_empty() {
+        if self.backplane.resolved() != BackplaneKind::None && self.secret.expose().is_empty() {
             errors.push(format!(
                 "realtime.backplane = \"{}\" needs realtime.secret: every process must sign channel subscriptions with the same secret",
                 self.backplane.as_str()
@@ -366,10 +411,136 @@ mod tests {
             [BackplaneKind::None, BackplaneKind::Redis].map(BackplaneKind::as_str),
             ["none", "redis"]
         );
+
+        // A name that is a lower-case word reads as a backplane a module
+        // registers, which needs the secret as Redis does; the boot looks
+        // for it.
+        let error = load(
+            ConfigSources::new().set("realtime", serde_json::json!({"backplane": "kabootar"})),
+        )
+        .expect_err("no secret")
+        .to_string();
         assert!(
-            load(ConfigSources::new().set("realtime", serde_json::json!({"backplane": "pigeon"})))
-                .is_err()
+            error.contains("realtime.backplane = \"kabootar\" needs realtime.secret: every process must sign channel subscriptions with the same secret"),
+            "{error}"
         );
+        let options = load(ConfigSources::new().set(
+            "realtime",
+            serde_json::json!({"backplane": "pigeon", "secret": "shared"}),
+        ))
+        .unwrap();
+        assert_eq!(
+            options.backplane,
+            BackplaneKind::Registered(DriverName::from_static("pigeon"))
+        );
+        assert_eq!(options.backplane.as_str(), "pigeon");
+
+        // Anything else is refused as the configuration is read.
+        assert!(
+            load(ConfigSources::new().set(
+                "realtime",
+                serde_json::json!({"backplane": "carrier-pigeon", "secret": "shared"})
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn backplane_kind_keeps_copy_and_its_static_name() {
+        fn copy<T: Copy>(_: T) {}
+        let kind = BackplaneKind::Registered(DriverName::from_static("kabootar"));
+        copy(kind);
+        let name: &'static str = kind.as_str();
+        assert_eq!(name, "kabootar");
+        assert_eq!(kind.resolved(), kind);
+        assert_eq!(
+            BackplaneKind::Registered(DriverName::from_static("none")).resolved(),
+            BackplaneKind::None
+        );
+        assert_eq!(
+            BackplaneKind::Registered(DriverName::from_static("redis")).resolved(),
+            BackplaneKind::Redis
+        );
+
+        // A built-in name given in code needs the secret exactly as the
+        // built-in does: `none` does not, `redis` does.
+        let none = RealtimeOptions {
+            backplane: BackplaneKind::Registered(DriverName::from_static("none")),
+            ..RealtimeOptions::default()
+        };
+        assert!(none.check().is_ok());
+        let redis = RealtimeOptions {
+            backplane: BackplaneKind::Registered(DriverName::from_static("redis")),
+            ..RealtimeOptions::default()
+        };
+        let errors = redis.check().unwrap_err();
+        assert!(errors[0].contains("needs realtime.secret"), "{errors:?}");
+    }
+
+    #[test]
+    fn realtime_config_of_today_reads_as_before() {
+        for (text, kind) in [
+            ("none", BackplaneKind::None),
+            ("redis", BackplaneKind::Redis),
+        ] {
+            assert_eq!(
+                serde_json::from_value::<BackplaneKind>(serde_json::json!(text)).unwrap(),
+                kind
+            );
+            assert_eq!(kind.as_str(), text);
+        }
+        assert_eq!(BackplaneKind::default(), BackplaneKind::None);
+        let defaults = RealtimeOptions::defaults().expect("defaults");
+        assert_eq!(defaults["backplane"], "none");
+        assert_eq!(load(ConfigSources::new()).unwrap().backplane, BackplaneKind::None);
+
+        // A lower-case word reads as a backplane a module registers.
+        let read: BackplaneKind =
+            serde_json::from_value(serde_json::json!("kabootar_ludhiana")).unwrap();
+        assert_eq!(read.as_str(), "kabootar_ludhiana");
+
+        // Anything else is refused with a text that lists the names and never
+        // repeats the value.
+        let error = serde_json::from_value::<BackplaneKind>(serde_json::json!("carrier-pigeon"))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            error,
+            "the backplane must be `none`, `redis` or the name of a backplane registered with m.backplane (a lower-case letter, then lower-case letters, digits or _)"
+        );
+        assert!(!error.contains("carrier-pigeon"), "{error}");
+    }
+
+    #[test]
+    fn backplane_written_as_a_one_key_table_reads_as_before() {
+        for (table, kind) in [
+            (serde_json::json!({"redis": {}}), BackplaneKind::Redis),
+            (serde_json::json!({"none": null}), BackplaneKind::None),
+            (serde_json::json!({"redis": {"channel": "crm"}}), BackplaneKind::Redis),
+        ] {
+            assert_eq!(serde_json::from_value::<BackplaneKind>(table).unwrap(), kind);
+        }
+        let options = load(ConfigSources::new().set(
+            "realtime",
+            serde_json::json!({"backplane": {"redis": {"channel": "crm"}}, "secret": "shared"}),
+        ))
+        .unwrap();
+        assert_eq!(options.backplane, BackplaneKind::Redis);
+
+        // A table never names a backplane a module registers, and reading
+        // one adds no name to the process's names.
+        let refused = "the backplane must be `none`, `redis` or the name of a backplane registered with m.backplane (a lower-case letter, then lower-case letters, digits or _)";
+        for (table, name) in [
+            (serde_json::json!({"kabootar": {}}), "kabootar"),
+            (serde_json::json!({"dakiya_hub": {"port": 4}}), "dakiya_hub"),
+        ] {
+            let error = serde_json::from_value::<BackplaneKind>(table)
+                .unwrap_err()
+                .to_string();
+            assert_eq!(error, refused);
+            assert!(!error.contains(name), "{error}");
+        }
+        assert_eq!(DriverName::lookup("dakiya_hub"), None);
     }
 
     #[test]
@@ -400,7 +571,13 @@ mod tests {
             field("allowed_origins").ty,
             FieldType::list(FieldType::String)
         );
-        assert_eq!(field("backplane").ty, FieldType::choice(&["none", "redis"]));
+        assert_eq!(
+            field("backplane").ty,
+            FieldType::Driver {
+                built_in: vec!["none".into(), "redis".into()],
+                register: "m.backplane".into(),
+            }
+        );
         let streams = field("streams");
         assert_eq!(streams.ty, FieldType::Table);
         assert!(

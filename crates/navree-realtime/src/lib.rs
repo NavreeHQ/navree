@@ -46,8 +46,10 @@
 //!   named `redis`, from navree-redis's `RedisModule`), every process shares
 //!   broadcasts, presence members and user disconnections, so several
 //!   `serve` processes can sit behind a load balancer; workers broadcast
-//!   through it without the relay. [`MemoryBackplane`] joins the apps of
-//!   one process, for tests.
+//!   through it without the relay. A module can register a backplane under a
+//!   name of its own with [`m.backplane`](ModuleBuilderBackplaneExt::backplane),
+//!   which `realtime.backplane` then selects. [`MemoryBackplane`] joins the
+//!   apps of one process, for tests.
 //!
 //! - **Live streams to pages** (`GET /broadcasting/stream`): a server-sent
 //!   event stream that tells a page when what it shows changed, for Navree
@@ -117,6 +119,7 @@ mod backplane;
 mod channel;
 mod cluster;
 mod controller;
+mod drivers;
 mod live;
 mod module;
 mod options;
@@ -127,6 +130,7 @@ mod socket;
 pub mod stream;
 
 pub use backplane::{Backplane, BackplaneHandler, MemoryBackplane};
+pub use drivers::ModuleBuilderBackplaneExt;
 pub use live::{Audience, Live, MAX_TOPIC_NAME, NUDGE_EVENT, Topic, is_topic_name};
 pub use module::{ChannelDecision, ModuleBuilderRealtimeExt, RealtimeModule};
 pub use options::{BackplaneKind, RealtimeOptions, StreamOptions};
