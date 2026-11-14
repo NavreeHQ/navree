@@ -139,11 +139,11 @@ Go through it in order; each item says how to check.
   `session.regenerate()` on sign-in and `invalidate()` on sign-out. A Navree UI
   form refuses a post that carries a cookie, sends neither `Sec-Fetch-Site` nor
   `Origin` and has no token the session's check took.
-- [ ] Accounts: registration does not prove an address. A never-verified account
-  signed in to by a magic link or an emailed code goes to the mailbox's owner
-  (its other sessions, password, passkeys, two-factor and module credentials
-  end); the verification link alone ends nothing. Social sign-in links to an
-  existing user by email only when the user's own address is verified too.
+- [ ] Accounts: registration does not prove an address, and verifying one later
+  (the verification link, a magic link, an emailed code) ends nothing the
+  registrant set: the owner resets the password and removes passkeys and a
+  second factor they didn't add. Social sign-in links to an existing user by
+  email only when the user's own address is verified too.
   Where an unverified password sign-in must not work, add a sign-in policy that
   refuses `SignInMethod::Password` while `email_verified_at` is empty.
 - [ ] Browser sign-in through `AuthPages` / `AuthService::sign_in_session`:
@@ -160,9 +160,6 @@ Go through it in order; each item says how to check.
   text shown from the database sits inside an element marked `data-ui-stored`,
   an `HtmlPolicy` allows none of the attributes the page acts on, and a sortable
   in an app with workspaces uses unique list keys or a `ListScope`.
-- [ ] With workspaces and the assistant (`ai`): a conversation answers only to
-  the workspace it began in, and the assistant's routes run behind
-  `InWorkspace::guard()` (by themselves with navree-ai's `workspace` feature).
 - [ ] An app with no configuration shows an error page's "Development only"
   details only if the code calls `PagesOptions::debug(true)`.
 

@@ -46,8 +46,6 @@ Navree::app()
    `Arc<Conversations>` and `Arc<AiOptions>`, contributes the migration set
    `ai` (`ai_conversations`, `ai_messages`) and the command
    `ai:prune [--days N]`. Run `navree migrate` after adding it.
-   A conversation, and the assistant's run of it (`ai_runs`, with the `ui`
-   feature), records the workspace it began in (nullable `workspace_id`).
 
 3. Configure models in `config/app.toml`, keys in `.env`:
 
@@ -281,20 +279,6 @@ assert_eq!(fake.tool_results("search_deals").len(), 1);
   off. Tool 5xx errors reach the model as "The tool failed".
 - **Memory needs `.conversation(..)`**: without it a run stores nothing and
   approvals can't be answered later (`approve` is then a 404).
-- **Workspaces.** In an app with workspaces a conversation answers only to the
-  workspace it was started in: any lookup (the assistant's page, items,
-  messages, stop, approvals, a component's button, deleting it,
-  `Conversations::list_for`, a run that continues it) from another workspace
-  is a 404, and one with no workspace (started before this, or without
-  workspaces) opens only in a request that is in no workspace. With navree-ai's
-  `workspace` feature (the `navree` crate turns it on when `ai`, `ui` and
-  `workspace` are on) the assistant's routes run behind `InWorkspace::guard()`
-  by themselves; guards given with `AssistantConfig::guard` take its place, so
-  repeat `InWorkspace::guard()` among them. Without the feature, pass it
-  yourself: `AssistantConfig::at("/assistant").guard(InWorkspace::guard())`.
-  The assistant's paths hold no workspace, so `workspace.resolvers` needs one
-  that reads it from the request (`session`, `subdomain`, `domain`, `header`,
-  `claim`), not only `path`.
 - **`acting_as_user(id)` needs `AccessModule`**; a run without a user is
   `AiError::Unauthenticated`.
 - **Vectors**: every embedding must have `ai.vectors.dimensions` entries; a

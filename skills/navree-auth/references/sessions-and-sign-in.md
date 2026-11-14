@@ -87,9 +87,10 @@
   - The app's session keeps the sign-in time of the browser session the code
     came from (`#[recent_auth]` sees it). After a sign-in made for the
     hand-over it ends as a "remember me" sign-in made then would; after a
-    confirmed browser it ends with that browser session (at the latest as a
-    "remember me" one would), and the code is refused once that browser
-    session has ended. The exchange asks the sign-in policies as
+    confirmed browser it ends when that browser session was due to end as the
+    hand-over finished (at the latest as a "remember me" one would; signing
+    the browser out later doesn't end it), and the code is refused once that
+    browser session has ended. The exchange asks the sign-in policies as
     `SignInMethod::AppHandOver { platform, app }` (single sign-on lets it
     through); a code issued before an upgrade is refused.
   - With an `https` `app.url`, an `https` callback on another host fails the
@@ -131,14 +132,10 @@ permission = "users.impersonate"
 - Magic links: `POST /api/auth/magic-link {email}` -> 202 always; mail links
   `{auth.magic_link.url}?token=..`; `POST /api/auth/magic-link/verify
   {token}` -> login response (or 2FA challenge). Single use, 15 minutes.
-  Signing in this way to an account whose address was never verified gives
-  the account to the mailbox's owner: first every other session and refresh
-  token ends, its password is cleared (set one with "forgot password"), its
-  passkeys and two-factor enrolment are removed, each module's
-  `CredentialRevoker` ends what it issued (`end_sign_ins_of`; social also
-  unlinks provider accounts), then the address is verified. Audited
-  `auth.unverified_account_claimed`. A verified account is left as it is, and
-  the registration verification link only marks the address verified.
+  Signing in this way marks an unverified address verified and ends nothing:
+  an account someone else registered with the address keeps their password,
+  passkeys, second factor and sessions until the owner resets the password
+  (which signs every session out) and removes what they didn't add.
 - Codes: `POST /api/auth/otp {email}`, `POST /api/auth/otp/verify {email,
   code}`; 6 digits, 10 minutes, burned after `auth.otp.max_attempts` (5),
   counted by the login throttle.

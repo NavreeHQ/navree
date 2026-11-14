@@ -185,10 +185,8 @@ bundle id); the returned ID token must have the same `sub`; Apple tokens
 are stored encrypted **whatever `store_tokens` says**, with their client
 (`social_account_clients`). Revoked at Apple by `unlink`,
 `Social::revoke_tokens(user_id)` and `AuthService::revoke_all_credentials`
-(credential revoker `social`, kind `social_provider_tokens`). When a magic
-link or an emailed code gives a never-verified account to its mailbox's
-owner, the revoker's `end_sign_ins_of` also unlinks the account's provider
-accounts (kind `social_accounts`). An account deletion route: `auth.revoke_all_credentials(user.id).await?` then delete
+(credential revoker `social`, kind `social_provider_tokens`). An account
+deletion route: `auth.revoke_all_credentials(user.id).await?` then delete
 the user.
 
 Apple notifications (`POST /api/auth/social/apple/notifications`, register
