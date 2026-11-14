@@ -192,6 +192,21 @@ public enum ContentRules {
         table.columns.indices.filter { table.columns[$0].role != .subtitle }
     }
 
+    /// How a record of a wide table opens what it opens.
+    public enum TableOpening: Sendable, Equatable {
+        /// A tap on its first cell, its name (iPad: a table's rows are
+        /// chosen only while it is edited).
+        case firstCell
+        /// A click anywhere on its row chooses the row and opens it, as a
+        /// Mac's list does and Mail's messages do; the row stays chosen while
+        /// what it opened is up.
+        case choosing
+    }
+
+    public static func tableOpening(bar: ActionBar) -> TableOpening {
+        bar == .window ? .choosing : .firstCell
+    }
+
     /// The control a field's input becomes on iPhone and iPad.
     public static func control(_ input: Navree.Input) -> ControlKind {
         switch input {

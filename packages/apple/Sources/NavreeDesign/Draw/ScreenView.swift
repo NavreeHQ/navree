@@ -129,7 +129,10 @@ public struct ScreenView: View {
         } else if let table, sections.count == 1,
             ContentRules.table(table, width: width, accessibilityText: typeSize.isAccessibilitySize) == .columns
         {
-            TableColumnsView(table: table, region: sections[0].region)
+            TableColumnsView(
+                table: table, region: sections[0].region,
+                presenting: SectionRules.overlays(body).contains(where: OverlayPresenter.isOpen)
+            )
         } else {
             SectionsList(
                 tree: body, sections: sections, notice: notice, table: table,

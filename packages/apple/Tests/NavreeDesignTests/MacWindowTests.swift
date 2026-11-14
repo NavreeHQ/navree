@@ -185,3 +185,17 @@ private func labels(_ nodes: [Navree.Node]) -> [String] {
     // iPhone and iPad set it at the trailing end themselves.
     #expect(CompositionRules.valuePlace(bar: .navigation) == .system)
 }
+
+@Test func aClickOnARowOfAMacsTableChoosesItAndOpensItsRecord() throws {
+    #expect(ContentRules.tableOpening(bar: .window) == .choosing)
+    // iPad keeps the tap on the record's name.
+    #expect(ContentRules.tableOpening(bar: .navigation) == .firstCell)
+    // The live store's orders: every record opens its glance, so any of its rows opens on a click.
+    let orders = try corpusScreen("store-orders.json")
+    var records: [Navree.TableRow] = []
+    orders.body.walk { node in
+        if case .table(let table) = node { records += table.rows }
+    }
+    #expect(!records.isEmpty)
+    #expect(records.allSatisfy { $0.action != nil })
+}
