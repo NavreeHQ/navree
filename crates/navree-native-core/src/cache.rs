@@ -196,7 +196,11 @@ impl Core {
         if response.error.is_some() {
             return response;
         }
-        let kept = !asked.delete
+        // Only the app's own origin keeps: a session belongs to a host, and an
+        // address inside on the app's origin is written as a path.
+        let home = asked.url.starts_with('/');
+        let kept = home
+            && !asked.delete
             && asked.method == Method::Get
             && asked.region.is_none()
             && (200..300).contains(&response.status)
@@ -226,13 +230,17 @@ impl Core {
     /// the app being told (a sign-in in the web view, a session that ran
     /// out). Nothing of the answer is kept, what is kept is emptied, in
     /// memory too, the named person is cleared and the shell is asked again.
-    /// Said once in a `report`. An answer the core made itself, or that never
-    /// came from the app, is not compared.
+    /// Said once in a `report`. An answer the core made itself, one that
+    /// never came from the app, and one from another origin the app allows
+    /// are not compared.
     pub(crate) fn same_session(&mut self, asked: &Asked, mut response: Response) -> Response {
+        // A session belongs to a host: an answer from another origin the app
+        // allows says nothing of the person the app's own shell named.
         if response.error.is_some()
             || response.left.is_some()
             || self.inner.synthetic
             || asked.purpose == Pending::Shell
+            || !asked.url.starts_with('/')
         {
             return response;
         }
