@@ -1239,7 +1239,8 @@ fn the_kernels_first_party_list_matches_the_cli_index() {
 }
 
 /// The namespaces the kernel keeps for the framework are the first words of the framework's
-/// configuration sections and a few words of its own, and they hold every permission prefix a
+/// configuration sections, a few words of its own, the folders the framework reads below the
+/// plugins' folders and the Windows device names, and they hold every permission prefix a
 /// framework crate declares.
 #[test]
 fn the_reserved_namespaces_match_the_framework_sections_and_permission_prefixes() {
@@ -1264,6 +1265,17 @@ fn the_reserved_namespaces_match_the_framework_sections_and_permission_prefixes(
         "organization",
         "subscriptions",
         "operations",
+    ]);
+    // Folders the framework reads below the plugins' folders: `layouts` for templates,
+    // `fonts` for documents.
+    expected.extend(["layouts", "fonts"]);
+    // The Windows device names a namespace could spell: no folder may be called one.
+    expected.extend(["con", "prn", "aux", "nul"]);
+    expected.extend([
+        "com0", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+    ]);
+    expected.extend([
+        "lpt0", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
     ]);
     assert_eq!(reserved, expected);
     // Every permission prefix a framework crate declares in its source is reserved.
