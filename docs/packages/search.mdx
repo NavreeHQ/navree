@@ -225,7 +225,7 @@ engine = "kosh"
 url = "https://kosh.ludhiana.example"
 ```
 
-Environment variables reach the settings too: `APP_SEARCH__KOSH__URL=https://kosh.ludhiana.example`. `search.engine` is read trimmed and in lower case, for a registered engine as for a built-in one, so `" Kosh "` selects `kosh`. In code, `SearchModule::for_root(Engine::Registered(DriverName::from_static("kosh")))` selects the same engine (`DriverName` is in `navree::plugin`).
+Environment variables reach the settings too: `APP_SEARCH__KOSH__URL=https://kosh.ludhiana.example`. `search.engine` is read trimmed and in lower case, for a registered engine as for a built-in one, so `" Kosh "` selects `kosh`. In code, `SearchModule::for_root(Engine::Registered(DriverName::from_static("kosh")))` selects the same engine (`DriverName` is in `navree::plugin`). An `Engine::Registered` that holds a built-in name is that built-in engine: with `DriverName::from_static("memory")` it is `Engine::Memory`.
 
 An engine's name is a lower-case letter followed by up to 63 lower-case letters, digits or `_`. `ctx.settings()` reads `[search.kosh]` into your type (its `Default` when the table is missing), and an error names the key, never a value; `ctx.settings_key()` is `search.kosh`.
 
