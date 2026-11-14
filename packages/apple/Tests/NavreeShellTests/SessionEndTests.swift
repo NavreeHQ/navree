@@ -35,18 +35,23 @@ struct SessionEndTests {
         #expect(jar.header(for: Self.address) == nil)
     }
 
-    @Test(.timeLimit(.minutes(1)))
-    func theWipeFindsTheWebViewsCookiesByTheOriginsHostEvenWhenTheJarHoldsNone() async throws {
-        let store = WKWebsiteDataStore.nonPersistent()
-        let ours = try #require(HTTPCookie(properties: [.name: "session", .value: "a", .domain: "shop.example", .path: "/"]))
-        let wide = try #require(HTTPCookie(properties: [.name: "wide", .value: "b", .domain: ".shop.example", .path: "/"]))
-        let other = try #require(HTTPCookie(properties: [.name: "other", .value: "c", .domain: "other.example", .path: "/"]))
-        for cookie in [ours, wide, other] { await store.httpCookieStore.setCookie(cookie) }
-        let jar = CookieJar(origin: "https://shop.example", persistent: false)
-        #expect(jar.hosts.isEmpty)
-        await jar.forget(store).value
-        let left = await store.httpCookieStore.allCookies().map(\.name)
-        #expect(left == ["other"])
+    @Test func theWipeFindsTheWebViewsCookiesAndDataByTheOriginsHostEvenWhenTheJarHoldsNone() {
+        let site = Origin("https://eu.shop.example")
+        let hosts = CookieJar.wiped(held: [], site: site)
+        #expect(hosts == ["eu.shop.example"])
+        #expect(CookieJar.wiped(held: ["pay.shop.example"], site: site) == ["eu.shop.example", "pay.shop.example"])
+        for (domain, wiped) in [
+            ("eu.shop.example", true), (".shop.example", true), ("shop.example", false), ("other.example", false),
+            ("us.shop.example", false),
+        ] {
+            let cookie = CookieRecord(name: "session", value: "a", domain: domain)
+            #expect(hosts.contains { cookie.matches(host: $0) } == wiped, "\(domain)")
+        }
+        // The store names its records by site.
+        #expect(CookieJar.holds("shop.example", of: hosts))
+        #expect(CookieJar.holds("eu.shop.example", of: hosts))
+        #expect(!CookieJar.holds("other.example", of: hosts))
+        #expect(!CookieJar.holds("hop.example", of: hosts))
     }
 
     @Test(.timeLimit(.minutes(1)))
