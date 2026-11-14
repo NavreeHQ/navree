@@ -72,7 +72,7 @@ enum DemoConfiguration {
         }
         if defaults.bool(forKey: "NavreeRecorded") {
             return ShellConfiguration(
-                origin: recordedOrigin, appVersion: version, signInScheme: "charkha", keepsSession: false,
+                origin: recordedOrigin, appVersion: version, signInScheme: scheme, keepsSession: false,
                 transport: { RecordedStore() },
                 webContent: .supplied({ address in RecordedStore.page(for: address) }),
                 launch: launch
@@ -87,9 +87,16 @@ enum DemoConfiguration {
             ?? Bundle.main.object(forInfoDictionaryKey: "NavreeOrigin") as? String
             ?? "http://127.0.0.1:8095"
         return ShellConfiguration(
-            origin: origin, loopbackHTTP: origin.hasPrefix("http://"), appVersion: version, signInScheme: "charkha",
+            origin: origin, loopbackHTTP: origin.hasPrefix("http://"), appVersion: version, signInScheme: scheme,
             signInPaths: signInPaths(defaults), launch: launch
         )
+    }
+
+    /// The scheme a sign-in comes back on: the build's own, from its
+    /// Info.plist, so the Mac demo and the menu-bar demo come back apart.
+    static var scheme: String {
+        let types = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]]
+        return (types?.first?["CFBundleURLSchemes"] as? [String])?.first ?? "charkha"
     }
 
     /// The site a team's signing associates the build with, if any.
