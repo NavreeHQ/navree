@@ -368,7 +368,9 @@ const trouble = new WeakMap();
  * refusal can say where to sign in and come back to.
  * @param {string} id
  */
-const asking = (id) => ({ ...HEADER, "x-navree-region": id, "x-navree-from": location.pathname + location.search });
+// A header holds bytes 0x21 to 0x7E, and a browser refuses anything past Latin-1: an id written in
+// Gurmukhi or Devanagari is sent percent-encoded, `%` and all. The address is encoded already.
+const asking = (id) => ({ ...HEADER, "x-navree-region": encodeURIComponent(id), "x-navree-from": location.pathname + location.search });
 
 /**
  * A fetch of a region ended in `status` (0: nothing answered). A shut door stops its poll. Any

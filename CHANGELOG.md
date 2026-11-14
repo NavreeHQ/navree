@@ -52,6 +52,8 @@ every `@navree/*` package carries the same version.
   picture's tag, which holds the toolkit's version: the same drawing got other ids, and the page
   other HTML, with every release. The ids now come from the drawing and its size alone. A picture's
   `ETag` still changes with a release, since its pixels may.
+- A region whose id is not in Latin letters (Gurmukhi, Devanagari) can refresh: the runtime sends
+  the id percent-encoded in the `x-navree-region` header, which a browser refused before.
 
 ### Security
 
