@@ -86,13 +86,14 @@ struct Parts {
 }
 
 impl Parts {
-    /// The whole address without its fragment: what a request is sent to.
+    /// The whole address without its fragment: what a request is sent to,
+    /// written as a browser sends it.
     fn whole(&self) -> String {
         let mut out = self.site.base();
-        out.push_str(&self.path);
+        encode_into(&mut out, &self.path, PATH_SET);
         if let Some(query) = &self.query {
             out.push('?');
-            out.push_str(query);
+            encode_into(&mut out, query, QUERY_SET);
         }
         out
     }
@@ -102,9 +103,40 @@ impl Parts {
         let mut out = self.whole();
         if let Some(fragment) = &self.fragment {
             out.push('#');
-            out.push_str(fragment);
+            encode_into(&mut out, fragment, FRAGMENT_SET);
         }
         out
+    }
+}
+
+/// What the URL standard percent-encodes in the path of an `http` or `https`
+/// address beyond the C0 controls and everything above `~`: its path
+/// percent-encode set.
+const PATH_SET: &[u8] = b" \"#<>?^`{}";
+/// The same for a query: its special-query percent-encode set. `[` and `]`
+/// are not in it, and stay.
+const QUERY_SET: &[u8] = b" \"#<>'";
+/// The same for a fragment: its fragment percent-encode set.
+const FRAGMENT_SET: &[u8] = b" \"<>`";
+
+/// Writes `text` with every byte the URL standard's `set` names, every C0
+/// control and every byte above `~` as `%` and two hex digits. An escape
+/// already written (`%` and two hex digits) stays as it is; any other `%` is
+/// written as `%25`. Written once, the text is written the same again.
+fn encode_into(out: &mut String, text: &str, set: &[u8]) {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let bytes = text.as_bytes();
+    for (at, &byte) in bytes.iter().enumerate() {
+        let escape = byte == b'%'
+            && bytes.get(at + 1).is_some_and(u8::is_ascii_hexdigit)
+            && bytes.get(at + 2).is_some_and(u8::is_ascii_hexdigit);
+        if escape || ((0x20..=0x7e).contains(&byte) && byte != b'%' && !set.contains(&byte)) {
+            out.push(char::from(byte));
+        } else {
+            out.push('%');
+            out.push(char::from(HEX[usize::from(byte >> 4)]));
+            out.push(char::from(HEX[usize::from(byte & 0xf)]));
+        }
     }
 }
 
@@ -801,7 +833,7 @@ mod tests {
         );
         assert_eq!(
             whole(&origin, "/उत्पाद/1").as_deref(),
-            Some("https://shop.example/उत्पाद/1")
+            Some("https://shop.example/%E0%A4%89%E0%A4%A4%E0%A5%8D%E0%A4%AA%E0%A4%BE%E0%A4%A6/1")
         );
         for not_ours in [
             "https://evil.example/x",
@@ -878,6 +910,47 @@ mod tests {
         ] {
             assert_eq!(https_address(refused), None, "{refused:?}");
         }
+    }
+
+    /// The URL standard's path, special-query and fragment percent-encode
+    /// sets: C0 controls, everything above `~`, and the characters each names.
+    #[test]
+    fn a_whole_address_is_written_as_a_browser_sends_it() {
+        let origin = origin();
+        for (inside, sent) in [
+            ("/a b", "https://shop.example/a%20b"),
+            ("/a\"<>b", "https://shop.example/a%22%3C%3Eb"),
+            ("/a^`{|}b", "https://shop.example/a%5E%60%7B|%7Db"),
+            ("/x?a b\"<>'", "https://shop.example/x?a%20b%22%3C%3E%27"),
+            // `[` and `]` in a query stay: apps write `filter[status]=won`.
+            (
+                "/x?filter[status]=won&sort=-total",
+                "https://shop.example/x?filter[status]=won&sort=-total",
+            ),
+            // In a path, only what the standard's path set names is written.
+            ("/a[1]?b^`{}", "https://shop.example/a[1]?b^`{}"),
+            ("/ü?ü", "https://shop.example/%C3%BC?%C3%BC"),
+            // An escape stays as it was; a `%` that is not one is written as one.
+            ("/a%20b?c=%41", "https://shop.example/a%20b?c=%41"),
+            ("/100%?a=%zz&b=%4", "https://shop.example/100%25?a=%25zz&b=%254"),
+        ] {
+            assert_eq!(whole(&origin, inside).as_deref(), Some(sent), "{inside:?}");
+        }
+        // The local form in the view state is not written again.
+        assert_eq!(origin.resolve("/a b", "/"), inside("/a b"));
+        // What leaves for another site is written the same way, its fragment
+        // by the standard's fragment set.
+        assert_eq!(
+            origin.resolve("https://evil.example/ä b?ä b#ä b`", "/"),
+            outside("https://evil.example/%C3%A4%20b?%C3%A4%20b#%C3%A4%20b%60")
+        );
+        assert_eq!(
+            openable("https://evil.example/a b?c d").as_deref(),
+            Some("https://evil.example/a%20b?c%20d")
+        );
+        // Written once, it is written the same again.
+        let sent = whole(&origin, "/ü b?%zz").unwrap();
+        assert_eq!(openable(&sent).as_deref(), Some(sent.as_str()));
     }
 
     #[test]
