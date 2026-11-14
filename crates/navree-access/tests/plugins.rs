@@ -120,7 +120,10 @@ const POSTS_EXPORT: &[Permission] = &[Permission::new(
 )];
 
 const POSTS_EXPORT_TWICE: &[Permission] = &[
-    Permission::new("posts.export", "Export the posts of Amritsar as a spreadsheet"),
+    Permission::new(
+        "posts.export",
+        "Export the posts of Amritsar as a spreadsheet",
+    ),
     Permission::new("posts.export", "Said a second time"),
 ];
 

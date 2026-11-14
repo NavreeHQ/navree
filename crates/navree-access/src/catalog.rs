@@ -56,7 +56,11 @@ pub(crate) fn check(ctx: &AppContext) -> Result<(), AccessError> {
             if registration.prefix.split('.').next() == Some(namespace)
                 && !registration.type_name.starts_with(&own)
             {
-                return Err(namespace_taken(plugin, registration.subject, contributed.module.name));
+                return Err(namespace_taken(
+                    plugin,
+                    registration.subject,
+                    contributed.module.name,
+                ));
             }
         }
         // `all`: navree-access's subject for everything.
@@ -148,7 +152,10 @@ mod tests {
             "",
             too_long.as_str(),
         ] {
-            assert!(!is_permission_name(name), "{name:?} is not a permission name");
+            assert!(
+                !is_permission_name(name),
+                "{name:?} is not a permission name"
+            );
         }
     }
 }
