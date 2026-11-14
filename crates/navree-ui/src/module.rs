@@ -138,7 +138,7 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
             let base = explicit.unwrap_or_default();
             let options = match r.app().try_get::<Config>().await {
                 Some(config) => base.try_configured(&config)?,
-                None => base,
+                None => base.unconfigured(),
             };
             Ok(Arc::new(options.checked()))
         }

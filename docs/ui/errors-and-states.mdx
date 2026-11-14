@@ -81,7 +81,7 @@ A 500, and any 5xx but a 503, shows fixed words. The error's source, its message
 
 Every page shows a reference, the request id from the `X-Request-Id` header, so a user can quote it and you can find the log line. In the shell it has a Copy button.
 
-A debug build can show more. Turn on `ui.debug` (on by default only in a build with debug assertions) and a block marked "Development only" lists the status, route, message and cause. Production is final: when the app's `env` (or `app.env`) is `production`, in any case, the block is never shown, whatever the build, the configuration or the code ask for. Never turn it on where users can see it.
+A debug build can show more. Turn on `ui.debug` (or `PagesOptions::debug(true)`) and a block marked "Development only" lists the status, route, message and cause. Left unset, it is on only in a build with debug assertions, and only when the app's `env` (or `app.env`) is named and is not `production` or `staging`; an app with no configuration to name one, or one that names none, shows nothing. Production is final: when the app's `env` (or `app.env`) is `production`, in any case, the block is never shown, whatever the build, the configuration or the code ask for. Never turn it on where users can see it.
 
 ## Inside a page
 
