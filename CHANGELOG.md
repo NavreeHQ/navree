@@ -76,9 +76,12 @@ every `@navree/*` package carries the same version.
   `m.document_files` paths are under the namespace. Each refusal fails the boot, names the plugin
   and the change, and says what to do instead. Replacing a document file of a module it imports
   follows the template rule, with a file in a `documents.templates` folder or a later module of the
-  app as the ways out. Two modules of an app that embed one document file path with different
-  contents now log a warning at boot; the later module's file is still the one used. The app's own
-  modules, the framework's packages and first-party plugins register as before.
+  app as the ways out. A module that replaces a document file of a module it imports with other
+  contents, and is not a module of a plugin that is not one of the framework's own, now says so in
+  an `info` line (in 1.2 nothing was logged); the later module's file is still the one used. Two
+  modules of an app that embed one document file path with different contents now log a warning at
+  boot; the later module's file is still the one used. The app's own modules, the framework's
+  packages and first-party plugins register as before.
 
 ## [1.2.2] - 2026-11-14
 
