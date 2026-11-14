@@ -3,8 +3,8 @@ import NavreeDesign
 import NavreeProtocol
 import Testing
 
-// The system symbols come from the protocol's own table, never from a table
-// of this client's.
+// The system symbols come from the protocol's own table, which this client
+// keeps as the schema has it; its own table is read after it.
 
 /// The protocol's schema, kept in the repository.
 private func schemaSymbols() throws -> [String: [String: [String: String]]] {
@@ -34,7 +34,7 @@ private func schemaSymbols() throws -> [String: [String: [String: String]]] {
 @Test func anIconTakesTheServersSymbolThenTheTablesThenItsOwnShape() throws {
     let named = try decode(Navree.Icon.self, #"{"name":"send"}"#)
     let given = try decode(Navree.Icon.self, #"{"name":"send","symbol":{"apple":"paperplane.circle","material":"send"}}"#)
-    let unknown = try decode(Navree.Icon.self, #"{"name":"undo-2","paths":["M9 14 4 9l5-5"]}"#)
+    let unknown = try decode(Navree.Icon.self, #"{"name":"candy","paths":["M10 7v10.9"]}"#)
     #expect(Symbols.symbol(for: named) == "paperplane")
     #expect(Symbols.filled(for: named) == "paperplane.fill")
     #expect(Symbols.symbol(for: given) == "paperplane.circle")
