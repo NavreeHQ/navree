@@ -80,9 +80,11 @@ enforce_for_verified_domains = true                     # refuse passwords for v
   this connection*, the user's own email is verified (`email_verified_at`)
   and OIDC `email_verified` isn't `false`; else create
   (JIT, `provisioning.jit`) only for verified domains unless
-  `allow_unverified_emails` on a connection the app owns (a workspace's or
-  an organization's connection needs `sso.tenants.unverified_emails = true`
-  too; refused first sign-ins are audited `sso.login_refused`). Otherwise
+  `allow_unverified_emails` on a connection the app owns (outside the
+  verified domains a workspace's or an organization's connection needs
+  `sso.tenants.unverified_emails = true` too; inside them the setting counts
+  for every connection; refused first sign-ins are audited
+  `sso.login_refused`). Otherwise
   409 `email_taken` / 403 `unverified_domain` / 403
   `sso_provisioning_disabled`.
 - **Roles.** `Provisioning { roles: vec![RoleRule { group, role }], default_role, sync_roles }`:

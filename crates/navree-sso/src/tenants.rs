@@ -4,8 +4,10 @@
 //!
 //! The setting lets a connection create accounts for addresses outside its
 //! verified domains. It counts for connections the app owns; for a
-//! connection owned by a workspace or an organization it counts only when
-//! the app sets `sso.tenants.unverified_emails = true`.
+//! connection owned by a workspace or an organization it counts outside the
+//! verified domains only when the app sets
+//! `sso.tenants.unverified_emails = true`. Inside the verified domains it
+//! counts for every connection.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -184,7 +186,7 @@ pub(crate) fn boot_lines(flagged: &[Flagged], tenants_allowed: bool) -> Vec<Line
 /// The line written after connection `slug` of `owner` is saved with
 /// `allow_unverified_emails` on: information for a connection the app owns
 /// or when `tenants_allowed` (`sso.tenants.unverified_emails`), otherwise a
-/// warning that the setting has no effect.
+/// warning that the setting has no effect outside the verified domains.
 pub(crate) fn change_line(slug: &str, owner: SsoOwner, tenants_allowed: bool) -> Line {
     let name = named(slug, owner);
     if owner == SsoOwner::App {
@@ -205,7 +207,7 @@ pub(crate) fn change_line(slug: &str, owner: SsoOwner, tenants_allowed: bool) ->
         Line {
             level: tracing::Level::WARN,
             message: format!(
-                "single sign-on connection {name} has allow_unverified_emails on, which has no effect for a connection the app doesn't own; set sso.tenants.unverified_emails = true to allow it"
+                "single sign-on connection {name} has allow_unverified_emails on, which has no effect outside its verified domains for a connection the app doesn't own; set sso.tenants.unverified_emails = true to allow it"
             ),
         }
     }

@@ -1401,9 +1401,11 @@ impl Sso {
             })
             .await;
         let (user, created) = match provisioned {
-            // A first sign-in refused because the connection isn't the
-            // app's: audited and logged here, after its unit of work rolled
-            // back, and answered as with the setting off.
+            // A first sign-in outside the verified domains, refused because
+            // the connection isn't the app's: audited and logged here, after
+            // its unit of work rolled back, and answered as with the setting
+            // off. (With the setting on, a refusal comes only from outside
+            // the verified domains.)
             Err(SsoError::UnverifiedDomain(domain))
                 if loaded.provisioning.allow_unverified_emails
                     && !honours_unverified_emails(
@@ -1520,20 +1522,24 @@ impl Sso {
                 // someone registered with an address they don't own, or
                 // created through another connection, never links).
                 let trusted = verified && profile.email_verified != Some(false);
+                // Outside the verified domains only a connection the app
+                // owns creates accounts, unless the app lets workspaces' and
+                // organizations' connections do it too. Inside them the
+                // setting counts for every connection, as before.
+                let unverified_allowed = if verified {
+                    loaded.provisioning.allow_unverified_emails
+                } else {
+                    honours_unverified_emails(
+                        loaded.owner,
+                        &loaded.provisioning,
+                        self.tenants_unverified_emails,
+                    )
+                };
                 let (user, created) = match existing {
                     Some(user) if trusted && user.email_verified_at.is_some() => (user, false),
                     Some(_) => return Err(SsoError::EmailTaken),
                     None if !loaded.provisioning.jit => return Err(SsoError::ProvisioningDisabled),
-                    // Outside the verified domains only a connection the app
-                    // owns creates accounts, unless the app lets workspaces'
-                    // and organizations' connections do it too.
-                    None if !trusted
-                        && !honours_unverified_emails(
-                            loaded.owner,
-                            &loaded.provisioning,
-                            self.tenants_unverified_emails,
-                        ) =>
-                    {
+                    None if !trusted && !unverified_allowed => {
                         return Err(SsoError::UnverifiedDomain(domain));
                     }
                     None => (self.create_user(uow, profile, &email, trusted).await?, true),
