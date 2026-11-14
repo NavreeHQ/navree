@@ -159,7 +159,7 @@ impl ChartImage {
             side: Side::Dark,
             accent: None,
             backdrop: Backdrop::Page,
-            cache: "no-cache",
+            cache: "private, no-cache",
         }
     }
 
@@ -206,9 +206,10 @@ impl ChartImage {
         self
     }
 
-    /// The `Cache-Control` of [`respond`](Self::respond)'s answers: `no-cache` by
-    /// default, so a client asks each time and gets `304 Not Modified` while the
-    /// picture is the same. A picture of private data should say `private, no-cache`.
+    /// The `Cache-Control` of [`respond`](Self::respond)'s answers: `private, no-cache`
+    /// by default, so a shared cache keeps no copy, and a client asks each time and
+    /// gets `304 Not Modified` while the picture is the same. A picture that is the
+    /// same for everyone can say `no-cache` instead.
     pub fn cache_control(mut self, value: &'static str) -> Self {
         self.cache = value;
         self
