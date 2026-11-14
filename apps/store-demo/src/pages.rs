@@ -354,6 +354,9 @@ struct AfterQuery {
     after: Option<String>,
 }
 
+/// The cache rule of the shelves, for a browser and a native client alike.
+const SHELVES_CACHE: &str = "private, no-cache";
+
 #[derive(Deserialize, Default)]
 struct StepQuery {
     kind: Option<String>,
@@ -404,7 +407,9 @@ impl Pages {
 
     /// `GET /shelves`: the shelves running low and today's top sellers. A native
     /// client gets them as a screen composed for it: the emptiest shelves as a wall
-    /// of tiles.
+    /// of tiles. Products and their stock show nothing of one person, so a native
+    /// app may keep the screen between launches, as a browser's private cache may
+    /// keep the page; both are always asked again.
     async fn shelves(&self, shell: AppShell, uow: Uow) -> Result<Response> {
         let (low, sellers) = shelf_lists(&uow).await?;
         #[cfg(feature = "native-preview")]
@@ -420,12 +425,16 @@ impl Pages {
                 stocked: count(level(Level::InStock).count(&uow).await?),
                 now: now(),
             };
-            return Ok(native::Answer::in_shell(&shell).native(|| screens::shelves(&shown)));
+            return Ok(native::Answer::in_shell(&shell)
+                .cache(SHELVES_CACHE)
+                .native(|| screens::shelves(&shown)));
         }
         Ok(shell
             .page("Shelves")
             .crumb("Dashboard", "/")
             .body(shelves(&low, &sellers))
+            .to_view()
+            .cache(SHELVES_CACHE)
             .into_response())
     }
 
