@@ -463,7 +463,7 @@ m.helm_staff_workspaces(|entry| async move {
 });
 ```
 
-  Every request made that way writes a `helm.workspace.staff` entry to the [audit log](/docs/security/audit-log/), when the app has one, on the log's own connection: the entry stays when the request, or a queued action, fails. A workspace that doesn't exist is a 404 for staff. Staff are held to read-only demos like anyone else.
+  Every request made that way writes a `helm.workspace.staff` entry to the [audit log](/docs/security/audit-log/), when the app has one, on the log's own connection: the entry stays when the request, or a queued action, fails. A workspace that doesn't exist is a 404 for staff. Staff are held to read-only demos like anyone else. Only the app decides who works as staff: the panel stops the boot when a module of a plugin that is not one of the framework's own packages calls `helm_staff_workspaces` or `helm_staff_organizations`.
 
 A header that names a workspace the user may not enter is a 403, the same one whether the workspace exists or not. A cookie that does counts for nothing, so a removed user still reaches the sidebar, and the form says why it refuses. An app without `WorkspaceModule` or `helm_staff_workspaces` has no way to check, so naming a workspace is refused with a 403 (code `helm_workspace_unchecked`) and the panel never takes the request's word for it. 
 

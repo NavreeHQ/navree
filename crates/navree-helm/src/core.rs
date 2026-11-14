@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_kernel::{AppContext, BoxError};
+use navree_kernel::{AppContext, BoxError, ModuleId, PluginReport};
 use navree_validation::Messages;
 use navree_view::Views;
 
@@ -77,6 +77,12 @@ impl Core {
                 .time_to_live(Duration::from_secs(options.metrics_cache_secs))
                 .build()
         });
+        // Only the app decides who works as staff: a policy from a module of a plugin the
+        // kernel does not find first-party stops the boot, wherever that module is in the
+        // order and whether or not the app registers one too.
+        if let Some(refusal) = staff_policy_of_a_plugin(&app) {
+            return Err(refusal.into());
+        }
         let mut policies = app.contributions::<StaffPolicy>().into_iter();
         let staff = policies.next().map(|policy| policy.value.0.clone());
         if policies.next().is_some() {
@@ -98,4 +104,46 @@ impl Core {
             options,
         })
     }
+}
+
+/// The refusal of the first staff policy that a module of a plugin the kernel does not find
+/// first-party registers, the workspaces' before the organizations': who works in a
+/// workspace, or with an organization's settings, they are not a member of is decided by the
+/// app alone. A module of the app, a module that names no plugin and a first-party plugin's
+/// module register them as before.
+fn staff_policy_of_a_plugin(app: &AppContext) -> Option<String> {
+    let workspaces = app.contributions::<StaffPolicy>();
+    let organizations = app.contributions::<StaffOrganizationPolicy>();
+    if workspaces.is_empty() && organizations.is_empty() {
+        return None;
+    }
+    let plugins = app.plugins().plugins;
+    for policy in &workspaces {
+        if let Some(plugin) = community_plugin(&plugins, policy.module.id) {
+            return Some(format!(
+                "plugin `{}` decides who works in workspaces they are not members of (m.helm_staff_workspaces in `{}`); only the app decides that: call it from a module of the app",
+                plugin.info.name, policy.module.name
+            ));
+        }
+    }
+    for policy in &organizations {
+        if let Some(plugin) = community_plugin(&plugins, policy.module.id) {
+            return Some(format!(
+                "plugin `{}` decides who works with the settings of organizations they are not members of (m.helm_staff_organizations in `{}`); only the app decides that: call it from a module of the app",
+                plugin.info.name, policy.module.name
+            ));
+        }
+    }
+    None
+}
+
+/// The plugin the kernel does not find first-party that `module` belongs to, if it belongs to
+/// one.
+pub(crate) fn community_plugin(
+    plugins: &[PluginReport],
+    module: ModuleId,
+) -> Option<&PluginReport> {
+    plugins.iter().find(|plugin| {
+        !plugin.first_party && plugin.modules.iter().any(|member| member.id == module)
+    })
 }
