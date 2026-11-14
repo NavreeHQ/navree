@@ -5,8 +5,8 @@
 #   scripts/evidence.sh <device> <mode> <picture.png> [launch arguments...]
 #
 #   device   a simulator's UDID; booted here if it is not
-#   mode     light, dark, largest, rtl, contrast or transparency, or several
-#            joined by "+" (dark+largest)
+#   mode     light, dark, largest, ax1 to ax5, rtl, contrast or
+#            transparency, or several joined by "+" (dark+largest)
 #
 #   scripts/evidence.sh $UDID dark out/orders-dark.png -NavreeSelect /orders
 #   ORIGIN=http://127.0.0.1:8096 scripts/evidence.sh $UDID rtl out/inbox-rtl.png
@@ -15,6 +15,7 @@
 # The modes:
 #   light, dark    the system's appearance (simctl ui appearance)
 #   largest        the largest accessibility text size (simctl ui content_size)
+#   ax1 ... ax5    the five accessibility text sizes, ax5 the largest
 #   rtl            right to left: Urdu as written in India, the app's
 #                  layout forced right to left (it has no Urdu words of its own)
 #   contrast       Increase Contrast (simctl ui increase_contrast)
@@ -31,12 +32,15 @@
 #             the one before (2)
 #
 # The picture is taken once STILL screenshots in a row are the same as the
-# one before, or after SETTLE seconds. The status bar shows 9:41, full
-# battery and Wi-Fi.
+# one before, or after SETTLE seconds. A screen with nothing under its status
+# bar is never taken for a still one: it is the launch screen, which stays
+# up while the app starts (20 s and more for a debug build on a busy machine,
+# the more so on the first launch after an install). The status bar shows
+# 9:41, full battery and Wi-Fi.
 set -euo pipefail
 
 if [ $# -lt 3 ]; then
-    sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
 fi
 udid="$1"
@@ -94,7 +98,11 @@ for one in "${modes[@]}"; do
     case "$one" in
         light) appearance=light ;;
         dark) appearance=dark ;;
-        largest) size=accessibility-extra-extra-extra-large ;;
+        largest|ax5) size=accessibility-extra-extra-extra-large ;;
+        ax1) size=accessibility-medium ;;
+        ax2) size=accessibility-large ;;
+        ax3) size=accessibility-extra-large ;;
+        ax4) size=accessibility-extra-extra-large ;;
         contrast) contrast=enabled ;;
         transparency) reduce=YES ;;
         rtl) arguments+=(-AppleLanguages "(ur)" -AppleLocale ur_IN -NSForceRightToLeftWritingDirection YES) ;;
@@ -111,6 +119,30 @@ if [ -n "${ORIGIN:-}" ]; then
 fi
 xcrun simctl launch "$udid" "$bundle" ${arguments[@]+"${arguments[@]}"} "$@" >/dev/null
 
+# Whether a screenshot holds nothing but its status bar: one colour from a
+# twelfth of the way down to the foot, as the launch screen is.
+blank() {
+    sips -Z 64 -s format bmp "$1" --out "$scratch/small.bmp" >/dev/null 2>&1 || return 1
+    python3 -I - "$scratch/small.bmp" <<'CHECK'
+import struct, sys
+data = open(sys.argv[1], "rb").read()
+start = struct.unpack_from("<I", data, 10)[0]
+width, height = struct.unpack_from("<ii", data, 18)
+size = struct.unpack_from("<H", data, 28)[0] // 8
+rows = abs(height)
+stride = (width * size + 3) // 4 * 4
+def pixel(x, y):
+    at = start + (y if height < 0 else rows - 1 - y) * stride + x * size
+    return data[at:at + 3]
+ground = pixel(width // 2, rows // 2)
+for y in range(rows // 12, rows):
+    for x in range(width):
+        if max(abs(a - b) for a, b in zip(pixel(x, y), ground)) > 8:
+            sys.exit(1)
+sys.exit(0)
+CHECK
+}
+
 mkdir -p "$(dirname "$out")"
 scratch="$(mktemp -d)"
 sleep "$wait_first"
@@ -122,7 +154,9 @@ still=0
 while [ $SECONDS -lt $end ]; do
     sleep 2
     xcrun simctl io "$udid" screenshot --type=png "$current" >/dev/null 2>&1
-    if cmp -s "$previous" "$current"; then
+    if blank "$current"; then
+        still=0
+    elif cmp -s "$previous" "$current"; then
         still=$((still + 1))
         [ $still -ge "$needed" ] && break
     else
@@ -134,7 +168,11 @@ if [ $still -ge "$needed" ]; then
     mv "$current" "$out"
 else
     mv "$previous" "$out"
-    echo "The screen was still changing after ${settle} s; kept the last picture" >&2
+    if blank "$out"; then
+        echo "The app had drawn nothing after ${settle} s; kept the launch screen" >&2
+    else
+        echo "The screen was still changing after ${settle} s; kept the last picture" >&2
+    fi
 fi
 rm -rf "$scratch"
 echo "$out ($mode)"
