@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use navree_config::__private::{
-    build_driver, check_registrations, contribute_slot, selector_error,
+    build_driver, check_registrations, contribute_slot, selector_error, selector_name,
 };
 use navree_config::{ConfigSection, DriverName, DriverNameError, ModuleBuilderConfigExt};
 use navree_contracts::{BoxFuture, HealthCheck, HealthStatus};
@@ -68,13 +68,15 @@ impl Serialize for CacheStoreKind {
     }
 }
 
-/// `memory` and `redis` are the built-in stores; any other lower-case
-/// name (a letter, then letters, digits or `_`) is a store a module
-/// registers, which the boot resolves. Anything else is an error that lists
-/// the names and never repeats the value.
+/// `memory` and `redis` are the built-in stores, also when written as a
+/// table whose only key is the name (`{ memory = {} }`); any other
+/// lower-case name (a letter, then letters, digits or `_`) is a store a
+/// module registers, which the boot resolves. Anything else, a table of any
+/// other key included, is an error that lists the names and never repeats
+/// the value.
 impl<'de> Deserialize<'de> for CacheStoreKind {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let name = String::deserialize(deserializer)?;
+        let name = selector_name(deserializer, "store", &SLOT)?;
         match name.as_str() {
             "memory" => Ok(CacheStoreKind::Memory),
             "redis" => Ok(CacheStoreKind::Redis),
@@ -416,6 +418,38 @@ mod tests {
             error,
             "the store must be `memory`, `redis` or the name of a cache store registered with m.cache_store (a lower-case letter, then lower-case letters, digits or _)"
         );
+    }
+
+    #[test]
+    fn cache_store_written_as_a_one_key_table_reads_as_before() {
+        for (table, kind, text) in [
+            (json!({"memory": {}}), CacheStoreKind::Memory, "memory"),
+            (json!({"redis": null}), CacheStoreKind::Redis, "redis"),
+        ] {
+            let read = serde_json::from_value::<CacheStoreKind>(table).unwrap();
+            assert_eq!(read, kind);
+            assert_eq!(serde_json::to_value(read).unwrap(), json!(text));
+        }
+        let options: CacheOptions =
+            serde_json::from_value(json!({"store": {"memory": {}}, "prefix": "crm:"})).unwrap();
+        assert_eq!(options.store, CacheStoreKind::Memory);
+
+        // A table never names a store a module registers, known or not, and
+        // reading one adds no name to the process's names.
+        let refused = "the store must be `memory`, `redis` or the name of a cache store registered with m.cache_store (a lower-case letter, then lower-case letters, digits or _)";
+        DriverName::register("ludhiana_vault").unwrap();
+        for (table, name) in [
+            (json!({"two_tier": {}}), "two_tier"),
+            (json!({"ludhiana_vault": {}}), "ludhiana_vault"),
+            (json!({"pune_vault": {"capacity": 500}}), "pune_vault"),
+        ] {
+            let error = serde_json::from_value::<CacheStoreKind>(table)
+                .unwrap_err()
+                .to_string();
+            assert_eq!(error, refused);
+            assert!(!error.contains(name), "{error}");
+        }
+        assert_eq!(DriverName::lookup("pune_vault"), None);
     }
 
     #[test]
