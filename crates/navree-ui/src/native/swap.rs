@@ -773,19 +773,14 @@ fn native(mut view: View, request: &Arc<scope::Request>) -> Response {
     let rows = rows_after(&page, request);
     // Only a whole page may be kept on the device, and only when its author
     // let a private cache keep it: never rows, a region or a failed page.
-    let keep = rows.is_none()
-        && request.region.is_none()
-        && parts.status.is_success()
-        && may_keep(parts.cache);
+    let keep = rows.is_none();
     let (envelope, answered) = match rows {
         Some(rows) => rows,
         None => envelope(page, request),
     };
     let mut response = respond(parts.status, parts.cache, envelope, request, &shell);
     if keep {
-        response
-            .headers_mut()
-            .insert(navree_native::KEEP_HEADER, HeaderValue::from_static("1"));
+        say_keep(&mut response, parts.status, parts.cache, request);
     }
     for cookie in parts.cookies.iter() {
         response.headers_mut().append(SET_COOKIE, cookie.clone());
@@ -793,6 +788,23 @@ fn native(mut view: View, request: &Arc<scope::Request>) -> Response {
     vary_also(&mut response, parts.vary);
     response.extensions_mut().insert(answered);
     response
+}
+
+/// Says on a native answer that its page may be kept on the device between
+/// launches ([`navree_native::KEEP_HEADER`]), when it may: a whole page, not a
+/// region, answered with success, whose `cache` allows it. One rule for a page
+/// read from a [`View`] and a screen written for native clients.
+pub(crate) fn say_keep(
+    response: &mut Response,
+    status: StatusCode,
+    cache: &str,
+    request: &scope::Request,
+) {
+    if request.region.is_none() && status.is_success() && may_keep(cache) {
+        response
+            .headers_mut()
+            .insert(navree_native::KEEP_HEADER, HeaderValue::from_static("1"));
+    }
 }
 
 /// Whether a page whose `Cache-Control` is `cache` may be kept on a native

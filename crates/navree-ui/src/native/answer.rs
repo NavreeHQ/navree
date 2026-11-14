@@ -95,6 +95,7 @@ impl From<Vec<navree_native::Op>> for Said {
 pub struct Answer<'a> {
     shell: Option<&'a AppShell>,
     status: StatusCode,
+    cache: &'static str,
 }
 
 impl Default for Answer<'_> {
@@ -109,6 +110,7 @@ impl<'a> Answer<'a> {
         Self {
             shell: None,
             status: StatusCode::OK,
+            cache: "no-store",
         }
     }
 
@@ -120,6 +122,7 @@ impl<'a> Answer<'a> {
         Self {
             shell: Some(shell),
             status: StatusCode::OK,
+            cache: "no-store",
         }
     }
 
@@ -127,6 +130,28 @@ impl<'a> Answer<'a> {
     /// that says the record is gone is still a `404`.
     pub fn status(mut self, status: StatusCode) -> Self {
         self.status = status;
+        self
+    }
+
+    /// Sets the native side's `Cache-Control`, as [`View::cache`] does a
+    /// page's: `no-store` unless said, because screens show private data. A
+    /// screen that shows nothing of one person may say `private, no-cache`: a
+    /// native app may then keep it on the device between launches, and still
+    /// asks for it again every time. The browser's side is the page's own.
+    ///
+    /// ```
+    /// use navree_ui::native::{Answer, ui::*};
+    /// use navree_ui::{Text as Words, View};
+    ///
+    /// let response = Answer::new().cache("private, no-cache").each(
+    ///     || View::new("Shelves").body(Words::new("Kesar, 250 g")),
+    ///     || Screen::titled("Shelves").body(Text::new("Kesar, 250 g")),
+    /// );
+    /// // No native client asked here, so this is the page, with its own rule.
+    /// assert_eq!(response.headers()["cache-control"], "no-store");
+    /// ```
+    pub fn cache(mut self, cache: &'static str) -> Self {
+        self.cache = cache;
         self
     }
 
@@ -165,6 +190,7 @@ impl<'a> Answer<'a> {
             None => View::new(title.to_owned()),
         }
         .status(self.status)
+        .cache(self.cache)
     }
 
     fn say(self, said: Said, request: &Arc<scope::Request>) -> Response {
@@ -269,6 +295,7 @@ impl<'a> Answer<'a> {
             answered.missing = gaps;
         }
         let mut response = swap::respond(parts.status, parts.cache, envelope, request, &shell);
+        swap::say_keep(&mut response, parts.status, parts.cache, request);
         for cookie in parts.cookies {
             response.headers_mut().append(SET_COOKIE, cookie.clone());
         }
@@ -536,6 +563,37 @@ mod tests {
             screen.body.find("today").map(|body| body.children().len()),
             Some(4)
         ));
+    }
+
+    #[test]
+    fn a_written_screen_may_be_kept_on_the_device_only_when_its_answer_allows_it() {
+        let keep = |answer: Answer<'static>| {
+            as_native("/shelves", || answer.native(today))
+                .headers()
+                .get(navree_native::KEEP_HEADER)
+                .map(|value| value.to_str().unwrap_or("").to_owned())
+        };
+        assert_eq!(
+            keep(Answer::new().cache("private, no-cache")).as_deref(),
+            Some("1")
+        );
+        // Screens are `no-store` unless said.
+        assert_eq!(keep(Answer::new()), None);
+        assert_eq!(keep(Answer::new().cache("private, no-store")), None);
+        // Nor a screen that says the record is gone.
+        assert_eq!(
+            keep(
+                Answer::new()
+                    .cache("private, no-cache")
+                    .status(StatusCode::NOT_FOUND)
+            ),
+            None
+        );
+        // The cache rule the screen was answered with is its own.
+        let response = as_native("/shelves", || {
+            Answer::new().cache("private, no-cache").native(today)
+        });
+        assert_eq!(response.headers()[CACHE_CONTROL], "private, no-cache");
     }
 
     #[tokio::test]
