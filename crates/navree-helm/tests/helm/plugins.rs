@@ -3,7 +3,7 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use navree_helm::{HelmLink, HelmWidget, ModuleBuilderHelmExt, ModuleBuilderHelmPanelExt};
+use navree_helm::{HelmLink, HelmPage, HelmWidget, ModuleBuilderHelmExt, ModuleBuilderHelmPanelExt};
 use navree_http::AppError;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_testing::{TestAppBuilder, TestClient, principal};
@@ -367,9 +367,19 @@ mod navree_plugin_pretty {
             (self.0)(m);
         }
     }
+
+    /// A module of the plugin that adds to the panel what `.0` adds.
+    pub struct PrettyPanel(pub fn(&mut ModuleBuilder));
+
+    impl Module for PrettyPanel {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PRETTY);
+            (self.0)(m);
+        }
+    }
 }
 
-use navree_plugin_pretty::PrettyStaff;
+use navree_plugin_pretty::{PrettyPanel, PrettyStaff};
 
 /// Lets every user work in every workspace.
 fn every_workspace(m: &mut ModuleBuilder) {
@@ -418,4 +428,59 @@ async fn a_plugin_may_not_decide_who_works_in_other_workspaces() {
         // The same call from a module of the app boots.
         builder().module(Adds(registers)).build().await;
     }
+}
+
+/// A page with no template.
+fn page_without_template(m: &mut ModuleBuilder) {
+    m.helm_page(HelmPage::new("report", "Report"));
+}
+
+/// A card that names a `.txt` template under the pretty plugin's namespace.
+fn text_card(m: &mut ModuleBuilder) {
+    m.helm_widget(
+        HelmWidget::new("pipeline", "Open pipeline").template("pretty/admin/widgets/pipeline.txt"),
+    );
+}
+
+#[tokio::test]
+async fn helm_hints_name_a_template_under_a_plugins_namespace() {
+    type Registers = fn(&mut ModuleBuilder);
+    let cases: [(Registers, &str); 3] = [
+        (
+            page_without_template,
+            "Helm page `report` has no template: add `.template(\"pretty/admin/report\")`",
+        ),
+        (
+            no_template,
+            "Helm widget `pipeline` has no template: add .template(\"pretty/admin/widgets/pipeline\")",
+        ),
+        (
+            text_card,
+            "Helm widget `pipeline` names the template `pretty/admin/widgets/pipeline.txt`, which is not HTML: name an .html template, such as .template(\"pretty/admin/widgets/pipeline\")",
+        ),
+    ];
+    for (registers, expected) in cases {
+        let error = boot_error(
+            builder()
+                .module(ViewModule::for_root(ViewOptions::default()))
+                .module(PrettyPanel(registers)),
+        )
+        .await;
+        assert!(
+            error.contains(expected),
+            "expected `{expected}` in:\n{error}"
+        );
+    }
+
+    // A module of the app keeps the hint it had.
+    let error = boot_error(
+        builder()
+            .module(ViewModule::for_root(ViewOptions::default()))
+            .module(Adds(page_without_template)),
+    )
+    .await;
+    assert!(
+        error.contains("Helm page `report` has no template: add `.template(\"admin/report\")`"),
+        "{error}"
+    );
 }
