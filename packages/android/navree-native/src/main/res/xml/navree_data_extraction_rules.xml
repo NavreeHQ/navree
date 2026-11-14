@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the client keeps for a person never leaves the device, by cloud backup or by a transfer
+     to a new device (Android 12 and later, for apps that target them). The sealed page cache and
+     the snapshot of a launch are in the no-backup folder, which neither takes; the web view's
+     folder holds the session cookie, what pages stored and its cache, and is left out here.
+     Everything else of the app goes as the app decides. An app with rules of its own adds these
+     lines to both of its sections. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="app_webview" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="app_webview" />
+    </device-transfer>
+</data-extraction-rules>

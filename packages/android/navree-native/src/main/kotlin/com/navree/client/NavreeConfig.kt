@@ -60,12 +60,20 @@ data class NavreeConfig(
      * pictures load from the app's origins.
      */
     val pictureHosts: List<String> = emptyList(),
+    /** How much of the app's screen the system may show elsewhere: see [ScreenPrivacy]. */
+    val screen: ScreenPrivacy = ScreenPrivacy.None,
+    /**
+     * Whether a touch is ignored while another app's window covers the app,
+     * so a window drawn over it cannot make the person tap something unseen.
+     */
+    val filterObscuredTouches: Boolean = true,
 ) {
     companion object {
         /**
          * Reads the configuration from resources: `navree_origin`, `navree_name`,
-         * `navree_seed`, `navree_dynamic_colour`, `navree_loopback_http` and
-         * `navree_google_client_id`.
+         * `navree_seed`, `navree_dynamic_colour`, `navree_loopback_http`,
+         * `navree_google_client_id` and `navree_screen` (empty,
+         * `hidden_in_recents` or `no_capture`).
          */
         fun fromResources(context: Context): NavreeConfig {
             val resources = context.resources
@@ -78,10 +86,60 @@ data class NavreeConfig(
                 dynamicColour = resources.getBoolean(R.bool.navree_dynamic_colour),
                 loopbackHttp = resources.getBoolean(R.bool.navree_loopback_http),
                 googleClientId = resources.getString(R.string.navree_google_client_id).ifEmpty { null },
+                screen = ScreenPrivacy.of(resources.getString(R.string.navree_screen)),
             )
         }
     }
 }
+
+/**
+ * How much of the app's screen the system may show elsewhere. The default is
+ * [None]: the system's own behaviour.
+ */
+enum class ScreenPrivacy {
+    /** Screenshots, screen recording and the recent-apps list show the app as it is. */
+    None,
+
+    /**
+     * The recent-apps list shows no picture of the app: on Android 13 and
+     * later with `Activity.setRecentsScreenshotEnabled(false)` (API 33);
+     * before that the only means is the window's `FLAG_SECURE`, so there it
+     * is [NoCapture].
+     */
+    HiddenInRecents,
+
+    /**
+     * No screenshot, no screen recording, no picture in the recent-apps list
+     * and nothing on a display that is not secure: the window's
+     * `WindowManager.LayoutParams.FLAG_SECURE` (API 1). Dialogs, sheets and
+     * menus that follow their window's policy (Compose's default) have it too.
+     */
+    NoCapture,
+    ;
+
+    /** What the window is told on a system of API level [sdk]. */
+    fun plan(sdk: Int): ScreenPlan = when (this) {
+        None -> ScreenPlan(secure = false, recentsPicture = true)
+        HiddenInRecents -> if (sdk >= 33) ScreenPlan(secure = false, recentsPicture = false) else ScreenPlan(secure = true, recentsPicture = false)
+        NoCapture -> ScreenPlan(secure = true, recentsPicture = false)
+    }
+
+    companion object {
+        /**
+         * The option a resource names: empty for [None], `hidden_in_recents`
+         * or `no_capture`. A name this build does not know keeps the most
+         * out, [NoCapture], rather than less than the app asked for.
+         */
+        fun of(name: String): ScreenPrivacy = when (name.trim()) {
+            "" -> None
+            "hidden_in_recents" -> HiddenInRecents
+            else -> NoCapture
+        }
+    }
+}
+
+/** What the window is told: whether it is secure, and whether the recent-apps list may show a picture of it. */
+data class ScreenPlan(val secure: Boolean, val recentsPicture: Boolean)
 
 /** What the device says about itself on every request, as the protocol's descriptor has it. */
 data class Device(

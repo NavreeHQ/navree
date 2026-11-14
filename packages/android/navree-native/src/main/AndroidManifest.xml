@@ -10,6 +10,16 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="https" />
         </intent>
+        <!-- The browser that opens sign-in sessions, asked what it supports. -->
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
     </queries>
+
+    <!-- What the client keeps for a person stays out of backups and transfers to a new device.
+         An app that says nothing has these rules; one with rules of its own adds their lines. -->
+    <application
+        android:dataExtractionRules="@xml/navree_data_extraction_rules"
+        android:fullBackupContent="@xml/navree_backup_rules" />
 
 </manifest>

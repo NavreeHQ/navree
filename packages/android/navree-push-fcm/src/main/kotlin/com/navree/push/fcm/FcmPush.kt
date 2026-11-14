@@ -72,17 +72,24 @@ class FcmPush(context: Context) : PushProvider {
 }
 
 /**
- * Receives the messages the server's push channel sends. A message the
- * system shows by itself (the app is not in front) opens the app with its
- * `href` when tapped; one that arrives while the app is open is shown here,
- * with the same link. A token that changes goes to the runtime core of the app
- * while it runs (and is asked for again at every launch); the core registers it.
+ * Receives the messages the server's push channel sends, and shows each one
+ * private on the lock screen: there the system shows a public version that
+ * names the app and says only that something arrived, never the title or the
+ * text. A tap opens the app with the message's `href`.
  *
- * This module's manifest declares it, so an app that adds the module has it.
+ * This code sees a message only when Firebase hands it over: a data message
+ * (`title`, `body` and `href` in `data`, no `notification`) always, a message
+ * with a `notification` only while the app is in front. A `notification`
+ * message that arrives while the app is in the background is shown by the
+ * Firebase library itself, as the server wrote it, and never reaches here.
+ *
+ * A token that changes goes to the runtime core of the app while it runs (and
+ * is asked for again at every launch); the core registers it. This module's
+ * manifest declares the service, so an app that adds the module has it.
  */
 class NavreeMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
-        val shown = message.notification ?: return
+        val shown = notificationText(message.notification?.title, message.notification?.body, message.data) ?: return
         // Only a path inside the app is kept; the core checks it again before anything opens.
         val href = message.data["href"]?.takeIf { it.startsWith("/") && !it.startsWith("//") }
         val manager = getSystemService(NotificationManager::class.java) ?: return
@@ -94,10 +101,18 @@ class NavreeMessagingService : FirebaseMessagingService() {
             href?.let { putExtra(NavreeActivity.EXTRA_HREF, it) }
         }
         val tap = PendingIntent.getActivity(this, message.messageId.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        // What the lock screen shows: the app's name and that something arrived.
+        val onLockScreen = NotificationCompat.Builder(this, CHANNEL)
+            .setSmallIcon(applicationInfo.icon)
+            .setContentTitle(applicationInfo.loadLabel(packageManager))
+            .setContentText(getString(R.string.navree_notification_public))
+            .build()
         val notification = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(applicationInfo.icon)
-            .setContentTitle(shown.title)
-            .setContentText(shown.body)
+            .setContentTitle(shown.first)
+            .setContentText(shown.second)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(onLockScreen)
             .setAutoCancel(true)
             .setContentIntent(tap)
             .build()
@@ -116,4 +131,15 @@ class NavreeMessagingService : FirebaseMessagingService() {
     private companion object {
         const val CHANNEL = "navree"
     }
+}
+
+/**
+ * The title and text of a message: its `notification` part when it has one,
+ * else `title` and `body` in its data. Null when it has neither: a message
+ * with nothing to show is not shown.
+ */
+fun notificationText(title: String?, body: String?, data: Map<String, String>): Pair<String?, String?>? {
+    val shownTitle = title ?: data["title"]
+    val shownBody = body ?: data["body"]
+    return if (shownTitle.isNullOrEmpty() && shownBody.isNullOrEmpty()) null else shownTitle to shownBody
 }
