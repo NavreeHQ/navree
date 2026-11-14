@@ -24,12 +24,27 @@ struct ComposerBar: View {
         let others = ComposerRules.others(found)
         VStack(alignment: .leading, spacing: 8) {
             if !others.isEmpty {
-                HStack(spacing: 12) {
-                    ForEach(Array(others.enumerated()), id: \.offset) { _, part in
-                        NodeView(part).fixedSize()
+                // In a row while it fits, else one under another
+                // (``ComposerRules/othersLayouts``).
+                ViewThatFits(in: .horizontal) {
+                    ForEach(ComposerRules.othersLayouts, id: \.self) { layout in
+                        switch layout {
+                        case .row:
+                            HStack(spacing: 12) {
+                                ForEach(Array(others.enumerated()), id: \.offset) { _, part in
+                                    NodeView(part).fixedSize()
+                                }
+                            }
+                        case .column:
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(Array(others.enumerated()), id: \.offset) { _, part in
+                                    NodeView(part).fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
                     }
-                    Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             // The field and its send button as one rounded field, the button
             // at its trailing end as Messages and Mail send: a filled arrow no

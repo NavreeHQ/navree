@@ -45,3 +45,7 @@ import Testing
     // The store's order, whose refund form has no conversation, has none.
     #expect(ComposerRules.composer(in: try answerScreen("store-order1").body) == nil)
 }
+
+@Test func thePartsOverTheReplyStandInARowWhileItFitsElseOneUnderAnother() {
+    #expect(ComposerRules.othersLayouts == [.row, .column])
+}

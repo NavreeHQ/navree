@@ -10,6 +10,18 @@ import NavreeProtocol
 /// screen, by a form that posts, with a field for many lines of text and a
 /// main button that sends it.
 public enum ComposerRules {
+    /// How the parts over the reply's field stand, in the order they are
+    /// tried: in a row while the row fits the bar's width, else one under
+    /// another, so at the largest text sizes in a narrow column ("Saved
+    /// replies" beside how the reply is sent) none of them, nor the field
+    /// under them, runs past the bar's edges.
+    public enum OthersLayout: Sendable, Equatable {
+        case row
+        case column
+    }
+
+    public static let othersLayouts: [OthersLayout] = [.row, .column]
+
     /// The composer and the screen's body without it.
     public struct Found: Sendable, Equatable {
         /// The reply form, drawn as a bar at the foot of the screen.
