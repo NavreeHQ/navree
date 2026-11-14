@@ -207,10 +207,7 @@ refresh tokens, unexchanged codes, remembered consent). It returns
 `attempt.domain()`. Access JWTs already issued live out `auth.jwt.access_ttl_secs`
 (15 minutes) but can't be refreshed. Your module can take part:
 `m.credential_revoker::<R>()` (`navree::contracts::ModuleBuilderRevocationExt`)
-with `R: CredentialRevoker` and `revoke_for_users(&[Uuid])`. Override
-`end_sign_ins_of` too if the module holds more that signs a person in (it is
-asked when a magic link or code gives a never-verified account to its
-mailbox's owner; the default is `revoke_for_users`). A failing revoker
+with `R: CredentialRevoker` and `revoke_for_users(&[Uuid])`. A failing revoker
 yields `AuthError::Revocation` after all others ran; repeat the call. Finding a
 domain's users scans the users' emails in pages: for an offboarding, not a
 request.
@@ -372,9 +369,9 @@ needs a real `users` row). To test sign-in itself, post to
 - Adding `SessionModule`'s authenticator next to `AuthModule`: an app has one
   `dyn Authenticator`.
 - Unverified emails aren't blocked: check `user.email_verified_at` where it matters.
-  A magic link or emailed code that signs in to a never-verified account ends
-  everything the registrant had on it (sessions, password, passkeys, two-factor,
-  module credentials) and gives it to the mailbox's owner.
+  Registering proves no address: an account someone else registered keeps their
+  password, passkeys and second factor after its owner verifies the address,
+  until the owner resets the password and removes what they didn't add.
 - Writing a "danger zone" route without `#[recent_auth]` or
   `#[not_while_impersonating]`: impersonation sessions and old tokens pass
   plain `#[authenticated]`.
