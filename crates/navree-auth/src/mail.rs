@@ -252,7 +252,7 @@ fn minutes(secs: u64) -> u64 {
 }
 
 /// `text` with the HTML special characters escaped.
-fn escape_html(text: &str) -> String {
+pub(crate) fn escape_html(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         match c {

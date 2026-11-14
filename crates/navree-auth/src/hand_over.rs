@@ -14,12 +14,21 @@
 //!    The app must be one of `auth.apps` with a `callback`. The session
 //!    remembers the request and goes to `GET /auth/app/finish`.
 //! 2. `GET /auth/app/finish` sends a browser that is not signed in to the
-//!    sign-in page with `next` set back to itself; the person signs in there
-//!    by any way and in as many steps as it takes. Once the browser is
-//!    signed in, it answers `303` to the app's configured callback with a
-//!    one-time `code` (60 seconds) and the app's `state`. The browser is
-//!    then signed out, unless it was signed in before the hand-over began or
-//!    `auth.apps.keep_browser_signed_in` is on.
+//!    sign-in page with `next` set back to itself and the hand-over's own
+//!    one-time `attempt`; the person signs in there by any way and in as
+//!    many steps as it takes. A sign-in that comes back with that `attempt`
+//!    is answered `303` to the app's configured callback with a one-time
+//!    `code` (60 seconds) and the app's `state`; the browser is then signed
+//!    out, unless `auth.apps.keep_browser_signed_in` is on. A browser that
+//!    was already signed in when the hand-over began is asked first, on a
+//!    small page of the framework's own (no page toolkit needed): "<app>
+//!    wants to sign in as <person>", Continue or Cancel, posted to `POST
+//!    /auth/app/confirm` with the session's CSRF token and a one-time value
+//!    of this hand-over. Continue hands that sign-in over and keeps the
+//!    browser signed in (an `https` callback), or signs the browser out and
+//!    asks the person to sign in again (a custom scheme). Cancel ends the
+//!    hand-over and sends the browser to the callback with
+//!    `error=access_denied` and the `state`.
 //! 3. The app posts `{platform, app, code, code_verifier}` to `POST
 //!    {api}/auth/app/exchange` from its own HTTP stack. The code works once,
 //!    for that app, with the verifier whose SHA-256 the session was started
@@ -34,27 +43,30 @@
 //! The code reaches only the app the operating system opens for the
 //! callback (a verified universal link or App Link), and only the app that
 //! made the verifier can use it: a code planted through a link (another
-//! person's, or the attacker's own) fails at the exchange. An app whose
-//! callback is a custom scheme (`custom_scheme`, which another app could
-//! claim) never gets a sign-in the browser already had: the browser is
-//! signed out at the start and the person signs in afresh, on a sign-in
-//! page whose `next` is the finish address with the hand-over's own
-//! one-time `attempt`. The finish hands such an app only a sign-in that came
-//! back on that address; a sign-in made for anything else while the
-//! hand-over waited (the person signing in to the site in another tab) is
-//! refused, and the hand-over ends. The redirect that carries the code is
-//! `no-store` and `no-referrer`.
+//! person's, or the attacker's own) fails at the exchange. Only a sign-in
+//! made for this hand-over (it came back with the `attempt`), or one the
+//! person confirmed on the framework's page, is handed over: a sign-in made
+//! for anything else while the hand-over waited (the person signing in to
+//! the site in another tab, or a sign-in another site posted) is refused,
+//! and the hand-over ends. Opening the start address, which any site can
+//! do, signs nobody out and hands nothing over. An app whose callback is a
+//! custom scheme (`custom_scheme`, which another app could claim) never
+//! gets a sign-in the browser already had: the person signs in again. The
+//! answers of the finish and the confirmation are `no-store` and
+//! `no-referrer`.
 
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use http::header::{CACHE_CONTROL, REFERRER_POLICY};
+use http::header::{CACHE_CONTROL, REFERRER_POLICY, X_FRAME_OPTIONS};
 use http::{HeaderValue, Method};
 use navree_contracts::AuditKind;
 use navree_crypto::{constant_time_eq, random_token, sha256_hex};
-use navree_http::response::Redirect;
-use navree_http::{ApiMeta, AppError, Controller, IntoResponse, Json, Query, RouteDef, schema_fn};
+use navree_http::response::{Html, Redirect};
+use navree_http::{
+    ApiMeta, AppError, Controller, Form, IntoResponse, Json, Query, Response, RouteDef, schema_fn,
+};
 use navree_kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
 use navree_openapi::ToSchema;
 use navree_session::Session;
@@ -65,12 +77,13 @@ use uuid::Uuid;
 
 use crate::apps::HandOverApp;
 use crate::controller::api;
+use crate::mail::escape_html;
 use crate::passkeys::base64_url;
 use crate::passkeys::webauthn::sha256;
 use crate::service::entry;
 use crate::{
-    AppsOptions, AuthError, AuthOptions, AuthService, ClientMeta, SignInAttempt, SignInMethod, User,
-    UserResource,
+    AppsOptions, AuthError, AuthOptions, AuthService, ClientMeta, SessionUser, SignInAttempt,
+    SignInMethod, User, UserResource,
 };
 
 /// Where an app starts the hand-over (outside the API prefix: it is opened
@@ -79,6 +92,10 @@ pub const APP_SIGN_IN_PATH: &str = "/auth/app/sign-in";
 
 /// Where the browser goes once it is signed in, to be sent on to the app.
 pub const APP_SIGN_IN_FINISH_PATH: &str = "/auth/app/finish";
+
+/// Where the confirmation page of a browser that was already signed in
+/// posts the person's answer.
+pub(crate) const APP_SIGN_IN_CONFIRM_PATH: &str = "/auth/app/confirm";
 
 /// How long a hand-over code can be exchanged, in seconds.
 pub const APP_CODE_TTL_SECS: u64 = 60;
@@ -121,11 +138,15 @@ struct Pending {
     was_signed_in: bool,
     /// When it began (Unix seconds).
     started_at: i64,
-    /// For an app whose callback is a custom scheme: the random value the
-    /// sign-in page comes back with (`?attempt=` on the finish address).
-    /// Only a sign-in that came back with it is handed over.
+    /// The random value the sign-in page comes back with (`?attempt=` on
+    /// the finish address). Only a sign-in that came back with it is handed
+    /// over without asking.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     attempt: Option<String>,
+    /// While a browser that was signed in at the start has not answered the
+    /// confirmation page: the one-time value its form posts back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    confirm: Option<String>,
 }
 
 /// The query of [`APP_SIGN_IN_FINISH_PATH`]: the hand-over's `attempt`, when
@@ -134,6 +155,17 @@ struct Pending {
 pub(crate) struct FinishRequest {
     #[serde(default)]
     pub(crate) attempt: Option<String>,
+}
+
+/// The form of the confirmation page (`POST /auth/app/confirm`): the
+/// hand-over's one-time value and the button pressed (`continue` or
+/// `cancel`). The session layer has taken out and checked `_csrf`.
+#[derive(Clone, Default, Deserialize)]
+pub(crate) struct ConfirmRequest {
+    #[serde(default)]
+    pub(crate) confirm: Option<String>,
+    #[serde(default)]
+    pub(crate) decision: Option<String>,
 }
 
 /// An issued code, kept in the cache under its SHA-256.
@@ -150,14 +182,34 @@ struct Code {
     auth_time: Option<i64>,
 }
 
-/// Where [`AuthService::finish_app_sign_in`] sends the browser.
+/// Where [`AuthService::finish_app_sign_in`] and
+/// [`AuthService::confirm_app_sign_in`] send the browser.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Finish {
     /// Not signed in yet: to the sign-in page, which comes back here (with
     /// the hand-over's `attempt`, when it has one).
     SignIn(Option<String>),
-    /// To the app's callback, with the code and the state.
+    /// To the app's callback, with the code (or `error`) and the state.
     App(String),
+    /// The browser was signed in when the hand-over began: the page that
+    /// asks the person first.
+    Confirm(ConfirmPage),
+}
+
+/// What the confirmation page says and posts back.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct ConfirmPage {
+    /// The app's bundle id or package name.
+    app: String,
+    /// The signed-in person's name.
+    name: String,
+    /// The signed-in person's email.
+    email: String,
+    /// An app with a custom-scheme callback: continuing signs the browser
+    /// out, and the person signs in again.
+    sign_in_again: bool,
+    /// The hand-over's one-time value.
+    token: String,
 }
 
 fn refused(reason: impl Into<String>) -> AuthError {
@@ -189,13 +241,40 @@ pub(crate) fn s256(verifier: &str) -> String {
     base64_url(&sha256(verifier.as_bytes()))
 }
 
+/// Whether an app's callback is an `https` link (else a custom scheme,
+/// which another app could claim).
+fn is_https(callback: &str) -> bool {
+    callback.starts_with("https://")
+}
+
+/// The app's `callback` with `pair` (the code, or the error) and the app's
+/// `state` added to its query.
+fn callback_with(
+    callback: &str,
+    pair: (&str, &str),
+    state: Option<&str>,
+) -> Result<String, AuthError> {
+    let mut url =
+        url::Url::parse(callback).map_err(|_| refused("the app's callback is not a URL"))?;
+    {
+        let mut query = url.query_pairs_mut();
+        query.append_pair(pair.0, pair.1);
+        if let Some(state) = state {
+            query.append_pair("state", state);
+        }
+    }
+    Ok(url.into())
+}
+
 impl AuthService {
     /// Starts handing a sign-in over to an app (`GET /auth/app/sign-in`):
     /// the app is one of `apps` with a callback, the challenge is S256, a
     /// `redirect_uri`, when given, is that callback. The request is kept in
-    /// the browser's session; the browser goes on to
-    /// [`APP_SIGN_IN_FINISH_PATH`]. Refusals are
-    /// [`AuthError::HandOverRefused`] (400 `invalid_hand_over`).
+    /// the browser's session with a one-time `attempt` (and, for a browser
+    /// that is signed in, the one-time value of the confirmation page); the
+    /// browser goes on to [`APP_SIGN_IN_FINISH_PATH`]. Nothing else changes:
+    /// any site can open this address, so it never signs the browser out.
+    /// Refusals are [`AuthError::HandOverRefused`] (400 `invalid_hand_over`).
     pub(crate) async fn start_app_sign_in(
         &self,
         session: &Session,
@@ -211,39 +290,72 @@ impl AuthService {
                 return Err(error);
             }
         };
-        let mut was_signed_in = match self.session_user(session) {
-            Some(user) => self
+        // A browser that is already signed in is neither signed out nor
+        // handed over from here: the finish asks the person first. Any
+        // other sign-in must come back with `attempt`.
+        let was_signed_in = self.live_user(session).await?.is_some();
+        self.keep_pending(
+            session,
+            &Pending {
+                platform: app.platform.to_owned(),
+                app: app.id,
+                callback: app.callback,
+                challenge: request.code_challenge.clone().unwrap_or_default(),
+                state: request.state.clone(),
+                was_signed_in,
+                started_at: self.clock.now().timestamp(),
+                attempt: Some(random_token(32)),
+                confirm: was_signed_in.then(|| random_token(32)),
+            },
+        )
+    }
+
+    /// Keeps `pending` in the browser's session.
+    fn keep_pending(&self, session: &Session, pending: &Pending) -> Result<(), AuthError> {
+        session
+            .insert(PENDING_KEY, pending)
+            .map_err(|error| AuthError::Session(error.to_string()))
+    }
+
+    /// The browser's signed-in user, when its sign-in is live.
+    async fn live_user(&self, session: &Session) -> Result<Option<SessionUser>, AuthError> {
+        match self.session_user(session) {
+            Some(user) => Ok(self
                 .live_session(user.user_id, user.session_id)
                 .await?
-                .is_some(),
-            None => false,
-        };
-        // Any app on the device can claim a custom scheme, and the app that
-        // started the hand-over holds the verifier: never hand such an app a
-        // sign-in the browser already had, or one it makes for anything
-        // else while the hand-over waits. The person signs in afresh, and
-        // the sign-in page comes back with `attempt`.
-        let custom_scheme = !app.callback.starts_with("https://");
-        if was_signed_in && custom_scheme {
-            self.sign_out_session(session, meta).await?;
-            was_signed_in = false;
+                .map(|_| user)),
+            None => Ok(None),
         }
-        session
-            .insert(
-                PENDING_KEY,
-                &Pending {
-                    platform: app.platform.to_owned(),
-                    app: app.id,
-                    callback: app.callback,
-                    challenge: request.code_challenge.clone().unwrap_or_default(),
-                    state: request.state.clone(),
-                    was_signed_in,
-                    started_at: self.clock.now().timestamp(),
-                    attempt: custom_scheme.then(|| random_token(32)),
-                },
-            )
-            .map_err(|error| AuthError::Session(error.to_string()))?;
-        Ok(())
+    }
+
+    /// The hand-over waiting in the browser's session, unless there is none
+    /// or it waited too long (it then ends): refused, and audited.
+    async fn pending(&self, session: &Session, meta: &ClientMeta) -> Result<Pending, AuthError> {
+        let Some(pending) = session.get::<Pending>(PENDING_KEY) else {
+            let error = refused("no app sign-in was started in this browser");
+            self.hand_over_refused(None, &error, meta).await;
+            return Err(error);
+        };
+        if self.clock.now().timestamp() - pending.started_at > PENDING_TTL_SECS {
+            return Err(self
+                .end_hand_over(session, &pending.app, "the app sign-in waited too long", meta)
+                .await);
+        }
+        Ok(pending)
+    }
+
+    /// Ends the waiting hand-over of `app`, refused for `reason` (audited).
+    async fn end_hand_over(
+        &self,
+        session: &Session,
+        app: &str,
+        reason: &str,
+        meta: &ClientMeta,
+    ) -> AuthError {
+        session.remove(PENDING_KEY);
+        let error = refused(reason);
+        self.hand_over_refused(Some(app), &error, meta).await;
+        error
     }
 
     fn check_start(
@@ -284,13 +396,14 @@ impl AuthService {
     }
 
     /// Finishes a started hand-over (`GET /auth/app/finish`): a browser not
-    /// signed in yet goes to the sign-in page ([`Finish::SignIn`]); a signed-in
-    /// one gets a one-time code for the app and goes to its callback
-    /// ([`Finish::App`]), signed out first unless it was signed in before
-    /// or `keep_browser_signed_in` says otherwise. An impersonation is never
-    /// handed over. For an app whose callback is a custom scheme, the
-    /// sign-in must come back with the hand-over's `attempt`: any other
-    /// sign-in ends the hand-over, refused.
+    /// signed in yet goes to the sign-in page ([`Finish::SignIn`]); a sign-in
+    /// that came back with the hand-over's `attempt` gets a one-time code
+    /// for the app and goes to its callback ([`Finish::App`]); a browser
+    /// that was signed in when the hand-over began is asked first
+    /// ([`Finish::Confirm`], answered by
+    /// [`confirm_app_sign_in`](AuthService::confirm_app_sign_in)). Any
+    /// other sign-in (made for something else while the hand-over waited)
+    /// ends the hand-over, refused. An impersonation is never handed over.
     pub(crate) async fn finish_app_sign_in(
         &self,
         session: &Session,
@@ -298,48 +411,132 @@ impl AuthService {
         keep_browser_signed_in: bool,
         meta: &ClientMeta,
     ) -> Result<Finish, AuthError> {
-        let Some(pending) = session.get::<Pending>(PENDING_KEY) else {
-            let error = refused("no app sign-in was started in this browser");
-            self.hand_over_refused(None, &error, meta).await;
-            return Err(error);
-        };
-        let now = self.clock.now();
-        if now.timestamp() - pending.started_at > PENDING_TTL_SECS {
-            session.remove(PENDING_KEY);
-            let error = refused("the app sign-in waited too long");
-            self.hand_over_refused(Some(&pending.app), &error, meta)
-                .await;
-            return Err(error);
-        }
-        let signed_in = match self.session_user(session) {
-            Some(user) => self
-                .live_session(user.user_id, user.session_id)
-                .await?
-                .map(|_| user),
-            None => None,
-        };
-        let Some(signed_in) = signed_in else {
+        let pending = self.pending(session, meta).await?;
+        let Some(signed_in) = self.live_user(session).await? else {
             return Ok(Finish::SignIn(pending.attempt.clone()));
         };
-        // A sign-in that did not come back from the hand-over's own sign-in
-        // page is not handed to an app another app could stand in for.
-        if let Some(expected) = &pending.attempt
-            && !attempt
-                .is_some_and(|attempt| constant_time_eq(attempt.as_bytes(), expected.as_bytes()))
-        {
-            session.remove(PENDING_KEY);
-            let error = refused("the sign-in was not made for this app sign-in");
-            self.hand_over_refused(Some(&pending.app), &error, meta)
-                .await;
-            return Err(error);
-        }
         if signed_in.impersonator.is_some() {
-            session.remove(PENDING_KEY);
-            let error = refused("an impersonation is not handed over");
-            self.hand_over_refused(Some(&pending.app), &error, meta)
-                .await;
-            return Err(error);
+            return Err(self
+                .end_hand_over(session, &pending.app, "an impersonation is not handed over", meta)
+                .await);
         }
+        let made_for_this = match (pending.attempt.as_deref(), attempt) {
+            (Some(expected), Some(given)) => constant_time_eq(given.as_bytes(), expected.as_bytes()),
+            _ => false,
+        };
+        if made_for_this {
+            return self
+                .issue_code(session, pending, signed_in, keep_browser_signed_in, meta)
+                .await;
+        }
+        // Signed in before the hand-over began: the person says first.
+        if let Some(token) = pending.confirm.clone() {
+            let Some(user) = self.find_user(signed_in.user_id).await? else {
+                return Err(self
+                    .end_hand_over(session, &pending.app, "the user no longer exists", meta)
+                    .await);
+            };
+            return Ok(Finish::Confirm(ConfirmPage {
+                app: pending.app.clone(),
+                name: user.name,
+                email: user.email,
+                sign_in_again: !is_https(&pending.callback),
+                token,
+            }));
+        }
+        // A sign-in that did not come back from the hand-over's own sign-in
+        // page, nor was confirmed, is never handed over.
+        Err(self
+            .end_hand_over(
+                session,
+                &pending.app,
+                "the sign-in was not made for this app sign-in",
+                meta,
+            )
+            .await)
+    }
+
+    /// Answers the confirmation page (`POST /auth/app/confirm`) with the
+    /// hand-over's one-time value `token`: Continue (`proceed`) hands the
+    /// browser's sign-in over to an app with an `https` callback (the
+    /// browser stays signed in), or signs the browser out and sends it to
+    /// the sign-in page with the hand-over's `attempt` for an app with a
+    /// custom scheme (and for a browser no longer signed in). Cancel ends
+    /// the hand-over and sends the browser to the callback with
+    /// `error=access_denied` and the `state`. A value that is not the
+    /// waiting hand-over's ends it, refused.
+    pub(crate) async fn confirm_app_sign_in(
+        &self,
+        session: &Session,
+        token: Option<&str>,
+        proceed: bool,
+        keep_browser_signed_in: bool,
+        meta: &ClientMeta,
+    ) -> Result<Finish, AuthError> {
+        let mut pending = self.pending(session, meta).await?;
+        let answered = match (pending.confirm.as_deref(), token) {
+            (Some(expected), Some(given)) => constant_time_eq(given.as_bytes(), expected.as_bytes()),
+            _ => false,
+        };
+        if !answered {
+            return Err(self
+                .end_hand_over(
+                    session,
+                    &pending.app,
+                    "the confirmation is not this app sign-in's",
+                    meta,
+                )
+                .await);
+        }
+        if !proceed {
+            session.remove(PENDING_KEY);
+            tracing::info!(target: "navree::auth", app = %pending.app, "an app sign-in was cancelled");
+            let callback = callback_with(
+                &pending.callback,
+                ("error", "access_denied"),
+                pending.state.as_deref(),
+            )?;
+            return Ok(Finish::App(callback));
+        }
+        // The value works once.
+        pending.confirm = None;
+        let signed_in = self.live_user(session).await?;
+        if let Some(signed_in) = signed_in
+            && is_https(&pending.callback)
+        {
+            return self
+                .issue_code(session, pending, signed_in, keep_browser_signed_in, meta)
+                .await;
+        }
+        // Another app can claim a custom scheme: such an app never gets the
+        // sign-in the browser had. The person signs in again, for this
+        // hand-over.
+        if signed_in.is_some() {
+            self.sign_out_session(session, meta).await?;
+        }
+        pending.was_signed_in = false;
+        self.keep_pending(session, &pending)?;
+        Ok(Finish::SignIn(pending.attempt))
+    }
+
+    /// Issues the one-time code of `pending` for `signed_in` and ends the
+    /// hand-over: the browser goes to the app's callback, signed out first
+    /// unless it was signed in before or `keep_browser_signed_in` says
+    /// otherwise.
+    async fn issue_code(
+        &self,
+        session: &Session,
+        pending: Pending,
+        signed_in: SessionUser,
+        keep_browser_signed_in: bool,
+        meta: &ClientMeta,
+    ) -> Result<Finish, AuthError> {
+        if signed_in.impersonator.is_some() {
+            return Err(self
+                .end_hand_over(session, &pending.app, "an impersonation is not handed over", meta)
+                .await);
+        }
+        let now = self.clock.now();
         let code = random_token(43);
         self.cache
             .put(
@@ -359,16 +556,12 @@ impl AuthService {
         if !pending.was_signed_in && !keep_browser_signed_in {
             self.sign_out_session(session, meta).await?;
         }
-        let mut callback = url::Url::parse(&pending.callback)
-            .map_err(|_| refused("the app's callback is not a URL"))?;
-        {
-            let mut query = callback.query_pairs_mut();
-            query.append_pair("code", &code);
-            if let Some(state) = &pending.state {
-                query.append_pair("state", state);
-            }
-        }
-        Ok(Finish::App(callback.into()))
+        let callback = callback_with(
+            &pending.callback,
+            ("code", code.as_str()),
+            pending.state.as_deref(),
+        )?;
+        Ok(Finish::App(callback))
     }
 
     /// Exchanges a hand-over `code` for a session of the app's own (`POST
@@ -622,31 +815,61 @@ impl Controller for AppSignInController {
                 let service = service.clone();
                 let sign_in = sign_in.clone();
                 async move {
-                    let target = match service
+                    let finish = service
                         .finish_app_sign_in(&session, request.attempt.as_deref(), keep, &meta)
                         .await
-                        .map_err(AuthError::into_app_error)?
-                    {
-                        Finish::SignIn(attempt) => sign_in_href(&sign_in, attempt.as_deref()),
-                        Finish::App(callback) => callback,
-                    };
-                    // The code is in the address: never cached, never sent on as
-                    // a referrer.
-                    let mut response = Redirect::to(&target).into_response();
-                    let headers = response.headers_mut();
-                    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
-                    headers.insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
-                    Ok::<_, AppError>(response)
+                        .map_err(AuthError::into_app_error)?;
+                    Ok::<_, AppError>(finish_response(finish, &sign_in, &session))
                 }
             };
         routes.push(
             RouteDef::on(Method::GET, format!("!{APP_SIGN_IN_FINISH_PATH}"), finish)
                 .public()
                 .name("auth.app.finish")
-                .api(api(
-                    "Send a signed-in browser on to the app with a one-time code",
-                    &[303, 400],
-                )),
+                .api(ApiMeta {
+                    description: Some(
+                        "Sends a browser that is not signed in to the sign-in page, and a \
+                         sign-in made for this hand-over on to the app's callback with a \
+                         one-time code. A browser that was signed in when the hand-over began \
+                         gets a page that asks the person first (200, HTML)."
+                            .to_owned(),
+                    ),
+                    ..api(
+                        "Send a signed-in browser on to the app with a one-time code",
+                        &[200, 303, 400],
+                    )
+                }),
+        );
+
+        let service = self.service.clone();
+        let sign_in = self.sign_in.clone();
+        let confirm =
+            move |session: Session, meta: ClientMeta, Form(input): Form<ConfirmRequest>| {
+                let service = service.clone();
+                let sign_in = sign_in.clone();
+                async move {
+                    let proceed = input.decision.as_deref() == Some("continue");
+                    let finish = service
+                        .confirm_app_sign_in(&session, input.confirm.as_deref(), proceed, keep, &meta)
+                        .await
+                        .map_err(AuthError::into_app_error)?;
+                    Ok::<_, AppError>(finish_response(finish, &sign_in, &session))
+                }
+            };
+        routes.push(
+            RouteDef::on(Method::POST, format!("!{APP_SIGN_IN_CONFIRM_PATH}"), confirm)
+                .public()
+                .name("auth.app.confirm")
+                .api(ApiMeta {
+                    description: Some(
+                        "The answer of the page that asks a signed-in browser before its \
+                         sign-in goes to an app: a form with the session's CSRF token \
+                         (`_csrf`), the hand-over's one-time `confirm` value and `decision` \
+                         (`continue` or `cancel`)."
+                            .to_owned(),
+                    ),
+                    ..api("Answer the question of an app sign-in hand-over", &[303, 400, 403])
+                }),
         );
 
         let service = self.service.clone();
@@ -704,6 +927,69 @@ impl Controller for AppSignInController {
 
 /// Exchanges one client may attempt per minute.
 const EXCHANGES_PER_MINUTE: u32 = 30;
+
+/// The answer of the finish and of the confirmation: a redirect to the
+/// sign-in page or to the app's callback, or the confirmation page. The
+/// code can be in the address and the page holds a one-time value: never
+/// cached, never sent on as a referrer, never framed.
+fn finish_response(finish: Finish, sign_in: &str, session: &Session) -> Response {
+    let mut response = match finish {
+        Finish::SignIn(attempt) => {
+            Redirect::to(&sign_in_href(sign_in, attempt.as_deref())).into_response()
+        }
+        Finish::App(callback) => Redirect::to(&callback).into_response(),
+        Finish::Confirm(page) => Html(confirm_page(&page, &session.csrf_token())).into_response(),
+    };
+    let headers = response.headers_mut();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    headers.insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+    headers.insert(X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    response
+}
+
+/// The confirmation page: plain HTML of the framework's own, so it works in
+/// an app without a page toolkit. Its form posts the session's CSRF token,
+/// the hand-over's one-time value and the button pressed to
+/// `POST /auth/app/confirm`.
+fn confirm_page(page: &ConfirmPage, csrf: &str) -> String {
+    let app = escape_html(&page.app);
+    let person = if page.name.trim().is_empty() {
+        escape_html(&page.email)
+    } else {
+        format!("{} ({})", escape_html(&page.name), escape_html(&page.email))
+    };
+    let (title, text) = if page.sign_in_again {
+        (
+            format!("Sign in again to continue to {app}"),
+            format!(
+                "You are signed in here as {person}. To continue to {app}, you are signed out \
+                 here and sign in again."
+            ),
+        )
+    } else {
+        (
+            format!("{app} wants to sign in as {person}"),
+            format!(
+                "{app} gets a sign-in of its own as {person}. You stay signed in here. Continue \
+                 only if you opened {app} yourself."
+            ),
+        )
+    };
+    let csrf = escape_html(csrf);
+    let token = escape_html(&page.token);
+    format!(
+        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
+         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
+         <meta name=\"referrer\" content=\"no-referrer\">\n<title>{title}</title>\n</head>\n\
+         <body>\n<main>\n<h1>{title}</h1>\n<p>{text}</p>\n\
+         <form method=\"post\" action=\"{APP_SIGN_IN_CONFIRM_PATH}\">\n\
+         <input type=\"hidden\" name=\"_csrf\" value=\"{csrf}\">\n\
+         <input type=\"hidden\" name=\"confirm\" value=\"{token}\">\n\
+         <button type=\"submit\" name=\"decision\" value=\"continue\">Continue</button>\n\
+         <button type=\"submit\" name=\"decision\" value=\"cancel\">Cancel</button>\n\
+         </form>\n</main>\n</body>\n</html>\n"
+    )
+}
 
 /// The sign-in page `sign_in` with `next` set to the finish address, carrying
 /// the hand-over's `attempt` when it has one.

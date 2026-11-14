@@ -31,6 +31,14 @@ every `@navree/*` package carries the same version.
   authenticated in the browser session the code came from, and ends when a "remember me" sign-in
   made at that time would. The exchange asks the sign-in policies about the new
   `SignInMethod::AppHandOver { platform, app }`.
+- The app sign-in hand-over hands over only a sign-in that came back with the hand-over's own
+  `attempt`, for every callback: a sign-in made in that browser for anything else while the
+  hand-over waits ends it with `400 invalid_hand_over`. A browser that was already signed in when
+  the hand-over began gets a small page of the framework's own first ("<app> wants to sign in as
+  <person>", Continue or Cancel), answered with `POST /auth/app/confirm`; Cancel sends the app's
+  callback `error=access_denied`. Opening `GET /auth/app/sign-in` no longer signs the browser out:
+  for an app with a custom-scheme callback, the browser is signed out only once the person
+  continues on that page.
 
 ### Fixed
 

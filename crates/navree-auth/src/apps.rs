@@ -85,7 +85,9 @@ pub struct AppsOptions {
     /// Whether a browser that signed in only to hand its sign-in over to an
     /// app stays signed in afterwards (default `false`: it is signed out,
     /// and only the app holds a session). A browser that was signed in
-    /// before the hand-over always stays signed in.
+    /// before the hand-over stays signed in once the person confirms,
+    /// unless the app's callback is a custom scheme (the browser is then
+    /// signed out and the person signs in again for the app).
     pub keep_browser_signed_in: bool,
 }
 
