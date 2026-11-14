@@ -62,7 +62,11 @@ pub(crate) fn node(display: &Display) -> Node {
         Display::Text { text } => Node::from(el("bdi").child(text.clone())),
         Display::Multiline { text } => Text::new(lines(text)).into(),
         Display::Markdown { text } => Markdown::trusted(text.clone()).into(),
-        Display::Html { html } => Node::Raw(SafeHtml::trusted(html.clone())),
+        // A record's own text: the toolkit's runtime acts on nothing inside it.
+        Display::Html { html } => el("div")
+            .flag("data-ui-stored", true)
+            .child(Node::Raw(SafeHtml::trusted(html.clone())))
+            .into(),
         Display::Link {
             href,
             text,
