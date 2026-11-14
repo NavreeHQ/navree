@@ -481,7 +481,11 @@ async fn a_wrapped_method_commits_its_unit_of_work_only_when_it_answers_ok() {
         (status.code(), status.message()),
         (Code::Aborted, "the ledger closed the stream")
     );
-    assert_eq!(ledger.commits(), 2, "the error after the head rolled nothing back");
+    assert_eq!(
+        ledger.commits(),
+        2,
+        "the error after the head rolled nothing back"
+    );
 
     // A head that is not HTTP 200 and has no `grpc-status` rolls back and is
     // answered with the code the gRPC specification gives that HTTP status.

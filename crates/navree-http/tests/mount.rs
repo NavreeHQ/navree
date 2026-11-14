@@ -856,11 +856,8 @@ async fn a_mount_that_names_its_methods_answers_any_other_as_a_route_does() {
     // A mount that needs a permission: the router answers the other methods
     // first, before authentication and the access check.
     let permits = Arc::new(Permits::default());
-    let (ledger, setup) = ledger_setup(|mount| {
-        mount
-            .permissions(&["khata.read"])
-            .methods(&[Method::GET])
-    });
+    let (ledger, setup) =
+        ledger_setup(|mount| mount.permissions(&["khata.read"]).methods(&[Method::GET]));
     let app = setup.module(PermitsModule(permits.clone())).boot().await;
     only_get_is_taken(&app, None).await;
     only_get_is_taken(&app, Some(HARPREET)).await;
