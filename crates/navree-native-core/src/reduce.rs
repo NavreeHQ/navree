@@ -817,11 +817,13 @@ impl Core {
                     .then(|| shell.stamp.clone())
                     .or(header);
                 self.install(shell);
+                // The person is the server's word now: what is kept is read
+                // only when it is theirs, and emptied when it is not.
+                let person = self.inner.user.clone();
+                self.shell_named(person);
                 self.remember_shell(response.body);
                 self.inner.shell_stamp = stamp;
                 self.inner.seen_stamp = None;
-                // The person is the server's word now: what was kept for them may be drawn.
-                self.shell_confirmed();
             }
             Ok(_) => self.shell_failed(Failure::Protocol),
             Err(error) => {
@@ -833,13 +835,17 @@ impl Core {
         }
     }
 
-    pub(crate) fn shell_from_cache(&mut self, body: &str) {
+    /// Draws the app from the shell kept at the last launch. False when it
+    /// does not read.
+    pub(crate) fn shell_from_cache(&mut self, body: &str) -> bool {
         if let Some(Ok(shell)) = decode::with_room(|| serde_json::from_str::<Shell>(body))
             && shell.navree == MAJOR
         {
             self.inner.cache.shell = Some(body.to_owned());
             self.install(shell);
+            return true;
         }
+        false
     }
 
     /// The address a destination opens at.

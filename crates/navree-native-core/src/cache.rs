@@ -2,23 +2,46 @@
 //!
 //! The core keeps a bounded number of answers in memory, as they came. When
 //! the app's build says so, it also hands the client to keep between launches,
-//! under keys the client need not understand, the shell and the list of pages
-//! kept (`boot`) and each page whose answer said it may be kept
-//! ([`navree_native::KEEP_HEADER`], sent when the page's `Cache-Control` does
-//! not say `no-store`) under `page:<address>`. An answer that does not say so
-//! removes what was kept for its address.
+//! under keys the client need not understand, the shell, the list of pages
+//! kept and their owner (`boot`), and each page whose answer said it may be
+//! kept ([`navree_native::KEEP_HEADER`], sent when the page's `Cache-Control`
+//! does not say `no-store`) under `page:<address>`. An answer that does not
+//! say so removes what was kept for its address.
+//!
+//! What is kept has an **owner**: the person, or the visitor, its pages were
+//! answered for, written in `boot` beside the list. A kept page may be read
+//! only when this launch's shell has answered over the network, as a shell,
+//! and named that owner ([`Cache::readable`]): both ways a page is read ask
+//! it, and every answer of the shell asks it again. A shell that names
+//! someone else empties what is kept before anything is read. An answer that
+//! is not a shell names nobody and makes nothing readable. A `boot` with no
+//! owner, or whose kept shell does not read, is emptied, not taken.
 //!
 //! A kept tree is only ever a head start: it is marked as kept, nothing is
-//! sent from it, and the fresh answer takes its place. A page kept on the
-//! device is drawn only once this launch's shell has answered over the network
-//! and named the person the kept shell named; until then it is not even read.
-//! A write, a new build, a change of person and a sign-out empty what is kept.
+//! sent from it, and the fresh answer takes its place. A write, a new build,
+//! a change of person and a sign-out empty what is kept.
 
 use serde::{Deserialize, Serialize};
 
 use crate::Core;
 use crate::effect::Effect;
 use crate::state::{Content, ScreenId};
+
+/// A person as the core compares people: a name and an email. `None` is a
+/// visitor, signed in as nobody.
+pub(crate) type Person = Option<(String, Option<String>)>;
+
+/// Whose the pages the client keeps are.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Owner {
+    /// What the client keeps has not been read yet in this launch.
+    #[default]
+    Unread,
+    /// Nothing is kept: this launch's shell decides whose pages are kept next.
+    Empty,
+    /// The pages kept were answered for this person.
+    Of(Person),
+}
 
 /// The answers kept in memory, and what the client keeps.
 #[derive(Debug, Default)]
@@ -29,9 +52,11 @@ pub(crate) struct Cache {
     pub disk: Vec<String>,
     /// The shell as it came, for the client to keep.
     pub shell: Option<String>,
-    /// This launch's shell answered over the network, and what is kept on
-    /// the device is the person's it named: a kept page may be drawn.
-    pub confirmed: bool,
+    /// Whose the pages the client keeps are.
+    pub owner: Owner,
+    /// The person this launch's shell named, when it answered over the
+    /// network as a shell. An answer that is not a shell never sets it.
+    pub named: Option<Person>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -39,6 +64,17 @@ struct Boot {
     shell: String,
     #[serde(default)]
     pages: Vec<String>,
+    /// Whose the pages are. A `boot` without it was written by an older
+    /// build, and is not used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    owner: Option<Kept>,
+}
+
+/// The owner of the pages kept, as `boot` holds it.
+#[derive(Serialize, Deserialize)]
+struct Kept {
+    /// The person, or `null` for a visitor.
+    person: Person,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -62,25 +98,33 @@ impl Cache {
             self.pages.remove(0);
         }
     }
-}
 
-/// The person a kept shell names, as the core compares people.
-fn person_of(shell: &str) -> Option<(String, Option<String>)> {
-    let shell = serde_json::from_str::<navree_native::shell::Shell>(shell).ok()?;
-    shell.user.map(|user| (user.name, user.email))
+    /// Whether what the client keeps may be read, or written to: this
+    /// launch's shell answered over the network as a shell, and the person it
+    /// named owns what is kept. The one question every read and write asks.
+    pub(crate) fn readable(&self) -> bool {
+        matches!((&self.owner, &self.named), (Owner::Of(owner), Some(named)) if owner == named)
+    }
 }
 
 impl Core {
+    /// Hands the client the shell, the list of pages kept and their owner.
+    /// Nothing is written before what was kept has been read and has an
+    /// owner: a list written then would stand for nobody's pages.
     fn boot(&mut self) {
         if !self.config.cache.persist {
             return;
         }
+        let Owner::Of(person) = self.inner.cache.owner.clone() else {
+            return;
+        };
         let Some(shell) = self.inner.cache.shell.clone() else {
             return;
         };
         let boot = Boot {
             shell,
             pages: self.inner.cache.disk.clone(),
+            owner: Some(Kept { person }),
         };
         self.effects.push(Effect::CacheWrite {
             key: "boot".to_owned(),
@@ -97,8 +141,9 @@ impl Core {
     }
 
     /// Keeps the answer a page gave: in memory, and on the device when the
-    /// answer said it may be kept (`keep`). An answer that did not say so
-    /// takes away what the device kept for its address.
+    /// answer said it may be kept (`keep`) and what is kept is this
+    /// person's. An answer that did not say so takes away what the device
+    /// kept for its address.
     pub(crate) fn remember(&mut self, url: &str, status: u16, body: &str, keep: bool) {
         let limit = self.config.cache.pages;
         if limit == 0 || status >= 400 {
@@ -118,6 +163,9 @@ impl Core {
                 });
                 self.boot();
             }
+            return;
+        }
+        if !self.inner.cache.readable() {
             return;
         }
         let page = Page {
@@ -155,9 +203,24 @@ impl Core {
         }
     }
 
-    /// Empties everything kept: the person changed, or signed out.
+    /// Empties everything kept: the person changed, or signed out. What the
+    /// client keeps is known to be nothing from here on, and a `boot` read
+    /// before this is not used.
     pub(crate) fn forget_all(&mut self) {
-        self.inner.cache = Cache::default();
+        self.inner.cache = Cache {
+            owner: Owner::Empty,
+            ..Cache::default()
+        };
+        if self.config.cache.persist {
+            self.effects.push(Effect::CacheClear);
+        }
+    }
+
+    /// Empties what the client keeps because it is not this launch's to read.
+    fn disown(&mut self) {
+        self.inner.cache.pages.clear();
+        self.inner.cache.disk.clear();
+        self.inner.cache.owner = Owner::Empty;
         if self.config.cache.persist {
             self.effects.push(Effect::CacheClear);
         }
@@ -169,26 +232,52 @@ impl Core {
         if let Some((status, body)) = self.inner.cache.get(url) {
             let body = body.to_owned();
             self.show_kept(id, status, &body);
-        } else if self.inner.cache.confirmed {
+        } else {
             self.read_kept(url);
         }
     }
 
-    /// Asks the client for the page it kept for `url`, when it keeps one.
+    /// Asks the client for the page it kept for `url`, when it keeps one and
+    /// it may be read.
     fn read_kept(&mut self, url: &str) {
-        if self.config.cache.persist && self.inner.cache.disk.iter().any(|kept| kept == url) {
+        if self.config.cache.persist
+            && self.inner.cache.readable()
+            && self.inner.cache.disk.iter().any(|kept| kept == url)
+        {
             self.effects.push(Effect::CacheRead {
                 key: format!("page:{url}"),
             });
         }
     }
 
-    /// This launch's shell answered over the network and the person it names
-    /// is the one what is kept belongs to (another, or nobody, emptied it
-    /// first): the screens still waiting for their first tree ask for theirs.
-    pub(crate) fn shell_confirmed(&mut self) {
-        if std::mem::replace(&mut self.inner.cache.confirmed, true) {
+    /// This launch's shell answered over the network, as a shell, and named
+    /// `person`. Asked at every such answer: what is kept for someone else is
+    /// emptied before anything is read, and nothing kept becomes this
+    /// person's; then the screens still waiting for their first tree ask for
+    /// theirs, when they may.
+    pub(crate) fn shell_named(&mut self, person: Person) {
+        self.inner.cache.named = Some(person.clone());
+        self.owner_settles();
+    }
+
+    /// Settles whose what is kept is, once both what was kept and this
+    /// launch's shell are known, and asks for the pages that may now be read.
+    fn owner_settles(&mut self) {
+        let Some(named) = self.inner.cache.named.clone() else {
             return;
+        };
+        match &self.inner.cache.owner {
+            Owner::Unread => return,
+            Owner::Of(owner) if *owner == named => {}
+            Owner::Of(_) => {
+                self.disown();
+                self.inner.cache.owner = Owner::Of(named);
+                self.boot();
+            }
+            Owner::Empty => {
+                self.inner.cache.owner = Owner::Of(named);
+                self.boot();
+            }
         }
         let waiting: Vec<String> = self
             .view
@@ -226,52 +315,46 @@ impl Core {
         self.show_native(id, &url, screen, status, true);
     }
 
+    /// What was kept, `boot`, has been read: taken when it has an owner and
+    /// its kept shell reads, emptied otherwise. Read once a launch: what
+    /// comes after the first answer, or after everything was emptied, is not
+    /// used.
+    fn boot_loaded(&mut self, value: Option<String>) {
+        if self.inner.cache.owner != Owner::Unread {
+            return;
+        }
+        let Some(value) = value else {
+            self.inner.cache.owner = Owner::Empty;
+            return self.owner_settles();
+        };
+        let boot = serde_json::from_str::<Boot>(&value)
+            .ok()
+            .and_then(|boot| Some((boot.owner?.person, boot.pages, boot.shell)));
+        let Some((owner, pages, shell)) = boot else {
+            // Not readable, or written by an older build with no owner.
+            self.disown();
+            return self.owner_settles();
+        };
+        if !self.inner.has_shell && !self.shell_from_cache(&shell) {
+            // A kept shell that does not read says nothing of whose the pages are.
+            self.disown();
+            return self.owner_settles();
+        }
+        self.inner.cache.disk = pages;
+        self.inner.cache.owner = Owner::Of(owner);
+        self.owner_settles();
+    }
+
     /// What the client kept under `key` has been read.
     pub(crate) fn cache_loaded(&mut self, key: &str, value: Option<String>) {
+        if key == "boot" {
+            return self.boot_loaded(value);
+        }
         let Some(value) = value else {
             return;
         };
-        if key == "boot" {
-            let Ok(boot) = serde_json::from_str::<Boot>(&value) else {
-                return;
-            };
-            if !self.inner.has_shell {
-                self.inner.cache.disk = boot.pages;
-                self.shell_from_cache(&boot.shell);
-            } else if !self.inner.cache.confirmed {
-                // A shell that is no person's word (an answer with none) is
-                // not a reason to draw what is kept, nor to throw it away.
-                self.inner.cache.disk = boot.pages;
-            } else if person_of(&boot.shell) == self.inner.user {
-                // The shell that came over the network is the newer one, and
-                // it names the person the pages kept are for.
-                let limit = self.config.cache.pages.max(1);
-                let mut pages = boot.pages;
-                for url in std::mem::take(&mut self.inner.cache.disk) {
-                    pages.retain(|kept| *kept != url);
-                    pages.push(url);
-                }
-                let over = pages.len().saturating_sub(limit);
-                for dropped in pages.drain(..over) {
-                    self.effects.push(Effect::CacheWrite {
-                        key: format!("page:{dropped}"),
-                        value: None,
-                    });
-                }
-                self.inner.cache.disk = pages;
-                self.boot();
-                self.inner.cache.confirmed = false;
-                self.shell_confirmed();
-            } else {
-                // What was kept is another person's, or from before a sign-out.
-                // Emptying the store takes this launch's pages with it.
-                self.inner.cache.disk.clear();
-                self.effects.push(Effect::CacheClear);
-                self.boot();
-            }
-        } else if let Some(url) = key.strip_prefix("page:") {
-            // Nothing kept is drawn before this launch's shell has named the person.
-            if !self.inner.cache.confirmed {
+        if let Some(url) = key.strip_prefix("page:") {
+            if !self.inner.cache.readable() {
                 return;
             }
             let Ok(page) = serde_json::from_str::<Page>(&value) else {
