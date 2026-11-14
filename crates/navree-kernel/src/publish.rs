@@ -1,7 +1,12 @@
 //! Publishing the files a plugin ships into the app: the rule every published
-//! path follows.
+//! path follows, and the checked writer every publishing command writes
+//! through.
 
 use std::collections::HashSet;
+use std::fmt;
+use std::fs::{self, OpenOptions};
+use std::io::{self, Write};
+use std::path::Path;
 
 /// Whether `path` is a safe relative path inside a publish folder: non-empty,
 /// at most 255 bytes, with `/` as the only separator; every segment non-empty,
@@ -91,9 +96,236 @@ pub(crate) fn first_case_collision<'a>(
     })
 }
 
+/// What [`publish_files`] did with one file, or with a dry run would do. Not
+/// public API; the commands that publish files use it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Published {
+    /// The file was written: it was new, or it was replaced with `force`.
+    Written,
+    /// The file exists and was kept (no `force`).
+    Kept,
+    /// A dry run: the file is new and would be written.
+    WouldBeWritten,
+    /// A dry run: the file exists and would be kept (no `force`).
+    WouldBeKept,
+    /// A dry run: the file exists and would be replaced (`force`).
+    WouldBeReplaced,
+}
+
+impl Published {
+    /// The line a command prints for the file `path`: `<path>: written`,
+    /// `<path>: exists, kept (use --force to replace it)`,
+    /// `<path>: would be written`,
+    /// `<path>: exists, would be kept (use --force to replace it)` or
+    /// `<path>: exists, would be replaced`.
+    pub fn line(&self, path: &str) -> String {
+        let outcome = match self {
+            Published::Written => "written",
+            Published::Kept => "exists, kept (use --force to replace it)",
+            Published::WouldBeWritten => "would be written",
+            Published::WouldBeKept => "exists, would be kept (use --force to replace it)",
+            Published::WouldBeReplaced => "exists, would be replaced",
+        };
+        format!("{path}: {outcome}")
+    }
+}
+
+/// Why [`publish_files`] refused to write, or stopped writing: the text a
+/// command prints after its `<command>: ` prefix. Not public API; the
+/// commands that publish files use it.
+#[derive(Debug)]
+pub struct PublishRefused(String);
+
+impl fmt::Display for PublishRefused {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for PublishRefused {}
+
+/// Writes `files`, each a path relative to `root` (the app's folder),
+/// `/`-separated, and its bytes, and says what happened to each, in path
+/// order. The paths are distinct (the caller makes sure of it). Not public
+/// API; `plugin:publish` and the commands that publish a plugin's
+/// configuration or translations write through it, some without the boot
+/// check, so it checks every path itself.
+///
+/// Nothing is written before every file has passed every check:
+///
+/// 1. every path is a safe relative path (the rule the boot applies to the
+///    files a plugin ships);
+/// 2. every folder below `root` on the way to a file is a folder, not a file
+///    and not a symbolic link or a junction, and the file itself is not a
+///    link and not a folder. `root` and the folders above it are not
+///    checked, so an app inside a linked folder publishes.
+///
+/// An existing file is kept unless `force` is set. With `dry_run` nothing is
+/// written and the result says what would be. A file is written as a new
+/// file beside its destination and renamed over it: an existing file is
+/// never opened for writing, so a hard link to it elsewhere keeps its
+/// content, and a link put in its place after the check is replaced, not
+/// followed. An error while writing stops at that file; the files before it
+/// are written.
+pub fn publish_files(
+    root: &Path,
+    files: &[(&str, &[u8])],
+    force: bool,
+    dry_run: bool,
+) -> Result<Vec<(String, Published)>, PublishRefused> {
+    let mut files = files.to_vec();
+    files.sort_by_key(|&(path, _)| path);
+    if let Some(&(path, _)) = files
+        .iter()
+        .find(|&&(path, _)| !is_safe_relative_path(path))
+    {
+        return Err(PublishRefused(format!(
+            "{path} is not a safe relative path; nothing was written"
+        )));
+    }
+    let mut outcomes = Vec::with_capacity(files.len());
+    for &(path, _) in &files {
+        let published = match (file_exists(root, path)?, force, dry_run) {
+            (false, _, false) | (true, true, false) => Published::Written,
+            (false, _, true) => Published::WouldBeWritten,
+            (true, false, false) => Published::Kept,
+            (true, false, true) => Published::WouldBeKept,
+            (true, true, true) => Published::WouldBeReplaced,
+        };
+        outcomes.push((path.to_owned(), published));
+    }
+    if dry_run {
+        return Ok(outcomes);
+    }
+    for (&(path, bytes), (_, published)) in files.iter().zip(&outcomes) {
+        if *published == Published::Written {
+            write_file(root, path, bytes)?;
+        }
+    }
+    Ok(outcomes)
+}
+
+/// Whether the file `path` exists below `root`, once each folder on the way
+/// to it has passed [`check_folder`] and the file itself is neither a link
+/// nor a folder. The first missing folder ends the walk: the file is new.
+fn file_exists(root: &Path, path: &str) -> Result<bool, PublishRefused> {
+    for (end, _) in path.match_indices('/') {
+        let folder = &path[..end];
+        match fs::symlink_metadata(root.join(folder)) {
+            Ok(metadata) => check_folder(folder, &metadata)?,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(cannot_write(path, &error)),
+        }
+    }
+    match fs::symlink_metadata(root.join(path)) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(inside_a_link(path)),
+        Ok(metadata) if metadata.is_dir() => Err(PublishRefused(format!(
+            "{path} is a folder where a file would be written; nothing was written"
+        ))),
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(cannot_write(path, &error)),
+    }
+}
+
+/// Refuses `folder` (relative to the app's folder) when it is a symbolic link
+/// or a junction (`is_symlink` holds for both), or not a folder.
+fn check_folder(folder: &str, metadata: &fs::Metadata) -> Result<(), PublishRefused> {
+    if metadata.file_type().is_symlink() {
+        Err(inside_a_link(folder))
+    } else if metadata.is_dir() {
+        Ok(())
+    } else {
+        Err(PublishRefused(format!(
+            "{folder} is a file where a folder is needed; nothing was written"
+        )))
+    }
+}
+
+/// Writes `bytes` to `path` below `root`: creates each missing folder (one
+/// that turns out to exist is checked again), writes the bytes to a new file
+/// beside the destination, and renames that file over the destination.
+fn write_file(root: &Path, path: &str, bytes: &[u8]) -> Result<(), PublishRefused> {
+    for (end, _) in path.match_indices('/') {
+        let folder = &path[..end];
+        match fs::create_dir(root.join(folder)) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                let metadata = fs::symlink_metadata(root.join(folder))
+                    .map_err(|error| cannot_write(path, &error))?;
+                check_folder(folder, &metadata)?;
+            }
+            Err(error) => return Err(cannot_write(path, &error)),
+        }
+    }
+    let destination = root.join(path);
+    let name = path.rsplit_once('/').map_or(path, |(_, name)| name);
+    let temporary = destination.with_file_name(format!(
+        ".{name}.navree-publish-{}.tmp",
+        std::process::id()
+    ));
+    // `create_new` never opens a file or a link that is already there.
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|error| cannot_write(path, &error))?;
+    let written = file.write_all(bytes);
+    // Closed before the rename, which Windows needs.
+    drop(file);
+    if let Err(error) = written.and_then(|()| fs::rename(&temporary, &destination)) {
+        let _ = fs::remove_file(&temporary);
+        return Err(cannot_write(path, &error));
+    }
+    Ok(())
+}
+
+/// `<path> is a symbolic link or inside one; nothing was written`.
+fn inside_a_link(path: &str) -> PublishRefused {
+    PublishRefused(format!(
+        "{path} is a symbolic link or inside one; nothing was written"
+    ))
+}
+
+/// `cannot write <path>: <error>`.
+fn cannot_write(path: &str, error: &io::Error) -> PublishRefused {
+    PublishRefused(format!("cannot write {path}: {error}"))
+}
+
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
+
+    /// A new, empty folder `navree-kernel-<name>-<process id>` in the
+    /// system's temporary folder, removed on drop.
+    struct TempFolder(PathBuf);
+
+    impl TempFolder {
+        fn new(name: &str) -> TempFolder {
+            let path = std::env::temp_dir().join(format!(
+                "navree-kernel-{name}-{}",
+                std::process::id()
+            ));
+            let _ = fs::remove_dir_all(&path);
+            fs::create_dir_all(&path).expect("a temporary folder");
+            TempFolder(path)
+        }
+    }
+
+    impl Drop for TempFolder {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// The line each outcome prints.
+    fn lines(out: &[(String, Published)]) -> Vec<String> {
+        out.iter()
+            .map(|(path, published)| published.line(path))
+            .collect()
+    }
 
     /// Paths the rule accepts.
     fn accepted_paths() -> Vec<String> {
@@ -228,5 +460,121 @@ mod tests {
         // Names that differ only in how an accent is composed (`é` as one
         // character, or `e` and a combining accent) are not caught: the
         // kernel has no normalisation table.
+    }
+
+    #[test]
+    fn the_writer_writes_new_files_and_keeps_existing_ones_without_force() {
+        let root = TempFolder::new("writer-keep");
+        let banner = root.0.join("resources/announcements/banner.css");
+        fs::create_dir_all(banner.parent().unwrap()).unwrap();
+        fs::write(&banner, "/* Simran Kaur */").unwrap();
+        let files = [
+            ("resources/announcements/banner.css", &b"body{}"[..]),
+            ("resources/announcements/print.css", &b"@media print{}"[..]),
+        ];
+        let out = publish_files(&root.0, &files, false, false).expect("published");
+        assert_eq!(
+            lines(&out),
+            [
+                "resources/announcements/banner.css: exists, kept (use --force to replace it)",
+                "resources/announcements/print.css: written",
+            ]
+        );
+        assert_eq!(fs::read_to_string(&banner).unwrap(), "/* Simran Kaur */");
+        let out = publish_files(&root.0, &files, true, true).expect("dry run");
+        assert_eq!(
+            lines(&out),
+            [
+                "resources/announcements/banner.css: exists, would be replaced",
+                "resources/announcements/print.css: exists, would be replaced",
+            ]
+        );
+        assert_eq!(
+            fs::read_to_string(&banner).unwrap(),
+            "/* Simran Kaur */",
+            "a dry run writes nothing"
+        );
+        fs::remove_file(root.0.join("resources/announcements/print.css")).unwrap();
+        let out = publish_files(&root.0, &files, false, true).expect("dry run");
+        assert_eq!(
+            lines(&out),
+            [
+                "resources/announcements/banner.css: exists, would be kept (use --force to replace it)",
+                "resources/announcements/print.css: would be written",
+            ]
+        );
+        assert!(!root.0.join("resources/announcements/print.css").exists());
+        let out = publish_files(&root.0, &files, true, false).expect("forced");
+        assert_eq!(lines(&out)[0], "resources/announcements/banner.css: written");
+        assert_eq!(fs::read_to_string(&banner).unwrap(), "body{}");
+    }
+
+    #[test]
+    fn the_writer_checks_every_file_before_the_first_write() {
+        let root = TempFolder::new("writer-check");
+        let unsafe_late = [
+            ("resources/a/one.css", &b"x"[..]),
+            ("resources/a/../two.css", &b"y"[..]),
+        ];
+        let refused = publish_files(&root.0, &unsafe_late, false, false).expect_err("refused");
+        assert_eq!(
+            refused.to_string(),
+            "resources/a/../two.css is not a safe relative path; nothing was written"
+        );
+        assert!(!root.0.join("resources").exists(), "nothing was written");
+        fs::create_dir_all(root.0.join("resources")).unwrap();
+        fs::write(root.0.join("resources/a"), "a file").unwrap();
+        let refused =
+            publish_files(&root.0, &unsafe_late[..1], false, false).expect_err("refused");
+        assert_eq!(
+            refused.to_string(),
+            "resources/a is a file where a folder is needed; nothing was written"
+        );
+        fs::remove_file(root.0.join("resources/a")).unwrap();
+        fs::create_dir_all(root.0.join("resources/a/one.css")).unwrap();
+        let refused = publish_files(&root.0, &unsafe_late[..1], true, false).expect_err("refused");
+        assert_eq!(
+            refused.to_string(),
+            "resources/a/one.css is a folder where a file would be written; nothing was written"
+        );
+    }
+
+    /// `config:publish --plugin` and `i18n:publish <plugin>` reach the writer without the
+    /// boot check, and a section key is free text: the writer refuses every shape itself.
+    #[test]
+    fn the_writer_refuses_every_unsafe_shape_itself() {
+        let root = TempFolder::new("writer-shapes");
+        for path in refused_paths() {
+            for force in [false, true] {
+                let refused = publish_files(&root.0, &[(path.as_str(), b"x")], force, false)
+                    .expect_err(&path);
+                assert_eq!(
+                    refused.to_string(),
+                    format!("{path} is not a safe relative path; nothing was written")
+                );
+            }
+            assert_eq!(
+                fs::read_dir(&root.0).unwrap().count(),
+                0,
+                "nothing was written for {path:?}"
+            );
+        }
+    }
+
+    /// The link check covers the app's folder and below it, not the folders above it.
+    #[cfg(unix)]
+    #[test]
+    fn plugin_publish_works_in_an_app_inside_a_linked_folder() {
+        let root = TempFolder::new("writer-linked-app");
+        fs::create_dir(root.0.join("real")).unwrap();
+        std::os::unix::fs::symlink(root.0.join("real"), root.0.join("app")).unwrap();
+        publish_files(
+            &root.0.join("app"),
+            &[("resources/announcements/banner.css", b"body{}")],
+            false,
+            false,
+        )
+        .expect("an app inside a linked folder publishes");
+        assert!(root.0.join("real/resources/announcements/banner.css").is_file());
     }
 }
