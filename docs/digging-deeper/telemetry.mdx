@@ -9,7 +9,7 @@ This page lists every event, says what the platform modules' events hold and lea
 
 ## The events
 
-There are nineteen kinds. The first twelve describe the web and data layers:
+The framework reports nineteen kinds, and a twentieth, `custom`, carries the events a module names itself (see [a custom event](#a-custom-event)). The first twelve describe the web and data layers:
 
 | Kind | Reported by | When |
 |---|---|---|
@@ -100,6 +100,28 @@ telemetry.sign_in(|| SignInEvent::refused(SignInMethod::Password, "account_locke
 
 Outside a request, resolve the registry once with `Telemetry::from_app(ctx).await` and keep it. Both are disabled, and report nothing, when the app has no sink. To skip work that only feeds an event, ask first: `telemetry.enabled(EventKind::AiCall)`.
 
+### A custom event
+
+For something none of these describe, emit a `CustomEvent`: a name of your own and fields of your own, delivered with `Telemetry::emit` like any other event:
+
+```rust
+use navree::telemetry::{CustomEvent, EventKind, Telemetry, TelemetryEvent};
+
+let telemetry = Telemetry::current();
+if telemetry.enabled(EventKind::Custom) {
+    telemetry.emit(TelemetryEvent::Custom(
+        CustomEvent::new("announcements.published")
+            .field("by", "Harpreet Sandhu")
+            .field("workspace", "Ludhiana branch")
+            .field("readers", 240),
+    ));
+}
+```
+
+The name is two or more lower-case words joined by `.`, each a lower-case letter followed by up to 63 lower-case letters, digits or `_`: start it with your module's or plugin's namespace (`announcements.published`, `crm.deal.won`). An event with any other name (`published`, `Announcements.Published`, `announcements..published`) is not delivered, and the registry logs a warning at target `navree::telemetry` the first time it sees that name. It remembers at most 1,024 such names; past that, a malformed name is still dropped, without another warning. Fields are JSON values: like the platform events, keep the content out of them (no message bodies, no personal data you would not log).
+
+Serialized, a custom event is `{"type": "custom", "name": "announcements.published", "fields": {"by": "Harpreet Sandhu", ...}}`. Its kind is `EventKind::Custom`, which `Interest::ALL` includes, so a sink that takes every kind receives custom events too; a sink that names its kinds with `Interest::only` receives them when it names `EventKind::Custom`. `EventKind::ALL` still lists the nineteen kinds the framework reports, and `EventKind::EVERY` lists all twenty.
+
 ## Seeing them
 
 **Logbook** has an entry type and a watcher for each of the seven (`ai`, `broadcasts`, `storage`, `webhooks`, `search`, `sign_ins` and `ui` under `logbook.watchers`), all on by default. They appear inside the request or job that made them, are counted on its row, and have a card of their own when it is open. Filter them with `type:ai`, `type:sign_in` and the rest, and `failed` finds a refused call, a failed upload or a rejected sign-in. See [Logbook](/docs/tools/logbook/#what-logbook-records).
@@ -118,7 +140,7 @@ fn interest(&self) -> Interest {
 
 ## Testing
 
-`TelemetryRecorder` has an accessor for each: `ai_calls()`, `broadcasts()`, `storage_ops()`, `webhook_deliveries()`, `searches()`, `sign_ins()` and `ui_operations()`.
+`TelemetryRecorder` has an accessor for each: `ai_calls()`, `broadcasts()`, `storage_ops()`, `webhook_deliveries()`, `searches()`, `sign_ins()` and `ui_operations()`. Custom events are in `recorder.of_kind(EventKind::Custom)`.
 
 ```rust title="tests/summaries.rs"
 use navree::prelude::*;
