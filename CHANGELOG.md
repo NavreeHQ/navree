@@ -70,6 +70,27 @@ every `@navree/*` package carries the same version.
   another with `TooManyViews` and writes nothing, and `ViewPost::refused` answers the form with the
   reason. The data table page says that an app with workspaces puts the workspace into the owner
   string, and shows it.
+- A form's file field takes a file key only from the person it was made for, for a file directly
+  in the folder of its own `Uploads`, as long as the file is still within that upload's size and
+  kind limits. The route a field's upload sends its file to answers with
+  `Received::into_keyed_response_for(&signer, owner)`, where `UploadOwner` (an extractor) is the
+  signed-in person's id and nothing for a guest. `file_key_for` and `file_path_for` make and read
+  these keys; a key from `file_key` is no longer taken by a form's file field, and the person
+  chooses the file again.
+- A form's file field stores the first file posted under its name; a later part under the same
+  name is not stored.
+- A part of a chunked upload sent while its upload is being finished waits for that, and the
+  finished file starts with the first part as it was checked.
+- `.attr(..)` on `Select`, `Combobox` and `MultiSelect` refuses `style`, `srcdoc` and `on*` and
+  checks URL attributes, as it does on any element.
+- A form's `Submit` and the appearance route refuse a request that carries a cookie and sends
+  neither `Sec-Fetch-Site` nor `Origin`; a request with no cookie is still taken. A form compares
+  the `Origin` as the session layer does (host and port) and, when the request carries its own
+  scheme, the scheme too.
+- Error pages show their "Development only" details only when the code (`PagesOptions::debug`)
+  or the `ui` section turns them on, or, in a build with debug assertions, when the configuration
+  names an environment that is not `production` or `staging`. An app with no configuration shows
+  none unless `PagesOptions::debug(true)` says so. In `production` and `staging` they stay off.
 
 ## [1.2.0] - 2026-11-13
 
