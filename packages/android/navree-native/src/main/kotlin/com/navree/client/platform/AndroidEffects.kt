@@ -19,6 +19,7 @@ import android.webkit.WebViewDatabase
 import androidx.activity.ComponentActivity
 import androidx.browser.customtabs.CustomTabsClient
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.core.app.NotificationManagerCompat
 import com.navree.client.BuildConfig
 import com.navree.client.R
 import com.navree.client.core.Driver
@@ -167,7 +168,7 @@ class AndroidEffects(
      * The session ended on this device. In the store's turn, after whatever
      * was asked before: the sealed page cache and the snapshot go; then, on
      * the main thread, the web view's storage, its cache, history, form data
-     * and saved sign-ins for sites, and
+     * and saved sign-ins for sites, the app's notifications in the shade, and
      * every cookie of the one store the web view shares. Nothing kept for the
      * session after runs before the cookie store says its cookies are gone,
      * or five seconds have passed (a limit armed before anything else, so a
@@ -196,6 +197,12 @@ class AndroidEffects(
                 clearWebViews(app)
             } catch (_: Throwable) {
                 // No web view on this device: nothing of it to clear.
+            }
+            try {
+                // Every notification of the app, also those the push service drew itself.
+                NotificationManagerCompat.from(app).cancelAll()
+            } catch (_: Throwable) {
+                // Nothing shown.
             }
             try {
                 cookies.clear {
