@@ -192,6 +192,29 @@ private func labels(_ nodes: [Navree.Node]) -> [String] {
     #expect(PresentationRules.sheetSizing(bar: .navigation) == .detents)
 }
 
+@Test func aMacSheetTakesTheFormsSizeWithinTheRoomOfTheWindowItStandsOn() {
+    let form = PresentationRules.formSize
+    #expect(form == CGSize(width: 470, height: 400))
+    // A full window has room for a form.
+    #expect(PresentationRules.sheetSize(form: form, room: CGSize(width: 960, height: 628)) == form)
+    // The window under an item in the menu bar is 400 points wide: the sheet
+    // takes that width, never hanging over the window's edges.
+    #expect(PresentationRules.sheetSize(form: form, room: CGSize(width: 400, height: 508)) == CGSize(width: 400, height: 400))
+    // A window shorter than a form: the sheet stops at the window's foot and its content scrolls.
+    #expect(PresentationRules.sheetSize(form: form, room: CGSize(width: 400, height: 300)) == CGSize(width: 400, height: 300))
+    // A window that says nothing of its room, or has none yet, leaves the form's size.
+    #expect(PresentationRules.sheetSize(form: form, room: nil) == form)
+    #expect(PresentationRules.sheetSize(form: form, room: .zero) == form)
+}
+
+@Test func aSheetsButtonsAreWordsOnAMacAndSymbolsOnAPhone() {
+    // A Mac sheet's push buttons: "Cancel" and the action's own words, the
+    // confirming one the default button.
+    #expect(PresentationRules.sheetButtons(bar: .window) == .words)
+    // iPhone and iPad keep ✕ and ✓ in the sheet's bar.
+    #expect(PresentationRules.sheetButtons(bar: .navigation) == .symbols)
+}
+
 @Test func aClickOnARowOfAMacsTableChoosesItAndOpensItsRecord() throws {
     #expect(ContentRules.tableOpening(bar: .window) == .choosing)
     // iPad keeps the tap on the record's name.
