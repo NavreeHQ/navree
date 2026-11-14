@@ -245,15 +245,12 @@ impl Core {
     /// memory too, the named person is cleared and the shell is asked again.
     /// Said once in a `report`. An answer the core made itself, one that
     /// never came from the app, and one from another origin the app allows
-    /// are not compared.
+    /// that names nobody are not compared.
     pub(crate) fn same_session(&mut self, asked: &Asked, mut response: Response) -> Response {
-        // A session belongs to a host: an answer from another origin the app
-        // allows says nothing of the person the app's own shell named.
         if response.error.is_some()
             || response.left.is_some()
             || self.inner.synthetic
             || asked.purpose == Pending::Shell
-            || !asked.url.starts_with('/')
         {
             return response;
         }
@@ -263,6 +260,13 @@ impl Core {
         let made_for = response
             .header(navree_native::PERSON_HEADER)
             .filter(|id| !id.is_empty());
+        // A session belongs to a host: an answer from another origin the app
+        // allows that names nobody says nothing of the person the app's own
+        // shell named. One that names a person (a session cookie shared
+        // across subdomains) is held to the shell's word like any other.
+        if !asked.url.starts_with('/') && made_for.is_none() {
+            return response;
+        }
         let same = match (named.as_ref().and_then(Who::id), made_for) {
             (Some(named), Some(made_for)) => named == made_for,
             (None, None) => true,
