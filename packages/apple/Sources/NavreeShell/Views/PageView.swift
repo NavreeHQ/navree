@@ -238,6 +238,8 @@ struct ScreenPage: View {
     /// The part of a screen of panes drawn, when only one is: its detail.
     var part: SplitPart?
     @State private var webTitle: String?
+    /// The serial of a page the web view could not show.
+    @State private var webFailed: Int?
 
     private var state: ScreenState { model.state }
 
@@ -269,9 +271,13 @@ struct ScreenPage: View {
                 appName: client.app?.name ?? "", notice: shown.notice, failure: shown.failure
             )
         case .web(let address, let title, _, let serial):
-            // Only an address of the origin is loaded; any other is a page that failed.
-            if let url = configuration.site?.inside(address) {
-                WebPageView(url: url, serial: serial, screen: state.id, client: client, configuration: configuration) {
+            // Only an address of the origin is loaded; any other is a page
+            // that failed, as is a page the web view could not show.
+            if let url = configuration.site?.inside(address), webFailed != serial {
+                WebPageView(
+                    url: url, serial: serial, screen: state.id, client: client, configuration: configuration,
+                    failed: { webFailed = serial }
+                ) {
                     webTitle = $0
                 }
                 .ignoresSafeArea(.container, edges: .bottom)
@@ -279,7 +285,7 @@ struct ScreenPage: View {
                 .modifier(InlineTitle(mode: NavigationRules.webTitleMode(screenDepth)))
                 .modifier(WebMessage(message: message, client: client))
             } else {
-                failed(Failure.server)
+                failed(Failure.server) { webFailed = nil }
             }
         case .blank:
             if state.failure != nil, !state.loading {
@@ -293,15 +299,19 @@ struct ScreenPage: View {
         }
     }
 
-    /// The system's layout for a screen that could not be shown, with "Try Again".
-    private func failed(_ failure: Failure?) -> some View {
+    /// The system's layout for a screen that could not be shown, with "Try
+    /// Again", which does `retry` and asks the core for the screen again.
+    private func failed(_ failure: Failure?, retry: @escaping () -> Void = {}) -> some View {
         let words = Words.failure(failure)
         return ContentUnavailableView {
             Label(words.title, systemImage: "wifi.exclamationmark")
         } description: {
             Text(words.text)
         } actions: {
-            Button("Try Again") { client.send(.refresh(screen: state.id)) }
+            Button("Try Again") {
+                retry()
+                client.send(.refresh(screen: state.id))
+            }
                 .buttonStyle(.bordered)
         }
         .navigationTitle(state.title ?? "")
