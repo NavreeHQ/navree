@@ -298,7 +298,7 @@ fn settle(takeovers: Vec<Takeover>, templates: &Templates) -> Vec<String> {
                 None => String::new(),
             };
             errors.push(format!(
-                "document file `{path}` of `{first}` cannot be replaced by `{second}`, a module of the plugin `{plugin}`; to use the plugin's version, put it in a documents.templates folder{folder} or embed it from a module of the app"
+                "document file `{path}` of `{first}` cannot be replaced by `{second}`, a module of the plugin `{plugin}`; to settle it, put the file you want, the plugin's or your own, in a documents.templates folder{folder}, or embed it from a module of the app that comes after `{second}`"
             ));
         }
     }

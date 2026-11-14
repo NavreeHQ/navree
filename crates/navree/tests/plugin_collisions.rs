@@ -279,7 +279,7 @@ async fn a_first_party_plugin_collides_like_a_module_of_today() {
     );
     assert!(
         error.contains(
-            "cannot be replaced by `NoticesShell`, a module of the plugin `navree-plugin-notices`; to use the plugin's version, copy it to resources/views/mail/welcome.html or register it from a module of the app"
+            "cannot be replaced by `NoticesShell`, a module of the plugin `navree-plugin-notices`; to settle it, put the template you want, the plugin's or your own, in a template folder of the app, or register it from a module of the app that comes after `NoticesShell`"
         ),
         "{error}"
     );

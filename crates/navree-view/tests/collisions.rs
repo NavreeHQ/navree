@@ -304,9 +304,10 @@ async fn a_plugin_replacing_a_template_of_an_app_module_it_imports_fails_the_boo
         .await
         .expect_err("fails")
         .to_string();
+    // No template folder is configured: the text does not name one.
     assert!(
         error.contains(
-            "embedded template `mail/welcome.html` of `CrmModule` cannot be replaced by `PluginShellModule`, a module of the plugin `navree-plugin-announcements`; to use the plugin's version, copy it to resources/views/mail/welcome.html or register it from a module of the app"
+            "embedded template `mail/welcome.html` of `CrmModule` cannot be replaced by `PluginShellModule`, a module of the plugin `navree-plugin-announcements`; to settle it, put the template you want, the plugin's or your own, in a template folder of the app, or register it from a module of the app that comes after `PluginShellModule`"
         ),
         "{error}"
     );
@@ -317,6 +318,30 @@ async fn a_plugin_replacing_a_template_of_an_app_module_it_imports_fails_the_boo
             .all(|line| !line.contains("is replaced by")),
         "an error, not a log line"
     );
+
+    // The text names where the file goes in the first configured template folder, whatever
+    // `view.dirs` says, and not a folder this app does not have.
+    let dir = views_dir(&[("mail/other.html", "Another mail")]);
+    let second = views_dir(&[]);
+    let error = boot_with(
+        options(&[dir.path(), second.path()]),
+        vec![Box::new(PluginShellModule)],
+    )
+    .await
+    .expect_err("fails")
+    .to_string();
+    let file = dir
+        .path()
+        .join("mail/welcome.html")
+        .to_string_lossy()
+        .replace('\\', "/");
+    assert!(
+        error.contains(&format!(
+            "embedded template `mail/welcome.html` of `CrmModule` cannot be replaced by `PluginShellModule`, a module of the plugin `navree-plugin-announcements`; to settle it, put the template you want, the plugin's or your own, in a template folder of the app ({file}), or register it from a module of the app that comes after `PluginShellModule`"
+        )),
+        "{error}"
+    );
+    assert!(!error.contains("resources/views"), "{error}");
 }
 
 #[tokio::test(flavor = "current_thread")]
