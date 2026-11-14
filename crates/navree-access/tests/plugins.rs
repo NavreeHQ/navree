@@ -68,18 +68,47 @@ impl tracing::Subscriber for Warnings {
     fn exit(&self, _: &tracing::span::Id) {}
 }
 
-/// A module of a community plugin that describes `permissions`: one per namespace.
-struct Plugin(PluginInfo, &'static [Permission]);
+/// The crate of the community plugins built with [`plugin`]. A test binary is one crate,
+/// so a plugin's own crate is this module: its `crate_name` is the module's path, and the
+/// app's subjects (types of this binary outside the module, such as the posts of
+/// `support`) belong to another crate, as they do in an app.
+mod navree_plugin_announcements {
+    use navree_access::Subject;
+    use navree_contracts::{ModuleBuilderPermissionsExt, Permission};
+    use navree_kernel::{Module, ModuleBuilder, ModuleId, PluginInfo};
 
-impl Module for Plugin {
-    fn id(&self) -> ModuleId {
-        ModuleId::named::<Plugin>(self.0.namespace)
+    /// A module of a community plugin that describes `permissions`: one per namespace.
+    pub struct Plugin(pub PluginInfo, pub &'static [Permission]);
+
+    impl Module for Plugin {
+        fn id(&self) -> ModuleId {
+            ModuleId::named::<Plugin>(self.0.namespace)
+        }
+
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(self.0.clone()).permissions(self.1);
+        }
     }
 
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(self.0.clone()).permissions(self.1);
+    /// A subject of the announcements plugin's crate, under its namespace.
+    pub struct Announcement;
+
+    impl Subject for Announcement {
+        const SUBJECT: &'static str = "Announcement";
+        const PERMISSION_PREFIX: &'static str = "announcements";
+    }
+
+    /// A subject of the announcements plugin's crate, under a prefix outside its
+    /// namespace.
+    pub struct Bulletin;
+
+    impl Subject for Bulletin {
+        const SUBJECT: &'static str = "Bulletin";
+        const PERMISSION_PREFIX: &'static str = "reports";
     }
 }
+
+use navree_plugin_announcements::{Announcement, Bulletin, Plugin};
 
 /// A module of the app, named `name`, that describes `permissions`.
 struct Plain(&'static str, &'static [Permission]);
@@ -94,8 +123,14 @@ impl Module for Plain {
     }
 }
 
+/// A community plugin of the crate `navree_plugin_announcements`.
 const fn plugin(name: &'static str, namespace: &'static str) -> PluginInfo {
-    PluginInfo::new(name, "plugins", namespace, "1.0.0")
+    PluginInfo::new(
+        name,
+        "plugins::navree_plugin_announcements",
+        namespace,
+        "1.0.0",
+    )
 }
 
 const NOTICES: &[Permission] = &[
@@ -106,7 +141,7 @@ const NOTICES: &[Permission] = &[
     ),
 ];
 
-/// The announcements plugin (crate `plugins`), describing [`NOTICES`].
+/// The announcements plugin (crate `navree_plugin_announcements`), describing [`NOTICES`].
 const ANNOUNCEMENTS: Plugin = Plugin(
     plugin("navree-plugin-announcements", "announcements"),
     NOTICES,
@@ -170,12 +205,12 @@ impl Subject for DealNote {
     const PERMISSION_PREFIX: &'static str = "deals.notes";
 }
 
-/// A subject of the crate of the `announcements` plugin (crate `plugins`).
-struct Announcement;
+/// A subject of the app whose prefix is outside the announcements plugin's namespace.
+struct Report;
 
-impl Subject for Announcement {
-    const SUBJECT: &'static str = "Announcement";
-    const PERMISSION_PREFIX: &'static str = "announcements";
+impl Subject for Report {
+    const SUBJECT: &'static str = "Report";
+    const PERMISSION_PREFIX: &'static str = "reports";
 }
 
 /// The test app of the module tests (posts, the access module, a database of
@@ -336,6 +371,31 @@ async fn a_plugin_whose_namespace_is_another_modules_permission_prefix_fails_the
         .try_build()
         .await
         .expect("a plugin's own subject boots");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugin_subject_outside_its_namespace_fails_the_boot() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    // The plugin's own subject would make `reports.*` grants mean its records.
+    let app = builder()
+        .module(AccessModule::for_subject::<Bulletin>())
+        .module(ANNOUNCEMENTS);
+    let error = boot_error(app).await;
+    assert!(
+        error.contains(
+            "plugin `navree-plugin-announcements` registers the subject `Bulletin` with the permission prefix `reports`, outside its namespace `announcements`"
+        ),
+        "{error}"
+    );
+    // The same prefix on a subject of the app boots beside the plugin: the rule is the
+    // plugin's own subjects'.
+    builder()
+        .module(AccessModule::for_subject::<Report>())
+        .module(ANNOUNCEMENTS)
+        .try_build()
+        .await
+        .expect("a subject of the app boots");
 }
 
 #[tokio::test(flavor = "current_thread")]
