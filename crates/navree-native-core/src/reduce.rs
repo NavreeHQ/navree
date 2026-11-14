@@ -1929,6 +1929,7 @@ impl Core {
         let Some(asked) = self.inner.pending.remove(&response.request) else {
             return;
         };
+        let response = self.keeping(&asked, response);
         let Some(response) = self.follow(&asked, response) else {
             return;
         };

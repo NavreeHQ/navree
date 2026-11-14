@@ -658,6 +658,7 @@ const REQUIRED: &[&str] = &[
     "sign-in-declined",
     "keep",
     "keep-owner",
+    "keep-answers",
 ];
 
 #[test]

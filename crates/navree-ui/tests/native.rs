@@ -469,6 +469,19 @@ impl Controller for Pages {
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         vec![
+            // A page that lets a private cache keep it, read and posted to.
+            RouteDef::on(Method::GET, "!/catalogue", || async {
+                View::new("Catalogue")
+                    .body(Text::new("Kesar, 250 g"))
+                    .cache("private, no-cache")
+            })
+            .public(),
+            RouteDef::on(Method::POST, "!/catalogue", || async {
+                View::new("Recovery codes")
+                    .body(Text::new("4821-0937"))
+                    .cache("private, no-cache")
+            })
+            .public(),
             RouteDef::on(Method::GET, "!/orders", |shell: AppShell| async move {
                 let query: TableQuery<OrderRow, NoFilter> = TableQuery::parse("/orders", "");
                 let page = TablePage::new(vec![order(1, "open"), order(2, "completed")], 5);
@@ -880,6 +893,33 @@ async fn a_browser_gets_the_html_it_always_got() {
         body.contains(r#"{"op":"morph","target":"order-page","html":"<div id=\"order-page\">"#),
         "{body}"
     );
+}
+
+#[tokio::test]
+async fn only_an_answer_to_a_read_says_its_page_may_be_kept_on_the_device() {
+    let app = app().await;
+    let read = app
+        .client()
+        .get("/catalogue")
+        .header(NATIVE, "1")
+        .header(CLIENT, PHONE)
+        .send()
+        .await;
+    assert_eq!(read.status(), StatusCode::OK);
+    assert_eq!(read.header("x-navree-keep"), Some("1"));
+    let posted = app
+        .client()
+        .post("/catalogue")
+        .header(NATIVE, "1")
+        .header(CLIENT, PHONE)
+        .send()
+        .await;
+    assert_eq!(posted.status(), StatusCode::OK);
+    assert_eq!(
+        posted.header("content-type"),
+        Some("application/vnd.navree.native+json")
+    );
+    assert_eq!(posted.header("x-navree-keep"), None);
 }
 
 #[tokio::test]

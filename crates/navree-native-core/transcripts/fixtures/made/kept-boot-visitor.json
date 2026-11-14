@@ -1,7 +1,7 @@
 {
  "shell": "{\n \"navree\": 1,\n \"build\": \"152bd84abf4d\",\n \"name\": \"Charkha Supply Co.\",\n \"home\": \"/\",\n \"nav\": {\n  \"groups\": [\n   {\n    \"items\": [\n     {\n      \"label\": \"Overview\",\n      \"href\": \"/\"\n     }\n    ]\n   }\n  ]\n },\n \"routes\": [\n  {\n   \"match\": \"/orders/new\",\n   \"present\": \"sheet\"\n  },\n  {\n   \"match\": \"/sign-in\",\n   \"present\": \"full\",\n   \"chrome\": false\n  },\n  {\n   \"match\": \"/orders/*\"\n  },\n  {\n   \"match\": \"/help\",\n   \"present\": \"external\"\n  },\n  {\n   \"match\": \"/reports\",\n   \"present\": \"root\"\n  }\n ]\n}\n",
  "pages": [
-  "/"
+  "https://shop.example/"
  ],
  "owner": {
   "person": null
