@@ -35,14 +35,16 @@ every `@navree/*` package carries the same version.
 - `FallibleLayer` (`navree::http::FallibleLayer`) puts a tower layer whose service can fail, such
   as `tower::timeout::TimeoutLayer`, on `AppRouter::layer`, `Endpoint::layer` and
   `Router::route_layer`; the service's error answers as a 500 through the app's `m.map_error`
-  mappings.
+  mappings, in any `LayerSlot` but `Edge`, which sits outside error rendering.
 - `m.mount(Mount::new("/khata", service).authenticated())` serves any tower service under a path
   prefix inside the app's pipeline: request id, context, client address, session and CSRF,
   authentication, the mount's access check on every request, throttle, timeout and body limit.
-  The service sees the rest of the path, as received, below `/`. A mount without an access
-  declaration, a prefix under `/_`, and a prefix that a route or another mount reaches fail the
-  boot. A request with an `Upgrade` header or `CONNECT` is answered 501 without reaching the
-  service. `routes` lists mounts. `use navree::plugin::prelude::*;` brings `m.mount`.
+  The service sees the rest of the path, as received, below `/`, and its answers go out as it
+  wrote them. A mount without an access declaration, a prefix under `/_`, and a prefix that a
+  route or another mount reaches fail the boot. A request with an `Upgrade` header or `CONNECT`
+  never reaches the service: the mount answers it 501, or the router 405 when `.methods(..)`
+  leaves its method out. `routes` lists mounts. `use navree::plugin::prelude::*;` brings
+  `m.mount`.
 - `TonicService` (`navree::grpc::TonicService`) serves a tonic server built elsewhere, such as a
   crate's generated `DealsServer`, through `GrpcModule` with the authentication, access checks,
   guards, deadline and unit of work of a `#[grpc_service]` method, checked before the server

@@ -315,7 +315,7 @@ A layer added this way runs inside the route pipeline: after the access checks, 
 
 ## A layer whose service can fail
 
-`router.layer(..)` and `Endpoint::layer(..)` take layers whose service can't fail. Many Tower layers make a service that can, such as `tower::timeout::TimeoutLayer`, whose error says the request took too long. Wrap such a layer in `FallibleLayer::new(..)`: the service's error then answers as a 500 `AppError` with the error as its source, so the client sees `Internal server error`, the log records the error, and `m.map_error::<E>(..)` turns it into another answer:
+`router.layer(..)` and `Endpoint::layer(..)` take layers whose service can't fail. Many Tower layers make a service that can, such as `tower::timeout::TimeoutLayer`, whose error says the request took too long. Wrap such a layer in `FallibleLayer::new(..)`: the service's error then answers as a 500 `AppError` with the error as its source, so the client sees `Internal server error`, and in any slot but `Edge` the log records the error and `m.map_error::<E>(..)` turns it into another answer. The `Edge` slot sits outside the app's error rendering: there the error answers as a 500 in the error format, neither mapped nor logged.
 
 ```rust title="src/modules/khata_timeout.rs"
 use std::time::Duration;
