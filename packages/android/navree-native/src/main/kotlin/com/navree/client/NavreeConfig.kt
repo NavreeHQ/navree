@@ -57,7 +57,9 @@ data class NavreeConfig(
     /**
      * Hosts pictures may also load from, over `https`, such as
      * `images.store.example.in` or `*.cdn.example.in`. None by default:
-     * pictures load from the app's origins.
+     * pictures load from the app's origins. A `*.` pattern needs at least two
+     * labels after it; one under a shared hosting name (`*.cloudfront.net`
+     * and the like) trusts everybody who publishes there.
      */
     val pictureHosts: List<String> = emptyList(),
     /**
@@ -67,7 +69,9 @@ data class NavreeConfig(
      * not 443. Only the web view reads it: never for a page itself, a native
      * request, a stream or a picture, and the client's own requests send it
      * no cookie. None by default. A host the page's own content policy lets
-     * in is named here once more.
+     * in is named here once more. A `*.` pattern needs at least two labels
+     * after it; one under a shared hosting name (`*.cloudfront.net` and the
+     * like) trusts everybody who publishes there.
      */
     val webHosts: List<String> = emptyList(),
     /** How much of the app's screen the system may show elsewhere: see [ScreenPrivacy]. */

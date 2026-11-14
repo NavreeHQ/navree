@@ -28,14 +28,23 @@ class Origins(
     origin: String,
     also: List<String> = emptyList(),
     loopbackHttp: Boolean = false,
-    /** Hosts pictures may also come from, over `https`, such as `images.shop.example` or `*.cdn.example`. */
+    /**
+     * Hosts pictures may also come from, over `https`, such as
+     * `images.shop.example` or `*.cdn.example`. A `*.` pattern needs at least
+     * two labels after it (`*.cdn.example`, never `*.com`). A pattern under a
+     * shared hosting name (`*.cloudfront.net` and the like) trusts everybody
+     * who publishes there: name the app's own host instead.
+     */
     pictureHosts: List<String> = emptyList(),
     /**
      * Hosts that may serve what a page in the web view loads inside it
      * (scripts, styles, fonts, pictures, frames), never the page itself and
      * never a native request: `pay.example`, `*.cdn.example`, with a `:port`
      * where it is not 443. Over `https`; plain `http` only to the machine
-     * itself, as for the origins.
+     * itself, as for the origins. A `*.` pattern needs at least two labels
+     * after it (`*.cdn.example`, never `*.com`). A pattern under a shared
+     * hosting name (`*.cloudfront.net` and the like) trusts everybody who
+     * publishes there: name the app's own host instead.
      */
     webHosts: List<String> = emptyList(),
 ) {
@@ -46,6 +55,16 @@ class Origins(
         host.lowercase(Locale.ROOT).takeIf { Site.hostReads(it, wildcard = true) }
     }
     private val web: List<Pair<String, Int?>> = webHosts.mapNotNull { hostRule(it) }
+
+    /**
+     * The entries of `also`, `pictureHosts` and `webHosts` that do not read
+     * (a wildcard with too few labels after it, plain `http` elsewhere than
+     * the machine itself, a path): each is dropped, and named here so the app
+     * can say so once, at start.
+     */
+    val refused: List<String> = also.filter { text -> Site.read(text, wildcard = true)?.takeIf { it.allowed(loopbackHttp) && it.bare } == null } +
+        pictureHosts.filter { !Site.hostReads(it.lowercase(Locale.ROOT), wildcard = true) } +
+        webHosts.filter { hostRule(it) == null }
     private val base: HttpUrl? = home?.let { origin.toHttpUrlOrNull() }
 
     /** Whether the configured origin can be used at all. */
@@ -253,9 +272,13 @@ internal data class Site(
 
         /** A host name of ASCII letters, digits and `-`, in labels that are not empty; `*.` in front only where a pattern is allowed. */
         fun hostReads(host: String, wildcard: Boolean): Boolean {
-            val name = if (wildcard && host.startsWith("*.")) host.substring(2) else host
+            val pattern = wildcard && host.startsWith("*.")
+            val name = if (pattern) host.substring(2) else host
             if (name.isEmpty()) return false
-            return name.split('.').all { label -> label.isNotEmpty() && label.all { it in 'a'..'z' || it in '0'..'9' || it == '-' } }
+            val labels = name.split('.')
+            // A pattern covers hosts under a name of at least two labels: `*.cdn.example`, never `*.com`.
+            if (pattern && labels.size < 2) return false
+            return labels.all { label -> label.isNotEmpty() && label.all { it in 'a'..'z' || it in '0'..'9' || it == '-' } }
         }
 
         /** Whether a host, or a `*.` pattern, covers [host]: under the name, never a name that merely ends in its letters. */
