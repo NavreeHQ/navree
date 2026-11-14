@@ -439,7 +439,8 @@ import Testing
     let icon = Navree.Icon(name: "heart-pulse", symbol: Navree.SystemSymbol(apple: "bolt.heart", appleFilled: "bolt.heart.fill", material: "monitor_heart"))
     #expect(Symbols.symbol(for: icon) == "bolt.heart")
     #expect(Symbols.symbol(for: Navree.Icon(name: "house")) == "house")
-    #expect(Symbols.symbol(for: Navree.Icon(name: "route")) == nil)
+    #expect(Symbols.symbol(for: Navree.Icon(name: "route")) == "point.topleft.down.to.point.bottomright.curvepath")
+    #expect(Symbols.symbol(for: Navree.Icon(name: "candy")) == nil)
 }
 
 @Test func aCentredStackInAListIsOneRowSoARingKeepsItsWordsUnderIt() {
