@@ -757,7 +757,12 @@ app made by `navree new` does this in one extractor, `Desk`
 Do not write code for these, and do not stand in for them with raw elements.
 Tell the owner they are coming.
 
-- **Rich text editing.**
+- **A workspace switcher in the shell's sidebar header.**
+  `navree_workspace::WorkspaceSwitcher` draws one; put it beside the page
+  heading (`AppPage::actions`) or in the shell's search slot, and show the
+  workspace's name under the app's with `AppShell::context` (see above).
+- **A rich text editor.** Islands are shipped (`Island` with an
+  `IslandScript`, the docs page `ui/islands`), but no editor is.
 - **Static files past the app's own stylesheet, fonts and pictures.** The
   content security policy loads styles, scripts, fonts and images only from
   the app's own origin: an `AppSheet`, `AppFont` or `AppImage` is compiled in
