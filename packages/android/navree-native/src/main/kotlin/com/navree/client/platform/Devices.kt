@@ -116,7 +116,8 @@ class DeviceCalls(
         val provider = (device["provider"] as? JsonPrimitive)?.contentOrNull
         // The nonce the core asked the server for, not the call's route to ask it at.
         val nonce = (options?.get("nonce") as? JsonPrimitive)?.contentOrNull
-        val clientId = (device["client_id"] as? JsonPrimitive)?.contentOrNull ?: googleClientId
+        // The app's own client id wins: an answer cannot point the sheet at another project.
+        val clientId = googleClientId ?: (device["client_id"] as? JsonPrimitive)?.contentOrNull
         if (provider != "google") {
             // Apple's sign-in on Android is its web flow, which the server offers as a link.
             answer(Events.deviceRefused(call, "unsupported"))
@@ -199,10 +200,11 @@ class DeviceCalls(
      */
     private fun confirm(activity: ComponentActivity, call: Long, options: JsonObject?) {
         val publicKey = options?.get("publicKey") as? JsonObject
-        if (publicKey?.get("challenge") == null) {
+        if (!confirmable(publicKey)) {
             answer(Events.deviceRefused(call, "failed"))
             return
         }
+        publicKey ?: return
         activity.lifecycleScope.launch {
             val event = try {
                 val got = CredentialManager.create(activity)
@@ -246,6 +248,16 @@ private fun DeviceCalls.allowNotificationsFor(activity: ComponentActivity, done:
     }
     launcher = registered
     registered.launch(Manifest.permission.POST_NOTIFICATIONS)
+}
+
+/**
+ * Whether a confirmation's passkey request may be shown: it has a challenge,
+ * and it requires the person to be verified (`userVerification` is
+ * `required`), so a confirmation is never a tap alone.
+ */
+fun confirmable(publicKey: JsonObject?): Boolean {
+    if (publicKey?.get("challenge") == null) return false
+    return (publicKey["userVerification"] as? JsonPrimitive)?.contentOrNull == "required"
 }
 
 /** An address inside the origin, or null when `href` leads elsewhere. */

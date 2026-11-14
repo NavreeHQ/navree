@@ -85,6 +85,23 @@ class OriginsTest {
     }
 
     @Test
+    fun only_a_link_that_can_be_the_sign_ins_return_ends_it() {
+        val origins = Origins("https://shop.example")
+        val callback = "https://shop.example/app/signed-in"
+        assertTrue(signInReturn("https://shop.example/app/signed-in?code=c1&state=s1", callback, origins))
+        assertTrue(signInReturn("HTTPS://SHOP.EXAMPLE/app/signed-in", callback, origins))
+        assertFalse("another path of the origin", signInReturn("https://shop.example/orders/7", callback, origins))
+        assertFalse("a longer path", signInReturn("https://shop.example/app/signed-in/more", callback, origins))
+        assertFalse("another host", signInReturn("https://evil.example/app/signed-in?code=c1", callback, origins))
+        assertFalse(signInReturn("https://shop.example//evil.example/app/signed-in", callback, origins))
+        assertTrue("a scheme callback", signInReturn("shop://signed-in?code=c1", "shop", origins))
+        assertFalse(signInReturn("https://shop.example/app/signed-in", "shop", origins))
+        assertTrue("no callback: a link of the origin", signInReturn("https://shop.example/app/signed-in", null, origins))
+        assertFalse(signInReturn("https://evil.example/", null, origins))
+        assertFalse(signInReturn(" shop://signed-in", "shop", origins))
+    }
+
+    @Test
     fun the_browser_inside_the_app_takes_only_a_web_address() {
         assertTrue(webAddress("https://shop.example/auth/app/sign-in?state=x"))
         assertTrue(webAddress("http://10.0.2.2:8095/auth/app/sign-in"))
