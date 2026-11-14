@@ -111,7 +111,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"device","call":1,"device":{"f":"share","href":"/orders/1","title":"Order CS-20481"},"posts":true}
+          {"t":"device","call":1,"device":{"f":"share","href":"https://shop.example/orders/1","title":"Order CS-20481"},"posts":true}
         ]
       }
     },
@@ -142,7 +142,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"device","call":2,"device":{"f":"share","href":"/orders/1","title":"Order CS-20481"},"posts":true}
+          {"t":"device","call":2,"device":{"f":"share","href":"https://shop.example/orders/1","title":"Order CS-20481"},"posts":true}
         ]
       }
     },

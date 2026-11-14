@@ -1336,6 +1336,30 @@ impl Core {
         }
     }
 
+    /// Writes the paths `keys` of a device call as whole addresses on the
+    /// app's origin, as a picture's source is written: what the system is
+    /// handed (a page shared) or the client fetches (a file shared) is never
+    /// a path for it to read against something. One that does not read as
+    /// one of the app's addresses is taken out.
+    fn whole_in(&self, call: &mut Value, keys: &[&str]) {
+        let Some(call) = call.as_object_mut() else {
+            return;
+        };
+        for key in keys {
+            let Some(path) = call.get(*key).and_then(Value::as_str) else {
+                continue;
+            };
+            match self.inner.origin.absolute(path) {
+                Some(whole) => {
+                    call.insert((*key).to_owned(), Value::String(whole));
+                }
+                None => {
+                    call.remove(*key);
+                }
+            }
+        }
+    }
+
     /// A device call a server's reply started: one of the few that need no
     /// tap. The protocol's types let no other be written into a reply.
     pub(crate) fn reply_call(&mut self, call: ReplyCall) {
@@ -1470,7 +1494,11 @@ impl Core {
                 if then.is_some() && !self.may_send(id) {
                     return;
                 }
-                let number = self.run(serde_json::to_value(&call), then.is_some());
+                let mut value = serde_json::to_value(&call);
+                if let (Call::Share(_), Ok(value)) = (&call, value.as_mut()) {
+                    self.whole_in(value, &["href", "file"]);
+                }
+                let number = self.run(value, then.is_some());
                 if let Some(then) = then {
                     self.inner.calls.insert(
                         number,
@@ -2541,6 +2569,63 @@ mod tests {
         ] {
             assert_eq!(upgrade(dropped), "", "{dropped:?}");
         }
+    }
+
+    #[test]
+    fn what_a_share_hands_the_system_and_fetches_is_a_whole_address_or_nothing() {
+        let mut client = Client::new(Platform::Android, FormFactor::Phone);
+        client.caps = vec!["share".to_owned()];
+        let mut core = Core::new(Config::new("https://shop.example", client));
+        core.send(Event::Start);
+        core.send(Event::Response(Response {
+            request: 1,
+            status: 404,
+            ..Response::default()
+        }));
+        let share = |core: &mut Core, call: serde_json::Value| {
+            let action = serde_json::from_value(serde_json::json!({"t": "device", "call": call}))
+                .expect("a device action");
+            let update = core.send(Event::Act {
+                screen: Some(1),
+                action,
+                form: None,
+                overlay: None,
+                text: None,
+                now: None,
+                ask: None,
+                from: None,
+            });
+            update
+                .effects
+                .into_iter()
+                .find_map(|effect| match effect {
+                    Effect::Device { device, .. } => Some(device),
+                    _ => None,
+                })
+                .expect("the share is started")
+        };
+        let device = share(
+            &mut core,
+            serde_json::json!({"f": "share", "title": "Order CS-20481", "href": "/orders/1?tab=items", "file": "/orders/1/invoice%202026.pdf", "url": "https://pay.example/r/7"}),
+        );
+        assert_eq!(device["href"], "https://shop.example/orders/1?tab=items");
+        assert_eq!(
+            device["file"],
+            "https://shop.example/orders/1/invoice%202026.pdf"
+        );
+        // Another site's page is shared as it was written.
+        assert_eq!(device["url"], "https://pay.example/r/7");
+        // A path the core does not read as one of the app's addresses (white
+        // space other than a plain space) is not handed over at all.
+        let device = share(
+            &mut core,
+            serde_json::json!({"f": "share", "title": "Order", "href": "/orders/\u{3000}1", "file": "/orders/\u{3000}2"}),
+        );
+        assert!(
+            device.get("href").is_none() && device.get("file").is_none(),
+            "{device}"
+        );
+        assert_eq!(device["title"], "Order");
     }
 
     /// A core that started against a server with no shell: one destination,
