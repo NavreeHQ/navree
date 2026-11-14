@@ -14,7 +14,7 @@ use crate::container::{AppInner, RequestScope};
 use crate::graph::{Graph, GraphReport, ROOT};
 use crate::{
     BootErrors, BoxError, CommandSpec, KernelError, Lifecycle, Module, ModuleId, PluginInfo,
-    ProviderKey, Resolver, Scope,
+    PluginsReport, ProviderKey, Resolver, Scope,
 };
 
 /// Default time allowed for each phase of a graceful shutdown.
@@ -76,6 +76,31 @@ impl AppBuilder {
     /// Validates the module graph without constructing any provider.
     pub fn validate(&self) -> Result<GraphReport, BootErrors> {
         self.graph().map(|graph| graph.report())
+    }
+
+    /// Validates the module graph (as [`validate`](AppBuilder::validate)) and
+    /// reports its plugins and what each of their modules adds. Nothing is
+    /// built.
+    ///
+    /// ```no_run
+    /// use navree_kernel::{Module, ModuleBuilder, Navree};
+    ///
+    /// struct AnnouncementsModule;
+    ///
+    /// impl Module for AnnouncementsModule {
+    ///     fn register(&self, m: &mut ModuleBuilder) {
+    ///         m.plugin(navree_kernel::plugin_info!(title = "Announcements"));
+    ///     }
+    /// }
+    ///
+    /// fn main() -> Result<(), navree_kernel::BootErrors> {
+    ///     let report = Navree::app().module(AnnouncementsModule).plugin_report()?;
+    ///     println!("{report}");
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn plugin_report(&self) -> Result<PluginsReport, BootErrors> {
+        self.graph().map(|graph| graph.plugins_report())
     }
 
     /// Validates the graph, constructs every singleton (modules in dependency
@@ -556,6 +581,33 @@ impl AppContext {
         graph
             .module_of(module)
             .and_then(|m| graph.modules[m].plugin.as_ref())
+    }
+
+    /// Every plugin of the app and what each of their modules adds, read
+    /// from the module graph without building anything.
+    ///
+    /// ```no_run
+    /// use navree_kernel::{Module, ModuleBuilder, Navree};
+    ///
+    /// struct AnnouncementsModule;
+    ///
+    /// impl Module for AnnouncementsModule {
+    ///     fn register(&self, m: &mut ModuleBuilder) {
+    ///         m.plugin(navree_kernel::plugin_info!(title = "Announcements"));
+    ///     }
+    /// }
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), navree_kernel::BootErrors> {
+    ///     let app = Navree::app().module(AnnouncementsModule).boot().await?;
+    ///     for plugin in app.ctx().plugins().plugins {
+    ///         println!("{} {}", plugin.info.name, plugin.info.version);
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn plugins(&self) -> PluginsReport {
+        self.inner.graph.plugins_report()
     }
 
     /// Cancelled when the app shuts down; long-running tasks should watch it.

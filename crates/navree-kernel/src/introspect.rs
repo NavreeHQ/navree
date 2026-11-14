@@ -111,7 +111,7 @@ fn command_object(out: &mut String, name: &str, about: &str, module: Option<Opti
 }
 
 /// A JSON array of strings.
-fn strings<'a>(out: &mut String, items: impl Iterator<Item = &'a str>) {
+pub(crate) fn strings<'a>(out: &mut String, items: impl Iterator<Item = &'a str>) {
     out.push('[');
     for (i, item) in items.enumerate() {
         if i > 0 {
@@ -123,7 +123,7 @@ fn strings<'a>(out: &mut String, items: impl Iterator<Item = &'a str>) {
 }
 
 /// A JSON string literal.
-fn string(out: &mut String, s: &str) {
+pub(crate) fn string(out: &mut String, s: &str) {
     out.push('"');
     for c in s.chars() {
         match c {
