@@ -14,6 +14,16 @@ import SwiftUI
 /// `views:<name>` (the window's views, their appearance and materials);
 /// `toolbar:<name>` (the toolbar's items, their words and the column each
 /// stands over);
+/// `elements:<name>` (every element the window says to VoiceOver, its role,
+/// its words and its frame in the window, in points from its top leading
+/// corner: where each word and control stands);
+/// `click:<x>,<y>` or `click:<words>` (a click of the mouse at that point of
+/// the window in front, or in the middle of the first element whose words
+/// hold those, as a person's click comes: through the app's event queue);
+/// `choose:<row>` (a row of the window's table chosen through the table's
+/// own selection, as a click chooses it);
+/// `scroll:<points>` (the content under the window's middle scrolled down by
+/// that many points, up when negative);
 /// `appearance:<dark|light|system>`; `quit`.
 struct DemoPictures: ViewModifier {
     func body(content: Content) -> some View {
@@ -32,6 +42,10 @@ enum WindowPictures {
         let out = URL(fileURLWithPath: (folder as NSString).expandingTildeInPath, isDirectory: true)
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         var log: [String] = []
+        // SwiftUI gives its windows' elements only to an assistive app, which
+        // first sets the app's enhanced user interface: the app does so itself.
+        let enhance = NSSelectorFromString("accessibilitySetEnhancedUserInterfaceAttribute:")
+        if NSApp.responds(to: enhance) { _ = NSApp.perform(enhance, with: NSNumber(value: true)) }
         // The menu bar acts on the key window of the active app, as for a person.
         NSApp.activate(ignoringOtherApps: true)
         windows.first?.makeKeyAndOrderFront(nil)
@@ -46,7 +60,7 @@ enum WindowPictures {
             case "front":
                 NSApp.activate(ignoringOtherApps: true)
                 windows.first?.makeKeyAndOrderFront(nil)
-                log.append("front: key window \"\(NSApp.keyWindow?.title ?? "none")\"")
+                log.append("front: key window \"\(NSApp.keyWindow?.title ?? "none")\", app \(NSApp.isActive ? "active" : "not active")")
             case "size":
                 resize(argument)
                 log.append("size \(argument)")
@@ -81,6 +95,21 @@ enum WindowPictures {
             case "toolbar":
                 write(toolbar(), to: out.appendingPathComponent("\(argument).txt"))
                 log.append("toolbar \(argument).txt")
+            case "elements":
+                write(await fromRunLoop(elements), to: out.appendingPathComponent("\(argument).txt"))
+                log.append("elements \(argument).txt")
+            case "click":
+                let before = windows.first?.title ?? ""
+                let place = await fromRunLoop { click(argument) }
+                try? await Task.sleep(for: .seconds(2))
+                log.append("click \(argument) \(place): window \"\(before)\" became \"\(windows.first?.title ?? "")\"")
+            case "choose":
+                let before = windows.first?.title ?? ""
+                let chosen = choose(Int(argument) ?? 0)
+                try? await Task.sleep(for: .seconds(2))
+                log.append("choose \(argument): \(chosen); front window \"\(before)\" became \"\(windows.first?.title ?? "")\", \(windows.count) windows")
+            case "scroll":
+                log.append("scroll \(argument): \(scroll(Double(argument) ?? 0))")
             case "appearance":
                 // The app's appearance: `dark`, `light`, or `system`.
                 NSApp.appearance = argument == "dark" ? NSAppearance(named: .darkAqua)
@@ -88,12 +117,28 @@ enum WindowPictures {
                 log.append("appearance \(argument)")
             case "quit":
                 write(log.joined(separator: "\n") + "\n", to: out.appendingPathComponent("steps.txt"))
+                // A sheet still up would hold the app open.
+                for window in NSApp.windows {
+                    if let sheet = window.attachedSheet { window.endSheet(sheet) }
+                }
                 NSApp.terminate(nil)
             default:
                 log.append("unknown step \(step)")
             }
         }
         write(log.joined(separator: "\n") + "\n", to: out.appendingPathComponent("steps.txt"))
+    }
+
+    /// Runs `work` from the main run loop, as an assistive app's requests
+    /// come, rather than inside this task: asking a table for its elements
+    /// lays out all its rows, and their views' own code then runs where it
+    /// would for VoiceOver.
+    static func fromRunLoop<T: Sendable>(_ work: @escaping @MainActor () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { continuation.resume(returning: work()) }
+            }
+        }
     }
 
     /// The windows on screen, the one in front first.
@@ -131,22 +176,13 @@ enum WindowPictures {
     static func tree() -> String {
         guard let window = windows.first else { return "no window\n" }
         var lines: [String] = []
-        func walk(_ element: Any, depth: Int) {
-            guard depth < 40 else { return }
-            let object = element as AnyObject
-            let role = (object.accessibilityRole?() ?? nil)?.rawValue ?? ""
-            let label = object.accessibilityLabel?() ?? nil
-            let title = object.accessibilityTitle?() ?? nil
-            let value = (object.accessibilityValue?() ?? nil).map { "\($0)" }
-            let words = [label, title, value].compactMap { $0 }.filter { !$0.isEmpty }
+        walk(window, limit: 40) { element, depth in
+            let words = element.words
             if !words.isEmpty || depth < 3 {
-                lines.append(String(repeating: "  ", count: depth) + role + " " + words.joined(separator: " | "))
+                lines.append(String(repeating: "  ", count: depth) + element.role + " " + words.joined(separator: " | "))
             }
-            for child in (object.accessibilityChildren?() ?? nil) ?? [] {
-                walk(child, depth: depth + 1)
-            }
+            return true
         }
-        walk(window, depth: 0)
         return lines.joined(separator: "\n") + "\n"
     }
 
@@ -198,15 +234,10 @@ enum WindowPictures {
     /// The words a view and the views in it say to VoiceOver.
     static func labels(in view: NSView) -> [String] {
         var found: [String] = []
-        func walk(_ element: Any, depth: Int) {
-            guard depth < 8 else { return }
-            let object = element as AnyObject
-            for words in [object.accessibilityLabel?() ?? nil, object.accessibilityTitle?() ?? nil] {
-                if let words, !words.isEmpty, !found.contains(words) { found.append(words) }
-            }
-            for child in (object.accessibilityChildren?() ?? nil) ?? [] { walk(child, depth: depth + 1) }
+        walk(view, limit: 8) { element, _ in
+            for words in element.words.prefix(2) where !found.contains(words) { found.append(words) }
+            return true
         }
-        walk(view, depth: 0)
         return found
     }
 
@@ -234,6 +265,203 @@ enum WindowPictures {
         }
         walk(root, depth: 0)
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Every element the window in front says to VoiceOver, indented by
+    /// depth: its role, its frame in the window (x and y from the window's
+    /// top leading corner, then width and height, in points) and its words.
+    /// What a picture shows as pixels, this gives as the frames SwiftUI laid
+    /// out: each word's and each control's leading edge, a button's height.
+    static func elements() -> String {
+        guard let window = windows.first else { return "no window\n" }
+        var lines = [
+            "window \(Int(window.frame.width))x\(Int(window.frame.height)) \"\(window.title)\";"
+                + " frames as x y width height, in points from the window's top leading corner",
+        ]
+        walk(window) { element, depth in
+            var line = String(repeating: "  ", count: depth) + element.role
+            if let frame = element.frame(in: window) {
+                line += " " + [frame.minX, frame.minY, frame.width, frame.height].map(points).joined(separator: " ")
+            }
+            if !element.words.isEmpty { line += " \"" + element.words.joined(separator: "\" \"") + "\"" }
+            lines.append(line)
+            return true
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Walks the elements of a window or a view, each before its children, until
+    /// `visit` says to stop. A menu's items are not walked: they stand in
+    /// the menu, not in the window.
+    static func walk(_ root: AnyObject, limit: Int = 60, _ visit: (Element, Int) -> Bool) {
+        func walk(_ element: Element, depth: Int) -> Bool {
+            guard depth < limit else { return true }
+            if !visit(element, depth) { return false }
+            guard !["AXMenuButton", "AXPopUpButton", "AXMenu", "AXMenuBar", "AXMenuItem"].contains(element.role) else { return true }
+            for child in element.children where !walk(child, depth: depth + 1) { return false }
+            return true
+        }
+        _ = walk(Element(object: root), depth: 0)
+    }
+
+    /// An element as VoiceOver reads it: through the methods of its role
+    /// where it has them, else through its attributes by name. Words are
+    /// read as whatever object holds them and kept only when they are a
+    /// string, an attributed string or a number: bridging anything else to a
+    /// string throws, and an exception thrown through Swift's frames leaves
+    /// the main actor's checks reading freed memory later on.
+    struct Element {
+        let object: AnyObject
+
+        /// An attribute by name, only when the element says it has it: an
+        /// element asked for one it has not may throw, and nothing thrown
+        /// may pass through this code.
+        private func attribute(_ name: String) -> Any? {
+            guard let object = object as? NSObject else { return nil }
+            let names = NSSelectorFromString("accessibilityAttributeNames")
+            let read = NSSelectorFromString("accessibilityAttributeValue:")
+            guard object.responds(to: names), object.responds(to: read),
+                let known = object.perform(names)?.takeUnretainedValue() as? [Any],
+                known.contains(where: { ($0 as? NSObject)?.isEqual(name as NSString) == true })
+            else { return nil }
+            return object.perform(read, with: name)?.takeUnretainedValue()
+        }
+
+        /// What a method of the element's role returns, else its attribute
+        /// by that name, as words, whatever kind of object holds them.
+        private func words(_ method: String, _ name: String) -> String? {
+            guard let object = object as? NSObject else { return nil }
+            var found: Any?
+            let selector = NSSelectorFromString(method)
+            if object.responds(to: selector) { found = object.perform(selector)?.takeUnretainedValue() }
+            if found == nil { found = attribute(name) }
+            guard let found = found as? NSObject else { return nil }
+            if let words = found as? NSAttributedString { return words.string }
+            if found.isKind(of: NSString.self) { return String(describing: found) }
+            if let number = found as? NSNumber { return number.stringValue }
+            return nil
+        }
+
+        var role: String { words("accessibilityRole", "AXRole") ?? "" }
+
+        var words: [String] {
+            [words("accessibilityLabel", "AXDescription"), words("accessibilityTitle", "AXTitle"), words("accessibilityValue", "AXValue")]
+                .compactMap { $0 }.filter { !$0.isEmpty }
+        }
+
+        var children: [Element] {
+            guard let object = object as? NSObject else { return [] }
+            var found: Any?
+            let selector = NSSelectorFromString("accessibilityChildren")
+            if object.responds(to: selector) { found = object.perform(selector)?.takeUnretainedValue() }
+            if found == nil { found = attribute("AXChildren") }
+            return (found as? [Any] ?? []).map { Element(object: $0 as AnyObject) }
+        }
+
+        /// The element's frame in the window, from its top leading corner.
+        func frame(in window: NSWindow) -> CGRect? {
+            var screen = object.accessibilityFrame?() ?? .zero
+            if screen.width == 0, screen.height == 0,
+                let position = (attribute("AXPosition") as? NSValue)?.pointValue,
+                let size = (attribute("AXSize") as? NSValue)?.sizeValue
+            {
+                // Inside the app, as the frame is: from the screen's bottom leading corner.
+                screen = CGRect(origin: position, size: size)
+            }
+            guard screen.width > 0 || screen.height > 0 else { return nil }
+            let base = window.convertFromScreen(screen)
+            return CGRect(x: base.minX, y: window.frame.height - base.maxY, width: base.width, height: base.height)
+        }
+    }
+
+    /// A length in points, to the half point the screen draws.
+    static func points(_ value: CGFloat) -> String {
+        let rounded = (value * 2).rounded() / 2
+        return rounded == rounded.rounded() ? String(Int(rounded)) : String(format: "%.1f", rounded)
+    }
+
+    /// A click at a point of the window in front (`x,y` from its top leading
+    /// corner), or in the middle of the first element whose words hold the
+    /// argument: a press and a release of the mouse's button, posted to the
+    /// app's event queue as the window server delivers a person's.
+    static func click(_ argument: String) -> String {
+        guard let window = windows.first else { return "no window" }
+        let numbers = argument.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        var point: CGPoint?
+        if numbers.count == 2 {
+            point = CGPoint(x: numbers[0], y: numbers[1])
+        } else if let frame = find(argument, in: window) {
+            point = CGPoint(x: frame.midX, y: frame.midY)
+        }
+        guard let point else { return "found nothing saying \"\(argument)\"" }
+        let base = NSPoint(x: point.x, y: window.frame.height - point.y)
+        let events = [(NSEvent.EventType.leftMouseDown, Float(1)), (.leftMouseUp, 0)].compactMap { type, pressure in
+            NSEvent.mouseEvent(
+                with: type, location: base, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: pressure
+            )
+        }
+        guard events.count == 2 else { return "no event" }
+        if NSApp.isActive {
+            events.forEach { NSApp.postEvent($0, atStart: false) }
+            return "at \(points(point.x)),\(points(point.y))"
+        }
+        // An app the system keeps from the front takes a click on its window
+        // only as the click that brings it forward, which it cannot be: the
+        // view under the point is handed the press itself, and the release
+        // waits in the queue for the press's own tracking.
+        guard let frame = window.contentView?.superview ?? window.contentView,
+            let view = frame.hitTest(frame.convert(base, from: nil))
+        else { return "nothing under \(points(point.x)),\(points(point.y))" }
+        NSApp.postEvent(events[1], atStart: false)
+        view.mouseDown(with: events[0])
+        return "at \(points(point.x)),\(points(point.y)) (the app not in front: handed to \(type(of: view)))"
+    }
+
+    /// Chooses a row of the window's table (counted from 0), as a click on
+    /// it does in a window in front: through the table's own selection, which
+    /// tells the table's delegate, and SwiftUI's selection with it.
+    static func choose(_ row: Int) -> String {
+        guard let window = windows.first, let root = window.contentView else { return "no window" }
+        var found: NSTableView?
+        func walk(_ view: NSView) {
+            if found == nil, let table = view as? NSTableView, table.numberOfColumns > 1 { found = table; return }
+            view.subviews.forEach(walk)
+        }
+        walk(root)
+        guard let table = found, row < table.numberOfRows else { return "no table with that row" }
+        guard table.delegate?.tableView?(table, shouldSelectRow: row) ?? true else { return "row \(row) may not be chosen" }
+        table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        return "row \(row) chosen of \(table.numberOfRows), selected \(Array(table.selectedRowIndexes))"
+    }
+
+    /// The frame of the first element whose words hold these, in the window.
+    static func find(_ words: String, in window: NSWindow) -> CGRect? {
+        var found: CGRect?
+        walk(window) { element, depth in
+            if depth > 0, element.words.contains(where: { $0.contains(words) }), let frame = element.frame(in: window) {
+                found = frame
+                return false
+            }
+            return true
+        }
+        return found
+    }
+
+    /// Scrolls the scroll view under the window's middle by some points.
+    static func scroll(_ by: Double) -> String {
+        guard let window = windows.first, let root = window.contentView else { return "no window" }
+        let middle = NSPoint(x: root.bounds.midX, y: root.bounds.midY)
+        var view = root.hitTest(middle)
+        while let current = view, !(current is NSScrollView) { view = current.superview }
+        guard let scroll = view as? NSScrollView, let document = scroll.documentView else { return "no scroll view" }
+        let clip = scroll.contentView
+        var origin = clip.bounds.origin
+        let room = max(document.frame.height - clip.bounds.height, 0)
+        origin.y = document.isFlipped ? min(max(origin.y + by, 0), room) : min(max(origin.y - by, 0), room)
+        clip.scroll(to: origin)
+        scroll.reflectScrolledClipView(clip)
+        return "to \(Int(origin.y)) of \(Int(room))"
     }
 
     /// Every menu of the menu bar, each item with its shortcut, indented by depth.
