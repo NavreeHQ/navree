@@ -151,6 +151,10 @@ every `@navree/*` package carries the same version.
 - Every `View` answers with `X-Navree-Page: 1`, and the UI runtime takes an answer into the page only
   when it carries it (the build is checked as before): a page without it loads for real, and a
   region's answer without it is not drawn. A region's source must answer with a `View`.
+- A boosted navigation fetched before a write, a sign-out or another tab's change is fetched again
+  rather than shown; a navigation that began before a form's post never replaces the form's answer;
+  a region's fetch begun on one page never lands in the next page's region of the same id; and a
+  page dropped as overtaken adds no history entry.
 - `Href::parse`, and `LocalHref::parse` with it, refuses an address with whitespace or a control
   character at either end, or whitespace other than a plain space before its path (`\u{3000}`,
   `\u{a0}`, `\u{2028}` and the like), so a native client that trims it reads the same address.

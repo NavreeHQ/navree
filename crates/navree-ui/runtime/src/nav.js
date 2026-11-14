@@ -52,8 +52,13 @@ export function forget() {
   sameUser();
 }
 
-/** Runs `write`, with no prefetch standing or started until it's over. @template T @param {() => Promise<T>} write */
+/**
+ * Runs `write`, with no prefetch standing or started until it's over. A write takes the page's turn:
+ * a navigation that began before it is overtaken, so its answer never replaces the write's.
+ * @template T @param {() => Promise<T>} write
+ */
 export async function whileWriting(write) {
+  generation++;
   writing++;
   noteWrite(true);
   forget();
@@ -188,8 +193,9 @@ function dropSheets(wanted) {
 /**
  * Shows a fetched HTML response in this page.
  * @param {Response} response
- * @param {{region?: string, push?: boolean, url?: string, keep?: boolean}} [how] `keep`: the same page
- * again, so what was typed stays.
+ * @param {{region?: string, push?: boolean, url?: string, keep?: boolean, since?: number}} [how] `keep`: the same page
+ * again, so what was typed stays. `since`: the epoch the fetch began in.
+ * @returns {Promise<true | undefined>} true when the answer was late, and nothing of it was shown
  */
 export async function showPage(response, how = {}) {
   const url = how.url || response.url;
@@ -201,6 +207,9 @@ export async function showPage(response, how = {}) {
   // title are its to make, and this one leaves them. A toast it brought is still shown. A region is overtaken only
   // by a page or by another show of itself: two tables sorted at once each show their own answer.
   const newer = () => (id ? pageShown > ticket || shown.get(id) !== turn : ticket !== shows);
+  // Something was written, here or in another tab, since the fetch began (`since`): the answer may be from
+  // before it. It is not shown, and the caller fetches again.
+  const late = () => how.since !== undefined && how.since !== epoch;
   // A page of this app says so in a header, which no file the app serves as it is can carry.
   const ours = response.headers.has(PAGE);
   const doc = new DOMParser().parseFromString(await response.text(), "text/html");
@@ -209,13 +218,13 @@ export async function showPage(response, how = {}) {
     if (ours) adoptToasts(doc);
     return;
   }
+  if (late()) return true;
   const build = root(doc).getAttribute("data-build");
   // Anything else, a page from another build, or one without the runtime, loads for real.
   if (!ours || build !== root().getAttribute("data-build")) {
     location.assign(url);
     return;
   }
-  if (how.push !== false && url !== location.href) history.pushState(null, "", url);
   clean(body(doc));
   if (!id) swaps++;
   // A toast the last request left joins the standing toaster; the page's own is never morphed.
@@ -225,6 +234,9 @@ export async function showPage(response, how = {}) {
   const styles = mergeHead(doc);
   if (styles) await styles;
   if (newer()) return;
+  if (late()) return true;
+  // The address is the page's once it is sure to show: one dropped as overtaken leaves no entry behind.
+  if (how.push !== false && url !== location.href) history.pushState(null, "", url);
   if (id) {
     const from = byId(id), to = byId(id, doc);
     if (from && to) {
@@ -304,9 +316,13 @@ export async function go(url, how = {}) {
     html.setAttribute("data-ui-loading", "");
   }
   tablePending(table, true);
+  // As a region's refresh: an answer fetched before a write, a sign-out or another tab's change is from
+  // before it, and is fetched again (a write began here overtakes this outright: see `whileWriting`).
+  const since = epoch;
   try {
     const response = await fetchPage(url);
     if (stale()) return;
+    if (epoch !== since) return go(url, how);
     if (table && !response.ok) {
       tableFailed(table, url, response.status);
       return;
@@ -315,7 +331,7 @@ export async function go(url, how = {}) {
       location.assign(url);
       return;
     }
-    await showPage(response, { ...how, url: response.url || url });
+    if ((await showPage(response, { ...how, url: response.url || url, since })) && !stale()) return go(url, how);
   } catch {
     if (stale()) return;
     if (table) tableFailed(table, url, 0);
@@ -550,11 +566,13 @@ export async function refresh(id, polled = false) {
   }
   const mine = newest(id);
   const since = epoch;
+  // The page it was asked from: another page's region of the same id (the morph keeps the element) is not its to draw.
+  const page = swaps;
   el.removeAttribute("data-ui-failed");
   const table = el.hasAttribute("data-ui-table") ? el : null;
   // Whether a newer fetch of the region began, or the user moved on while this was on its way: it answers a state
   // that's gone. Asked after the headers and again after the body, which a newer fetch can overtake.
-  const old = () => regions.get(id) !== mine || !!(table && (el.getAttribute("data-ui-src") !== src || el.hasAttribute("data-pending")));
+  const old = () => regions.get(id) !== mine || swaps !== page || !!(table && (el.getAttribute("data-ui-src") !== src || el.hasAttribute("data-pending")));
   // Whether something was written since this fetch began, here or in another tab, or the page was shown again from
   // the back-forward cache: the answer may be from before the write, and drawn after the page was drawn again for
   // it, it would put back what the write changed. Asked wherever `old` is.
@@ -624,7 +642,7 @@ export async function refresh(id, polled = false) {
     // Said once: a poll that gets the same answer again says nothing new.
     if (state && (news(el, state) || !polled)) announce(all(el, "[data-slot=state-title]")[0]?.textContent || "");
   } catch (error) {
-    if (regions.get(id) !== mine) return;
+    if (regions.get(id) !== mine || swaps !== page) return;
     troubled(el, 0);
     if (table) tableFailed(table, src, 0);
     // Nothing answered (the connection failed), or the answer took too long: only the first is being offline.

@@ -832,6 +832,8 @@ export function install(options = {}) {
     answers: [],
     /** History entries pushed. @type {string[]} */
     pushed: [],
+    /** The channels to other tabs the page opened. @type {any[]} */
+    channels: [],
     doc,
   };
   const location = {
@@ -955,7 +957,11 @@ export function install(options = {}) {
       disconnect() {}
     },
     ResizeObserver: undefined,
+    // The channel to the page's other tabs: a test says what another tab says with `onmessage`.
     BroadcastChannel: class {
+      constructor() {
+        page.channels.push(this);
+      }
       postMessage() {}
     },
     matchMedia: () => ({ matches: false, addEventListener() {} }),
