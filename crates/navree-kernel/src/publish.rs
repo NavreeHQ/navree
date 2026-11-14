@@ -115,13 +115,16 @@ pub(crate) fn first_file_and_folder<'a>(paths: &[&'a str]) -> Option<(&'a str, &
             )
         })
         .collect();
-    paths.iter().zip(&folded).find_map(|(&file, (lower, upper))| {
-        paths.iter().find_map(|&inside| {
-            (inside.to_lowercase().starts_with(lower.as_str())
-                || inside.to_uppercase().starts_with(upper.as_str()))
-            .then_some((file, inside))
+    paths
+        .iter()
+        .zip(&folded)
+        .find_map(|(&file, (lower, upper))| {
+            paths.iter().find_map(|&inside| {
+                (inside.to_lowercase().starts_with(lower.as_str())
+                    || inside.to_uppercase().starts_with(upper.as_str()))
+                .then_some((file, inside))
+            })
         })
-    })
 }
 
 /// What [`publish_files`] did with one file, or with a dry run would do. Not
@@ -892,7 +895,10 @@ mod tests {
                 "resources/views/announcements/Admin would be both a file and the folder of resources/views/announcements/admin/edit.html; nothing was written",
             ),
         ] {
-            let files = [(paths[0], &b"<ul></ul>"[..]), (paths[1], &b"<form></form>"[..])];
+            let files = [
+                (paths[0], &b"<ul></ul>"[..]),
+                (paths[1], &b"<form></form>"[..]),
+            ];
             for (force, dry_run) in [(false, false), (true, false), (false, true)] {
                 let refused = publish_files(&root.0, &files, force, dry_run).expect_err(refusal);
                 assert_eq!(refused.to_string(), refusal);
