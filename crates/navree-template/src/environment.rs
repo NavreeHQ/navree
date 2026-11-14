@@ -443,8 +443,9 @@ pub struct Fingerprint {
     templates: BTreeMap<String, Arc<Ast>>,
     filters: BTreeMap<String, Arc<Callable>>,
     tests: BTreeMap<String, Arc<Callable>>,
-    /// Functions and variables, by name; a function is its handle, a variable
-    /// its value.
+    /// Functions and variables, by name, as the very values the environment
+    /// holds (compared by identity, see `Value::is_identical`): a function is
+    /// its handle, a string its shared text with its safe mark.
     globals: BTreeMap<String, Value>,
     loader: Option<Arc<Loader>>,
     auto_escape: Arc<AutoEscapeCallback>,
@@ -546,7 +547,9 @@ impl Fingerprint {
         let names: BTreeSet<&String> = self.globals.keys().chain(after.globals.keys()).collect();
         for name in names {
             let (was, is) = (self.globals.get(name), after.globals.get(name));
-            let same = matches!((was, is), (Some(a), Some(b)) if a == b);
+            // By identity, not by equality: equal text put back marked safe,
+            // or built again, is not what the app set.
+            let same = matches!((was, is), (Some(a), Some(b)) if a.is_identical(b));
             record(
                 &mut changes,
                 name,
@@ -762,6 +765,52 @@ mod tests {
         assert_eq!(
             before.changes(&fingerprint(&env)),
             ["replaces the filter `shout`"]
+        );
+    }
+
+    #[test]
+    fn a_global_put_back_marked_safe_or_built_again_is_a_replacement() {
+        let mut env = base();
+        env.add_global("count", 7);
+        env.add_global("ratio", 0.5);
+        env.add_global("tags", vec!["a", "b"]);
+        let before = fingerprint(&env);
+        // Nothing touched, and a scalar set to the same scalar: no change.
+        env.add_global("count", 7);
+        env.add_global("ratio", 0.5);
+        assert!(before.changes(&fingerprint(&env)).is_empty());
+
+        // The same text put back marked safe equals the plain one, and is not it.
+        env.add_global("brand", Value::from_safe_string("Agra".to_owned()));
+        assert_eq!(
+            before.changes(&fingerprint(&env)),
+            ["replaces the global `brand`"]
+        );
+        assert_eq!(
+            before.changes_outside(&fingerprint(&env), "announcements"),
+            ["replaces the global `brand`"]
+        );
+
+        // Equal contents built again are another value: text, a list, a function.
+        let mut env = base();
+        env.add_global("tags", vec!["a", "b"]);
+        let before = fingerprint(&env);
+        env.add_global("tags", vec!["a", "b"]);
+        env.add_function("clock", || "IST");
+        assert_eq!(
+            before.changes(&fingerprint(&env)),
+            ["replaces the function `clock`", "replaces the global `tags`"]
+        );
+
+        // A safe string left alone is no change; the same text put back plain is a replacement.
+        let mut env = base();
+        env.add_global("note", Value::from_safe_string("<b>hi</b>".to_owned()));
+        let before = fingerprint(&env);
+        assert!(before.changes(&fingerprint(&env)).is_empty());
+        env.add_global("note", "<b>hi</b>");
+        assert_eq!(
+            before.changes(&fingerprint(&env)),
+            ["replaces the global `note`"]
         );
     }
 
