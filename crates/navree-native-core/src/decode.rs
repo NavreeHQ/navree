@@ -725,7 +725,8 @@ mod tests {
             let Node::Stack(stack) = screen.body else {
                 panic!("not a stack");
             };
-            let (Node::Image(image), Node::Avatar(avatar)) = (&stack.children[0], &stack.children[1])
+            let (Node::Image(image), Node::Avatar(avatar)) =
+                (&stack.children[0], &stack.children[1])
             else {
                 panic!("not an image and an avatar");
             };
@@ -734,11 +735,20 @@ mod tests {
             image.src.clone()
         };
         for (src, becomes) in [
-            ("/pictures/kesar.jpg", "https://shop.example/pictures/kesar.jpg"),
-            ("kesar 250 g.jpg", "https://shop.example/kesar%20250%20g.jpg"),
+            (
+                "/pictures/kesar.jpg",
+                "https://shop.example/pictures/kesar.jpg",
+            ),
+            (
+                "kesar 250 g.jpg",
+                "https://shop.example/kesar%20250%20g.jpg",
+            ),
             ("https://shop.example/a.png", "https://shop.example/a.png"),
             ("//cdn.example/a.png", "https://cdn.example/a.png"),
-            ("HTTPS://CDN.Example/ü.png#x", "https://cdn.example/%C3%BC.png#x"),
+            (
+                "HTTPS://CDN.Example/ü.png#x",
+                "https://cdn.example/%C3%BC.png#x",
+            ),
             ("http://cdn.example/a.png", ""),
             ("/\\evil.example/a.png", ""),
             ("//evil.example\\a.png", ""),
