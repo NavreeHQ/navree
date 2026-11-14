@@ -47,6 +47,8 @@ With the feature `jni` the crate also exports the four native methods of the Kot
 
 **Stack.** A call may be made from a thread with 512 KiB of stack, which is what a secondary thread has on Apple's systems. Reading a tree as deep as the protocol allows takes more than that, so the core reads each answer on a thread of its own with 4 MiB, and waits for it; everything else it does with such a tree fits the caller's thread. `tests/stack.rs` runs all of it on 512 KiB in a debug build. A tree deeper than the protocol allows is refused before it is read.
 
+**How large an answer may be.** An answer's body holds at most `MAX_BODY` bytes (8 MiB), and one answer at most `MAX_NODES` nodes (100,000, across its screen, its ops and their rows) and `MAX_OPS` ops (1,000); the constants are in `navree-native`, beside `MAX_DEPTH`. Past any of them the answer fails as one that could not be read: the body is not read at all, and a shell that large is not drawn. The largest answers recorded so far hold about 30 KB, 410 nodes and 13 ops; `tests/scale.rs` reads one of about 4 MB and 70,000 nodes. Each op still looks through the screen for its target, and an op that changes a form looks through all of it again, so an answer costs about its ops times the screen's nodes: at the caps, some hundred million visits. An index of ids kept as the screen changes would bring that down to what each op touches; it is not built.
+
 `src/ffi.rs` is the only file with `unsafe` in it.
 
 ## Config

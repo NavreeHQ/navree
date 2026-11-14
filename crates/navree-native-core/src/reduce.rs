@@ -816,7 +816,10 @@ impl Core {
         let header = decode::shell_stamp_of(&response);
         // Read where there is room for it, like any other answer.
         let body = response.body.as_str();
-        let value: Value = decode::with_room(|| serde_json::from_str(body).ok())
+        // A shell larger than any answer may be is not read: it fails below
+        // as one whose shape does not read.
+        let value: Value = (body.len() <= navree_native::MAX_BODY)
+            .then(|| decode::with_room(|| serde_json::from_str(body).ok()).flatten())
             .flatten()
             .unwrap_or(Value::Null);
         if let Some(upgrade) = value
@@ -863,7 +866,8 @@ impl Core {
     /// Draws the app from the shell kept at the last launch. False when it
     /// does not read.
     pub(crate) fn shell_from_cache(&mut self, body: &str) -> bool {
-        if let Some(Ok(mut shell)) = decode::with_room(|| serde_json::from_str::<Shell>(body))
+        if body.len() <= navree_native::MAX_BODY
+            && let Some(Ok(mut shell)) = decode::with_room(|| serde_json::from_str::<Shell>(body))
             && shell.navree == MAJOR
         {
             self.shell_pictures(&mut shell);
@@ -1497,7 +1501,7 @@ impl Core {
         let good = response.error.is_none()
             && response.left.is_none()
             && (200..300).contains(&response.status);
-        let answer: Option<Value> = good
+        let answer: Option<Value> = (good && response.body.len() <= navree_native::MAX_BODY)
             .then(|| serde_json::from_str(&response.body).ok())
             .flatten();
         let options = match (&mut known.goes, answer) {
@@ -1611,7 +1615,9 @@ impl Core {
         let good = response.error.is_none()
             && response.left.is_none()
             && (200..300).contains(&response.status);
-        let answer: Option<Value> = serde_json::from_str(&response.body).ok();
+        let answer: Option<Value> = (response.body.len() <= navree_native::MAX_BODY)
+            .then(|| serde_json::from_str(&response.body).ok())
+            .flatten();
         // Anything but a plain yes is not a sign-in. The route says when a
         // second step is still to come, and until it is done nobody is signed in.
         let second = answer
@@ -2686,6 +2692,46 @@ mod tests {
         note(core.send(Event::Select { destination: 2 }));
         note(core.send(page(4)));
         assert!(written.is_empty(), "{written:?}");
+    }
+
+    #[test]
+    fn a_shell_larger_than_any_answer_may_be_is_not_read() {
+        let shell = include_str!("../transcripts/fixtures/store/shell.json");
+        let new = || {
+            Core::new(Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            ))
+        };
+        let with = |body: String| {
+            let mut core = new();
+            core.send(Event::Start);
+            let update = core.send(Event::Response(Response {
+                request: 1,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body,
+                ..Response::default()
+            }));
+            (core, update)
+        };
+        let (core, _) = with(shell.to_owned());
+        assert_eq!(core.view().destinations.len(), 3);
+
+        // The same shell, padded past the cap with white space.
+        let padded = format!("{shell}{}", " ".repeat(navree_native::MAX_BODY));
+        let (core, update) = with(padded.clone());
+        assert_eq!(core.view().destinations.len(), 1, "{:?}", core.view());
+        assert!(
+            update
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Report { what, .. } if what == "decode")),
+            "{update:?}"
+        );
+        // A kept shell that large is not drawn either.
+        assert!(new().shell_from_cache(shell));
+        assert!(!new().shell_from_cache(&padded));
     }
 
     /// Before the list is read, any read answered without the keep header

@@ -88,6 +88,27 @@ pub const MAX_DEPTH: usize = 64;
 /// view. See [`nesting`].
 pub const MAX_NESTING: usize = 127;
 
+/// The most bytes an answer's body may hold: 8 MiB. A client fails a larger
+/// answer as one it could not read, before reading it. The largest answer
+/// recorded so far, a page of fifty rows of the store's inventory, is about
+/// 30 KB; this is more than two hundred and fifty times that, and holds a
+/// page with every chart at the most points the vocabulary allows.
+pub const MAX_BODY: usize = 8 * 1024 * 1024;
+
+/// The most nodes an answer may hold, counted across its screen, its ops and
+/// its rows together: 100,000. A client fails an answer with more as one it
+/// could not read. The largest page recorded so far holds about 410 (fifty
+/// rows of the store's inventory); the most the core is shown to read in one
+/// answer, a list of ten thousand rows beside a table of ten thousand, holds
+/// about 70,000. A page that comes near it should be cut into pages by cursor.
+pub const MAX_NODES: usize = 100_000;
+
+/// The most ops one answer may hold: 1,000. A client fails an answer with
+/// more as one it could not read. The most recorded so far is 13 (a board
+/// moving its cards); each op looks through the screen again, so the cap also
+/// bounds the work one answer can ask of a client.
+pub const MAX_OPS: usize = 1_000;
+
 /// How deep the objects and arrays of `json` nest, read without recursion.
 ///
 /// ```

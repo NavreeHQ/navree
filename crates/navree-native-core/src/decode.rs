@@ -10,7 +10,10 @@
 use navree_native::action::Command;
 use navree_native::device::{Alt, Call, Feature};
 use navree_native::node::{Button, Node, Stack, TableRow};
-use navree_native::{Action, CONTENT_TYPE, Envelope, Input, MAJOR, MAX_NESTING, Op, Screen};
+use navree_native::{
+    Action, CONTENT_TYPE, Envelope, Input, MAJOR, MAX_BODY, MAX_NESTING, MAX_NODES, MAX_OPS, Op,
+    Screen,
+};
 use serde_json::Value;
 
 use crate::config::Config;
@@ -388,6 +391,10 @@ pub(crate) fn envelope_with(
 }
 
 fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<Read, Failure> {
+    // An answer larger than the protocol allows is not read at all.
+    if body.len() > MAX_BODY {
+        return Err(Failure::Protocol);
+    }
     let mut read = Read {
         envelope: blank(),
         missing: Vec::new(),
@@ -420,6 +427,11 @@ fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<
     if read.envelope.navree != MAJOR {
         return Err(Failure::Protocol);
     }
+    // Nor is one that holds more than it allows: what a client does with an
+    // answer grows with its nodes and its ops.
+    if read.envelope.ops.len() > MAX_OPS || !nodes_within(&read.envelope, MAX_NODES) {
+        return Err(Failure::Protocol);
+    }
     // Icons the answer keeps in one place go back to where they are drawn, so
     // a screen stands on its own.
     read.envelope.inline_icons();
@@ -447,6 +459,35 @@ fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<
     read.missing.sort();
     read.missing.dedup();
     Ok(read)
+}
+
+/// Whether `envelope` holds at most `cap` nodes, counted across its screen,
+/// its ops and their rows. It stops counting once past the cap.
+fn nodes_within(envelope: &Envelope, cap: usize) -> bool {
+    let mut stack: Vec<&Node> = Vec::new();
+    if let Some(screen) = &envelope.screen {
+        stack.extend(crate::tree::roots(screen));
+    }
+    for op in &envelope.ops {
+        match op {
+            Op::Morph { node, .. } | Op::Replace { node, .. } => stack.push(node),
+            Op::Append { nodes, .. } | Op::Prepend { nodes, .. } | Op::Merge { nodes, .. } => {
+                stack.extend(nodes)
+            }
+            Op::Rows { rows, .. } => rows.iter().for_each(|row| stack.extend(row.nodes())),
+            Op::Row { row, .. } => stack.extend(row.nodes()),
+            _ => {}
+        }
+    }
+    let mut count = 0_usize;
+    while let Some(node) = stack.pop() {
+        count += 1;
+        if count > cap {
+            return false;
+        }
+        stack.extend(node.children());
+    }
+    true
 }
 
 /// Reads a response. `asked` is the address the request went to. The core
@@ -611,6 +652,45 @@ mod tests {
         .unwrap();
         assert!(read.missing.is_empty());
         assert_eq!(kinds(&read.envelope.screen.unwrap().body), ["text"]);
+    }
+
+    #[test]
+    fn an_answer_past_a_cap_fails_as_one_that_could_not_be_read() {
+        use navree_native::{MAX_BODY, MAX_NODES, MAX_OPS};
+        let texts = |count: usize| {
+            let texts = vec![r#"{"t":"text","value":"Ludhiana"}"#; count].join(",");
+            body(&format!(r#"{{"t":"stack","children":[{texts}]}}"#))
+        };
+        // As many nodes as the cap allows (the stack and its texts) are read.
+        assert!(envelope(&texts(MAX_NODES - 1), &config()).is_ok());
+        assert_eq!(
+            envelope(&texts(MAX_NODES), &config()).err(),
+            Some(Failure::Protocol)
+        );
+        // Nodes are counted across the screen and every op together.
+        let half = vec![r#"{"t":"text","value":"Amritsar"}"#; MAX_NODES / 2 + 1].join(",");
+        let ops = format!(
+            r#"{{"navree":1,"build":"b1","vocab":0,"ops":[{{"op":"append","target":"a","nodes":[{half}]}},{{"op":"append","target":"b","nodes":[{half}]}}]}}"#
+        );
+        assert_eq!(envelope(&ops, &config()).err(), Some(Failure::Protocol));
+
+        let ops = |count: usize| {
+            let ops = vec![r#"{"op":"toast","text":"Saved"}"#; count].join(",");
+            format!(r#"{{"navree":1,"build":"b1","vocab":0,"ops":[{ops}]}}"#)
+        };
+        assert!(envelope(&ops(MAX_OPS), &config()).is_ok());
+        assert_eq!(
+            envelope(&ops(MAX_OPS + 1), &config()).err(),
+            Some(Failure::Protocol)
+        );
+
+        // A body past the cap is not read at all, even when what it holds is
+        // small: white space counts.
+        let padded = format!("{}{}", texts(1), " ".repeat(MAX_BODY));
+        assert_eq!(envelope(&padded, &config()).err(), Some(Failure::Protocol));
+        let fits = texts(1);
+        let fits = format!("{fits}{}", " ".repeat(MAX_BODY - fits.len()));
+        assert!(envelope(&fits, &config()).is_ok());
     }
 
     #[test]
