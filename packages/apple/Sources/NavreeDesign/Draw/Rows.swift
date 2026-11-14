@@ -327,7 +327,7 @@ struct RowContent: View {
                     Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                ForEach(Array(RowRules.detailLines(row.detail).enumerated()), id: \.offset) { _, line in
+                ForEach(Array(RowRules.detailLines(RowRules.withoutTitleButton(row.detail, title: row.title)).enumerated()), id: \.offset) { _, line in
                     if line.count > 1 {
                         // States one after another share a line, as Mail's flags do.
                         Flow(spacing: 12, lineSpacing: 4) {
@@ -607,16 +607,13 @@ struct RowOffersActions: ViewModifier {
 
         func body(content: Content) -> some View {
             if let button, let action = button.action {
+                // The row is the control (its title button is not drawn): a tap
+                // or a click anywhere on it, and VoiceOver's default action.
                 let open = { context.send(.act(action, Place(form: form.map(FormRef.init)))) }
-                switch ContentRules.rowOpening(bar: .current) {
-                case .button:
-                    content.accessibilityAction { open() }
-                case .click:
-                    content
-                        .contentShape(Rectangle())
-                        .onTapGesture { open() }
-                        .accessibilityAction { open() }
-                }
+                content
+                    .contentShape(Rectangle())
+                    .onTapGesture { open() }
+                    .accessibilityAction { open() }
             } else {
                 content
             }

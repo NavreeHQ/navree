@@ -145,14 +145,8 @@ public enum SpeechRules {
                         offers.openings.append(.init(label: disclosure.label, form: form, submit: submit))
                     }
                 case .form(let form) where offers.titleButton == nil:
-                    var buttons: [Navree.Button] = []
-                    var fields = 0
-                    form.walkFields { inner in
-                        if case .button(let button) = inner { buttons.append(button) }
-                        if case .field = inner { fields += 1 }
-                    }
-                    if fields == 0, buttons.count == 1, same(buttons[0].label, row.title) {
-                        offers.titleButton = buttons[0]
+                    if formOnlyRepeats(form, title: row.title), let button = submit(of: form) {
+                        offers.titleButton = button
                         offers.titleForm = form
                     }
                 case .button(let button) where offers.titleButton == nil && same(button.label, row.title):
@@ -163,6 +157,17 @@ public enum SpeechRules {
             }
         }
         return offers
+    }
+
+    /// Whether a form holds nothing but one button saying a row's title again.
+    public static func formOnlyRepeats(_ form: Navree.Form, title: String) -> Bool {
+        var buttons: [Navree.Button] = []
+        var fields = 0
+        form.walkFields { inner in
+            if case .button(let button) = inner { buttons.append(button) }
+            if case .field = inner { fields += 1 }
+        }
+        return fields == 0 && buttons.count == 1 && same(buttons[0].label, title)
     }
 
     /// Whether a button in a row's detail only says the row's title again.
