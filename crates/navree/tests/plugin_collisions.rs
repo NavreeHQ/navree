@@ -6,6 +6,8 @@
 //! `navree::time::TimeModule` and names navree-time's plugin, the way the framework's own crate
 //! would.
 
+use std::sync::{Arc, Mutex};
+
 use navree::ModuleId;
 use navree::config::ConfigSection;
 use navree::contracts::{Job, JobContext};
@@ -16,6 +18,48 @@ use navree::testing::TestApp;
 use navree::ui::AppSheet;
 use navree::view::{ViewOptions, Views};
 use serde::{Deserialize, Serialize};
+
+/// Captures formatted tracing output written while the guard is alive (on this thread: use a
+/// current-thread runtime).
+#[derive(Clone, Default)]
+struct LogCapture(Arc<Mutex<Vec<u8>>>);
+
+impl LogCapture {
+    fn install(&self) -> tracing::subscriber::DefaultGuard {
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .with_ansi(false)
+            .with_writer(self.clone())
+            .finish();
+        tracing::subscriber::set_default(subscriber)
+    }
+
+    fn lines(&self) -> Vec<String> {
+        String::from_utf8_lossy(&self.0.lock().unwrap())
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+}
+
+impl std::io::Write for LogCapture {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LogCapture {
+    type Writer = LogCapture;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        self.clone()
+    }
+}
 
 /// Two sheets of one name and different text.
 static PROBE_BRAND: AppSheet = AppSheet::new("brand", b".hero{color:var(--accent)}", 1024);
@@ -121,6 +165,24 @@ impl Module for NoticesShell {
     }
 }
 
+/// A second module of navree-time's plugin that registers the welcome mail again.
+struct TimeLater;
+impl Module for TimeLater {
+    fn id(&self) -> ModuleId {
+        ModuleId::named::<navree::time::TimeModule>("TimeLater")
+    }
+
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(PluginInfo::new(
+            "navree-time",
+            "navree_time",
+            "time",
+            env!("CARGO_PKG_VERSION"),
+        ))
+        .templates(&[("mail/welcome.html", "Welcome from navree-time, later")]);
+    }
+}
+
 /// A test app with the modules that check the four names.
 fn modules() -> navree::testing::TestAppBuilder {
     TestApp::builder()
@@ -138,6 +200,9 @@ fn modules() -> navree::testing::TestAppBuilder {
 
 #[tokio::test]
 async fn a_first_party_plugin_collides_like_a_module_of_today() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+
     // A template, a static file, a job and a section beside today's module: warnings, never an
     // error.
     let app = modules().module(Probe).module(CrmModule).build().await;
@@ -145,6 +210,21 @@ async fn a_first_party_plugin_collides_like_a_module_of_today() {
         app.ctx(),
         ModuleId::of::<navree::time::TimeModule>()
     ));
+    for warning in [
+        "embedded template `mail/welcome.html` is registered by both `TimeModule` and `CrmModule`; `CrmModule`'s is used, and this becomes an error in 2.0",
+        "static file `brand.css` is contributed by both `TimeModule` and `CrmModule`; `TimeModule`'s is served, and this becomes an error in 2.0",
+        "job `notices.digest` is registered by both `TimeModule` and `CrmModule`; `TimeModule`'s runs, and this becomes an error in 2.0",
+        "configuration section `notices` is read by two types: `plugin_collisions::TimeNotices` (TimeModule) and `plugin_collisions::CrmNotices` (CrmModule); this becomes an error in 2.0",
+    ] {
+        assert!(
+            capture
+                .lines()
+                .iter()
+                .any(|line| line.contains("WARN") && line.contains(warning)),
+            "{warning}: {:#?}",
+            capture.lines()
+        );
+    }
     assert_eq!(
         app.get::<Views>()
             .await
@@ -191,6 +271,22 @@ async fn a_first_party_plugin_collides_like_a_module_of_today() {
         error.contains(
             "cannot be replaced by `NoticesShell`, a module of the plugin `navree-plugin-notices`; to use the plugin's version, copy it to resources/views/mail/welcome.html or register it from a module of the app"
         ),
+        "{error}"
+    );
+
+    // A later module of a first-party plugin is not a module of the app: it does not settle
+    // the replacement.
+    let Err(error) = modules()
+        .module(NoticesShell)
+        .module(TimeLater)
+        .try_build()
+        .await
+    else {
+        panic!("fails")
+    };
+    let error = error.to_string();
+    assert!(
+        error.contains("cannot be replaced by `NoticesShell`, a module of the plugin `navree-plugin-notices`"),
         "{error}"
     );
 }

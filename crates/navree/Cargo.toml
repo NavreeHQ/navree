@@ -830,6 +830,8 @@ tower = { workspace = true }
 # `tests/integrations_docs.rs`: the page's listener logs with tracing, as
 # an app does.
 tracing = { workspace = true }
+# `tests/plugin_collisions.rs` reads the warnings a boot logs.
+tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
 # The gRPC docs example: tonic's generated code names these crates.
 prost = { workspace = true }

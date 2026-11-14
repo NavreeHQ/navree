@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use navree_http::HttpModule;
 use navree_kernel::{Module, ModuleBuilder, PluginInfo};
 use navree_testing::{TestApp, TestAppBuilder};
-use navree_ui::{AppSheet, UiModule};
+use navree_ui::{AppSheet, IslandScript, UiModule};
 
 /// Captures formatted tracing output written while the guard is alive (on this thread: use a
 /// current-thread runtime).
@@ -227,4 +227,150 @@ async fn a_plugins_static_file_outside_its_namespace_fails_the_boot() {
         .shutdown()
         .await
         .unwrap();
+}
+
+/// Island scripts named `clock`, with different text: two of the app's, a plugin's under its
+/// namespace, one of the app's under that namespace too, and a plugin's with no namespace.
+static CRM_CLOCK: IslandScript = IslandScript::new(
+    "clock",
+    b"export function mount(body) { body.textContent = 'IST'; }",
+    1024,
+);
+static BOARD_CLOCK: IslandScript = IslandScript::new(
+    "clock",
+    b"export function mount(body) { body.textContent = 'UTC'; }",
+    1024,
+);
+static NOTICE_CLOCK: IslandScript = IslandScript::new(
+    "clock",
+    b"export function mount(body) { body.textContent = 'Ludhiana'; }",
+    1024,
+)
+.namespace("announcements");
+static SHELL_CLOCK: IslandScript = IslandScript::new(
+    "clock",
+    b"export function mount(body) { body.textContent = 'Agra'; }",
+    1024,
+)
+.namespace("announcements");
+static LOOSE_CLOCK: IslandScript = IslandScript::new(
+    "clock",
+    b"export function mount(body) { body.textContent = 'Amritsar'; }",
+    1024,
+);
+
+/// An app module with an island script.
+struct ClockModule;
+impl Module for ClockModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(CRM_CLOCK);
+    }
+}
+
+/// Another app module with an island script called `clock`.
+struct OtherClockModule;
+impl Module for OtherClockModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(BOARD_CLOCK);
+    }
+}
+
+/// The plugin, with a script under its namespace.
+struct NoticeClockModule;
+impl Module for NoticeClockModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(announcements()).contribute(NOTICE_CLOCK);
+    }
+}
+
+/// An app module that puts a script under the namespace `announcements`.
+struct ShellClockModule;
+impl Module for ShellClockModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(SHELL_CLOCK);
+    }
+}
+
+/// A plugin with a script outside its namespace.
+struct LooseClockModule;
+impl Module for LooseClockModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(announcements()).contribute(LOOSE_CLOCK);
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_duplicate_island_script_warns_between_modules_and_fails_with_a_plugin() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+
+    // One script per name says nothing, a plugin's under its namespace included.
+    builder()
+        .module(UiModule)
+        .module(ClockModule)
+        .module(NoticeClockModule)
+        .build()
+        .await
+        .shutdown()
+        .await
+        .unwrap();
+    assert!(
+        capture
+            .lines()
+            .iter()
+            .all(|line| !line.contains("is contributed by both"))
+    );
+
+    // Two of today's modules: the first module's script is served, with a warning.
+    let app = builder()
+        .module(UiModule)
+        .module(ClockModule)
+        .module(OtherClockModule)
+        .build()
+        .await;
+    assert!(capture.lines().iter().any(|line| line.contains("WARN")
+        && line.contains(
+            "static file `clock.js` is contributed by both `ClockModule` and `OtherClockModule`; `ClockModule`'s is served, and this becomes an error in 2.0"
+        )));
+    app.shutdown().await.unwrap();
+
+    // A plugin's script with no namespace fails the boot, and so does a module that is no
+    // first-party plugin's putting a script under the plugin's namespace.
+    let Err(error) = builder()
+        .module(UiModule)
+        .module(ClockModule)
+        .module(LooseClockModule)
+        .try_build()
+        .await
+    else {
+        panic!("fails")
+    };
+    let error = error.to_string();
+    assert!(
+        error.contains(
+            "plugin `navree-plugin-announcements` contributes the static file `clock.js`, which is not under its namespace: build it with .namespace(\"announcements\")"
+        ),
+        "{error}"
+    );
+    assert!(
+        error.contains(
+            "static file `clock.js` is contributed by both `ClockModule` and `LooseClockModule`; name one under its plugin's namespace"
+        ),
+        "{error}"
+    );
+    let Err(error) = builder()
+        .module(UiModule)
+        .module(NoticeClockModule)
+        .module(ShellClockModule)
+        .try_build()
+        .await
+    else {
+        panic!("fails")
+    };
+    assert!(
+        error.to_string().contains(
+            "static file `announcements.clock.js` is contributed by both `NoticeClockModule` and `ShellClockModule`; name one under its plugin's namespace"
+        ),
+        "{error}"
+    );
 }
