@@ -70,8 +70,8 @@ impl SafeHtml {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum HrefError {
-    /// A control character anywhere, or whitespace or an invisible format character (a
-    /// zero-width space, a direction mark, a byte order mark) at the start: browsers
+    /// An ASCII control character anywhere, or whitespace, any other control or an invisible
+    /// format character (a zero-width space, a direction mark, a byte order mark) at the start: browsers
     /// strip some of those before reading the scheme, so `java\tscript:` would still
     /// run, and other clients trim the rest, so what follows would be read as a scheme
     /// or a host.
@@ -86,7 +86,7 @@ impl fmt::Display for HrefError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::Control => {
-                "a URL can't hold control characters or start with whitespace or an invisible character"
+                "a URL can't hold ASCII control characters or start with whitespace, a control or an invisible character"
             }
             Self::Scheme => "a URL's scheme must be http, https, mailto or tel",
             Self::OffSite => "this URL must stay on this site: a path, a query or a fragment",
