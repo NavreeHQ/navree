@@ -470,3 +470,52 @@ async fn the_boot_does_not_report_the_tables_of_registered_drivers() {
         .await
         .unwrap();
 }
+
+/// A made-up section that sits below `vault` and is read by a module of its own
+/// (`[vault.shelf]`), as `notify.push` sits below `notify`.
+#[derive(Clone, Debug, Default, Deserialize, ConfigSection)]
+#[config(key = "vault.shelf")]
+#[serde(default)]
+struct ShelfOptions {
+    /// How many boxes a shelf holds.
+    #[allow(dead_code)]
+    boxes: u32,
+}
+
+/// Registers the section `vault.shelf`.
+struct ShelfModule;
+
+impl Module for ShelfModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.config_section::<ShelfOptions>();
+    }
+}
+
+/// Registers the vault kind `shelf`, the name of the section `vault.shelf`.
+struct ShelfChestModule;
+
+impl Module for ShelfChestModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        register_chest(m, &SLOT, "shelf");
+    }
+}
+
+#[tokio::test]
+async fn a_driver_cannot_take_the_name_of_a_section_below_its_own() {
+    let setting = "m.vault_kind(\"shelf\") in `ShelfChestModule`: `vault.shelf` is a setting of the vault section; register the vault kind under another name";
+    let sources = || vault(json!({"kind": "memory"}));
+    let add = |app: AppBuilder| {
+        app.module(VaultModule)
+            .module(ShelfModule)
+            .module(ShelfChestModule)
+    };
+    let text = boot(sources(), add).await;
+    assert!(text.contains(setting), "{text}");
+    let text = check_text(sources(), add).await;
+    assert!(text.contains(&format!("error    {setting}")), "{text}");
+
+    // Without the section below it, the name is free.
+    let add = |app: AppBuilder| app.module(VaultModule).module(ShelfChestModule);
+    let text = check_text(sources(), add).await;
+    assert!(text.contains("config:check: ok ("), "{text}");
+}

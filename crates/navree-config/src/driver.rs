@@ -34,7 +34,9 @@ use crate::check::CheckReport;
 use crate::schema::SectionSchema;
 use crate::usage::covers;
 use crate::value::{Kind, Value};
-use crate::{Config, ConfigError, ConfigRegistry, ConfigSources, ModuleBuilderConfigExt};
+use crate::{
+    Config, ConfigError, ConfigRegistry, ConfigSources, ModuleBuilderConfigExt, SectionRegistration,
+};
 
 /// The most distinct driver names one process holds.
 const LIMIT: usize = 1024;
@@ -601,10 +603,32 @@ pub fn registration_problems(
     problems
 }
 
+/// The names of the sections registered just below `section`, as the keys
+/// they are in it, each once: `push` for the section `notify.push` below
+/// `notify`. Such a section is a setting of `section` kept in a table of its
+/// own, so no driver may take its name.
+fn nested_section_keys<'a>(section: &str, sections: impl Iterator<Item = &'a str>) -> Vec<String> {
+    let mut keys: Vec<String> = Vec::new();
+    for key in sections {
+        let Some(rest) = key
+            .strip_prefix(section)
+            .and_then(|rest| rest.strip_prefix('.'))
+        else {
+            continue;
+        };
+        let first = rest.split('.').next().unwrap_or(rest);
+        if !first.is_empty() && !keys.iter().any(|known| known == first) {
+            keys.push(first.to_owned());
+        }
+    }
+    keys
+}
+
 /// The first problem of the registrations of `slot` in `app`, as the boot
 /// error. `section` is the schema of the section the slot is in; its
-/// top-level keys are names a registration may not take (a `*` slot has
-/// none).
+/// top-level keys, and the keys of the sections registered just below it
+/// (`push` for `notify.push`), are names a registration may not take (a `*`
+/// slot has none).
 ///
 /// Not public API: what the driver kinds of Navree call.
 #[doc(hidden)]
@@ -615,7 +639,13 @@ pub fn check_registrations(
 ) -> Result<(), BoxError> {
     let section_keys: Vec<String> = match section {
         Some(schema) if !slot.key().contains('*') => {
-            schema.fields.into_iter().map(|field| field.name).collect()
+            let mut keys: Vec<String> = schema.fields.into_iter().map(|field| field.name).collect();
+            let registered = app.contributions::<SectionRegistration>();
+            keys.extend(nested_section_keys(
+                section_of(slot.key()),
+                registered.iter().map(|registration| registration.value.key()),
+            ));
+            keys
         }
         _ => Vec::new(),
     };
@@ -1056,14 +1086,16 @@ pub(crate) fn check_names(
 }
 
 /// The top-level keys of the section `slot` is in, as the registry
-/// describes it; none for a `*` slot.
+/// describes it, and the keys of the sections registered just below it;
+/// none for a `*` slot.
 pub(crate) fn section_keys(registry: &ConfigRegistry, slot: &DriverSlot) -> Vec<String> {
     if slot.key().contains('*') {
         return Vec::new();
     }
-    registry
-        .section(section_of(slot.key()))
-        .and_then(|section| section.schema.as_ref())
+    let section = section_of(slot.key());
+    let mut keys: Vec<String> = registry
+        .section(section)
+        .and_then(|info| info.schema.as_ref())
         .map(|schema| {
             schema
                 .fields
@@ -1071,7 +1103,12 @@ pub(crate) fn section_keys(registry: &ConfigRegistry, slot: &DriverSlot) -> Vec<
                 .map(|field| field.name.clone())
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    keys.extend(nested_section_keys(
+        section,
+        registry.sections().iter().map(|info| info.key),
+    ));
+    keys
 }
 
 /// For each slot: its key, its built-in names then the names registered

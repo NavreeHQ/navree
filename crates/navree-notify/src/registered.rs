@@ -189,7 +189,7 @@ pub trait ModuleBuilderNotifyChannelsExt {
     ///
     /// A name that is not such a word, a built-in driver (`twilio`,
     /// `vonage`, `sns`, `aws_sns`, `log`), a key of the `notify` section
-    /// (`slack`, `meta`) and a name two modules register fail the boot,
+    /// (`slack`, `meta`, `push`) and a name two modules register fail the boot,
     /// naming `m.sms_driver` and the module, also when another driver is
     /// selected; `config:check` says the same. A factory that fails fails
     /// the boot. An app's own unnamed `dyn SmsDriver` (a fake in a test)
