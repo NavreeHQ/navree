@@ -210,10 +210,10 @@ impl Core {
             response
                 .headers
                 .retain(|(name, _)| !name.eq_ignore_ascii_case(navree_native::KEEP_HEADER));
-            // A screen's own page is taken away from the device whatever the
-            // list in memory says; another request's address only when listed.
-            let page = matches!(asked.purpose, Pending::Page { .. });
-            self.forget_kept(&asked.url, page);
+            // What a read asked for is taken away from the device when the list
+            // holds it; before the list is read, remembered to be.
+            let read = asked.method == Method::Get && !asked.delete;
+            self.forget_kept(&asked.url, read);
             return response;
         }
         response
@@ -292,8 +292,8 @@ impl Core {
     }
 
     /// Takes away what the client keeps for `url`, when the list says it
-    /// keeps a page there; before the list is read, remembers a screen's page
-    /// (`always`) to take away once it is.
+    /// keeps a page there; before the list is read, remembers what a read
+    /// asked for (`always`) to take away once it is.
     pub(crate) fn forget_kept(&mut self, url: &str, always: bool) {
         if !self.config.cache.persist {
             return;

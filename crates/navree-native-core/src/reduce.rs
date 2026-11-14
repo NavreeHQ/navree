@@ -2685,6 +2685,61 @@ mod tests {
         assert!(written.is_empty(), "{written:?}");
     }
 
+    /// Before the list is read, any read answered without the keep header
+    /// is remembered, and taken away once the list holds its address: a
+    /// search form's query as much as a screen's page.
+    #[test]
+    fn a_read_answered_before_the_list_is_read_is_taken_away_once_it_is() {
+        let mut config = Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        );
+        config.cache.persist = true;
+        let mut core = Core::new(config);
+        core.send(Event::Start);
+        core.send(Event::Response(Response {
+            request: 1,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: include_str!("../transcripts/fixtures/store/shell.json").to_owned(),
+            ..Response::default()
+        }));
+        // A form's own read, not a screen's page, answered without the header.
+        core.fetch(
+            Pending::Send {
+                screen: 1,
+                visit: 0,
+                key: "search".to_owned(),
+                write: false,
+                in_place: true,
+            },
+            Method::Get,
+            "/orders",
+            None,
+            PAGE_LIMIT,
+        );
+        let request = core.inner.next.request;
+        core.settle();
+        core.send(Event::Response(Response {
+            request,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: include_str!("../transcripts/fixtures/store/orders.json").to_owned(),
+            ..Response::default()
+        }));
+        let update = core.send(Event::Cache {
+            key: "boot".to_owned(),
+            value: Some(include_str!("../transcripts/fixtures/made/kept-boot.json").to_owned()),
+        });
+        assert!(
+            update.effects.iter().any(|effect| matches!(
+                effect,
+                Effect::CacheWrite { key, value: None } if key == "page:https://shop.example/orders"
+            )),
+            "{update:?}"
+        );
+    }
+
     #[test]
     fn a_picture_in_the_shell_s_user_menu_is_written_whole() {
         let mut core = Core::new(Config::new(
