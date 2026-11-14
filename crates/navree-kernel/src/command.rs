@@ -1,5 +1,5 @@
-//! CLI commands contributed by modules, and the built-in `check`, `help`
-//! and `introspect`.
+//! CLI commands contributed by modules, and the built-in `check`, `help`,
+//! `introspect` and `plugins`.
 
 use std::fmt;
 use std::future::Future;
@@ -81,7 +81,7 @@ impl fmt::Debug for CommandSpec {
 }
 
 /// Built-in commands handled by [`AppBuilder::run_with_args`](crate::AppBuilder::run_with_args).
-pub(crate) const BUILT_INS: [(&str, &str); 3] = [
+pub(crate) const BUILT_INS: [(&str, &str); 4] = [
     (
         "check [--graph]",
         "Validate the module graph without constructing providers",
@@ -91,23 +91,43 @@ pub(crate) const BUILT_INS: [(&str, &str); 3] = [
         "introspect --json",
         "Print the module graph and commands as JSON without constructing providers",
     ),
+    (
+        "plugins [--json]",
+        "List the plugins and what each adds, without constructing providers",
+    ),
 ];
+
+/// Built-in commands that give way to a module command of the same name.
+pub(crate) const YIELDING: [&str; 2] = ["plugins", "plugin:publish"];
+
+/// The built-in commands of an app with `report`'s modules, as (usage,
+/// about): [`BUILT_INS`] without one that yields to a module command of its
+/// name.
+pub(crate) fn built_ins(
+    report: &GraphReport,
+) -> impl Iterator<Item = (&'static str, &'static str)> + '_ {
+    BUILT_INS.into_iter().filter(move |&(usage, _)| {
+        let name = usage.split_whitespace().next().unwrap_or(usage);
+        !(YIELDING.contains(&name) && report.has_command(name))
+    })
+}
 
 /// The text printed by `help`.
 pub(crate) fn help_text(report: &GraphReport) -> String {
+    let listed: Vec<(&str, &str)> = built_ins(report).collect();
     let commands: Vec<(&str, &str)> = report
         .modules
         .iter()
         .flat_map(|m| m.commands.iter().map(|c| (c.name, c.about)))
         .collect();
-    let width = BUILT_INS
+    let width = listed
         .iter()
         .chain(commands.iter())
         .map(|(name, _)| name.len())
         .max()
         .unwrap_or(0);
     let mut out = String::from("Usage: <command> [args...]\n\nBuilt-in commands:\n");
-    for (name, about) in BUILT_INS {
+    for (name, about) in listed {
         out.push_str(&format!("  {name:width$}  {about}\n"));
     }
     if !commands.is_empty() {
@@ -117,4 +137,37 @@ pub(crate) fn help_text(report: &GraphReport) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{CommandInfo, ModuleReport};
+
+    #[test]
+    fn help_leaves_out_a_built_in_that_yields() {
+        struct Mine;
+        let own = GraphReport {
+            modules: vec![ModuleReport {
+                id: crate::ModuleId::of::<Mine>(),
+                name: "Mine",
+                global: false,
+                imports: Vec::new(),
+                providers: Vec::new(),
+                exports: Vec::new(),
+                commands: vec![CommandInfo {
+                    name: "plugins",
+                    about: "The app's own list",
+                }],
+            }],
+        };
+        let text = help_text(&own);
+        assert!(!text.contains("plugins [--json]"), "{text}");
+        assert!(
+            text.lines()
+                .any(|l| l.trim_start().starts_with("plugins ") && l.ends_with("The app's own list")),
+            "{text}"
+        );
+        assert!(help_text(&GraphReport { modules: Vec::new() }).contains("plugins [--json]"));
+    }
 }
