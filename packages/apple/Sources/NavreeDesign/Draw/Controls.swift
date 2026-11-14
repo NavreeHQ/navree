@@ -45,16 +45,19 @@ struct ButtonLabel: View {
         }
     }
 
-    private var symbol: String? {
-        button.standard.flatMap(Symbols.standard) ?? button.icon.flatMap(Symbols.symbol(for:)) ?? Symbols.forRole(button.role)
+    /// The standard action's symbol, else the icon's, else the role's.
+    private var symbol: Image? {
+        if let standard = button.standard.flatMap(Symbols.standard) { return Image(systemName: standard) }
+        if let image = button.icon.flatMap(Symbols.image(for:)) { return image }
+        return Symbols.forRole(button.role).map { Image(systemName: $0) }
     }
 
     var body: some View {
         if showIcon, let symbol {
             if showTitle {
-                Label(button.label, systemImage: symbol).labelStyle(.titleAndIcon)
+                Label { Text(button.label) } icon: { symbol }.labelStyle(.titleAndIcon)
             } else {
-                Label(button.label, systemImage: symbol).labelStyle(.iconOnly)
+                Label { Text(button.label) } icon: { symbol }.labelStyle(.iconOnly)
             }
         } else if showIcon, let icon = button.icon {
             if showTitle {
@@ -196,8 +199,8 @@ struct MenuPart: View {
     }
 
     @ViewBuilder private func label(_ icon: Navree.Icon) -> some View {
-        if let symbol = Symbols.symbol(for: icon) {
-            Label(menu.label, systemImage: symbol)
+        if let symbol = Symbols.image(for: icon) {
+            Label { Text(menu.label) } icon: { symbol }
         } else {
             Label { Text(menu.label) } icon: { Glyph(icon: icon, icons: context.icons) }
         }

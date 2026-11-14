@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreText
 import Foundation
 import NavreeProtocol
 import SwiftUI
@@ -232,39 +233,56 @@ public enum SVGPath {
 }
 
 /// An icon's own shape, drawn as Apple draws a template symbol: in the colour
-/// around it, stroked at a weight that matches the text beside it.
+/// around it, as large as the system's symbols in the font around it and with
+/// lines as heavy as theirs at its weight (``DrawnIcon``), following the
+/// person's text size, Bold Text and the image scale, and standing on the
+/// line where a symbol stands.
 public struct IconShapeView: View {
     let paths: [String]
     let fills: [String]
     let viewBox: CGRect
+    let style: Font.TextStyle
 
-    @ScaledMetric private var size: CGFloat
+    @Environment(\.font) private var font
+    @Environment(\.fontResolutionContext) private var fontContext
+    @Environment(\.imageScale) private var imageScale
 
-    /// An icon `side` points wide and high before the person's text size,
-    /// following it as `style` does.
-    public init(paths: [String], fills: [String], viewBox: String?, side: Double = 20, relativeTo style: Font.TextStyle = .body) {
+    /// An icon sized by the font around it, or by `style` where no font is set.
+    public init(paths: [String], fills: [String], viewBox: String?, relativeTo style: Font.TextStyle = .body) {
         self.paths = paths
         self.fills = fills
         self.viewBox = Self.box(viewBox)
-        _size = ScaledMetric(wrappedValue: CGFloat(side), relativeTo: style)
+        self.style = style
     }
 
     public var body: some View {
-        Canvas { context, canvas in
-            let scale = min(canvas.width / viewBox.width, canvas.height / viewBox.height)
-            let transform = CGAffineTransform(translationX: -viewBox.minX, y: -viewBox.minY)
-                .concatenating(CGAffineTransform(scaleX: scale, y: scale))
-            let shading = GraphicsContext.Shading.foreground
-            for data in paths {
-                let path = SVGPath.path(data).applying(transform)
-                context.stroke(path, with: shading, style: StrokeStyle(lineWidth: 2 * scale, lineCap: .round, lineJoin: .round))
-            }
-            for data in fills {
-                context.fill(SVGPath.path(data).applying(transform), with: shading)
-            }
+        let metrics = Self.metrics(font: font ?? .system(style), context: fontContext, scale: imageScale)
+        IconCanvas(paths: paths, fills: fills, viewBox: viewBox, metrics: metrics)
+            .frame(width: metrics.side, height: metrics.side)
+            .alignmentGuide(.firstTextBaseline) { _ in CGFloat(metrics.baseline) }
+            .alignmentGuide(.lastTextBaseline) { _ in CGFloat(metrics.baseline) }
+            .accessibilityHidden(true)
+    }
+
+    /// The metrics of a drawn icon in `font` as the environment resolves it:
+    /// the resolved font is already the person's text size and, with Bold
+    /// Text on, the bolder weight, as the words beside the icon are.
+    static func metrics(font: Font, context: Font.Context, scale: Image.Scale) -> DrawnIcon.Metrics {
+        let resolved = font.resolve(in: context)
+        let traits = CTFontCopyTraits(resolved.ctFont) as NSDictionary
+        let weight = (traits[kCTFontWeightTrait] as? NSNumber)?.doubleValue ?? 0
+        return DrawnIcon.metrics(
+            pointSize: Double(resolved.pointSize), weight: weight, scale: Self.scale(scale),
+            capHeight: Double(CTFontGetCapHeight(resolved.ctFont))
+        )
+    }
+
+    static func scale(_ scale: Image.Scale) -> DrawnIcon.Scale {
+        switch scale {
+        case .small: .small
+        case .large: .large
+        default: .medium
         }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
     }
 
     static func box(_ text: String?) -> CGRect {
@@ -274,18 +292,54 @@ public struct IconShapeView: View {
     }
 }
 
+/// The paths of an icon in the middle of its frame: its box as large as the
+/// metrics say, its lines as heavy, round at their ends and corners as the
+/// toolkit draws them.
+struct IconCanvas: View {
+    let paths: [String]
+    let fills: [String]
+    let viewBox: CGRect
+    let metrics: DrawnIcon.Metrics
+
+    var body: some View {
+        Canvas { context, canvas in
+            let longest = max(viewBox.width, viewBox.height)
+            let scale = metrics.box / longest
+            let origin = CGPoint(
+                x: (canvas.width - viewBox.width * scale) / 2, y: (canvas.height - viewBox.height * scale) / 2
+            )
+            let transform = CGAffineTransform(translationX: -viewBox.minX, y: -viewBox.minY)
+                .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+                .concatenating(CGAffineTransform(translationX: origin.x, y: origin.y))
+            let shading = GraphicsContext.Shading.foreground
+            let line = StrokeStyle(lineWidth: metrics.stroke, lineCap: .round, lineJoin: .round)
+            for data in paths {
+                context.stroke(SVGPath.path(data).applying(transform), with: shading, style: line)
+            }
+            for data in fills {
+                context.fill(SVGPath.path(data).applying(transform), with: shading)
+            }
+        }
+    }
+}
+
 /// An icon's own shape as an image, for the places that take only images: a
-/// tab bar item, a sidebar row. It is a template, so it takes the tint.
+/// tab bar item, a sidebar row. It is as large as the system's symbols in
+/// that place (``DrawnIcon/bar(_:)``), and a template, so it takes the tint.
 @MainActor
 public enum IconImage {
-    public static func image(_ icon: Navree.Icon, icons: [String: Navree.IconShape] = [:]) -> Image? {
+    public static func image(
+        _ icon: Navree.Icon, icons: [String: Navree.IconShape] = [:], in bar: DrawnIcon.Bar, boldText: Bool = false
+    ) -> Image? {
         let shape = icon.name.flatMap { icons[$0] }
         let paths = icon.paths.isEmpty ? shape?.paths ?? [] : icon.paths
         let fills = icon.fills.isEmpty ? shape?.fills ?? [] : icon.fills
         guard !paths.isEmpty || !fills.isEmpty else { return nil }
-        let view = IconShapeView(paths: paths, fills: fills, viewBox: icon.viewBox ?? shape?.viewBox)
+        let size = DrawnIcon.bar(bar)
+        let metrics = DrawnIcon.metrics(pointSize: size.pointSize, weight: 0, boldText: boldText, scale: size.scale)
+        let view = IconCanvas(paths: paths, fills: fills, viewBox: IconShapeView.box(icon.viewBox ?? shape?.viewBox), metrics: metrics)
+            .frame(width: metrics.side, height: metrics.side)
             .foregroundStyle(.black)
-            .frame(width: 24, height: 24)
         let renderer = ImageRenderer(content: view)
         renderer.scale = 3
         guard let cgImage = renderer.cgImage else { return nil }

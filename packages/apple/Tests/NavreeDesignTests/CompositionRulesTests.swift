@@ -258,14 +258,6 @@ private let navigate = Navree.Action.navigate(Navree.Action.Navigate(href: "/sle
     #expect(!CompositionRules.keepsWhole(Navree.Text(value: "harpreet.singh@example.in")))
 }
 
-@Test func aDrawnIconIsAsLargeAsASymbolOfItsStyle() {
-    #expect(CompositionRules.iconSide(nil) == 20)
-    #expect(CompositionRules.iconSide(.body) == 20)
-    #expect(CompositionRules.iconSide(.caption) < CompositionRules.iconSide(.body))
-    #expect(CompositionRules.iconSide(.title2) < CompositionRules.iconSide(.title))
-    #expect(CompositionRules.iconSide(.display) > CompositionRules.iconSide(.largeTitle))
-}
-
 @Test func aHintIsOfferedByWhatItIsAbout() {
     #expect(HintRules.actionName(Navree.Hint(about: "the health score", text: "…")) == "About the health score")
     #expect(HintRules.actionName(Navree.Hint(about: " ", text: "…")) == "About")

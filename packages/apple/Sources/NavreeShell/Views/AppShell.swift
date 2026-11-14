@@ -419,7 +419,7 @@ struct Chrome: View {
         case .tabBar:
             TabView(selection: selection) {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                    tab(item, index)
+                    tab(item, index, inTabBar: true)
                 }
             }
         case .sidebarAdaptable where !NavigationRules.groupsAsSections(groups):
@@ -456,11 +456,11 @@ struct Chrome: View {
         })
     }
 
-    private func tab(_ item: Destination, _ index: Int) -> some TabContent<Int> {
+    private func tab(_ item: Destination, _ index: Int, inTabBar: Bool = false) -> some TabContent<Int> {
         Tab(value: index) {
             StackView(stack: item.stack, client: client, configuration: configuration)
         } label: {
-            DestinationLabel(label: item.label, icon: item.icon)
+            DestinationLabel(label: item.label, icon: item.icon, inTabBar: inTabBar)
         }
         .badge(item.badge.flatMap { Int($0) } ?? 0)
     }
@@ -497,19 +497,40 @@ struct DestinationGroup: Identifiable {
 }
 
 /// A destination's label in the tab bar or the sidebar: its name and the
-/// system symbol that means the same, or its own icon drawn as a template.
+/// system symbol that means the same, or its own icon drawn as a template
+/// as large as the system's symbols there.
 struct DestinationLabel: View {
     let label: String
     let icon: Navree.Icon?
+    /// In a tab bar rather than a sidebar.
+    var inTabBar = false
+
+    @Environment(\.navree) private var context
+    @Environment(\.legibilityWeight) private var legibility
+    #if os(macOS)
+    @Environment(\.sidebarRowSize) private var rowSize
+    #endif
 
     var body: some View {
-        if let icon, let symbol = Symbols.symbol(for: icon) {
-            Label(label, systemImage: symbol)
-        } else if let icon, let image = IconImage.image(icon) {
+        if let icon, let symbol = Symbols.image(for: icon) {
+            Label { Text(label) } icon: { symbol }
+        } else if let icon, let image = IconImage.image(icon, icons: context.icons, in: bar, boldText: legibility == .bold) {
             Label { Text(label) } icon: { image }
         } else {
             Label(label, systemImage: "square.dashed")
         }
+    }
+
+    private var bar: DrawnIcon.Bar {
+        #if os(macOS)
+        switch rowSize {
+        case .small: .macSidebar(.small)
+        case .large: .macSidebar(.large)
+        default: .macSidebar(.medium)
+        }
+        #else
+        inTabBar ? .tabBar : .sidebar
+        #endif
     }
 }
 

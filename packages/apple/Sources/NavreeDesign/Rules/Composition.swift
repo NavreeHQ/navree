@@ -373,21 +373,6 @@ public enum CompositionRules {
     /// The longest word kept whole on its line.
     public static let wholeWord = 16
 
-    /// The side of an icon drawn from its paths, in points before the person's
-    /// text size, for the text style it is as large as: as tall as a symbol of
-    /// that style, so a drawn icon and a system symbol beside it match.
-    public static func iconSide(_ scale: Navree.TextStyle?) -> Double {
-        switch scale {
-        case .caption: 14
-        case .callout: 19
-        case .title2: 26
-        case .title: 33
-        case .largeTitle: 40
-        case .display: 56
-        case .body, .headline, .mono, nil: 20
-        }
-    }
-
     // MARK: Motion
 
     /// How words show that they changed.
