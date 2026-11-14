@@ -96,11 +96,15 @@ enforce_for_verified_domains = true                     # refuse passwords for v
 - **Writes** of a sign-in (user, identity, membership) run in their own
   transaction: a refused sign-in writes nothing, even when answered with a
   redirect.
-- **Customer pages.** Set `owner` yourself, check `connection(key)?.owner`
-  before `update_connection`, `delete_connection`, `add_domain` or
-  `remove_domain`, never pass `provisioning` through, never call
-  `mark_domain_verified` for a customer. The module's management routes are
-  staff routes.
+- **Customer pages.** Set `owner` yourself (never let a customer choose it:
+  a connection owned by `SsoOwner::App` keeps `allow_unverified_emails`
+  working), check `connection(key)?.owner` before `update_connection`,
+  `delete_connection` or `add_domain`, never pass `provisioning` through,
+  never call `mark_domain_verified` for a customer. `verify_domain` and
+  `remove_domain` take a domain's id: look the id up among `domains(key)` of
+  a connection the workspace owns first, and refuse it otherwise. The
+  module's management routes are staff routes: grant `sso.manage` app-wide
+  only to the app's own staff.
 - **Enforcement** is one navree-auth `SignInPolicy` (`SsoSignInPolicy`):
   for a verified domain of an enabled, enforcing connection, every sign-in
   but that connection's own gets 403 `sso_required` ("Sign in with
