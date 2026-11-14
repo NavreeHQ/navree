@@ -382,7 +382,8 @@ impl ClientDescriptor {
                 return Err(ClientError::Malformed(pair.to_owned()));
             }
             // A value the client wrote percent-encoded (see `to_header`).
-            let value = unescaped(value);
+            let raw = value;
+            let value = unescaped(raw);
             let value = value.as_str();
             match key {
                 "platform" => {
@@ -423,11 +424,12 @@ impl ClientDescriptor {
                 "text" => client.text_percent = percent(value)?,
                 "locale" => client.locale = value.to_owned(),
                 "tz" => client.tz = value.to_owned(),
+                // Each capability is read by itself, once they are told apart.
                 "caps" => {
-                    client.caps = value
+                    client.caps = raw
                         .split('+')
                         .filter(|cap| !cap.is_empty())
-                        .map(str::to_owned)
+                        .map(unescaped)
                         .collect();
                 }
                 _ => {}
@@ -534,7 +536,8 @@ const HEX: &[u8; 16] = b"0123456789ABCDEF";
 
 /// `value` with each `%` and two hex digits read as the byte they name. A `%`
 /// not followed by two hex digits stays, and so does the whole value when
-/// the bytes are not UTF-8 once read.
+/// the bytes are not UTF-8 once read, or would hold what a value may not
+/// (see `unsafe_in_a_value`).
 fn unescaped(value: &str) -> String {
     let bytes = value.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
@@ -556,7 +559,26 @@ fn unescaped(value: &str) -> String {
             }
         }
     }
-    String::from_utf8(out).unwrap_or_else(|_| value.to_owned())
+    match String::from_utf8(out) {
+        Ok(read) if !read.chars().any(unsafe_in_a_value) => read,
+        _ => value.to_owned(),
+    }
+}
+
+/// Whether `c`, once read, would make a value say more than a value: a
+/// control character, a mark of the header's own (`;`, `=`), or a character
+/// that changes the direction or the joining of text without being seen.
+fn unsafe_in_a_value(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            ';' | '='
+                | '\u{061C}'
+                | '\u{200B}'..='\u{200F}'
+                | '\u{202A}'..='\u{202E}'
+                | '\u{2060}'..='\u{2069}'
+                | '\u{FEFF}'
+        )
 }
 
 /// How a page shown in a native client's web view is known: a token the client
@@ -738,7 +760,7 @@ mod tests {
     #[test]
     fn a_value_that_is_not_a_token_is_written_percent_encoded_and_read_back() {
         let mut client = Client::new(Platform::Android, FormFactor::Phone);
-        client.os = "16 (Pixel; build=AP4A)".to_owned();
+        client.os = "16 (Pixel 9, build AP4A)".to_owned();
         client.app = "१.४.०".to_owned();
         client.lib = "0.3.0 beta".to_owned();
         client.locale = "pa-Guru-IN".to_owned();
@@ -752,7 +774,7 @@ mod tests {
             "{header}"
         );
         assert!(
-            header.contains("os=16%20%28Pixel%3B%20build%3DAP4A%29"),
+            header.contains("os=16%20%28Pixel%209%2C%20build%20AP4A%29"),
             "{header}"
         );
         assert!(
@@ -764,6 +786,28 @@ mod tests {
         client.app = "100%".to_owned();
         assert!(client.to_header().contains("app=100%25"));
         assert_eq!(Client::parse(&client.to_header()).unwrap(), client);
+        // A value with the header's own marks is written safely, and read
+        // back as it was written: it can't stand for more than one value.
+        client.os = "16; build=AP4A".to_owned();
+        let read = Client::parse(&client.to_header()).unwrap();
+        assert_eq!(read.os, "16%3B%20build%3DAP4A");
+    }
+
+    #[test]
+    fn a_value_that_would_hold_a_control_or_the_header_s_own_marks_once_read_stays_as_written() {
+        let client = Client::parse(
+            "platform=ios; form=phone; os=a%0Ab; app=1%3B2; lib=x%3Dy; locale=%00; tz=Asia/Kolkata%E2%80%AE",
+        )
+        .unwrap();
+        assert_eq!(client.os, "a%0Ab");
+        assert_eq!(client.app, "1%3B2");
+        assert_eq!(client.lib, "x%3Dy");
+        assert_eq!(client.locale, "%00");
+        // A right-to-left override is a format character, read as written too.
+        assert_eq!(client.tz, "Asia/Kolkata%E2%80%AE");
+        // Each of the capabilities is read by itself, after they are told apart.
+        let client = Client::parse("platform=ios; form=phone; caps=share%2Bpush+camera").unwrap();
+        assert_eq!(client.caps, ["share+push", "camera"]);
     }
 
     #[test]
