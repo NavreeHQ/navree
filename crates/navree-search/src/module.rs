@@ -4,12 +4,14 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use navree_config::ModuleBuilderConfigExt;
+use navree_config::__private::contribute_slot;
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_db::ModuleBuilderDbExt;
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::commands::commands;
+use crate::drivers::SLOT;
 use crate::error::map_search_error;
 use crate::index::IndexRegistration;
 use crate::migration::migrations;
@@ -82,6 +84,7 @@ impl Module for SearchModule {
 
 fn register(m: &mut ModuleBuilder, options: Option<SearchOptions>) {
     m.global();
+    contribute_slot(m, SLOT);
     match options {
         Some(options) => {
             let options = Arc::new(options);
