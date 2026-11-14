@@ -26,6 +26,28 @@ import Testing
     #expect(StackPath.change([], to: []) == nil)
 }
 
+@Test func aScreenStandsOnTheOneUnderItAndAPresentationOnTheScreenInFrontOfWhatItCovers() throws {
+    let nav = try JSONDecoder().decode(NavPart.self, from: Data(
+        #"""
+        {"stage":"ready","selected":1,"destinations":[
+          {"label":"Today","href":"/","stack":[1,7]},
+          {"label":"Orders","href":"/orders","stack":[2,3]}],
+         "modals":[{"present":"sheet","stack":[4,5]},{"present":"task","stack":[6]}]}
+        """#.utf8
+    ))
+    // Pushed: the screen under it in its stack, the chosen destination's or another's.
+    #expect(StackPath.under(3, in: nav) == 2)
+    #expect(StackPath.under(5, in: nav) == 4)
+    #expect(StackPath.under(7, in: nav) == 1)
+    // The first screen of a presentation: the screen in front of what it covers.
+    #expect(StackPath.under(4, in: nav) == 3)
+    #expect(StackPath.under(6, in: nav) == 5)
+    // A destination's first screen, and a screen no stack holds, stand on nothing.
+    #expect(StackPath.under(2, in: nav) == nil)
+    #expect(StackPath.under(1, in: nav) == nil)
+    #expect(StackPath.under(99, in: nav) == nil)
+}
+
 @Test func aFullPresentationCoversTheScreenAndAnyOtherIsASheet() {
     #expect(ModalRules.presentation(.full) == .cover)
     #expect(ModalRules.presentation(.sheet) == .sheet)

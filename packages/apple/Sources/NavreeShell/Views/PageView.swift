@@ -14,6 +14,8 @@ struct StackView: View {
     var modal: Modal?
 
     @Environment(\.navreeWindow) private var window
+    @Environment(\.navreeZoomSpace) private var zoomSpace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let layout = modal == nil ? SplitRules.layout(stack.first.flatMap { client.screen($0)?.screen?.body }, width: window) : .stack
@@ -34,6 +36,7 @@ struct StackView: View {
                                 id: id, depth: stack.firstIndex(of: id) ?? 1, modal: nil, client: client,
                                 configuration: configuration
                             )
+                            .navreeZoom(from: client.zoomSource(of: id, reduceMotion: reduceMotion), in: zoomSpace)
                         }
                     }
             }
@@ -85,6 +88,37 @@ public enum StackPath {
         }
         return nil
     }
+
+    /// The screen `screen` stands on: the one under it in its stack; for the
+    /// first screen of a presentation, the screen in front of the
+    /// presentation under it, or of the chosen destination's stack; `nil`
+    /// for a destination's first screen and a screen no stack holds.
+    public static func under(_ screen: ScreenID, in nav: NavPart) -> ScreenID? {
+        let selected = nav.destinations.indices.contains(nav.selected) ? nav.destinations[nav.selected].stack : []
+        let stacks = [selected] + nav.modals.map(\.stack)
+        for (level, stack) in stacks.enumerated() {
+            guard let index = stack.firstIndex(of: screen) else { continue }
+            if index > 0 { return stack[index - 1] }
+            return level > 0 ? stacks[..<level].last(where: { !$0.isEmpty })?.last : nil
+        }
+        for destination in nav.destinations {
+            if let index = destination.stack.firstIndex(of: screen), index > 0 { return destination.stack[index - 1] }
+        }
+        return nil
+    }
+}
+
+extension NativeClient {
+    /// The card the screen `id` grows out of as it comes in, and shrinks back
+    /// into as it is left: the part it was opened from (`screens[n].from`),
+    /// when the screen it stands on holds that part as a card that zooms.
+    /// `nil` when the person asked for less motion, and for a screen opened
+    /// from a row, a link, a button or nothing: it then comes in as any
+    /// screen does.
+    func zoomSource(of id: ScreenID, reduceMotion: Bool) -> String? {
+        let under = StackPath.under(id, in: nav).flatMap { screen($0)?.screen?.body }
+        return ZoomRules.source(from: screen(id)?.from, under: under, reduceMotion: reduceMotion)
+    }
 }
 
 /// The screens presented over everything, each over the one before: a sheet,
@@ -93,6 +127,8 @@ struct Modals: ViewModifier {
     let level: Int
     let client: NativeClient
     let configuration: ShellConfiguration
+    @Environment(\.navreeZoomSpace) private var zoomSpace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         let modal = level < client.nav.modals.count ? client.nav.modals[level] : nil
@@ -118,6 +154,7 @@ struct Modals: ViewModifier {
                 .presentationDetents(height == .half ? [.medium, .large] : [.large])
                 .presentationDragIndicator(height == .half ? .visible : .automatic)
                 .modifier(SheetSizing())
+                .navreeZoom(from: modal.stack.first.flatMap { client.zoomSource(of: $0, reduceMotion: reduceMotion) }, in: zoomSpace)
         }
     }
 
