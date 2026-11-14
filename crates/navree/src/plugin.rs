@@ -2,6 +2,10 @@
 //! an app's plugins, and the extension traits a plugin's modules use
 //! (`use navree::plugin::prelude::*;`).
 //!
+//! A plugin can also add a driver under a name of its own for each driver
+//! kind (`m.cache_store`, and the methods beside it), with what it needs in
+//! [`DriverName`] and [`DriverContext`].
+//!
 //! ```no_run
 //! use navree::prelude::*;
 //! use navree::plugin::prelude::*;
@@ -21,6 +25,7 @@
 //! ```
 
 pub use navree_config::ClientModule;
+pub use navree_config::{DriverContext, DriverName};
 pub use navree_contracts::EmbeddedLocales;
 /// A permission a module describes with `m.permissions(..)`; describing grants it to nobody.
 pub use navree_contracts::Permission;
@@ -34,6 +39,8 @@ pub use navree_view::TemplateDir;
 /// not in `navree::prelude`, so a glob import of it never makes an app's own
 /// method of the same name ambiguous.
 pub mod prelude {
+    #[cfg(feature = "cache")]
+    pub use navree_cache::ModuleBuilderCacheExt as _;
     pub use navree_contracts::ModuleBuilderLocalesExt as _;
     pub use navree_contracts::ModuleBuilderPermissionsExt as _;
     #[cfg(feature = "grpc")]
