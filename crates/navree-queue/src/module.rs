@@ -121,10 +121,7 @@ fn register(m: &mut ModuleBuilder, options: Option<QueueOptions>) {
                 };
                 let app = r.app();
                 let clock = app.try_get::<dyn Clock>().await;
-                let registrations = app
-                    .contributions::<JobRegistration>()
-                    .into_iter()
-                    .map(|c| (*c.value).clone());
+                let registrations: Vec<JobRegistration> = crate::queue::job_registrations(&app)?;
                 let telemetry = Telemetry::from_app(&app).await;
                 let policy = match app.try_get::<Config>().await {
                     Some(config) => TracePolicy::from_section(

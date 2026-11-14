@@ -292,6 +292,12 @@ fn run_job<J: Job>(payload: Value, ctx: JobContext) -> BoxFuture<'static, Result
 pub trait ModuleBuilderJobsExt {
     /// Contributes [`JobRegistration::of::<J>()`](JobRegistration::of) so the
     /// queue can run jobs of type `J`.
+    ///
+    /// Register each job type in one module. A job name that two modules
+    /// register logs a warning at boot and the first module's handler runs;
+    /// when one of the two belongs to a plugin that is not one of the
+    /// framework's own, the boot fails. A job type that a module both
+    /// registers and schedules is one registration.
     fn job<J: Job>(&mut self) -> &mut Self;
 }
 
