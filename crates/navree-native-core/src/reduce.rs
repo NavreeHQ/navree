@@ -525,13 +525,13 @@ impl Core {
     }
 
     /// Says, once for the event, that an address an answer gave does not
-    /// read and was not followed: of what kind, and its text up to its query.
+    /// read and was not followed: of what kind, and its scheme and host, never its path.
     pub(crate) fn said_refused(&mut self, kind: &str, address: &str) {
         if std::mem::replace(&mut self.inner.refusal_said, true) {
             return;
         }
-        let text = address.split(['?', '#']).next().unwrap_or("");
-        self.report("address", format!("{kind}: {text}"));
+        let site = crate::origin::site_of(address);
+        self.report("address", format!("{kind}: {site}"));
     }
 
     /// Asks the client to open an address outside the app: the one way an
@@ -2563,7 +2563,12 @@ mod tests {
             from: None,
         };
         let update = core.send(tap("/a/..//evil.example/x?token=s3cret#top"));
-        assert_eq!(reports(&update), ["link: /a/..//evil.example/x"]);
+        // Its kind, and never its path: a path can hold a token.
+        assert_eq!(reports(&update), ["link: a path"]);
+        let update = core.send(tap("https://user@evil.example/reset/s3cret?x=1"));
+        assert_eq!(reports(&update), ["link: https://user@evil.example"]);
+        let update = core.send(tap("javascript:alert(1)"));
+        assert_eq!(reports(&update), ["link: javascript:"]);
         // A redirect that does not read.
         let update = core.send(tap("/orders"));
         let request = update
@@ -2580,7 +2585,7 @@ mod tests {
             location: Some(" /sign-in?next=/orders".to_owned()),
             ..Response::default()
         }));
-        assert_eq!(reports(&update), ["redirect:  /sign-in"]);
+        assert_eq!(reports(&update), ["redirect: a path"]);
         // Another site is not refused, and is not said.
         assert!(reports(&core.send(tap("https://evil.example/x"))).is_empty());
         // A link from outside the app is the system's, and is not said.
@@ -2639,7 +2644,7 @@ mod tests {
             body: shell,
             ..Response::default()
         }));
-        assert_eq!(reports(&update), ["shell:  /orders"]);
+        assert_eq!(reports(&update), ["shell: a path"]);
         assert_eq!(core.view.destinations.len(), 1);
     }
 

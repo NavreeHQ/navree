@@ -257,7 +257,7 @@
       "expect": {
         "changed": [],
         "effects": [
-          {"t":"report","what":"address","detail":"link: javascript:alert(1)"}
+          {"t":"report","what":"address","detail":"link: javascript:"}
         ]
       }
     },
