@@ -68,6 +68,22 @@ With the feature `jni` the crate also exports the four native methods of the Kot
 
 Only `origin` and `client` are required. `origin` must be `https` (`loopback_http: true` allows plain `http` for the machine itself, for development). `also` lists other origins the app treats as its own. `app_id` is the app's own name with its system (the bundle id, the package name): a sign-in is handed over to the app by it and the device's push token is registered for it, and without it neither is started. `client` is the protocol's own description of a client, sent with every request; its `caps` name the device features this build has, by the protocol's names (`share`, `clipboard`, `open_url`, `scan_code`, `location_once`, …). A control that calls a feature the build lacks is drawn as the call's stand-in says, or not at all. `sign_in.native` names the providers this build signs in with through the system's own sheet (`apple` on Apple's systems, `google` on Android); a sign-in with any other goes the web's way. `back_to_first` is Android's back, which leads to the first destination before it leaves the app. `undrawable` names the kinds this build of the client can't draw yet: a page that holds one is shown in the web view.
 
+## Addresses
+
+Every address the core is given, by a page, an answer, a redirect, a link from outside or the web view, is read before anything is done with it, and read as it is: nothing is trimmed and nothing is repaired. What does not read leads nowhere.
+
+- Text that is empty, starts with `#`, has white space at either end, or holds anywhere a control character, a backslash, or a space other than the ASCII space does not read. An ASCII space inside an address is kept.
+- A host is ASCII letters, digits, `-` and `.`, or an IPv6 literal in brackets. A name in another script is written in its ASCII form (`xn--…`). The origins in the configuration are held to the same rules.
+- An address with a name before its host (`user@host`) does not read.
+- A path that starts with `//` once its dot segments (`.`, `..`, `%2e`) are taken out does not read. An empty segment further inside stays, as a browser keeps it.
+- A scheme is read by what an address starts with, never by `://` somewhere in it: `/x?a=b://c` is a path and a query on the app's origin.
+
+**Every address a client is given to fetch, to stream from or to show in the web view is a whole address**, `scheme://host[:port]/path[?query]`, built from the parts that were read, on the app's own origin or one it allows (`also`). The text that came in never goes out as it came. A request whose address is not one of these is never sent: it fails as an answer of 502 does. A stream is never opened, and a page is never put in the web view (the screen fails).
+
+**A client asks again.** Before it fetches an address, streams from it or loads it in the web view, a client asks "is this ours?": is it an `http` or `https` address that reads by the rules above, on the app's own origin or one it allows? `vectors/addresses.json` holds the addresses every client must read the same way as the core: `resolve` (how an address found on a page reads, and the whole address that leaves) and `ours` (the question above). The core's tests run them, and so must each client's.
+
+**What opens outside.** An `open_url` effect holds only a whole `http` or `https` address that reads, written again from its parts (its fragment kept), or a `mailto`, `tel`, `sms` or `geo` one. A newer app (`upgrade`) is offered only at an `https` address; any other is dropped, and `upgrade.url` is empty.
+
 ## Events
 
 Every event is an object whose `t` names it. A field shown with `?` may be left out.
@@ -145,9 +161,9 @@ One more part is read without a change to say so: `{"part":"snapshot"}`, below.
 
 | `t` | Fields | What the client does |
 |---|---|---|
-| `fetch` | `request`, `method`, `url`, `headers`, `body?`, `timeout_ms`, `xsrf?` | Sends the request with its cookies, follows no redirect, and answers with a `response` event carrying `request`. `method` is `get`, `post` or `delete`. `body` is `{"t":"form","text":"a=1&b=2"}` (send `text` as it is), `{"t":"multipart","parts":[…]}` (write the parts, putting in the bytes kept under each `token`) or `{"t":"json","text":"{…}"}` (send `text` as it is, which may be empty: the framework's own routes speak JSON, and the answer's body is handed back as any other). With `xsrf`, the `XSRF-TOKEN` cookie, decoded, also goes in `x-xsrf-token`. A request for one region or for a list's next rows carries `x-navree-region` with the region's id. |
+| `fetch` | `request`, `method`, `url`, `headers`, `body?`, `timeout_ms`, `xsrf?` | Sends the request with its cookies, follows no redirect, and answers with a `response` event carrying `request`. `method` is `get`, `post` or `delete`. `body` is `{"t":"form","text":"a=1&b=2"}` (send `text` as it is), `{"t":"multipart","parts":[…]}` (write the parts, putting in the bytes kept under each `token`) or `{"t":"json","text":"{…}"}` (send `text` as it is, which may be empty: the framework's own routes speak JSON, and the answer's body is handed back as any other). With `xsrf`, the `XSRF-TOKEN` cookie, decoded, also goes in `x-xsrf-token`. A request for one region or for a list's next rows carries `x-navree-region` with the region's id, percent-encoded: each byte of its UTF-8 outside `!` to `~`, and `%`, is written as `%` and two hex digits, so a plain ASCII id goes as it is. `url` is a whole address on one of the app's origins (see "Addresses"). |
 | `cancel` | `request` | May drop the request: its answer is no longer wanted. |
-| `open_url` | `url`, `inside?` | Opens the address outside the app; with `inside`, in the system's browser inside the app. |
+| `open_url` | `url`, `inside?` | Opens the address outside the app; with `inside`, in the system's browser inside the app. Only a whole `http` or `https` address, or a `mailto`, `tel`, `sms` or `geo` one. |
 | `sign_in` | `url`, `callback?`, `ephemeral?` | Opens the system's sign-in session, and answers with `sign_in_done`. With `ephemeral`, the session shares nothing with the system's browser. |
 | `message` | `id`, `tone`, `text?`, `title?`, `notice?`, `action?` | Shows a short message, and answers with `message_shown` when it has gone. `notice` is a message of the core's own, for the client to word. |
 | `haptic` | `kind` | Plays a haptic. |
@@ -160,7 +176,7 @@ One more part is read without a change to say so: `{"part":"snapshot"}`, below.
 | `announce` | `text?`, `notice?`, `count?` | Says it to assistive technology. |
 | `copy` | `text`, `sensitive?` | Puts the text on the clipboard. With `sensitive`, as a secret the system should not show or sync. |
 | `timer`, `cancel_timer` | `timer`, `ms` | Answers with a `timer` event after that long; or no longer. |
-| `stream_open`, `stream_close` | `stream`, `url`, `headers` | Opens a stream of server-sent events and answers with `stream` events; or closes it. Only an event's name is passed on. The client does not reconnect by itself: the core asks. |
+| `stream_open`, `stream_close` | `stream`, `url`, `headers` | Opens a stream of server-sent events at `url`, a whole address on one of the app's origins, and answers with `stream` events; or closes it. Only an event's name is passed on. The client does not reconnect by itself: the core asks. |
 | `exit` | | There is nothing to go back to: the system takes the back. |
 | `report` | `what`, `detail` | Something the app's developers will want to know. |
 
@@ -188,8 +204,8 @@ One more part is read without a change to say so: `{"part":"snapshot"}`, below.
  "messages": [{"id": 1, "tone": "success", "text": "Refunded ₹10.00"}]}
 ```
 
-- `stage`: `starting`, `ready`, `failed` (with `failure`) or `upgrade` (with `upgrade`).
-- A screen's `content` is `{"t":"blank"}`, `{"t":"native","screen":…}` (a screen of the protocol) or `{"t":"web","url","title?","why","serial"}` (load the address in the web view; load it again when `serial` moves on).
+- `stage`: `starting`, `ready`, `failed` (with `failure`) or `upgrade` (with `upgrade`). An `upgrade` whose `url` is empty offers nothing to open.
+- A screen's `content` is `{"t":"blank"}`, `{"t":"native","screen":…}` (a screen of the protocol) or `{"t":"web","url","title?","why","serial"}` (load the address in the web view, a whole address on one of the app's origins; load it again when `serial` moves on).
 - **The tree is ready to draw.** What is open, hidden, disabled or waiting is already in it: a sheet's `open`, a stack's `hidden`, a button's `pending`. A state that has no field in the tree is in `states`, by the node's id.
 - **Every form and every field has an id that is its own on its screen.** A form that came with none goes by `@` and its address. `forms` holds each form's state by that id, and each field's by the field's id: what it holds now, and what is wrong with it. A client draws a field's value and messages from here, never from the node.
 - `overlays` lists the sheets, dialogs and popovers that are open, the last opened last.
@@ -245,7 +261,7 @@ The core follows redirects itself, and a redirect means one of three things.
 - **The page has moved.** Any other redirect of a plain request. The screen takes the address the answer came from, and nothing is presented over anything. (`transcripts/page-moved.json`)
 - **A post was done.** A redirect, or a `navigate` op, in the answer to a write. Out of a presented screen and back to what is under it; back to a screen already in the stack; or in place of the screen that posted. A `navigate` op that says how to `present` its screen is obeyed instead. (`transcripts/post-landing.json`, `transcripts/form-redirect.json`)
 
-A redirect that leaves the app's origins opens outside the app and is never fetched.
+A redirect that leaves the app's origins opens outside the app and is never fetched. One whose address does not read (see "Addresses") is not followed: the request failed, as a sixth redirect in a row does. (`transcripts/addresses.json`)
 
 ## What the core keeps current
 
@@ -256,6 +272,6 @@ A redirect that leaves the app's origins opens outside the app and is never fetc
 
 ## The conversations
 
-`transcripts/` holds each conversation with a server as a sequence of events in and the updates expected out, to be read by a person and replayed by the tests: opening the app, pages, every way a link is presented, route rules, back, refresh, forms (messages at fields, one send at a time, redirects, files), every op and command, regions, live regions, lists by cursor, the table's query, the web view's page, an app too old, kinds a build has never heard of, a session that ends, a page that moved, where a post leads, device calls, a sign-in with a provider, a sign-in handed over from the system's session, a second step, push, signing out on purpose, a launch that is restored, tabs, lists that change by revision, tables row by row, rows moved, fields that act as they change, ranges, searched options, ticked menu items, questions, a post from a menu an answer brought, tasks, the health charts and a day pager stepped in place, a pager in a screen's bar, parts added to a card and a carousel, the part a screen was opened from, a destination's page pushed as a detail, failures, answers nobody waits for any more, links from outside, a change of person, and what is kept between launches. The bodies in `transcripts/fixtures/store` are what the store demo answered; those in `fixtures/made` are written by hand.
+`transcripts/` holds each conversation with a server as a sequence of events in and the updates expected out, to be read by a person and replayed by the tests: opening the app, pages, every way a link is presented, route rules, back, refresh, forms (messages at fields, one send at a time, redirects, files), every op and command, regions, live regions, lists by cursor, the table's query, the web view's page, an app too old, kinds a build has never heard of, a session that ends, a page that moved, where a post leads, device calls, a sign-in with a provider, a sign-in handed over from the system's session, a second step, push, signing out on purpose, a launch that is restored, tabs, lists that change by revision, tables row by row, rows moved, fields that act as they change, ranges, searched options, ticked menu items, questions, a post from a menu an answer brought, tasks, the health charts and a day pager stepped in place, a pager in a screen's bar, parts added to a card and a carousel, the part a screen was opened from, a destination's page pushed as a detail, failures, answers nobody waits for any more, links from outside, addresses that do not read and an id in another script, a change of person, and what is kept between launches. The bodies in `transcripts/fixtures/store` are what the store demo answered; those in `fixtures/made` are written by hand.
 
 `NAVREE_CORE_TRANSCRIPTS=write cargo test -p navree-native-core --test transcripts` writes the expected updates and the schema file again after a change that is meant.

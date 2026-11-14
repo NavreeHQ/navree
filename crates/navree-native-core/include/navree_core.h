@@ -22,6 +22,14 @@
  * memory; it does not make the order of two racing events meaningful. The
  * thread needs about 1 MiB of stack.
  *
+ * Addresses: every address in an effect that a client fetches, streams from
+ * or shows in the web view is a whole address, scheme://host[:port]/path?query,
+ * on the app's own origin or one it allows. A client asks "is this ours?" again
+ * before it uses one, by the same rules (the README, "Addresses"), and runs
+ * vectors/addresses.json to prove it reads them the same way. An open_url
+ * effect holds only a whole http or https address, or a mailto, tel, sms or
+ * geo one.
+ *
  * Errors: a call never crashes on bad input. navree_core_new answers NULL for
  * a configuration it can't read. navree_core_send and navree_core_view answer
  * {"error":"..."} for an event or a query they can't read, for a NULL core,
