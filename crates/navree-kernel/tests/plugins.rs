@@ -238,6 +238,22 @@ fn a_plugin_in_a_reserved_namespace_fails_the_boot() {
 }
 
 #[test]
+fn a_plugin_named_after_a_folder_the_framework_reads_or_a_device_fails_the_boot() {
+    // `layouts` would put a plugin's templates over the framework's mail and document
+    // layouts, `fonts` its files into the documents' font folder, and a device name can be
+    // no folder at all on Windows.
+    for namespace in ["layouts", "fonts", "con", "nul", "aux", "prn", "com1", "lpt9"] {
+        let ledger = PluginInfo::new("navree-plugin-ledger", "plugins", namespace, "1.0.0");
+        assert_eq!(
+            errors(Navree::app().module(Claims("LedgerModule", ledger))),
+            format!(
+                "plugin `navree-plugin-ledger` uses the namespace `{namespace}`, which the framework keeps for itself; set another with plugin_info!(namespace = \"..\")"
+            )
+        );
+    }
+}
+
+#[test]
 fn a_first_party_name_in_another_crate_is_a_community_plugin() {
     // On the kernel's list and at its version, but a module of this crate: no exemption.
     let flags = PluginInfo::new(

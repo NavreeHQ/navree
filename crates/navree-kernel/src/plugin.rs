@@ -427,8 +427,13 @@ pub const FIRST_PARTY: &[(&str, &str)] = &[
 ];
 
 /// The namespaces the framework keeps for itself, sorted: a plugin that is
-/// not first-party may not use one. Not public API; Navree's own crates and
-/// tests use it.
+/// not first-party may not use one. They are the first words of the
+/// framework's configuration sections and permission prefixes, a few words
+/// of its own, the folders the framework reads below the plugins' folders
+/// (`layouts` for templates, `fonts` for documents), and the Windows device
+/// names a namespace could spell (`con`, `prn`, `aux`, `nul`, `com0` to
+/// `com9`, `lpt0` to `lpt9`), which no folder may be called. Not public API;
+/// Navree's own crates and tests use it.
 pub const RESERVED_NAMESPACES: &[&str] = &[
     "ai",
     "all",
@@ -436,8 +441,20 @@ pub const RESERVED_NAMESPACES: &[&str] = &[
     "app",
     "audit",
     "auth",
+    "aux",
     "billing",
     "cache",
+    "com0",
+    "com1",
+    "com2",
+    "com3",
+    "com4",
+    "com5",
+    "com6",
+    "com7",
+    "com8",
+    "com9",
+    "con",
     "database",
     "directory",
     "documents",
@@ -445,6 +462,7 @@ pub const RESERVED_NAMESPACES: &[&str] = &[
     "env",
     "flags",
     "fleet",
+    "fonts",
     "graphql",
     "grpc",
     "hashing",
@@ -453,21 +471,34 @@ pub const RESERVED_NAMESPACES: &[&str] = &[
     "http_client",
     "i18n",
     "integrations",
+    "layouts",
     "lighthouse",
     "log",
     "logbook",
+    "lpt0",
+    "lpt1",
+    "lpt2",
+    "lpt3",
+    "lpt4",
+    "lpt5",
+    "lpt6",
+    "lpt7",
+    "lpt8",
+    "lpt9",
     "mail",
     "mcp",
     "media",
     "micro",
     "navree",
     "notify",
+    "nul",
     "oauth",
     "observe",
     "operations",
     "organization",
     "orm",
     "plugins",
+    "prn",
     "queue",
     "realtime",
     "redis",
@@ -674,9 +705,32 @@ mod tests {
         for (package, krate) in FIRST_PARTY {
             assert_eq!(package.replace('-', "_"), *krate);
         }
-        assert_eq!(RESERVED_NAMESPACES.len(), 60);
+        assert_eq!(RESERVED_NAMESPACES.len(), 86);
         assert!(RESERVED_NAMESPACES.windows(2).all(|w| w[0] < w[1]));
         assert!(RESERVED_NAMESPACES.iter().all(|ns| is_namespace(ns)));
+    }
+
+    /// A namespace is a folder name (`resources/views/<namespace>/`): every word the path
+    /// rule refuses as a Windows device, and that the namespace grammar allows, is reserved.
+    #[test]
+    fn every_namespace_that_names_a_windows_device_is_reserved() {
+        let mut devices = Vec::new();
+        for stem in ["con", "prn", "aux", "nul", "com", "lpt"] {
+            for end in ["", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] {
+                let word = format!("{stem}{end}");
+                if is_namespace(&word) && !crate::publish::is_safe_relative_path(&word) {
+                    assert!(
+                        RESERVED_NAMESPACES.contains(&word.as_str()),
+                        "{word} is not reserved"
+                    );
+                    devices.push(word);
+                }
+            }
+        }
+        assert_eq!(devices.len(), 24, "{devices:?}");
+        for folder in ["layouts", "fonts"] {
+            assert!(RESERVED_NAMESPACES.contains(&folder), "{folder}");
+        }
     }
 
     #[test]
