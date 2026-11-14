@@ -79,6 +79,7 @@ mod money;
 mod options;
 mod page;
 mod panel;
+mod plugin;
 mod present;
 mod query;
 mod readable;
@@ -101,6 +102,7 @@ pub use metric::{Metric, MetricRange};
 pub use module::{Helm, HelmModule, ModuleBuilderHelmExt};
 pub use options::HelmOptions;
 pub use page::HelmPage;
+pub use plugin::{HelmLink, HelmWidget, ModuleBuilderHelmPanelExt};
 pub use resource::{FormData, ModelOf, RecordOf, Resource};
 pub use workspace::{StaffEntry, StaffOrganizationEntry, WORKSPACE_COOKIE, Workspaces};
 

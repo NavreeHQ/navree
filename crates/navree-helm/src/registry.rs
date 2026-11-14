@@ -1,16 +1,18 @@
-//! [`Registry`]: every resource and page of the panel, built when the panel
-//! boots.
+//! [`Registry`]: every resource and page of the panel, and the links and cards
+//! other modules add, built when the panel boots.
 
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use navree_kernel::{AppContext, BoxError, BoxFuture, Injectable, ModuleId};
+use navree_ui::html::LocalHref;
 
 use crate::field::{FieldKind, Related};
 use crate::handle::{ErasedResource, Handle};
 use crate::page::PageRegistration;
-use crate::{HelmOptions, HelmPage, Resource};
+use crate::plugin::{LinkRegistration, WidgetRegistration};
+use crate::{HelmLink, HelmOptions, HelmPage, HelmWidget, Resource};
 
 /// Builds a resource's handle.
 type Build = fn(
@@ -58,13 +60,30 @@ pub(crate) struct PageEntry {
     pub(crate) module: ModuleId,
 }
 
-/// The panel's resources (in menu order) and pages.
+/// A link another module added to the menu, checked at boot.
+#[derive(Clone, Debug)]
+pub(crate) struct LinkEntry {
+    pub(crate) link: HelmLink,
+    pub(crate) module: ModuleId,
+}
+
+/// A card another module added to the dashboard, checked at boot.
+#[derive(Clone, Debug)]
+pub(crate) struct WidgetEntry {
+    pub(crate) widget: HelmWidget,
+    pub(crate) module: ModuleId,
+}
+
+/// The panel's resources (in menu order) and pages, and the links and cards
+/// other modules add.
 #[derive(Default)]
 pub(crate) struct Registry {
     resources: Vec<Arc<dyn ErasedResource>>,
     by_slug: HashMap<String, usize>,
     by_type: HashMap<TypeId, usize>,
     pages: Vec<PageEntry>,
+    links: Vec<LinkEntry>,
+    widgets: Vec<WidgetEntry>,
 }
 
 impl Registry {
@@ -140,6 +159,60 @@ impl Registry {
             }
             registry.pages.push(PageEntry { page, module });
         }
+
+        // A link is drawn on every page of the panel: its address must be a path of this
+        // app, never another site's.
+        for contributed in app.contributions::<LinkRegistration>() {
+            let LinkRegistration { link, module } = (*contributed.value).clone();
+            if LocalHref::parse(&link.href).is_err() || !link.href.starts_with('/') {
+                return Err(format!(
+                    "m.helm_nav(\"{}\") in `{}`: the link must be a path on this app, such as /announcements",
+                    link.label, contributed.module.name
+                )
+                .into());
+            }
+            let entry = LinkEntry { link, module };
+            if !entry.link.icon.is_empty() && !crate::icons::exists(&entry.link.icon) {
+                tracing::warn!(
+                    target: "navree::helm",
+                    link = %entry.link.label,
+                    module = entry.module.name(),
+                    icon = %entry.link.icon,
+                    "the panel knows no icon by this name (any Lucide name needs the `helm-all-icons` feature); the menu shows a generic icon"
+                );
+            }
+            registry.links.push(entry);
+        }
+
+        let mut keys = HashSet::new();
+        for contributed in app.contributions::<WidgetRegistration>() {
+            let WidgetRegistration { widget, module } = (*contributed.value).clone();
+            let well_formed = !widget.key.is_empty()
+                && widget
+                    .key
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
+            if !well_formed {
+                return Err(format!(
+                    "Helm widget key `{}` in `{}` must be lower-case letters, digits and -",
+                    widget.key, contributed.module.name
+                )
+                .into());
+            }
+            if widget.template.is_none() {
+                return Err(format!(
+                    "Helm widget `{}` has no template: add .template(\"admin/widgets/{}\")",
+                    widget.key, widget.key
+                )
+                .into());
+            }
+            if !keys.insert(widget.key.clone()) {
+                return Err(format!("two Helm widgets use the key `{}`", widget.key).into());
+            }
+            registry.widgets.push(WidgetEntry { widget, module });
+        }
+        // A stable sort: cards of one order keep the order they were added in.
+        registry.widgets.sort_by_key(|entry| entry.widget.order);
         Ok(registry)
     }
 
@@ -221,5 +294,16 @@ impl Registry {
     /// The page with `slug`.
     pub(crate) fn page(&self, slug: &str) -> Option<&PageEntry> {
         self.pages.iter().find(|p| p.page.slug == slug)
+    }
+
+    /// The links other modules add to the menu, in registration order.
+    pub(crate) fn links(&self) -> &[LinkEntry] {
+        &self.links
+    }
+
+    /// The cards other modules add to the dashboard, by their order, then in
+    /// registration order.
+    pub(crate) fn widgets(&self) -> &[WidgetEntry] {
+        &self.widgets
     }
 }

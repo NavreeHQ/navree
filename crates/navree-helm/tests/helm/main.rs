@@ -16,6 +16,7 @@ mod fixes;
 mod hidden;
 mod metrics;
 mod pages;
+mod plugins;
 #[cfg(feature = "settings")]
 mod settings;
 mod signin;
