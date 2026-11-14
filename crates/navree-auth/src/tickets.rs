@@ -11,12 +11,15 @@ use navree_contracts::{
     BoxFuture, CallTickets, Clock, IssuedTicket, RedeemedTicket, TicketCheck, TicketError,
     TicketHolder, TicketRequest,
 };
-use navree_crypto::{CryptoError, Encrypter, random_token, sha256_hex};
+use navree_crypto::{AppKey, CryptoError, Encrypter, random_token, sha256_hex};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// What a sealed ticket says inside, as its version names it.
 const VERSION: &str = "navree.call.1";
+
+/// The purpose the tickets' key is derived for from the application key.
+const KEY_PURPOSE: &str = "navree-auth.call-tickets";
 
 /// The longest ticket accepted, in bytes (a sealed ticket is a few hundred).
 const MAX_TICKET_LEN: usize = 4096;
@@ -39,13 +42,16 @@ struct Sealed {
 }
 
 /// Sealed one-time tickets (navree-contracts' `CallTickets`): AES-256-GCM
-/// with the application key (navree-crypto's `Encrypter`), so a client can
-/// neither read nor make one, and single use through the cache (an atomic
-/// "add if absent" under the ticket's random name until it expires).
+/// with a key of their own, derived from the application key for this one
+/// purpose (navree-crypto's `Encrypter::derive_key`), so a client can
+/// neither read nor make one, nothing else sealed with the application key
+/// opens as a ticket, and single use through the cache (an atomic "add if
+/// absent" under the ticket's random name until it expires).
 ///
 /// `AuthModule` registers one as `dyn CallTickets`, on the app's cache when
 /// `CacheModule` is in the app (shared by every instance with a shared
-/// store), else an in-process one. Issuing stores nothing.
+/// store), else an in-process one. Issuing stores nothing. With more than
+/// one instance, a ticket is single use across them only on a shared cache.
 pub struct SealedTickets {
     encrypter: Arc<Encrypter>,
     cache: Cache,
@@ -53,9 +59,16 @@ pub struct SealedTickets {
 }
 
 impl SealedTickets {
-    /// Tickets sealed with `encrypter`, used once in `cache`, timed by
-    /// `clock`.
+    /// Tickets sealed with a key derived from `encrypter`'s current key for
+    /// tickets alone, used once in `cache`, timed by `clock`. Without an
+    /// application key, issuing fails (`TicketError::Unavailable`).
     pub fn new(encrypter: Arc<Encrypter>, cache: Cache, clock: Arc<dyn Clock>) -> Self {
+        let encrypter = match encrypter.derive_key(KEY_PURPOSE) {
+            Ok(key) => Arc::new(Encrypter::new(AppKey::from_bytes(key))),
+            // No current key: `encrypter` seals nothing either, and the
+            // error says so.
+            Err(_) => encrypter,
+        };
         Self {
             encrypter,
             cache,
@@ -257,5 +270,49 @@ mod tests {
             tickets.redeem(&"a".repeat(5000), &check).await,
             Err(TicketError::Malformed)
         );
+    }
+
+    #[tokio::test]
+    async fn tickets_are_sealed_with_a_key_of_their_own() {
+        let general = Arc::new(Encrypter::new(AppKey::generate()));
+        let clock = Arc::new(FixedClock::new(Utc::now()));
+        let tickets = SealedTickets::new(general.clone(), Cache::memory(), clock.clone());
+        let check = TicketCheck::new(holder("phone"), "scan_code").at("POST", "/stock/scan");
+
+        // The application key opens no ticket.
+        let issued = tickets
+            .issue(&TicketRequest::new(
+                holder("phone"),
+                "scan_code",
+                "POST",
+                "/stock/scan",
+            ))
+            .unwrap();
+        assert!(general.decrypt(&issued.ticket).is_err());
+
+        // Nor does anything it seals open as a ticket, even a ticket's inside.
+        let now = clock.now().timestamp();
+        let inside = Sealed {
+            v: VERSION.to_owned(),
+            n: random_token(22),
+            u: Some(Uuid::nil()),
+            s: session_hash(&holder("phone")),
+            f: "scan_code".to_owned(),
+            m: "POST".to_owned(),
+            p: "/stock/scan".to_owned(),
+            b: None,
+            i: now,
+            e: now + 60,
+        };
+        let sealed = general.encrypt_json(&inside).unwrap();
+        assert_eq!(
+            tickets.redeem(&sealed, &check).await,
+            Err(TicketError::Malformed)
+        );
+
+        // The same application key makes the same ticket key: another
+        // instance redeems what this one issued.
+        let other = SealedTickets::new(general, Cache::memory(), clock);
+        assert!(other.redeem(&issued.ticket, &check).await.is_ok());
     }
 }

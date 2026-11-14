@@ -24,6 +24,9 @@ every `@navree/*` package carries the same version.
 - A request authenticated with a bearer access token carries the token's session (`sid`) as the
   principal's `session_id`, so call tickets and push devices are bound to that session as they are
   for a browser's.
+- Call tickets (`SealedTickets`) are sealed with a key derived from the application key for tickets
+  alone, so no other value sealed with the application key opens as a ticket. Tickets issued
+  before the upgrade no longer redeem; they live minutes.
 
 ### Fixed
 

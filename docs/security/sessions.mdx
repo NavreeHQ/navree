@@ -220,7 +220,7 @@ The challenge is `SHA-256("navree-confirm-v1" ‖ nonce ‖ digest)`, where the 
 
 ## Tickets for results posted back
 
-When a page asks the client for something and the answer comes back in a later request (a confirmation, a scanned code, a location), that answer must come from the session the page was for, to the route the page meant, once. A ticket says so. The auth module registers `dyn navree::contracts::CallTickets`, which seals tickets with the application key and remembers used ones in the cache:
+When a page asks the client for something and the answer comes back in a later request (a confirmation, a scanned code, a location), that answer must come from the session the page was for, to the route the page meant, once. A ticket says so. The auth module registers `dyn navree::contracts::CallTickets`, which seals tickets with a key derived from the application key for tickets alone (nothing else sealed with the application key opens as a ticket) and remembers used ones in the cache:
 
 ```rust
 use navree::contracts::{AuthState, CallTickets, TicketCheck, TicketHolder, TicketRequest};
