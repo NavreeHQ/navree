@@ -109,7 +109,7 @@ struct ButtonPart: View {
         VStack(alignment: .leading, spacing: 4) {
             Group {
                 if prominent || (button.prominence == .high && button.role != .destructive) {
-                    control.buttonStyle(.borderedProminent).modifier(FingerTarget())
+                    control.buttonStyle(FingerRoom(prominent: true))
                 } else if borderless {
                     TargetRoom {
                         control.buttonStyle(.borderless)
@@ -117,7 +117,7 @@ struct ButtonPart: View {
                         DrawnTwin { ButtonLabel(button: button) }
                     }
                 } else {
-                    control.buttonStyle(.bordered).modifier(FingerTarget())
+                    control.buttonStyle(FingerRoom(prominent: false))
                 }
             }
             if let reason = ActionRules.reason(button) {
@@ -129,17 +129,64 @@ struct ButtonPart: View {
     }
 }
 
-/// A button in the content as large as a finger needs on iPhone and iPad:
-/// the system's large size, whose capsule is at least the 44 points Apple
-/// asks of every target (the regular one is 34.5 points tall). A Mac's
-/// pointer keeps the regular size.
-struct FingerTarget: ViewModifier {
-    func body(content: Content) -> some View {
-        #if os(iOS)
-        content.controlSize(.large)
-        #else
-        content
-        #endif
+/// A bordered button in the content, at the system's size for it
+/// (``HitRules/borderedSize``), as Mail, Settings and Reminders draw one in
+/// their content: on iPhone and iPad a capsule about 34 points tall, whose
+/// target reaches round it to at least 44 points each way
+/// (``HitRules/target(drawn:bar:)``). A tap in that room, outside the
+/// capsule, is the button's own, and VoiceOver outlines the whole target;
+/// the layout round it keeps the capsule's size, so the line it stands on
+/// keeps its spacing. A Mac's pointer needs only the capsule.
+struct FingerRoom: PrimitiveButtonStyle {
+    let prominent: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        Room(configuration: configuration, prominent: prominent)
+    }
+
+    struct Room: View {
+        let configuration: Configuration
+        let prominent: Bool
+        @Environment(\.isEnabled) private var enabled
+        @State private var drawn: CGSize = .zero
+
+        var body: some View {
+            let target = HitRules.target(drawn: (Double(drawn.width), Double(drawn.height)), bar: .current)
+            styled
+                .modifier(BorderedSize())
+                .onGeometryChange(for: CGSize.self, of: { $0.size }) { drawn = $0 }
+                .background {
+                    if enabled, target.width > drawn.width || target.height > drawn.height {
+                        // Larger than the capsule, centred on it, under it: only
+                        // a tap the capsule does not take comes here.
+                        Color.clear
+                            .frame(width: target.width, height: target.height)
+                            .contentShape(Rectangle())
+                            .onTapGesture { configuration.trigger() }
+                            .accessibilityHidden(true)
+                    }
+                }
+        }
+
+        /// iPhone and iPad take the size the rule says; a Mac keeps the size
+        /// its window gives its controls.
+        struct BorderedSize: ViewModifier {
+            func body(content: Content) -> some View {
+                #if os(iOS)
+                content.controlSize(HitRules.borderedSize)
+                #else
+                content
+                #endif
+            }
+        }
+
+        @ViewBuilder private var styled: some View {
+            if prominent {
+                Button(configuration).buttonStyle(.borderedProminent)
+            } else {
+                Button(configuration).buttonStyle(.bordered)
+            }
+        }
     }
 }
 

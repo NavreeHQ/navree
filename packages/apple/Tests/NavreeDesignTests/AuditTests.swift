@@ -71,6 +71,20 @@ private let systemLight: [(String, ContrastRules.RGB)] = [
     #expect(mac.width == 104 && mac.height == 16)
 }
 
+@Test func aBorderedButtonInTheContentIsTheSystemsRegularSizeWithATargetOfFortyFourPointsRoundIt() {
+    #expect(HitRules.borderedSize == .regular)
+    // "Mark as read" at the regular size: 34.33 points tall as drawn, its
+    // target 44 round it on iPhone and iPad.
+    let capsule = HitRules.target(drawn: (width: 126, height: 34.33), bar: .navigation)
+    #expect(capsule.width == 126 && capsule.height == 44)
+    // A short word's capsule: both ways.
+    let short = HitRules.target(drawn: (width: 40, height: 34.33), bar: .navigation)
+    #expect(short.width == 44 && short.height == 44)
+    // A Mac's pointer: the capsule.
+    let mac = HitRules.target(drawn: (width: 90, height: 20), bar: .window)
+    #expect(mac.width == 90 && mac.height == 20)
+}
+
 @Test func aRingsNumberFollowsEveryTextSize() {
     // At the size the ring was drawn for: 0.3 of the ring, as before.
     #expect(RingRules.centreSize(diameter: 188, textScale: 1, ringScale: 1) == 188 * 0.3)
