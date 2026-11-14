@@ -114,7 +114,7 @@ pub use app::{AppOptions, Environment};
 pub use client::{ClientModule, ClientModuleOptions};
 pub use config::Config;
 pub use dotenv::{DotenvEntryExists, parse_dotenv, set_dotenv_value};
-pub use driver::{DriverName, DriverNameError};
+pub use driver::{DriverContext, DriverName, DriverNameError, DriverSlot, RegisteredDriver};
 pub use error::ConfigError;
 pub use fallback::{Fallback, env_fallback, table_env_fallback};
 pub use lists::{comma_list, comma_list_of, comma_list_opt};
@@ -137,4 +137,10 @@ pub use usage::UnusedKey;
 #[doc(hidden)]
 pub mod __private {
     pub use serde_json::{Map, Value};
+
+    // The machinery the driver kinds of Navree share (see `DriverSlot`).
+    pub use crate::driver::{
+        DriverFactory, DriverRecord, build_driver, check_registrations, contribute_slot,
+        register_driver, registration_problems, selector_error,
+    };
 }
