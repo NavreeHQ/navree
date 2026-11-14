@@ -47,6 +47,7 @@ mod lifecycle;
 mod module;
 mod plugin;
 mod plugin_graph;
+mod publish;
 mod resolver;
 
 pub use app::{App, AppBuilder, AppContext, Contributed, ModuleInfo, Navree, WeakAppContext};
@@ -59,7 +60,7 @@ pub use key::{ModuleId, ProviderKey, Scope};
 pub use lazy::Lazy;
 pub use lifecycle::Lifecycle;
 pub use module::{CodeConfigured, ConfiguredModule, Injectable, IntoModules, Module};
-pub use plugin::PluginInfo;
+pub use plugin::{PluginInfo, PublishTag, Publishable};
 pub use resolver::Resolver;
 
 /// Items Navree's own crates and macros use; not public API.
@@ -68,6 +69,7 @@ pub mod __private {
     pub use crate::plugin::{
         FIRST_PARTY, RESERVED_NAMESPACES, default_namespace, is_namespace, namespace_text,
     };
+    pub use crate::publish::is_safe_relative_path;
 }
 
 /// A boxed error that can cross module and task boundaries.

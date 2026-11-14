@@ -1,5 +1,8 @@
-//! [`PluginInfo`] and `plugin_info!`: what a plugin says about itself, and the
-//! kernel's lists of first-party plugins and reserved namespaces.
+//! [`PluginInfo`] and `plugin_info!`: what a plugin says about itself, the
+//! files it ships ([`Publishable`]), and the kernel's lists of first-party
+//! plugins and reserved namespaces.
+
+use std::borrow::Cow;
 
 /// What a plugin says about itself: `m.plugin(plugin_info!())`.
 ///
@@ -116,6 +119,134 @@ impl PluginInfo {
 /// `None` for an empty string.
 const fn non_empty(value: &'static str) -> Option<&'static str> {
     if value.is_empty() { None } else { Some(value) }
+}
+
+/// The kinds of files a plugin ships that `plugin:publish` copies into the
+/// app, each into a folder of its own (relative to the app's folder):
+///
+/// | Tag | Folder | Path inside it |
+/// |---|---|---|
+/// | `views` | `resources/views/<namespace>/` | any relative path |
+/// | `locales` | `locales/<locale>/<namespace>/` | the first segment is the locale (`en`, `pa-IN`), the rest goes below `<namespace>/` |
+/// | `files` | `resources/<namespace>/` | any relative path |
+///
+/// There is no tag for configuration: `plugin:publish --tag config` runs the
+/// app's `config:publish --plugin <namespace>` instead.
+///
+/// ```
+/// use navree_kernel::PublishTag;
+///
+/// assert_eq!(PublishTag::from_name("locales"), Some(PublishTag::Locales));
+/// assert_eq!(PublishTag::Views.as_str(), "views");
+/// assert_eq!(PublishTag::ALL.len(), 3);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum PublishTag {
+    /// Templates, copied to `resources/views/<namespace>/`.
+    Views,
+    /// Translations, copied to `locales/<locale>/<namespace>/`.
+    Locales,
+    /// Other files (styles, images, scripts), copied to `resources/<namespace>/`.
+    Files,
+}
+
+impl PublishTag {
+    /// Every tag, in this order: views, locales, files.
+    pub const ALL: &'static [PublishTag] =
+        &[PublishTag::Views, PublishTag::Locales, PublishTag::Files];
+
+    /// `views`, `locales` or `files`.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            PublishTag::Views => "views",
+            PublishTag::Locales => "locales",
+            PublishTag::Files => "files",
+        }
+    }
+
+    /// The tag named `name` (`views`, `locales` or `files`), if there is one.
+    pub fn from_name(name: &str) -> Option<PublishTag> {
+        PublishTag::ALL
+            .iter()
+            .copied()
+            .find(|tag| tag.as_str() == name)
+    }
+}
+
+/// Files a plugin ships in its binary that `plugin:publish` copies into the
+/// app, all under one [`PublishTag`]. A module that names itself a plugin
+/// contributes it with `m.contribute(..)`.
+///
+/// Each path is relative to the tag's folder, with `/` between segments. The
+/// boot (and `check`) fails when a module that does not name itself a plugin
+/// contributes one, and when a path is not safe: empty, longer than 255 bytes
+/// (also once placed in its folder), or with a segment longer than 128 bytes;
+/// an empty, `.` or `..` segment, a leading `/`, a `\`, a `:` or a control
+/// character; one of `<>"|?*`; a segment ending in `.` or a space; a segment
+/// named after a Windows device (`con`, `prn`, `aux`, `nul`, `com0` to `com9`,
+/// `lpt0` to `lpt9`, in any case, with or without an extension); two paths of
+/// one plugin under one tag that differ only in case. Under `locales` the
+/// first segment is the locale.
+///
+/// ```
+/// use navree_kernel::{PublishTag, Publishable};
+///
+/// let views = Publishable::new(PublishTag::Views)
+///     .file("list.html", b"<ul><li>Simran Kaur: fees of \xe2\x82\xb91,00,000 are due</li></ul>")
+///     .file("show.html", b"<p></p>");
+/// assert_eq!(views.tag(), PublishTag::Views);
+/// assert_eq!(views.files().count(), 2);
+/// ```
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct Publishable {
+    /// The folder the files go to.
+    tag: PublishTag,
+    /// Each file's path in that folder, and its bytes.
+    files: Vec<(Cow<'static, str>, &'static [u8])>,
+}
+
+impl Publishable {
+    /// No files yet, under `tag`.
+    pub fn new(tag: PublishTag) -> Publishable {
+        Publishable {
+            tag,
+            files: Vec::new(),
+        }
+    }
+
+    /// Adds a file: `path` relative to the tag's folder, `bytes` embedded in
+    /// the binary (with `include_bytes!`, say).
+    pub fn file(mut self, path: impl Into<Cow<'static, str>>, bytes: &'static [u8]) -> Publishable {
+        self.files.push((path.into(), bytes));
+        self
+    }
+
+    /// The tag the files are published under.
+    pub fn tag(&self) -> PublishTag {
+        self.tag
+    }
+
+    /// The files as (path, bytes), in the order they were added.
+    pub fn files(&self) -> impl Iterator<Item = (&str, &'static [u8])> {
+        self.files.iter().map(|(path, bytes)| (&**path, *bytes))
+    }
+}
+
+/// Where `plugin:publish` writes the file `path` that a plugin with
+/// `namespace` ships under `tag`, relative to the app's folder:
+/// `resources/views/<namespace>/<path>`, `locales/<locale>/<namespace>/<rest>`
+/// (`path` is `<locale>/<rest>`), or `resources/<namespace>/<path>`.
+pub(crate) fn destination(tag: PublishTag, namespace: &str, path: &str) -> String {
+    match tag {
+        PublishTag::Views => format!("resources/views/{namespace}/{path}"),
+        PublishTag::Locales => {
+            let (locale, rest) = path.split_once('/').unwrap_or((path, ""));
+            format!("locales/{locale}/{namespace}/{rest}")
+        }
+        PublishTag::Files => format!("resources/{namespace}/{path}"),
+    }
 }
 
 /// What a plugin says about itself, filled from the `Cargo.toml` of the crate
@@ -540,5 +671,48 @@ mod tests {
         assert_eq!(RESERVED_NAMESPACES.len(), 60);
         assert!(RESERVED_NAMESPACES.windows(2).all(|w| w[0] < w[1]));
         assert!(RESERVED_NAMESPACES.iter().all(|ns| is_namespace(ns)));
+    }
+
+    #[test]
+    fn publish_tags_name_their_folders_and_all_lists_three() {
+        assert_eq!(
+            PublishTag::ALL,
+            &[PublishTag::Views, PublishTag::Locales, PublishTag::Files]
+        );
+        let names: Vec<&str> = PublishTag::ALL.iter().map(|tag| tag.as_str()).collect();
+        assert_eq!(names, ["views", "locales", "files"]);
+        for tag in PublishTag::ALL {
+            assert_eq!(PublishTag::from_name(tag.as_str()), Some(*tag));
+        }
+        assert_eq!(PublishTag::from_name("config"), None);
+        assert_eq!(PublishTag::from_name("Views"), None);
+        assert_eq!(
+            destination(PublishTag::Views, "announcements", "admin/list.html"),
+            "resources/views/announcements/admin/list.html"
+        );
+        assert_eq!(
+            destination(
+                PublishTag::Locales,
+                "announcements",
+                "pa-IN/announcements.ftl",
+            ),
+            "locales/pa-IN/announcements/announcements.ftl"
+        );
+        assert_eq!(
+            destination(PublishTag::Files, "announcements", "banner.css"),
+            "resources/announcements/banner.css"
+        );
+        let files = Publishable::new(PublishTag::Views)
+            .file("list.html", b"<ul></ul>")
+            .file(String::from("show.html"), b"<p></p>");
+        assert_eq!(files.tag(), PublishTag::Views);
+        let listed: Vec<(&str, &[u8])> = files.files().collect();
+        assert_eq!(
+            listed,
+            [
+                ("list.html", &b"<ul></ul>"[..]),
+                ("show.html", &b"<p></p>"[..]),
+            ]
+        );
     }
 }

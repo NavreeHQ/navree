@@ -220,6 +220,26 @@ pub enum KernelError {
         /// The plugin that uses it too.
         second: &'static str,
     },
+    /// A module that does not name itself a plugin has files to publish.
+    #[error(
+        "module `{module}` has files to publish but does not name itself a plugin; call m.plugin(plugin_info!()) in its register"
+    )]
+    PublishableOutsidePlugin {
+        /// The module.
+        module: &'static str,
+    },
+    /// A file a plugin ships has a path that is not safe inside its folder.
+    #[error(
+        "plugin `{plugin}`: the {tag} file `{path}` is not a safe relative path inside its folder (no `..`, no leading `/`, no `\\`, no `:`, none of `<>\"|?*`, no segment ending in `.` or a space, no device name such as `con` or `nul`, no two names that differ only in case); fix the path in the plugin"
+    )]
+    UnsafePublishPath {
+        /// The plugin's name.
+        plugin: &'static str,
+        /// The file's tag: `views`, `locales` or `files`.
+        tag: &'static str,
+        /// The file's path, as the plugin gives it.
+        path: String,
+    },
 }
 
 /// Every error found while booting or validating an app.
