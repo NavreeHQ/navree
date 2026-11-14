@@ -41,6 +41,13 @@ public struct AppShell: View {
         Group {
             if let client = session.client {
                 Chrome(client: client, configuration: session.configuration, commands: session.commands)
+                    // Moved between the window under an item in the menu bar and a
+                    // full window, the chrome is laid out anew for the window it
+                    // is now in, as that window's own would be from its start:
+                    // the sidebar beside the content and the screen's title in the
+                    // content's part of the toolbar, or the sidebar folded away.
+                    // What it shows is the core's, so nothing is lost.
+                    .id(compactWindow)
                     .environment(\.navreeStartsEditing, session.configuration.launch.editing)
                     .modifier(SheetRoom())
                     .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in

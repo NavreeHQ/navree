@@ -120,9 +120,76 @@ public enum CompositionRules {
         case .text, .rich, .badge, .timeline, .facts, .progress, .button, .link, .menu, .row, .feedRow, .message,
             .figure, .code, .table, .field, .disclosure:
             true
+        // A grid of words with no surface of their own (a day's figures)
+        // stands in as a whole, so its first column's words stand at the
+        // same edge as the words in the cards above and below it.
+        case .grid(let grid):
+            !grid.children.isEmpty && grid.children.allSatisfy(wordsOnGround)
         default:
             false
         }
+    }
+
+    // MARK: Room between blocks (a Mac window)
+
+    /// A composed screen's room on a Mac, as SwiftUI's grouped form sets out
+    /// its sections on macOS 27 (measured on this Mac, a `Form` with
+    /// `.formStyle(.grouped)`): its first section 20 points under the bar,
+    /// 10 between two sections, a section's heading 30 under the section
+    /// before it and 10 over its own. iPhone and iPad keep the page's own
+    /// steps and Health's look.
+    public struct BlockRoom: Sendable, Equatable {
+        /// Between the bar and the first part.
+        public var top: Double
+        /// Between two parts standing on the ground (a card and the figures
+        /// under it), or nil for the page's own steps.
+        public var between: Double?
+        /// More room over a group's heading, so it stands this far from the
+        /// part before it beyond ``between``.
+        public var overHeading: Double
+        /// Between a heading and its group's part.
+        public var underHeading: Double
+    }
+
+    public static func blockRoom(bar: ActionBar) -> BlockRoom {
+        bar == .window
+            ? BlockRoom(top: 20, between: 10, overHeading: 20, underHeading: 10)
+            : BlockRoom(top: 8, between: nil, overHeading: 0, underHeading: 10)
+    }
+
+    /// How a group's heading on the ground is written: on a Mac in the
+    /// system's headline style (13 points, bold), as System Settings and a
+    /// grouped form head their sections; on iPhone and iPad bold in the
+    /// title 3 style, as Health's Summary heads its groups.
+    public enum GroupHeadingStyle: Sendable, Equatable {
+        case headline
+        case title3Bold
+    }
+
+    /// Whether a stack is a column of blocks (cards, sections, grids, lists,
+    /// charts, carousels, columns of them): the parts a grouped form's
+    /// sections are, which take ``BlockRoom/between`` on a Mac. A stack of
+    /// words or pictures keeps the page's own steps.
+    public static func isBlockColumn(_ stack: Navree.Stack) -> Bool {
+        !stack.children.isEmpty && stack.children.allSatisfy { child in
+            switch child {
+            case .card, .section, .grid, .list, .chart, .carousel, .table: true
+            case .stack(let inner): isBlockColumn(inner)
+            default: false
+            }
+        }
+    }
+
+    public static func groupHeading(bar: ActionBar) -> GroupHeadingStyle {
+        bar == .window ? .headline : .title3Bold
+    }
+
+    /// The most a row's leading picture with a size of its own (a symbol in a
+    /// tinted circle) takes on a Mac: 24 points, the size of the pictures in
+    /// a Mac list's rows (System Settings' and Reminders' lists), rather than
+    /// the 40 points a finger's row takes. Nil: the page's own size.
+    public static func rowPicture(bar: ActionBar) -> Double? {
+        bar == .window ? 24 : nil
     }
 
     /// A room at least this wide is wide: what a tablet, a large window or a
@@ -372,6 +439,19 @@ public enum CompositionRules {
 
     /// The longest word kept whole on its line.
     public static let wholeWord = 16
+
+    /// How small a text kept whole on its line may become to fit its place
+    /// (SwiftUI's `minimumScaleFactor`). A figure in the display style alone
+    /// in its place (a day's revenue, `₹30,54,275`) shrinks as far as a
+    /// quarter of its size, about the size of body text, so it is written
+    /// whole in a narrow window rather than cut, as the system writes a large
+    /// number in little room (Calculator's display, a Stocks price); other
+    /// whole words alone shrink to half. Among tiles a text keeps its size and
+    /// the grid gives it room; text that may break is never shrunk.
+    public static func shrinkLimit(whole: Bool, display: Bool, inTiles: Bool) -> CGFloat {
+        guard whole, !inTiles else { return 1 }
+        return display ? 0.25 : 0.5
+    }
 
     // MARK: Motion
 

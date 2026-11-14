@@ -309,6 +309,7 @@ struct RowContent: View {
         HStack(alignment: Self.leadsWithPicture(row) ? .center : .firstTextBaseline, spacing: 12) {
             if let leading = row.leading {
                 NodeView(leading).font(.body)
+                    .environment(\.navreeRowPicture, CompositionRules.rowPicture(bar: .current))
                     .accessibilityHidden(Self.leadingRepeatsTitle(leading, title: row.title))
             } else if let state = row.state {
                 Image(systemName: Self.symbol(state))

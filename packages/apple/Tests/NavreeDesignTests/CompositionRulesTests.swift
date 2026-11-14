@@ -301,3 +301,55 @@ private let navigate = Navree.Action.navigate(Navree.Action.Navigate(href: "/sle
     #expect(footer.note == [words])
     #expect(CompositionRules.footer([]).rows.isEmpty)
 }
+
+@Test func aLargeFigureAloneShrinksToFitRatherThanBeingCut() {
+    // Revenue today, ₹30,54,275, alone in its card in a narrow window: written
+    // whole down to a quarter of its size, about body text.
+    #expect(CompositionRules.shrinkLimit(whole: true, display: true, inTiles: false) == 0.25)
+    // Another word kept whole alone shrinks to half.
+    #expect(CompositionRules.shrinkLimit(whole: true, display: false, inTiles: false) == 0.5)
+    // Among tiles the grid gives a figure room instead; text that may break never shrinks.
+    #expect(CompositionRules.shrinkLimit(whole: true, display: true, inTiles: true) == 1)
+    #expect(CompositionRules.shrinkLimit(whole: false, display: true, inTiles: false) == 1)
+}
+
+@Test func aMacScreenSetsOutItsBlocksAsAGroupedFormDoes() {
+    // Measured on macOS 27.2 with a grouped Form: its first section 20 points
+    // under the bar, 10 between sections, a heading 30 under the section
+    // before it and 10 over its own.
+    let mac = CompositionRules.blockRoom(bar: .window)
+    #expect(mac.top == 20 && mac.between == 10 && mac.overHeading == 20 && mac.underHeading == 10)
+    // iPhone and iPad keep the page's own steps under the large title.
+    let phone = CompositionRules.blockRoom(bar: .navigation)
+    #expect(phone.top == 8 && phone.between == nil && phone.overHeading == 0 && phone.underHeading == 10)
+    // Only a column of blocks takes that room; a column of words keeps its steps.
+    let figures = Navree.Node.grid(Navree.Grid(children: [.figure(Navree.Figure(label: "Orders today", value: "911"))]))
+    #expect(CompositionRules.isBlockColumn(Navree.Stack(children: [.card(Navree.Card()), figures])))
+    #expect(CompositionRules.isBlockColumn(Navree.Stack(children: [.stack(Navree.Stack(children: [.card(Navree.Card())])), .section(Navree.Section())])))
+    #expect(!CompositionRules.isBlockColumn(Navree.Stack(children: [text("Revenue today"), text("₹30,54,275")])))
+    #expect(!CompositionRules.isBlockColumn(Navree.Stack(children: [])))
+}
+
+@Test func aGridOfFiguresStandsAtTheWordsEdgeAndAGridOfCardsAtTheCardsEdge() {
+    // A day's figures, words with no surface, stand in with the words of the
+    // cards above and below them on a Mac.
+    let figures = Navree.Node.grid(Navree.Grid(children: [
+        .figure(Navree.Figure(label: "Orders today", value: "911")), .figure(Navree.Figure(label: "To fulfil", value: "982")),
+    ]))
+    #expect(CompositionRules.wordsOnGround(figures))
+    #expect(!CompositionRules.wordsOnGround(.grid(Navree.Grid(children: [.card(Navree.Card()), .card(Navree.Card())]))))
+    #expect(!CompositionRules.wordsOnGround(.grid(Navree.Grid())))
+}
+
+@Test func aGroupsHeadingIsTheHeadlineOnAMacAndBoldTitle3OnAPhone() {
+    // System Settings and a grouped form head their sections at 13 points bold.
+    #expect(CompositionRules.groupHeading(bar: .window) == .headline)
+    // Health's Summary heads its groups in bold title 3.
+    #expect(CompositionRules.groupHeading(bar: .navigation) == .title3Bold)
+}
+
+@Test func aRowsPictureIsAMacListsSizeOnAMac() {
+    // A tinted circle the page sizes at 40 for a finger stands at 24 in a Mac row.
+    #expect(CompositionRules.rowPicture(bar: .window) == 24)
+    #expect(CompositionRules.rowPicture(bar: .navigation) == nil)
+}

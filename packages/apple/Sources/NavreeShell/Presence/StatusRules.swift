@@ -45,6 +45,20 @@ public struct StatusLabelParts: Sendable, Equatable {
 
 /// The app's item in the menu bar, as plain rules.
 public enum StatusRules {
+    /// The bar of a window: the system's unified toolbar, or its compact one.
+    public enum WindowBar: Sendable, Equatable {
+        case unified
+        case compact
+    }
+
+    /// The bar of the window under an item in the menu bar is the system's
+    /// compact toolbar, the one AppKit gives a narrow utility window: its
+    /// controls 24 points tall (the unified bar's are 36-point circles, heavy
+    /// in a window 400 points wide), its height 40 points. The content
+    /// starts under it with a grouped form's room
+    /// (``CompositionRules/blockRoom(bar:)``).
+    public static let windowBar = WindowBar.compact
+
     /// The style the item opens in: a menu. A small window showing one
     /// destination's screen is not built yet (it needs one session shared by
     /// the app's cores), so an item that asks for one has no style and does

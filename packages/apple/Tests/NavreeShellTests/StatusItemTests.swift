@@ -153,3 +153,8 @@ private let held = StatusItem(image: .symbol("shippingbox"), content: .app())
     #expect(StatusRules.width(compactWindow: true, sizeClass: nil, points: 1200) == .compact)
     #expect(StatusRules.width(compactWindow: false, sizeClass: nil, points: 1200) == .expanded)
 }
+
+@Test func theWindowUnderTheItemHasTheCompactBarOfANarrowUtilityWindow() {
+    // 24-point controls in a 40-point bar, not the unified bar's 36-point circles.
+    #expect(StatusRules.windowBar == .compact)
+}
