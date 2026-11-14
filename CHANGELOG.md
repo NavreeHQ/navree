@@ -39,6 +39,10 @@ every `@navree/*` package carries the same version.
   callback `error=access_denied`. Opening `GET /auth/app/sign-in` no longer signs the browser out:
   for an app with a custom-scheme callback, the browser is signed out only once the person
   continues on that page.
+- With an `https` `app.url` set, an `https` app callback (`auth.apps.*.*.callback`) on another host
+  fails the boot. The site answers `GET` on the path of each `https` callback with an empty page
+  (`Cache-Control: no-store`, `Referrer-Policy: no-referrer`) for a browser the system did not hand
+  to the app; `auth.apps.callback_page = false` turns it off for an app that serves that path.
 
 ### Fixed
 

@@ -20,7 +20,7 @@ use navree_contracts::{AuditSink, Clock as _, FixedClock};
 use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
 use navree_session::{Session, SessionModule, SessionOptions};
-use navree_testing::{TestApp, TestClient, TestResponse};
+use navree_testing::{TestApp, TestAppBuilder, TestClient, TestResponse};
 use navree_ui::UiModule;
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -118,6 +118,11 @@ impl Module for PlatformModule {
 }
 
 async fn app(clock: &Arc<FixedClock>, sink: &Arc<RecordingSink>) -> TestApp {
+    builder(clock, sink).build().await
+}
+
+/// The app of these tests, not booted yet.
+fn builder(clock: &Arc<FixedClock>, sink: &Arc<RecordingSink>) -> TestAppBuilder {
     support::clocked(clock)
         .config("auth.apps.apple.orders.team_id", "ABCDE12345")
         .config("auth.apps.apple.orders.bundle_id", BUNDLE)
@@ -144,8 +149,6 @@ async fn app(clock: &Arc<FixedClock>, sink: &Arc<RecordingSink>) -> TestApp {
         .module(UiModule)
         .module(AuthPages::new())
         .module(PlatformModule)
-        .build()
-        .await
 }
 
 /// The browser's CSRF token (opening the sign-in page when it has none).
@@ -891,6 +894,59 @@ async fn a_sign_in_made_for_something_else_is_never_handed_to_an_https_app() {
             "no app sign-in was started in this browser",
         ]
     );
+}
+
+// When the system does not open the app, the browser lands on the https
+// callback itself, with the code in its address: the site answers with an
+// empty page that keeps nothing and sends nothing on.
+#[tokio::test]
+async fn the_site_answers_its_callback_address_with_an_empty_page() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    let landed = get(&app.client(), "/app/signed-in?code=Tq7uX0b2&state=s-1")
+        .await
+        .assert_status(200);
+    assert_eq!(landed.header("cache-control"), Some("no-store"));
+    assert_eq!(landed.header("referrer-policy"), Some("no-referrer"));
+    let page = landed.text();
+    assert!(!page.contains("Tq7uX0b2"), "{page}");
+    assert!(!page.contains("<script"), "{page}");
+
+    // An app that answers that address itself turns it off.
+    let app = builder(&clock, &sink)
+        .config("auth.apps.callback_page", false)
+        .build()
+        .await;
+    let response = get(&app.client(), "/app/signed-in?code=Tq7uX0b2").await;
+    assert_eq!(response.status().as_u16(), 404);
+}
+
+#[tokio::test]
+async fn an_https_callback_must_be_on_the_sites_own_host() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let error = builder(&clock, &sink)
+        .config("app.url", "https://shop.example.com")
+        .try_build()
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("auth.apps.apple.orders.callback must be on the site's own host"),
+        "{error}"
+    );
+    assert!(
+        error.contains("auth.apps.android.orders.callback"),
+        "{error}"
+    );
+    // The custom scheme has no host to be on.
+    assert!(!error.contains("legacy"), "{error}");
+    let app = builder(&clock, &sink)
+        .config("app.url", "https://example.com")
+        .build()
+        .await;
+    get(&app.client(), "/app/signed-in")
+        .await
+        .assert_status(200);
 }
 
 // A platform sign-in (Sign in with Apple in the app) that needs a second
