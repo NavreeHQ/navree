@@ -21,8 +21,9 @@ use crate::{
 /// The HTTP module: the server, default layer stack, JSON errors,
 /// controllers. Global; provides and exports [`HttpOptions`], [`HttpServer`]
 /// and [`UrlSigner`]; registers the commands `serve`, `routes`, `down` and
-/// `up`; and checks every route at boot (access declarations, duplicate
-/// routes, missing authenticator or authorizer), before `serve` binds a port.
+/// `up`; and checks every route and every mount at boot (access
+/// declarations, duplicate routes, a mount's prefix and what it overlaps,
+/// missing authenticator or authorizer), before `serve` binds a port.
 ///
 /// ```no_run
 /// use navree_http::{HttpModule, HttpOptions};

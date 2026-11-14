@@ -14,6 +14,10 @@
 //!   [`authenticated`](RouteDef::authenticated), [`roles`](RouteDef::roles),
 //!   [`permissions`](RouteDef::permissions) or [`can`](RouteDef::can) fails
 //!   the boot.
+//! - Modules serve any tower service under a path prefix with a [`Mount`]
+//!   ([`ModuleBuilderMountExt::mount`]), behind the same pipeline and access
+//!   check as a route, and put a tower layer whose service can fail on the
+//!   app with [`FallibleLayer`].
 //! - Routes are matched by Navree's [`routing::Router`]: no path
 //!   normalization (dot segments and backslashes are refused), strict
 //!   percent-decoding of parameters, static before parameter before
