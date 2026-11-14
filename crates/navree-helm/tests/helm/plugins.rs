@@ -2,6 +2,7 @@
 //! dashboard, checked at boot and drawn only for who may see them.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use navree_helm::{
     HelmLink, HelmPage, HelmWidget, ModuleBuilderHelmExt, ModuleBuilderHelmPanelExt,
@@ -485,4 +486,214 @@ async fn helm_hints_name_a_template_under_a_plugins_namespace() {
         error.contains("Helm page `report` has no template: add `.template(\"admin/report\")`"),
         "{error}"
     );
+}
+
+/// The warnings logged on this thread while the guard lives (the tests run on a
+/// current-thread runtime, so the boot logs on this thread).
+#[derive(Clone, Default)]
+struct Warnings(Arc<Mutex<Vec<String>>>);
+
+impl Warnings {
+    fn install(&self) -> tracing::subscriber::DefaultGuard {
+        tracing::subscriber::set_default(self.clone())
+    }
+
+    fn all(&self) -> Vec<String> {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+struct Message(String);
+
+impl tracing::field::Visit for Message {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        if field.name() == "message" {
+            self.0 = format!("{value:?}");
+        }
+    }
+}
+
+impl tracing::Subscriber for Warnings {
+    fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
+        *metadata.level() <= tracing::Level::WARN
+    }
+
+    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+
+    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+
+    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+
+    fn event(&self, event: &tracing::Event<'_>) {
+        if *event.metadata().level() == tracing::Level::WARN {
+            let mut message = Message(String::new());
+            event.record(&mut message);
+            self.0.lock().unwrap().push(message.0);
+        }
+    }
+
+    fn enter(&self, _: &tracing::span::Id) {}
+
+    fn exit(&self, _: &tracing::span::Id) {}
+}
+
+/// What the report pages are given: a note someone typed, holding markup.
+fn note() -> serde_json::Value {
+    json!({ "note": "<b>Amritsar</b>" })
+}
+
+/// The custom page `slug` as `client` gets it: its status and its body.
+async fn panel_page(client: &TestClient, slug: &str) -> (u16, String) {
+    let response = client
+        .get(&format!("/admin/pages/{slug}"))
+        .header("accept", "text/html")
+        .send()
+        .await;
+    (response.status().as_u16(), response.text())
+}
+
+/// A page of the pretty plugin that names a `.txt` template.
+fn plugin_text_page(m: &mut ModuleBuilder) {
+    m.helm_page(HelmPage::new("report", "Report").template("pretty/admin/report.txt"));
+}
+
+/// Two pages of the pretty plugin whose data holds markup: `report` names its template
+/// without an extension, and only a `.txt` file of that name exists; `summary` has an
+/// `.html` one.
+fn plugin_pages(m: &mut ModuleBuilder) {
+    m.templates(&[
+        ("pretty/admin/report.txt", "Report: {{ data.note }}"),
+        (
+            "pretty/admin/summary.html",
+            "<p class=\"summary\">{{ data.note }}</p>",
+        ),
+    ])
+    .helm_page(
+        HelmPage::new("report", "Report")
+            .template("pretty/admin/report")
+            .data(|_ctx| async { Ok(note()) }),
+    )
+    .helm_page(
+        HelmPage::new("summary", "Summary")
+            .template("pretty/admin/summary")
+            .data(|_ctx| async { Ok(note()) }),
+    );
+}
+
+#[tokio::test]
+async fn a_plugins_page_renders_only_an_html_template() {
+    // A template that is not HTML stops the boot.
+    let error = boot_error(
+        builder()
+            .module(ViewModule::for_root(ViewOptions::default()))
+            .module(PrettyPanel(plugin_text_page)),
+    )
+    .await;
+    assert!(
+        error.contains(
+            "Helm page `report` names the template `pretty/admin/report.txt`, which is not HTML: name an .html template, such as .template(\"pretty/admin/report\")"
+        ),
+        "{error}"
+    );
+
+    // A name without an extension is its `.html` template and never a `.txt` file of that
+    // name: with no `.html` one, the page fails, and its data never reaches the panel raw.
+    let app = builder()
+        .module(ViewModule::for_root(ViewOptions::default()))
+        .module(PrettyPanel(plugin_pages))
+        .build()
+        .await;
+    let (_, rep) = user(&app, "rep").await;
+    let (status, html) = panel_page(&rep, "report").await;
+    assert_eq!(status, 500, "{html}");
+    assert!(!html.contains("<b>Amritsar"), "{html}");
+    // The `.html` template escapes the same data.
+    let (status, html) = panel_page(&rep, "summary").await;
+    assert_eq!(status, 200, "{html}");
+    assert!(
+        html.contains("<p class=\"summary\">&lt;b&gt;Amritsar"),
+        "{html}"
+    );
+    assert!(!html.contains("<b>Amritsar"), "{html}");
+}
+
+/// A page of the app that names a `.txt` template.
+fn app_text_page(m: &mut ModuleBuilder) {
+    m.templates(&[("admin/report.txt", "Report: {{ data.note }}")])
+        .helm_page(
+            HelmPage::new("report", "Report")
+                .template("admin/report.txt")
+                .data(|_ctx| async { Ok(note()) }),
+        );
+}
+
+#[tokio::test]
+async fn an_apps_page_whose_template_is_not_html_is_warned_about_and_renders_as_before() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    let app = builder()
+        .module(ViewModule::for_root(ViewOptions::default()))
+        .module(Adds(app_text_page))
+        .build()
+        .await;
+    let warning = "Helm page `report` names the template `admin/report.txt`, which is not HTML, so what it writes is not escaped: name an .html template, such as .template(\"admin/report\")";
+    let logged = warnings.all();
+    assert_eq!(
+        logged.iter().filter(|line| *line == warning).count(),
+        1,
+        "{logged:?}"
+    );
+
+    let (_, rep) = user(&app, "rep").await;
+    let (status, html) = panel_page(&rep, "report").await;
+    assert_eq!(status, 200, "{html}");
+    // As before: a `.txt` template writes values as they are, which is what the warning says.
+    assert!(html.contains("Report: <b>Amritsar</b>"), "{html}");
+}
+
+/// Two pages of the app on HTML templates: `summary` names its template without the
+/// extension, `overview` with it.
+fn app_html_pages(m: &mut ModuleBuilder) {
+    m.templates(&[
+        ("admin/summary.html", "<p class=\"summary\">{{ data.note }}</p>"),
+        ("admin/overview.html", "<p class=\"overview\">{{ data.note }}</p>"),
+    ])
+    .helm_page(
+        HelmPage::new("summary", "Summary")
+            .template("admin/summary")
+            .data(|_ctx| async { Ok(note()) }),
+    )
+    .helm_page(
+        HelmPage::new("overview", "Overview")
+            .template("admin/overview.html")
+            .data(|_ctx| async { Ok(note()) }),
+    );
+}
+
+#[tokio::test]
+async fn an_apps_html_page_renders_as_before_without_a_warning() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    let app = builder()
+        .module(ViewModule::for_root(ViewOptions::default()))
+        .module(Adds(app_html_pages))
+        .build()
+        .await;
+    let logged = warnings.all();
+    assert!(
+        logged.iter().all(|line| !line.starts_with("Helm page")),
+        "{logged:?}"
+    );
+
+    let (_, rep) = user(&app, "rep").await;
+    for slug in ["summary", "overview"] {
+        let (status, html) = panel_page(&rep, slug).await;
+        assert_eq!(status, 200, "{html}");
+        assert!(
+            html.contains(&format!("<p class=\"{slug}\">&lt;b&gt;Amritsar")),
+            "{html}"
+        );
+    }
 }
