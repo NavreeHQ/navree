@@ -401,11 +401,14 @@ impl Origin {
     }
 
     /// Whether `address` is a whole address on one of the app's origins: an
-    /// `http` or `https` address that reads by the rules at the top of this
+    /// `http` or `https` address with no white space at all (what leaves the
+    /// core is percent-encoded) that reads by the rules at the top of this
     /// file, on the app's own origin or one it allows. A client asks the same
-    /// before it fetches an address, streams from it or shows it.
+    /// of what its platform's own parser reads, before it fetches an address,
+    /// streams from it or shows it: `vectors/addresses.json`, `ours`.
     pub(crate) fn ours(&self, address: &str) -> bool {
         readable(address)
+            && !address.contains(' ')
             && is_web(address)
             && split(address).is_some_and(|parts| self.holds(&parts.site))
     }
