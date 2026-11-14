@@ -378,9 +378,12 @@ impl ClientDescriptor {
                 return Err(ClientError::Malformed(pair.to_owned()));
             };
             let (key, value) = (key.trim(), value.trim());
-            if key.is_empty() || !is_token(key) || !is_token(value) {
+            if key.is_empty() || !is_token(key) || !is_written_token(value) {
                 return Err(ClientError::Malformed(pair.to_owned()));
             }
+            // A value the client wrote percent-encoded (see `to_header`).
+            let value = unescaped(value);
+            let value = value.as_str();
             match key {
                 "platform" => {
                     platform = Some(
@@ -435,7 +438,20 @@ impl ClientDescriptor {
         Ok(client)
     }
 
-    /// The descriptor as the header carries it.
+    /// The descriptor as the header carries it. A value that is not a token
+    /// (ASCII letters, digits and `.-_/:+`) has each byte of its UTF-8 that is
+    /// not one, and `%`, written as `%` and two hex digits, so the header is
+    /// visible ASCII whatever the system said; [`ClientDescriptor::parse`]
+    /// reads it back. A value that is a token is written as it is.
+    ///
+    /// ```
+    /// use navree_native::client::{ClientDescriptor, FormFactor, Platform};
+    ///
+    /// let mut client = ClientDescriptor::new(Platform::Android, FormFactor::Phone);
+    /// client.os = "16 (Pixel)".to_owned();
+    /// assert!(client.to_header().contains("os=16%20%28Pixel%29"));
+    /// assert_eq!(ClientDescriptor::parse(&client.to_header()).unwrap(), client);
+    /// ```
     pub fn to_header(&self) -> String {
         let mut out = format!("platform={}", self.platform.as_str());
         let mut pair = |key: &str, value: &str| {
@@ -443,7 +459,7 @@ impl ClientDescriptor {
                 out.push_str("; ");
                 out.push_str(key);
                 out.push('=');
-                out.push_str(value);
+                escape_into(&mut out, value);
             }
         };
         pair("os", &self.os);
@@ -489,8 +505,58 @@ impl ClientDescriptor {
 /// Whether `text` holds only what a token may: ASCII letters and digits and
 /// `. - _ / : +`. An empty value is a token too (`caps=`).
 fn is_token(text: &str) -> bool {
-    text.bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || b".-_/:+".contains(&byte))
+    text.bytes().all(is_token_byte)
+}
+
+fn is_token_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || b".-_/:+".contains(&byte)
+}
+
+/// A token, or one written percent-encoded.
+fn is_written_token(text: &str) -> bool {
+    text.bytes().all(|byte| byte == b'%' || is_token_byte(byte))
+}
+
+/// Writes `value` with each byte that is not a token's, and `%`, as `%XX`.
+fn escape_into(out: &mut String, value: &str) {
+    for byte in value.bytes() {
+        if is_token_byte(byte) {
+            out.push(char::from(byte));
+        } else {
+            out.push('%');
+            out.push(char::from(HEX[usize::from(byte >> 4)]));
+            out.push(char::from(HEX[usize::from(byte & 0xf)]));
+        }
+    }
+}
+
+const HEX: &[u8; 16] = b"0123456789ABCDEF";
+
+/// `value` with each `%` and two hex digits read as the byte they name. A `%`
+/// not followed by two hex digits stays, and so does the whole value when
+/// the bytes are not UTF-8 once read.
+fn unescaped(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        let digit = |at: usize| {
+            bytes
+                .get(at)
+                .and_then(|byte| char::from(*byte).to_digit(16))
+        };
+        match (bytes[at], digit(at + 1), digit(at + 2)) {
+            (b'%', Some(high), Some(low)) => {
+                out.push(u8::try_from(high * 16 + low).unwrap_or(b'%'));
+                at += 3;
+            }
+            (byte, _, _) => {
+                out.push(byte);
+                at += 1;
+            }
+        }
+    }
+    String::from_utf8(out).unwrap_or_else(|_| value.to_owned())
 }
 
 /// How a page shown in a native client's web view is known: a token the client
@@ -667,6 +733,52 @@ mod tests {
         let client = Client::parse("platform=android; form=tablet; fold=open; vocab=7").unwrap();
         assert_eq!(client.vocab, 7);
         assert_eq!(client.form, FormFactor::Tablet);
+    }
+
+    #[test]
+    fn a_value_that_is_not_a_token_is_written_percent_encoded_and_read_back() {
+        let mut client = Client::new(Platform::Android, FormFactor::Phone);
+        client.os = "16 (Pixel; build=AP4A)".to_owned();
+        client.app = "१.४.०".to_owned();
+        client.lib = "0.3.0 beta".to_owned();
+        client.locale = "pa-Guru-IN".to_owned();
+        client.tz = "Asia/Kolkata".to_owned();
+        let header = client.to_header();
+        // Every byte is one a header and the parser take.
+        assert!(
+            header
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b".-_/:+%;= ".contains(&byte)),
+            "{header}"
+        );
+        assert!(
+            header.contains("os=16%20%28Pixel%3B%20build%3DAP4A%29"),
+            "{header}"
+        );
+        assert!(
+            header.contains("locale=pa-Guru-IN; tz=Asia/Kolkata"),
+            "{header}"
+        );
+        assert_eq!(Client::parse(&header).unwrap(), client);
+        // A `%` of the value's own is written too, and comes back.
+        client.app = "100%".to_owned();
+        assert!(client.to_header().contains("app=100%25"));
+        assert_eq!(Client::parse(&client.to_header()).unwrap(), client);
+    }
+
+    #[test]
+    fn a_plain_descriptor_is_written_and_read_as_before() {
+        let header = "platform=ios; os=26.1; form=phone; app=1.4.0; lib=0.3.0; vocab=1; \
+                      scheme=dark; contrast=more; text=1.30; locale=en-IN; tz=Asia/Kolkata; \
+                      caps=share+push";
+        let client = Client::parse(header).unwrap();
+        assert_eq!(client.to_header(), header);
+        // A broken escape stays as it was written.
+        let client = Client::parse("platform=ios; form=phone; app=1%2; lib=%zz").unwrap();
+        assert_eq!((client.app.as_str(), client.lib.as_str()), ("1%2", "%zz"));
+        // Bytes that are not text once read stay as they came.
+        let client = Client::parse("platform=ios; form=phone; os=%E0%A4").unwrap();
+        assert_eq!(client.os, "%E0%A4");
     }
 
     #[test]
