@@ -89,9 +89,14 @@ final class ScreensTests: XCTestCase {
         let app = launch(select: "/inventory")
         let product = app.staticTexts["Chakla belan, Amritsar"]
         wait(product, "The first product")
+        // The row's actions slide in after the swipe; a slow simulator can
+        // take the first swipe as a scroll, so it is swiped once more.
+        let restock = app.buttons["Restock"].firstMatch
         product.swipeLeft()
+        if !restock.waitForExistence(timeout: 5) { product.swipeLeft() }
+        wait(restock, "The row's restock action")
         Shots.save("07-inventory-swipe", in: self)
-        app.buttons["Restock"].firstMatch.tap()
+        restock.tap()
         wait(app.navigationBars["Restock"], "The restock sheet")
         Shots.save("08-restock", in: self)
         app.navigationBars["Restock"].buttons["Restock"].tap()
