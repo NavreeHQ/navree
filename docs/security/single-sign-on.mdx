@@ -258,7 +258,7 @@ The rule is one navree-auth [sign-in policy](/docs/security/authentication/#sign
 
 ### Offboarding
 
-Enforcement decides at sign-in: turning it on ends no session. Sessions (and the app sessions handed over from them), [personal access tokens](/docs/packages/oauth-server/#personal-access-tokens) and OAuth grants issued before it was turned on go on until they end, and a browser session from before can still be handed over to a native app, whose session keeps that sign-in's time and ends `auth.session.remember_days` after it. Revoking refresh tokens alone (`revoke_all_refresh_tokens`) leaves the last two working. When you turn enforcement on, cut everyone of the domain off with one call:
+Enforcement decides at sign-in: turning it on ends no session. Sessions (and the app sessions handed over from them), [personal access tokens](/docs/packages/oauth-server/#personal-access-tokens) and OAuth grants issued before it was turned on go on until they end, and a browser session from before can still be handed over to a native app, whose session keeps that sign-in's time and ends when that browser session ends, at the latest. Revoking refresh tokens alone (`revoke_all_refresh_tokens`) leaves the last two working. When you turn enforcement on, cut everyone of the domain off with one call:
 
 ```rust
 let ended = auth.revoke_credentials_of_domain("agra.com").await?;

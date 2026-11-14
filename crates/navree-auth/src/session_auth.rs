@@ -430,22 +430,27 @@ impl AuthService {
     /// exchange) to `user` as [`start_session`](AuthService::start_session)
     /// does, as a sign-in handed over from a browser session whose user
     /// last authenticated at `signed_in_at` (Unix seconds): the new session
-    /// keeps that time as its own (`#[recent_auth]` routes read it), is kept
-    /// like "remember me", and ends when a "remember me" sign-in made at
-    /// `signed_in_at` would, never later. A hand-over therefore never makes
-    /// a sign-in younger than the one it came from.
-    /// [`AuthError::HandOverRefused`] when that time has already passed.
+    /// keeps that time as its own (`#[recent_auth]` routes read it) and is
+    /// kept like "remember me". It ends when a "remember me" sign-in made at
+    /// `signed_in_at` would, or at `ends_by` (Unix seconds) when that comes
+    /// first: the end of the browser session a confirmed hand-over came
+    /// from, which the app's session never outlasts. A sign-in made for the
+    /// hand-over passes no `ends_by`: the person has just signed in for the
+    /// app. [`AuthError::HandOverRefused`] when that end has already passed.
     pub(crate) async fn start_handed_over_session(
         &self,
         session: &Session,
         user: &User,
         signed_in_at: i64,
+        ends_by: Option<i64>,
         meta: &ClientMeta,
     ) -> Result<(), AuthError> {
         let longest = i64::try_from(self.options.session.max_age_secs(true)).unwrap_or(i64::MAX);
+        let remembered = signed_in_at.saturating_add(longest);
+        let ends_at = ends_by.map_or(remembered, |ends_by| ends_by.min(remembered));
         let times = (
             chrono::DateTime::from_timestamp(signed_in_at, 0),
-            chrono::DateTime::from_timestamp(signed_in_at.saturating_add(longest), 0),
+            chrono::DateTime::from_timestamp(ends_at, 0),
         );
         let (Some(authenticated_at), Some(expires_at)) = times else {
             return Err(AuthError::HandOverRefused(
