@@ -79,6 +79,7 @@ client.get("/sign-in").header("accept", "text/html").send().await.assert_status(
 let response = client
     .post("/sign-in")
     .header("accept", "text/html")
+    .header("sec-fetch-site", "same-origin")
     .xsrf()
     .form(&[("email", email), ("password", password), ("next", "/customers")])
     .send()
@@ -86,12 +87,19 @@ let response = client
 assert_eq!(response.status(), 303);
 ```
 
-`.xsrf()` sends the session's CSRF token back, as the page's script or a hidden field does. Leave it out to prove the check works: a post without the token is a 403, and so is one marked `sec-fetch-site: cross-site`. See [sessions and CSRF](/docs/basics/sessions-and-csrf/#csrf-protection).
+`.xsrf()` sends the session's CSRF token back, as the page's script or a hidden field does. Leave it out to prove the check works: a post without the token is a 403, and so is one marked `sec-fetch-site: cross-site`. A browser also says that the post comes from the page's own site with `sec-fetch-site: same-origin`, and a form refuses a post that carries a cookie and says nothing of where it came from (neither that header nor `Origin`), so a test that holds a session sends it too. See [sessions and CSRF](/docs/basics/sessions-and-csrf/#csrf-protection).
 
 A form that fails comes back as the page again, with what was typed and the errors under the fields, and a status of 422. The body holds the text, so assert on it. (To the runtime, the same rejection is a 422 with ops that put the errors under the fields.) A good post answers with a redirect, as the next example shows.
 
 ```rust
-let rejected = client.post("/customers/new").header("accept", "text/html").xsrf().form(&fields).send().await;
+let rejected = client
+    .post("/customers/new")
+    .header("accept", "text/html")
+    .header("sec-fetch-site", "same-origin")
+    .xsrf()
+    .form(&fields)
+    .send()
+    .await;
 assert_eq!(rejected.status(), 422);
 assert!(rejected.text().contains("field-error"));
 ```

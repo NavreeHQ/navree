@@ -96,7 +96,7 @@ The toolkit is built so that a page can't break that policy or be turned against
 - **URLs are checked.** Every URL attribute goes through `Href`, which refuses `javascript:` and any other scheme it doesn't know.
 - **Commands are data.** What an element does in the browser is a `Cmd` from a closed list, interpreted by the runtime. No expression is evaluated, and a command can set only state attributes, never where something points.
 - **Redirects stay on the site.** `Reply::redirect` and `Op::navigate` refuse a URL that would leave it, so a `next` parameter can't send a user away. Leaving is `redirect_external`, by name.
-- **Forms refuse forgery.** `Submit<T>` refuses a body from another site with 403 (by `Sec-Fetch-Site`, or `Origin`, unless that origin is in `http.cors.allowed_origins`), a body that isn't a form with 415, `GET` with 405, and more than 1,000 fields with 413. Only the struct's own fields are read, and a rejected form never writes a password back. See [Forms](/docs/ui/forms/).
+- **Forms refuse forgery.** `Submit<T>` refuses a body from another site with 403 (by `Sec-Fetch-Site`, or `Origin`, unless that origin is in `http.cors.allowed_origins`, and a request that carries a cookie and sends neither), a body that isn't a form with 415, `GET` with 405, and more than 1,000 fields with 413. Only the struct's own fields are read, and a rejected form never writes a password back. See [Forms](/docs/ui/forms/).
 - **Hovering changes nothing.** Nothing is fetched ahead of a click unless you ask, link by link, with `prefetch`, and anything that writes is a `POST`.
 
 The docs' own previews run under the same policy: each is a page rendered by the toolkit, framed on its own, so the toolkit's styles and this site's never meet.

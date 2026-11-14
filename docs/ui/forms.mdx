@@ -206,7 +206,7 @@ The runtime keeps the page and shows only the errors, so the label matters for t
 
 ## What a form accepts
 
-- A body from another site is refused with 403, by `Sec-Fetch-Site`, or by `Origin` where a browser doesn't send that, unless its `Origin` is in `http.cors.allowed_origins`.
+- A body from another site is refused with 403, by `Sec-Fetch-Site`, or by `Origin` where a browser doesn't send that, unless its `Origin` is in `http.cors.allowed_origins`. An `Origin` must name this host, and the scheme the request carries when it carries one. A request that sends neither header is a script or a test: it is taken when it carries no cookie, and refused with 403 when it carries one, since a session could be riding on it. Send `Sec-Fetch-Site: same-origin`, as a browser does, from a client that holds a session.
 - A body that isn't a urlencoded form gets 415; `GET` and `HEAD` get 405; past 1,000 fields, 413.
 - Only the struct's own fields are read: a `#[form(skip)]` field stays out of the client's reach.
 - A rejected form never writes back what a password input holds. A `String` field named `password`, or ending in it (`new_password`, `password_confirmation`), is drawn as one; `#[form(widget = password)]` makes any other field one, which is what a token or a key needs. `Rejected`'s `Debug` holds field names and errors, not values.
