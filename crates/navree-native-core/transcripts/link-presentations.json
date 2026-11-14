@@ -256,7 +256,9 @@
       "send": {"t":"act","screen":6,"action":{"t":"navigate","href":"javascript:alert(1)"}},
       "expect": {
         "changed": [],
-        "effects": []
+        "effects": [
+          {"t":"report","what":"address","detail":"link: javascript:alert(1)"}
+        ]
       }
     },
     {

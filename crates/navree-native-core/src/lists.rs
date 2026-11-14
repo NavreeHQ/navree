@@ -492,7 +492,11 @@ impl Core {
         let Some(before) = view.screen().and_then(|screen| before_of(screen, list)) else {
             return;
         };
-        let Target::Inside(url) = self.inner.origin.resolve(&before, &view.url) else {
+        let target = self.inner.origin.resolve(&before, &view.url);
+        let Target::Inside(url) = target else {
+            if target == Target::Refused {
+                self.said_refused("list", &before);
+            }
             return;
         };
         inner.before.insert(list.to_owned(), before.clone());

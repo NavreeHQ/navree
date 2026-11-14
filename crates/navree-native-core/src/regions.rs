@@ -433,7 +433,11 @@ impl Core {
         let Some(more) = view.screen().and_then(|screen| more_of(screen, list)) else {
             return;
         };
-        let Target::Inside(url) = self.inner.origin.resolve(&more, &view.url) else {
+        let target = self.inner.origin.resolve(&more, &view.url);
+        let Target::Inside(url) = target else {
+            if target == Target::Refused {
+                self.said_refused("list", &more);
+            }
             return;
         };
         inner.more.insert(list.to_owned(), more.clone());

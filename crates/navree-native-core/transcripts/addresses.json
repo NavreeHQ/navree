@@ -45,7 +45,9 @@
       "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"　//evil.example/x"}},
       "expect": {
         "changed": [],
-        "effects": []
+        "effects": [
+          {"t":"report","what":"address","detail":"link: 　//evil.example/x"}
+        ]
       }
     },
     {
@@ -53,7 +55,9 @@
       "send": {"t":"act","screen":1,"action":{"t":"navigate","href":" /orders"}},
       "expect": {
         "changed": [],
-        "effects": []
+        "effects": [
+          {"t":"report","what":"address","detail":"link:  /orders"}
+        ]
       }
     },
     {
@@ -61,14 +65,18 @@
       "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/a/..//evil.example/x"}},
       "expect": {
         "changed": [],
-        "effects": []
+        "effects": [
+          {"t":"report","what":"address","detail":"link: /a/..//evil.example/x"}
+        ]
       }
     },
     {
       "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"https://shop.example//evil.example/x?a=b://c"}},
       "expect": {
         "changed": [],
-        "effects": []
+        "effects": [
+          {"t":"report","what":"address","detail":"link: https://shop.example//evil.example/x"}
+        ]
       }
     },
     {
@@ -76,7 +84,9 @@
       "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"https://shop.example@evil.example/"}},
       "expect": {
         "changed": [],
-        "effects": []
+        "effects": [
+          {"t":"report","what":"address","detail":"link: https://shop.example@evil.example/"}
+        ]
       }
     },
     {
@@ -112,7 +122,9 @@
         "changed": [
           {"t":"screen","id":2}
         ],
-        "effects": []
+        "effects": [
+          {"t":"report","what":"address","detail":"redirect: 　//evil.example/x"}
+        ]
       },
       "check": [
         {"at":"/screens/2/failure","is":"server"},
@@ -138,7 +150,9 @@
         "changed": [
           {"t":"screen","id":3}
         ],
-        "effects": []
+        "effects": [
+          {"t":"report","what":"address","detail":"redirect: /.//evil.example/x"}
+        ]
       },
       "check": [
         {"at":"/screens/3/failure","is":"server"}

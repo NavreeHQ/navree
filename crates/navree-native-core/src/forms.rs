@@ -670,7 +670,11 @@ impl Core {
         } else {
             form.action.clone()
         };
-        let Target::Inside(address) = self.resolve(&action, id) else {
+        let target = self.resolve(&action, id);
+        if target == Target::Refused {
+            self.said_refused("form", &action);
+        }
+        let Target::Inside(address) = target else {
             return;
         };
         let query = encode(&said);
@@ -705,7 +709,11 @@ impl Core {
         } else {
             search.action.clone()
         };
-        let Target::Inside(address) = self.resolve(&action, id) else {
+        let target = self.resolve(&action, id);
+        let Target::Inside(address) = target else {
+            if target == Target::Refused {
+                self.said_refused("form", &action);
+            }
             return;
         };
         let path = address.split('?').next().unwrap_or("/");
@@ -803,7 +811,11 @@ impl Core {
             None if form.action.is_empty() => view.url.clone(),
             None => form.action.clone(),
         };
-        let Target::Inside(address) = self.inner.origin.resolve(&action, &view.url) else {
+        let target = self.inner.origin.resolve(&action, &view.url);
+        let Target::Inside(address) = target else {
+            if target == Target::Refused {
+                self.said_refused("form", &action);
+            }
             // Only this site's addresses are posted to.
             return self.notice(Notice::Failed, Some(id));
         };
@@ -883,7 +895,7 @@ impl Core {
         let url = match self.resolve(href, id) {
             Target::Inside(url) => url,
             Target::Outside(url) => return self.open_outside(&url, false),
-            Target::Refused => return,
+            Target::Refused => return self.said_refused("form", href),
         };
         if !self.may_send(id) {
             return;
