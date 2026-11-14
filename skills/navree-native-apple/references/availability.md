@@ -4,7 +4,8 @@ Read on 2026-11-12 (see `sources.md`). Each row says what the system offers
 and from which OS version, then marks Navree's state plainly:
 
 - **in Navree**: the client's code does it. Nothing here has been run on a
-  physical device; the client was run in cloud simulators.
+  physical device; the client was run in simulators on a Mac and in the
+  cloud, and as a Mac app.
 - **by the system**: Navree gets it by drawing with the system's own
   components, with no code of its own.
 - **not yet**: the system offers it and Navree does not.
@@ -18,8 +19,8 @@ Apple's approval of a request).
 | System | Shipping | Navree |
 |---|---|---|
 | iOS | 27.2.1 (27.0 on 14 Sep 2026; the 26 line is the one before) | iPhone client built, floor 26 |
-| iPadOS | 27.2.1 | iPad client built (tab bar to sidebar), floor 26 |
-| macOS | 27.2.1 | package targets 26; not run; no menu bar yet |
+| iPadOS | 27.2.1 | iPad client built (tab bar to sidebar, a list beside its detail, panes as the split view), floor 26 |
+| macOS | 27.2.1 | Mac app built, floor 26: sidebar, three columns, menu bar, Settings window; run on macOS 27.2 |
 | watchOS, tvOS, visionOS | 27.2.1, 27.2, 27.2.1 | not built |
 | Xcode | 27.2 (Swift 6.4), needs macOS Tahoe 26.6 on Apple silicon | the cloud build uses Xcode 26.6 and 27.2 |
 
@@ -33,14 +34,14 @@ launch screen.
 |---|---|---|
 | Liquid Glass on bars, tab bars, sidebars, sheets, menus, alerts, search in a toolbar, controls while touched | 26 | by the system. The client never calls glass on content. |
 | Floating tab bar; the search tab apart at the trailing end; a tab bar that can minimise on scroll | 26 | by the system (tab bar); minimising: not yet |
-| Toolbar items grouped on shared glass, one prominent tinted item; `ToolbarSpacer` between groups | 26 | in Navree (a fixed spacer sets the account apart) |
+| Toolbar items grouped on shared glass, one prominent tinted item; `ToolbarSpacer` between groups | 26 | in Navree: the one prominent item takes the accent, every other bar item the bar's own colour; a fixed spacer sets the account apart |
 | Search in the bottom toolbar on iPhone | 26 | not yet: search is a field under the title |
 | Button roles confirm and close for toolbar buttons | 26 | in Navree through the toolbar placements |
 | `.glass` and `.glassProminent` button styles for floating controls | 26 | not yet, by design: no floating controls from the server |
 | Title-case section headers (no capitals) | 26 | by the system |
 | A user setting from clear to tinted glass; more diffusion over busy content | 27 | by the system, with no recompile |
 | Sidebars extend to the window edge; sidebar icons regain the accent | 27 | by the system |
-| Menu item images hidden by default in the iPadOS and macOS menu bars | 27 | not applicable (no menu bar yet) |
+| Menu item images hidden by default in the iPadOS and macOS menu bars | 27 | in Navree: a menu-bar command shows a symbol only for a standard action |
 | iPhone apps resize (iPad, Mirroring): layout by size class | 27 | in Navree: placement is by size class |
 | Toolbar visibility priority, a declared overflow menu, a pinned trailing slot; bars that slide away on scroll | 27 | not yet (they need Xcode 27's compiler) |
 | A prominent tab always visible when the tab bar collapses | 27 | not yet |
@@ -73,9 +74,9 @@ own or what a server reply may start.
 | Camera | `UIImagePickerController`, AVFoundation | iOS | free (`NSCameraUsageDescription`) | not yet |
 | Scan a code | VisionKit `DataScannerViewController` | iOS 16 | free | not yet |
 | One location fix | `CLLocationManager.requestLocation` | iOS 9; approximate may be all the person grants | free (`NSLocationWhenInUseUsageDescription`) | not yet |
-| Ask for a review | `RequestReviewAction` | iOS 16 | free | not yet |
+| Ask for a review | `RequestReviewAction`, `AppStore.requestReview(in:)` | iOS 16 | free | in Navree (`request_review` in `caps`) |
 | Keep the screen on | `isIdleTimerDisabled` | iOS 2 | free | not yet |
-| Open this app's settings | `openSettingsURLString` | iOS 8 | free | not yet |
+| Open this app's settings | `openSettingsURLString` | iOS 8 | free | in Navree (`open_settings` in `caps`, the notification settings too) |
 | Sign in with Apple | `ASAuthorizationAppleIDProvider` | iOS 13; watchOS 6 | ADP (capability) | in the client, offered by a build signed for it; the server side is done (`navree-social`) |
 | Sign in with Google on iPhone | the web flow in `ASWebAuthenticationSession` | iOS 12 | free (a Google Cloud project) | the server side is done; the client uses the sign-in session |
 
