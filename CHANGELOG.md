@@ -119,10 +119,11 @@ every `@navree/*` package carries the same version.
   so is one whose token the session's check took, as a test client or a native app sends it. A
   form compares the `Origin` as the session layer does (host and port) and, when the request
   carries its own scheme, the scheme too.
-- Error pages show their "Development only" details only when the code (`PagesOptions::debug`)
-  or the `ui` section turns them on, or, in a build with debug assertions, when the configuration
-  names an environment that is not `production` or `staging`. An app with no configuration shows
-  none unless `PagesOptions::debug(true)` says so. In `production` and `staging` they stay off.
+- An app with no configuration shows the "Development only" details of an error page only when
+  the code turns them on with `PagesOptions::debug(true)`: a build with debug assertions alone no
+  longer does, since such an app cannot say it is not production. An app with a configuration is
+  unchanged: on in a debug build, off in a release build, always off in `production` and
+  `staging`.
 - The UI toolkit's brotli for pages and ops answers follows the same opt-outs as the HTTP
   pipeline's gzip: a route with `no_compression`, a response with `Cache-Control: no-transform` and
   `http.compression = false` leave the body uncompressed. `navree_http::may_compress` is the rule

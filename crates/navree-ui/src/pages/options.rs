@@ -25,9 +25,8 @@ pub struct UiOptions {
     /// the sign-in state (default off).
     pub sign_in_redirect: Option<bool>,
     /// Add the status, code, message and cause to error pages, marked
-    /// "Development only". When it is not set, it is on only in a build with debug
-    /// assertions and only when the app's environment is named and is not `production`
-    /// or `staging`; otherwise off. Always off in `production` and `staging`.
+    /// "Development only" (default: on in a debug build, off in a release build).
+    /// Always off in `production` and `staging`.
     pub debug: Option<bool>,
 }
 
@@ -77,13 +76,11 @@ pub struct PagesOptions {
     /// asks for a page; an action or a region always gets its own answer.
     pub redirect_guests: bool,
     /// Adds the status, code, message and cause to an error page, marked "Development
-    /// only". Unless [`debug`](PagesOptions::debug) or the `ui` section says otherwise, it
-    /// is on when the build has debug assertions and the app's environment (`env` or
-    /// `app.env`, read from the configuration) is named and is not `production` or
-    /// `staging`; an app with no configuration to name one, or one that names none,
-    /// shows nothing, whatever the build. In `production` and `staging` it is always off,
-    /// whatever the build, the configuration or the code say. Never turn it on where users
-    /// can see it.
+    /// only". On by default when the build has debug assertions, off in a release build.
+    /// An app with no configuration to read its environment from shows nothing unless
+    /// [`debug`](PagesOptions::debug) turns it on. In `production` and `staging` (the
+    /// app's `env` or `app.env`) it is always off, whatever the build, the configuration
+    /// or the code say. Never turn it on where users can see it.
     pub debug: bool,
     /// Whether the code or the configuration chose `debug`, and not the build.
     debug_chosen: bool,
@@ -161,17 +158,12 @@ impl PagesOptions {
         if let Some(value) = ui.sign_in_redirect {
             self.redirect_guests = value;
         }
-        let env = environment(config);
         if let Some(value) = ui.debug {
             self.debug = value;
             self.debug_chosen = true;
-        } else if !self.debug_chosen {
-            // Nobody chose: a build with debug assertions shows the details only where the
-            // app says what it is and that it is not production.
-            self.debug = cfg!(debug_assertions) && named_and_not_production(env.as_deref());
         }
         // Production is final: whatever asked for the details, they stay off.
-        if is_production(env.as_deref()) {
+        if is_production(environment(config).as_deref()) {
             self.debug = false;
         }
         Ok(self)
@@ -209,11 +201,6 @@ fn environment(config: &Config) -> Option<String> {
 /// Whether `env` takes the production behaviour (`production` or `staging`, in any case).
 pub(crate) fn is_production(env: Option<&str>) -> bool {
     env.is_some_and(|env| Environment::parse(env).behaves_like_production())
-}
-
-/// Whether `env` names an environment and it is not one that takes the production behaviour.
-fn named_and_not_production(env: Option<&str>) -> bool {
-    env.is_some_and(|env| !env.trim().is_empty() && !is_production(Some(env)))
 }
 
 /// Whether `address` can be a link target.
@@ -312,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn with_a_configuration_the_details_need_a_named_environment_that_is_not_production() {
+    fn with_a_configuration_the_details_follow_the_build_outside_production() {
         use navree_config::ConfigSources;
 
         let load = |pairs: &[(&str, serde_json::Value)]| {
@@ -325,8 +312,7 @@ mod tests {
         let debug_in = |options: PagesOptions, pairs: &[(&str, serde_json::Value)]| {
             options.try_configured(&load(pairs)).expect("valid").debug
         };
-        // Nobody chose: a debug build shows them in an environment that is named and is not
-        // production, and nowhere else.
+        // Nobody chose: the build decides, production and staging aside.
         for (env, shown) in [
             ("local", cfg!(debug_assertions)),
             ("testing", cfg!(debug_assertions)),
@@ -334,14 +320,16 @@ mod tests {
             ("production", false),
             ("Production", false),
             ("staging", false),
-            ("", false),
         ] {
             let pairs = [("env", serde_json::json!(env))];
             assert_eq!(debug_in(PagesOptions::default(), &pairs), shown, "{env:?}");
         }
-        // No environment named: off, whatever the build says.
+        // No environment named: the build decides too.
         let unnamed = [("ui.sign_in", serde_json::json!("/login"))];
-        assert!(!debug_in(PagesOptions::default(), &unnamed));
+        assert_eq!(
+            debug_in(PagesOptions::default(), &unnamed),
+            cfg!(debug_assertions)
+        );
         // Chosen in code or in the configuration: it stands, production aside.
         assert!(debug_in(PagesOptions::default().debug(true), &unnamed));
         assert!(debug_in(

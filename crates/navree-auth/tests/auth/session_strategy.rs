@@ -656,7 +656,10 @@ async fn a_form_post_with_the_sessions_token_needs_no_origin_header() {
     let start = page.find(marker).expect("the token field") + marker.len();
     let masked = page[start..].split('"').next();
     let masked = masked.unwrap_or_default().to_owned();
-    assert!(client.cookie(COOKIE).is_some(), "the page started a session");
+    assert!(
+        client.cookie(COOKIE).is_some(),
+        "the page started a session"
+    );
 
     let refused = sink.with_action("csrf.mismatch").len();
     sign_in_without_origin_headers(&client, "forged-token")
