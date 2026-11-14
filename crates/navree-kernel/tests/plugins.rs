@@ -1,7 +1,11 @@
 //! Plugins: what a module says about itself, the boot checks, the report and the
 //! `plugins` built-in. This file's crate is `plugins`, in the package `navree-kernel`.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use navree_kernel::{BootErrors, KernelError, Module, ModuleBuilder, ModuleId, Navree};
+use navree_kernel::{BoxError, CommandSpec, Factory};
 use navree_kernel::{PluginInfo, plugin_info};
 use navree_kernel::{PublishTag, Publishable};
 
@@ -353,4 +357,108 @@ fn an_unsafe_publish_path_fails_the_boot() {
         ))
         .validate()
         .expect("safe paths boot");
+}
+
+/// A value the report counts; nothing reads its text.
+#[allow(dead_code)]
+pub struct Notice(&'static str);
+pub struct Costly;
+
+/// The plugin the report and the `plugins` built-in are tried on.
+struct Announcements {
+    built: Arc<AtomicUsize>,
+}
+impl Module for Announcements {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let built = self.built.clone();
+        m.plugin(plugin_info!(
+            namespace = "announcements",
+            title = "Announcements"
+        ))
+        .factory(Factory::<Costly>::new(move |_| {
+            built.fetch_add(1, Ordering::SeqCst);
+            async { Ok::<_, BoxError>(Arc::new(Costly)) }
+        }))
+        .contribute(Notice("Gurpreet Singh posted the Ludhiana schedule"))
+        .contribute(
+            Publishable::new(PublishTag::Views)
+                .file("list.html", b"<ul></ul>")
+                .file("show.html", b"<p></p>")
+                .file("admin/edit.html", b"<form></form>"),
+        )
+        .contribute(
+            Publishable::new(PublishTag::Locales)
+                .file("en/announcements.ftl", b"announcements-title = Notices\n")
+                .file(
+                    "pa-IN/announcements.ftl",
+                    "announcements-title = ਸੂਚਨਾਵਾਂ\n".as_bytes(),
+                ),
+        )
+        .command(CommandSpec::new(
+            "announcements:prune",
+            "Remove old notices",
+            |_, _| async { Ok(()) },
+        ));
+    }
+}
+
+#[tokio::test]
+async fn the_plugins_report_needs_no_boot_and_lists_what_each_module_adds() {
+    let built = Arc::new(AtomicUsize::new(0));
+    let report = Navree::app()
+        .module(Announcements {
+            built: built.clone(),
+        })
+        .module(Plain)
+        .plugin_report()
+        .expect("valid");
+    let [plugin] = report.plugins.as_slice() else {
+        panic!("one plugin: {report:?}")
+    };
+    assert_eq!(
+        plugin.info,
+        plugin_info!(namespace = "announcements", title = "Announcements")
+    );
+    assert!(!plugin.first_party);
+    let [module] = plugin.modules.as_slice() else {
+        panic!("one module: {plugin:?}")
+    };
+    assert_eq!(module.id, ModuleId::of::<Announcements>());
+    assert_eq!(module.commands, ["announcements:prune"]);
+    assert_eq!(
+        module.contributions,
+        [
+            ("navree_kernel::plugin::Publishable", 2),
+            ("plugins::Notice", 1)
+        ]
+    );
+    assert_eq!(
+        module.publishable,
+        [(PublishTag::Views, 3), (PublishTag::Locales, 2)]
+    );
+    assert_eq!(built.load(Ordering::SeqCst), 0, "nothing is built");
+
+    let app = Navree::app()
+        .module(Announcements {
+            built: built.clone(),
+        })
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(
+        app.ctx().plugins().plugins.len(),
+        1,
+        "a booted app answers the same"
+    );
+}
+
+#[test]
+fn a_community_plugin_using_plugin_info_is_not_first_party() {
+    let report = Navree::app()
+        .module(NoticesModule)
+        .plugin_report()
+        .expect("valid");
+    assert!(!report.plugins[0].first_party);
+    let json: serde_json::Value = serde_json::from_str(&report.to_json()).expect("JSON");
+    assert_eq!(json["plugins"][0]["first_party"], false);
 }

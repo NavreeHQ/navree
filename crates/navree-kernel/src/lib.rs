@@ -48,6 +48,7 @@ mod module;
 mod plugin;
 mod plugin_graph;
 mod publish;
+mod report;
 mod resolver;
 
 pub use app::{App, AppBuilder, AppContext, Contributed, ModuleInfo, Navree, WeakAppContext};
@@ -61,6 +62,7 @@ pub use lazy::Lazy;
 pub use lifecycle::Lifecycle;
 pub use module::{CodeConfigured, ConfiguredModule, Injectable, IntoModules, Module};
 pub use plugin::{PluginInfo, PublishTag, Publishable};
+pub use report::{PluginModuleReport, PluginReport, PluginsReport};
 pub use resolver::Resolver;
 
 /// Items Navree's own crates and macros use; not public API.
