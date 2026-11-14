@@ -48,6 +48,8 @@ Every request the runtime makes (a page, a region, a feed, a lazy list, a tree, 
 
 An answer is taken into the page on screen only when it is a page of the app: every `View` sends `X-Navree-Page: 1`, which no file the app serves as it is (an upload served back, a proxy's error page) carries, and the page's build must match too. A page without the header loads for real; a region's answer without it is not drawn, and the region says it failed.
 
+An answer that may be from before a change is not shown. A page or a region fetched before a write in this tab, a write or a sign-out in another, or the page coming back from the back-forward cache is fetched again. A form that writes takes the page's turn, so a navigation that began before it never replaces the form's answer. A region's fetch that began on one page is dropped when the reader has moved to another, even where the next page has a region of the same id. A page dropped this way adds no history entry: the address changes only once the page is sure to show.
+
 A form or a command posts to a handler. The handler answers with a `Reply`: a list of ops for the runtime (morph this element, show a toast, close this dialog), or a redirect or a full page for a browser with JavaScript off. [Commands and ops](/docs/ui/commands-and-ops/) covers the ops.
 
 The morph turns the old element into the new one and keeps what the person is doing. Focus, the caret, the selection, an input method composition and typed values survive, and an element with an `id` keeps its identity even when it moves.
