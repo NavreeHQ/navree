@@ -25,7 +25,7 @@ use serde_json::{Value, json};
 use crate::Core;
 use crate::decode::Answer;
 use crate::effect::{Change, Effect};
-use crate::origin::{Target, path_of};
+use crate::origin::Target;
 use crate::state::{Content, Notice, Pending, ScreenId, ScreenView, Stream, TimerFor};
 use crate::tree::{Names, Survey, find_in, find_in_mut, has_id, rewrite_in};
 
@@ -409,7 +409,7 @@ impl Core {
         // A table that is its page's content takes the page's address with it.
         if let Some(went) = went
             && let Some(view) = self.view.screens.get_mut(&id)
-            && path_of(&view.url) == path_of(went)
+            && self.inner.origin.where_of(&view.url) == self.inner.origin.where_of(went)
             && view.url != went
         {
             view.url = went.to_owned();

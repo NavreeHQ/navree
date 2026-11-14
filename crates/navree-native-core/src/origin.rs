@@ -308,6 +308,31 @@ pub(crate) fn path_of(url: &str) -> String {
     }
 }
 
+impl Origin {
+    /// Where `url` is, for comparing places: its path when it is on the home
+    /// origin (as a path or a whole address), and its origin and path when it
+    /// is on another. Two addresses are the same place when these are equal:
+    /// the same path on two origins is two places.
+    pub(crate) fn where_of(&self, url: &str) -> String {
+        if !is_web(url) {
+            return path_of(url);
+        }
+        match split(url) {
+            Some(parts) if parts.site == self.home => parts.path,
+            Some(parts) => format!("{}{}", parts.site.base(), parts.path),
+            // What does not read is a place of its own.
+            None => url.to_owned(),
+        }
+    }
+
+    /// Whether `url` is on the home origin and its path fits `pattern`. The
+    /// shell's routes, and the paths a sign-in goes by, are the home
+    /// origin's.
+    pub(crate) fn on_route(&self, pattern: &str, url: &str) -> bool {
+        self.where_of(url).starts_with('/') && route_matches(pattern, url)
+    }
+}
+
 /// Whether the path of `url` fits `pattern`, where `*` stands for one segment.
 pub(crate) fn route_matches(pattern: &str, url: &str) -> bool {
     let path = path_of(url);
@@ -907,6 +932,30 @@ mod tests {
         ] {
             assert_eq!(whole(&origin, not_ours), None, "{not_ours:?}");
         }
+    }
+
+    #[test]
+    fn a_place_is_its_origin_and_its_path() {
+        let origin = origin();
+        let place = |url| origin.where_of(url);
+        assert_eq!(place("/orders?page=2"), "/orders");
+        assert_eq!(place("https://shop.example/orders#x"), "/orders");
+        assert_eq!(
+            place("https://patiala.shop.example/orders"),
+            "https://patiala.shop.example/orders"
+        );
+        assert_ne!(
+            place("https://patiala.shop.example/orders"),
+            place("/orders")
+        );
+        assert_ne!(
+            place("https://pay.example:8443/orders"),
+            place("https://patiala.shop.example/orders")
+        );
+        // The shell's routes are the home origin's.
+        assert!(origin.on_route("/orders/*", "/orders/7"));
+        assert!(origin.on_route("/orders/*", "https://shop.example/orders/7"));
+        assert!(!origin.on_route("/orders/*", "https://patiala.shop.example/orders/7"));
     }
 
     #[test]
