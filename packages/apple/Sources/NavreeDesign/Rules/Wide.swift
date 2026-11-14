@@ -160,8 +160,10 @@ public enum SplitRules {
     /// in the detail's bar about one launch in six on iPhone, and on an iPad
     /// held upright pushed the columns' bars 54 points below the tab bar on a
     /// first launch.
-    public static func inspectorIsSheet(width: WindowClass) -> Bool {
-        !showsInspector(width: width)
+    /// On a Mac, where a window's inspector is a column the person shows
+    /// and hides, it stays a column at every width.
+    public static func inspectorIsSheet(width: WindowClass, bar: ActionBar = .navigation) -> Bool {
+        bar == .navigation && !showsInspector(width: width)
     }
 
     /// The destinations whose first screen is drawn as columns, as far as

@@ -69,6 +69,9 @@ private func go(_ href: String, _ present: Navree.Present = .auto) -> Navree.Act
     #expect(SplitRules.inspectorIsSheet(width: .compact))
     #expect(SplitRules.inspectorIsSheet(width: .medium))
     #expect(!SplitRules.inspectorIsSheet(width: .expanded))
+    // A Mac window keeps it a column at every width.
+    #expect(!SplitRules.inspectorIsSheet(width: .medium, bar: .window))
+    #expect(!SplitRules.inspectorIsSheet(width: .compact, bar: .window))
     #expect(SplitRules.sideBySide(width: .medium))
     #expect(!SplitRules.sideBySide(width: .compact))
 }

@@ -191,7 +191,7 @@ public struct SplitColumns<Sidebar: View, ListColumn: View, DetailRoot: View, In
                     }
                 }
         }
-        .modifier(InspectorColumn(content: inspector, shown: inspectorBinding, sheet: SplitRules.inspectorIsSheet(width: window)))
+        .modifier(InspectorColumn(content: inspector, shown: inspectorBinding, sheet: SplitRules.inspectorIsSheet(width: window, bar: .current)))
         .modifier(DetailMinimum())
     }
 
