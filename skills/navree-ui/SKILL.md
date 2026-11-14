@@ -742,15 +742,15 @@ gives the workspace, the role and `has_permission`; read and write a
 workspace's rows through `WorkspaceRepo::<Model>`.
 
 The shell is registered once and static, so draw the person and the
-workspace per request: clone the registered `Shell`, set
-`.context(workspace.name)` and `.user(UserMenu::new(name, email)
-.link("Profile", "/profile").action("Sign out", "/sign-out"))`, and apply it
-with `shell.for_request(path, &headers)`. An app made by `navree new` does this
-in one extractor, `Desk` (`src/ui/shell.rs`): take `Desk` where this skill says
-`AppShell`. On the `AppShell` itself, `user_menu(menu)` sets the person at the
-foot for this request, `header_slot(node)` puts a workspace switcher under
-the app's name (`Shell::header_slot` for every page) and `csrf(token)` gives
-the shell's own forms the session's token.
+workspace per request: take the `AppShell` extractor and set
+`.context(workspace.name.clone())` (the line below the app's name) and
+`.user_menu(UserMenu::new(name, email).link("Profile", "/profile")
+.action("Sign out", "/sign-out"))` on it; the registered `Shell` stays as it
+is. Do not clone the `Shell` and apply it with `Shell::for_request`: that draws
+none of the links other modules add with `m.nav_item`, which a shell built with
+`.contributed()` draws through `AppShell` for the readers who may open them. An
+app made by `navree new` does this in one extractor, `Desk`
+(`src/ui/shell.rs`): take `Desk` where this skill says `AppShell`.
 
 ## What is not shipped
 

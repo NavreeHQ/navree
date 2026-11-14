@@ -5,12 +5,13 @@
 
 use navree::BoxFuture;
 use navree::helm::{
-    Action, ActionResult, Field, Filter, FormData, HelmPage, Metric, RecordOf, Resource,
-    SaveContext,
+    Action, ActionResult, Field, Filter, FormData, HelmLink, HelmPage, HelmWidget, Metric,
+    RecordOf, Resource, SaveContext,
 };
 use navree::orm::Builder;
+use navree::plugin::prelude::*;
 use navree::prelude::*;
-use navree::testing::{TestApp, principal};
+use navree::testing::{TestApp, TestAppBuilder, principal};
 use serde_json::json;
 
 mod models {
@@ -428,6 +429,37 @@ impl DealsModule {
     }
 }
 
+/// Another module of the app: the docs' link and card from other modules, verbatim, with
+/// the card's template.
+struct SalesReportsModule;
+
+impl Module for SalesReportsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.helm_nav(
+            HelmLink::new("Sales report", "/reports/sales")
+                .group("Sales")
+                .icon("chart-line")
+                .can("read", "Deal"),
+        )
+        .helm_widget(
+            HelmWidget::new("open-deals", "Open deals")
+                .template("admin/widgets/open-deals")
+                .can("read", "Deal")
+                .data(|ctx| async move {
+                    let open = Deal::query()
+                        .where_(Deal::CLOSED_AT.is_null())
+                        .count(ctx.uow())
+                        .await?;
+                    Ok(json!({ "open": open }))
+                }),
+        );
+        m.templates(&[(
+            "admin/widgets/open-deals.html",
+            "<p class=\"open-deals\">{{ data.open }}</p>",
+        )]);
+    }
+}
+
 fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
     ctx.grant_permissions(rules);
     let Some(user) = &ctx.user else { return };
@@ -446,6 +478,11 @@ fn abilities(ctx: &AbilityCtx, rules: &mut Rules) {
 
 // The docs' test helpers.
 async fn boot_app() -> TestApp {
+    app_builder().build().await
+}
+
+/// The app `boot_app` boots, before it boots.
+fn app_builder() -> TestAppBuilder {
     TestApp::builder()
         .temp_database()
         .config("app.key", navree::crypto::generate_key())
@@ -463,8 +500,6 @@ async fn boot_app() -> TestApp {
         .module(ViewModule::from_config())
         .module(DealsModule)
         .module(HelmModule::from_config())
-        .build()
-        .await
 }
 
 async fn create_user(app: &TestApp, email: &str, role: &str) -> navree::auth::User {
@@ -606,4 +641,34 @@ async fn the_docs_resource_serves_its_screens() {
         .assert_status(200)
         .text();
     assert!(html.contains("<p>Priya: Pipeline board</p>"), "{html}");
+}
+
+#[tokio::test]
+async fn the_docs_link_and_card_show_to_reps_only() {
+    let app = app_builder().module(SalesReportsModule).build().await;
+    let priya = create_user(&app, "priya@example.com", "rep").await;
+    // A role with `helm.view` and nothing else.
+    let meera = create_user(&app, "meera@example.com", "support").await;
+    create_deal(&app, priya.id, "Ilaichi upgrade").await;
+    let dashboard = |user: uuid::Uuid| {
+        let client = app.acting_as(principal(user));
+        async move {
+            client
+                .get("/admin")
+                .header("accept", "text/html")
+                .send()
+                .await
+                .assert_status(200)
+                .text()
+        }
+    };
+
+    let html = dashboard(priya.id).await;
+    assert!(html.contains(r#"href="/reports/sales""#), "{html}");
+    assert!(html.contains(r#"data-helm-widget="open-deals""#), "{html}");
+    assert!(html.contains(r#"<p class="open-deals">1</p>"#), "{html}");
+
+    let html = dashboard(meera.id).await;
+    assert!(!html.contains(r#"href="/reports/sales""#), "{html}");
+    assert!(!html.contains("data-helm-widget"), "{html}");
 }
