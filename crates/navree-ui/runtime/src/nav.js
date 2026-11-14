@@ -1,6 +1,6 @@
 // Link boosting and regions: fetch a page, morph what changed, keep the shell
 // alive. A failed fetch falls back to a real navigation.
-import { E, active, all, attr, body, byId, clean, closest, cookies, emit, every, head, hidden, holds, make, on, one, ownModule, root, sameOrigin, set, setTitle, titleOf, unset } from "./dom.js";
+import { E, active, all, attr, body, byId, clean, closest, cookies, emit, every, fetchHere, head, hidden, holds, make, on, one, ownModule, root, sameOrigin, set, setTitle, titleOf, unset } from "./dom.js";
 import { morph, pieces } from "./morph.js";
 import { adoptToasts, announce, noteWrite, sameUser } from "./ui.js";
 
@@ -94,7 +94,7 @@ async function standing(key) {
 
 /** @param {string} url */
 async function fetchPage(url) {
-  return (await standing(keyOf(url))) || fetch(url, { headers: HEADER });
+  return (await standing(keyOf(url))) || fetchHere(url, { headers: HEADER });
 }
 
 /** @param {string} url */
@@ -102,7 +102,7 @@ function prefetch(url) {
   const key = keyOf(url);
   if (writing || prefetched.has(key) || /** @type {any} */ (navigator).connection?.saveData) return;
   if (prefetched.size > 8) prefetched.clear();
-  const page = fetch(url, { headers: PREFETCH, priority: "low" });
+  const page = fetchHere(url, { headers: PREFETCH, priority: "low" });
   page.catch(() => prefetched.delete(key));
   prefetched.set(key, { at: performance.now(), epoch, cookies: cookies(), page });
 }
@@ -485,7 +485,7 @@ async function feed(el, src, current) {
   const url = new URL(src, location.href);
   url.searchParams.set("after", el.getAttribute("data-ui-after") || "0");
   const stale = () => !current() || el.getAttribute("data-ui-src") !== src;
-  const response = await fetch(url, { headers: asking(el.id), signal: withinLimit() });
+  const response = await fetchHere(url, { headers: asking(el.id), signal: withinLimit() });
   // Before anything is done for it, a redirect too: a newer fetch may have been answered since.
   if (stale()) return;
   const taken = takes(response);
@@ -561,7 +561,7 @@ export async function refresh(id, polled = false) {
       await feed(el, src, () => !old() && !late());
       return late() ? again() : undefined;
     }
-    const response = await fetch(src, { headers: asking(id), signal: withinLimit() });
+    const response = await fetchHere(src, { headers: asking(id), signal: withinLimit() });
     if (old() || late()) return again();
     if (table && !response.ok) {
       troubled(table, response.status, response.headers.get("retry-after"));

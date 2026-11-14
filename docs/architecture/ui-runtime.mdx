@@ -44,6 +44,8 @@ Every module has a size ceiling in the crate's tests, and a change that crosses 
 
 When a page loads `core`, its `<body>` carries `data-ui-boost`. A click on a link to the same site then fetches the next page and morphs what changed into the one on screen, so the shell stays in place. If the fetch fails, the browser navigates as it would without the runtime. Nothing is fetched ahead of a click unless a link says so with `prefetch`.
 
+Every request the runtime makes (a page, a region, a feed, a lazy list, a tree, a picker's search, a split's save, an upload) goes to the page's own origin only. An address on another origin is refused before anything is sent, so no header and no token goes there, and an answer redirected to another origin counts as a failure: a page then loads its own address for real, and a region keeps what it had.
+
 A form or a command posts to a handler. The handler answers with a `Reply`: a list of ops for the runtime (morph this element, show a toast, close this dialog), or a redirect or a full page for a browser with JavaScript off. [Commands and ops](/docs/ui/commands-and-ops/) covers the ops.
 
 The morph turns the old element into the new one and keeps what the person is doing. Focus, the caret, the selection, an input method composition and typed values survive, and an element with an `id` keeps its identity even when it moves.

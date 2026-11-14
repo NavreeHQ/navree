@@ -8,7 +8,7 @@
 // policy allows; the server's whole percents stay in `data-split-basis`. Saves wait
 // for a pause, one is out at a time, and changes made meanwhile go in one more save
 // when it lands, so the last word is always the last thing done.
-import { attr, byId, closest, cookie, every, has, on, sameOrigin, set, toggle, unset } from "./dom.js";
+import { attr, byId, closest, cookie, every, fetchHere, has, on, sameOrigin, set, toggle, unset } from "./dom.js";
 
 /** Percent per arrow key, and with Shift. */
 const STEP = 2;
@@ -168,7 +168,7 @@ async function save(root, leaving = false) {
   const limit = setTimeout(() => stop.abort(), LIMIT);
   try {
     // A save the page is leaving with still goes.
-    await fetch(new URL(url, location.href), { method: "POST", headers, body, signal: stop.signal, credentials: "same-origin", keepalive: leaving });
+    await fetchHere(url, { method: "POST", headers, body, signal: stop.signal, credentials: "same-origin", keepalive: leaving });
   } catch {} finally {
     clearTimeout(limit);
     s.busy = false;

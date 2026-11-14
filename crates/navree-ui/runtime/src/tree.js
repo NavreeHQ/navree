@@ -7,7 +7,7 @@
 // The list items are `role=none` and each item's row is the `treeitem`: its name is its
 // own label, not the text of everything under it, and its group is owned with
 // `aria-owns`. A row is what has the tab stop and the focus.
-import { active, all, attr, body, byId, clean, closest, every, has, make, on, sameOrigin, set, unset } from "./dom.js";
+import { active, all, attr, body, byId, clean, closest, every, fetchHere, has, make, on, sameOrigin, set, unset } from "./dom.js";
 
 const ROOT = "[data-ui-tree]";
 const ITEM = "li[data-slot=tree-item],li[data-slot=tree-more],li[data-slot=tree-note]";
@@ -204,7 +204,7 @@ const pending = new WeakMap();
  */
 async function fetchItems(src) {
   if (!sameOrigin(src)) return null;
-  const response = await fetch(src, {
+  const response = await fetchHere(src, {
     headers: { "X-Navree-UI": "1", Accept: "text/html" },
     credentials: "same-origin",
     redirect: "error",

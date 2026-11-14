@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use crate::components::{Button, Live, Size, Skeleton, SkeletonShape};
-use crate::html::Href;
+use crate::html::{Href, LocalHref};
 use crate::icons;
 use crate::node::{AttrValue, Element, IntoNodes, Node, Uses, el};
 use crate::pages::{State, StateKind, StateLabels};
@@ -49,8 +49,19 @@ impl Region {
     /// toolkit marks a view answered to a region's fetch as its fragment. A page with
     /// the runtime that lacks this id and isn't marked so (one a proxy serves), or a
     /// redirect, is somewhere else: the user goes there, as when a session has ended.
+    ///
+    /// The source is on this site: an address that is not a [`LocalHref`] becomes `#`, as
+    /// `LocalHref::from` makes it, so a region never names another site.
+    ///
+    /// ```
+    /// use navree_ui::{Region, render};
+    ///
+    /// let html = render(&Region::new("kpis").src("https://other.example/kpis").into());
+    /// assert!(html.contains(r##"data-ui-src="#""##));
+    /// ```
     pub fn src(mut self, src: impl Into<Href>) -> Self {
-        self.el = self.el.attr("data-ui-src", src.into());
+        let local = LocalHref::from(src.into().as_str());
+        self.el = self.el.attr("data-ui-src", local.into_href());
         self
     }
 
