@@ -427,6 +427,7 @@ struct Chrome: View {
             }
             .tabViewStyle(.sidebarAdaptable)
             .modifier(SidebarAccount(client: client))
+            .id(columnDestinations)
         case .sidebarAdaptable:
             TabView(selection: selection) {
                 ForEach(DestinationGroup.of(items)) { group in
@@ -439,7 +440,17 @@ struct Chrome: View {
             }
             .tabViewStyle(.sidebarAdaptable)
             .modifier(SidebarAccount(client: client))
+            .id(columnDestinations)
         }
+    }
+
+    /// The destinations drawn as columns so far: the tab view is built anew
+    /// when one of them first is (see ``SplitRules/columnDestinations(_:)``).
+    private var columnDestinations: [Int] {
+        let width = WindowRules.window(client.nav.width)
+        return SplitRules.columnDestinations(client.nav.destinations.map { item in
+            SplitRules.layout(item.stack.first.flatMap { client.screen($0)?.screen?.body }, width: width)
+        })
     }
 
     private func tab(_ item: Destination, _ index: Int) -> some TabContent<Int> {
