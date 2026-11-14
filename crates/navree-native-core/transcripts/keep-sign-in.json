@@ -281,6 +281,7 @@
         "effects": [
           {"t":"cache_clear"},
           {"t":"fetch","request":3,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"report","what":"session","detail":"an answer was made for another person than the shell named: what was kept was emptied, and the shell is asked again"},
           {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
         ]
       }

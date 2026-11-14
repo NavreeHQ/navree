@@ -1007,6 +1007,8 @@ pub(crate) struct Inner {
     /// The number the first request asked while the event in hand is
     /// handled gets: what was asked before is from before the event.
     pub event_start: u64,
+    /// An answer the core makes itself (a request never sent) is being read.
+    pub synthetic: bool,
     /// An address an answer gave did not read, and that was said, in this event.
     pub refusal_said: bool,
     pub screens: BTreeMap<ScreenId, ScreenInner>,

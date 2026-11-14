@@ -508,21 +508,26 @@ impl Core {
                 return;
             }
             for request in unsent {
+                // Made here, not by the app: no person to compare.
+                self.inner.synthetic = true;
                 self.answered(Response {
                     request,
                     status: 502,
                     ..Response::default()
                 });
+                self.inner.synthetic = false;
             }
         }
         // What is left is failed all the same. What failing it asks for in
         // turn waits for the next event's update, so no asker is left waiting.
         for request in std::mem::take(&mut self.inner.unsent) {
+            self.inner.synthetic = true;
             self.answered(Response {
                 request,
                 status: 502,
                 ..Response::default()
             });
+            self.inner.synthetic = false;
         }
     }
 
@@ -1967,6 +1972,7 @@ impl Core {
         let Some(asked) = self.inner.pending.remove(&response.request) else {
             return;
         };
+        let response = self.same_session(&asked, response);
         let response = self.keeping(&asked, response);
         let Some(response) = self.follow(&asked, response) else {
             return;
