@@ -1,10 +1,11 @@
-//! [`PluginInfo`] and `plugin_info!`: what a plugin says about itself.
+//! [`PluginInfo`] and `plugin_info!`: what a plugin says about itself, and the
+//! kernel's lists of first-party plugins and reserved namespaces.
 
 /// What a plugin says about itself: `m.plugin(plugin_info!())`.
 ///
 /// `plugin_info!()` fills it from the `Cargo.toml` of the crate that calls
 /// it; [`PluginInfo::new`] and the setters build one by hand. The kernel
-/// checks it at boot.
+/// checks it at boot (see [`ModuleBuilder::plugin`](crate::ModuleBuilder::plugin)).
 ///
 /// ```
 /// use navree_kernel::PluginInfo;
@@ -253,6 +254,148 @@ pub const fn namespace_text(bytes: &'static [u8], len: usize) -> &'static str {
     }
 }
 
+/// The framework's own plugin packages, as (package, crate), sorted by
+/// package: a plugin is first-party when its name is here, its version is the
+/// kernel's, and every module of it is a type of the listed crate. Not public
+/// API; Navree's own crates and tests use it.
+pub const FIRST_PARTY: &[(&str, &str)] = &[
+    ("navree-ai", "navree_ai"),
+    ("navree-audit", "navree_audit"),
+    ("navree-billing", "navree_billing"),
+    ("navree-directory", "navree_directory"),
+    ("navree-documents", "navree_documents"),
+    ("navree-domains", "navree_domains"),
+    ("navree-flags", "navree_flags"),
+    ("navree-fleet", "navree_fleet"),
+    ("navree-graphql", "navree_graphql"),
+    ("navree-grpc", "navree_grpc"),
+    ("navree-helm", "navree_helm"),
+    ("navree-http-client", "navree_http_client"),
+    ("navree-i18n", "navree_i18n"),
+    ("navree-integrations", "navree_integrations"),
+    ("navree-mcp", "navree_mcp"),
+    ("navree-media", "navree_media"),
+    ("navree-micro", "navree_micro"),
+    ("navree-mongo", "navree_mongo"),
+    ("navree-notify", "navree_notify"),
+    ("navree-oauth", "navree_oauth"),
+    ("navree-realtime", "navree_realtime"),
+    ("navree-redis", "navree_redis"),
+    ("navree-search", "navree_search"),
+    ("navree-settings", "navree_settings"),
+    ("navree-sheets", "navree_sheets"),
+    ("navree-social", "navree_social"),
+    ("navree-sso", "navree_sso"),
+    ("navree-storage", "navree_storage"),
+    ("navree-time", "navree_time"),
+    ("navree-webhooks", "navree_webhooks"),
+    ("navree-workflows", "navree_workflows"),
+];
+
+/// The namespaces the framework keeps for itself, sorted: a plugin that is
+/// not first-party may not use one. Not public API; Navree's own crates and
+/// tests use it.
+pub const RESERVED_NAMESPACES: &[&str] = &[
+    "ai",
+    "all",
+    "api",
+    "app",
+    "audit",
+    "auth",
+    "billing",
+    "cache",
+    "database",
+    "directory",
+    "documents",
+    "domains",
+    "env",
+    "flags",
+    "fleet",
+    "graphql",
+    "grpc",
+    "hashing",
+    "helm",
+    "http",
+    "http_client",
+    "i18n",
+    "integrations",
+    "lighthouse",
+    "log",
+    "logbook",
+    "mail",
+    "mcp",
+    "media",
+    "micro",
+    "navree",
+    "notify",
+    "oauth",
+    "observe",
+    "operations",
+    "organization",
+    "orm",
+    "plugins",
+    "queue",
+    "realtime",
+    "redis",
+    "roles",
+    "schema",
+    "search",
+    "session",
+    "settings",
+    "sheets",
+    "social",
+    "sso",
+    "storage",
+    "subscriptions",
+    "time",
+    "ui",
+    "users",
+    "validation",
+    "view",
+    "views",
+    "webhooks",
+    "workflows",
+    "workspace",
+];
+
+/// Whether `type_name` names a path of the crate `crate_name`: `<crate_name>::`
+/// at its start or right after `<`, `,`, a space, `(`, `[`, `&` or `*`, so the
+/// type itself and its generic arguments count, and `x_navree_plugin_a::T`
+/// does not count for `navree_plugin_a`.
+pub(crate) fn names_crate(type_name: &str, crate_name: &str) -> bool {
+    let path = format!("{crate_name}::");
+    type_name.match_indices(path.as_str()).any(|(at, _)| {
+        at == 0
+            || matches!(
+                type_name.as_bytes()[at - 1],
+                b'<' | b',' | b' ' | b'(' | b'[' | b'&' | b'*'
+            )
+    })
+}
+
+/// Whether the plugin `info`, whose modules have the types `type_names`, is
+/// first-party: `listed` pairs its name with a crate, its version is
+/// `kernel_version`, and every module type, up to its first `<`, is a path of
+/// that crate (generic arguments do not count).
+pub(crate) fn is_first_party(
+    info: &PluginInfo,
+    type_names: &[&str],
+    listed: &[(&str, &str)],
+    kernel_version: &str,
+) -> bool {
+    let Some(&(_, krate)) = listed.iter().find(|(package, _)| *package == info.name) else {
+        return false;
+    };
+    let path = format!("{krate}::");
+    info.version == kernel_version
+        && type_names.iter().all(|type_name| {
+            let outer = type_name
+                .split_once('<')
+                .map_or(*type_name, |(outer, _)| outer);
+            outer.starts_with(path.as_str())
+        })
+}
+
 /// Whether `bytes` starts with `prefix` (`<[u8]>::starts_with` in a `const fn`).
 const fn starts_with(bytes: &[u8], prefix: &[u8]) -> bool {
     if bytes.len() < prefix.len() {
@@ -323,5 +466,79 @@ mod tests {
         ] {
             assert!(!is_namespace(bad), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_type_path_counts_for_a_crate_only_on_a_segment_boundary() {
+        assert!(names_crate("navree_plugin_a::T", "navree_plugin_a"));
+        assert!(!names_crate("x_navree_plugin_a::T", "navree_plugin_a"));
+        assert!(!names_crate("navree_plugin_ab::T", "navree_plugin_a"));
+        assert!(!names_crate("a::B<x_navree_plugin_a::T>", "navree_plugin_a"));
+        assert!(names_crate(
+            "navree_config::client::ClientModule<reqwest::Client, navree_plugin_github::GithubOptions>",
+            "navree_plugin_github"
+        ));
+        for shape in [
+            "a::B<navree_plugin_a::T>",
+            "&navree_plugin_a::T",
+            "(u8, navree_plugin_a::T)",
+            "[navree_plugin_a::T; 1]",
+            "*const navree_plugin_a::T",
+        ] {
+            assert!(names_crate(shape, "navree_plugin_a"), "{shape}");
+        }
+    }
+
+    #[test]
+    fn first_party_needs_a_listed_name_the_kernels_version_and_a_type_of_the_listed_crate() {
+        let listed = [("navree-flags", "navree_flags")];
+        let flags = PluginInfo::new("navree-flags", "navree_flags", "flags", "1.3.0");
+        let module = ["navree_flags::module::FlagsModule"];
+        assert!(is_first_party(&flags, &module, &listed, "1.3.0"));
+        assert!(
+            !is_first_party(&flags, &module, &listed, "1.3.1"),
+            "another version"
+        );
+        let unlisted = PluginInfo::new("navree-plugin-flags", "navree_flags", "flags", "1.3.0");
+        assert!(
+            !is_first_party(&unlisted, &module, &listed, "1.3.0"),
+            "a name not on the list"
+        );
+        assert!(
+            !is_first_party(
+                &flags,
+                &["acme::Wrap<navree_flags::module::FlagsModule>"],
+                &listed,
+                "1.3.0"
+            ),
+            "generic arguments do not count"
+        );
+        assert!(
+            !is_first_party(
+                &flags,
+                &["navree_flags::module::FlagsModule", "acme::Extra"],
+                &listed,
+                "1.3.0"
+            ),
+            "every module of the plugin"
+        );
+        assert!(!is_first_party(
+            &flags,
+            &["navree_flags_extra::FlagsModule"],
+            &listed,
+            "1.3.0"
+        ));
+    }
+
+    #[test]
+    fn the_kernels_lists_are_sorted_and_well_formed() {
+        assert_eq!(FIRST_PARTY.len(), 31);
+        assert!(FIRST_PARTY.windows(2).all(|w| w[0].0 < w[1].0));
+        for (package, krate) in FIRST_PARTY {
+            assert_eq!(package.replace('-', "_"), *krate);
+        }
+        assert_eq!(RESERVED_NAMESPACES.len(), 60);
+        assert!(RESERVED_NAMESPACES.windows(2).all(|w| w[0] < w[1]));
+        assert!(RESERVED_NAMESPACES.iter().all(|ns| is_namespace(ns)));
     }
 }
