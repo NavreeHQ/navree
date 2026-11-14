@@ -68,8 +68,9 @@ every `@navree/*` package carries the same version.
   A plugin's permissions start with its namespace, and its namespace may not be another module's
   permission prefix. A plugin that reads a configuration section outside its namespace is warned
   about at boot. Without `AccessModule` the permissions modules describe are not checked, and a
-  route cannot require one; a workspace's owner and the app's super-admin role hold every
-  permission, a plugin's included.
+  route cannot require one. The roles that already hold every permission hold a plugin's too: a
+  workspace's owner, an organization's owner in each of its workspaces, the app's super-admin role
+  and any role granted `all.*`; a role granted `all.read` holds every plugin's `read` permissions.
 - `navree::http::RequestWorkspace`: the workspace a request names, resolved without entering it;
   `WorkspaceModule` provides it.
 

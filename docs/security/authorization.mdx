@@ -245,7 +245,7 @@ m.permissions(&[
 ]);
 ```
 
-Describing a permission grants it to nobody. `m.permissions` describes, `#[permissions(..)]` on a route (`.permissions(&[..])` on a `RouteDef`) requires, as [Checking routes](#checking-routes) shows, and a person holds one only when the app grants it: a workspace role's list under `workspace.roles` in the app's configuration, or a role of navree-access (`access:grant editor announcements.publish`). Until then a [sidebar link](/docs/ui/app-shell/#links-other-modules-add) or a [Helm card](/docs/tools/helm/#links-and-cards-from-other-modules) that asks for it is drawn for nobody.
+Describing a permission grants it to nobody. `m.permissions` describes, `#[permissions(..)]` on a route (`.permissions(&[..])` on a `RouteDef`) requires, as [Checking routes](#checking-routes) shows, and a person holds one only when the app grants it: a workspace role's list under `workspace.roles` in the app's configuration, or a role of navree-access (`access:grant editor announcements.publish`). Until then a [sidebar link](/docs/ui/app-shell/#links-other-modules-add) that asks for it, or a [Helm link or card](/docs/tools/helm/#links-and-cards-from-other-modules) whose check stands for it, is drawn only for the roles that already hold every permission ([below](#who-holds-the-permissions-plugins-describe)).
 
 `navree::contracts::permission_catalog(ctx)` lists every permission the app's modules describe, with the module that described it, in module order:
 
@@ -259,7 +259,16 @@ A name is two or more lower-case words joined by `.`, each a letter followed by 
 
 The name, namespace and prefix checks and the check of a name two modules describe run in `AccessModule` at boot. Without `AccessModule`, nothing checks them and nothing reads the descriptions, but roles still hold what `workspace.roles.{role}.permissions` lists, and no route can require a permission.
 
-The roles that hold every permission also hold a plugin's, from the moment it is installed: a workspace's `owner` (`all.*`) in that workspace, and the app's super-admin role. So a plugin does not guard a staff-only action with a permission that a workspace owner (in a SaaS app, a customer) holds.
+#### Who holds the permissions plugins describe
+
+The roles that already hold every permission hold a plugin's too, from the moment it is installed:
+
+- a workspace's `owner` (`all.*`), in that workspace;
+- an organization's `owner`, in each of its workspaces: with organizations on, it enters each of them as its `owner`;
+- the app's super-admin role;
+- any role the app grants `all.*`, in `workspace.roles` or with navree-access.
+
+A role granted one action on `all` holds that action of every plugin: `all.read` holds `announcements.read`. So a plugin does not guard a staff-only action with a permission that a workspace owner (in a SaaS app, a customer) holds.
 
 ### Managing roles in code
 
