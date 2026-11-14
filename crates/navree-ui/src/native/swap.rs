@@ -1142,9 +1142,10 @@ pub(crate) async fn shell_parts(
 /// on a task of its own, where the reply layer's scope is not. A browser's
 /// request costs one look in its extensions.
 ///
-/// Here, inside authentication, it also names on a native answer that may be
-/// kept the person it was made for ([`navree_native::PERSON_HEADER`], as the
-/// shell's answer names them), so a client keeps it only for that person.
+/// Here, inside authentication, it also names on every native answer the
+/// person it was made for ([`navree_native::PERSON_HEADER`], as the shell's
+/// answer names them), so a client sees at once when the session changed
+/// under it and keeps a page only for that person.
 pub(crate) async fn context_layer(request: Request, next: Next) -> Response {
     match request.extensions().get::<Asked>().cloned() {
         Some(asked) => {
@@ -1165,12 +1166,9 @@ pub(crate) async fn context_layer(request: Request, next: Next) -> Response {
     }
 }
 
-/// Names on an answer that may be kept on the device the person it was made
-/// for, as the shell's answer names them; nobody signed in names nobody.
+/// Names on a native answer the person it was made for, as the shell's
+/// answer names them; nobody signed in names nobody.
 fn made_for(response: &mut Response, user: Option<uuid::Uuid>) {
-    if !response.headers().contains_key(navree_native::KEEP_HEADER) {
-        return;
-    }
     if let Some(value) = super::routes::person(user) {
         response
             .headers_mut()
@@ -1410,7 +1408,7 @@ mod tests {
     }
 
     #[test]
-    fn an_answer_that_may_be_kept_names_the_person_it_was_made_for() {
+    fn every_native_answer_names_the_person_it_was_made_for() {
         let id = uuid::Uuid::parse_str("0193a4b2-7c1d-7e3f-9a2b-5c6d7e8f9a0b").unwrap();
         let answer = |keep: bool| {
             let mut response = (StatusCode::OK, "{}").into_response();
@@ -1437,10 +1435,13 @@ mod tests {
         let mut kept = answer(true);
         made_for(&mut kept, None);
         assert_eq!(person(&kept), None);
-        // An answer that may not be kept says nothing of anyone.
+        // An answer that may not be kept names them too.
         let mut not_kept = answer(false);
         made_for(&mut not_kept, Some(id));
-        assert_eq!(person(&not_kept), None);
+        assert_eq!(
+            person(&not_kept).as_deref(),
+            Some("0193a4b2-7c1d-7e3f-9a2b-5c6d7e8f9a0b")
+        );
     }
 
     #[test]

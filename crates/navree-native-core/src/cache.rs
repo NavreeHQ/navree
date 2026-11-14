@@ -105,6 +105,9 @@ pub(crate) struct Cache {
     /// The pages asked of the client since what is kept was last emptied:
     /// an answer for any other is dropped.
     asked: Vec<String>,
+    /// That an answer named another person than the shell was said, since
+    /// the shell last named someone.
+    change_said: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -198,25 +201,51 @@ impl Core {
             self.forget_kept(&asked.url, page);
             return response;
         }
-        // The person the answer was made for is the one the shell named, or
-        // the session changed under the app: nothing of the answer is kept,
-        // what is kept is emptied, and the shell is asked again.
-        if let Some(named) = self.inner.cache.named.clone() {
-            let made_for = response
-                .header(navree_native::PERSON_HEADER)
-                .filter(|id| !id.is_empty());
-            let same = match (named.as_ref().and_then(Who::id), made_for) {
-                (Some(named), Some(made_for)) => named == made_for,
-                (None, None) => true,
-                _ => false,
-            };
-            if !same {
-                response
-                    .headers
-                    .retain(|(name, _)| !name.eq_ignore_ascii_case(navree_native::KEEP_HEADER));
-                self.disown();
-                self.who_may_have_changed(true);
-            }
+        response
+    }
+
+    /// Every answer of the app names the person it was made for
+    /// ([`navree_native::PERSON_HEADER`]; none for nobody). Compared with the
+    /// person this launch's shell named before anything else is done with
+    /// the answer: a difference is the news that the session changed without
+    /// the app being told (a sign-in in the web view, a session that ran
+    /// out). Nothing of the answer is kept, what is kept is emptied, in
+    /// memory too, the named person is cleared and the shell is asked again.
+    /// Said once in a `report`. An answer the core made itself, or that never
+    /// came from the app, is not compared.
+    pub(crate) fn same_session(&mut self, asked: &Asked, mut response: Response) -> Response {
+        if response.error.is_some()
+            || response.left.is_some()
+            || self.inner.synthetic
+            || asked.purpose == Pending::Shell
+        {
+            return response;
+        }
+        let Some(named) = self.inner.cache.named.clone() else {
+            return response;
+        };
+        let made_for = response
+            .header(navree_native::PERSON_HEADER)
+            .filter(|id| !id.is_empty());
+        let same = match (named.as_ref().and_then(Who::id), made_for) {
+            (Some(named), Some(made_for)) => named == made_for,
+            (None, None) => true,
+            _ => false,
+        };
+        if same {
+            return response;
+        }
+        response
+            .headers
+            .retain(|(name, _)| !name.eq_ignore_ascii_case(navree_native::KEEP_HEADER));
+        self.disown();
+        self.who_may_have_changed(true);
+        if !std::mem::replace(&mut self.inner.cache.change_said, true) {
+            self.report(
+                "session",
+                "an answer was made for another person than the shell named: what was kept was emptied, and the shell is asked again"
+                    .to_owned(),
+            );
         }
         response
     }
@@ -447,6 +476,7 @@ impl Core {
     /// theirs, when they may.
     pub(crate) fn shell_named(&mut self, person: Person) {
         self.inner.cache.named = Some(person.clone());
+        self.inner.cache.change_said = false;
         self.owner_settles();
     }
 

@@ -139,10 +139,11 @@ pub const EMBED_HEADER: &str = "x-navree-embed";
 /// the shell never carry it.
 pub const KEEP_HEADER: &str = "x-navree-keep";
 
-/// The response header on the shell's answer that names the person signed
-/// in, by the id the app's sign-in gives them, percent-encoded where it is not
-/// visible ASCII. Absent when nobody is signed in. A client compares people by
-/// it, and by name and email when an older server does not send it.
+/// The response header on every native answer, the shell's too, that names
+/// the person signed in, by the id the app's sign-in gives them,
+/// percent-encoded where it is not visible ASCII. Absent when nobody is signed
+/// in. A client keeps pages only for a person it names, and an answer that
+/// names another person than the shell did says the session changed.
 pub const PERSON_HEADER: &str = "x-navree-person";
 
 /// The product a native client's web view adds to its user agent:
