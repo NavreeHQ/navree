@@ -288,7 +288,8 @@ impl Module for Announcements {
 }
 
 /// `GET /notices-home`: a page drawn from the `AppShell` extractor that says whether its
-/// unit of work entered a workspace.
+/// unit of work entered a workspace. `GET /notices-entered` is the same page after the
+/// `CurrentWorkspace` extractor, which enters the workspace.
 struct NoticesHome;
 
 impl Injectable for NoticesHome {
@@ -310,6 +311,17 @@ impl Controller for NoticesHome {
                 Method::GET,
                 "!/notices-home",
                 |shell: AppShell, uow: Uow| async move {
+                    shell
+                        .page("Notices")
+                        .body(Text::new(format!("entered: {:?}", uow.workspace())))
+                },
+            )
+            .page()
+            .authenticated(),
+            RouteDef::on(
+                Method::GET,
+                "!/notices-entered",
+                |_: CurrentWorkspace, shell: AppShell, uow: Uow| async move {
                     shell
                         .page("Notices")
                         .body(Text::new(format!("entered: {:?}", uow.workspace())))
@@ -394,8 +406,13 @@ async fn people(app: &TestApp) -> People {
 
 /// `GET /notices-home` as `user`, naming `workspace` in `X-Workspace` when there is one.
 async fn notices_home(app: &TestApp, user: Uuid, workspace: Option<Uuid>) -> String {
+    notices_page(app, "/notices-home", user, workspace).await
+}
+
+/// The page at `path` as `user`, naming `workspace` in `X-Workspace` when there is one.
+async fn notices_page(app: &TestApp, path: &str, user: Uuid, workspace: Option<Uuid>) -> String {
     let client = app.acting_as(principal(user));
-    let mut request = client.get("/notices-home").header("accept", "text/html");
+    let mut request = client.get(path).header("accept", "text/html");
     if let Some(workspace) = workspace {
         request = request.header("x-workspace", workspace.to_string());
     }
@@ -462,6 +479,12 @@ async fn asking_for_links_does_not_enter_the_workspace_on_the_unit_of_work() {
     assert!(page.contains(READ_LINK), "{page}");
     // And not entered: the page's unit of work is in no workspace.
     assert!(page.contains("entered: None"), "{page}");
+    // The same page after `CurrentWorkspace` is in it: the unit of work reports an entered
+    // workspace, so the line above can tell.
+    let entered = notices_page(&granted, "/notices-entered", them.meera, Some(them.office)).await;
+    let expected = format!("entered: {:?}", Some(them.office));
+    assert!(entered.contains(&expected), "{entered}");
+    assert!(entered.contains(READ_LINK), "{entered}");
 }
 
 #[tokio::test]
