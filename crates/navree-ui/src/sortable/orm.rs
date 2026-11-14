@@ -6,8 +6,8 @@ use std::future::Future;
 
 use navree_db::{Backend, Db, IsolationLevel, Uow};
 use navree_orm::{
-    Access, Column, Dialect, Executor, Filter, OrmError, Result, Value, ValueFor, col, raw,
-    scalar, table,
+    Access, Column, Dialect, Executor, Filter, OrmError, Result, Value, ValueFor, col, raw, scalar,
+    table,
 };
 
 use super::moves::Move;

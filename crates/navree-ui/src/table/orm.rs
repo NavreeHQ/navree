@@ -832,8 +832,9 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
             let chunk = (limit - written).min(u64::from(EXPORT_CHUNK));
             // Always by position, never by `OFFSET`: a read costs the same at the
             // millionth row as at the first.
-            let rows = Self::read_past(&filtered, exec, dialect, &terms, position.as_deref(), chunk)
-                .await?;
+            let rows =
+                Self::read_past(&filtered, exec, dialect, &terms, position.as_deref(), chunk)
+                    .await?;
             let got = rows.len() as u64;
             if let Some(last) = rows.last() {
                 position = terms.iter().map(|term| value_of(last, term)).collect();
@@ -899,9 +900,7 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
             room: limit,
         };
         // One row more than is written says that the result goes on.
-        let read = self
-            .walk(builder, exec, limit + 1, map, &mut sink)
-            .await?;
+        let read = self.walk(builder, exec, limit + 1, map, &mut sink).await?;
         Ok(sink.spool.into_response(file, read > limit).await)
     }
 }

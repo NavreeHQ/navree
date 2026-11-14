@@ -502,12 +502,7 @@ async fn confirming_an_action_does_not_make_the_sign_in_recent() {
 
     // Neither counts as a step-up: a token refreshed afterwards still
     // carries the sign-in of eleven minutes ago.
-    let fresh = tokens(
-        &support::refresh(&client, &refresh)
-            .await
-            .assert_status(200),
-    )
-    .0;
+    let fresh = tokens(&support::refresh(&client, &refresh).await.assert_status(200)).0;
     assert_eq!(
         support::claims_of(auth.jwt(), &fresh).auth_time,
         claims.auth_time

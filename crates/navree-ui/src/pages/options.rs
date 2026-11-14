@@ -349,7 +349,10 @@ mod tests {
             &[("ui.debug", serde_json::json!(true))]
         ));
         let development = [("env", serde_json::json!("development"))];
-        assert!(!debug_in(PagesOptions::default().debug(false), &development));
+        assert!(!debug_in(
+            PagesOptions::default().debug(false),
+            &development
+        ));
         assert!(!debug_in(
             PagesOptions::default().debug(true),
             &[("env", serde_json::json!("production"))]
@@ -360,6 +363,11 @@ mod tests {
             ("ui.sign_in", serde_json::json!("javascript:alert(1)")),
         ]);
         assert!(!PagesOptions::default().configured(&invalid).debug);
-        assert!(PagesOptions::default().debug(true).configured(&invalid).debug);
+        assert!(
+            PagesOptions::default()
+                .debug(true)
+                .configured(&invalid)
+                .debug
+        );
     }
 }

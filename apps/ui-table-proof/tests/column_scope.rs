@@ -7,7 +7,7 @@ use navree::db::Executor as _;
 use navree::db::{Db, DbOptions};
 use navree::orm::{Model, Record};
 use navree::ui::table::{
-    MAX_SAVED_VIEWS, NoFilter, Total, TooManyViews, delete_view, list_views, save_view,
+    MAX_SAVED_VIEWS, NoFilter, TooManyViews, Total, delete_view, list_views, save_view,
 };
 use navree::ui::{TableQuery, TableRow};
 use uuid::Uuid;
@@ -26,8 +26,7 @@ pub struct Staff {
     pub pay: i64,
 }
 
-const SCHEMA: &str =
-    "CREATE TABLE cs_staff (id INTEGER PRIMARY KEY, name TEXT NOT NULL, city TEXT NOT NULL, pay INTEGER NOT NULL)";
+const SCHEMA: &str = "CREATE TABLE cs_staff (id INTEGER PRIMARY KEY, name TEXT NOT NULL, city TEXT NOT NULL, pay INTEGER NOT NULL)";
 
 /// A database file of its own, with the staff table and six people in it.
 async fn staff() -> (Db, std::path::PathBuf) {

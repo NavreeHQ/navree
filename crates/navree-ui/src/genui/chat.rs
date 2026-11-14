@@ -641,9 +641,9 @@ impl Sources {
                             Text::muted(format!(" ({host})")).inline(),
                         ))
                         .into(),
-                    Some((Goes::Here, href)) => el("span")
-                        .children(el("a").href(href).child(title))
-                        .into(),
+                    Some((Goes::Here, href)) => {
+                        el("span").children(el("a").href(href).child(title)).into()
+                    }
                     Some((Goes::Unreadable, _)) | None => Node::Text(title.into()),
                 };
                 el("li").child(line).into()
@@ -1356,7 +1356,11 @@ mod tests {
             assert!(!html.contains("<a "), "{url}: {html}");
         }
         // A path on this site, and a mail address, are links with nothing to show.
-        for url in ["/orders", "mailto:accounts@example.com", "tel:+919876543210"] {
+        for url in [
+            "/orders",
+            "mailto:accounts@example.com",
+            "tel:+919876543210",
+        ] {
             let html = render(&Sources::new().source("Doc", url).into());
             assert!(html.contains("<a "), "{url}: {html}");
             assert!(!html.contains("nofollow"), "{url}: {html}");
