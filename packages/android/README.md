@@ -1,0 +1,29 @@
+# Navree Native for Android
+
+The Android client of Navree Native: `navree-native` (the library: the runtime core's Kotlin side, the effects, the drawing), `navree-push-fcm` (notifications through Firebase Cloud Messaging, for apps that send them) and `demo` (an app that is the library plus resources, and the template for one).
+
+An app declares `com.navree.client.NavreeActivity` in its manifest and sets its origin, name and colour in its resources (`demo/src/main/res/values/navree.xml`). An app that needs more subclasses the activity and overrides `config()`.
+
+## What the library does by itself
+
+These hold for every app built on the library, with nothing to configure.
+
+- **Addresses.** Every request, server-sent event stream, address the web view is given and picture is checked against the app's origins before it is made: the origin it was built for and the others `NavreeConfig.also` names (a host that starts with `*.` stands for every host under that name). Plain `http` is used only for the machine itself, and only when `navree_loopback_http` is true, which a release build must never set. Connections use TLS 1.2 or 1.3 with modern cipher suites. An answer's body is at most 8 MiB, a line of an event stream at most 256 KiB, a picture at most 10 MiB and is decoded at most 2048 pixels on its longest side.
+- **Outside the app.** An address the server asks to open outside the app is handed to the system only when it is `http`, `https`, `mailto`, `tel`, `sms` or `geo`.
+- **The web view.** A page shown in the web view, and every frame in it, loads only from the app's origins. A link the person taps is handed to the core; every other way of leaving (a redirect, a posted form, a script) is stopped. The app bar takes a title only from a page on the app's origins. A web view whose process ends is replaced once, then the screen offers "Try again".
+- **The end of a session.** When the person signs out, the client deletes, in order and before anything of the next session is stored: the sealed page cache, the snapshot of the launch, what pages stored in the web view, the web view's cache, history and form data, and every cookie. With `navree-push-fcm`, the device's push token is deleted and a new one is asked for.
+- **Backups.** The library's manifest sets `android:fullBackupContent` (Android 11 and earlier) and `android:dataExtractionRules` (Android 12 and later, cloud backup and device transfer). The page cache and the snapshot live in the no-backup folder, which no backup takes; the rules leave out the web view's folder (`app_webview`), which holds the session cookie.
+- **Touches.** A touch is ignored while another app's window covers the app (`NavreeConfig.filterObscuredTouches`, on by default).
+
+## What an app must do itself
+
+- **Its own backup rules.** An app that sets `android:fullBackupContent` or `android:dataExtractionRules` itself replaces the library's (the manifest merger reports the clash; resolve it with `tools:replace="android:fullBackupContent,android:dataExtractionRules"` on the app's `<application>`). Its rules must then leave out the web view's folder too: `<exclude domain="root" path="app_webview" />` in `<full-backup-content>`, and in both `<cloud-backup>` and `<device-transfer>` of `<data-extraction-rules>`. An app that sets `android:allowBackup="false"` has no cloud backup, but on Android 12 and later device transfer still follows the extraction rules.
+- **The screen.** `navree_screen` in resources (or `NavreeConfig.screen`) says how much of the app the system may show elsewhere:
+  - empty (the default): the system's own behaviour;
+  - `hidden_in_recents`: no picture of the app in the recent-apps list, with `Activity.setRecentsScreenshotEnabled(false)` on Android 13 (API 33) and later; before that the only means is the secure window flag, so there it behaves as `no_capture`;
+  - `no_capture`: no screenshot, no screen recording, no picture in the recent-apps list and nothing on a display that is not secure, with `WindowManager.LayoutParams.FLAG_SECURE` (API 1).
+  A value the library does not know is taken as `no_capture`.
+- **Notifications.** A message is shown private on the lock screen: there the system shows only the app's name and "New notification". The library sees a message only when Firebase hands it over: a **data message** (`title`, `body` and `href` in `data`, no `notification` block) always; a message with a `notification` block only while the app is in front. While the app is in the background, Firebase shows a `notification` message itself, with its title and text on the lock screen. An app whose notifications say anything private has its server send data messages.
+- **The activity.** As the template does: `android:taskAffinity=""` so no other app's activity can join the app's task, `android:launchMode="singleTop"`, and an app-link filter (`android:autoVerify="true"`) for the app's host that names only the paths the app opens (`android:path`, `android:pathPrefix`) and the path the sign-in returns to.
+- **Pictures from another host.** Pictures load from the app's origins; a host that serves them (a CDN) is named in `NavreeConfig.pictureHosts` and is used only over `https`.
+- **Shrinking.** The library's consumer rules keep the core's native methods and the serializers; an app needs no rules of its own for them.
