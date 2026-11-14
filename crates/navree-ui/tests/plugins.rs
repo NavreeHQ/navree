@@ -5,11 +5,19 @@
 use std::sync::{Arc, Mutex};
 
 use http::Method;
-use navree_contracts::{ModuleBuilderPermissionsExt, Permission};
-use navree_http::{Controller, ModuleBuilderHttpExt, RouteDef};
-use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
-use navree_testing::{TestApp, TestAppBuilder};
-use navree_ui::{AppShell, ModuleBuilderShellExt, Shell, ShellNavItem, UiModule};
+use http::request::Parts;
+use navree_contracts::{
+    BoxError, ModuleBuilderPermissionsExt, Permission, PermissionCheck, Principal,
+};
+use navree_http::{Controller, ModuleBuilderHttpExt, RequestWorkspace, RouteDef};
+use navree_kernel::{
+    BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, PluginInfo, Resolver,
+};
+use navree_testing::{TestApp, TestAppBuilder, principal};
+use navree_ui::{
+    AppShell, ModuleBuilderShellExt, NavGroup, NavItem, Shell, ShellNavItem, UiModule, icons,
+};
+use uuid::Uuid;
 
 /// The warnings logged on this thread while the guard lives (the tests run on a
 /// current-thread runtime, so the boot logs on this thread).
@@ -121,6 +129,153 @@ impl Module for Outbound {
     }
 }
 
+/// The announcements plugin, a community plugin of this crate (`plugins`).
+const NOTICES: PluginInfo = PluginInfo::new(
+    "navree-plugin-announcements",
+    "plugins",
+    "announcements",
+    "1.0.0",
+)
+.title("Announcements");
+
+/// The announcements plugin's module: it describes its two permissions and adds three
+/// links, one that needs `announcements.read`, one that needs `announcements.publish`
+/// and one that needs nothing.
+struct Announcements;
+
+impl Module for Announcements {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(NOTICES)
+            .permissions(&[
+                Permission::new("announcements.read", "Read the workspace's announcements"),
+                Permission::new(
+                    "announcements.publish",
+                    "Publish an announcement to the workspace",
+                ),
+            ])
+            .nav_item(
+                ShellNavItem::new("Announcements", "/announcements")
+                    .icon(icons::MEGAPHONE)
+                    .permission("announcements.read"),
+            )
+            .nav_item(
+                ShellNavItem::new("New announcement", "/announcements/new")
+                    .permission("announcements.publish")
+                    .order(-1),
+            )
+            .nav_item(ShellNavItem::new("Notice board", "/notice-board"));
+    }
+}
+
+/// Who holds what in the app, as a `dyn PermissionCheck`: `Some(true)` exactly for a
+/// listed `(user, permission, workspace)`, the workspace `None` for app-wide, else
+/// `Some(false)`. A permission in `failing` is answered with an error.
+#[derive(Clone, Default)]
+struct Grants {
+    held: Arc<Mutex<Vec<(Uuid, &'static str, Option<Uuid>)>>>,
+    failing: Arc<Mutex<Vec<&'static str>>>,
+}
+
+impl Grants {
+    fn grant(&self, user: Uuid, permission: &'static str, workspace: Option<Uuid>) {
+        self.held
+            .lock()
+            .unwrap()
+            .push((user, permission, workspace));
+    }
+
+    fn revoke(&self, user: Uuid, permission: &'static str) {
+        self.held
+            .lock()
+            .unwrap()
+            .retain(|(holder, name, _)| !(*holder == user && *name == permission));
+    }
+
+    fn fail(&self, permission: &'static str) {
+        self.failing.lock().unwrap().push(permission);
+    }
+}
+
+impl PermissionCheck for Grants {
+    fn check<'a>(
+        &'a self,
+        principal: &'a Principal,
+        permission: &'a str,
+        workspace: Option<Uuid>,
+    ) -> BoxFuture<'a, Result<Option<bool>, BoxError>> {
+        let failing = self
+            .failing
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|name| *name == permission);
+        let answer = if failing {
+            Err(BoxError::from("the role table is unavailable"))
+        } else {
+            let held = self.held.lock().unwrap().iter().any(|(user, name, scope)| {
+                *user == principal.user_id
+                    && *name == permission
+                    && scope.is_none_or(|scope| Some(scope) == workspace)
+            });
+            Ok(Some(held))
+        };
+        Box::pin(async move { answer })
+    }
+}
+
+impl Module for Grants {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let grants = self.clone();
+        m.multi(Factory::<dyn PermissionCheck>::new(move |_| {
+            let grants = grants.clone();
+            async move { Ok(Arc::new(grants) as Arc<dyn PermissionCheck>) }
+        }));
+    }
+}
+
+/// A `dyn RequestWorkspace` that takes the request's `x-workspace` header as its
+/// workspace. A test double: it checks nothing.
+struct HeaderWorkspace;
+
+impl RequestWorkspace for HeaderWorkspace {
+    fn resolve<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Option<Uuid>> {
+        let named = parts
+            .headers
+            .get("x-workspace")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| Uuid::parse_str(value).ok());
+        Box::pin(async move { named })
+    }
+}
+
+impl Module for HeaderWorkspace {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.factory(Factory::<dyn RequestWorkspace>::new(|_| async {
+            Ok(Arc::new(HeaderWorkspace) as Arc<dyn RequestWorkspace>)
+        }));
+    }
+}
+
+/// The home page as `reader` gets it (a guest with `None`), naming `workspace` in
+/// `x-workspace` when there is one. It answers 200.
+async fn home(app: &TestApp, reader: Option<Uuid>, workspace: Option<Uuid>) -> String {
+    let client = match reader {
+        Some(user) => app.acting_as(principal(user)),
+        None => app.client(),
+    };
+    let mut request = client.get("/").header("accept", "text/html");
+    if let Some(workspace) = workspace {
+        request = request.header("x-workspace", workspace.to_string());
+    }
+    let response = request.send().await;
+    let page = response.text();
+    assert_eq!(response.status().as_u16(), 200, "{page}");
+    page
+}
+
+/// The link that needs `announcements.read`.
+const READ_LINK: &str = r#"href="/announcements""#;
+
 #[tokio::test(flavor = "current_thread")]
 async fn a_contributed_link_that_leaves_the_site_fails_the_boot() {
     for href in [
@@ -201,4 +356,232 @@ async fn a_link_asking_for_an_undeclared_permission_warns_at_boot() {
             .all(|line| !line.contains("reports.view")),
         "{described:?}"
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn contributed_links_show_only_to_readers_with_their_permission() {
+    let grants = Grants::default();
+    let (harpreet, kuldeep) = (Uuid::now_v7(), Uuid::now_v7());
+    grants.grant(harpreet, "announcements.read", None);
+    let app = builder(Shell::new("Kesar").contributed())
+        .module(Announcements)
+        .module(grants.clone())
+        .build()
+        .await;
+
+    let page = home(&app, Some(harpreet), None).await;
+    assert!(page.contains(READ_LINK), "{page}");
+    assert!(page.contains(r#"href="/notice-board""#), "{page}");
+    assert!(
+        page.contains(r#"<p data-slot="sidebar-group-label">Announcements</p>"#),
+        "{page}"
+    );
+    assert!(!page.contains(r#"href="/announcements/new""#), "{page}");
+    // Kuldeep holds nothing; the guest has no principal.
+    for page in [
+        home(&app, Some(kuldeep), None).await,
+        home(&app, None, None).await,
+    ] {
+        assert!(page.contains(r#"href="/notice-board""#), "{page}");
+        assert!(!page.contains(READ_LINK), "{page}");
+        assert!(!page.contains(r#"href="/announcements/new""#), "{page}");
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_contributed_link_follows_a_grant_from_one_request_to_the_next() {
+    let grants = Grants::default();
+    let kuldeep = Uuid::now_v7();
+    let app = builder(Shell::new("Kesar").contributed())
+        .module(Announcements)
+        .module(grants.clone())
+        .build()
+        .await;
+
+    let page = home(&app, Some(kuldeep), None).await;
+    assert!(!page.contains(READ_LINK), "{page}");
+    grants.grant(kuldeep, "announcements.read", None);
+    let page = home(&app, Some(kuldeep), None).await;
+    assert!(page.contains(READ_LINK), "the grant is read again: {page}");
+    grants.revoke(kuldeep, "announcements.read");
+    let page = home(&app, Some(kuldeep), None).await;
+    assert!(!page.contains(READ_LINK), "the grant taken away: {page}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn without_a_request_workspace_provider_the_check_is_app_wide() {
+    let grants = Grants::default();
+    let (meera, office) = (Uuid::now_v7(), Uuid::now_v7());
+    // Meera holds the permission only in the workspace `office`.
+    grants.grant(meera, "announcements.read", Some(office));
+    let app = builder(Shell::new("Kesar").contributed())
+        .module(Announcements)
+        .module(grants.clone())
+        .build()
+        .await;
+    let page = home(&app, Some(meera), Some(office)).await;
+    assert!(!page.contains(READ_LINK), "{page}");
+
+    let app = builder(Shell::new("Kesar").contributed())
+        .module(Announcements)
+        .module(grants.clone())
+        .module(HeaderWorkspace)
+        .build()
+        .await;
+    let page = home(&app, Some(meera), Some(office)).await;
+    assert!(page.contains(READ_LINK), "{page}");
+    let page = home(&app, Some(meera), None).await;
+    assert!(!page.contains(READ_LINK), "{page}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_failing_permission_check_hides_the_link() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    let grants = Grants::default();
+    let harpreet = Uuid::now_v7();
+    grants.grant(harpreet, "announcements.read", None);
+    grants.fail("announcements.read");
+    let app = builder(Shell::new("Kesar").contributed())
+        .module(Announcements)
+        .module(grants.clone())
+        .build()
+        .await;
+
+    let page = home(&app, Some(harpreet), None).await;
+    assert!(!page.contains(READ_LINK), "{page}");
+    assert!(page.contains(r#"href="/notice-board""#), "{page}");
+    let warning = "a sidebar link's permission could not be checked; the link is left out";
+    let logged = warnings.all();
+    assert!(logged.iter().any(|line| line == warning), "{logged:?}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn contributed_links_are_grouped_after_the_shells_own_and_ordered() {
+    /// A module of the app (no plugin) with two links that need nothing.
+    struct Extras;
+
+    impl Module for Extras {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.nav_item(ShellNavItem::new("Reports", "/reports"))
+                .nav_item(ShellNavItem::new("Members", "/members").group("Workspace"));
+        }
+    }
+
+    let grants = Grants::default();
+    let harpreet = Uuid::now_v7();
+    grants.grant(harpreet, "announcements.read", None);
+    grants.grant(harpreet, "announcements.publish", None);
+    let shell = Shell::new("Kesar")
+        .group(NavGroup::new("Sales").item(NavItem::new("Deals", "/deals")))
+        .contributed();
+    let app = builder(shell)
+        .module(Announcements)
+        .module(Extras)
+        .module(grants.clone())
+        .build()
+        .await;
+
+    let page = home(&app, Some(harpreet), None).await;
+    let at = |needle: &str| {
+        page.find(needle)
+            .unwrap_or_else(|| panic!("no {needle} in {page}"))
+    };
+    let positions: Vec<usize> = [
+        r#"href="/deals""#,
+        r#"<p data-slot="sidebar-group-label">Announcements</p>"#,
+        r#"href="/announcements/new""#,
+        READ_LINK,
+        r#"href="/notice-board""#,
+        r#"<p data-slot="sidebar-group-label">More</p>"#,
+        r#"href="/reports""#,
+        r#"<p data-slot="sidebar-group-label">Workspace</p>"#,
+        r#"href="/members""#,
+    ]
+    .into_iter()
+    .map(at)
+    .collect();
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "{positions:?}: {page}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn contributed_labels_and_groups_are_escaped() {
+    /// A module whose link's label and group hold markup.
+    struct Marked;
+
+    impl Module for Marked {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.nav_item(
+                ShellNavItem::new("<b>Notices</b> & \"more\"", "/notices").group("<i>Board</i>"),
+            );
+        }
+    }
+
+    let app = builder(Shell::new("Kesar").contributed())
+        .module(Marked)
+        .build()
+        .await;
+    let page = home(&app, None, None).await;
+    assert!(
+        page.contains("&lt;b&gt;Notices&lt;/b&gt; &amp; &quot;more&quot;"),
+        "{page}"
+    );
+    assert!(page.contains("&lt;i&gt;Board&lt;/i&gt;"), "{page}");
+    assert!(!page.contains("<b>Notices"), "{page}");
+    assert!(!page.contains("<i>Board"), "{page}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_shell_without_contributed_draws_the_same_page_whatever_modules_add() {
+    let grants = Grants::default();
+    let harpreet = Uuid::now_v7();
+    grants.grant(harpreet, "announcements.read", None);
+    grants.grant(harpreet, "announcements.publish", None);
+    let bare = builder(Shell::new("Kesar")).build().await;
+    let added = builder(Shell::new("Kesar"))
+        .module(Announcements)
+        .module(grants.clone())
+        .build()
+        .await;
+
+    assert_eq!(home(&bare, None, None).await, home(&added, None, None).await);
+    assert_eq!(
+        home(&bare, Some(harpreet), None).await,
+        home(&added, Some(harpreet), None).await
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_reader_who_may_open_no_contributed_link_gets_the_page_drawn_without_them() {
+    /// A module of the app whose only link needs a permission.
+    struct Guarded;
+
+    impl Module for Guarded {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.permissions(&[Permission::new(
+                "reports.view",
+                "View the monthly reports of the Amritsar branch",
+            )])
+            .nav_item(ShellNavItem::new("Reports", "/reports").permission("reports.view"));
+        }
+    }
+
+    let kuldeep = Uuid::now_v7();
+    let contributed = builder(Shell::new("Kesar").contributed())
+        .module(Guarded)
+        .module(Grants::default())
+        .build()
+        .await;
+    let plain = builder(Shell::new("Kesar"))
+        .module(Guarded)
+        .module(Grants::default())
+        .build()
+        .await;
+
+    let page = home(&contributed, Some(kuldeep), None).await;
+    assert_eq!(page, home(&plain, Some(kuldeep), None).await);
+    assert!(!page.contains("sidebar-group-label"), "{page}");
 }
