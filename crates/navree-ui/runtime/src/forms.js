@@ -222,10 +222,12 @@ export function startForms() {
     const form = /** @type {HTMLFormElement} */ (e.target);
     if (e.defaultPrevented) return;
     const submitter = /** @type {HTMLElement | null} */ (e.submitter);
-    // A button in stored content sends nothing. The page's post form sends only for a button the
-    // server drew for it (`data-ui-post`), whose `formaction` it takes: any other that names the
-    // form, or a form of that name in stored content, would post with the page's token.
-    if ((submitter && stored(submitter)) || (attr(form, "id") === "ui-post" && (stored(form) || !submitter || !has(submitter, "data-ui-post")))) {
+    // A form in stored content is the browser's to send, with nothing of the runtime's: no token in a
+    // header. A button in stored content sends nothing: the form it is in, the page's, holds the token.
+    // The page's post form sends only for a button the server drew for it (`data-ui-post`), whose
+    // `formaction` it takes: any other that names the form would post with the page's token.
+    if (stored(form)) return;
+    if ((submitter && stored(submitter)) || (attr(form, "id") === "ui-post" && !has(submitter || form, "data-ui-post"))) {
       e.preventDefault();
       return;
     }

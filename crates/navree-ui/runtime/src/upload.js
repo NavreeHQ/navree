@@ -4,7 +4,18 @@
 // so a morph needs no wiring and a name in stored markup can't shadow a method. The limits in
 // the markup are hints; the server holds every file to them. Text from the server goes in with
 // textContent, never as markup.
-import { T, all, attr, byId, closest, cookie, every, has, holds, on, sameOrigin, set, unset } from "./dom.js";
+import { D, E, T, all, attr, cookie, has, holds, on, set, unset } from "./dom.js";
+
+// Unlike dom.js's, these find what is in stored content too, which costs nothing here: an upload area there is
+// never made ready (`every` leaves stored content out), and every listener below acts only on a ready area or on
+// a file it is sending.
+/** @param {any} node @param {string} selector @returns {Element | null} */
+const closest = (node, selector) => (node instanceof Element ? E.closest.call(node, selector) : null);
+/** @param {string} id */
+const byId = (id) => D.getElementById.call(document, id);
+
+/** Whether `url` is on this site. One no browser can read throws, and its send fails. @param {string} url */
+const here = (url) => new URL(url, location.href).origin === location.origin;
 
 const ROOT = "[data-ui-upload]";
 const ROW = "[data-slot=upload-item]";
@@ -111,7 +122,7 @@ function req(job, method, url, body, type, up) {
   return new Promise((ok, no) => {
     // As every fetch of the runtime: only to this site, so no file and no token goes anywhere
     // else, and an answer that ended on another site is a failure.
-    if (!sameOrigin(url)) return no(0);
+    if (!here(url)) return no(0);
     const x = new XMLHttpRequest();
     job.x = x;
     x.open(method, url);
@@ -121,7 +132,7 @@ function req(job, method, url, body, type, up) {
     if (type) x.setRequestHeader("content-type", type);
     if (up) x.upload.onprogress = (e) => up(e.loaded);
     x.onload = () => {
-      if (!sameOrigin(x.responseURL || url)) return no(0);
+      if (!here(x.responseURL)) return no(0);
       let json = {};
       try { json = JSON.parse(x.responseText); } catch {}
       ok({ status: x.status, json });
@@ -277,26 +288,24 @@ on(document, "change", (e) => {
   if (root && has(root, "data-ready")) take(root, /** @type {HTMLInputElement} */ (input).files || [], true);
 });
 
-// A form sent by hand sends its files one by one, with progress. This runs before the core
-// runtime's own submit handler, which then leaves a prevented submit alone.
+// Both run before the core runtime's own submit handler, which then leaves a prevented submit alone.
 on(document, "submit", (e) => {
-  const root = closest(e.target, ROOT);
-  if (!root || !has(root, "data-ready") || !attr(root, "action") || has(root, "data-disabled")) return;
-  const input = field(root);
-  const files = [...(input.files || [])];
-  if (!files.length) return;
-  e.preventDefault();
-  // The field is emptied, so the rows of the chosen files give way to the rows that send them.
-  input.value = "";
-  chosen(root);
-  start(root, files);
-}, true);
-
-// A form of the page's waits while one of its uploads is still sending: its key isn't there yet.
-// (An upload in a form of the page's sends only when it has a `data-send` route.)
-on(document, "submit", (e) => {
-  const form = /** @type {Element} */ (e.target);
-  for (const root of all(form, ROOT)) {
+  // A form sent by hand sends its files one by one, with progress.
+  const area = closest(e.target, ROOT);
+  if (area && has(area, "data-ready") && attr(area, "action") && !has(area, "data-disabled")) {
+    const input = field(area);
+    const files = [...(input.files || [])];
+    if (files.length) {
+      e.preventDefault();
+      // The field is emptied, so the rows of the chosen files give way to the rows that send them.
+      input.value = "";
+      chosen(area);
+      start(area, files);
+    }
+  }
+  // A form of the page's waits while one of its uploads is still sending: its key isn't there yet.
+  // (An upload in a form of the page's sends only when it has a `data-send` route.)
+  for (const root of all(/** @type {Element} */ (e.target), ROOT)) {
     const row = busy(root);
     const job = row && jobs.get(row);
     if (job) {
@@ -357,7 +366,7 @@ on(document, "drop", (e) => {
 
 // The area is ready: the native control is laid over it, and the list takes over from its text.
 function ready() {
-  for (const root of every(ROOT)) set(root, "data-ready", "");
+  for (const root of D.querySelectorAll.call(document, ROOT + ":not([data-ui-stored] *)")) set(root, "data-ready", "");
 }
 ready();
 on(document, "ui:swap", ready);

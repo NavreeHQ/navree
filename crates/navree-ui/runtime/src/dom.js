@@ -73,7 +73,7 @@ export const setTitle = (title) => sTitle?.call(document, title);
  * mark can be written from inside: stored markup loses every `data-ui-*` when it is cleaned.
  * @param {Element} el
  */
-export const stored = (el) => E.matches.call(el, "[data-ui-stored] :not([data-ui-own],[data-ui-own] *)");
+export const stored = (el) => E.matches.call(el, "[data-ui-stored] :not([data-ui-own] *)");
 /** @param {Element | null} el */
 const own = (el) => (el && !stored(el) ? el : null);
 /** The element with this id, unless it is stored content. @param {string} id @param {Document} [doc] @returns {HTMLElement | null} */

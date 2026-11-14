@@ -2,16 +2,28 @@
 // form, and work without this. Here: the selection across pages, dragging and
 // keying column widths and order, the grid keys, and keeping the address bar and
 // the form's controls true to what the server drew.
-import { active, all, body, byId, closest, every, has, make, on, who } from "./dom.js";
 
-const FP = HTMLFormElement.prototype;
+// Everything read from the document goes through the prototypes, as dom.js says: an element named
+// `addEventListener` or `getElementById` in the page can't stand in for a method. These are the few
+// this module needs.
+const D = Document.prototype;
+const on = EventTarget.prototype.addEventListener.bind(document);
+/** @param {string} id @returns {any} */
+const byId = (id) => D.getElementById.call(document, id);
+const tables = () => /** @type {NodeListOf<HTMLElement>} */ (D.querySelectorAll.call(document, "[data-ui-table]"));
+/** Whether `el` is laid out right to left. @param {Element} el */
+const rtl = (el) => getComputedStyle(el).direction === "rtl";
 
 const STICKY_SELECT = "[data-sticky=s]";
 
 /** @typedef {{mode: "ids" | "all", ids: string[], ex: string[], key: string}} Selection */
 
-/** Where a table's selection is kept: for the person, the table and the page, so the next person in the tab starts with none. @param {Element} root */
-const storeKey = (root) => "navree-table:" + who() + ":" + root.id + ":" + location.pathname;
+/**
+ * Where a table's selection is kept. The core runtime clears every table's when the person signed in
+ * changes, so the next person in the tab starts with none.
+ * @param {Element} root
+ */
+const storeKey = (root) => "navree-table:" + root.id + ":" + location.pathname;
 
 /** @param {Element} root @returns {Selection} */
 function load(root) {
@@ -116,7 +128,7 @@ function drawSelection(root) {
 
 /** Goes to `url` through the runtime, in the region. @param {Element} root @param {string} url */
 function visit(root, url) {
-  const a = /** @type {HTMLAnchorElement} */ (make("a"));
+  const a = /** @type {HTMLAnchorElement} */ (D.createElement.call(document, "a"));
   a.href = url;
   a.setAttribute("data-ui-in-region", "");
   a.hidden = true;
@@ -208,9 +220,9 @@ function resetControls(root) {
   const form = /** @type {HTMLFormElement | null} */ (root.querySelector("form[data-ui-target]"));
   if (!form) return;
   const state = new URL(root.getAttribute("data-ui-src") || location.href, location.href).searchParams;
-  for (const control of /** @type {any} */ (Object.getOwnPropertyDescriptor(FP, "elements")?.get).call(form)) {
+  for (const control of form.elements) {
     const input = /** @type {HTMLInputElement} */ (control);
-    if (control === active()) {
+    if (input.matches(":focus")) {
       // Back or forward: the state is the URL's, even in the box being typed in.
       if (cameBack && input.nodeName === "INPUT" && input.type !== "hidden") input.value = state.get(input.name) || "";
       continue;
@@ -256,7 +268,7 @@ function sync(root) {
 }
 
 function syncAll() {
-  for (const root of every("[data-ui-table]")) {
+  for (const root of tables()) {
     // The server drew the table: what came before a sort here is no longer the last it drew.
     if (!root.hasAttribute("data-ui-confirm")) /** @type {any} */ (root).uiBefore = null;
     sync(/** @type {HTMLElement} */ (root));
@@ -292,7 +304,7 @@ function gridKey(e, cell) {
   const row = /** @type {HTMLTableRowElement} */ (cell.parentElement);
   const rows = /** @type {HTMLTableRowElement[]} */ ([...(row.parentElement?.children || [])]);
   const at = cell.cellIndex;
-  const rtl = getComputedStyle(cell).direction === "rtl";
+  const rtl = rtl(cell);
   const byRow = (/** @type {number} */ delta) => {
     const target = rows[Math.max(0, Math.min(rows.length - 1, rows.indexOf(row) + delta))];
     return /** @type {HTMLElement | undefined} */ (target?.cells[Math.min(at, target.cells.length - 1)]);
@@ -439,7 +451,7 @@ function sortHere(root, url) {
 // The server couldn't confirm: what was done here is undone, and the table shows what
 // the server last drew. Only a sort still waiting for its answer is undone: once the
 // server has drawn the table, that is what a later failure leaves on screen.
-on(document, "ui:failed", (e) => {
+on("ui:failed", (e) => {
   const root = /** @type {any} */ (/** @type {Element} */ (e.target).closest?.("[data-ui-table]"));
   if (!root) return;
   const waited = root.hasAttribute("data-ui-confirm");
@@ -485,7 +497,7 @@ function tick(root, keys, on) {
   drawSelection(root);
 }
 
-on(document, "click", (e) => {
+on("click", (e) => {
   const target = /** @type {Element} */ (e.target);
   const root = target.closest?.("[data-ui-table]");
   if (!root) return;
@@ -528,16 +540,15 @@ on(document, "click", (e) => {
     sortHere(/** @type {HTMLElement} */ (root), new URL(link.href));
     return;
   }
-  // A row in stored content is no row of the table's.
-  const row = closest(target, "tr[data-ui-row-href]");
-  if (row && !target.closest("a,button,input,select,label,[popover]") && !getSelection()?.toString()) visit(body(), row.getAttribute("data-ui-row-href") || "");
+  const row = target.closest("tr[data-ui-row-href]");
+  if (row && !target.closest("a,button,input,select,label,[popover]") && !getSelection()?.toString()) visit(D.querySelector.call(document, "body"), row.getAttribute("data-ui-row-href") || "");
 }, true);
 
 // What a bulk form posts: the browser's own fields hold only this page's ticks.
-on(document, "formdata", (e) => {
+on("formdata", (e) => {
   const form = /** @type {HTMLFormElement} */ (e.target);
-  if (!(form instanceof HTMLFormElement) || !has(form, "data-ui-bulk")) return;
-  const root = closest(form, "[data-ui-table]");
+  if (!form.hasAttribute?.("data-ui-bulk")) return;
+  const root = form.closest("[data-ui-table]");
   if (!root) return;
   const selection = load(root);
   const data = /** @type {FormDataEvent} */ (e).formData;
@@ -553,10 +564,10 @@ on(document, "formdata", (e) => {
   }
 });
 
-on(document, "submit", (e) => {
+on("submit", (e) => {
   const form = /** @type {HTMLFormElement} */ (e.target);
-  if (!(form instanceof HTMLFormElement) || !has(form, "data-ui-bulk")) return;
-  const root = closest(form, "[data-ui-table]");
+  if (!form.hasAttribute?.("data-ui-bulk")) return;
+  const root = form.closest("[data-ui-table]");
   if (!root) return;
   const selection = load(root);
   const n = selectedCount(root, selection);
@@ -578,44 +589,45 @@ on(document, "submit", (e) => {
   /** @type {any} */ (dialog).uiSubmit = () => {
     confirmed = button;
     dialog.close();
-    FP.requestSubmit.call(form, button);
+    form.requestSubmit(button);
   };
   dialog.showModal();
 }, true);
 
-on(document, "click", (e) => {
+on("click", (e) => {
   const yes = /** @type {Element} */ (e.target).closest?.("[data-ui-confirm-yes]");
   if (yes) /** @type {any} */ (yes.closest("dialog"))?.uiSubmit?.();
 });
 
-/** Puts an edited cell back to what the server last said. @param {HTMLFormElement} form */
-function rollBack(form) {
-  const control = /** @type {any} */ (all(form, "input:not([type=hidden]),select")[0]);
+/**
+ * Puts an edited cell back to what the server last said (`back`), or makes what the cell shows the value it
+ * goes back to.
+ * @param {HTMLFormElement} form @param {boolean} back
+ */
+function restore(form, back) {
+  const control = /** @type {any} */ (form.querySelector("input:not([type=hidden]),select"));
   if (!control) return;
-  if (control.nodeName === "SELECT") for (const option of control.options) option.selected = option.defaultSelected;
-  else control.value = control.defaultValue;
-}
-
-/** Makes what the cell shows the value it goes back to. @param {HTMLFormElement} form */
-function settle(form) {
-  const control = /** @type {any} */ (all(form, "input:not([type=hidden]),select")[0]);
-  if (!control) return;
-  if (control.nodeName === "SELECT") for (const option of control.options) option.defaultSelected = option.selected;
+  if (control.nodeName === "SELECT") {
+    for (const option of control.options) {
+      if (back) option.selected = option.defaultSelected;
+      else option.defaultSelected = option.selected;
+    }
+  } else if (back) control.value = control.defaultValue;
   else control.defaultValue = control.value;
 }
 
-on(document, "change", (e) => {
+on("change", (e) => {
   const control = /** @type {HTMLInputElement} */ (e.target);
   const form = control.closest?.("form[data-ui-edit]");
-  if (form) FP.requestSubmit.call(form);
+  if (form) /** @type {HTMLFormElement} */ (form).requestSubmit();
 });
 
-on(document, "keydown", (e) => {
+on("keydown", (e) => {
   const control = /** @type {HTMLInputElement} */ (e.target);
   const form = /** @type {HTMLFormElement | null} */ (control.closest?.("form[data-ui-edit]"));
   if (!form) return;
   if (e.key === "Escape") {
-    rollBack(form);
+    restore(form, true);
     control.blur();
   } else if (e.key === "Enter") {
     // Leaving the box posts it, once.
@@ -624,49 +636,47 @@ on(document, "keydown", (e) => {
   }
 });
 
-on(document, "ui:sent", (e) => {
+on("ui:sent", (e) => {
   const { form, ok } = /** @type {CustomEvent} */ (e).detail;
-  if (!(form instanceof HTMLFormElement)) return;
-  if (has(form, "data-ui-edit")) {
-    if (ok) settle(form);
-    else rollBack(form);
+  if (form.hasAttribute?.("data-ui-edit")) {
+    restore(form, !ok);
     return;
   }
-  const root = closest(form, "[data-ui-table]");
-  if (root && ok && has(form, "data-ui-bulk")) {
+  const root = form.closest?.("[data-ui-table]");
+  if (root && ok && form.hasAttribute("data-ui-bulk")) {
     save(root, { mode: "ids", ids: [], ex: [], key: "" });
     drawSelection(root);
   }
 });
 
-on(document, "ui:swap", syncAll);
+on("ui:swap", syncAll);
 
 /* Resizing: with a pointer, or the arrow keys on the handle */
 
-on(document, "pointerdown", (e) => {
+on("pointerdown", (e) => {
   const handle = /** @type {Element} */ (e.target).closest?.("[data-slot=col-resize]");
   const root = handle?.closest("[data-ui-table]");
   if (!handle || !root) return;
   e.preventDefault();
   freezeWidths(root);
   const th = /** @type {HTMLElement} */ (handle.closest("th"));
-  const rtl = getComputedStyle(th).direction === "rtl";
+  const rtl = rtl(th);
   resizing = { root, handle, start: e.clientX, width: th.getBoundingClientRect().width, side: rtl ? -1 : 1 };
   /** @type {HTMLElement} */ (handle).setPointerCapture?.(e.pointerId);
 });
 
-on(document, "pointermove", (e) => {
+on("pointermove", (e) => {
   if (resizing) setWidth(resizing.root, resizing.handle, resizing.width + (e.clientX - resizing.start) * resizing.side);
 });
 
-on(document, "pointerup", () => {
+on("pointerup", () => {
   if (!resizing) return;
   const root = resizing.root;
   resizing = null;
   commitWidths(root);
 });
 
-on(document, "keydown", (e) => {
+on("keydown", (e) => {
   const target = /** @type {HTMLElement} */ (e.target);
   const cell = target.matches?.("td[tabindex]") && target.closest("[data-ui-grid]") ? target : null;
   if (cell) {
@@ -682,7 +692,7 @@ on(document, "keydown", (e) => {
   if (!root) return;
   e.preventDefault();
   freezeWidths(root);
-  const rtl = getComputedStyle(target).direction === "rtl";
+  const rtl = rtl(target);
   const grow = (e.key === "ArrowRight") !== rtl;
   // From the width the column has now, which a late face or a cell that filled in may have changed since it was drawn.
   setWidth(root, target, /** @type {Element} */ (target.closest("th")).getBoundingClientRect().width + (grow ? 16 : -16));
@@ -692,18 +702,18 @@ on(document, "keydown", (e) => {
 
 /* Reordering by dragging a heading */
 
-on(document, "dragstart", (e) => {
+on("dragstart", (e) => {
   const th = /** @type {Element} */ (e.target).closest?.("th[data-col]");
   if (!th || !/** @type {Element} */ (e.target).matches?.("[data-ui-col-drag]")) return;
   dragged = th.getAttribute("data-col");
   if (/** @type {DragEvent} */ (e).dataTransfer) /** @type {DataTransfer} */ (/** @type {DragEvent} */ (e).dataTransfer).effectAllowed = "move";
 });
 
-on(document, "dragover", (e) => {
+on("dragover", (e) => {
   if (dragged && /** @type {Element} */ (e.target).closest?.("th[data-col]")) e.preventDefault();
 });
 
-on(document, "drop", (e) => {
+on("drop", (e) => {
   const th = /** @type {Element} */ (e.target).closest?.("th[data-col]");
   const root = th?.closest("[data-ui-table]");
   if (!dragged || !th || !root) return;
@@ -716,13 +726,13 @@ on(document, "drop", (e) => {
   visit(root, withParam(root, "cols", names.join(",")));
 });
 
-on(document, "dragend", () => {
+on("dragend", () => {
   dragged = null;
 });
 
 /* A long list of filter choices: narrowing it needs no request */
 
-on(document, "input", (e) => {
+on("input", (e) => {
   const find = /** @type {HTMLInputElement} */ (e.target);
   if (!find.matches?.("[data-ui-find-option]")) return;
   const needle = find.value.toLowerCase();
@@ -737,7 +747,7 @@ addEventListener("popstate", () => {
   cameBack = true;
 }, true);
 
-on(document, "scroll", (e) => {
+on("scroll", (e) => {
   const box = /** @type {Element} */ (e.target);
   if (box.matches?.("[data-slot=table-container]")) {
     const root = box.closest("[data-ui-table]");
@@ -746,7 +756,7 @@ on(document, "scroll", (e) => {
 }, { capture: true, passive: true });
 
 addEventListener("resize", () => {
-  for (const root of every("[data-ui-table]")) measureSticky(root);
+  for (const root of tables()) measureSticky(root);
 });
 
 syncAll();

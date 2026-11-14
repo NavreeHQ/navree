@@ -38,7 +38,9 @@ test("a table's selection is the person's who made it", () => {
   // The page is drawn again: the selection is read back.
   document.dispatchEvent(new Event("ui:swap"));
   assert.equal($("box").checked, true);
+  // Another person signs in: the runtime sees it (here as the tab is shown again) before the page is drawn.
   signIn("gurpreet-token");
+  document.dispatchEvent(new Event("visibilitychange"));
   document.dispatchEvent(new Event("ui:swap"));
   assert.equal($("box").checked, false);
   // No token in what is kept.
