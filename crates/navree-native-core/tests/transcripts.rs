@@ -659,6 +659,7 @@ const REQUIRED: &[&str] = &[
     "keep",
     "keep-owner",
     "keep-answers",
+    "keep-store",
 ];
 
 #[test]
