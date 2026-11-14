@@ -103,6 +103,13 @@ fn register(m: &mut ModuleBuilder, sources: ConfigSources) {
                         .into_iter()
                         .map(|contributed| contributed.value.key().to_owned()),
                 );
+                // A table a registered driver reads (`storage.disks.uploads`)
+                // is read whole by that driver.
+                claims.extend(crate::driver::registered_tables(
+                    &r.get::<Config>().await?,
+                    &commands::slots(&app),
+                    &commands::drivers(&app),
+                ));
                 Ok(Arc::new(ConfigDiagnostics {
                     config: r.get::<Config>().await?,
                     claims,

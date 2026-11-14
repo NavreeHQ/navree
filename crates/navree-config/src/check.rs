@@ -152,6 +152,25 @@ impl CheckReport {
         self
     }
 
+    /// Adds what the driver names that `sources` give the selectors of
+    /// `slots` say that `drivers` (the drivers the modules registered) do
+    /// not: a name that is neither built in nor registered for its slot is a
+    /// [`ConfigError::Driver`] with the sentence the boot fails with. A slot
+    /// whose section already has an error here is left out, so one value
+    /// gives one error. The tables of a `*` slot (`storage.disks.*.driver`)
+    /// whose driver is registered are read by that driver: none of their
+    /// keys is unknown.
+    #[must_use]
+    pub fn with_drivers(
+        mut self,
+        sources: &ConfigSources,
+        slots: &[crate::DriverSlot],
+        drivers: &[crate::RegisteredDriver],
+    ) -> CheckReport {
+        crate::driver::check_names(&mut self, sources, slots, drivers);
+        self
+    }
+
     /// How many things fail the check: invalid sections, unknown keys and
     /// failing profile settings. Keys set in both `.env` and a config file,
     /// what the web app's settings disagree on, and notes, are warnings and
@@ -180,6 +199,10 @@ impl CheckReport {
                     for problem in problems {
                         let _ = writeln!(out, "error    {problem}");
                     }
+                }
+                // The sentence names its key: the boot prints the same one.
+                ConfigError::Driver { message, .. } => {
+                    let _ = writeln!(out, "error    {message}");
                 }
                 other => {
                     let _ = writeln!(out, "error    {other}");

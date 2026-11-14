@@ -129,6 +129,10 @@ pub struct SectionInfo {
 #[derive(Clone, Debug)]
 pub struct ConfigRegistry {
     sections: Vec<SectionInfo>,
+    /// The driver selectors whose choice is closed to the names that boot:
+    /// the slot's key, its names and its registration method
+    /// ([`with_drivers`](ConfigRegistry::with_drivers)).
+    drivers: Vec<(&'static str, Vec<String>, &'static str)>,
 }
 
 impl ConfigRegistry {
@@ -151,7 +155,10 @@ impl ConfigRegistry {
             });
         }
         sections.sort_by(|a, b| a.key.cmp(b.key));
-        ConfigRegistry { sections }
+        ConfigRegistry {
+            sections,
+            drivers: Vec::new(),
+        }
     }
 
     /// The sections, by key.
@@ -250,7 +257,23 @@ impl ConfigRegistry {
                 insert_section(&mut root, &path, schema.json_schema());
             }
         }
+        crate::driver::close_choices(&mut root, &self.drivers);
         root
+    }
+
+    /// The registry, with the choice of each driver selector of `slots`
+    /// closed to the names that boot in this app: in
+    /// [`schema_document`](ConfigRegistry::schema_document), the selector
+    /// lists its built-in names, then the names `drivers` registers for it,
+    /// instead of accepting any driver name. `config:schema` calls it with
+    /// the app's contributions.
+    pub fn with_drivers(
+        mut self,
+        slots: &[crate::DriverSlot],
+        drivers: &[crate::RegisteredDriver],
+    ) -> ConfigRegistry {
+        self.drivers = crate::driver::slot_names(slots, drivers);
+        self
     }
 }
 
