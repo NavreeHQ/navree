@@ -212,6 +212,25 @@ public final class PresenceModel {
         statusWindowShown = shown
     }
 
+    /// How many of the system's own sheets (signing in) stand over the app's
+    /// windows: while one does, the window under the app's item stays open.
+    @ObservationIgnored private(set) var systemSheets = 0
+
+    /// One of the system's own sheets opened or closed.
+    func systemSheet(opened: Bool) {
+        systemSheets = max(0, systemSheets + (opened ? 1 : -1))
+    }
+
+    #if os(macOS)
+    /// The window the system's own sheets (signing in) stand over while the
+    /// app is held by its item in the menu bar: the window holding it, the one
+    /// under the item opened for the sheet; none otherwise, and the key window
+    /// stands.
+    func windowForSystemSheets() -> NSWindow? {
+        holdsApp ? statusPanel.windowForSystemSheets() : nil
+    }
+    #endif
+
     #if os(macOS)
     /// The app's item in the menu bar while it has one: its button, and its
     /// menu as it is drawn when it opens.

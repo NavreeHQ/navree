@@ -110,6 +110,34 @@ private let held = StatusItem(image: .symbol("shippingbox"), content: .app())
     #expect(short.minY == 8)
 }
 
+@Test func theWindowOpensOnTheScreenThatHoldsTheItem() {
+    // A second screen to the right of the first, its menu bar with the item.
+    let second = CGRect(x: 1440, y: 0, width: 1920, height: 1050)
+    let frame = StatusRules.windowFrame(item: CGRect(x: 3300, y: 1050, width: 32, height: 30), size: CGSize(width: 400, height: 560), screen: second)
+    #expect(second.contains(frame))
+    #expect(frame.maxX == second.maxX - 8)
+    #expect(frame.maxY == 1046)
+    // A screen above the first, with its own menu bar.
+    let above = CGRect(x: 0, y: 870, width: 1440, height: 870)
+    let high = StatusRules.windowFrame(item: CGRect(x: 100, y: 1740, width: 32, height: 30), size: CGSize(width: 400, height: 560), screen: above)
+    #expect(above.contains(high))
+    #expect(high.minX == 8)
+}
+
+@MainActor
+@Test func theWindowUnderTheItemCountsTheSystemsSheetsStandingOverIt() {
+    let model = PresenceModel()
+    #expect(model.systemSheets == 0)
+    model.systemSheet(opened: true)
+    model.systemSheet(opened: true)
+    #expect(model.systemSheets == 2)
+    model.systemSheet(opened: false)
+    model.systemSheet(opened: false)
+    model.systemSheet(opened: false)
+    // Never fewer than none, however a sheet ended.
+    #expect(model.systemSheets == 0)
+}
+
 @Test func aRightClickOffersTheAppThenOpenInWindowSettingsAboutAndQuit() {
     let entries = StatusRules.contextMenu(destinations: destinations, appName: "Charkha Bar", user: nil)
     #expect(entries == [
