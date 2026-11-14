@@ -192,9 +192,7 @@ impl Core {
                     // where a post would otherwise lead.
                     let said = (present != Present::Auto).then_some(present);
                     match (self.resolve(&href, current), said) {
-                        (Target::Outside(url), _) => {
-                            self.effects.push(Effect::OpenUrl { url, inside: false })
-                        }
+                        (Target::Outside(url), _) => self.open_outside(&url, false),
                         (Target::Refused, _) => {}
                         (Target::Inside(url), Some(said)) => {
                             current = self.go_as(Some(current), &url, said).unwrap_or(current)
@@ -216,13 +214,8 @@ impl Core {
                 Op::NavigateExternal { href } => {
                     left = true;
                     match self.resolve(&href, current) {
-                        Target::Outside(url) => {
-                            self.effects.push(Effect::OpenUrl { url, inside: false })
-                        }
-                        Target::Inside(url) => {
-                            let url = self.inner.origin.absolute(&url);
-                            self.effects.push(Effect::OpenUrl { url, inside: false });
-                        }
+                        Target::Outside(url) => self.open_outside(&url, false),
+                        Target::Inside(url) => self.open_ours_outside(&url),
                         Target::Refused => {}
                     }
                 }

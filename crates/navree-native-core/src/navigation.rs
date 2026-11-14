@@ -38,7 +38,7 @@ impl Core {
         match target {
             Target::Refused => from,
             Target::Outside(url) => {
-                self.effects.push(Effect::OpenUrl { url, inside: false });
+                self.open_outside(&url, false);
                 from
             }
             Target::Inside(url) => self.go(from, &url, present),
@@ -115,8 +115,7 @@ impl Core {
         select: bool,
     ) -> Option<ScreenId> {
         if how == Present::External {
-            let url = self.inner.origin.absolute(url);
-            self.effects.push(Effect::OpenUrl { url, inside: false });
+            self.open_ours_outside(url);
             return from;
         }
         if let Some(from) = from {
@@ -531,7 +530,7 @@ impl Core {
             Target::Inside(inside) => {
                 self.go(Some(id), &inside, Present::Auto);
             }
-            Target::Outside(url) => self.effects.push(Effect::OpenUrl { url, inside: false }),
+            Target::Outside(url) => self.open_outside(&url, false),
             Target::Refused => {}
         }
     }

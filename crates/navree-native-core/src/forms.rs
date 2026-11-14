@@ -882,11 +882,7 @@ impl Core {
     ) {
         let url = match self.resolve(href, id) {
             Target::Inside(url) => url,
-            Target::Outside(url) => {
-                return self
-                    .effects
-                    .push(crate::Effect::OpenUrl { url, inside: false });
-            }
+            Target::Outside(url) => return self.open_outside(&url, false),
             Target::Refused => return,
         };
         if !self.may_send(id) {
@@ -1204,9 +1200,7 @@ impl Core {
                 self.failed(failure, Some(id));
                 told = true;
             }
-            Answer::Left(url) => self
-                .effects
-                .push(crate::Effect::OpenUrl { url, inside: false }),
+            Answer::Left(url) => self.open_outside(&url, false),
             Answer::Empty => {
                 if write {
                     self.wrote(id);

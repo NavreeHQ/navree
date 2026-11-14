@@ -1001,6 +1001,9 @@ pub(crate) struct Inner {
     pub next: Counters,
     /// The requests on their way.
     pub pending: BTreeMap<u64, Asked>,
+    /// Requests whose address was not on one of the app's origins: never
+    /// sent, they fail before the update goes out.
+    pub unsent: Vec<u64>,
     pub screens: BTreeMap<ScreenId, ScreenInner>,
     /// The build the kept trees belong to.
     pub build: Option<String>,

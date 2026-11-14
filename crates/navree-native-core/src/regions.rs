@@ -706,12 +706,20 @@ impl Core {
                 // A screen that was away may have missed something: it fetches once when its stream is back.
                 missed,
             };
-            self.open_stream(&stream);
+            let mut stream = stream;
+            // A stream that is not on one of the app's origins is never
+            // opened: it stops, as one the server ended for good.
+            stream.stopped = !self.open_stream(&stream);
             self.inner.streams.push(stream);
         }
     }
 
-    fn open_stream(&mut self, stream: &Stream) {
+    /// Asks the client to open a stream. False when its address is not on
+    /// one of the app's origins: then nothing is asked.
+    pub(crate) fn open_stream(&mut self, stream: &Stream) -> bool {
+        let Some(url) = self.inner.origin.absolute(&stream.url) else {
+            return false;
+        };
         let mut headers = vec![("accept".to_owned(), "text/event-stream".to_owned())];
         headers.push((
             navree_native::NATIVE_HEADER.to_owned(),
@@ -719,9 +727,10 @@ impl Core {
         ));
         self.effects.push(Effect::StreamOpen {
             stream: stream.id,
-            url: self.inner.origin.absolute(&stream.url),
+            url,
             headers,
         });
+        true
     }
 
     /// The regions of the screen in front that listen to a stream: for an
@@ -839,7 +848,11 @@ impl Core {
         };
         stream.reopen = None;
         let stream = stream.clone();
-        self.open_stream(&stream);
+        if !self.open_stream(&stream)
+            && let Some(stream) = self.inner.streams.iter_mut().find(|stream| stream.id == id)
+        {
+            stream.stopped = true;
+        }
     }
 
     /// Fetches a live region now, or, if its last fetch is still out, once more when it lands.
