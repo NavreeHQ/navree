@@ -167,34 +167,45 @@ class AndroidEffects(
      * The session ended on this device. In the store's turn, after whatever
      * was asked before: the sealed page cache and the snapshot go; then, on
      * the main thread, the web view's storage, its cache, history, form data
-     * and saved sign-ins for sites; then every cookie of the one store the
-     * web view shares. Nothing kept for the session after runs before the
-     * cookie store says its cookies are gone (or five seconds have passed),
-     * and no write of the session that ended runs at all. The push service's
-     * token for this install is deleted and a new one asked for.
+     * and saved sign-ins for sites, and
+     * every cookie of the one store the web view shares. Nothing kept for the
+     * session after runs before the cookie store says its cookies are gone,
+     * or five seconds have passed (a limit armed before anything else, so a
+     * failure of any kind cannot hold the queue), and no write of the session
+     * that ended runs at all. The push service's token for this install is
+     * deleted and a new one asked for.
      */
     private fun forget() {
-        state.end { done ->
-            cache.clear()
-            snapshots.clear()
-            main.post {
-                try {
-                    clearWebViews(app)
-                } catch (_: Exception) {
-                    // No web view on this device: nothing of it to clear.
-                }
-                try {
-                    cookies.clear {
-                        state.always { cookies.flush() }
-                        done()
-                    }
-                } catch (_: Exception) {
-                    done()
-                }
-                main.postDelayed({ done() }, WIPE_WAIT_MS)
-            }
+        state.end { finished ->
+            // The time limit is armed before anything it guards: whatever happens below, the queue goes on.
+            endWithLimit(finished, arm = { release -> main.postDelayed({ release() }, WIPE_WAIT_MS) }) { done -> wipe(done) }
         }
         push?.forget { askToken() }
+    }
+
+    /** The steps of [forget], in order; [done] when the cookie store says its cookies are gone. */
+    private fun wipe(done: () -> Unit) {
+        try {
+            cache.clear()
+            snapshots.clear()
+        } catch (_: Throwable) {
+            // A file that could not be deleted is sealed under a key only this app holds.
+        }
+        main.post {
+            try {
+                clearWebViews(app)
+            } catch (_: Throwable) {
+                // No web view on this device: nothing of it to clear.
+            }
+            try {
+                cookies.clear {
+                    state.always { cookies.flush() }
+                    done()
+                }
+            } catch (_: Throwable) {
+                done()
+            }
+        }
     }
 
     /** The app left the front: streams close (the core opens them again when it comes back). */
