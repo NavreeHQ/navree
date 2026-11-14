@@ -105,12 +105,27 @@ struct ButtonPart: View {
                     control.buttonStyle(.bordered)
                 }
             }
+            .modifier(FingerTarget())
             if let reason = ActionRules.reason(button) {
                 Text(reason).font(.footnote).foregroundStyle(.secondary)
             }
         }
         // A button that says its row's title again is the row's own action.
         .accessibilityHidden(row.map { SpeechRules.repeatsTitle(button, of: $0.title) } ?? false)
+    }
+}
+
+/// A button in the content as large as a finger needs on iPhone and iPad:
+/// the system's large size, whose capsule is at least the 44 points Apple
+/// asks of every target (the regular one is 34.5 points tall). A Mac's
+/// pointer keeps the regular size.
+struct FingerTarget: ViewModifier {
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.controlSize(.large)
+        #else
+        content
+        #endif
     }
 }
 

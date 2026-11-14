@@ -69,7 +69,13 @@ final class WalkTests: XCTestCase {
         settle(3)
         Shots.save("inbox-thread", in: self)
         let tabs = app.tabBars.firstMatch
-        Shots.note("inbox-thread", "reply \(reply.frame)\ntab bar \(tabs.exists ? "\(tabs.frame)" : "none")\nwindow \(app.frame)\n")
+        // What a finger can hit: each control's frame, in points.
+        var frames = "reply \(reply.frame)\ntab bar \(tabs.exists ? "\(tabs.frame)" : "none")\nwindow \(app.frame)\n"
+        for name in ["Snooze", "Close", "Mark as read", "Reply", "Internal note", "Saved replies", "Send"] {
+            let control = app.buttons[name].firstMatch
+            frames += "\(name): \(control.exists ? "\(control.frame)" : "none")\n"
+        }
+        Shots.note("inbox-thread", frames)
         if tabs.exists, tabs.frame.minY > app.frame.midY {
             XCTAssertLessThanOrEqual(reply.frame.maxY, tabs.frame.minY, "The reply runs under the tab bar")
         }
