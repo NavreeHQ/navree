@@ -851,6 +851,12 @@
         "doc": "Sets the user at the foot of the sidebar for this request, in place of the shell's: the person signed in, with what they may do. The app's one shell stays as it is."
       },
       {
+        "name": "context",
+        "generics": "",
+        "args": "context: impl Into<Cow<'static, str>>",
+        "doc": "Sets the line below the app's name for this request (a workspace, a plan), in place of the shell's `context`. The app's one shell stays as it is."
+      },
+      {
         "name": "header_slot",
         "generics": "",
         "args": "slot: impl Into<Node>",
@@ -18398,6 +18404,12 @@
         "generics": "",
         "args": "group: NavGroup",
         "doc": "Adds a group of links."
+      },
+      {
+        "name": "contributed",
+        "generics": "",
+        "args": "",
+        "doc": "Adds the links modules contribute with `m.nav_item`, after the shell's own groups, each shown only to readers who hold its permission. Off unless called."
       },
       {
         "name": "user",
