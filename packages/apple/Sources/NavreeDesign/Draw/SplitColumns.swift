@@ -10,10 +10,52 @@ extension EnvironmentValues {
     @Entry public var navreeFind: Int = 0
     /// Set in the list of a list beside its detail: what a row that would push
     /// does instead, choosing the screen the detail shows.
-    @Entry public var navreeChoose: (@MainActor @Sendable (Navree.Action, Place) -> Void)? = nil
+    @Entry public var navreeChoose: Choice? = nil
     /// Set in the list of a list beside its detail: the address of the screen
     /// the detail shows, whose row the list shows chosen.
     @Entry public var navreeOpen: String? = nil
+}
+
+/// What a row of a list beside its detail does in place of a push: asks the
+/// runtime for the screen the detail shows. Two are the same when they serve
+/// the same list, whatever their code: the system cannot compare code, and a
+/// choice handed down anew each time the split view is drawn would have every
+/// row drawn again with it, and the bars the rows' screens fill, and the split
+/// view again, without end on a compact width.
+public struct Choice: Equatable, Sendable {
+    /// What the choice serves: the same key, the same choice.
+    public let key: String
+    let run: @MainActor @Sendable (Navree.Action, Place) -> Void
+
+    public init(key: String, run: @escaping @MainActor @Sendable (Navree.Action, Place) -> Void) {
+        self.key = key
+        self.run = run
+    }
+
+    @MainActor public func callAsFunction(_ action: Navree.Action, _ place: Place) {
+        run(action, place)
+    }
+
+    public static func == (a: Choice, b: Choice) -> Bool { a.key == b.key }
+}
+
+/// A navigation stack's path as the runtime holds it, and what a change the
+/// system makes to it asks of the runtime. Two are the same when they show the
+/// same entries for the same stack: a binding made of code is never the same
+/// as the last, and would have the split view drawn again on every update.
+public struct ColumnPath: Equatable, Sendable {
+    public let entries: [PathEntry]
+    /// The stack the path is of: the same key, the same follow.
+    public let key: String
+    let follow: @MainActor @Sendable ([PathEntry]) -> Void
+
+    public init(entries: [PathEntry], key: String, follow: @escaping @MainActor @Sendable ([PathEntry]) -> Void) {
+        self.entries = entries
+        self.key = key
+        self.follow = follow
+    }
+
+    public static func == (a: ColumnPath, b: ColumnPath) -> Bool { a.entries == b.entries && a.key == b.key }
 }
 
 /// The search field takes the focus when Find is chosen from the menu bar.
@@ -43,10 +85,10 @@ struct FindFocus: ViewModifier {
 /// handed to `choose`, which asks the runtime for the detail; the detail
 /// column then shows what it answers.
 public struct SplitColumns<Sidebar: View, ListColumn: View, DetailRoot: View, Inspector: View, Pushed: View>: View {
-    let path: Binding<[PathEntry]>
+    let path: ColumnPath
     let compactColumn: CompactColumn
     let inspectorTitle: String?
-    let choose: @MainActor @Sendable (Navree.Action, Place) -> Void
+    let choose: Choice
     let sidebar: Sidebar?
     let list: ListColumn
     let detail: DetailRoot
@@ -58,8 +100,8 @@ public struct SplitColumns<Sidebar: View, ListColumn: View, DetailRoot: View, In
     @State private var inspecting: Bool?
 
     public init(
-        path: Binding<[PathEntry]>, compactColumn: CompactColumn, inspectorTitle: String? = nil,
-        choose: @escaping @MainActor @Sendable (Navree.Action, Place) -> Void, sidebar: Sidebar?,
+        path: ColumnPath, compactColumn: CompactColumn, inspectorTitle: String? = nil,
+        choose: Choice, sidebar: Sidebar?,
         @ViewBuilder list: () -> ListColumn, @ViewBuilder detail: () -> DetailRoot,
         inspector: (() -> Inspector)? = nil, @ViewBuilder pushed: @escaping (PathEntry) -> Pushed
     ) {
@@ -110,8 +152,8 @@ public struct SplitColumns<Sidebar: View, ListColumn: View, DetailRoot: View, In
         list
             // A row the list would push is a choice, asked of the runtime
             // for the detail column.
-            .environment(\.navreeChoose, { action, place in
-                shown = .detail
+            .environment(\.navreeChoose, Choice(key: choose.key) { [choose, shown = $shown] action, place in
+                shown.wrappedValue = .detail
                 choose(action, place)
             })
             // A list narrower than the window draws as a phone's would:
@@ -121,7 +163,7 @@ public struct SplitColumns<Sidebar: View, ListColumn: View, DetailRoot: View, In
     }
 
     private var detailColumn: some View {
-        NavigationStack(path: path) {
+        NavigationStack(path: Binding(get: { path.entries }, set: { [path] next in path.follow(next) })) {
             detail
                 .navigationDestination(for: PathEntry.self, destination: pushed)
                 .toolbar {
@@ -155,8 +197,8 @@ public struct SplitColumns<Sidebar: View, ListColumn: View, DetailRoot: View, In
 extension SplitColumns where Sidebar == EmptyView {
     /// A list beside its detail, in two columns.
     public init(
-        path: Binding<[PathEntry]>, compactColumn: CompactColumn, inspectorTitle: String? = nil,
-        choose: @escaping @MainActor @Sendable (Navree.Action, Place) -> Void,
+        path: ColumnPath, compactColumn: CompactColumn, inspectorTitle: String? = nil,
+        choose: Choice,
         @ViewBuilder list: () -> ListColumn, @ViewBuilder detail: () -> DetailRoot,
         inspector: (() -> Inspector)? = nil, @ViewBuilder pushed: @escaping (PathEntry) -> Pushed
     ) {
@@ -170,8 +212,8 @@ extension SplitColumns where Sidebar == EmptyView {
 extension SplitColumns where Sidebar == EmptyView, Inspector == EmptyView {
     /// A list beside its detail, in two columns, with no inspector.
     public init(
-        path: Binding<[PathEntry]>, compactColumn: CompactColumn,
-        choose: @escaping @MainActor @Sendable (Navree.Action, Place) -> Void,
+        path: ColumnPath, compactColumn: CompactColumn,
+        choose: Choice,
         @ViewBuilder list: () -> ListColumn, @ViewBuilder detail: () -> DetailRoot,
         @ViewBuilder pushed: @escaping (PathEntry) -> Pushed
     ) {
