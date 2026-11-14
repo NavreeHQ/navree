@@ -133,9 +133,10 @@ permission = "users.impersonate"
   `{auth.magic_link.url}?token=..`; `POST /api/auth/magic-link/verify
   {token}` -> login response (or 2FA challenge). Single use, 15 minutes.
   Signing in this way marks an unverified address verified and ends nothing:
-  an account someone else registered with the address keeps their password,
-  passkeys, second factor and sessions until the owner resets the password
-  (which signs every session out) and removes what they didn't add.
+  an account someone else registered with the address keeps their password
+  and sessions (until a password reset), their passkeys, connected providers
+  and app tokens (until each is removed), and their two-factor, which stops
+  the owner at every sign-in until an administrator clears it.
 - Codes: `POST /api/auth/otp {email}`, `POST /api/auth/otp/verify {email,
   code}`; 6 digits, 10 minutes, burned after `auth.otp.max_attempts` (5),
   counted by the login throttle.
