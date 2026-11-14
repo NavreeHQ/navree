@@ -111,6 +111,7 @@ mod cors;
 pub mod csrf;
 mod error;
 mod error_pages;
+mod fallible;
 pub mod extract;
 pub mod handler;
 mod limiter;
@@ -141,6 +142,7 @@ pub use error_pages::{
 pub use extract::{
     ClientIp, Extension, Form, Json, Multipart, MultipartLimits, Path, Query, RawQuery, Scoped,
 };
+pub use fallible::{FallibleLayer, FallibleService};
 pub use handler::Handler;
 pub use limiter::{KeyedRateLimiter, Limited, MemoryRateLimitStore, RateLimitStore, StoreVerdict};
 pub use maintenance::{MaintenanceInfo, MaintenanceMode};
