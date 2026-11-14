@@ -31,6 +31,19 @@ async function axe(page) {
   });
 }
 
+/**
+ * The key the palette `id` keeps its recent items under: `navree-ui:recent:<who>:<id>`. `<who>` is what the runtime calls the
+ * person (`who()` in dom.js): a hash of the session's token cookie, and nothing when there is no such cookie.
+ */
+const recentKey = (page, id = "palette") =>
+  page.evaluate((id) => {
+    let token = "";
+    for (const part of document.cookie.split("; ")) if (part.startsWith("XSRF-TOKEN=")) token = part.slice(11);
+    let hash = 5381;
+    for (let i = 0; i < token.length; i++) hash = ((hash * 33) ^ token.charCodeAt(i)) >>> 0;
+    return `navree-ui:recent:${token ? hash.toString(36) : ""}:${id}`;
+  }, id);
+
 const browsers = (process.env.SELECT_BROWSERS || "chromium firefox").split(" ");
 
 for (const browserName of browsers) {
@@ -826,7 +839,7 @@ for (const browserName of browsers) {
 
     test("Palette: recent items come first when the box is empty, and an item that opts out never does", async () => {
       const { page, close } = await open("/select");
-      await page.evaluate(() => localStorage.removeItem("navree-ui:recent:palette"));
+      await page.evaluate((key) => localStorage.removeItem(key), await recentKey(page));
       await page.reload();
       await page.keyboard.press("Control+k");
       assert.equal(await page.locator("#palette [data-slot=command-recent]").isVisible(), false);
@@ -847,7 +860,7 @@ for (const browserName of browsers) {
       await page.keyboard.press("Enter");
       await page.waitForURL("**/select/echo");
       await page.goBack();
-      const stored = await page.evaluate(() => localStorage.getItem("navree-ui:recent:palette"));
+      const stored = await page.evaluate((key) => localStorage.getItem(key), await recentKey(page));
       assert.ok(!stored.includes("/select/echo"), stored);
       await close();
     });
@@ -1230,7 +1243,7 @@ for (const browserName of browsers) {
 
     test("A morph of the page draws an open palette's Recent group again with the row on it still on, and a palette the swap replaced starts as a new page's does", async () => {
       const { page, close } = await open("/select");
-      await page.evaluate(() => localStorage.setItem("navree-ui:recent:palette", JSON.stringify(["/gallery", "/deals/new"])));
+      await page.evaluate(([key, items]) => localStorage.setItem(key, JSON.stringify(items)), [await recentKey(page), ["/gallery", "/deals/new"]]);
       await page.reload();
       await page.keyboard.press("Control+k");
       const recent = page.locator("#palette [data-slot=command-recent]");

@@ -1408,7 +1408,8 @@ for (const name of NAMES) {
       });
 
       test("R2 an item whose page has no post form gets one from the runtime", async () => {
-        const path = paged(`<main id="main"><form method="post" action="/outer" data-ui-form><button id="item" type="submit" form="ui-post" formaction="/item" formmethod="post">Item</button><button id="whole">Whole</button></form></main>${TOASTER}`);
+        // The button is marked `data-ui-post`, as the server marks every one it draws for the post form: only such a button posts it.
+        const path = paged(`<main id="main"><form method="post" action="/outer" data-ui-form><button id="item" type="submit" form="ui-post" data-ui-post formaction="/item" formmethod="post">Item</button><button id="whole">Whole</button></form></main>${TOASTER}`);
         f.routes.set("/item", (req, res) => f.ops(res, { build: "b1", ops: [{ op: "toast", tone: "success", text: "The item." }] }));
         f.routes.set("/outer", (req, res) => f.ops(res, { build: "b1", ops: [{ op: "toast", tone: "success", text: "The form." }] }));
         const page = await fixture(path);
@@ -1551,7 +1552,8 @@ for (const name of NAMES) {
 
       /** A page with the page's one post form and the token cookie `t`, for post items. */
       const withPostForm = (items, extra = "") => paged(`<main id="main">${items}${extra}</main>${TOASTER}<form id="ui-post" method="post" hidden data-ui-form><input type="hidden" name="_csrf" value="t"></form>`);
-      const post = (name, id, path) => `<button id="${id}" type="submit" form="ui-post" formaction="${path}" formmethod="post">${name}</button>`;
+      // As the server draws one: marked `data-ui-post`, which is what makes the runtime post the page's form for it.
+      const post = (name, id, path) => `<button id="${id}" type="submit" form="ui-post" data-ui-post formaction="${path}" formmethod="post">${name}</button>`;
       const slowOps = (path, text, ms = 700) => f.routes.set(path, (req, res, body) => setTimeout(() => f.ops(res, { build: "b1", ops: [{ op: "toast", tone: "info", text }] }), ms));
 
       test("R5 two post items of the shared form: A then B both post, and a double click on A posts once", async () => {

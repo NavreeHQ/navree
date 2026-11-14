@@ -1049,6 +1049,25 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
       }
     });
 
+    test(`a page answered without the page header is loaded for real, never morphed in (${engine})`, async () => {
+      const name = key("nopage");
+      route(`/${name}`, doc(`<a id="n" href="/${name}-file">file</a>`));
+      // A file the app serves as it is: HTML that even names this build, but that no `View` wrote, so it has no `x-navree-page`.
+      route(`/${name}-file`, doc(`<h1 id="h">served as it is</h1>`, { title: "file" }), { "x-navree-page": null });
+      const { context, page } = await fresh(`/${name}`);
+      await page.evaluate(() => { window.__stays = true; });
+      await page.click("#n");
+      await page.waitForURL(`**/${name}-file`);
+      await page.waitForSelector("#h");
+      await until(() => hits(`/${name}-file`).length >= 2);
+      assert.equal(await page.evaluate(() => window.__stays), undefined, "the document was loaded again, not morphed");
+      const asked = hits(`/${name}-file`);
+      assert.equal(asked.length, 2, "once by the runtime, once by the browser");
+      assert.equal(asked[0].headers["x-navree-ui"], "1", "the runtime asked first");
+      assert.equal(asked[1].headers["x-navree-ui"], undefined, "then the browser loaded it for real");
+      await context.close();
+    });
+
     test(`a region only takes HTML (${engine})`, async () => {
       for (const [type, body] of [["text/plain", `<a id="inj" href="https://evil.example">click</a>`], ["application/json", `{"bio":"<a id='inj' href='https://evil.example'>click</a>"}`]]) {
         const { context, page } = await regionScene((res) => {

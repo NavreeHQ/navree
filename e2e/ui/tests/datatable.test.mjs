@@ -1423,7 +1423,8 @@ for (const browserName of browsers) {
         await new Promise((resolve) => setTimeout(resolve, 1500));
         await route.continue();
       });
-      await page.waitForTimeout(800);
+      // The first poll, held by the route above: the table polls once a second at the most, whatever its source asks for.
+      await page.waitForRequest((request) => /\/live\?per_page=10$/.test(request.url()));
       await page.locator("thead th[data-col=amount] [data-slot=sort-link]").click();
       await page.waitForURL(/sort=amount/);
       await settled(page);
@@ -1469,13 +1470,25 @@ for (const browserName of browsers) {
       await close();
     });
 
-    test("live refresh: a whole page without the runtime at the table's own address is shown as the page, never inside the table", async () => {
+    test("live refresh: a whole page at the table's own address is never drawn inside the table: one no page of the app wrote is dropped, one of the app's without the runtime is shown as the page", async () => {
       await reset();
       const { page, close, problems } = await open("/refreshable?per_page=10");
       await page.locator("[data-ui-refresh]").waitFor();
       // A sign-in page served as a plain 200 where the table lives, as a proxy that does not carry the runtime would.
       const signIn = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Sign in</title></head><body><main><h1>Sign in</h1><form method="post"><label>Password <input type="password" name="password"></label></form></main></body></html>';
-      await page.route(/\/refreshable\?per_page=10$/, (route) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: signIn }));
+      const here = /\/refreshable\?per_page=10$/;
+      // A proxy's page has no `x-navree-page`, which every answer of the app's own `View` has: it is not drawn, and the
+      // reader is not taken to it either. The table keeps its rows and is marked failed.
+      const before = await keys(page);
+      await page.route(here, (route) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: signIn }));
+      await page.locator("[data-ui-refresh]").click();
+      await page.waitForFunction(() => document.getElementById("deals")?.hasAttribute("data-ui-failed"));
+      assert.equal(await page.locator("input[type=password]").count(), 0, "the sign-in page is not drawn over the table");
+      assert.deepEqual(await keys(page), before, "the rows stay");
+      assert.equal(await page.title() === "Sign in", false, "and the page was not left for it");
+      await page.unroute(here);
+      // The same page as one of the app's own that carries no runtime: the reader is taken to it, as to any page.
+      await page.route(here, (route) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", headers: { "x-navree-page": "1" }, body: signIn }));
       const navigated = page.waitForEvent("framenavigated", { predicate: (frame) => frame === page.mainFrame(), timeout: 6000 });
       await page.locator("[data-ui-refresh]").click();
       await navigated;

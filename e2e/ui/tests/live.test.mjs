@@ -96,10 +96,10 @@ for (const name of NAMES) {
 
     test("H1 a refused stream is not reopened by another region's poll or by typing", async () => {
       await scenario(async ({ srv, page }) => {
-        srv.routes.set("/p", (req, res) => srv.html(res, shell(region() + `<div id="clock" data-ui-region data-ui-src="/clock" data-ui-poll="500">c0</div><form id="f" action="/search" method="get" data-ui-target="results"><input name="q" aria-label="q"></form><div id="results" data-ui-region data-ui-src="/search">r0</div>`)));
+        srv.routes.set("/p", (req, res) => srv.html(res, shell(region() + `<div id="clock" data-ui-region data-ui-src="/clock" data-ui-poll="1000">c0</div><form id="f" action="/search" method="get" data-ui-target="results"><input name="q" aria-label="q"></form><div id="results" data-ui-region data-ui-src="/search">r0</div>`)));
         let c = 0;
         srv.routes.set("/clock", (req, res) => srv.html(res, "c" + ++c));
-        srv.routes.set("/search", (req, res, url) => srv.html(res, shell(region() + `<div id="clock" data-ui-region data-ui-src="/clock" data-ui-poll="500">c0</div><form id="f" action="/search" method="get" data-ui-target="results"><input name="q" aria-label="q"></form><div id="results" data-ui-region data-ui-src="/search">r ${url.searchParams.get("q")}</div>`)));
+        srv.routes.set("/search", (req, res, url) => srv.html(res, shell(region() + `<div id="clock" data-ui-region data-ui-src="/clock" data-ui-poll="1000">c0</div><form id="f" action="/search" method="get" data-ui-target="results"><input name="q" aria-label="q"></form><div id="results" data-ui-region data-ui-src="/search">r ${url.searchParams.get("q")}</div>`)));
         srv.routes.set("/sse", (req, res) => {
           if (!("x-ui-probe" in req.headers)) {
             srv.sse.attempts++;
@@ -854,7 +854,9 @@ for (const name of NAMES) {
     // A fetch on its way when a form posts may be answered with what was there before the post. The post's reply
     // draws the page again; the held answer, let through after that, must not put the old content back. The first
     // fetch is held, and from it on the page counts as hidden, so no later poll begins and the held fetch stays the
-    // region's newest (a newer fetch would make it out of date by itself, write or not).
+    // region's newest (a newer fetch would make it out of date by itself, write or not). The runtime polls once a
+    // second at the most, so a second is what these ask for, and each test waits for its first poll to reach the
+    // server (`until`), not for a time.
 
     /** A reply of ops, as a form's post gets one. */
     const ops = (res, envelope) => {
@@ -910,7 +912,7 @@ for (const name of NAMES) {
             let state = "before", open;
             const held = new Promise((resolve) => (open = resolve));
             const table = kind === "table" ? " data-ui-table" : "";
-            srv.routes.set("/p", (req, res) => srv.html(res, shell(`<div id="r" data-ui-region${table} data-ui-src="/frag" data-ui-poll="200">${state} (page)</div>${writes}`)));
+            srv.routes.set("/p", (req, res) => srv.html(res, shell(`<div id="r" data-ui-region${table} data-ui-src="/frag" data-ui-poll="1000">${state} (page)</div>${writes}`)));
             // What the region is when the poll arrives; the first poll's answer waits at the server.
             srv.routes.set("/frag", async (req, res) => {
               const n = srv.count("/frag");
@@ -945,7 +947,7 @@ for (const name of NAMES) {
       await scenario(
         async ({ srv, page }) => {
           let state = "before";
-          const region = (text) => `<div id="r" data-ui-region data-ui-src="/frag" data-ui-poll="200">${text}</div>`;
+          const region = (text) => `<div id="r" data-ui-region data-ui-src="/frag" data-ui-poll="1000">${text}</div>`;
           srv.routes.set("/p", (req, res) => srv.html(res, shell(region(`${state} (page)`) + writes)));
           srv.routes.set("/frag", (req, res) => srv.html(res, `${state} (poll ${srv.count("/frag")})`));
           // The reply draws the region itself.
@@ -979,7 +981,7 @@ for (const name of NAMES) {
           const held = new Promise((resolve) => (open = resolve));
           const items = (after) => [...rows].filter(([id]) => id > after).reverse().map(([id, text]) => `<li id="row-${id}">${text}</li>`).join("");
           const newest = () => String(Math.max(...rows.keys()));
-          srv.routes.set("/p", (req, res) => srv.html(res, shell(`<div id="feed" data-ui-region data-ui-src="/rows" data-ui-feed="list" data-ui-after="${newest()}" data-ui-poll="200"><ol id="list">${items(0)}</ol></div>${writes}`)));
+          srv.routes.set("/p", (req, res) => srv.html(res, shell(`<div id="feed" data-ui-region data-ui-src="/rows" data-ui-feed="list" data-ui-after="${newest()}" data-ui-poll="1000"><ol id="list">${items(0)}</ol></div>${writes}`)));
           srv.routes.set("/rows", async (req, res, url) => {
             const n = srv.count("/rows");
             // Row 2 came after the page was drawn: the first poll's answer has it, and waits at the server.
@@ -1024,7 +1026,7 @@ for (const name of NAMES) {
           const held = new Promise((resolve) => (open = resolve));
           const item = (key) => `<li id="item-${key}" data-key="${key}" data-cursor="000001">${items.get(key).text}</li>`;
           const list = () =>
-            `<div data-slot="lazy-list" id="l" data-ui-lazy-list data-ui-src="/items" data-ui-poll="200" data-ui-order="desc"><ul data-slot="lazy-items" id="l-v" data-ui-start-done data-ui-end-done data-ui-since="${rev}">${[...items.keys()].map(item).join("")}</ul></div>`;
+            `<div data-slot="lazy-list" id="l" data-ui-lazy-list data-ui-src="/items" data-ui-poll="1000" data-ui-order="desc"><ul data-slot="lazy-items" id="l-v" data-ui-start-done data-ui-end-done data-ui-since="${rev}">${[...items.keys()].map(item).join("")}</ul></div>`;
           srv.routes.set("/p", (req, res) => srv.html(res, shell(list() + writes, { lazy: true })));
           srv.routes.set("/items", async (req, res, url) => {
             const n = srv.count("/items");
