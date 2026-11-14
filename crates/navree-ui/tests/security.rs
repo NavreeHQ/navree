@@ -458,7 +458,8 @@ async fn a_submit_with_a_cookie_and_no_word_from_a_browser_is_refused() {
     let app = app().await;
     let body = "password=longenough&email=a";
     // A request that carries a session and says nothing of where it came from is not taken:
-    // a client that sends no cookie has no session to ride on, this one has.
+    // a client that sends no cookie has no session to ride on, this one has, and in an app
+    // with no session layer no token check vouches for it.
     for cookie in ["sid=abc", "theme=dark; sid=abc"] {
         let response = app
             .client()

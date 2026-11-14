@@ -617,6 +617,77 @@ async fn sign_in_and_sign_out_need_the_csrf_token() {
     assert!(sink.with_action("csrf.mismatch").len() >= 4);
 }
 
+/// Posts the sign-in form with `csrf` in its `_csrf` field, the session's cookie, and
+/// neither of the headers a browser says where a post came from with: as the test
+/// client does, and a native app's HTTP stack.
+async fn sign_in_without_origin_headers(client: &TestClient, csrf: &str) -> TestResponse {
+    client
+        .post("/sign-in")
+        .header("accept", "text/html")
+        .without_header("origin")
+        .without_header("sec-fetch-site")
+        .form(&[
+            ("email", "anu@example.com"),
+            ("password", PASSWORD),
+            ("next", "/deals/42"),
+            ("_csrf", csrf),
+        ])
+        .send()
+        .await
+}
+
+// A form post that carries the session's cookie and says nothing of where it came from
+// is taken by the form when the session's token check vouched for it: the token is what
+// only a page of this site holds. A wrong token is refused by that check.
+#[tokio::test]
+async fn a_form_post_with_the_sessions_token_needs_no_origin_header() {
+    let sink = Arc::new(RecordingSink::default());
+    let app = audited(&support::clock(), &sink).await;
+    create_user(&app, "anu@example.com").await;
+    let client = app.client();
+    let page = client
+        .get("/sign-in")
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(200)
+        .text();
+    let marker = r#"name="_csrf" value=""#;
+    let start = page.find(marker).expect("the token field") + marker.len();
+    let masked = page[start..].split('"').next();
+    let masked = masked.unwrap_or_default().to_owned();
+    assert!(client.cookie(COOKIE).is_some(), "the page started a session");
+
+    let refused = sink.with_action("csrf.mismatch").len();
+    sign_in_without_origin_headers(&client, "forged-token")
+        .await
+        .assert_status(403);
+    assert_eq!(
+        sink.with_action("csrf.mismatch").len(),
+        refused + 1,
+        "the token check refused it"
+    );
+    whoami(&client).await.assert_status(401);
+
+    // The token the page carries, masked: taken.
+    let response = sign_in_without_origin_headers(&client, &masked)
+        .await
+        .assert_status(303);
+    assert_eq!(response.header("location"), Some("/deals/42"));
+    whoami(&client).await.assert_status(200);
+    // And the cookie's value, as a script sends it, on the new session.
+    let csrf = token(&client).await;
+    client
+        .post("/sign-out")
+        .header("accept", "text/html")
+        .without_header("origin")
+        .form(&[("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .assert_status(303);
+    whoami(&client).await.assert_status(401);
+}
+
 // Two-factor authentication on cookies: the password alone signs
 // nothing in; a wrong code is refused and audited; the right one signs in
 // once; a recovery code works once.

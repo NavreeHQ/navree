@@ -23,6 +23,15 @@ pub const CSRF_FIELD: &str = "_csrf";
 /// (`[A-Za-z0-9]`), as navree-session makes it.
 pub const TOKEN_LEN: usize = 40;
 
+/// Put on a request (in its extensions) by the layer that checked its CSRF token, when
+/// the token matched: navree-session's layer does, for a request that sent the session's
+/// token in a header or a form's `_csrf` field. Nothing a client sends can set it; the
+/// session layer also takes away one that is there before it checks. A check that vouches
+/// for a request some other way (a request that carries no cookie, or the browser's
+/// origin headers) reads it: such a request has proved it came from a page of this site.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TokenChecked;
+
 /// `token` masked, as a page carries it: `base64url(pad || pad XOR token)`
 /// (no padding), where the pad is as many random bytes as the token has, drawn
 /// afresh on every call. Two masks of one token share nothing, so a body that

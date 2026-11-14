@@ -17,6 +17,7 @@ use http::header::{ALLOW, CONTENT_TYPE, COOKIE, ORIGIN};
 use http::request::Parts;
 use http::{HeaderValue, Method, StatusCode};
 use navree_http::body::{BodyLimit, read_body};
+use navree_http::csrf::TokenChecked;
 use navree_http::extract::{FromRequest, Request, urlencoded};
 use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, HttpOptions};
@@ -2633,16 +2634,19 @@ pub(crate) fn encode_into(out: &mut String, text: &str) {
 /// `Sec-Fetch-Site`, which no page can set, or in `Origin` when they predate that or
 /// the page isn't on HTTPS: the `Origin` must name this host, and the scheme the request
 /// itself carries when it carries one (HTTP/2 and HTTP/3 do, an HTTP/1.1 request doesn't).
-/// A client that sends neither header (curl, a test) isn't a browser acting for a page and
-/// has no session to ride on, so it passes without a cookie; with one it is refused, as
-/// the session layer refuses it on a route that checks the origin alone. A sibling
-/// subdomain is another site here: it can set cookies, but it shouldn't be able to post.
+/// A client that sends neither header (curl, a test, a native app's HTTP stack) isn't a
+/// browser acting for a page. Without a cookie it has no session to ride on, so it passes.
+/// With one it passes only when the session layer checked its CSRF token and the token
+/// matched ([`TokenChecked`]): the token is what a page of this site holds, and no other
+/// site can read it. Else it is refused. A sibling subdomain is another site here: it can
+/// set cookies, but it shouldn't be able to post.
 fn from_this_site(parts: &Parts) -> bool {
     if let Some(site) = parts.headers.get("sec-fetch-site") {
         return matches!(site.as_bytes(), b"same-origin" | b"none");
     }
     let Some(origin) = parts.headers.get(ORIGIN) else {
-        return !parts.headers.contains_key(COOKIE);
+        return !parts.headers.contains_key(COOKIE)
+            || parts.extensions.get::<TokenChecked>().is_some();
     };
     let Ok(origin) = origin.to_str() else {
         return false;
@@ -2721,7 +2725,8 @@ async fn refusal_of(parts: &Parts, multipart: bool) -> Option<StatusCode> {
 /// It has its own answer to cross-site request forgery, with or without a session:
 /// a body from another site is refused with 403 unless its `Origin` is in
 /// `http.cors.allowed_origins`, a body from a request that sends neither `Sec-Fetch-Site`
-/// nor `Origin` but carries a cookie with 403 too, a body that isn't a urlencoded form (or,
+/// nor `Origin` but carries a cookie with 403 too unless the session layer checked its
+/// CSRF token and the token matched, a body that isn't a urlencoded form (or,
 /// for a form with a file field, a multipart one) with 415, and a `GET` or `HEAD` with 405,
 /// so no link or prefetch can fill one. Behind navree-session the token check also runs.
 ///
@@ -3147,14 +3152,20 @@ mod tests {
         request.body(()).unwrap().into_parts().0
     }
 
+    /// `head` as the session layer leaves it when the request's token matched.
+    fn token_checked(mut head: Parts) -> Parts {
+        head.extensions.insert(TokenChecked);
+        head
+    }
+
     #[test]
-    fn a_request_with_neither_origin_header_passes_only_without_a_cookie() {
+    fn a_request_with_neither_origin_header_and_a_cookie_passes_only_with_a_checked_token() {
         assert!(from_this_site(&request_head("/store", &[])));
-        assert!(!from_this_site(&request_head(
-            "/store",
-            &[("cookie", "sid=abc")]
-        )));
-        // The browser's own word comes first, with or without a cookie.
+        assert!(from_this_site(&token_checked(request_head("/store", &[]))));
+        let with_cookie = || request_head("/store", &[("cookie", "sid=abc")]);
+        assert!(!from_this_site(&with_cookie()));
+        assert!(from_this_site(&token_checked(with_cookie())));
+        // The browser's own word comes first, with or without a cookie or a checked token.
         for site in ["same-origin", "none"] {
             let head = request_head("/store", &[("cookie", "sid=abc"), ("sec-fetch-site", site)]);
             assert!(from_this_site(&head), "{site}");
@@ -3162,7 +3173,17 @@ mod tests {
         for site in ["same-site", "cross-site"] {
             let head = request_head("/store", &[("sec-fetch-site", site)]);
             assert!(!from_this_site(&head), "{site}");
+            let head = request_head("/store", &[("cookie", "sid=abc"), ("sec-fetch-site", site)]);
+            assert!(!from_this_site(&token_checked(head)), "{site}");
         }
+        // An `Origin` of another site is refused with a checked token too.
+        let elsewhere = [
+            ("cookie", "sid=abc"),
+            ("host", "app.example"),
+            ("origin", "https://evil.example"),
+        ];
+        let head = token_checked(request_head("/store", &elsewhere));
+        assert!(!from_this_site(&head));
     }
 
     #[test]

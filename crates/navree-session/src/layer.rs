@@ -16,7 +16,7 @@ use navree_contracts::{
 use navree_crypto::Encrypter;
 use navree_glob::Glob;
 use navree_http::body::Body;
-use navree_http::csrf::token_matches;
+use navree_http::csrf::{TokenChecked, token_matches};
 use navree_http::extract::Request;
 use navree_http::middleware::{Next, State, from_fn_with_state};
 use navree_http::response::{IntoResponse, Response};
@@ -187,18 +187,23 @@ async fn handle(
 
 impl SessionManager {
     async fn run(&self, mut request: Request, next: Next) -> Response {
+        // Only this layer says a token matched: whatever was there before it is not its word.
+        request.extensions_mut().remove::<TokenChecked>();
         let cookies = session_cookies(request.headers(), &self.cookie_name);
         let session = match self.start(&cookies).await {
             Ok(session) => session,
             Err(error) => return AppError::internal(error).into_response(),
         };
         if self.needs_csrf_check(&request) {
+            // Whether the session's token was sent and matched: not when the path is
+            // checked by its origin, nor when no session cookie came.
+            let mut token_matched = false;
             let checked = if self.same_origin_only.contains(&request.uri().path()) {
                 check_same_origin(request.headers(), request.uri(), !cookies.is_empty())
             } else if cookies.is_empty() {
                 self.check_cross_site(request.headers())
             } else {
-                match check_csrf(&request, &session) {
+                let compared = match check_csrf(&request, &session) {
                     // A plain HTML form cannot set a header: its body may carry the token.
                     Err(CsrfFailure::Missing) => match FormBody::of(request.headers()) {
                         Some(form) => {
@@ -223,11 +228,18 @@ impl SessionManager {
                         None => Err(CsrfFailure::Missing),
                     },
                     other => other,
-                }
+                };
+                token_matched = compared.is_ok();
+                compared
             };
             if let Err(failure) = checked {
                 reject(&request, failure).await;
                 return AppError::csrf_mismatch().into_response();
+            }
+            // On the request the handler gets: after a form's field was taken out, the
+            // request rebuilt from its body.
+            if token_matched {
+                request.extensions_mut().insert(TokenChecked);
             }
         }
         request.extensions_mut().insert(session.clone());
