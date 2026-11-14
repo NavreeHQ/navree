@@ -677,6 +677,175 @@ async fn a_mount_checks_its_access_on_every_request() {
     assert_eq!(ledger.calls(), 1);
 }
 
+/// Lets a request through when its `x-permission` header names what the
+/// mount declares: its permission, or its ability as `{action} {subject}`.
+#[derive(Default)]
+struct Permits {
+    asked: Counter,
+}
+
+impl RouteAuthorizer for Permits {
+    fn authorize<'a>(
+        &'a self,
+        parts: &'a mut Parts,
+        meta: &'a RouteMeta,
+    ) -> BoxFuture<'a, Result<(), AppError>> {
+        self.asked.hit();
+        let needed = match &meta.access.can {
+            Some(can) => format!("{} {}", can.action, can.subject),
+            None => meta.access.permissions.join(","),
+        };
+        Box::pin(async move {
+            let given = parts
+                .headers
+                .get("x-permission")
+                .and_then(|value| value.to_str().ok());
+            if given == Some(needed.as_str()) {
+                Ok(())
+            } else {
+                Err(AppError::forbidden().with_detail("This khata is not yours to open."))
+            }
+        })
+    }
+}
+
+/// Registers a `Permits` as the app's `dyn RouteAuthorizer`.
+struct PermitsModule(Arc<Permits>);
+
+impl Module for PermitsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.value_arc::<dyn RouteAuthorizer>(self.0.clone());
+    }
+}
+
+#[tokio::test]
+async fn a_mount_checks_a_permission_or_an_ability_on_every_request() {
+    for (declare, permission) in [
+        (
+            (|mount: Mount| mount.permissions(&["khata.read"])) as fn(Mount) -> Mount,
+            "khata.read",
+        ),
+        (|mount: Mount| mount.can("read", "Khata"), "read Khata"),
+    ] {
+        let permits = Arc::new(Permits::default());
+        let (ledger, setup) = ledger_setup(declare);
+        let app = setup.module(PermitsModule(permits.clone())).boot().await;
+        app.get("/khata/entries").await.assert_error(401);
+        let refused = app.send(as_user("GET", "/khata/entries", HARPREET)).await;
+        assert_eq!(
+            refused.assert_error(403)["message"],
+            "This khata is not yours to open.",
+            "{permission}"
+        );
+        let mut allowed = as_user("GET", "/khata/entries", HARPREET);
+        allowed
+            .headers_mut()
+            .insert("x-permission", HeaderValue::from_static(permission));
+        assert_eq!(app.send(allowed).await.text(), "/entries", "{permission}");
+        assert_eq!(
+            (permits.asked.get(), ledger.calls()),
+            (2, 1),
+            "asked on each signed-in request: {permission}"
+        );
+    }
+}
+
+/// Sends every method a `GET`-only mount at `/khata` does not take (`CONNECT`
+/// and an extension method among them) to the prefix and to a path below it,
+/// with and without a body, carrying `x-permission: khata.read`, from `user`
+/// (a guest when `None`): each is the router's 405 with the `Allow` of a
+/// `GET` route.
+async fn only_get_is_taken(app: &TestApp, user: Option<&str>) {
+    let others = [
+        Method::POST,
+        Method::PUT,
+        Method::DELETE,
+        Method::PATCH,
+        Method::CONNECT,
+        Method::from_bytes(b"PROPFIND").unwrap(),
+    ];
+    for method in others {
+        for path in ["/khata", "/khata/entries"] {
+            for body in ["", "₹1,00,000 for the Diwali khata"] {
+                let mut request = http::Request::builder()
+                    .method(method.clone())
+                    .uri(path)
+                    .header("x-permission", "khata.read");
+                if let Some(user) = user {
+                    request = request.header("x-user-id", user);
+                }
+                if !body.is_empty() {
+                    request = request
+                        .header("content-type", "text/plain")
+                        .header("content-length", body.len());
+                }
+                let response = app.send(request.body(Body::from(body)).unwrap()).await;
+                assert_eq!(
+                    response.assert_error(405)["message"],
+                    "Method Not Allowed",
+                    "{method} {path} {body:?}"
+                );
+                assert_eq!(
+                    response.header("allow"),
+                    Some("GET, HEAD, OPTIONS"),
+                    "{method} {path} {body:?}"
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_mount_that_names_its_methods_answers_any_other_as_a_route_does() {
+    // A public, read-only mount; a method named twice is kept once.
+    let (ledger, app) = ledger_app(|mount| mount.public().methods(&[Method::GET, Method::GET]));
+    let app = app.await;
+    only_get_is_taken(&app, None).await;
+    only_get_is_taken(&app, Some(HARPREET)).await;
+    assert_eq!(ledger.calls(), 0, "no other method reached the service");
+    assert_eq!(app.get("/khata/entries").await.text(), "/entries");
+    let head = app
+        .send(
+            http::Request::head("/khata/entries")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!((head.status, head.text().as_str()), (StatusCode::OK, ""));
+    assert_eq!(ledger.last().method, "HEAD", "HEAD runs the GET answer");
+    let options = app
+        .send(
+            http::Request::options("/khata/entries")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(options.status, StatusCode::NO_CONTENT);
+    assert_eq!(options.header("allow"), Some("GET, HEAD, OPTIONS"));
+    assert_eq!(ledger.calls(), 2, "OPTIONS is answered without the service");
+
+    // A mount that needs a permission: the router answers the other methods
+    // first, before authentication and the access check.
+    let permits = Arc::new(Permits::default());
+    let (ledger, setup) = ledger_setup(|mount| {
+        mount
+            .permissions(&["khata.read"])
+            .methods(&[Method::GET])
+    });
+    let app = setup.module(PermitsModule(permits.clone())).boot().await;
+    only_get_is_taken(&app, None).await;
+    only_get_is_taken(&app, Some(HARPREET)).await;
+    assert_eq!(ledger.calls(), 0, "no other method reached the service");
+    assert_eq!(permits.asked.get(), 0, "refused before the access check");
+    app.get("/khata/entries").await.assert_error(401);
+    let mut allowed = as_user("GET", "/khata/entries", HARPREET);
+    allowed
+        .headers_mut()
+        .insert("x-permission", HeaderValue::from_static("khata.read"));
+    assert_eq!(app.send(allowed).await.text(), "/entries");
+    assert_eq!((permits.asked.get(), ledger.calls()), (1, 1));
+}
+
 /// Answers `/slow` after two seconds and any other path at once.
 async fn slow_or_fast(request: Request) -> Result<http::Response<Body>, Infallible> {
     if request.uri().path() == "/slow" {
