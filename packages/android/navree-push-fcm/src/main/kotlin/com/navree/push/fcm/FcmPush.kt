@@ -13,6 +13,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.navree.client.NavreeActivity
+import com.navree.client.platform.LockScreen
 import com.navree.client.platform.PushProvider
 import com.navree.client.platform.PushTokens
 
@@ -72,16 +73,19 @@ class FcmPush(context: Context) : PushProvider {
 }
 
 /**
- * Receives the messages the server's push channel sends, and shows each one
- * private on the lock screen: there the system shows a public version that
- * names the app and says only that something arrived, never the title or the
- * text. A tap opens the app with the message's `href`.
+ * Receives the messages the server's push channel sends and shows them. What
+ * a locked screen shows of one is set by `navree_notification_lock_screen`
+ * ([LockScreen]): by default the system's way, where the person's own setting
+ * decides whether the title and text show there, and where it hides them the
+ * app's name and "New notification" stand in; with `nothing`, nothing of it
+ * on a secure locked screen. A tap opens the app with the message's `href`.
  *
  * This code sees a message only when Firebase hands it over: a data message
  * (`title`, `body` and `href` in `data`, no `notification`) always, a message
  * with a `notification` only while the app is in front. A `notification`
- * message that arrives while the app is in the background is shown by the
- * Firebase library itself, as the server wrote it, and never reaches here.
+ * message that arrives while the app is in the background is drawn by the
+ * Firebase library itself, as the server wrote it, and never reaches here:
+ * the option above does not hold for it.
  *
  * A token that changes goes to the runtime core of the app while it runs (and
  * is asked for again at every launch); the core registers it. This module's
@@ -101,7 +105,8 @@ class NavreeMessagingService : FirebaseMessagingService() {
             href?.let { putExtra(NavreeActivity.EXTRA_HREF, it) }
         }
         val tap = PendingIntent.getActivity(this, message.messageId.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        // What the lock screen shows: the app's name and that something arrived.
+        val lockScreen = LockScreen.of(getString(R.string.navree_notification_lock_screen))
+        // Where the person's setting hides what a notification says: the app's name and that something arrived.
         val onLockScreen = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(applicationInfo.icon)
             .setContentTitle(applicationInfo.loadLabel(packageManager))
@@ -111,7 +116,7 @@ class NavreeMessagingService : FirebaseMessagingService() {
             .setSmallIcon(applicationInfo.icon)
             .setContentTitle(shown.first)
             .setContentText(shown.second)
-            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setVisibility(if (lockScreen == LockScreen.Hidden) NotificationCompat.VISIBILITY_SECRET else NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(onLockScreen)
             .setAutoCancel(true)
             .setContentIntent(tap)
