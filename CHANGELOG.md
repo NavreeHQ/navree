@@ -7,6 +7,8 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-11-14
+
 ### Upgrading
 
 - To see before upgrading whether the single sign-on change below affects your app, list the
@@ -624,7 +626,9 @@ Most apps upgrade with no change. These are the changes that can ask something o
 
 First release. Read what it includes in the [release notes](https://navree.com/docs/prologue/release-notes/).
 
-[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.2
+[1.2.1]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.1
 [1.2.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.0
 [1.1.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.1.0
 [1.0.2]: https://github.com/NavreeHQ/navree/releases/tag/v1.0.2
