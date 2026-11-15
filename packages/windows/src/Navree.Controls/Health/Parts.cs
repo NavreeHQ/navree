@@ -59,6 +59,27 @@ public static class HealthParts
         where T : UIElement
     {
         AutomationProperties.SetAccessibilityView(element, AccessibilityView.Raw);
+
+        // A reader skips a part left out of its view, but still reaches what stands inside it: so each part inside is left out too.
+        switch (element)
+        {
+            case Panel panel:
+                foreach (UIElement child in panel.Children)
+                {
+                    Hidden(child);
+                }
+
+                break;
+            case Border { Child: UIElement inner }:
+                Hidden(inner);
+                break;
+            case ContentControl { Content: UIElement content }:
+                Hidden(content);
+                break;
+            default:
+                break;
+        }
+
         return element;
     }
 
@@ -100,8 +121,8 @@ public static class HealthParts
         return button;
     }
 
-    /// <summary>How a ring or a figure says how its value stands: the word in its tone, in a small capsule tinted with that tone.</summary>
-    public static UIElement Status(Models.Badge badge, FrameworkElement? owner = null)
+    /// <summary>How a ring or a figure says how its value stands: the word in its tone, in a small capsule tinted with that tone (or, in a row, the dot and the word alone).</summary>
+    public static UIElement Status(Models.Badge badge, FrameworkElement? owner = null, bool capsule = true)
     {
         Palette palette = new(owner ?? new Border());
         Models.Hue hue = HueRules.OfTone(badge.Tone);
@@ -115,7 +136,15 @@ public static class HealthParts
         text.TextWrapping = TextWrapping.Wrap;
         text.VerticalAlignment = VerticalAlignment.Center;
         line.Children.Add(text);
-        Border capsule = new()
+        if (!capsule)
+        {
+            // In a row of a list or a table: the dot and its words, with no ground of their own.
+            line.HorizontalAlignment = HorizontalAlignment.Left;
+            AutomationProperties.SetName(line, badge.Text);
+            return line;
+        }
+
+        Border tinted = new()
         {
             Child = line,
             Padding = new Thickness(10, 2, 10, 3),
@@ -123,8 +152,8 @@ public static class HealthParts
             Background = palette.Fill(hue, 0.15),
             HorizontalAlignment = HorizontalAlignment.Left,
         };
-        AutomationProperties.SetName(capsule, badge.Text);
-        return capsule;
+        AutomationProperties.SetName(tinted, badge.Text);
+        return tinted;
     }
 
     /// <summary>Which way a value is going, in the system's arrow and in the colour of its news rather than of its direction.</summary>

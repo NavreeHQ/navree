@@ -65,6 +65,7 @@ public sealed partial class GaugeView : KindControl
         {
             Height = diameter * GaugeRules.HeightShare,
             MaxWidth = diameter,
+            Ideal = diameter,
             AccessName = name,
             AccessType = "gauge",
             Range = range,
@@ -258,7 +259,10 @@ public sealed partial class RangeView : KindControl
         value.Children.Add(HealthParts.Hidden(number));
         if (range.Value is not null && range.Unit is not null)
         {
-            value.Children.Add(HealthParts.Hidden(Ink.Words(range.Unit, 12, palette.Secondary, strong: true)));
+            TextBlock unit = Ink.Words(range.Unit, 12, palette.Secondary, strong: true);
+            unit.VerticalAlignment = VerticalAlignment.Bottom;
+            unit.Margin = new Thickness(0, 0, 0, 3);
+            value.Children.Add(HealthParts.Hidden(unit));
         }
 
         Grid.SetColumn(value, 1);

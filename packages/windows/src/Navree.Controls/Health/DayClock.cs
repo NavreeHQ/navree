@@ -61,6 +61,7 @@ public sealed partial class DayClockView : KindControl
         {
             Height = side,
             MaxWidth = side,
+            Ideal = side,
             Reads = true,
             AccessName = string.IsNullOrEmpty(name) ? said : SpeechRules.Fact(name, said),
             AccessType = "day clock",

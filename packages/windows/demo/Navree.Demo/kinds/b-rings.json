@@ -17,7 +17,7 @@
       {
        "t": "stack",
        "axis": "horizontal",
-       "wide": "horizontal",
+       "wrap": true,
        "gap": 6,
        "align": "start",
        "children": [
@@ -148,7 +148,7 @@
       {
        "t": "stack",
        "axis": "horizontal",
-       "wide": "horizontal",
+       "wrap": true,
        "gap": 8,
        "children": [
         {

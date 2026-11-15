@@ -110,7 +110,7 @@ internal sealed partial class NodeRenderer
             case Models.Progress progress:
                 return DrawProgressBar(progress);
             case Models.Badge { Dot: true } badge:
-                return HealthParts.Status(badge);
+                return HealthParts.Status(badge, capsule: false);
             case Models.Text text:
                 return DrawWords(text);
             case Models.Stack stack when stack.Wrap || stack.Appear is not null:
@@ -121,6 +121,8 @@ internal sealed partial class NodeRenderer
                 return Composed.Layers(layers, Render);
             case Models.Shape shape:
                 return Composed.Shape(shape);
+            case Models.Grid grid:
+                return Composed.Grid(grid, Render);
             case Models.Carousel carousel:
                 return Composed.Carousel(carousel, Render);
             case Models.Adaptive adaptive:
@@ -167,6 +169,11 @@ internal sealed partial class NodeRenderer
 
         if (drawn is TextBlock block)
         {
+            if (ComposeRules.KeepsWhole(text.Value))
+            {
+                block.TextWrapping = TextWrapping.NoWrap;
+            }
+
             if (text.Tabular)
             {
                 Typography.SetNumeralAlignment(block, FontNumeralAlignment.Tabular);

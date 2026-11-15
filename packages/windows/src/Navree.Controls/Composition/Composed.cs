@@ -107,13 +107,11 @@ public static class Composed
             Height = height,
             MinWidth = double.IsNaN(width) ? 4 : 0,
             MinHeight = double.IsNaN(height) ? 4 : 0,
-            CornerRadius = new CornerRadius(shape.Form switch
-            {
-                Models.ShapeForm.Rect => 0,
-                Models.ShapeForm.Circle or Models.ShapeForm.Capsule => 1000,
-                _ => 8,
-            }),
+            CornerRadius = new CornerRadius(shape.Form == Models.ShapeForm.Rect ? 0 : 8),
         };
+
+        // A capsule and a circle are round at the shorter side, whatever size the place gives them.
+        box.SizeChanged += (_, e) => box.CornerRadius = new CornerRadius(ComposeRules.Corner(shape.Form, e.NewSize.Width, e.NewSize.Height));
         if (shape.Fill is not null)
         {
             Models.Colour fill = shape.Fill;
@@ -198,6 +196,21 @@ public static class Composed
         return box;
     }
 
+    /// <summary>Parts in columns of one width, each row as high as its highest part.</summary>
+    /// <param name="grid">The grid.</param>
+    /// <param name="render">Draws one part.</param>
+    /// <returns>The grid.</returns>
+    public static UIElement Grid(Models.Grid grid, Func<Models.Node, UIElement> render)
+    {
+        FlowGrid flow = new() { Cols = grid.Cols, Min = grid.Min, Gap = grid.Gap == 0 ? 12 : grid.Gap * 4 };
+        foreach (Models.Node child in grid.Children)
+        {
+            flow.Children.Add(render(child));
+        }
+
+        return flow;
+    }
+
     /// <summary>Parts side by side that scroll across, stopping at a part: as many as fit at the least width are shown, so a wide room may show them all and scroll nothing; a paged run shows one at a time with the system's marks for which.</summary>
     /// <param name="carousel">The carousel.</param>
     /// <param name="render">Draws one part.</param>
@@ -233,12 +246,41 @@ public static class Composed
 
         StackPanel host = new() { Spacing = 8 };
         host.Children.Add(scroller);
-        PipsPager? pips = null;
+        List<Button> marks = [];
         if (carousel.Paged && parts.Count > 1)
         {
-            pips = new PipsPager { NumberOfPages = parts.Count, SelectedPageIndex = 0, HorizontalAlignment = HorizontalAlignment.Center };
-            host.Children.Add(pips);
+            StackPanel row = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+            for (int at = 0; at < parts.Count; at++)
+            {
+                int page = at;
+                Button mark = new()
+                {
+                    Content = new Microsoft.UI.Xaml.Shapes.Ellipse { Width = 8, Height = 8 },
+                    MinWidth = 28,
+                    MinHeight = 28,
+                    Padding = new Thickness(0),
+                    Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                    BorderThickness = new Thickness(0),
+                };
+                AutomationProperties.SetName(mark, "Page " + (page + 1) + " of " + parts.Count);
+                mark.Click += (_, _) => scroller.ChangeView(page * (scroller.ViewportWidth + gap), null, null);
+                marks.Add(mark);
+                row.Children.Add(mark);
+            }
+
+            host.Children.Add(row);
         }
+
+        void Mark(int current)
+        {
+            Windows.UI.Color chosen = Palette.Resource("TextFillColorPrimaryBrush") is SolidColorBrush primary ? primary.Color : Microsoft.UI.Colors.Gray;
+            for (int at = 0; at < marks.Count; at++)
+            {
+                ((Microsoft.UI.Xaml.Shapes.Ellipse)marks[at].Content).Fill = new SolidColorBrush(chosen) { Opacity = at == current ? 1 : 0.3 };
+            }
+        }
+
+        Mark(0);
 
         void Fit(double room)
         {
@@ -267,26 +309,13 @@ public static class Composed
         }
 
         host.SizeChanged += (_, e) => Fit(e.NewSize.Width);
-        if (pips is not null)
+        if (marks.Count > 0)
         {
-            bool moving = false;
             scroller.ViewChanged += (_, _) =>
             {
-                if (scroller.ViewportWidth <= 0 || moving)
+                if (scroller.ViewportWidth > 0)
                 {
-                    return;
-                }
-
-                int page = (int)Math.Round(scroller.HorizontalOffset / (scroller.ViewportWidth + gap));
-                moving = true;
-                pips.SelectedPageIndex = Math.Clamp(page, 0, parts.Count - 1);
-                moving = false;
-            };
-            pips.SelectedIndexChanged += (_, _) =>
-            {
-                if (!moving)
-                {
-                    scroller.ChangeView(pips.SelectedPageIndex * (scroller.ViewportWidth + gap), null, null);
+                    Mark(Math.Clamp((int)Math.Round(scroller.HorizontalOffset / (scroller.ViewportWidth + gap)), 0, parts.Count - 1));
                 }
             };
         }

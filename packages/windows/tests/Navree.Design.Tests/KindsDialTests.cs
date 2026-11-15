@@ -290,6 +290,28 @@ public sealed class KindsDialTests
     }
 
     [TestMethod]
+    public void A_grid_has_as_many_columns_as_fit_the_least_width_no_more_than_its_count_and_no_more_than_its_parts()
+    {
+        Assert.AreEqual(4, ComposeRules.Columns(1000, null, 200, 12, 9));
+        Assert.AreEqual(3, ComposeRules.Columns(1000, 3, 200, 12, 9));
+        Assert.AreEqual(2, ComposeRules.Columns(1000, 3, 200, 12, 2));
+        Assert.AreEqual(1, ComposeRules.Columns(150, null, 200, 12, 9));
+        Assert.AreEqual(5, ComposeRules.Columns(100, 5, null, 12, 9));
+        Assert.AreEqual(6, ComposeRules.Columns(1000, null, null, 12, 9));
+        Assert.AreEqual(1, ComposeRules.Columns(1000, null, null, 12, 0));
+    }
+
+    [TestMethod]
+    public void One_short_word_or_figure_is_kept_whole_and_longer_words_may_wrap()
+    {
+        Assert.IsTrue(ComposeRules.KeepsWhole("Movement"));
+        Assert.IsTrue(ComposeRules.KeepsWhole("\u20B91,24,050"));
+        Assert.IsFalse(ComposeRules.KeepsWhole("25% of score"));
+        Assert.IsFalse(ComposeRules.KeepsWhole("Antidisestablishmentarianism"));
+        Assert.IsFalse(ComposeRules.KeepsWhole("  "));
+    }
+
+    [TestMethod]
     public void A_part_comes_in_as_it_says_and_only_fades_for_a_person_who_asked_for_less_motion()
     {
         Assert.AreEqual(ComposeRules.Arrival.None, ComposeRules.ArrivalOf(null, false));

@@ -270,9 +270,9 @@ public static class TrendRules
     public static string Glyph(Models.Direction direction) =>
         direction switch
         {
-            Models.Direction.Up => "",
-            Models.Direction.Down => "",
-            _ => "",
+            Models.Direction.Up => "",
+            Models.Direction.Down => "",
+            _ => "",
         };
 
     /// <summary>What a trend says to a screen reader when it has no words of its own.</summary>

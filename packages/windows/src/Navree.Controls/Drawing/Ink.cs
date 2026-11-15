@@ -347,6 +347,9 @@ internal static class Ink
             IsHitTestVisible = false,
             TextReadingOrder = TextReadingOrder.DetectFromContent,
         };
+
+        // What a drawing says is said once, by the drawing: its own words are not read again one by one.
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(block, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         if (strong)
         {
             block.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;

@@ -100,7 +100,7 @@ public sealed partial class ChartView : KindControl
             Height = PlotHeight,
             Reads = !Spark,
             MirrorInRtl = true,
-            AccessName = string.IsNullOrEmpty(chart.Title) ? chart.Summary ?? Sentence() : SpeechRules.Fact(chart.Title, chart.Summary ?? Sentence()),
+            AccessName = string.IsNullOrEmpty(chart.Title) ? chart.Summary ?? Sentence() : SpeechRules.Fact(chart.Title, SpeechRules.Value(chart.Summary ?? Sentence(), chart.Title)),
             AccessType = "chart",
         };
         plot.Painter = Paint;
@@ -307,7 +307,7 @@ public sealed partial class ChartView : KindControl
     }
 
     private string MarkWords(double mark, ValueStyle style) =>
-        chart.Stacking == Models.Stacking.Shares ? Math.Round(mark * 100).ToString("0", CultureInfo.InvariantCulture) + "%" : ValueWords.Text(mark, style);
+        chart.Stacking == Models.Stacking.Shares ? ((int)Math.Round(mark * 100)).ToString(CultureInfo.InvariantCulture) + "%" : ValueWords.Text(mark, style);
 
     // The grid, the value labels, the zones and the references: what stands behind the marks.
     private void PaintGuides(PlotCanvas canvas, Frame frame, IReadOnlyList<double> marks, ValueStyle style)
@@ -421,7 +421,7 @@ public sealed partial class ChartView : KindControl
             for (int at = 0; at < many; at++)
             {
                 Models.Series series = chart.Series[at];
-                if (place >= series.Values.Count || series.Values[place] is not double value)
+                if (place >= series.Values.Count || series.Values[place] is not double value || value == 0)
                 {
                     continue;
                 }

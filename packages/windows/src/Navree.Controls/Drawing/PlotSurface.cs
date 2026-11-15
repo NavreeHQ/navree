@@ -127,6 +127,9 @@ internal sealed partial class PlotSurface : UserControl
     /// <summary>How high the drawing is for a width, when that follows from the width (a calendar of square days); the surface then takes that height.</summary>
     internal Func<double, double>? HeightFor { get; set; }
 
+    /// <summary>The width the drawing wants when its place gives it none (a ring in a column that is as wide as its words); less when the place is narrower.</summary>
+    internal double Ideal { get; set; }
+
     /// <summary>Whether the drawing runs the other way across in right to left.</summary>
     internal bool MirrorInRtl { get; set; }
 
@@ -176,6 +179,19 @@ internal sealed partial class PlotSurface : UserControl
         {
             Tell(probes[current].Spoken);
         }
+    }
+
+    /// <inheritdoc />
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        Size measured = base.MeasureOverride(availableSize);
+        if (Ideal <= 0)
+        {
+            return measured;
+        }
+
+        double room = double.IsInfinity(availableSize.Width) ? Ideal : Math.Min(availableSize.Width, Ideal);
+        return new Size(Math.Max(measured.Width, room), measured.Height);
     }
 
     /// <inheritdoc />

@@ -24,6 +24,39 @@ public static class ComposeRules
         return !double.IsFinite(count) || count >= int.MaxValue ? int.MaxValue : Math.Max(1, (int)count);
     }
 
+    /// <summary>The least width of a grid column when the page gives neither a count nor a least width.</summary>
+    public const double GridLeast = 160;
+
+    /// <summary>
+    /// How many columns a grid has in a place this wide, at most: the count is the most, the least width the least a column may be; a grid that
+    /// gives only a count draws that many. Never more columns than parts, never fewer than one.
+    /// </summary>
+    /// <param name="width">The place width.</param>
+    /// <param name="cols">The count the page gives, or none.</param>
+    /// <param name="least">The least width the page gives, or none.</param>
+    /// <param name="gap">The gap between columns.</param>
+    /// <param name="parts">How many parts there are.</param>
+    /// <returns>The number of columns.</returns>
+    public static int Columns(double width, int? cols, int? least, double gap, int parts)
+    {
+        int count;
+        if (least is int column)
+        {
+            int fits = Fit(width, column, gap);
+            count = cols is int most ? Math.Min(most, fits) : fits;
+        }
+        else if (cols is int fixedCount && fixedCount > 0)
+        {
+            count = fixedCount;
+        }
+        else
+        {
+            count = Fit(width, GridLeast, gap);
+        }
+
+        return Math.Max(1, Math.Min(count, Math.Max(parts, 1)));
+    }
+
     /// <summary>The width of each column of a run of <paramref name="count"/> columns in a place this wide.</summary>
     /// <param name="width">The place's width.</param>
     /// <param name="count">How many columns.</param>
@@ -120,6 +153,18 @@ public static class ComposeRules
     /// <param name="dark">Whether the ground is dark.</param>
     /// <returns>The opacity of the ground and the opacity of the edge.</returns>
     public static (double Ground, double Edge) Tint(bool dark) => dark ? (0.18, 0.4) : (0.1, 0.32);
+
+    /// <summary>The longest word kept whole on its line.</summary>
+    public const int WholeWord = 16;
+
+    /// <summary>Whether a text is one short word or figure (<c>1,994</c>, <c>Movement</c>) that is never cut in two to fit a narrow place.</summary>
+    /// <param name="text">The text.</param>
+    /// <returns>Whether it is kept whole.</returns>
+    public static bool KeepsWhole(string text)
+    {
+        string trimmed = text.Trim();
+        return trimmed.Length > 0 && trimmed.Length <= WholeWord && !trimmed.Any(char.IsWhiteSpace);
+    }
 
     /// <summary>The least side of a target a person points at: 40 effective pixels, as the system's own controls give.</summary>
     public const double TouchLeast = 40;
