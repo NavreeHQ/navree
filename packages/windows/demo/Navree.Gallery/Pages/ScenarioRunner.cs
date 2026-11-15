@@ -58,6 +58,7 @@ internal static class ScenarioRunner
                 break;
             case "table":
                 await TableScenarios.RunAsync(window, TableScenarios.All);
+                await CareScenarios.RunAsync(window);
                 break;
             case "translation":
                 await TranslationScenario.RunAsync(window);

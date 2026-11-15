@@ -212,8 +212,15 @@ public sealed partial class DataTable
     {
         if (args.Element is DataTableRow row)
         {
+            // The active row is pinned, so it is not recycled to make room; when it is cleared with focus on it, which a
+            // reset or a row drawn again can do, focus is put back on the active cell once the rows are in place.
+            bool heldFocus = row.Index >= 0 && row.Index == activeRow && FocusIsInside(row);
             row.Unbind();
             liveRows.Remove(row);
+            if (heldFocus)
+            {
+                FocusActiveSoon();
+            }
         }
     }
 

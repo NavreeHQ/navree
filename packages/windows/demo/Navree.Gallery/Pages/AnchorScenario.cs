@@ -104,7 +104,7 @@ internal static class AnchorScenario
             "500 rows join the start and the row the view is on is kept made",
             index =>
             {
-                page.Layout.PinnedIndex = index + 500;
+                page.Layout.Pinned = [index + 500];
                 page.Source.Prepend(AnchorPage.Make("s", 500));
             },
             picture: false);
@@ -150,7 +150,7 @@ internal static class AnchorScenario
         change(index);
         await Task.Delay(900);
         CompositionTarget.Rendering -= Sample;
-        page.Layout.PinnedIndex = -1;
+        page.Layout.Pinned = [];
 
         double after = page.TopOf(key);
         double worst = samples.Where(s => !double.IsNaN(s)).Select(s => Math.Abs(s - before)).DefaultIfEmpty(double.NaN).Max();

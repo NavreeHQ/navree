@@ -12,13 +12,15 @@ namespace Navree.Controls;
 public sealed partial class DataTable
 {
     private int activeRow = -1;
+    private string? activeKey;
+    private readonly RowPins pins = new();
     private int activeColumn;
     private bool activeSet;
     private bool lastInputWasKeyboard;
     private Control? activeElement;
     private string typed = string.Empty;
     private DateTime typedAt = DateTime.MinValue;
-    private List<string>? rowNames;
+    private readonly RowNameCache nameCache = new();
 
     /// <summary>Whether a cell of a body row is the active one.</summary>
     /// <param name="row">The row's place.</param>
@@ -35,9 +37,8 @@ public sealed partial class DataTable
         if (cell.Role == CellRole.Data && cell.Row is { Index: >= 0 } row)
         {
             activeSet = true;
-            activeRow = row.Index;
+            SetActiveRow(row.Index);
             activeColumn = Math.Max(cell.GridColumn, 0);
-            rowsLayout.PinnedIndex = activeRow;
             MarkActive(cell);
         }
     }
@@ -64,8 +65,17 @@ public sealed partial class DataTable
         int count = Model?.RowCount ?? 0;
         activeSet = count > 0;
         activeColumn = 0;
-        activeRow = count > 0 ? 0 : -1;
-        rowsLayout.PinnedIndex = activeRow;
+        SetActiveRow(count > 0 ? 0 : -1);
+    }
+
+    // The active row is a place and the key of the row there: the key is what the active row is followed by when rows change.
+    // The row is pinned for the active owner, so it stays made wherever the view is and keeps the keyboard focus.
+    private void SetActiveRow(int row)
+    {
+        activeRow = row;
+        activeKey = row >= 0 && Model is { } model && row < model.RowCount ? model.GetRow(row).Key : null;
+        pins.Set(PinOwner.Active, row);
+        rowsLayout.Pinned = pins.Indices;
     }
 
     private void MarkActive(Control element)
@@ -126,9 +136,8 @@ public sealed partial class DataTable
     internal void SetActive(Cell cell, bool focus)
     {
         activeSet = true;
-        activeRow = cell.Row;
+        SetActiveRow(cell.Row);
         activeColumn = cell.Column;
-        rowsLayout.PinnedIndex = activeRow;
         if (cell.Row >= 0)
         {
             RevealRow(cell.Row);
@@ -382,8 +391,8 @@ public sealed partial class DataTable
         DateTime now = DateTime.UtcNow;
         typed = (now - typedAt).TotalMilliseconds > 800 ? character.ToString() : typed + character;
         typedAt = now;
-        rowNames ??= Enumerable.Range(0, model.RowCount).Select(i => presenter.RowName(model.GetRow(i))).ToList();
-        int next = TypeAhead.Next(rowNames, cell.Row!.Index, typed, Culture);
+        IReadOnlyList<string> names = nameCache.Get(model.RowCount, i => presenter.RowName(model.GetRow(i)));
+        int next = TypeAhead.Next(names, cell.Row!.Index, typed, Culture);
         if (next >= 0)
         {
             SetActive(new Cell(next, Math.Max(activeColumn, 0)), focus: true);

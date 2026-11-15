@@ -151,7 +151,8 @@ public sealed class DataTableRow : Control
     }
 
     /// <summary>Draws the row again from the model and the table's state.</summary>
-    internal void Refresh()
+    /// <param name="keepFocused">Whether a cell, or the detail, that holds keyboard focus is left as it is: the row was drawn again with new data and a person is in it.</param>
+    internal void Refresh(bool keepFocused = false)
     {
         DataTable? table = Owner;
         if (table is null || root is null)
@@ -188,7 +189,7 @@ public sealed class DataTableRow : Control
                 {
                     table.BindList(cell, Record);
                 }
-                else if (cell.Content is UIElement content)
+                else if (cell.Content is UIElement content && !(keepFocused && table.HoldsFocus(cell)))
                 {
                     presenter.BindCell(content, Record, cell.ColumnIndex);
                 }
@@ -209,6 +210,12 @@ public sealed class DataTableRow : Control
         {
             chevron.Glyph = table.IsDetailOpen(Key) ? Glyphs.ChevronUp : Glyphs.ChevronDown;
             chevron.Visibility = Record.HasDetail ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (keepFocused && detailContent is not null && !table.HoldsFocus(detailCard!))
+        {
+            // The detail is made again from the new data, unless a person is working in it.
+            ClearDetail();
         }
 
         UpdateDetail(table);

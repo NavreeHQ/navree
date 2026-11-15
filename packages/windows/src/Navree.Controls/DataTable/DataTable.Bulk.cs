@@ -148,12 +148,24 @@ public sealed partial class DataTable
         addedEarlier = 0;
     }
 
-    private bool FocusIsInside()
+    private bool FocusIsInside() => FocusIsInside(this);
+
+    /// <summary>Whether keyboard focus is on an element of the table or inside it.</summary>
+    /// <param name="element">The element.</param>
+    internal bool HoldsFocus(DependencyObject element) => FocusIsInside(element);
+
+    // Whether keyboard focus is on an element or on something inside it.
+    private bool FocusIsInside(DependencyObject inside)
     {
+        if (XamlRoot is null)
+        {
+            return false;
+        }
+
         DependencyObject? at = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
         while (at is not null)
         {
-            if (ReferenceEquals(at, this))
+            if (ReferenceEquals(at, inside))
             {
                 return true;
             }
@@ -173,11 +185,12 @@ public sealed partial class DataTable
             return;
         }
 
-        rowsLayout.PinnedIndex = index;
+        pins.Set(PinOwner.Assistive, index);
+        rowsLayout.Pinned = pins.Indices;
         rowsLayout.Reflow();
         _ = repeater.GetOrCreateElement(index);
         repeater.UpdateLayout();
-        ReleasePinSoon();
+        ReleasePinSoon(PinOwner.Assistive);
     }
 
     private void Announce(string words)

@@ -240,7 +240,7 @@ public sealed partial class DataTable
     /// <summary>A heading took focus.</summary>
     internal void HeaderGotFocus(DataTableHeaderCell cell, RoutedEventArgs e)
     {
-        activeRow = -1;
+        SetActiveRow(-1);
         activeColumn = Math.Max(cell.GridColumn, 0);
     }
 

@@ -22,7 +22,9 @@ public sealed partial class DataTable
     private int askedBeforeAt = -1;
     private bool heldLimitRaised;
     private bool detailGeometryQueued;
-    private DispatcherQueueTimer? pinTimer;
+    private DispatcherQueueTimer? anchorPinTimer;
+    private DispatcherQueueTimer? assistivePinTimer;
+    private bool holdingFirstRow;
 
     /// <summary>The height of a row.</summary>
     internal double RowHeight => rowHeight;
@@ -46,9 +48,12 @@ public sealed partial class DataTable
         }
 
         choice = new ChoiceState(new HashSet<string>(StringComparer.Ordinal), false);
-        activeRow = -1;
+        pins.Clear();
+        SetActiveRow(-1);
+        activeKey = null;
         activeColumn = 0;
         activeSet = false;
+        nameCache.Clear();
         openKeys.Clear();
         detailExtras.Clear();
         if (templateWired)
@@ -87,7 +92,7 @@ public sealed partial class DataTable
 
         if (e.Kind is DataTableChangeKind.Reset or DataTableChangeKind.Insert or DataTableChangeKind.Remove or DataTableChangeKind.Replace)
         {
-            rowNames = null;
+            nameCache.Clear();
         }
 
         switch (e.Kind)
@@ -104,11 +109,7 @@ public sealed partial class DataTable
                 RowsRemoved(e.Index, e.Count);
                 break;
             case DataTableChangeKind.Replace:
-                for (int i = 0; i < e.Count; i++)
-                {
-                    rows.Redraw(e.Index + i);
-                }
-
+                RowsReplaced(e.Index, e.Count);
                 break;
             case DataTableChangeKind.Columns:
                 RebuildColumns(remeasure: false);
@@ -174,21 +175,37 @@ public sealed partial class DataTable
             return;
         }
 
+        // Focus is put back on the active cell afterwards only when it was in the table.
+        bool hadFocus = FocusIsInside();
         if (activeSet)
         {
-            activeRow = Math.Min(activeRow, model.RowCount - 1);
+            // The active row is the same row by key when the new rows have it, else the first row.
+            int same = activeKey is { } key ? model.IndexOfKey(key) : -1;
+            SetActiveRow(ActiveRowRules.AfterReset(activeRow < 0, same, model.RowCount));
         }
         else
         {
             NormalizeActive();
         }
 
-        rowsLayout.PinnedIndex = activeRow;
         UpdateGeometry();
         rows.Reset(Handles(model, 0, model.RowCount));
         scroll?.ScrollTo(scroll.HorizontalOffset, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
         CheckCursors();
+        if (hadFocus)
+        {
+            FocusActiveSoon();
+        }
     }
+
+    // Puts focus back on the active cell once the rows have been placed.
+    private void FocusActiveSoon() => DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+    {
+        if (loaded && Model is not null)
+        {
+            TryActivate(focus: true, 0);
+        }
+    });
 
     // The place of the row at the top of the view, which is the one to keep when rows join above it.
     private int TopIndex()
@@ -209,28 +226,70 @@ public sealed partial class DataTable
         }
 
         int top = TopIndex();
-        bool above = index <= top && rows.Count > 0 && scroll is not null && scroll.VerticalOffset > 0;
-        if (above)
+        double offset = scroll?.VerticalOffset ?? 0;
+        int heldBefore = rows.Count;
+        bool keepFirst = scroll is not null && ActiveRowRules.KeepsFirstRowInView(index, heldBefore, offset);
+        bool above = index <= top && heldBefore > 0 && scroll is not null && offset > 0;
+        pins.RowsJoined(index, count);
+        if (above || keepFirst)
         {
             // The row the view is on is kept made wherever it ends up, so the scroll view can keep it where it was.
-            rowsLayout.PinnedIndex = top + count;
+            pins.Set(PinOwner.Anchor, top + count);
         }
 
-        if (activeRow >= index)
+        if (activeSet)
         {
-            activeRow += count;
+            SetActiveRow(ActiveRowRules.AfterInsert(activeRow, index, count));
+        }
+        else
+        {
+            rowsLayout.Pinned = pins.Indices;
         }
 
         UpdateGeometry();
         rows.InsertRows(index, Handles(model, index, count));
-        if (above)
+        if (above || keepFirst)
         {
-            ReleasePinSoon();
+            ReleasePinSoon(PinOwner.Anchor);
+        }
+
+        if (keepFirst)
+        {
+            KeepFirstRowInView(count);
         }
 
         askedAfterAt = askedBeforeAt = -1;
         NoteRowsAdded(count, earlier: index == 0 && rows.Count > count);
         CheckCursors();
+    }
+
+    // A view at the very top has nothing above it for the scroll view to anchor to: rows that joined the start are above the row that was
+    // first, and the view is moved down to that row, whose place is the arithmetic of the rows now held.
+    private void KeepFirstRowInView(int count)
+    {
+        if (scroll is not { } view)
+        {
+            return;
+        }
+
+        holdingFirstRow = true;
+        void Move()
+        {
+            double wanted = Anchoring.OffsetAfterChange(count, 0, rowsLayout.Geometry, rows.Count, view.ViewportHeight);
+            if (Math.Abs(view.VerticalOffset - wanted) > 0.5)
+            {
+                view.ScrollTo(view.HorizontalOffset, wanted, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
+            }
+        }
+
+        view.UpdateLayout();
+        Move();
+        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            Move();
+            holdingFirstRow = false;
+            CheckCursors();
+        });
     }
 
     private void RowsRemoved(int index, int count)
@@ -242,48 +301,85 @@ public sealed partial class DataTable
 
         int top = TopIndex();
         bool above = index + count <= top && scroll is not null && scroll.VerticalOffset > 0;
+        bool hadFocus = FocusIsInside();
+        pins.RowsLeft(index, count);
         if (above)
         {
-            rowsLayout.PinnedIndex = top - count;
+            pins.Set(PinOwner.Anchor, top - count);
         }
 
-        bool activeRemoved = activeSet && activeRow >= index && activeRow < index + count;
-        if (activeRow >= index + count)
+        if (activeSet)
         {
-            activeRow -= count;
+            (Cell? next, bool activeRemoved) = ActiveRowRules.AfterRemove(activeRow, index, count, Model?.RowCount ?? 0, activeColumn, !IsList);
+            SetActiveRow(next?.Row ?? -1);
+            if (activeRemoved)
+            {
+                Announce(DataTableStrings.Get("DataTable_RowRemoved"));
+                if (hadFocus)
+                {
+                    // Focus goes where the rule for a removed row says: the row now at the place, the one before it, or the heading.
+                    FocusActiveSoon();
+                }
+            }
         }
-        else if (activeRemoved)
+        else
         {
-            Cell? next = GridNavigation.FocusAfterRemoval(index, Model?.RowCount ?? 0, activeColumn, !IsList);
-            activeRow = next?.Row ?? -1;
-            Announce(DataTableStrings.Get("DataTable_RowRemoved"));
+            rowsLayout.Pinned = pins.Indices;
         }
 
         UpdateGeometry();
         rows.RemoveRange(index, count);
         if (above)
         {
-            ReleasePinSoon();
+            ReleasePinSoon(PinOwner.Anchor);
         }
 
         RemovedFromChoice();
     }
 
-    // Lets the pin go back to the active row once the rows have been placed.
-    private void ReleasePinSoon()
+    // Rows drawn again with new data: a row that is made is bound again where it stands, so a field a person is typing in and the
+    // focus stay; a row whose key changed is a new row to the repeater.
+    private void RowsReplaced(int index, int count)
     {
-        pinTimer ??= DispatcherQueue.CreateTimer();
-        pinTimer.Stop();
-        pinTimer.Interval = TimeSpan.FromMilliseconds(400);
-        pinTimer.IsRepeating = false;
-        pinTimer.Tick -= OnPinTimer;
-        pinTimer.Tick += OnPinTimer;
-        pinTimer.Start();
+        if (Model is not { } model)
+        {
+            return;
+        }
+
+        for (int i = index; i < index + count && i < model.RowCount; i++)
+        {
+            string key = model.GetRow(i).Key ?? ("\u0001" + i.ToString(Culture));
+            if (rows.PlaceOf(key) != i)
+            {
+                rows.Replace(i, new RowHandle(key));
+            }
+            else if (repeater?.TryGetElement(i) is DataTableRow made)
+            {
+                made.Refresh(keepFocused: true);
+            }
+        }
+
+        UpdateFooter();
+    }
+
+    // Lets an owner's pin go back to nothing once the rows have been placed.
+    private void ReleasePinSoon(PinOwner owner)
+    {
+        ref DispatcherQueueTimer? timer = ref (owner == PinOwner.Anchor ? ref anchorPinTimer : ref assistivePinTimer);
+        timer ??= DispatcherQueue.CreateTimer();
+        timer.Stop();
+        timer.Interval = TimeSpan.FromMilliseconds(400);
+        timer.IsRepeating = false;
+        timer.Tick -= OnPinTimer;
+        timer.Tick += OnPinTimer;
+        timer.Start();
     }
 
     private void OnPinTimer(DispatcherQueueTimer sender, object args)
     {
-        rowsLayout.PinnedIndex = activeRow;
+        PinOwner owner = ReferenceEquals(sender, anchorPinTimer) ? PinOwner.Anchor : PinOwner.Assistive;
+        pins.Release(owner);
+        rowsLayout.Pinned = pins.Indices;
         rowsLayout.Reflow();
     }
 
@@ -422,7 +518,7 @@ public sealed partial class DataTable
         }
 
         double viewport = scroll.ViewportHeight;
-        if (viewport <= 0 || model.RowCount == 0)
+        if (viewport <= 0 || model.RowCount == 0 || holdingFirstRow)
         {
             return;
         }
