@@ -46,6 +46,16 @@ object ListRules {
     fun gridLeast(least: Int?, parts: List<Navree.Node>): Int? =
         least ?: if (parts.size > 1 && parts.all { it is Navree.Section }) LANE_LEAST_DP else null
 
+    /** Whether a grid's parts are lanes: several sections side by side, each a group of its own. */
+    fun areLanes(parts: List<Navree.Node>): Boolean = parts.size > 1 && parts.all { it is Navree.Section }
+
+    /**
+     * Whether lanes are shown one at a time, the others a tab away: where the
+     * window holds a single column of them, they would stand one under another,
+     * and the second lane would start where the first one's cards end.
+     */
+    fun oneLaneAtATime(parts: List<Navree.Node>, columns: Int): Boolean = columns == 1 && areLanes(parts)
+
     /** A button, and the form of its own it sends. */
     data class TitleButton(val form: Navree.Form, val button: Navree.Button)
 

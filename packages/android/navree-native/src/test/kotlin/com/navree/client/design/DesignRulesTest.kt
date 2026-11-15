@@ -758,3 +758,29 @@ class ContentRulesTest {
         assertTrue(ContentRules.statusAsText(inRow = true))
     }
 }
+
+class TooltipRulesTest {
+    @Test
+    fun a_tooltip_keeps_a_margin_from_both_edges_of_the_window() {
+        assertEquals("room on both sides: where it was", 120, TooltipRules.inset(120, 320, 800, 48))
+        assertEquals("against the left edge", 48, TooltipRules.inset(0, 320, 800, 48))
+        assertEquals("against the right edge", 800 - 320 - 48, TooltipRules.inset(500, 320, 800, 48))
+        assertEquals("wider than the room: at the margin", 48, TooltipRules.inset(10, 790, 800, 48))
+    }
+}
+
+class LanesTest {
+    private val lanes = listOf<Navree.Node>(Navree.Section(title = "Backlog"), Navree.Section(title = "Ready"), Navree.Section(title = "Done"))
+
+    @Test
+    fun lanes_are_one_a_tab_where_the_window_holds_one_column_of_them() {
+        assertTrue(ListRules.oneLaneAtATime(lanes, columns = 1))
+        assertFalse("room for two side by side", ListRules.oneLaneAtATime(lanes, columns = 2))
+    }
+
+    @Test
+    fun a_grid_that_is_not_all_sections_is_not_lanes() {
+        assertFalse(ListRules.areLanes(lanes + Navree.Text(value = "Note")))
+        assertFalse("one section is no set of lanes", ListRules.areLanes(lanes.take(1)))
+    }
+}

@@ -45,6 +45,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -558,6 +559,10 @@ private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthD
         shown.size,
         controls = shown.any { it is Navree.Field },
     )
+    if (ListRules.oneLaneAtATime(shown, columns)) {
+        OneLane(node.id, shown.filterIsInstance<Navree.Section>(), place, modifier)
+        return
+    }
     val cell = ContentRules.cardWidthDp(widthDp, columns, gap)
     val stretch = ListRules.stretchesLastLine(shown)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(gap.dp)) {
@@ -574,6 +579,36 @@ private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthD
                 if (!stretch) repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
             }
         }
+    }
+}
+
+/**
+ * Lanes where the window holds one column: a row of tabs, one a lane with its
+ * count under its name, and the lane chosen below, as Material's secondary
+ * tabs switch between the parts of one screen. What is chosen is kept
+ * through a turn of the device.
+ */
+@Composable
+private fun OneLane(id: String?, lanes: List<Navree.Section>, place: Place, modifier: Modifier) {
+    var at by rememberSaveable(id) { mutableIntStateOf(0) }
+    val chosen = at.coerceIn(0, lanes.lastIndex)
+    Column(modifier.fillMaxWidth()) {
+        SecondaryScrollableTabRow(selectedTabIndex = chosen, edgePadding = 0.dp) {
+            lanes.forEachIndexed { index, lane ->
+                Tab(
+                    selected = index == chosen,
+                    onClick = { at = index },
+                    text = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(lane.title ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            lane.subtitle?.let { Text(it, style = MaterialTheme.typography.labelSmall, maxLines = 1) }
+                        }
+                    },
+                )
+            }
+        }
+        // The tab says the lane's name and count: the lane's own heading is not said again over its cards.
+        Box(Modifier.padding(top = 12.dp)) { NodeView(lanes[chosen].copy(title = null, subtitle = null), place) }
     }
 }
 
