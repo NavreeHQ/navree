@@ -83,7 +83,7 @@ public sealed class ModelsTests
     [TestMethod]
     public void A_word_a_closed_list_lacks_is_unknown_where_the_field_has_no_default()
     {
-        using JsonDocument document = Reading.Open("""{"t":"haptic","kind":"thump"}""");
+        using JsonDocument document = Reading.Open("""{"f":"haptic","kind":"thump"}""");
         Models.Call call = Models.ReadCall(document.RootElement);
         Assert.IsInstanceOfType<Models.Haptic>(call);
         Assert.AreEqual(Models.HapticKind.Unknown, ((Models.Haptic)call).Kind);
