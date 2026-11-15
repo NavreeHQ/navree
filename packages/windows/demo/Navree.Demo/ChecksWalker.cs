@@ -266,8 +266,16 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
         string? before = host.State.App?.User?.Name;
         bool ended = false;
         host.SessionEnded += _ => ended = true;
-        host.Send(Events.SignedOut);
-        await Task.Delay(3000);
+
+        // The person signs out as they would: with what the server put in their menu.
+        Models.Button? out1 = host.State.App?.User?.Menu.OfType<Models.Button>().FirstOrDefault(b => b.Label.Contains("Sign out", StringComparison.OrdinalIgnoreCase));
+        Check("the person's menu offers signing out", out1?.Action is not null, out1 is null ? "no such item in " + string.Join(", ", host.State.App?.User?.Menu.Select(n => n.GetType().Name) ?? []) : "found");
+        if (out1?.Action is not null)
+        {
+            host.Send(Events.Act(host.State.Nav.Front, out1.Action, null, null, null, null, out1.Ask, out1.Id));
+        }
+
+        await Task.Delay(4000);
         await SettleAsync();
         Check("signing out wipes the session", ended, "the wipe report " + (ended ? "came" : "did not come") + "; before: " + before + ", after: " + (host.State.App?.User?.Name ?? "nobody") + ", stage " + host.State.Nav.Stage + ", screens held " + host.State.Screens.Count);
     }
@@ -342,20 +350,16 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
         }
     }
 
+    // The whole screen as the protocol writes it, searched for the words: whatever part holds them.
     private static bool Said(Models.Screen tree, string phrase)
     {
-        foreach (Models.Node node in Tree.Nodes(tree))
+        using MemoryStream stream = new();
+        using (System.Text.Json.Utf8JsonWriter writer = new(stream))
         {
-            foreach (System.Reflection.PropertyInfo property in node.GetType().GetProperties())
-            {
-                if (property.PropertyType == typeof(string) && property.GetValue(node) is string text && text.Contains(phrase, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
+            Models.WriteScreen(writer, tree);
         }
 
-        return false;
+        return System.Text.Encoding.UTF8.GetString(stream.ToArray()).Contains(phrase, StringComparison.Ordinal);
     }
 
     // ---- the walk's own parts ----------------------------------------------------------------------------------
