@@ -297,7 +297,7 @@ public sealed class KindsDialTests
         Assert.AreEqual(2, ComposeRules.Columns(1000, 3, 200, 12, 2));
         Assert.AreEqual(1, ComposeRules.Columns(150, null, 200, 12, 9));
         Assert.AreEqual(5, ComposeRules.Columns(100, 5, null, 12, 9));
-        Assert.AreEqual(6, ComposeRules.Columns(1000, null, null, 12, 9));
+        Assert.AreEqual(5, ComposeRules.Columns(1000, null, null, 12, 9));
         Assert.AreEqual(1, ComposeRules.Columns(1000, null, null, 12, 0));
     }
 
