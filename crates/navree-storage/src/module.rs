@@ -22,6 +22,11 @@ use crate::{Disk, DiskConfig, DiskDriver, Storage, StorageError, StorageOptions,
 /// The purpose string temporary URL keys are derived for.
 const SIGNING_PURPOSE: &str = "navree-storage/temporary-url/v1";
 
+/// What the boot builds before `Storage`: it holds that every registration
+/// of a disk driver was checked. A provider of its own, so an app that
+/// replaces `Storage` still has its registrations checked.
+struct CheckedDrivers;
+
 /// The global storage module: provides and exports [`Storage`] (every
 /// configured disk) and [`Disk`] (the default disk), registers a `storage`
 /// readiness check (`dyn HealthCheck`, probing every disk) and the
@@ -89,8 +94,17 @@ fn register(m: &mut ModuleBuilder, options: Option<StorageOptions>) {
         None => m.config::<StorageOptions>(),
     };
     m.factory(
+        // Every registration of a disk driver is checked, whichever disks
+        // use one and whether or not `Storage` is replaced.
+        Factory::<CheckedDrivers>::new(|r: Resolver| async move {
+            check_registrations(&r.app(), &SLOT, None)?;
+            Ok(Arc::new(CheckedDrivers))
+        }),
+    )
+    .factory(
         Factory::<Storage>::new(|r: Resolver| async move {
             let options = r.get::<StorageOptions>().await?;
+            r.get::<CheckedDrivers>().await?;
             let key = signing_key(&r).await?;
             let registered = registered_drivers(&r, &options).await?;
             // Creating local roots touches the filesystem.
@@ -100,7 +114,10 @@ fn register(m: &mut ModuleBuilder, options: Option<StorageOptions>) {
             .await??;
             Ok(Arc::new(storage))
         })
-        .deps(vec![ProviderKey::of::<StorageOptions>()]),
+        .deps(vec![
+            ProviderKey::of::<StorageOptions>(),
+            ProviderKey::of::<CheckedDrivers>(),
+        ]),
     )
     .factory(
         Factory::<Disk>::new(|r: Resolver| async move {
@@ -145,17 +162,14 @@ async fn signing_key(r: &Resolver) -> Result<Vec<u8>, BoxError> {
     Ok(AppKey::generate().expose_bytes().to_vec())
 }
 
-/// Checks every registration of a disk driver, whichever disks use one,
-/// then builds the driver of each disk whose `driver` a module registers,
-/// by disk name: its settings are the disk's table the module runs with
-/// (from the configuration or from `for_root`), and a driver no module
-/// registers fails the boot naming `m.disk_driver`.
+/// Builds the driver of each disk whose `driver` a module registers, by
+/// disk name: its settings are the disk's table the module runs with (from
+/// the configuration or from `for_root`), and a driver no module registers
+/// fails the boot naming `m.disk_driver`.
 async fn registered_drivers(
     r: &Resolver,
     options: &StorageOptions,
 ) -> Result<BTreeMap<String, Arc<dyn DiskDriver>>, BoxError> {
-    let app = r.app();
-    check_registrations(&app, &SLOT, None)?;
     let mut registered = BTreeMap::new();
     for (disk, config) in &options.disks {
         let DiskConfig::Registered(table) = config else {

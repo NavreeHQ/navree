@@ -7,8 +7,7 @@ use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
-use navree_config::__private::{build_driver, check_registrations};
-use navree_config::ConfigSection;
+use navree_config::__private::build_driver;
 use navree_contracts::{Dispatcher, JobEnvelope, JobOptions};
 use navree_db::{Backend, Db, Uow};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle, Resolver, WeakAppContext};
@@ -115,8 +114,8 @@ impl Search {
     /// Builds the service from the factory of `Search` (`r`): the engine
     /// from `options` (a module's registered engine, built from its
     /// registration), and every model registered with
-    /// `SearchModule::for_feature`. Every registration of an engine is
-    /// checked first, whichever engine is selected.
+    /// `SearchModule::for_feature`. The module checked every registration
+    /// of an engine before.
     pub(crate) async fn build(r: &Resolver, options: SearchOptions) -> Result<Search, BoxError> {
         let app = r.app();
         let options = SearchOptions {
@@ -126,7 +125,6 @@ impl Search {
         options
             .check()
             .map_err(|message| format!("invalid search options: {message}"))?;
-        check_registrations(&app, &SLOT, SearchOptions::schema())?;
         let db = app.try_get::<Db>().await.map(|db| (*db).clone());
         let engine = match &options.engine {
             Engine::Registered(name) => {

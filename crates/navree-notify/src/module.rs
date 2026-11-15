@@ -23,7 +23,9 @@ use crate::controller::NotificationsController;
 use crate::devices::{DeviceRevoker, RegisteredApps};
 use crate::digest::DIGEST_TEMPLATES;
 use crate::notifier::Parts;
-use crate::registered::{CHANNEL_SLOT, SMS_SLOT, WHATSAPP_SLOT, registered_drivers};
+use crate::registered::{
+    CHANNEL_SLOT, CheckedDrivers, SMS_SLOT, WHATSAPP_SLOT, registered_drivers,
+};
 use crate::{
     Channel, DeliveryLog, ModuleBuilderNotifyExt, Notification, NotificationCatalog,
     NotificationPreferences, Notifier, NotifyOptions, OptOuts, PushDevices, PushOptions,
@@ -248,16 +250,24 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
         )
         .exports::<NotificationPreferences>()
         .factory(
-            Factory::<Notifier>::new(|r| async move {
-                let options = r.get::<NotifyOptions>().await?;
-                let push = r.get::<PushOptions>().await?;
-                let app = r.app().downgrade();
-                // Every registration of a driver is checked, whichever is
-                // selected; a selected one is built with its settings.
+            // Every registration of a driver and a channel is checked,
+            // whichever is selected and whether or not the `Notifier` is
+            // replaced.
+            Factory::<CheckedDrivers>::new(|r| async move {
                 let ctx = r.app();
                 check_registrations(&ctx, &SMS_SLOT, NotifyOptions::schema())?;
                 check_registrations(&ctx, &WHATSAPP_SLOT, NotifyOptions::schema())?;
                 check_registrations(&ctx, &CHANNEL_SLOT, NotifyOptions::schema())?;
+                Ok(Arc::new(CheckedDrivers))
+            }),
+        )
+        .factory(
+            Factory::<Notifier>::new(|r| async move {
+                let options = r.get::<NotifyOptions>().await?;
+                let push = r.get::<PushOptions>().await?;
+                r.get::<CheckedDrivers>().await?;
+                let app = r.app().downgrade();
+                // A selected driver is built with its settings.
                 let registered = registered_drivers(&r, &options).await?;
                 let drivers = ChannelDrivers::from_options(&options, &push, &app)
                     .map_err(|message| format!("notify: {message}"))?
@@ -285,6 +295,7 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
                 ProviderKey::of::<PushOptions>(),
                 ProviderKey::of::<PushDevices>(),
                 ProviderKey::of::<NotificationPreferences>(),
+                ProviderKey::of::<CheckedDrivers>(),
             ]),
         )
         .exports::<Notifier>()

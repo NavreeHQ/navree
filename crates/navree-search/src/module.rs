@@ -3,15 +3,15 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use navree_config::__private::contribute_slot;
-use navree_config::ModuleBuilderConfigExt;
+use navree_config::__private::{check_registrations, contribute_slot};
+use navree_config::{ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_db::ModuleBuilderDbExt;
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::commands::commands;
-use crate::drivers::SLOT;
+use crate::drivers::{CheckedEngines, SLOT};
 use crate::error::map_search_error;
 use crate::index::IndexRegistration;
 use crate::migration::migrations;
@@ -104,14 +104,26 @@ fn register(m: &mut ModuleBuilder, options: Option<SearchOptions>) {
     }
     m.exports::<SearchOptions>()
         .factory(
+            // Every registration of an engine is checked, whichever is
+            // selected and whether or not `Search` is replaced.
+            Factory::<CheckedEngines>::new(|r: Resolver| async move {
+                check_registrations(&r.app(), &SLOT, SearchOptions::schema())?;
+                Ok(Arc::new(CheckedEngines))
+            }),
+        )
+        .factory(
             Factory::<Search>::new(|r: Resolver| async move {
                 let options = r.get::<SearchOptions>().await?;
+                r.get::<CheckedEngines>().await?;
                 let search = Search::build(&r, (*options).clone())
                     .await
                     .map_err(|error| format!("cannot start search: {error}"))?;
                 Ok(Arc::new(search))
             })
-            .deps(vec![ProviderKey::of::<SearchOptions>()]),
+            .deps(vec![
+                ProviderKey::of::<SearchOptions>(),
+                ProviderKey::of::<CheckedEngines>(),
+            ]),
         )
         .exports::<Search>()
         .lifecycle::<Search>()

@@ -18,6 +18,11 @@ pub(crate) const SLOT: DriverSlot = DriverSlot::new(
     "backplane",
 );
 
+/// What the boot builds before `Realtime`: it holds that every registration
+/// of a backplane was checked. A provider of its own, so an app that
+/// replaces `Realtime` still has its registrations checked.
+pub(crate) struct CheckedBackplanes;
+
 /// Registers backplanes on a [`ModuleBuilder`]: `use
 /// navree::plugin::prelude::*;` (or this trait) brings the method.
 ///

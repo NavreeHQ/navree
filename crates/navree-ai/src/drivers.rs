@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use navree_config::__private::{build_driver, check_registrations, register_driver};
 use navree_config::{DriverContext, DriverName, DriverSlot};
-use navree_kernel::{BoxError, ModuleBuilder, Resolver};
+use navree_kernel::{AppContext, BoxError, ModuleBuilder, Resolver};
 use serde_json::{Map, Value as Json};
 
 use crate::options::DRIVERS;
@@ -32,6 +32,11 @@ pub(crate) const SLOT: DriverSlot = DriverSlot::new(
     "AI provider driver",
 )
 .defaults_to_table_name();
+
+/// What the boot builds before `Ai`: it holds that every registration of a
+/// provider driver was checked. A provider of its own, so an app that
+/// replaces `Ai` still has its registrations checked.
+pub(crate) struct CheckedDrivers;
 
 /// Registers AI provider drivers on a [`ModuleBuilder`]: `use
 /// navree::plugin::prelude::*;` (or this trait) brings the method.
@@ -136,19 +141,23 @@ impl ModuleBuilderAiProviderExt for ModuleBuilder {
     }
 }
 
-/// Checks every registration of a provider driver, then builds the driver
-/// of each provider table of `options` whose driver is not built in, from
-/// the registration of that name, keyed by the table's name. A table
-/// naming a driver no module registers is the boot error naming its key.
-/// With `in_code` (options given to `AiModule::for_root`), each driver
-/// reads the table it was given; otherwise the table as the configuration
-/// writes it.
+/// Checks every registration of a provider driver, whichever tables select
+/// one: what [`CheckedDrivers`]'s factory runs.
+pub(crate) fn check_drivers(app: &AppContext) -> Result<(), BoxError> {
+    check_registrations(app, &SLOT, None)
+}
+
+/// Builds the driver of each provider table of `options` whose driver is
+/// not built in, from the registration of that name, keyed by the table's
+/// name. A table naming a driver no module registers is the boot error
+/// naming its key. With `in_code` (options given to `AiModule::for_root`),
+/// each driver reads the table it was given; otherwise the table as the
+/// configuration writes it.
 pub(crate) async fn registered_drivers(
     r: &Resolver,
     options: &AiOptions,
     in_code: bool,
 ) -> Result<BTreeMap<String, Arc<dyn Driver>>, BoxError> {
-    check_registrations(&r.app(), &SLOT, None)?;
     let mut drivers: BTreeMap<String, Arc<dyn Driver>> = BTreeMap::new();
     for (table, config) in &options.providers {
         let driver = config.driver_for(table);

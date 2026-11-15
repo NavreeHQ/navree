@@ -36,6 +36,12 @@ pub(crate) const CHANNEL_SLOT: DriverSlot = DriverSlot::new(
     "notification channel",
 );
 
+/// What the boot builds before the `Notifier`: it holds that every
+/// registration of an SMS driver, a WhatsApp driver and a channel was
+/// checked. A provider of its own, so an app that replaces the `Notifier`
+/// still has its registrations checked.
+pub(crate) struct CheckedDrivers;
+
 /// A channel a module adds, as the notifier sends through it.
 pub(crate) trait ErasedChannel: Send + Sync {
     /// [`ChannelDriver::send`].

@@ -26,6 +26,11 @@ pub(crate) const SLOT: DriverSlot = DriverSlot::new(
     "search engine",
 );
 
+/// What the boot builds before `Search`: it holds that every registration
+/// of a search engine was checked. A provider of its own, so an app that
+/// replaces `Search` still has its registrations checked.
+pub(crate) struct CheckedEngines;
+
 /// Registers search engines on a [`ModuleBuilder`]: `use
 /// navree::plugin::prelude::*;` (or this trait) brings the method.
 ///
