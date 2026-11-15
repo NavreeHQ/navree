@@ -223,7 +223,15 @@ internal class LaneState {
         val ownKey = LaneRules.key(list.id, id)
         val heldTop = info.visibleItemsInfo.firstOrNull { it.key == ownKey }?.offset
         val to = LaneRules.landing(from, startOffset + offsetY, heldSize, slots, info.viewportStartOffset, info.viewportEndOffset, heldTop)
-        if (to != from) order = LaneRules.moved(shown.ids, from, to)
+        if (to != from) {
+            // A lazy list that has its first item moved follows the item: the row in hand, at the top of the window, would take the list along
+            // with it as it passes each row, and pass the next, and the next. The window is kept where it is.
+            val wasFirst = info.visibleItemsInfo.firstOrNull()?.key == ownKey
+            val firstIndex = state.firstVisibleItemIndex
+            val firstOffset = state.firstVisibleItemScrollOffset
+            order = LaneRules.moved(shown.ids, from, to)
+            if (wasFirst) state.requestScrollToItem(firstIndex, firstOffset)
+        }
         note("follow from=$from to=$to heldTop=$heldTop slots=${slots.size}", state, list.id)
     }
 
