@@ -160,3 +160,35 @@ async fn console_errors_and_uncaught_exceptions_fail_the_check() {
         .await
         .unwrap_err();
 }
+
+#[tokio::test]
+async fn assert_no_policy_violations_fails_on_a_blocked_image() {
+    let (browser, site) = browser_or_skip!("assert_no_policy_violations_fails_on_a_blocked_image");
+    // The same policy, the same page, without the picture the policy refuses.
+    let clean = browser.visit(site.url("/policy-clean")).await.unwrap();
+    clean.assert_see("No map tile").await.unwrap();
+    clean.assert_no_policy_violations().await.unwrap();
+
+    let blocked = browser.visit(site.url("/policy-image")).await.unwrap();
+    blocked.assert_see("Map tile").await.unwrap();
+    let started = Instant::now();
+    let error = blocked.assert_no_policy_violations().await.unwrap_err();
+    assert!(
+        started.elapsed() < Duration::from_secs(4),
+        "it does not wait"
+    );
+    let message = error.to_string();
+    assert!(
+        message.starts_with("assert_no_policy_violations() failed: "),
+        "{message}"
+    );
+    assert!(
+        message.contains("content security policy violation"),
+        "{message}"
+    );
+    assert!(message.contains("img-src"), "{message}");
+    assert!(
+        message.contains("https://tile.openstreetmap.org/0/0/0.png"),
+        "{message}"
+    );
+}

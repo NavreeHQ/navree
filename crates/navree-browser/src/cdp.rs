@@ -323,6 +323,10 @@ pub(crate) struct PageLog {
     pub(crate) lines: Vec<String>,
     /// `console.error` calls and uncaught exceptions.
     pub(crate) errors: Vec<String>,
+    /// The browser's own text for each content security policy violation it
+    /// reported (a `Log.entryAdded` of source `security` and level `error`),
+    /// in order. They are not in `errors`.
+    pub(crate) violations: Vec<String>,
     pub(crate) requests: Vec<Request>,
     /// The main frame's URL.
     pub(crate) url: String,
@@ -379,14 +383,15 @@ impl PageLog {
             }
             "Log.entryAdded" => {
                 let entry = &p["entry"];
+                let source = entry["source"].as_str().unwrap_or("log");
+                let level = entry["level"].as_str().unwrap_or("info");
+                let text = entry["text"].as_str().unwrap_or_default();
                 // Failed requests are logged from the Network events.
-                if entry["source"] != "network" {
-                    self.line(format!(
-                        "[{} {}] {}",
-                        entry["source"].as_str().unwrap_or("log"),
-                        entry["level"].as_str().unwrap_or("info"),
-                        entry["text"].as_str().unwrap_or_default()
-                    ));
+                if source != "network" {
+                    self.line(format!("[{source} {level}] {text}"));
+                }
+                if source == "security" && level == "error" {
+                    self.violations.push(text.to_owned());
                 }
             }
             "Network.requestWillBeSent" => {
@@ -549,6 +554,42 @@ mod tests {
                 "console.error: Error: boom",
                 "uncaught TypeError: x is undefined"
             ]
+        );
+    }
+
+    #[test]
+    fn security_entries_are_counted_as_policy_violations() {
+        let blocked = "Refused to load the image 'https://tile.openstreetmap.org/0/0/0.png' because it violates the following Content Security Policy directive: \"img-src 'self' data:\".";
+        let mut log = PageLog::default();
+        log.event(
+            "Log.entryAdded",
+            &json!({ "entry": { "source": "security", "level": "error", "text": blocked } }),
+        );
+        // Only an error of source `security` is a violation.
+        log.event(
+            "Log.entryAdded",
+            &json!({ "entry": { "source": "security", "level": "warning", "text": "a warning" } }),
+        );
+        log.event(
+            "Log.entryAdded",
+            &json!({ "entry": { "source": "javascript", "level": "error", "text": "a script error" } }),
+        );
+        log.event(
+            "Log.entryAdded",
+            &json!({ "entry": { "source": "network", "level": "error", "text": "Failed to load resource" } }),
+        );
+        assert_eq!(log.violations, [blocked]);
+        assert_eq!(
+            log.lines,
+            [
+                format!("[security error] {blocked}"),
+                "[security warning] a warning".to_owned(),
+                "[javascript error] a script error".to_owned(),
+            ]
+        );
+        assert!(
+            log.errors.is_empty(),
+            "a policy violation is not a console error"
         );
     }
 
