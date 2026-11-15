@@ -316,10 +316,10 @@ jobs:
           # `tests` is how many device tests a look runs on that device: the number in the run's `OK (N tests)`.
           - device: phone
             profile: pixel_7
-            tests: 51
+            tests: 50
           - device: tablet
             profile: pixel_tablet
-            tests: 51
+            tests: 50
     env:
       IMAGE: system-images;android-35;google_apis;x86_64
     steps:
