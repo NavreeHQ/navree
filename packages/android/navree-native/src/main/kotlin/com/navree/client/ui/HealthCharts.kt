@@ -19,10 +19,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -100,7 +106,24 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
         if (!spark && unit != null && !node.horizontal) Text(unit, style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
         val count = node.labels.size.coerceAtLeast(node.series.maxOfOrNull { it.values.size } ?: 0)
         val height = if (spark) 40.dp else if (node.horizontal) (28f * count.coerceAtLeast(1) * scale.coerceIn(1f, 1.5f)).dp else (184f * scale.coerceIn(1f, 1.4f)).dp
-        Canvas(Modifier.fillMaxWidth().height(height).clearAndSetSemantics { contentDescription = said }) {
+        // The mark a finger is on, and where the plot stood when it was last drawn.
+        var touched by remember(node) { mutableStateOf<Int?>(null) }
+        val geometry = remember { floatArrayOf(0f, 0f) }
+        val barKind = node.kind == Navree.ChartKind.BAR || node.kind == Navree.ChartKind.FUNNEL
+        val reads = Modifier.pointerInput(count, rtl, barKind) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                touched = AxisRules.touchIndex(down.position.x, geometry[0], geometry[1], count, barKind, rtl)
+                do {
+                    val event = awaitPointerEvent()
+                    // A drag that scrolls the page is the page's, not the chart's.
+                    if (event.changes.any { it.isConsumed }) break
+                    event.changes.firstOrNull()?.let { touched = AxisRules.touchIndex(it.position.x, geometry[0], geometry[1], count, barKind, rtl) }
+                } while (event.changes.any { it.pressed })
+                touched = null
+            }
+        }
+        Canvas(Modifier.fillMaxWidth().height(height).then(if (spark || node.horizontal) Modifier else reads).clearAndSetSemantics { contentDescription = said }) {
             if (count == 0) return@Canvas
             // Room for the value axis' numbers or the levels' names at the start, and the labels under.
             val axisWords = if (spark) emptyList() else if (node.levels.isNotEmpty()) node.levels else listOf(amount(bounds.high), amount(bounds.low))
@@ -108,6 +131,8 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
             val gutter = if (spark || node.horizontal || AxisRules.namesInside(node)) 0f else (axisWords.maxOfOrNull { measurer.measure(it, small).size.width } ?: 0) + 8.dp.toPx()
             val labelsRoom = if (spark || node.horizontal) 0f else measurer.measure("0", small).size.height + 6.dp.toPx()
             val plot = Rect(if (rtl) 0f else gutter, 4.dp.toPx(), if (rtl) size.width - gutter else size.width, size.height - labelsRoom)
+            geometry[0] = plot.left
+            geometry[1] = plot.width
             fun x(at: Float): Float = if (rtl) plot.right - at * plot.width else plot.left + at * plot.width
             fun y(value: Double): Float = plot.bottom - bounds.at(value).coerceIn(-0.05f, 1.05f) * plot.height
             if (node.horizontal) {
@@ -209,6 +234,28 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
                     val centre = if (bar) x((at + 0.5f) / count) else x(if (count > 1) at.toFloat() / (count - 1) else 0.5f)
                     val left = (centre - text.size.width / 2f).coerceIn(plot.left - (if (rtl) 0f else gutter), size.width - text.size.width)
                     drawText(text, topLeft = Offset(left, plot.bottom + 6.dp.toPx()))
+                }
+                // What a finger is on: a rule down the mark, and its label and values in a small card.
+                touched?.takeIf { it < count }?.let { at ->
+                    val centre = if (bar) x((at + 0.5f) / count) else x(if (count > 1) at.toFloat() / (count - 1) else 0.5f)
+                    drawLine(scheme.outline, Offset(centre, plot.top), Offset(centre, plot.bottom), strokeWidth = 1.dp.toPx())
+                    val lines = buildList {
+                        node.labels.getOrNull(at)?.let { add(it) }
+                        for (series in node.series) {
+                            val value = series.shown.getOrNull(at) ?: series.values.getOrNull(at)?.let(::amount) ?: "-"
+                            add(if (node.series.size > 1) series.label + " " + value else value)
+                        }
+                    }
+                    val words = lines.map { measurer.measure(it, small.copy(color = scheme.inverseOnSurface)) }
+                    val width = (words.maxOfOrNull { it.size.width } ?: 0) + 16.dp.toPx()
+                    val tall = words.sumOf { it.size.height } + 12.dp.toPx()
+                    val left = (centre - width / 2f).coerceIn(0f, (size.width - width).coerceAtLeast(0f))
+                    drawRoundRect(scheme.inverseSurface, Offset(left, plot.top), Size(width, tall), CornerRadius(6.dp.toPx()))
+                    var top = plot.top + 6.dp.toPx()
+                    for (word in words) {
+                        drawText(word, topLeft = Offset(left + 8.dp.toPx(), top))
+                        top += word.size.height
+                    }
                 }
             }
         }

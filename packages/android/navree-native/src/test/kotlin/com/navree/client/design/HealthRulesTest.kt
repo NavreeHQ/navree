@@ -218,6 +218,21 @@ class AxisRulesTest {
     }
 }
 
+class ChartTouchTest {
+    @Test
+    fun a_touch_is_over_the_bar_it_falls_in_and_the_nearest_point_of_a_line() {
+        // A plot 100 wide from 20: seven bars, each 14.28 wide.
+        assertEquals(0, AxisRules.touchIndex(25f, 20f, 100f, 7, bars = true, rtl = false))
+        assertEquals(6, AxisRules.touchIndex(118f, 20f, 100f, 7, bars = true, rtl = false))
+        assertEquals(3, AxisRules.touchIndex(70f, 20f, 100f, 7, bars = true, rtl = false))
+        // Five points, 25 apart: x = 70 is between the second and third, nearer the third.
+        assertEquals(2, AxisRules.touchIndex(70f, 20f, 100f, 5, bars = false, rtl = false))
+        assertEquals(0, AxisRules.touchIndex(118f, 20f, 100f, 5, bars = false, rtl = true))
+        assertNull("outside the plot", AxisRules.touchIndex(5f, 20f, 100f, 7, bars = true, rtl = false))
+        assertNull("no marks", AxisRules.touchIndex(50f, 20f, 100f, 0, bars = true, rtl = false))
+    }
+}
+
 class PagerRulesTest {
     private fun corpus(name: String): Navree.Screen = Fixtures.screen(name)
 

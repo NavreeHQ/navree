@@ -351,6 +351,18 @@ object MatrixRules {
 
 /** The bounds of a chart's axes. */
 object AxisRules {
+    /**
+     * The mark of a chart a touch at `x` is over, or null outside the plot:
+     * the bar whose width it falls in, or the nearest point of a line. Where
+     * the line runs right to left the first mark is at the right.
+     */
+    fun touchIndex(x: Float, plotLeft: Float, plotWidth: Float, count: Int, bars: Boolean, rtl: Boolean): Int? {
+        if (count <= 0 || plotWidth <= 0f) return null
+        val along = ((if (rtl) plotLeft + plotWidth - x else x - plotLeft) / plotWidth)
+        if (along < -0.02f || along > 1.02f) return null
+        val clamped = along.coerceIn(0f, 1f)
+        return if (bars) (clamped * count).toInt().coerceAtMost(count - 1) else if (count == 1) 0 else Math.round(clamped * (count - 1))
+    }
     data class Bounds(val low: Double, val high: Double) {
         val span: Double get() = (high - low).takeIf { it > 0 } ?: 1.0
 
