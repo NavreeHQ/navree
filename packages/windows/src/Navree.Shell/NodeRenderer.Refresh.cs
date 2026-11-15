@@ -157,6 +157,7 @@ internal sealed partial class NodeRenderer
             return old;
         }
 
+        PageReports.Note("drawn again: " + now.GetType().Name + " " + Tree.IdOf(now) + (old.Update is null ? " (no way to be brought up to date)" : " (could not be brought up to date)"));
         return Replace(old, now);
     }
 
@@ -175,6 +176,7 @@ internal sealed partial class NodeRenderer
         catch (Exception problem) when (problem is not OutOfMemoryException)
         {
             System.Diagnostics.Debug.WriteLine("a part could not be brought up to date: " + problem.Message);
+            PageReports.Note("an update threw: " + problem.GetType().Name + ": " + problem.Message);
             return false;
         }
     }

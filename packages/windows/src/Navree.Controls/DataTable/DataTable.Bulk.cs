@@ -150,6 +150,10 @@ public sealed partial class DataTable
 
     private bool FocusIsInside() => FocusIsInside(this);
 
+    // Whether the focus is on the table's own rows or header, not on what the host put above them (a search box a person is typing in): the rows
+    // taking the focus back after they change is for a person who was on them.
+    private bool FocusIsInRows() => FocusIsInside() && !(Toolbar is { } bar && FocusIsInside(bar));
+
     /// <summary>Whether keyboard focus is on an element of the table or inside it.</summary>
     /// <param name="element">The element.</param>
     internal bool HoldsFocus(DependencyObject element) => FocusIsInside(element);

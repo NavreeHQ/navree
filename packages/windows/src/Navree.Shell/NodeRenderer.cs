@@ -1010,7 +1010,8 @@ internal sealed partial class NodeRenderer(RenderContext context)
                 return false;
             }
 
-            static Models.Region Bare(Models.Region node) => node with { Children = [] };
+            // The address a region fetches itself from moves with its query (a search, a sort); nothing is drawn from it.
+            static Models.Region Bare(Models.Region node) => node with { Children = [], Src = string.Empty };
             if (!PageRules.Same(Bare(previous), Bare(next)) || !run.Update(this, me, next.Children))
             {
                 return false;

@@ -258,11 +258,13 @@ internal sealed class Group
         Pairing pairing = PageRules.Pair(old, now);
         if (pairing.Refused)
         {
+            PageReports.Note("a run is drawn again: two children have one id");
             return false;
         }
 
         if (!Resizable && (pairing.Gone.Count > 0 || now.Count != old.Count || pairing.Old.Any(at => at < 0) || pairing.Moved.Any(moved => moved)))
         {
+            PageReports.Note("a run that cannot grow is drawn again: " + old.Count + " children, now " + now.Count);
             return false;
         }
 
@@ -421,6 +423,32 @@ public static class PageReports
     /// <summary>The count of nodes that the table's rows drew when they came into view, since the app started.</summary>
     public static int CellsDrawn { get; internal set; }
 
+    private static readonly List<string> Said = [];
+
+    /// <summary>Why parts were drawn again in their place, the latest two hundred, for a check to read.</summary>
+    public static IReadOnlyList<string> Notes
+    {
+        get
+        {
+            lock (Held)
+            {
+                return [.. Said];
+            }
+        }
+    }
+
+    internal static void Note(string what)
+    {
+        lock (Held)
+        {
+            Said.Add(what);
+            if (Said.Count > 200)
+            {
+                Said.RemoveAt(0);
+            }
+        }
+    }
+
     /// <summary>How many reports there have been in all, so a check can say which came after a moment.</summary>
     public static int Total { get; private set; }
 
@@ -443,7 +471,7 @@ public static class PageReports
         lock (Held)
         {
             Total++;
-            if (report.Kind == "whole" && !Firsts.ContainsKey(report.Screen))
+            if (report.Kind == "whole" && report.Rendered > 0 && !Firsts.ContainsKey(report.Screen))
             {
                 Firsts[report.Screen] = report;
             }

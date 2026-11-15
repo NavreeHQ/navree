@@ -178,11 +178,13 @@ internal sealed partial class NodeRenderer
         {
             if (now is not Models.Table next || me.Node is not Models.Table previous || !TableStands(previous, next))
             {
+                PageReports.Note("a table does not stand: its caption, columns, empty words or choosing changed");
                 return false;
             }
 
             if (!PageRules.SameButFieldValues(QueryNode(previous), QueryNode(next)) && !UpdateToolbar(toolbarRecords, next))
             {
+                PageReports.Note("a table's bar of fields changed beyond what the fields hold");
                 return false;
             }
 

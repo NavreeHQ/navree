@@ -223,6 +223,11 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
             Say("an answer: " + pass.Kind + ", drew " + pass.Rendered + " parts" + (pass.Kinds.Length > 0 ? " (" + pass.Kinds + ")" : string.Empty) + ", " + pass.Stood + " stood, " + pass.Updated + " brought up to date, " + pass.Replaced + " drawn again, " + pass.Lazy + " nodes drawn by the table's rows meanwhile");
         }
 
+        foreach (string note in PageReports.Notes.TakeLast(12))
+        {
+            Say("why a part was drawn again: " + note);
+        }
+
         int drawn = passes.Sum(pass => pass.Rendered);
         int whole = passes.Count(pass => pass.Kind == "whole");
         Say("the page's first drawing drew " + (first?.Rendered.ToString(CultureInfo.InvariantCulture) ?? "?") + " parts (" + first?.Kinds + ")");

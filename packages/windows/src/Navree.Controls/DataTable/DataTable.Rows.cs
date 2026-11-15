@@ -227,7 +227,7 @@ public sealed partial class DataTable
         }
 
         // Focus is put back on the active cell afterwards only when it was in the table.
-        bool hadFocus = FocusIsInside();
+        bool hadFocus = FocusIsInRows();
         if (activeSet)
         {
             // The active row is the same row by key when the new rows have it, else the first row.
@@ -382,7 +382,7 @@ public sealed partial class DataTable
 
         int top = TopIndex();
         bool above = index + count <= top && scroll is not null && scroll.VerticalOffset > 0;
-        bool hadFocus = FocusIsInside();
+        bool hadFocus = FocusIsInRows();
         pins.RowsLeft(index, count);
         if (above)
         {
