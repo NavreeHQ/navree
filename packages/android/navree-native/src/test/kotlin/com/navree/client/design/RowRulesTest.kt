@@ -90,14 +90,6 @@ class ReorderRulesTest {
     }
 
     @Test
-    fun half_a_row_dragged_counts_as_a_place() {
-        assertEquals(0, ReorderRules.steps(20f, 100))
-        assertEquals(1, ReorderRules.steps(60f, 100))
-        assertEquals(-2, ReorderRules.steps(-180f, 100))
-        assertEquals(0, ReorderRules.steps(500f, 0))
-    }
-
-    @Test
     fun a_moved_row_names_the_row_it_then_stands_before() {
         val ids = listOf("a", "b", "c", "d")
         assertEquals(ReorderRules.Landing(2, "d"), ReorderRules.landing(ids, 1, 1))

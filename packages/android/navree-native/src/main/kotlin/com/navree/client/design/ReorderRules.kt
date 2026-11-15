@@ -1,7 +1,6 @@
 package com.navree.client.design
 
 import com.navree.protocol.Navree
-import kotlin.math.roundToInt
 
 /**
  * Rows the person puts in another order, or moves to another list, as
@@ -38,9 +37,6 @@ object ReorderRules {
         }
         else -> node
     }
-
-    /** How many rows a drag of `offsetPx` crossed, for rows `rowPx` tall: half a row counts as one. */
-    fun steps(offsetPx: Float, rowPx: Int): Int = if (rowPx <= 0) 0 else (offsetPx / rowPx).roundToInt()
 
     /**
      * Where the row at `from` lands when moved `steps` places in a list whose

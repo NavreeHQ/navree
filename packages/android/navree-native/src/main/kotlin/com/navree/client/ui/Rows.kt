@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.sizeIn
@@ -23,11 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -44,8 +40,6 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,21 +47,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.CollectionInfo
-import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.collectionInfo
-import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
@@ -81,7 +66,6 @@ import com.navree.client.R
 import com.navree.client.core.Events
 import com.navree.client.design.ContentRules
 import com.navree.client.design.ListRules
-import com.navree.client.design.ReorderRules
 import com.navree.client.design.ScreenRules
 import com.navree.client.design.SelectionRules
 import com.navree.client.design.childNodes
@@ -281,137 +265,6 @@ internal fun RowView(
 
     Grouped(group) {
         if (swipe != null) Swipeable(swipe, place, item) else item()
-    }
-}
-
-/**
- * A list whose rows the person puts in order or moves to another list. A row
- * is dragged by its handle: it lifts and follows the finger, and where it is
- * let go is told to the core as a move; the order then drawn is the one the
- * core's next screen holds. The handle's menu, and TalkBack's actions, move a
- * row up, down, or to another list of the same group.
- */
-@Composable
-internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = Modifier) {
-    val ui = LocalUi.current
-    val listId = node.id
-    val ids = node.children.filterIsInstance<Navree.Row>().mapNotNull { it.id }
-    val targets = remember(place.screen.screen, node) { ReorderRules.targets(place.screen.screen?.body, node) }
-    var dragging by remember { mutableStateOf<String?>(null) }
-    var offset by remember { mutableFloatStateOf(0f) }
-    var rowPx by remember { mutableIntStateOf(1) }
-    // A row and the space after it: what one place of a drag measures.
-    val spacing = with(LocalDensity.current) { 8.dp.roundToPx() }
-    val upWords = stringResource(R.string.navree_move_up)
-    val downWords = stringResource(R.string.navree_move_down)
-    val toWords = targets.map { (_, name) -> stringResource(R.string.navree_move_to, name) }
-
-    // Where each card stands, asked once per answer and not once per card (a lane of thousands would search its ids for each).
-    val places = remember(ids) { ids.withIndex().associate { it.value to it.index } }
-
-    fun move(item: String, to: Navree.List, before: String?) {
-        val from = listId ?: return
-        val target = to.id ?: return
-        ui.send(Events.move(place.id, item, from, target, before))
-    }
-
-    fun step(item: String, steps: Int) {
-        val landing = ReorderRules.landing(ids, places[item] ?: -1, steps) ?: return
-        move(item, node, landing.before)
-    }
-
-    // Each card is one item of the lane, which is one group of them.
-    Column(
-        modifier.semantics { collectionInfo = CollectionInfo(rowCount = ids.size, columnCount = 1) },
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        for (child in node.children) {
-            if (child !is Navree.Row || !ReorderRules.draggable(node, child)) {
-                if (child is Navree.Row) RowView(child, place, Group.None) else NodeView(child, place)
-                continue
-            }
-            val id = child.id ?: continue
-            val index = places[id] ?: -1
-            val up = index > 0
-            val down = index in 0 until ids.lastIndex
-            val moves = buildList {
-                if (up) add(CustomAccessibilityAction(upWords) { step(id, -1); true })
-                if (down) add(CustomAccessibilityAction(downWords) { step(id, 1); true })
-                targets.forEachIndexed { at, (list, _) -> add(CustomAccessibilityAction(toWords[at]) { move(id, list, null); true }) }
-            }
-            val held = dragging == id
-            val handleName = stringResource(R.string.navree_move_card, child.title)
-            Box(
-                Modifier
-                    .zIndex(if (held) 1f else 0f)
-                    .onSizeChanged { rowPx = it.height + spacing }
-                    .graphicsLayer {
-                        translationY = if (held) offset else 0f
-                    }
-                    .semantics { collectionItemInfo = CollectionItemInfo(index, 1, 0, 1) },
-            ) {
-                // The card is the row container: a tonal step above the surface, lifted while it is dragged.
-                Card(
-                    Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = if (held) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow),
-                    elevation = CardDefaults.cardElevation(defaultElevation = if (held) 6.dp else 0.dp),
-                ) {
-                    RowView(
-                        // The form that moves a card by its fields is for a page with no handle: here the handle is the one way.
-                        ReorderRules.withoutMoveForm(node, child),
-                        place,
-                        Group.None,
-                        handle = {
-                            var open by remember { mutableStateOf(false) }
-                            Box {
-                                Icon(
-                                    Glyphs.DragHandle,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .pointerInput(id, ids) {
-                                            detectDragGestures(
-                                                onDragStart = {
-                                                    dragging = id
-                                                    offset = 0f
-                                                },
-                                                onDrag = { change, amount ->
-                                                    change.consume()
-                                                    offset += amount.y
-                                                },
-                                                onDragEnd = {
-                                                    step(id, ReorderRules.steps(offset, rowPx))
-                                                    dragging = null
-                                                    offset = 0f
-                                                },
-                                                onDragCancel = {
-                                                    dragging = null
-                                                    offset = 0f
-                                                },
-                                            )
-                                        }
-                                        // One stop for a screen reader: the handle, named for its card, with the moves as its actions.
-                                        .semantics {
-                                            contentDescription = handleName
-                                            customActions = moves
-                                        }
-                                        .clickable(role = Role.Button) { open = true }
-                                        .padding(12.dp),
-                                )
-                                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                                    if (up) DropdownMenuItem(text = { Text(upWords) }, onClick = { open = false; step(id, -1) })
-                                    if (down) DropdownMenuItem(text = { Text(downWords) }, onClick = { open = false; step(id, 1) })
-                                    targets.forEachIndexed { at, (list, _) ->
-                                        DropdownMenuItem(text = { Text(toWords[at]) }, onClick = { open = false; move(id, list, null) })
-                                    }
-                                }
-                            }
-                        },
-                    )
-                }
-            }
-        }
     }
 }
 

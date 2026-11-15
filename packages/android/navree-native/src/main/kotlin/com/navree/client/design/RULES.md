@@ -214,6 +214,17 @@ With nothing opened, the list has the window.
 - Facts stand in two columns only where the room they are drawn in holds two
   columns of 300 dp.
 - A list asks for its next page when its end is drawn, never before.
+- A list whose rows are moved (a board's lane of cards, a checklist) is laid
+  lazily, whatever it holds: where the window shows one lane at a time, the
+  lane in hand is part of the screen's own list under its tabs; where lanes
+  stand side by side, each is a lazy list as tall as the window; a list that
+  stands where nothing bounds its height is drawn whole and moved by its
+  menus. A row is dragged by its handle and is the same item wherever it
+  stands (its id is its key), so it keeps what it showed. The row in hand
+  follows the finger, takes its place among the rows beside it as the finger
+  passes their middles, and the list scrolls by itself while the finger is
+  near an edge, only the way the finger went. A drag moves a row within its
+  own list: to another list a row goes by its handle's menu.
 
 ### Fields
 

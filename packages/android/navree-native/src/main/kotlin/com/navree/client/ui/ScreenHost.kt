@@ -57,6 +57,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -271,6 +272,7 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     val open = remember(screen.body, shownUrl) { ListRules.openRow(shownUrl, ListRules.rowAddresses(screen.body)) }
     val place = Place(view, openRow = open, titleInBar = plan.titleInBar)
     val list = rememberLazyListState()
+    val choices = rememberLaneChoices()
     var searching by rememberSaveable { mutableStateOf(false) }
     val pinned = TopAppBarDefaults.pinnedScrollBehavior()
     val leaving = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -347,8 +349,11 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
                         .focusable()
                         .clearAndSetSemantics {},
                 )
-                val items = remember(screen.body, view, maxWidth, barSubmit, hoisted, window.fontScale) {
-                    blocks(screen.body, view, maxWidth.value.toInt(), omit = barSubmit, hoisted = hoisted, fontScale = window.fontScale, titleInBar = plan.titleInBar)
+                val items = remember(screen.body, view, maxWidth, barSubmit, hoisted, window.fontScale, choices.chosen) {
+                    blocks(
+                        screen.body, view, maxWidth.value.toInt(), omit = barSubmit, hoisted = hoisted, fontScale = window.fontScale, titleInBar = plan.titleInBar,
+                        lanes = LaneLayout(ContentRules.marginDp(window), choices.chosen),
+                    )
                 }
                 val floating = (fab != null && plan.fabPlace == FabPlace.BottomEnd) || bars.isNotEmpty()
                 val bottom = padding.calculateBottomPadding() + if (floating) 88.dp else 16.dp
@@ -356,7 +361,7 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
                 val column = ContentRules.columnMostDp(cardsSideBySide(items))
                 val pane = maxWidth.value
                 val body: @Composable () -> Unit = {
-                    CompositionLocalProvider(LocalPane provides pane, LocalColumn provides column) {
+                    CompositionLocalProvider(LocalPane provides pane, LocalColumn provides column, LocalLaneChoices provides choices) {
                         Body(items, place.copy(omit = barSubmit), list, PaddingValues(top = 8.dp, bottom = bottom))
                     }
                 }
@@ -393,9 +398,15 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
 /** The screen's column of blocks, drawn as it scrolls. */
 @Composable
 internal fun Body(blocks: List<Block>, place: Place, state: LazyListState, padding: PaddingValues) {
-    LazyColumn(state = state, contentPadding = padding, modifier = Modifier.fillMaxSize()) {
-        items(count = blocks.size, key = { blocks[it].key }, contentType = { blocks[it]::class }) { index ->
-            BlockView(blocks[index], place)
+    val lanes = remember { Lanes() }
+    val moving = lanes.lists(blocks)
+    val shown = lanes.arranged(blocks, moving)
+    for ((id, list) in moving) key(id) { lanes.of(id).Settling(list) }
+    CompositionLocalProvider(LocalPageList provides state, LocalLanes provides lanes) {
+        LazyColumn(state = state, contentPadding = padding, modifier = Modifier.fillMaxSize()) {
+            items(count = shown.size, key = { shown[it].key }, contentType = { shown[it]::class }) { index ->
+                BlockView(shown[index], place)
+            }
         }
     }
 }
@@ -420,8 +431,10 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
                 block.form != null -> FormRules.FORM_MOST_DP
                 else -> column
             }
+            // Lanes side by side are each a lazy list: the board is as tall as the window, which is the height they scroll in.
+            val board = if (node is Navree.Grid && ListRules.areLanes(node.children)) Modifier.fillParentMaxHeight() else Modifier
             Roomed(ContentRules.contentDp(pane, most, marginDp)) {
-                Box(Modifier.readable(most, column).padding(horizontal = margin, vertical = if (node is Navree.Field) 8.dp else 0.dp)) {
+                Box(Modifier.readable(most, column).padding(horizontal = margin, vertical = if (node is Navree.Field) 8.dp else 0.dp).then(board)) {
                     // A form's own button under its fields sits at the form's end, as wide as its words.
                     if (node is Navree.Button && block.form != null) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { NodeView(node, inner) }
@@ -452,18 +465,21 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
         is Block.Filters -> FilterBar(block.form, place, block.sends)
         is Block.Waiting -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Waiting(Modifier.size(40.dp)) }
         is Block.Space -> Spacer(Modifier.height(block.dp.dp))
-        is Block.More -> {
-            val state = place.screen.lists[block.id]
-            if (state?.failed == true) {
-                RetryLine(stringResource(R.string.navree_more_failed)) { ui.send(Events.more(place.id, block.id)) }
-            } else {
-                // Drawing the end of the list is what asks for the next page; the core asks once.
-                LaunchedEffect(block.key) { ui.send(Events.more(place.id, block.id)) }
-                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                }
-            }
+        // Drawing the end of the list is what asks for the next page; the core asks once.
+        is Block.More -> MoreEnd(block.key, block.id, place)
+        is Block.Moving -> {
+            val lane = requireNotNull(LocalLanes.current) { "a row of a lane outside a screen's list" }.of(block.list.id)
+            MovingRow(
+                block.row,
+                block.list,
+                lane,
+                LocalPageList.current,
+                place.copy(form = block.form ?: place.form),
+                modifier = Modifier.readable(column).padding(horizontal = margin),
+                animation = Modifier.animateItem(),
+            )
         }
+        is Block.LaneTabs -> Box(Modifier.readable(ContentRules.TABLE_MOST_DP, column).padding(horizontal = margin).padding(bottom = 12.dp)) { LaneTabsView(block) }
         is Block.Fill -> Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) { NodeView(block.node, place) }
         is Block.Before -> {
             val state = place.screen.lists[block.id]
