@@ -141,6 +141,7 @@ say "offline with a page kept says: $(ui texts | tr '\n' '|' | cut -c1-300)"
 
 say "== the network comes back"
 check "the network is on" net on
+dump
 if ui has "Try again" > /dev/null 2>&1; then tap "Try again"; fi
 check "the screen comes once the network is back" wait_for Dashboard 30
 
