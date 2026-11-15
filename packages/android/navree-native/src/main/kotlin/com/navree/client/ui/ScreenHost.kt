@@ -68,7 +68,9 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -836,6 +838,8 @@ private fun FilterBar(form: Navree.Form, place: Place) {
                         FilterChip(
                             selected = chosen.isNotEmpty(),
                             onClick = { open = true },
+                            // It opens a menu of its choices: a screen reader says so, not "checkbox".
+                            modifier = Modifier.semantics { role = Role.DropdownList },
                             label = {
                                 Text(
                                     when (named.size) {
@@ -871,6 +875,7 @@ private fun FilterBar(form: Navree.Form, place: Place) {
                         FilterChip(
                             selected = named != null && named.value.isNotEmpty(),
                             onClick = { open = true },
+                            modifier = Modifier.semantics { role = Role.DropdownList },
                             label = { Text(if (named != null && named.value.isNotEmpty()) named.label else label) },
                             trailingIcon = { Icon(Glyphs.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         )
