@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
@@ -70,6 +71,7 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
             await Task.Delay(3000);
             await WheelAsync();
             await KeysAsync();
+            await SearchAsync();
             await MenuAsync();
         }
         catch (Exception problem)
@@ -130,9 +132,25 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
         }
 
         int before = RowsHeld();
+        Navree.Controls.DataTableCellRef? chosen = table.ActiveCell;
+        Say("the active cell before End: " + Words(chosen));
         Foreground();
         Press(End);
-        await Task.Delay(2500);
+        await Task.Delay(200);
+
+        // The end is where the table asks for more rows; they arrive, and the person is where they were: the same cell, the focus in the table.
+        Navree.Controls.DataTableCellRef? atEnd = TableNow()?.ActiveCell;
+        for (int waited = 0; waited < 8000 && RowsHeld() <= before; waited += 200)
+        {
+            await Task.Delay(200);
+        }
+
+        await Task.Delay(1500);
+        Navree.Controls.DataTable? tableAfter = TableNow();
+        Navree.Controls.DataTableCellRef? afterRows = tableAfter?.ActiveCell;
+        Check("rows arrived when the end was reached", RowsHeld() > before, before + " rows held, then " + RowsHeld().ToString(CultureInfo.InvariantCulture));
+        Check("the active cell is the same after the rows arrived", atEnd is not null && afterRows == atEnd, "at the end " + Words(atEnd) + ", after the rows " + Words(afterRows));
+        Check("the focus is in the table after the rows arrived", tableAfter is not null && FocusIsIn(tableAfter), "focus is on " + FocusedWords());
         int afterEnd = RowsHeld();
         Check("End with a cell chosen went to the end and asked for more rows", afterEnd >= before, before + " rows held, then " + afterEnd.ToString(CultureInfo.InvariantCulture));
         for (int page = 0; page < 6; page++)
@@ -145,6 +163,63 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
         int afterPages = RowsHeld();
         Check("Page Down kept the view at the end and more rows came", afterPages >= afterEnd, afterEnd + " rows held, then " + afterPages.ToString(CultureInfo.InvariantCulture));
     }
+
+    // Letters are typed one at a time into the table's search box, each long enough for the core's answer to come and the page to be
+    // drawn again: every letter is in the box at the end and the box still has the focus.
+    private async Task SearchAsync()
+    {
+        Say("== the search box across an answer");
+        host.Send(Events.Select(1));
+        await Task.Delay(2500);
+        TextBox? box = SearchBox();
+        Check("the table's search box is on the screen", box is not null, box is null ? "no text box named Search" : "found");
+        if (box is null)
+        {
+            return;
+        }
+
+        await ClickAsync(box);
+        foreach (char letter in "kaur")
+        {
+            Foreground();
+            Press((byte)char.ToUpperInvariant(letter));
+            await Task.Delay(1800);
+        }
+
+        await Task.Delay(2000);
+        TextBox? now = SearchBox();
+        Check("every letter typed across the answers is in the box", now?.Text == "kaur", "the box holds '" + now?.Text + "'");
+        Check("the box has the focus after the answers", now is not null && ReferenceEquals(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(window.Surface.XamlRoot), now), "focus is on " + FocusedWords());
+        await ShotAsync("hands-search");
+    }
+
+    private TextBox? SearchBox() =>
+        Below(window.Surface).OfType<TextBox>().FirstOrDefault(box => AutomationProperties.GetName(box).Contains("search", StringComparison.OrdinalIgnoreCase) || box.PlaceholderText.Contains("search", StringComparison.OrdinalIgnoreCase));
+
+    private Navree.Controls.DataTable? TableNow() => Below(window.Surface).OfType<Navree.Controls.DataTable>().FirstOrDefault();
+
+    private bool FocusIsIn(DependencyObject container)
+    {
+        for (DependencyObject? at = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(window.Surface.XamlRoot) as DependencyObject; at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (ReferenceEquals(at, container))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private string FocusedWords() =>
+        Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(window.Surface.XamlRoot) switch
+        {
+            null => "nothing",
+            TextBox box => "a text box that holds '" + box.Text + "'",
+            { } other => other.GetType().Name,
+        };
+
+    private static string Words(Navree.Controls.DataTableCellRef? cell) => cell is { } at ? "row " + at.RowKey + ", column " + at.ColumnKey : "none";
 
     private async Task MenuAsync()
     {
@@ -160,6 +235,7 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
         }
 
         (int x, int y) = ScreenOf(cell, cell.ActualWidth / 2, cell.ActualHeight / 2);
+        Navree.Controls.DataTableCellRef? activeBefore = table?.ActiveCell;
         Foreground();
         Move(x, y);
         await Task.Delay(250);
@@ -167,6 +243,10 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
         await Task.Delay(80);
         mouse_event(RightUp, 0, 0, 0, UIntPtr.Zero);
         await Task.Delay(900);
+
+        // Where a click that opens no menu went: whether it reached a row (the active cell's keys before and after) and what is open over the window.
+        Say("the active cell before the right click: " + Words(activeBefore) + ", after: " + Words(TableNow()?.ActiveCell));
+        Say("open over the window: " + string.Join(", ", VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Select(popup => popup.Child?.GetType().Name ?? "nothing")) + "; menus in them: " + Popups().SelectMany(Below).OfType<MenuFlyoutPresenter>().Count());
         List<MenuFlyoutItem> items = [.. Popups().SelectMany(Below).OfType<MenuFlyoutItem>()];
         Check("a right click on a row opens its menu", items.Count > 0, "items: " + string.Join(", ", items.Select(item => item.Text + (item.IsEnabled ? string.Empty : " (disabled)"))));
         await ShotAsync("hands-row-menu");

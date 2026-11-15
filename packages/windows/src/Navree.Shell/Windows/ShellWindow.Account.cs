@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Navree.Design;
 using Navree.Protocol;
 using Navree.Runtime;
 
@@ -10,16 +11,18 @@ namespace Navree.Shell;
 // their menu (their profile, signing out). Nothing is shown while the app does not know who is using it.
 public sealed partial class ShellWindow
 {
-    private Models.User? accountShown;
+    private string accountShown = string.Empty;
 
     private void ShowAccount(Models.User? user)
     {
-        if (ReferenceEquals(user, accountShown))
+        // The same person with the same menu, read afresh, leaves the menu as it is: it may be open.
+        string key = AccountRules.Key(user);
+        if (key == accountShown)
         {
             return;
         }
 
-        accountShown = user;
+        accountShown = key;
         if (user is null)
         {
             titleBar.RightHeader = null;
@@ -27,33 +30,29 @@ public sealed partial class ShellWindow
         }
 
         MenuFlyout menu = new();
-        menu.Items.Add(new MenuFlyoutItem { Text = user.Name, IsEnabled = false });
+
+        // The name and the address are items a screen reader reaches (a disabled item is skipped); pressing one only closes the menu.
+        MenuFlyoutItem who = new() { Text = user.Name };
+        AutomationProperties.SetName(who, AccountRules.SignedInAs(user));
+        menu.Items.Add(who);
         if (!string.IsNullOrEmpty(user.Email))
         {
-            menu.Items.Add(new MenuFlyoutItem { Text = user.Email, IsEnabled = false });
+            MenuFlyoutItem address = new() { Text = user.Email };
+            AutomationProperties.SetName(address, "Email address, " + user.Email);
+            menu.Items.Add(address);
         }
 
-        if (user.Menu.Count > 0)
+        if (user.Menu.Count > 0 || host.OffersOwnSignOut)
         {
             menu.Items.Add(new MenuFlyoutSeparator());
         }
 
-        foreach (Models.Node node in user.Menu)
+        AddItems(menu.Items, user.Menu);
+        if (host.OffersOwnSignOut)
         {
-            switch (node)
-            {
-                case Models.Link link:
-                    menu.Items.Add(AccountItem(link.Label, link.Action, null, link.Id));
-                    break;
-                case Models.Button button when button.Action is not null:
-                    menu.Items.Add(AccountItem(button.Label, button.Action, button.Ask, button.Id));
-                    break;
-                case Models.Divider:
-                    menu.Items.Add(new MenuFlyoutSeparator());
-                    break;
-                default:
-                    break;
-            }
+            MenuFlyoutItem signOut = new() { Text = "Sign out" };
+            signOut.Click += (_, _) => _ = host.SignOutHereAsync();
+            menu.Items.Add(signOut);
         }
 
         Button account = new()
@@ -69,6 +68,33 @@ public sealed partial class ShellWindow
         AutomationProperties.SetName(account, "Account, " + user.Name);
         ToolTipService.SetToolTip(account, user.Name);
         titleBar.RightHeader = account;
+    }
+
+    // What the server put in the menu: a link, a button, a divider and a menu inside the menu; anything else it put there is left out.
+    private void AddItems(IList<MenuFlyoutItemBase> items, IEnumerable<Models.Node> nodes)
+    {
+        foreach (Models.Node node in nodes)
+        {
+            switch (node)
+            {
+                case Models.Link link:
+                    items.Add(AccountItem(link.Label, link.Action, null, link.Id));
+                    break;
+                case Models.Button button when button.Action is not null:
+                    items.Add(AccountItem(button.Label, button.Action, button.Ask, button.Id));
+                    break;
+                case Models.Divider:
+                    items.Add(new MenuFlyoutSeparator());
+                    break;
+                case Models.Menu inner:
+                    MenuFlyoutSubItem sub = new() { Text = inner.Label };
+                    AddItems(sub.Items, inner.Items);
+                    items.Add(sub);
+                    break;
+                default:
+                    break;
+            }
+        }
     }
 
     private MenuFlyoutItem AccountItem(string label, Models.Action action, Models.Question? ask, string? from)

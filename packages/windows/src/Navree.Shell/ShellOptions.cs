@@ -1,4 +1,5 @@
 using Navree.Platform;
+using Navree.Runtime;
 
 namespace Navree.Shell;
 
@@ -23,15 +24,21 @@ public sealed record ShellOptions
     /// <summary>What answers the core's requests, when it is not the network: the demo's recorded answers.</summary>
     public IFetcher? Fetcher { get; init; }
 
+    /// <summary>What answers a request before the network does, when it has an answer to give and none when it has not: the demo's recorded sign-out.</summary>
+    public Func<FetchEffect, FetchResult?>? AnswerFirst { get; init; }
+
     /// <summary>What answers a request of a page in the web view for the app's own origin, when it is not the network: the demo's recorded pages.</summary>
     public Func<Uri, (byte[] Body, string ContentType)?>? RecordedPages { get; init; }
 
     /// <summary>Where what the app keeps between launches goes; the app's folder under the local application data when left out.</summary>
     public string? KeptFolder { get; init; }
 
+    /// <summary>Where the web views keep what a web page leaves (cookies, storage, cache); the app's folder under the local application data when left out. Signing out empties it.</summary>
+    public string? WebFolder { get; init; }
+
     /// <summary>What the app says about its place in Windows: its own scheme, its instance key, what its jump list holds.</summary>
     public PlaceOptions Place { get; init; } = new();
 
-    /// <summary>The names of the kinds this build does not draw, which the core then shows in the web view.</summary>
-    public IReadOnlyList<string> Undrawable { get; init; } = [];
+    /// <summary>The names of the kinds this build does not draw, which the core then shows in the web view: the kinds the renderer has no drawing for, unless the app says otherwise.</summary>
+    public IReadOnlyList<string> Undrawable { get; init; } = Navree.Design.Undrawable.Kinds;
 }

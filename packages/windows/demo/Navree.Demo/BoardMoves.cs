@@ -108,6 +108,7 @@ internal sealed class BoardMoves(ShellHost host, ShellWindow window, string fold
         await Task.Delay(500);
         await ChordAsync(Down);
         (string Lane, int Index)? now = await WaitAsync(first.Id, first.Lane, 1);
+        Say("after Down the focus is on " + Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(window.Surface.XamlRoot)?.GetType().Name + " '" + (Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(window.Surface.XamlRoot) is DependencyObject focused ? AutomationProperties.GetName(focused) : string.Empty) + "'");
         Check("Alt, Shift and Down moved the card one place down", now is { Lane: "backlog", Index: 1 }, Said(first.Id));
         await ShotAsync("moves-keys-down");
 
@@ -159,6 +160,25 @@ internal sealed class BoardMoves(ShellHost host, ShellWindow window, string fold
         {
             Check("a card is in the first lane to drag", false, "none found");
             return;
+        }
+
+        // The steps before left the page scrolled to the card they moved, so the lane it is dragged to may be above the window: the page is
+        // taken back to its top, and the positions are read after that.
+        Button? beforeScroll = HandleOf(picked.Title);
+        ScrollViewer? page = null;
+        for (DependencyObject? at = beforeScroll is null ? null : VisualTreeHelper.GetParent(beforeScroll); at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (at is ScrollViewer found)
+            {
+                page = found;
+            }
+        }
+
+        if (page is not null)
+        {
+            _ = page.ChangeView(null, 0, null, true);
+            await Task.Delay(800);
+            await SettleAsync();
         }
 
         Button? handle = HandleOf(picked.Title);

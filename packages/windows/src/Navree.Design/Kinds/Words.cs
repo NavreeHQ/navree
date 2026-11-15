@@ -140,18 +140,16 @@ public static class ValueWords
     /// <returns>The words.</returns>
     public static string Text(double value, ValueStyle style)
     {
-        bool negative = value < 0;
-        double magnitude = Math.Abs(value);
-        double whole = Math.Truncate(magnitude);
-        double fraction = magnitude - whole;
-        string digits = ((long)whole).ToString(CultureInfo.InvariantCulture);
+        // The same rounding as an amount's: to one place, away from zero, and a value that comes to a whole has no fraction.
+        long tenths = (long)Math.Round(Math.Abs(value) * 10, MidpointRounding.AwayFromZero);
+        string digits = (tenths / 10).ToString(CultureInfo.InvariantCulture);
         digits = style.Indian ? IndianGroups(digits) : WesternGroups(digits);
-        if (fraction >= 0.05)
+        if (tenths % 10 != 0)
         {
-            digits += "." + (((int)Math.Round(fraction * 10)) % 10).ToString(CultureInfo.InvariantCulture);
+            digits += "." + (tenths % 10).ToString(CultureInfo.InvariantCulture);
         }
 
-        return (negative ? "−" : string.Empty) + style.Prefix + digits + style.Suffix;
+        return (value < 0 && tenths > 0 ? "−" : string.Empty) + style.Prefix + digits + style.Suffix;
     }
 
     /// <summary>Digits grouped in threes.</summary>

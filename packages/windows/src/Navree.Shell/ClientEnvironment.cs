@@ -1,6 +1,5 @@
 using System.Globalization;
-using System.Text;
-using System.Text.Json;
+using Navree.Design;
 using Microsoft.UI.Xaml;
 using Windows.UI.ViewManagement;
 
@@ -40,84 +39,20 @@ internal static class ClientEnvironment
             ? TimeZoneInfo.Local.Id
             : TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out string? iana) ? iana : null;
 
+    /// <summary>What the system says now.</summary>
+    internal static ClientSettings Settings() => new(IsDark, MoreContrast, TextPercent, Locale, TimeZone);
+
     /// <summary>The configuration the core is made from.</summary>
-    internal static byte[] Config(ShellOptions options)
-    {
-        using MemoryStream stream = new();
-        using (Utf8JsonWriter w = new(stream))
-        {
-            w.WriteStartObject();
-            w.WriteString("origin", options.Origin);
-            if (options.Also.Count > 0)
-            {
-                w.WriteStartArray("also");
-                foreach (string other in options.Also)
-                {
-                    w.WriteStringValue(other);
-                }
-
-                w.WriteEndArray();
-            }
-
-            if (options.AppId is not null)
-            {
-                w.WriteString("app_id", options.AppId);
-            }
-
-            w.WriteStartObject("client");
-            w.WriteString("platform", "windows");
-            w.WriteString("os", Environment.OSVersion.Version.ToString());
-            w.WriteString("form", "desktop");
-            w.WriteString("app", typeof(ClientEnvironment).Assembly.GetName().Version?.ToString(3) ?? "0.1.0");
-            w.WriteString("lib", "0.1.0");
-            w.WriteNumber("vocab", 0);
-            w.WriteString("scheme", IsDark ? "dark" : "light");
-            w.WriteString("contrast", MoreContrast ? "more" : "normal");
-            w.WriteNumber("text_percent", TextPercent);
-            w.WriteString("locale", Locale);
-            if (TimeZone is string zone)
-            {
-                w.WriteString("tz", zone);
-            }
-
-            w.WriteStartArray("caps");
-            foreach (string cap in Navree.Presence.Capabilities.ProtocolCaps(PlaceCapabilities.Current()))
-            {
-                w.WriteStringValue(cap);
-            }
-
-            w.WriteEndArray();
-            w.WriteEndObject();
-            if (options.Place.Scheme is string scheme)
-            {
-                w.WriteStartObject("sign_in");
-                w.WriteString("callback", scheme);
-                w.WriteEndObject();
-            }
-
-            w.WriteStartObject("cache");
-            w.WriteNumber("pages", 24);
-            w.WriteBoolean("persist", true);
-            w.WriteEndObject();
-            if (options.LoopbackHttp)
-            {
-                w.WriteBoolean("loopback_http", true);
-            }
-
-            if (options.Undrawable.Count > 0)
-            {
-                w.WriteStartArray("undrawable");
-                foreach (string kind in options.Undrawable)
-                {
-                    w.WriteStringValue(kind);
-                }
-
-                w.WriteEndArray();
-            }
-
-            w.WriteEndObject();
-        }
-
-        return stream.ToArray();
-    }
+    internal static byte[] Config(ShellOptions options) =>
+        ClientConfig.Json(
+            options.Origin,
+            options.Also,
+            options.AppId,
+            Settings(),
+            Environment.OSVersion.Version.ToString(),
+            typeof(ClientEnvironment).Assembly.GetName().Version?.ToString(3) ?? "0.1.0",
+            Navree.Presence.Capabilities.ProtocolCaps(PlaceCapabilities.Current()),
+            options.Place.Scheme,
+            options.LoopbackHttp,
+            options.Undrawable);
 }

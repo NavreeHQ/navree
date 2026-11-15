@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
 using Navree.Design;
+using Navree.Platform;
 using Navree.Runtime;
 using Windows.Storage.Streams;
 
@@ -23,7 +24,11 @@ namespace Navree.Shell;
 /// </remarks>
 internal sealed class WebPage : Grid
 {
-    private static CoreWebView2Environment? environment;
+    // One environment for each folder the app's web views keep their data in; a page that is made while another is being started waits for the same one.
+    private static readonly Dictionary<string, Task<CoreWebView2Environment>> Environments = [];
+
+    // Every page whose web view has been started and not closed, on screen or not: the wipe at sign-out reaches them all, and
+    // a page that was shown, left and shown again is one of them.
     private static readonly List<WebPage> Live = [];
 
     private readonly ShellHost host;
@@ -32,6 +37,8 @@ internal sealed class WebPage : Grid
     private readonly Func<Uri, (byte[] Body, string ContentType)?>? recorded;
     private string? loaded;
     private long loadedSerial = -1;
+    private WebContent? wanted;
+    private Task? starting;
 
     internal WebPage(ShellHost host, long screen, Func<Uri, (byte[] Body, string ContentType)?>? recorded)
     {
@@ -39,16 +46,77 @@ internal sealed class WebPage : Grid
         this.screen = screen;
         this.recorded = recorded;
         Children.Add(view);
-        Live.Add(this);
-        Unloaded += (_, _) => Live.Remove(this);
     }
 
-    /// <summary>Empties what every web view of the app keeps: its cookies, storage, cache and history.</summary>
-    internal static async Task ClearAllAsync()
+    /// <summary>
+    /// Empties what the web views of the app keep: their cookies, storage, cache and history. While a web view is running its
+    /// profile is cleared (the web view's own way; its folder is not deleted under it). With none running, which is the case
+    /// when the person signs out from a screen that is not a web page, or in a launch that never showed one, the folder the last
+    /// launch left is deleted.
+    /// </summary>
+    /// <param name="folder">The folder the web views keep their data in.</param>
+    internal static async Task ClearAllAsync(string folder)
     {
-        foreach (WebPage page in Live.ToArray())
+        WebPage[] running = [.. Live];
+        foreach (WebPage page in running)
         {
-            await page.ClearAsync();
+            if (page.starting is Task starting)
+            {
+                try
+                {
+                    await starting;
+                }
+                catch (Exception)
+                {
+                    // A web view that could not start keeps nothing.
+                }
+            }
+        }
+
+        Exception? failure = null;
+        bool cleared = false;
+        foreach (WebPage page in running.Where(page => page.view.CoreWebView2 is not null))
+        {
+            try
+            {
+                await page.ClearAsync();
+                cleared = true;
+                break;
+            }
+            catch (Exception problem)
+            {
+                failure = problem;
+            }
+        }
+
+        if (cleared)
+        {
+            return;
+        }
+
+        if (failure is not null)
+        {
+            throw failure;
+        }
+
+        Environments.Remove(folder);
+        if (!await WebData.DeleteAsync(folder, TimeSpan.FromSeconds(5)))
+        {
+            throw new IOException("the web view's folder could not be deleted");
+        }
+    }
+
+    /// <summary>Closes the page's web view when its screen has left for good, so the page is no longer kept for the wipe and the process behind it goes.</summary>
+    internal void Release()
+    {
+        Live.Remove(this);
+        try
+        {
+            view.Close();
+        }
+        catch (Exception)
+        {
+            // Already closed.
         }
     }
 
@@ -62,19 +130,13 @@ internal sealed class WebPage : Grid
 
         loaded = web.Url;
         loadedSerial = web.Serial;
+        wanted = web;
         try
         {
-            if (view.CoreWebView2 is null)
-            {
-                environment ??= await CoreWebView2Environment.CreateWithOptionsAsync(
-                    null,
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Navree", host.Options.AppName, "web"),
-                    new CoreWebView2EnvironmentOptions());
-                await view.EnsureCoreWebView2Async(environment);
-                Hold(view.CoreWebView2!);
-            }
-
-            if (!host.Origins.Ours(web.Url))
+            // The web view is started and held once, whatever came while it was being started; the newest wish is the one carried out.
+            starting ??= StartAsync();
+            await starting;
+            if (wanted != web || !host.Origins.Ours(web.Url))
             {
                 return;
             }
@@ -86,6 +148,29 @@ internal sealed class WebPage : Grid
             Children.Clear();
             Children.Add(Look.Label("The web view is not available on this device (" + problem.GetType().Name + ").", muted: true));
         }
+    }
+
+    private async Task StartAsync()
+    {
+        string folder = host.Options.WebFolder ?? WebData.DefaultFolder(host.Options.AppName);
+        if (!Environments.TryGetValue(folder, out Task<CoreWebView2Environment>? made))
+        {
+            made = CoreWebView2Environment.CreateWithOptionsAsync(null, folder, new CoreWebView2EnvironmentOptions()).AsTask();
+            Environments[folder] = made;
+        }
+
+        try
+        {
+            await view.EnsureCoreWebView2Async(await made);
+        }
+        catch (Exception)
+        {
+            Environments.Remove(folder);
+            throw;
+        }
+
+        Hold(view.CoreWebView2!);
+        Live.Add(this);
     }
 
     // The web view's settings and every callback that holds it to the app's origins.
@@ -102,7 +187,7 @@ internal sealed class WebPage : Grid
         // A page of the app's own, in this window; any other address goes to the core, which decides, and the web view stays.
         web.NavigationStarting += (_, args) =>
         {
-            if (!host.Origins.Ours(args.Uri) && !IsInternal(args.Uri))
+            if (!host.Origins.Ours(args.Uri) && !WebData.IsOwnDocument(args.Uri))
             {
                 args.Cancel = true;
                 host.Send(Events.WebLink(screen, args.Uri));
@@ -110,7 +195,7 @@ internal sealed class WebPage : Grid
         };
         web.FrameNavigationStarting += (_, args) =>
         {
-            if (!host.Origins.Ours(args.Uri) && !IsInternal(args.Uri))
+            if (!host.Origins.Ours(args.Uri) && !WebData.IsOwnDocument(args.Uri))
             {
                 args.Cancel = true;
             }
@@ -137,14 +222,14 @@ internal sealed class WebPage : Grid
         web.WebResourceRequested += (sender, args) =>
         {
             string uri = args.Request.Uri;
-            if (IsInternal(uri))
+            if (WebData.IsOwnRequest(uri))
             {
                 return;
             }
 
             if (!host.Origins.Ours(uri))
             {
-                args.Response = environment!.CreateWebResourceResponse(null, 403, "Blocked", string.Empty);
+                args.Response = web.Environment.CreateWebResourceResponse(null, 403, "Blocked", string.Empty);
                 return;
             }
 
@@ -159,15 +244,10 @@ internal sealed class WebPage : Grid
                 }
 
                 stream.Seek(0);
-                args.Response = environment!.CreateWebResourceResponse(stream, 200, "OK", "Content-Type: " + type);
+                args.Response = web.Environment.CreateWebResourceResponse(stream, 200, "OK", "Content-Type: " + type);
             }
         };
     }
-
-    private static bool IsInternal(string uri) =>
-        uri.StartsWith("about:", StringComparison.OrdinalIgnoreCase)
-        || uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
-        || uri.StartsWith("blob:", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Empties what the web view keeps of the app: its cookies, storage, cache and history.</summary>
     internal async Task ClearAsync()

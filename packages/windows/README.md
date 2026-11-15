@@ -43,6 +43,10 @@ The DLL is copied next to every program that uses `Navree.Core`. The "Native cli
 `Navree.Demo` runs the client on the store demo's recorded answers (`packages/android/fixtures/store-demo`, found above the program), or on a server with `--server https://...`. `--dark` and `--light` choose the theme, `--rtl` the direction. `--walk <folder>` walks it through its screens at three widths and writes a picture of the window's content and of each page whole, and `walk.txt` saying what was done. `scripts/take-pictures.ps1` runs the demo on a Windows machine with a desktop, pictures its window in each way there is, and walks it in light, dark and right to left.
 
 
+## What is not drawn
+
+The client tells the core which kinds it has no drawing for (`ShellOptions.Undrawable`, from the one list in `Navree.Design/Undrawable.cs`), and the core shows a page that holds one in the web view, whole, never with a hole: a web region, and the colour, file and range fields. A test reads the renderer's sources against the list, so a kind gains a drawing and leaves the list in the same change, and a kind that loses its drawing cannot be forgotten.
+
 ## The app's place in Windows
 
 Each feature is offered only where the build can do it, and the client's capability list and the About page say which. With a package: the taskbar badge, the jump list, the startup task. Without: an overlay icon on the taskbar button, the person's own list of programs to run at sign-in. Either way: the icon in the notification area with a small window by it, app notifications (not to an app that runs as an administrator), the share sheet, several windows over the one core, one running app (a second start hands what it was asked to the first), and a sign-in in the system's browser that comes back on the app's own scheme. `--system-walk <folder>` walks these and writes what each answered; `--probe <file>` runs the app for a while so a second start and an address on its scheme can be tried on it; `scripts/take-system-pictures.ps1` does both with and without a package.

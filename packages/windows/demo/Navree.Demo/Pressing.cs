@@ -16,7 +16,7 @@ namespace Navree.Demo;
 /// send each time: the order number on Orders, a quantity typed into a row of Inventory and its Restock button, and the Filter
 /// button of Orders with a box ticked in what it opens. What was done, and what came of it, is written to <c>press.txt</c>.
 /// </summary>
-internal sealed class Pressing(ShellHost host, ShellWindow window, string folder)
+internal sealed partial class Pressing(ShellHost host, ShellWindow window, string folder)
 {
     private const uint MoveTo = 0x0001;
     private const uint LeftDown = 0x0002;
@@ -27,6 +27,9 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
     private const byte LetterA = 0x41;
     private const byte Digit0 = 0x30;
     private const byte Escape = 0x1B;
+    private const byte EndKey = 0x23;
+    private const byte BackSpace = 0x08;
+    private const byte Delete = 0x2E;
 
     private readonly List<string> log = [];
 
@@ -50,6 +53,7 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
             await OrderNumberAsync();
             await PutAwayAsync();
             await FilterAsync();
+            await TypedBackAsync();
         }
         catch (Exception problem)
         {

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Microsoft.UI.Dispatching;
 using Navree.Design;
 using Navree.Platform;
+using Navree.Protocol;
 using Navree.Runtime;
 
 namespace Navree.Shell;
@@ -24,6 +25,9 @@ public sealed partial class ShellHost : IDisposable
     private readonly Dictionary<long, CancellationTokenSource> streams = [];
     private readonly SerialQueue disk = new();
     private readonly CancellationTokenSource stopped = new();
+    private readonly EnvironmentWatcher environment;
+    private readonly ForegroundTracker foreground = new();
+    private readonly List<WipeStep> moreWipeSteps = [];
     private string lastCookies = string.Empty;
 
     /// <summary>Makes the host and its core. Nothing is sent to the core until <see cref="Start"/>.</summary>
@@ -43,7 +47,8 @@ public sealed partial class ShellHost : IDisposable
             network = new HttpFetcher(Origins, cookies);
         }
 
-        fetcher = options.Fetcher ?? network!;
+        IFetcher answering = options.Fetcher ?? network!;
+        fetcher = options.AnswerFirst is null ? answering : new FirstAnswer(options.AnswerFirst, answering);
         if (kept.Read("cookies") is string saved)
         {
             cookies.Import(saved);
@@ -51,6 +56,12 @@ public sealed partial class ShellHost : IDisposable
         }
 
         client = new CoreClient(ClientEnvironment.Config(options), OnUpdate, OnProblem);
+
+        // What the system says is told to the core when it changes, not only when the core is made.
+        environment = new EnvironmentWatcher(
+            dispatcher,
+            ClientEnvironment.Settings(),
+            change => client.Send(Events.Environment(change.Dark, change.Contrast, change.TextPercent, change.Locale, change.TimeZone)));
     }
 
     /// <summary>What the app says.</summary>
@@ -76,6 +87,52 @@ public sealed partial class ShellHost : IDisposable
 
     /// <summary>Raised on the UI thread when the session ended and what was kept has been wiped.</summary>
     public event Action<WipeReport>? SessionEnded;
+
+    /// <summary>
+    /// Whether the client offers a way out of its own: somebody is signed in, the app has a sign-in, and the menu the server gave
+    /// that person has none.
+    /// </summary>
+    public bool OffersOwnSignOut =>
+        Options.Place.Scheme is not null && State.App?.User is Models.User user && !AccountRules.OffersSignOut(user.Menu);
+
+    /// <summary>
+    /// Signs the person out on this device: what could rebuild the session goes first (the cookies, what is kept, what the web view
+    /// keeps), then the core is told the client ended the session itself and starts again from the shell.
+    /// </summary>
+    /// <returns>When the wipe has finished and the core is told.</returns>
+    public async Task SignOutHereAsync()
+    {
+        await ForgetAsync();
+        client.Send(Events.SignedOut);
+    }
+
+    /// <summary>
+    /// A window says whether it is shown (not minimised, not hidden). The core is told the app went to the background when the last
+    /// window is no longer shown and that it came back when one is again; it is told nothing for a window opening beside another.
+    /// Called on the UI thread.
+    /// </summary>
+    /// <param name="window">The window.</param>
+    /// <param name="shown">Whether it is shown.</param>
+    public void WindowShown(object window, bool shown)
+    {
+        if (foreground.Moved(window, shown) is bool front)
+        {
+            client.Send(front ? Events.Foreground : Events.Background);
+            if (front)
+            {
+                // The person may have changed the system's settings, or its language, while the app was away.
+                environment.Check();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Adds a step to the wipe at sign-out, after the host's own: something else the shell keeps of the person (the pictures of the pages
+    /// it drew). Each step has the wipe's limit, and a step that fails is reported with the rest.
+    /// </summary>
+    /// <param name="name">What it takes away, for the report.</param>
+    /// <param name="run">Takes it away.</param>
+    public void AddWipeStep(string name, Func<Task> run) => moreWipeSteps.Add(new WipeStep(name, run));
 
     /// <summary>Tells the core what happened.</summary>
     /// <param name="eventJson">An event, from <see cref="Events"/>.</param>
@@ -104,6 +161,7 @@ public sealed partial class ShellHost : IDisposable
     public void Dispose()
     {
         stopped.Cancel();
+        environment.Dispose();
         client.Dispose();
         network?.Dispose();
         disk.Dispose();
@@ -136,6 +194,10 @@ public sealed partial class ShellHost : IDisposable
     /// <summary>What a page in the web view is answered with when the app has recorded answers instead of a network.</summary>
     internal Func<Uri, (byte[] Body, string ContentType)?>? RecordedPages => Options.RecordedPages;
 
+    /// <summary>Reports a problem of the client's own from a part of the shell that is not the host (a dialog that could not be shown): it is raised as <see cref="Problem"/>.</summary>
+    /// <param name="what">What went wrong, by its kind: never the server's words or a person's.</param>
+    internal void ReportProblem(string what) => dispatcher.TryEnqueue(() => Problem?.Invoke(what));
+
     private void OnProblem(string what) =>
         dispatcher.TryEnqueue(() =>
         {
@@ -144,24 +206,33 @@ public sealed partial class ShellHost : IDisposable
         });
 
     // On the core's thread: the state is handed to the UI thread, and then each effect, in order.
+    // A window that cannot show the state, or an effect that fails, does not cost the rest of the update.
     private void OnUpdate(Update update)
     {
         dispatcher.TryEnqueue(() =>
+            Delivery.Deliver(
+                update,
+                state => StateChanged?.Invoke(state),
+                effect => Run(effect, update.State),
+                what => Problem?.Invoke(what)));
+    }
+
+    // Completes on the dispatcher the host was given, whatever thread the caller finished on: the host's own state changes only there.
+    // False when the queue is gone, which is the end of the app.
+    private Task<bool> OnDispatcherAsync()
+    {
+        if (dispatcher.HasThreadAccess)
         {
-            StateChanged?.Invoke(update.State);
-            foreach (Effect effect in update.Effects)
-            {
-                try
-                {
-                    Run(effect, update.State);
-                }
-                catch (Exception problem)
-                {
-                    // One effect that fails, in any way, is reported by its kind alone and the rest go on.
-                    Problem?.Invoke("an effect failed: " + effect.GetType().Name + ": " + problem.GetType().Name);
-                }
-            }
-        });
+            return Task.FromResult(true);
+        }
+
+        TaskCompletionSource<bool> arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!dispatcher.TryEnqueue(() => arrived.SetResult(true)))
+        {
+            arrived.SetResult(false);
+        }
+
+        return arrived.Task;
     }
 
     private void Run(Effect effect, ViewState state)
@@ -277,18 +348,24 @@ public sealed partial class ShellHost : IDisposable
     {
         CancellationTokenSource work = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token);
         running[fetch.Request] = work;
-        FetchResult result;
+        FetchResult? result = null;
         try
         {
-            result = await Task.Run(() => fetcher.FetchAsync(fetch, work.Token)).ConfigureAwait(true);
+            result = await Task.Run(() => Delivery.FetchAsync(fetcher, fetch, work.Token)).ConfigureAwait(false);
         }
-        finally
+        catch (OperationCanceledException)
         {
-            running.Remove(fetch.Request);
-            work.Dispose();
+            // The core no longer wants the answer, or the app is ending.
         }
 
-        if (stopped.IsCancellationRequested)
+        if (!await OnDispatcherAsync().ConfigureAwait(false))
+        {
+            return;
+        }
+
+        running.Remove(fetch.Request);
+        work.Dispose();
+        if (result is null || stopped.IsCancellationRequested)
         {
             return;
         }
@@ -315,7 +392,7 @@ public sealed partial class ShellHost : IDisposable
     {
         CancellationTokenSource work = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token);
         streams[open.Stream] = work;
-        int status;
+        int status = 0;
         try
         {
             status = await Task.Run(() => network!.StreamAsync(
@@ -331,12 +408,23 @@ public sealed partial class ShellHost : IDisposable
                     client.Send(Events.StreamEvent(open.Stream, name));
                     return Task.CompletedTask;
                 },
-                work.Token)).ConfigureAwait(true);
+                work.Token)).ConfigureAwait(false);
         }
-        finally
+        catch (OperationCanceledException)
         {
-            work.Dispose();
+            // The core closed it, or the app is ending.
         }
+        catch (Exception)
+        {
+            // A stream that broke ends as one that could not be kept open.
+        }
+
+        if (!await OnDispatcherAsync().ConfigureAwait(false))
+        {
+            return;
+        }
+
+        work.Dispose();
 
         // The core closed it itself (it is no longer listed) or the app is ending: nobody is told it ended.
         if (streams.Remove(open.Stream) && !stopped.IsCancellationRequested)
@@ -360,19 +448,27 @@ public sealed partial class ShellHost : IDisposable
     {
         CancellationTokenSource wait = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token);
         timers[timer.Timer] = wait;
+        bool ran = false;
         try
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(Math.Max(0, timer.Ms)), wait.Token).ConfigureAwait(true);
-            timers.Remove(timer.Timer);
-            client.Send(Events.Timer(timer.Timer));
+            await Task.Delay(TimeSpan.FromMilliseconds(Math.Max(0, timer.Ms)), wait.Token).ConfigureAwait(false);
+            ran = true;
         }
         catch (OperationCanceledException)
         {
             // The core no longer wants it.
         }
-        finally
+
+        if (!await OnDispatcherAsync().ConfigureAwait(false))
         {
-            wait.Dispose();
+            return;
+        }
+
+        wait.Dispose();
+        if (ran)
+        {
+            timers.Remove(timer.Timer);
+            client.Send(Events.Timer(timer.Timer));
         }
     }
 
@@ -380,7 +476,8 @@ public sealed partial class ShellHost : IDisposable
     private async Task ForgetAsync()
     {
         WipeReport report = await Wipe.RunAsync(
-            [
+            [.. new[]
+            {
                 new WipeStep("the cookies", () =>
                 {
                     cookies.Clear();
@@ -392,8 +489,13 @@ public sealed partial class ShellHost : IDisposable
                     kept.Clear();
                     return Task.CompletedTask;
                 }),
-                new WipeStep("what the web view keeps", OnUiAsync(WebPage.ClearAllAsync)),
-            ]).ConfigureAwait(true);
+                new WipeStep("what the web view keeps", OnUiAsync(() => WebPage.ClearAllAsync(Options.WebFolder ?? WebData.DefaultFolder(Options.AppName)))),
+            }.Concat(moreWipeSteps)]).ConfigureAwait(false);
+        if (!await OnDispatcherAsync().ConfigureAwait(false))
+        {
+            return;
+        }
+
         if (!report.Complete)
         {
             Problem?.Invoke("the wipe did not finish: " + string.Join(", ", report.Failed.Select(failed => failed.Key)));
@@ -401,5 +503,12 @@ public sealed partial class ShellHost : IDisposable
 
         Place?.EndSession();
         SessionEnded?.Invoke(report);
+    }
+
+    // Asks what the app answers by itself first, and the fetcher behind it for the rest.
+    private sealed class FirstAnswer(Func<FetchEffect, FetchResult?> first, IFetcher behind) : IFetcher
+    {
+        public Task<FetchResult> FetchAsync(FetchEffect effect, CancellationToken cancel) =>
+            first(effect) is FetchResult answer ? Task.FromResult(answer) : behind.FetchAsync(effect, cancel);
     }
 }

@@ -134,7 +134,8 @@ public sealed class ModelsTests
         return Models.ReadShell(document.RootElement);
     }
 
-    // An answer is read, written, read again and written again: the two writings are the same.
+    // An answer is read and written: what is written is what the file says, by value, so a field the models do not keep fails here;
+    // and written again it is the same.
     private static void RoundTrip(string file)
     {
         string text = File.ReadAllText(file);
@@ -142,6 +143,81 @@ public sealed class ModelsTests
         string first = shell ? WriteShell(text) : WriteEnvelope(text);
         string second = shell ? WriteShell(first) : WriteEnvelope(first);
         Assert.AreEqual(first, second, file);
+
+        // An answer from a newer server holds what this build has never heard of, which the models cannot keep: it is read against its own test.
+        if (Path.GetFileName(file) == "from-the-future.json")
+        {
+            return;
+        }
+
+        using JsonDocument original = Reading.Open(text);
+        using JsonDocument written = Reading.Open(first);
+        List<string> differences = [];
+        Compare(original.RootElement, written.RootElement, "$", differences);
+        Expect.That(differences.Count == 0, Path.GetFileName(file) + " is not what the models write: " + string.Join("; ", differences.Take(5)));
+    }
+
+    // A value the models leave out because it is the default (false, nothing, an empty list) is not a difference; anything else is.
+    private static bool IsDefault(JsonElement value) =>
+        value.ValueKind switch
+        {
+            JsonValueKind.Null or JsonValueKind.False => true,
+            JsonValueKind.Array => value.GetArrayLength() == 0,
+            JsonValueKind.Object => !value.EnumerateObject().Any(),
+            JsonValueKind.String => value.GetString()!.Length == 0,
+            _ => false,
+        };
+
+    private static void Compare(JsonElement original, JsonElement written, string at, List<string> differences)
+    {
+        if (original.ValueKind == JsonValueKind.Object && written.ValueKind == JsonValueKind.Object)
+        {
+            foreach (JsonProperty property in original.EnumerateObject())
+            {
+                if (written.TryGetProperty(property.Name, out JsonElement other))
+                {
+                    Compare(property.Value, other, at + "." + property.Name, differences);
+                }
+                else if (!IsDefault(property.Value))
+                {
+                    differences.Add(at + "." + property.Name + " is dropped");
+                }
+            }
+
+            foreach (JsonProperty property in written.EnumerateObject())
+            {
+                if (!original.TryGetProperty(property.Name, out _) && !IsDefault(property.Value))
+                {
+                    differences.Add(at + "." + property.Name + " is added");
+                }
+            }
+
+            return;
+        }
+
+        if (original.ValueKind == JsonValueKind.Array && written.ValueKind == JsonValueKind.Array && original.GetArrayLength() == written.GetArrayLength())
+        {
+            int index = 0;
+            foreach ((JsonElement left, JsonElement right) in original.EnumerateArray().Zip(written.EnumerateArray()))
+            {
+                Compare(left, right, at + "[" + index++ + "]", differences);
+            }
+
+            return;
+        }
+
+        bool same = original.ValueKind == written.ValueKind
+            && original.ValueKind switch
+            {
+                JsonValueKind.String => original.GetString() == written.GetString(),
+                JsonValueKind.Number => original.GetDecimal() == written.GetDecimal() || original.GetDouble() == written.GetDouble(),
+                JsonValueKind.Array => false,
+                _ => true,
+            };
+        if (!same)
+        {
+            differences.Add(at + " is " + original.GetRawText() + " and is written " + written.GetRawText());
+        }
     }
 
     private static string WriteEnvelope(string text)
