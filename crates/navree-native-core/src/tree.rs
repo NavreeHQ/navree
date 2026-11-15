@@ -465,10 +465,18 @@ pub(crate) struct Names<'a> {
     pub server: &'a mut BTreeMap<String, Option<String>>,
 }
 
+/// What a form is named from: its id, or, with none, a stem of its address no
+/// longer than an id may be, so a long address is not copied into the name of
+/// every field of the form (two forms that share the stem are still two: a
+/// name is made free after it is chosen).
 fn base_of(form: &Form) -> String {
-    form.id
-        .clone()
-        .unwrap_or_else(|| format!("@{}", form.action))
+    form.id.clone().unwrap_or_else(|| {
+        let mut end = form.action.len().min(navree_native::MAX_ID);
+        while !form.action.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("@{}", &form.action[..end])
+    })
 }
 
 fn count_bases(node: &Node, counts: &mut BTreeMap<String, usize>) {
@@ -1042,6 +1050,44 @@ mod tests {
             children,
             ..Stack::default()
         })
+    }
+
+    /// A form with no id is named from its address, and an address may be
+    /// long: the name is a short stem of it, so it is not copied into every
+    /// field of the form, and two forms that share the stem are still two.
+    #[test]
+    fn a_form_with_no_id_is_named_from_a_short_stem_of_its_address() {
+        let field = |name: &str| {
+            Node::Field(Field {
+                name: name.to_owned(),
+                ..Field::default()
+            })
+        };
+        let form = |address: String| {
+            Node::Form(Form {
+                action: address,
+                children: vec![field("city"), field("pin")],
+                ..Form::default()
+            })
+        };
+        let long = format!("/orders/{}", "x".repeat(10_000));
+        let mut nodes = vec![form(format!("{long}/1")), form(format!("{long}/2"))];
+        let (mut forms, mut fields, mut server) =
+            (BTreeSet::new(), BTreeSet::new(), BTreeMap::new());
+        Names {
+            forms: &mut forms,
+            fields: &mut fields,
+            server: &mut server,
+        }
+        .name(&mut nodes, None);
+        assert_eq!(forms.len(), 2, "{forms:?}");
+        assert!(
+            forms.iter().all(|handle| handle.len() < 300),
+            "a handle is {} bytes",
+            forms.iter().map(String::len).max().unwrap_or(0)
+        );
+        assert_eq!(fields.len(), 4);
+        assert!(fields.iter().all(|field| field.len() < 320), "{fields:?}");
     }
 
     #[test]
