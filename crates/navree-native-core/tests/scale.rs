@@ -272,3 +272,97 @@ fn a_change_among_ten_thousand_rows() {
         "among 10,000 rows: a merge of 3 rows took {merged:?} and its rows read again {reading:?} (the whole screen: {whole_read:?}); a tick took {ticked:?} and its part {part_read:?}"
     );
 }
+
+/// A screen that is a field and a list of `rows` plain rows.
+fn screen_of(rows: usize) -> (Core, u64) {
+    let mut core = Core::new(Config::new(
+        "https://shop.example",
+        Client::new(Platform::Android, FormFactor::Phone),
+    ));
+    let shell = request_of(&core.send(Event::Start));
+    let page = request_of(&answer(
+        &mut core,
+        shell,
+        &json!({"navree": 1, "build": "b1", "name": "Charkha Supply Co.", "home": "/"}),
+    ));
+    let list: Vec<Value> = (0..rows)
+        .map(|number| json!({"t": "row", "id": format!("order-{number}"), "title": format!("CS-{number}")}))
+        .collect();
+    answer(
+        &mut core,
+        page,
+        &json!({"navree": 1, "build": "b1", "vocab": 1, "screen": {"title": "Orders", "body": {
+            "t": "stack", "children": [
+                {"t": "field", "id": "note", "name": "note", "input": {"t": "text"}},
+                {"t": "list", "id": "orders", "children": list}]}}}),
+    );
+    let screen = core.view().front.expect("a screen is in front");
+    (core, screen)
+}
+
+/// Sends `ops` as the answer to the screen asked for again.
+fn ops_answer(core: &mut Core, screen: u64, ops: Value) -> navree_native_core::Update {
+    let asked = request_of(&core.send(Event::Refresh { screen }));
+    answer(
+        core,
+        asked,
+        &json!({"navree": 1, "build": "b1", "vocab": 1, "ops": ops}),
+    )
+}
+
+/// What an answer may ask of a client is bounded: its ops that look through
+/// the screen, times the nodes the screen holds, may not pass twenty million.
+#[test]
+fn an_answer_whose_ops_would_look_through_a_big_screen_too_often_is_refused() {
+    let focus = |count: usize| Value::Array(vec![json!({"op": "focus", "target": "note"}); count]);
+    // A thousand ops on a screen of fifty rows: each finds its field.
+    let (mut small, screen) = screen_of(50);
+    ops_answer(&mut small, screen, focus(1_000));
+    assert_eq!(
+        small.view().screens[&screen]
+            .focus
+            .as_ref()
+            .map(|focus| focus.serial),
+        Some(1_000)
+    );
+    // The same answer to a screen of thirty thousand rows is thirty million
+    // visits: none of its ops is applied, and it is said.
+    let (mut big, screen) = screen_of(30_000);
+    let update = ops_answer(&mut big, screen, focus(1_000));
+    assert_eq!(big.view().screens[&screen].focus, None);
+    assert!(
+        update
+            .effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::Report { what, .. } if what == "size")),
+        "{update:?}"
+    );
+    // A few ops on that screen are applied.
+    ops_answer(&mut big, screen, focus(13));
+    assert!(big.view().screens[&screen].focus.is_some());
+}
+
+/// A merge costs the rows it brings, not the rows it brings times the rows
+/// the list holds.
+#[test]
+fn a_merge_costs_the_rows_it_brings_and_not_the_list_times_them() {
+    let (mut core, screen) = screen_of(40_000);
+    let rows: Vec<Value> = (0..40_000)
+        .map(|number| json!({"t": "row", "id": format!("newer-{number}"), "title": format!("CS-{number}")}))
+        .collect();
+    let gone: Vec<String> = (0..20_000)
+        .map(|number| format!("order-{number}"))
+        .collect();
+    let started = Instant::now();
+    ops_answer(
+        &mut core,
+        screen,
+        json!([{"op": "merge", "target": "orders", "since": "1", "at": "end", "gone": gone, "nodes": rows}]),
+    );
+    let took = started.elapsed();
+    let content = serde_json::to_value(&core.view().screens[&screen].content).unwrap();
+    let list = &content["screen"]["body"]["children"][1]["children"];
+    assert_eq!(list.as_array().map(Vec::len), Some(60_000));
+    println!("a merge of 40,000 rows and 20,000 gone, into 40,000 rows: {took:?}");
+    assert!(took.as_secs() < 3, "the merge took {took:?}");
+}

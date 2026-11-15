@@ -835,6 +835,11 @@ pub(crate) struct ScreenInner {
     pub visit: u64,
     /// What it shows may be out of date: it is fetched again when it comes to the front.
     pub stale: bool,
+    /// What the screen's tree takes, in the weight of `weight`: counted when
+    /// a page is shown, and added to as ops bring more. It is never less than
+    /// what the tree holds, so it is counted afresh before anything is
+    /// refused for it.
+    pub weight: usize,
     pub form_ids: BTreeSet<String>,
     pub field_ids: BTreeSet<String>,
     /// The id the server gave each form, by the form's id here.

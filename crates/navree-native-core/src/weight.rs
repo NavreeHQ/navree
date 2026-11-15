@@ -87,6 +87,13 @@ pub(crate) fn own(node: &Node) -> usize {
     1 + parts(node)
 }
 
+/// What a whole screen takes.
+pub(crate) fn of_screen(screen: &Screen) -> usize {
+    let mut tally = Tally::new(usize::MAX);
+    tally.screen(screen);
+    tally.total
+}
+
 /// A running count against a limit. It stops looking once the count is past
 /// the limit: what it holds then is more than the limit, not the whole.
 pub(crate) struct Tally {
