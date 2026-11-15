@@ -291,8 +291,9 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     val sink = remember { FocusSink() }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     // The sink is asked for when a field is done: once it can take the focus, the focus is put on it, and where that fails it is cleared.
+    // `requestFocus()` answers false when the request was cancelled (compose-ui 1.10 and later; the BOM here is later), and throws when the sink is not laid out.
     LaunchedEffect(sink.armed) {
-        if (sink.armed && runCatching { sink.requester.requestFocus() }.isFailure) {
+        if (sink.armed && !runCatching { sink.requester.requestFocus() }.getOrDefault(false)) {
             focusManager.clearFocus()
             sink.release()
         }

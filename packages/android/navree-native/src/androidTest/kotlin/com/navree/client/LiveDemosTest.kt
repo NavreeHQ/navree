@@ -198,38 +198,80 @@ class LiveDemosTest {
         settled(app)
     }
 
+    /** One stop of a keyboard's Tab: the node's id, its name, and where it stands in the window. */
+    private class Stop(val id: Int, val name: String, val inside: Boolean, val widthDp: Float, val heightDp: Float)
+
+    private fun focusedStop(): Stop? {
+        val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
+        if (focused.size != 1) return null
+        val node = focused.single()
+        val density = node.layoutInfo.density.density
+        val config = node.config
+        val named = listOfNotNull(
+            config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", "),
+            config.getOrNull(SemanticsProperties.Text)?.joinToString(", ") { it.text },
+            config.getOrNull(SemanticsProperties.EditableText)?.text,
+        ).filter { it.isNotEmpty() }.joinToString(" | ")
+        val window = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val box = node.boundsInRoot
+        val inside = box.left >= window.left - 1f && box.top >= window.top - 1f && box.right <= window.right + 1f && box.bottom <= window.bottom + 1f
+        return Stop(node.id, named, inside, node.size.width / density, node.size.height / density)
+    }
+
     /**
-     * A hardware keyboard's Tab through a screen of fields and buttons (the store's inventory) stops only where something can be
-     * seen and said: every stop is a control with a name and a bound a finger
-     * could hit, and the field that is picked, not typed, is one stop.
+     * A hardware keyboard's Tab through a screen of fields and buttons (the
+     * store's inventory): every stop is one control with a name, a size a finger
+     * could hit and bounds inside the window; no control is a stop twice; and
+     * every field that was in view at the start is a stop.
      */
     @Test
-    fun aTabWalkThroughTheStoresInventoryStopsOnlyWhereSomethingCanBeSeenAndSaid() {
+    fun aTabWalkThroughTheStoresInventoryVisitsEachVisibleFieldOnceAndStopsOnlyWhereSomethingCanBeSeenAndSaid() {
         val origin = arguments.getString("store")
         assumeTrue("no store demo was named", origin != null)
         val app = start(origin!!)
         send(app, Events.select(2))
         settled(app)
-        val stops = ArrayList<String>()
-        repeat(30) { press ->
+        val fields = compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().map { it.id }
+        assertTrue("the inventory shows fields to walk through", fields.isNotEmpty())
+        val seen = ArrayList<Stop>()
+        repeat(40) { press ->
             compose.onRoot().performKeyInput { pressKey(Key.Tab) }
             compose.waitForIdle()
-            val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
-            assertTrue("press ${press + 1} of Tab landed on nothing that can be seen or said; the stops so far: $stops", focused.size == 1)
-            val node = focused.single()
-            val density = node.layoutInfo.density.density
-            val config = node.config
-            val named = listOfNotNull(
-                config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", "),
-                config.getOrNull(SemanticsProperties.Text)?.joinToString(", ") { it.text },
-                config.getOrNull(SemanticsProperties.EditableText)?.text,
-            ).filter { it.isNotEmpty() }.joinToString(" | ")
-            assertTrue("press ${press + 1}: the stop has no name; the stops so far: $stops", named.isNotEmpty())
-            assertTrue("press ${press + 1}: \"$named\" is ${node.size.width / density}x${node.size.height / density} dp, too small to see", node.size.width / density >= 8f && node.size.height / density >= 8f)
-            stops += named.take(40)
+            val stop = focusedStop()
+            assertTrue("press ${press + 1} of Tab landed on nothing that can be seen or said; the stops so far: ${seen.map { it.name.take(30) }}", stop != null)
+            stop!!
+            assertTrue("press ${press + 1}: the stop has no name", stop.name.isNotEmpty())
+            assertTrue("press ${press + 1}: \"${stop.name}\" is ${stop.widthDp}x${stop.heightDp} dp, too small to hit", stop.widthDp >= 8f && stop.heightDp >= 8f)
+            assertTrue("press ${press + 1}: \"${stop.name}\" stands outside the window", stop.inside)
+            assertTrue("press ${press + 1}: \"${stop.name}\" is a stop for the second time", seen.none { it.id == stop.id })
+            seen += stop
         }
-        // No stop has the same name as the one before it: a field with something drawn over it would be two stops.
-        stops.zipWithNext().forEach { (before, after) -> assertTrue("the stop \"$after\" came twice running", before != after) }
+        val missed = fields.filter { id -> seen.none { it.id == id } }
+        assertTrue("fields that were in view at the start and were never a stop: ${missed.size} of ${fields.size}", missed.isEmpty())
+    }
+
+    /** After a field's keyboard action ends the typing, the out-of-sight place that takes the focus is not a stop of the next Tab. */
+    @Test
+    fun aKeyboardsDoneLeavesNoInvisibleStopForTheNextTab() {
+        val origin = arguments.getString("store")
+        assumeTrue("no store demo was named", origin != null)
+        val app = start(origin!!)
+        send(app, Events.select(2))
+        settled(app)
+        // The first field is the search box; the next is a row's quantity, a field of a form that its keyboard action ends.
+        val field = compose.onAllNodes(hasSetTextAction())[1]
+        field.performClick()
+        compose.waitForIdle()
+        field.performImeAction()
+        compose.waitForIdle()
+        Thread.sleep(500)
+        assertEquals("no field holds the focus after Done", 0, compose.onAllNodes(hasSetTextAction() and isFocused()).fetchSemanticsNodes().size)
+        repeat(6) { press ->
+            compose.onRoot().performKeyInput { pressKey(Key.Tab) }
+            compose.waitForIdle()
+            val stop = focusedStop()
+            assertTrue("press ${press + 1} of Tab after Done landed on nothing that can be seen or said", stop != null)
+        }
     }
 
     @Test
