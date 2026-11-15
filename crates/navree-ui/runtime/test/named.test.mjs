@@ -17,7 +17,7 @@ const page = install({
         <button id="void" type="submit" data-ui-confirm="Cancel {n} invoices?">Cancel</button>
       </form>
       <table><tbody><tr data-key="k1"><td><input id="box" type="checkbox" data-ui-select-row value="k1"></td></tr></tbody></table>
-      <form id="edit" method="post" action="/invoices/k1/title" data-ui-edit><input id="cell" name="title" value="Paid"><input name="requestSubmit"></form>
+      <form id="edit" method="post" action="/invoices/k1/title" data-ui-edit><input id="cell" name="value" value="Paid"><input name="requestSubmit"></form>
       <dialog id="t-confirm"><p data-slot="dialog-description"></p><button id="yes" type="button" data-ui-confirm-yes>Yes</button></dialog>
     </div>
     <form id="plain" method="get" action="/invoices/search"><input name="q" value="UPI"><input name="requestSubmit"></form>
