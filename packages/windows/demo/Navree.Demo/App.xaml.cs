@@ -44,11 +44,20 @@ public partial class App : Application
                 KeptFolder = Path.Combine(Path.GetTempPath(), "navree-demo-kept-" + Environment.ProcessId),
             };
 
-        host = new ShellHost(options, DispatcherQueue.GetForCurrentThread());
-        window = new ShellWindow(host);
-        window.SetFlowDirection(Array.IndexOf(arguments, "--rtl") >= 0);
-        window.Activate();
-        host.Start();
+        try
+        {
+            host = new ShellHost(options, DispatcherQueue.GetForCurrentThread());
+            host.Problem += what => File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "navree-demo.log"), "problem: " + what + Environment.NewLine);
+            window = new ShellWindow(host);
+            window.SetFlowDirection(Array.IndexOf(arguments, "--rtl") >= 0);
+            window.Activate();
+            host.Start();
+        }
+        catch (Exception problem)
+        {
+            File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "navree-demo.log"), "start: " + problem + Environment.NewLine);
+            throw;
+        }
 
         if (Option(arguments, "--walk") is string folder)
         {

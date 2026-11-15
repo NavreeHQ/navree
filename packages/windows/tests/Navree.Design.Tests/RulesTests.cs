@@ -31,6 +31,15 @@ public sealed class RulesTests
     }
 
     [TestMethod]
+    public void A_long_form_is_a_pane_at_the_side_only_when_the_window_is_wide_and_everything_else_is_a_dialog()
+    {
+        Assert.IsTrue(WindowRules.UsesSidePane(WidthClass.Expanded, true));
+        Assert.IsFalse(WindowRules.UsesSidePane(WidthClass.Expanded, false));
+        Assert.IsFalse(WindowRules.UsesSidePane(WidthClass.Medium, true));
+        Assert.IsFalse(WindowRules.UsesSidePane(WidthClass.Compact, true));
+    }
+
+    [TestMethod]
     public void The_core_is_told_the_class_by_its_own_words_and_the_smallest_window_leaves_snap_layouts_working()
     {
         Assert.AreEqual("compact", WindowRules.Word(WidthClass.Compact));

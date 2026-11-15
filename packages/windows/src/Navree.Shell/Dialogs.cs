@@ -7,11 +7,12 @@ using Navree.Runtime;
 namespace Navree.Shell;
 
 /// <summary>
-/// What is shown over the window: the question a control asked before it acts, a screen presented as a sheet, a
-/// dialog or a sheet of the page itself. One at a time, as a <see cref="ContentDialog"/> is; the core says which, and
-/// when the person closes one the core is told. A dialog the core took away is closed without telling it again.
+/// What is shown over the window: the question a control asked before it acts (always a dialog, which is what a question
+/// is), and a screen presented as a sheet or a sheet of the page itself, which is a pane at the side when the window is
+/// wide and what it holds is more than a question, and a dialog otherwise. One at a time; the core says which, and when
+/// the person closes one the core is told. What the core took away is closed without telling it again.
 /// </summary>
-internal sealed class Dialogs(ShellHost host, FrameworkElement root)
+internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pane)
 {
     private Wanted? latest;
     private Wanted? showing;
@@ -30,6 +31,8 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root)
         }
     }
 
+    private WidthClass Width => WindowRules.ClassOf(root.ActualWidth);
+
     private Wanted? Decide(ViewState state, RenderContext? context, bool modalInFront)
     {
         ScreenView? front = state.FrontScreen;
@@ -37,18 +40,15 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root)
         {
             return new Wanted(
                 "question:" + front.Id + ":" + question.Id,
-                () =>
+                () => new ContentDialog
                 {
-                    ContentDialog ask = new()
-                    {
-                        Title = question.Title,
-                        Content = question.Text is null ? null : Look.Label(question.Text),
-                        PrimaryButtonText = question.Confirm,
-                        CloseButtonText = question.Cancel ?? "Cancel",
-                        DefaultButton = ContentDialogButton.Close,
-                    };
-                    return ask;
+                    Title = question.Title,
+                    Content = question.Text is null ? null : Look.Label(question.Text),
+                    PrimaryButtonText = question.Confirm,
+                    CloseButtonText = question.Cancel ?? "Cancel",
+                    DefaultButton = ContentDialogButton.Close,
                 },
+                null,
                 null,
                 result => host.Send(Events.Answer(front.Id, question.Id, result == ContentDialogResult.Primary)));
         }
@@ -57,15 +57,19 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root)
         {
             long id = front.Id;
             ScreenPresenter presenter = new(host);
+            string heading = front.Screen?.Title ?? front.Title ?? string.Empty;
+            Models.Present present = state.Nav.Modals.FirstOrDefault(modal => modal.Stack.Contains(id))?.Present ?? Models.Present.Sheet;
             return new Wanted(
                 "screen:" + id,
-                () =>
+                () => new ContentDialog { Title = heading, Content = presenter, CloseButtonText = "Close", MinWidth = 520 },
+                new PaneBody(heading, () =>
                 {
-                    presenter.Show(front, WindowRules.ClassOf(root.ActualWidth));
-                    return new ContentDialog { Title = front.Screen?.Title ?? front.Title ?? string.Empty, Content = presenter, CloseButtonText = "Close", MinWidth = 520 };
-                },
-                () => presenter.Show(host.State.Screens.TryGetValue(id, out ScreenView? held) ? held : front, WindowRules.ClassOf(root.ActualWidth)),
-                _ => host.Send(Events.Dismissed(id)));
+                    presenter.Show(front, Width);
+                    return presenter;
+                }),
+                () => presenter.Show(host.State.Screens.TryGetValue(id, out ScreenView? held) ? held : front, Width),
+                _ => host.Send(Events.Dismissed(id)),
+                large: present != Models.Present.Full);
         }
 
         if (context is not null)
@@ -79,26 +83,44 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root)
                 }
 
                 OverlayRequest overlay = request;
+                bool large = overlay.Node is Models.Sheet { Size: Models.SheetSize.Large };
                 return new Wanted(
                     "overlay:" + screen.Id + ":" + overlay.Id,
                     () => OverlayDialog(overlay, context),
+                    new PaneBody(Titled(overlay), () => OverlayBody(overlay, context)),
                     null,
-                    _ => host.Send(Events.Overlay(screen.Id, overlay.Id, false)));
+                    _ => host.Send(Events.Overlay(screen.Id, overlay.Id, false)),
+                    large: large);
             }
         }
 
         return null;
     }
 
-    private static ContentDialog OverlayDialog(OverlayRequest overlay, RenderContext context)
+    private static string Titled(OverlayRequest overlay) =>
+        overlay.Node switch
+        {
+            Models.Sheet sheet => sheet.Title ?? string.Empty,
+            Models.Dialog dialog => dialog.Title ?? string.Empty,
+            _ => string.Empty,
+        };
+
+    private static ContentDialog OverlayDialog(OverlayRequest overlay, RenderContext context) =>
+        new()
+        {
+            Title = Titled(overlay),
+            Content = new ScrollViewer { Content = OverlayBody(overlay, context) },
+            CloseButtonText = "Close",
+            MinWidth = 480,
+        };
+
+    private static UIElement OverlayBody(OverlayRequest overlay, RenderContext context)
     {
         NodeRenderer renderer = new(context);
         StackPanel body = new() { Spacing = 12 };
-        string? title = null;
         switch (overlay.Node)
         {
             case Models.Sheet sheet:
-                title = sheet.Title;
                 if (sheet.Subtitle is not null)
                 {
                     body.Children.Add(Look.Label(sheet.Subtitle, muted: true));
@@ -115,20 +137,19 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root)
                 }
 
                 break;
-            case Models.Dialog dialog:
-                title = dialog.Title;
-                if (dialog.Text is not null)
+            case Models.Dialog inner:
+                if (inner.Text is not null)
                 {
-                    body.Children.Add(Look.Label(dialog.Text));
+                    body.Children.Add(Look.Label(inner.Text));
                 }
 
-                foreach (Models.Node child in dialog.Children)
+                foreach (Models.Node child in inner.Children)
                 {
                     body.Children.Add(renderer.RenderInOverlay(child, overlay.Id));
                 }
 
                 StackPanel actions = new() { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
-                foreach (Models.Node action in dialog.Actions)
+                foreach (Models.Node action in inner.Actions)
                 {
                     actions.Children.Add(renderer.RenderInOverlay(action, overlay.Id));
                 }
@@ -146,16 +167,10 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root)
                 break;
         }
 
-        return new ContentDialog
-        {
-            Title = title ?? string.Empty,
-            Content = new ScrollViewer { Content = body },
-            CloseButtonText = "Close",
-            MinWidth = 480,
-        };
+        return body;
     }
 
-    // One dialog is on screen at a time: what is wanted replaces what is showing, and the latest wish wins.
+    // One thing is over the window at a time: what is wanted replaces what is showing, and the latest wish wins.
     private async Task PumpAsync()
     {
         pumping = true;
@@ -178,12 +193,30 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root)
                     continue;
                 }
 
+                if (pane.IsShowing)
+                {
+                    pane.Hide();
+                    showing = null;
+                    continue;
+                }
+
                 if (want is null)
                 {
                     return;
                 }
 
-                ContentDialog next = want.Build();
+                if (want.Pane is PaneBody body && WindowRules.UsesSidePane(Width, want.Large))
+                {
+                    showing = want;
+                    pane.Show(body.Title, body.Build(), () =>
+                    {
+                        showing = null;
+                        want.OnClosed(ContentDialogResult.None);
+                    });
+                    return;
+                }
+
+                ContentDialog next = want.Dialog();
                 next.XamlRoot = root.XamlRoot;
                 dialog = next;
                 showing = want;
@@ -213,5 +246,10 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root)
         }
     }
 
-    private sealed record Wanted(string Key, Func<ContentDialog> Build, Action? Refresh, Action<ContentDialogResult> OnClosed);
+    private sealed record PaneBody(string Title, Func<UIElement> Build);
+
+    private sealed record Wanted(string Key, Func<ContentDialog> Dialog, PaneBody? Pane, Action? Refresh, Action<ContentDialogResult> OnClosed, bool large = false)
+    {
+        internal bool Large { get; } = large;
+    }
 }

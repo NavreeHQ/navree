@@ -1,5 +1,6 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -28,6 +29,8 @@ public sealed class ShellWindow : Window
     private readonly TextBlock announcer = new() { Opacity = 0, Height = 0, IsHitTestVisible = false };
     private readonly Grid root = new();
     private readonly Dialogs dialogs;
+    private readonly SidePane sidePane = new();
+    private readonly AutoSuggestBox search = new() { Visibility = Visibility.Collapsed, MaxWidth = 460, VerticalAlignment = VerticalAlignment.Center, QueryIcon = new SymbolIcon(Symbol.Find) };
     private bool updatingSelection;
     private string destinationsKey = string.Empty;
     private WidthClass width = WidthClass.Expanded;
@@ -41,16 +44,25 @@ public sealed class ShellWindow : Window
         this.host = host;
         front = new ScreenPresenter(host);
         back = new ScreenPresenter(host);
-        dialogs = new Dialogs(host, root);
+        dialogs = new Dialogs(host, root, sidePane);
 
         Title = host.Options.AppName;
         SystemBackdrop = new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.Base };
         ExtendsContentIntoTitleBar = true;
+        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
 
         titleBar.Title = host.Options.AppName;
         titleBar.IsBackButtonVisible = true;
         titleBar.IsBackButtonEnabled = false;
         titleBar.IsPaneToggleButtonVisible = true;
+        titleBar.Content = search;
+        search.QuerySubmitted += (_, e) =>
+        {
+            if (host.State.FrontScreen is ScreenView current)
+            {
+                host.Send(Events.Search(current.Id, e.QueryText));
+            }
+        };
         titleBar.BackRequested += (_, _) => host.Send(Events.Back);
         titleBar.PaneToggleRequested += (_, _) => navigation.IsPaneOpen = !navigation.IsPaneOpen;
 
@@ -61,6 +73,7 @@ public sealed class ShellWindow : Window
         navigation.SelectionChanged += OnSelectionChanged;
 
         content.Children.Add(front);
+        content.Children.Add(sidePane);
         content.Children.Add(messages);
         content.Children.Add(announcer);
         navigation.Content = content;
@@ -165,6 +178,7 @@ public sealed class ShellWindow : Window
         NavPart nav = state.Nav;
         titleBar.IsBackButtonEnabled = nav.CanGoBack;
         ShowDestinations(nav);
+        ShowSearch(state.FrontScreen?.Screen?.Search);
 
         if (nav.Stage != Stage.Ready)
         {
@@ -193,6 +207,24 @@ public sealed class ShellWindow : Window
 
         front.Show(baseScreen, width);
         dialogs.Update(state, front.Context, modalInFront);
+    }
+
+    // The screen's own search is the title bar's: the place a Windows person looks for it.
+    private void ShowSearch(Models.Search? wanted)
+    {
+        search.Visibility = wanted is null ? Visibility.Collapsed : Visibility.Visible;
+        if (wanted is null)
+        {
+            return;
+        }
+
+        search.PlaceholderText = wanted.Placeholder ?? "Search";
+        if (search.FocusState == FocusState.Unfocused && search.Text != wanted.Value)
+        {
+            search.Text = wanted.Value;
+        }
+
+        AutomationProperties.SetName(search, wanted.Placeholder ?? "Search");
     }
 
     private void ShowStage(NavPart nav)

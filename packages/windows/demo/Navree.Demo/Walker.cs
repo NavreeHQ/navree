@@ -24,7 +24,7 @@ internal sealed class Walker(ShellHost host, ShellWindow window, string folder)
             await ReadyAsync();
             foreach ((string name, int width) in Widths)
             {
-                window.Size(width, 820);
+                window.Size(width, 2600);
                 await SettleAsync();
                 await HomeAsync();
 

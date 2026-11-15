@@ -186,14 +186,6 @@ internal sealed class ScreenPresenter : Grid
             titles.Children.Add(Look.Label(screen.Subtitle, "BodyTextBlockStyle", muted: true));
         }
 
-        if (screen.Search is Models.Search search)
-        {
-            AutoSuggestBox box = new() { PlaceholderText = search.Placeholder ?? "Search", Text = search.Value, QueryIcon = new SymbolIcon(Symbol.Find), Margin = new Thickness(0, 8, 0, 0), MaxWidth = 420, HorizontalAlignment = HorizontalAlignment.Left };
-            box.QuerySubmitted += (_, e) => context.Send(Events.Search(context.Screen.Id, e.QueryText));
-            AutomationProperties.SetName(box, search.Placeholder ?? "Search");
-            titles.Children.Add(box);
-        }
-
         header.Children.Add(titles);
         if (screen.Actions.Count > 0)
         {

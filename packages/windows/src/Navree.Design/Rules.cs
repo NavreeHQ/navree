@@ -53,6 +53,15 @@ public static class WindowRules
     /// <returns>Whether there are two panes.</returns>
     public static bool TwoPanes(WidthClass width, int stackDepth) => width == WidthClass.Expanded && stackDepth >= 2;
 
+    /// <summary>
+    /// Whether a long form or a detail is a pane at the side of the window and not a dialog: the window is wide enough to
+    /// keep what is behind it in view, and what it holds is more than a question or a short form.
+    /// </summary>
+    /// <param name="width">The window's class.</param>
+    /// <param name="large">Whether what it holds is a long form or a detail.</param>
+    /// <returns>Whether it is a side pane.</returns>
+    public static bool UsesSidePane(WidthClass width, bool large) => width == WidthClass.Expanded && large;
+
     /// <summary>The space of a step of the protocol's spacing: four effective pixels, the grid of the Windows design guidance.</summary>
     /// <param name="steps">How many steps.</param>
     /// <returns>Effective pixels.</returns>
