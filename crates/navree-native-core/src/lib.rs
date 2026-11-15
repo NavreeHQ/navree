@@ -60,6 +60,7 @@ mod sign_in;
 pub mod snapshot;
 mod state;
 mod tree;
+mod weight;
 
 pub use config::{CacheConfig, Config, DeepLinks, SignInConfig};
 pub use effect::{Body, Change, Effect, Part, Request, Update, Verb};

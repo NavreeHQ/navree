@@ -92,15 +92,20 @@ pub const MAX_NESTING: usize = 127;
 /// answer as one it could not read, before reading it. The largest answer
 /// recorded so far, a page of fifty rows of the store's inventory, is about
 /// 30 KB; this is more than two hundred and fifty times that, and holds a
-/// page with every chart at the most points the vocabulary allows.
+/// page with every chart at the most points the vocabulary allows. The shapes
+/// of an envelope's icon table, once for each icon that names one, may add up
+/// to no more than this either: a shape is written into every icon that uses it.
 pub const MAX_BODY: usize = 8 * 1024 * 1024;
 
 /// The most nodes an answer may hold, counted across its screen, its ops and
-/// its rows together: 100,000. A client fails an answer with more as one it
-/// could not read. The largest page recorded so far holds about 410 (fifty
-/// rows of the store's inventory); the most the core is shown to read in one
-/// answer, a list of ten thousand rows beside a table of ten thousand, holds
-/// about 70,000. A page that comes near it should be cut into pages by cursor.
+/// its rows together: 100,000. What stands in a tree without being a node, a
+/// table's rows and columns, the items of a list of facts, the tabs of a set
+/// of tabs, the points of a chart, counts as one node each. A client fails an
+/// answer with more as one it could not read. The largest page recorded so far
+/// holds about 410 (fifty rows of the store's inventory); the most the core is
+/// shown to read in one answer, a list of ten thousand rows beside a table of
+/// ten thousand, holds about 80,000. A page that comes near it should be cut
+/// into pages by cursor.
 pub const MAX_NODES: usize = 100_000;
 
 /// The most ops one answer may hold: 1,000. A client fails an answer with
