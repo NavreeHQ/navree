@@ -271,17 +271,17 @@ public sealed partial class DayPagerView : KindControl
         CalendarView calendar = new() { SelectionMode = CalendarViewSelectionMode.Single };
         if (PagerRules.Day(pager.First) is DateOnly low)
         {
-            calendar.MinDate = new DateTimeOffset(low.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            calendar.MinDate = PagerRules.Midnight(low, TimeZoneInfo.Local);
         }
 
         if (PagerRules.Day(pager.Last) is DateOnly high)
         {
-            calendar.MaxDate = new DateTimeOffset(high.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            calendar.MaxDate = PagerRules.Midnight(high, TimeZoneInfo.Local);
         }
 
         if (PagerRules.Day(pager.Date) is DateOnly shown)
         {
-            DateTimeOffset at = new(shown.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            DateTimeOffset at = PagerRules.Midnight(shown, TimeZoneInfo.Local);
             calendar.SetDisplayDate(at);
             calendar.SelectedDates.Add(at);
         }
@@ -294,7 +294,7 @@ public sealed partial class DayPagerView : KindControl
                 return;
             }
 
-            DateOnly chosen = DateOnly.FromDateTime(args.AddedDates[0].Date);
+            DateOnly chosen = PagerRules.DayOf(args.AddedDates[0], TimeZoneInfo.Local);
             string text = PagerRules.Text(chosen);
 
             // The day already shown is selected when the calendar opens: choosing it again is not a change.

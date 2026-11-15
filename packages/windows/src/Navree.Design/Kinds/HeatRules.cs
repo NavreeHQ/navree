@@ -17,6 +17,26 @@ public static class PagerRules
     /// <returns>The text.</returns>
     public static string Text(DateOnly day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// The value a calendar control is given for a person's day: the day's midnight in the person's own time zone, with that zone's offset
+    /// on that day, so the control shows the same day to a person at UTC-5 as to one at UTC+5:30.
+    /// </summary>
+    /// <param name="day">The day.</param>
+    /// <param name="zone">The person's time zone.</param>
+    /// <returns>The day's midnight.</returns>
+    public static DateTimeOffset Midnight(DateOnly day, TimeZoneInfo zone)
+    {
+        DateTime local = day.ToDateTime(TimeOnly.MinValue);
+        return new DateTimeOffset(local, zone.GetUtcOffset(local));
+    }
+
+    /// <summary>The person's day a calendar control's value stands for.</summary>
+    /// <param name="value">The control's value.</param>
+    /// <param name="zone">The person's time zone.</param>
+    /// <returns>The day.</returns>
+    public static DateOnly DayOf(DateTimeOffset value, TimeZoneInfo zone) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(value, zone).DateTime);
+
     /// <summary>Whether a day may be chosen: inside the first and last days where they are given.</summary>
     /// <param name="day">The day's text.</param>
     /// <param name="first">The first day, or none.</param>
