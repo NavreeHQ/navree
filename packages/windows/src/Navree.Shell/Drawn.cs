@@ -421,10 +421,14 @@ public static class PageReports
     /// <summary>The count of nodes that the table's rows drew when they came into view, since the app started.</summary>
     public static int CellsDrawn { get; internal set; }
 
+    /// <summary>How many reports there have been in all, so a check can say which came after a moment.</summary>
+    public static int Total { get; private set; }
+
     internal static void Add(PageReport report)
     {
         lock (Held)
         {
+            Total++;
             Held.Add(report);
             if (Held.Count > 200)
             {

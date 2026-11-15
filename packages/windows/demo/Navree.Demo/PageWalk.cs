@@ -142,10 +142,24 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
 
     private async Task StoreAsync()
     {
-        await SearchAsync();
-        await KeysAsync();
-        await WheelAsync();
-        await ReturnAsync();
+        // The search goes last: the letters stay in the box and in the core, and the table that follows would hold fewer rows.
+        await GuardedAsync("the keys", KeysAsync);
+        await GuardedAsync("the wheel", WheelAsync);
+        await GuardedAsync("coming back to a screen", ReturnAsync);
+        await GuardedAsync("the search box", SearchAsync);
+    }
+
+    // One scenario that throws loses only itself.
+    private async Task GuardedAsync(string name, Func<Task> scenario)
+    {
+        try
+        {
+            await scenario();
+        }
+        catch (Exception problem)
+        {
+            Say("[page] FAIL " + name + " could not be walked: " + problem.Message);
+        }
     }
 
     // The orders table with its first rows only: the destination chosen and the screen asked for again.
@@ -180,7 +194,7 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
         }
 
         long screen = host.State.Nav.Front ?? 0;
-        int mark = PageReports.All.Count;
+        int mark = PageReports.Total;
         int cellsBefore = PageReports.CellsDrawn;
         await ClickAsync(before);
         foreach (char letter in "kaur")
@@ -202,7 +216,7 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
         await ShotAsync("page-search");
 
         // Line 9: what the answers drew.
-        List<PageReport> passes = [.. PageReports.All.Skip(mark).Where(report => report.Screen == screen)];
+        List<PageReport> passes = [.. PageReports.All.TakeLast(Math.Max(0, PageReports.Total - mark)).Where(report => report.Screen == screen)];
         PageReport? first = PageReports.All.FirstOrDefault(report => report.Screen == screen && report.Kind == "whole");
         foreach (PageReport pass in passes)
         {
@@ -261,16 +275,21 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
         }
 
         int before = RowsHeld();
+        string? lastKey = LastRowKey();
         DataTableCellRef? lastBefore = table.ActiveCell;
         Foreground();
         keybd_event(ControlKey, 0, 0, UIntPtr.Zero);
+        await Task.Delay(60);
         Press(EndKey);
+        await Task.Delay(60);
         keybd_event(ControlKey, 0, KeyUp, UIntPtr.Zero);
-        for (int waited = 0; waited < 9000 && RowsHeld() <= before; waited += 100)
+        for (int waited = 0; waited < 9000 && RowsHeld() <= before; waited += 20)
         {
-            await Task.Delay(100);
+            await Task.Delay(20);
             lastBefore = table.ActiveCell ?? lastBefore;
         }
+
+        Check("Control and End put the active cell on the last row held", lastBefore is { } reached && reached.RowKey == lastKey, "the last row is " + lastKey + ", the active cell was " + Words(lastBefore));
 
         Describe("after Control and End, as the rows arrived", table);
         await Task.Delay(1800);
@@ -299,8 +318,11 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
         {
             Foreground();
             Press(PageDownKey);
-            await Task.Delay(450);
-            lastBefore = table.ActiveCell ?? lastBefore;
+            for (int waited = 0; waited < 450 && RowsHeld() <= before; waited += 20)
+            {
+                await Task.Delay(20);
+                lastBefore = table.ActiveCell ?? lastBefore;
+            }
         }
 
         for (int waited = 0; waited < 5000 && RowsHeld() <= before; waited += 100)
@@ -372,7 +394,7 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
 
         Say("the wheel was turned " + seen.Count + " times; the core holds " + total + " rows; " + arrivals + " arrivals; the view reached " + highest.ToString("0", CultureInfo.InvariantCulture) + " and lost at most " + mostLost.ToString("0", CultureInfo.InvariantCulture) + " after reaching it");
         Check("rows kept arriving as the end was reached", arrivals >= 3 && total >= 200, arrivals + " arrivals, " + total + " rows");
-        Check("the view did not jump when rows arrived", mostLost < 60, "at most " + mostLost.ToString("0", CultureInfo.InvariantCulture) + " px lost");
+        Check("the view did not jump when rows arrived, and it did scroll", mostLost < 60 && highest > 1000, "at most " + mostLost.ToString("0", CultureInfo.InvariantCulture) + " px lost after reaching " + highest.ToString("0", CultureInfo.InvariantCulture));
         Check("the table is the same object after the rows arrived", ReferenceEquals(table, TableNow()), "same: " + ReferenceEquals(table, TableNow()));
         await ShotAsync("page-wheel");
     }
@@ -428,6 +450,8 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
 
     private async Task InboxAsync()
     {
+        host.Send(Events.Select(0));
+        await SettleAsync();
         await Task.Delay(1500);
         if (host.State.FrontScreen?.Screen is Models.Screen list
             && Tree.Nodes(list).Select(node => node.GetType().GetProperty("Action")?.GetValue(node)).OfType<Models.ActionNavigate>().FirstOrDefault(go => go.Href.StartsWith("/inbox/", StringComparison.Ordinal)) is { } open)
@@ -452,13 +476,20 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
             return;
         }
 
+        int reports = PageReports.Total;
         await ClickAsync(button);
         await Task.Delay(900);
         bool open = VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Any(popup => popup.Child is not null && Below(popup.Child).Any(part => part is FlyoutPresenter or ContentDialog));
         Check(label + " opened", open, "a flyout or a dialog is open: " + open);
         Foreground();
         Press(EscapeKey);
+        for (int waited = 0; waited < 5000 && host.State.FrontScreen?.Overlays.Count > 0; waited += 100)
+        {
+            await Task.Delay(100);
+        }
+
         await Task.Delay(900);
+        Say("the core's answers since the press: " + (PageReports.Total - reports) + " passes over the page; overlays held: " + (host.State.FrontScreen?.Overlays.Count ?? 0));
         bool closed = !VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Any(popup => popup.Child is not null && Below(popup.Child).Any(part => part is FlyoutPresenter or ContentDialog));
         Check("Escape took " + label + " away", closed, closed ? "nothing is open" : "something is still open");
         Button? again = ButtonNamed(label);
@@ -472,7 +503,7 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
     }
 
     private Button? ButtonNamed(string label) =>
-        Below(window.Surface).OfType<Button>().FirstOrDefault(candidate => AutomationProperties.GetName(candidate) == label || candidate.Content as string == label);
+        Below(window.Surface).OfType<Button>().FirstOrDefault(candidate => candidate.ActualWidth > 0 && (AutomationProperties.GetName(candidate) == label || candidate.Content as string == label));
 
     // ================================================================================================================
     // The board: a disclosure (line 7), a sheet sent with a wrong value (line 6), a card moved and another pressed (line 10)
@@ -520,6 +551,7 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
         await PressAsync(SpaceKey);
         await SettleAsync();
         await Task.Delay(1500);
+        Check("Space shut the disclosure again", after is not null && after.IsExpanded == was, "now " + after?.IsExpanded + ", began " + was);
         Check("the focus is still on the disclosure after it was closed", Chain(FocusManager.GetFocusedElement(window.Surface.XamlRoot) as DependencyObject).Any(part => ReferenceEquals(part, first)), "focus is on " + FocusedWords());
     }
 
@@ -579,9 +611,14 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
         }
 
         Focus? asked = null;
+        long? olderSerial = host.State.FrontScreen?.Focus?.Serial;
         for (int sample = 0; sample < 150; sample++)
         {
-            asked ??= host.State.FrontScreen?.Focus;
+            if (host.State.FrontScreen?.Focus is { } request && request.Serial != olderSerial)
+            {
+                asked ??= request;
+            }
+
             await Task.Delay(15);
         }
 
@@ -590,7 +627,7 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
         FrameworkElement? after = SheetOnScreen();
         string? error = host.State.FrontScreen?.Forms.Values.SelectMany(form => form.Fields.Values).SelectMany(field => field.Errors).FirstOrDefault();
         Check("the server refused the empty comment with words for the field", error is not null, error is null ? "no field holds an error" : "\"" + error + "\"");
-        Check("the sheet stayed open and is the same object", after is not null && ReferenceEquals(after, sheet), "sheet before " + sheet.GetType().Name + ", after " + after?.GetType().Name + ", same: " + ReferenceEquals(after, sheet));
+        Check("the sheet stayed open (the same dialog, or the one pane)", after is not null && ReferenceEquals(after, sheet), "sheet before " + sheet.GetType().Name + ", after " + after?.GetType().Name + ", same: " + ReferenceEquals(after, sheet));
         Check("the error stands at its field in the sheet", error is not null && after is not null && DrawnText.Of(after).Contains(error, StringComparison.Ordinal), error is null ? "no error" : "\"" + error + "\" looked for in the sheet");
         Check("the comment box is the same object after the answer", after is not null && Below(after).OfType<TextBox>().Any(box => ReferenceEquals(box, comment)), "same box found: " + (after is not null && Below(after).OfType<TextBox>().Any(box => ReferenceEquals(box, comment))));
         Check("the core asked for the focus to be put on the field in error", asked is not null, asked is null ? "no request was seen" : "target " + asked.Target);
@@ -660,12 +697,13 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
         FrameworkElement? cardBNow = handleBNow is null ? null : Up(handleBNow);
         Check("the second card stood across the move of the first", ReferenceEquals(cardB, cardBNow) && ReferenceEquals(handleB, handleBNow), "card same: " + ReferenceEquals(cardB, cardBNow) + ", handle same: " + ReferenceEquals(handleB, handleBNow));
         Foreground();
-        _ = handleB.Focus(FocusState.Keyboard);
+        _ = (handleBNow ?? handleB).Focus(FocusState.Keyboard);
         await Task.Delay(500);
         await ChordAsync(DownKey);
         await WaitOrderAsync("backlog", 1, second.Id);
         List<string> end = Order("backlog");
         Say("after the second card's handle was pressed the lane holds " + string.Join(", ", end.Take(5)));
+        Check("the lane is where it began after the two moves", end.Take(5).SequenceEqual(start.Take(5)), "began " + string.Join(", ", start.Take(5)) + ", now " + string.Join(", ", end.Take(5)));
         Check("the second card went one place down in the board as it is now, not as it was", end.IndexOf(second.Id) == moved.IndexOf(second.Id) + 1 && end.IndexOf(first.Id) == moved.IndexOf(first.Id) - 1, "the lane held " + string.Join(", ", moved.Take(4)) + " and now holds " + string.Join(", ", end.Take(4)));
     }
 
@@ -711,7 +749,7 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
     }
 
     private Button? HandleOf(string title) =>
-        Below(window.Surface).OfType<Button>().FirstOrDefault(button => AutomationProperties.GetName(button) == "Move " + title);
+        Below(window.Surface).OfType<Button>().FirstOrDefault(button => button.ActualWidth > 0 && AutomationProperties.GetName(button) == "Move " + title);
 
     private static FrameworkElement? Up(DependencyObject from)
     {
@@ -730,16 +768,22 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
     // What is on the screen, and what the core holds
     // ================================================================================================================
 
+    private string? LastRowKey() =>
+        host.State.FrontScreen?.Screen is Models.Screen tree ? Tree.Nodes(tree).OfType<Models.Table>().Select(table => table.Rows.LastOrDefault()?.Id).FirstOrDefault() : null;
+
     private int RowsHeld() =>
         host.State.FrontScreen?.Screen is Models.Screen tree ? Tree.Nodes(tree).OfType<Models.Table>().Select(table => table.Rows.Count).FirstOrDefault() : -1;
 
     private TextBox? SearchBox() =>
-        Below(window.Surface).OfType<TextBox>().FirstOrDefault(box => AutomationProperties.GetName(box).Contains("search", StringComparison.OrdinalIgnoreCase) || box.PlaceholderText.Contains("search", StringComparison.OrdinalIgnoreCase));
+        Below(window.Surface).OfType<TextBox>().FirstOrDefault(box => box.ActualWidth > 0 && (AutomationProperties.GetName(box).Contains("search", StringComparison.OrdinalIgnoreCase) || box.PlaceholderText.Contains("search", StringComparison.OrdinalIgnoreCase)));
 
     private DataTable? TableNow() => Below(window.Surface).OfType<DataTable>().FirstOrDefault();
 
     private static FrameworkElement? FirstCell(DataTable table) =>
-        Below(table).OfType<FrameworkElement>().FirstOrDefault(element => element.GetType().Name == "DataTableCell" && element.ActualWidth > 0 && element.TransformToVisual(table).TransformPoint(new Point(0, 0)).Y > 60);
+        Below(table).OfType<FrameworkElement>()
+            .Where(element => element.GetType().Name == "DataTableCell" && element.ActualWidth > 0 && element.TransformToVisual(table).TransformPoint(new Point(0, 0)).Y is > 60 and < 400)
+            .OrderBy(element => element.TransformToVisual(table).TransformPoint(new Point(0, 0)).Y)
+            .FirstOrDefault();
 
     private bool FocusIsIn(DependencyObject container) =>
         Chain(FocusManager.GetFocusedElement(window.Surface.XamlRoot) as DependencyObject).Any(part => ReferenceEquals(part, container));
