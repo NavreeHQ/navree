@@ -11,7 +11,7 @@ public readonly record struct ColInfo(string Key, ColumnKind Kind, ColumnRole Ro
 public static class ColumnSet
 {
     /// <summary>The width a name column is counted at when the room is shared out: it takes what is left, down to its least, so it is not counted whole.</summary>
-    public const double TitleComfort = 160;
+    public const double TitleComfort = 140;
 
     /// <summary>The most columns a table shows.</summary>
     public const int MostShown = 48;

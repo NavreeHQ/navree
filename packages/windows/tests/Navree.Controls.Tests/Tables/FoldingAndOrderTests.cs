@@ -196,9 +196,9 @@ public sealed class ColumnSetTests
             new("s2", ColumnKind.Words, ColumnRole.None, true),
         ];
         double[] asks = [240, 100, 100, 100];
-        Same.Items([0, 1, 2, 3], ColumnSet.Shown(columns, Set(), Set(), asks, 460));
-        Same.Items([0, 1, 2], ColumnSet.Shown(columns, Set(), Set(), asks, 459));
-        Same.Items([0, 2], ColumnSet.Shown(columns, Set(), Set(), asks, 359));
+        Same.Items([0, 1, 2, 3], ColumnSet.Shown(columns, Set(), Set(), asks, 440));
+        Same.Items([0, 1, 2], ColumnSet.Shown(columns, Set(), Set(), asks, 439));
+        Same.Items([0, 2], ColumnSet.Shown(columns, Set(), Set(), asks, 339));
         Same.Items([0, 2], ColumnSet.Shown(columns, Set(), Set(), asks, 50));
     }
 

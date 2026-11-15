@@ -17,7 +17,7 @@ internal static class ContrastScenario
           <Grid x:Name="PART_Root" Width="60" Height="60">
             @RESOURCES@
             <Border x:Name="PART_Box" CornerRadius="9" BorderThickness="3" BORDER BACKGROUND />
-            <FontIcon x:Name="PART_Glyph" FontFamily="{ThemeResource SymbolThemeFontFamily}" FontSize="36" Glyph="&#xE73E;" GLYPH Visibility="Collapsed" />
+            <FontIcon x:Name="PART_Glyph" FontFamily="{ThemeResource SymbolThemeFontFamily}" FontSize="36" Glyph="&#xE73E;" GLYPH HighContrastAdjustment="None" Visibility="Collapsed" />
             <VisualStateManager.VisualStateGroups>
               <VisualStateGroup x:Name="CheckStates">
                 <VisualState x:Name="Unchecked" />

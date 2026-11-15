@@ -94,13 +94,28 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
         Say("the field held " + quantity.Text + " before it was typed into");
         await ClickAsync(quantity);
         Foreground();
+        ScreenView? before = host.State.FrontScreen;
+        FrameworkElement? page = window.CurrentPage;
         await KeyAsync(CtrlKey, LetterA);
-        await Task.Delay(150);
+        await Task.Delay(300);
         await KeyAsync(0, (byte)(Digit0 + 6));
+        await Task.Delay(700);
+        Say("after the 6: the field holds '" + quantity.Text + "', it is " + (quantity.XamlRoot is null ? "off the screen" : "still on it") + ", the page is " + (ReferenceEquals(page, window.CurrentPage) ? "the same" : "a new one") + ", focus is on " + FocusedWords());
+        Compare(before, host.State.FrontScreen);
+        TextBox? again = Everything().OfType<TextBox>().FirstOrDefault(box => NameOf(box).StartsWith("Units of Chakla belan", StringComparison.Ordinal));
+        Say("the field is " + (ReferenceEquals(again, quantity) ? "the same element" : "a new element") + " and holds '" + again?.Text + "'");
         await KeyAsync(0, Digit0);
         await Task.Delay(700);
-        Check("the quantity typed is in the field", quantity.Text == "60", "the field holds " + quantity.Text);
+        again = Everything().OfType<TextBox>().FirstOrDefault(box => NameOf(box).StartsWith("Units of Chakla belan", StringComparison.Ordinal));
+        Check("the quantity typed is in the field", again?.Text == "60", "the field holds '" + again?.Text + "'; focus is on " + FocusedWords());
         await ShotAsync("press-restock-typed", "60 typed into the quantity of the first row");
+
+        restock = again is null ? null : RestockBesides(again);
+        if (restock is null)
+        {
+            Check("the Restock button is on the screen after the typing", false, "no button");
+            return;
+        }
 
         int from = RecordingFetcher.Sent.Count;
         await ClickAsync(restock);
@@ -124,8 +139,16 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
             return;
         }
 
+        if (filter.Flyout is { } flyout)
+        {
+            flyout.Opened += (_, _) => Say("the flyout opened");
+            flyout.Closed += (_, _) => Say("the flyout closed");
+        }
+
+        Say("overlays now: " + string.Join(",", host.State.FrontScreen?.Overlays ?? []) + "; popups open: " + VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Count);
         await ClickAsync(filter);
         await Task.Delay(800);
+        Say("popups open: " + VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Count + "; focus is on " + FocusedWords());
         CheckBox? open = InPopups().OfType<CheckBox>().FirstOrDefault(box => box.Content is string text && text == "Open");
         Check("the Filter button opens a flyout with the Status choices", open is not null, open is null ? "no box says Open in an open popup" : "found");
         await ShotAsync("press-filter-open", "the flyout of the Filter button");
@@ -182,8 +205,75 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
 
         host.Send(Events.Select(destination));
         await SettleAsync();
+        if (host.State.FrontScreen is { } front)
+        {
+            foreach (string overlay in front.Overlays)
+            {
+                Say("closing the overlay " + overlay + " left open by the step before");
+                host.Send(Events.Overlay(front.Id, overlay, false));
+            }
+
+            await SettleAsync();
+        }
+
         await Task.Delay(1200);
         Foreground();
+    }
+
+    private string FocusedWords() =>
+        Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(window.Surface.XamlRoot) switch
+        {
+            null => "nothing",
+            TextBox box => "a text box that holds '" + box.Text + "'",
+            { } other => other.GetType().Name,
+        };
+
+    // What of a screen's state is another object after something was done: the parts a screen is drawn again for.
+    private void Compare(ScreenView? before, ScreenView? after)
+    {
+        if (before is null || after is null)
+        {
+            Say("the screen: none to compare");
+            return;
+        }
+
+        List<string> changed = [];
+        if (!ReferenceEquals(before.Content, after.Content))
+        {
+            changed.Add("content");
+        }
+
+        if (!ReferenceEquals(before.States, after.States))
+        {
+            changed.Add("states");
+        }
+
+        if (!ReferenceEquals(before.Overlays, after.Overlays))
+        {
+            changed.Add("overlays");
+        }
+
+        if (!ReferenceEquals(before.Regions, after.Regions))
+        {
+            changed.Add("regions");
+        }
+
+        if (!ReferenceEquals(before.Lists, after.Lists))
+        {
+            changed.Add("lists");
+        }
+
+        if (!ReferenceEquals(before.Forms, after.Forms))
+        {
+            changed.Add("forms");
+        }
+
+        if (before.Loading != after.Loading || before.Refreshing != after.Refreshing)
+        {
+            changed.Add("loading");
+        }
+
+        Say("what the screen is drawn again for, changed by the typing: " + (changed.Count == 0 ? "nothing" : string.Join(", ", changed)));
     }
 
     // ---- what is on the screen -------------------------------------------------------------------------

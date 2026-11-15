@@ -50,6 +50,17 @@
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
+                            <!-- In high contrast a chosen box takes the system's colours: the highlight, the text on it, and the window's text for its edge. -->
+                            <VisualStateGroup x:Name="ContrastStates">
+                                <VisualState x:Name="ContrastOff" />
+                                <VisualState x:Name="ContrastOn">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource SystemColorWindowTextColorBrush}" />
+                                        <Setter Target="PART_Glyph.Foreground" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
                     </Grid>
                 </ControlTemplate>

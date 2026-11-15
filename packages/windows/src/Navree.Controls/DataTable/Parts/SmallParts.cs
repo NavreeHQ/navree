@@ -7,6 +7,7 @@ namespace Navree.Controls;
 /// <summary>The box that chooses a row, drawn from the table's own brushes.</summary>
 public sealed class DataTableCheck : Control
 {
+    private static Windows.UI.ViewManagement.AccessibilitySettings? access;
     private HeaderBoxState state;
     private bool available = true;
 
@@ -56,6 +57,24 @@ public sealed class DataTableCheck : Control
         };
         VisualStateManager.GoToState(this, check, false);
         VisualStateManager.GoToState(this, available ? "Enabled" : "Unavailable", false);
+        VisualStateManager.GoToState(this, HighContrast && state != HeaderBoxState.Off ? "ContrastOn" : "ContrastOff", false);
+    }
+
+    // Whether the system's high contrast colours are on: read each time, as a person may turn them on while the table is open.
+    private static bool HighContrast
+    {
+        get
+        {
+            try
+            {
+                access ??= new Windows.UI.ViewManagement.AccessibilitySettings();
+                return access.HighContrast;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
     }
 }
 
