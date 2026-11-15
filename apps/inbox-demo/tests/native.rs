@@ -308,3 +308,68 @@ async fn the_shell_a_native_client_draws_its_navigation_from_keeps_its_counts() 
     assert!(ran.iter().any(|sql| sql.contains("conversations")));
     assert!(shell.text().contains("\"badge\""), "{:.400}", shell.text());
 }
+
+#[tokio::test]
+async fn the_live_streams_one_person_may_hold_are_the_number_the_app_is_built_with() {
+    let (app, _dir) = boot_desk().await;
+    let options = app.get::<navree::realtime::RealtimeOptions>().await;
+    assert_eq!(options.streams.per_user, 10_000);
+}
+
+#[tokio::test]
+async fn a_cookie_that_is_not_the_one_the_app_signed_for_an_agent_names_the_default_agent() {
+    let (app, _dir) = boot_desk().await;
+    let default = Some(inbox_demo::person::person_of(inbox_demo::data::DEFAULT_AGENT).to_string());
+    let signer = app.get::<navree::http::UrlSigner>().await;
+    let now = chrono::Utc::now();
+    // What the app signs for agent 2: `2.<expires>.<signature>`.
+    let good = inbox_demo::pages::agent_cookie(&signer, 2, now);
+    let [agent, expires, signature] = good.splitn(3, '.').collect::<Vec<_>>()[..] else {
+        panic!("{good}");
+    };
+    assert_eq!(agent, "2");
+    assert_eq!(
+        person_of(&app, "/_navree/native/shell", Some(&good)).await,
+        Some(inbox_demo::person::person_of(2).to_string())
+    );
+    let long = "a".repeat(10_000);
+    let digits = "7".repeat(10_000);
+    let expired = inbox_demo::pages::agent_cookie(&signer, 2, now - chrono::Duration::days(400));
+    let bad = [
+        // Signed for agent 2, with the number changed to 3.
+        ("another agent's number", format!("3.{expires}.{signature}")),
+        // Good while it lasted.
+        ("expired", expired),
+        (
+            "not hex",
+            format!("2.{expires}.{}", "z".repeat(signature.len())),
+        ),
+        (
+            "a later expiry",
+            format!("2.{}.{signature}", expires.parse::<i64>().unwrap_or(0) + 1),
+        ),
+        ("a signature far too long", format!("2.{expires}.{long}")),
+        (
+            "a number far too long",
+            format!("{digits}.{expires}.{signature}"),
+        ),
+        ("an expiry far too long", format!("2.{digits}.{signature}")),
+        ("no signature", format!("2.{expires}.")),
+        ("no parts", "2".to_owned()),
+        ("empty", String::new()),
+        ("a sign", format!("-2.{expires}.{signature}")),
+    ];
+    for (what, cookie) in bad {
+        assert_eq!(
+            person_of(&app, "/_navree/native/shell", Some(&cookie)).await,
+            default,
+            "{what}"
+        );
+        // The page answers too: nothing in its way of reading the cookie panics.
+        assert_eq!(
+            person_of(&app, "/inbox", Some(&cookie)).await,
+            default,
+            "{what}"
+        );
+    }
+}
