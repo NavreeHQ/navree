@@ -18,7 +18,7 @@ namespace Navree.Demo;
 /// holds it: by its handle's keys (Alt, Shift and an arrow), by the handle's menu (a real click on its item), and by dragging it with the pointer
 /// into another lane. The board is then asked again, so what the server kept is told too. What was done is written to <c>moves.txt</c>.
 /// </summary>
-internal sealed class BoardMoves(ShellHost host, ShellWindow window, string folder)
+internal sealed partial class BoardMoves(ShellHost host, ShellWindow window, string folder)
 {
     private const uint MoveTo = 0x0001;
     private const uint LeftDown = 0x0002;
@@ -71,6 +71,7 @@ internal sealed class BoardMoves(ShellHost host, ShellWindow window, string fold
             await MenuAsync();
             await DragAsync();
             await PersistAsync();
+            await SheetsAsync();
         }
         catch (Exception problem)
         {
