@@ -26,7 +26,7 @@ public sealed class ClientSettingsTests
         Assert.AreEqual("normal", Told.Since(Told with { MoreContrast = true }).Contrast);
         Assert.AreEqual(150, (Told with { TextPercent = 150 }).Since(Told).TextPercent);
         Assert.AreEqual("pa-IN", (Told with { Locale = "pa-IN" }).Since(Told).Locale);
-        Assert.AreEqual("Asia/Dubai", (Told with { TimeZone = "Asia/Dubai" }).Since(Told).TimeZone);
+        Assert.AreEqual("Asia/Colombo", (Told with { TimeZone = "Asia/Colombo" }).Since(Told).TimeZone);
     }
 
     [TestMethod]
