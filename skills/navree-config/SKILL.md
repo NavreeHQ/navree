@@ -36,7 +36,8 @@ such as `REDIS_URL`, and whether each is set) and check it with
 `navree config:check [--env production]`: all invalid sections at once, keys
 and sections that nothing reads (usually typos; the boot warns about them
 too), keys set in both `.env` and a file, and for production the unsafe
-settings (no `app.key`, a SQLite `database.url`, `mail.transport = "log"`).
+settings that fail the check (no `app.key`, a SQLite `database.url`,
+`mail.transport = "log"` and `session.secure = false`).
 Both run without booting the app. `navree config:schema [--out <file>]`
 writes a JSON Schema of the whole tree for the editor, and
 `navree config:publish <section> [--force] [--stdout]` writes
