@@ -165,6 +165,9 @@ internal sealed partial class PlotSurface : UserControl
     /// <summary>Paints again.</summary>
     internal void Repaint() => Paint(force: true);
 
+    /// <summary>Takes the read-out away.</summary>
+    internal void Dismiss() => Hide();
+
     /// <summary>Reads out the place at an index, as the keys do.</summary>
     internal void Reach(int index, bool speak = true)
     {
@@ -472,5 +475,49 @@ internal sealed partial class PlotPeer(PlotSurface owner) : FrameworkElementAuto
     public void SetValue(double value)
     {
         // The value is shown, never set by a person.
+    }
+}
+
+/// <summary>Reads out a place of every drawing under an element, as the arrow keys do: for a picture of what a person sees there.</summary>
+public static class Readouts
+{
+    /// <summary>Takes the read-out away from every drawing under the element.</summary>
+    /// <param name="root">The element.</param>
+    public static void Clear(DependencyObject root)
+    {
+        int children = VisualTreeHelper.GetChildrenCount(root);
+        for (int at = 0; at < children; at++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, at);
+            if (child is PlotSurface surface)
+            {
+                surface.Dismiss();
+            }
+
+            Clear(child);
+        }
+    }
+
+    /// <summary>Reaches the place at an index of each drawing under the element (the last place when there are fewer).</summary>
+    /// <param name="root">The element.</param>
+    /// <param name="index">The place.</param>
+    /// <returns>How many drawings were read out.</returns>
+    public static int Show(DependencyObject root, int index)
+    {
+        int shown = 0;
+        int children = VisualTreeHelper.GetChildrenCount(root);
+        for (int at = 0; at < children; at++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, at);
+            if (child is PlotSurface surface && surface.Probes.Count > 0)
+            {
+                surface.Reach(Math.Min(index, surface.Probes.Count - 1), speak: false);
+                shown++;
+            }
+
+            shown += Show(child, index);
+        }
+
+        return shown;
     }
 }

@@ -60,6 +60,16 @@ internal sealed class KindsWalker(Window window, string folder)
                     page.UpdateLayout();
                     string file = Path.Combine(folder, prefix + name + "-w" + width + ".png");
                     await SaveAsync(page, file, 1, name);
+                    if (width == 840)
+                    {
+                        // What a person sees where the pointer is (or the arrow keys have reached) in each drawing.
+                        int read = Navree.Controls.Drawing.Readouts.Show(page, 2);
+                        await Task.Delay(300);
+                        await SaveAsync(page, Path.Combine(folder, prefix + name + "-w840-readout.png"), 1, name);
+                        Say(name + ": a place read out in " + read + " drawings");
+                        Navree.Controls.Drawing.Readouts.Clear(page);
+                    }
+
                     if (width == 840 && prefix == "light-")
                     {
                         await SaveAsync(page, Path.Combine(folder, prefix + name + "-w840-x2.png"), 2, name);
