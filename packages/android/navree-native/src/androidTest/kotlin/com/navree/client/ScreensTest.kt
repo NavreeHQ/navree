@@ -3,6 +3,10 @@ package com.navree.client
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.hasContentDescription
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.navree.client.core.Content
 import com.navree.client.core.Events
@@ -116,5 +120,57 @@ class ScreensTest {
         send(app, Events.select(2))
         front(app, "Inventory")
         Shots.take("examples-inventory-empty")
+    }
+
+    /** Runs one step of a walk; a step that finds nothing to touch is said in the log and the walk goes on. */
+    private fun step(what: String, block: () -> Unit) {
+        runCatching(block).onFailure { android.util.Log.w("NavreeShots", "$what: $it") }
+    }
+
+    /**
+     * The menus and a question: the account's menu, a filter's choices, the
+     * question a destructive action asks, each pictured open.
+     */
+    @Test
+    fun theMenusAndAQuestion() {
+        val app = start(
+            "",
+            routes = mapOf(
+                "/_navree/native/shell" to "shell",
+                "/" to "screen-dashboard",
+                "/orders" to "screen-list",
+                "/orders/1042" to "screen-detail",
+                "/orders/1041" to "screen-detail",
+            ),
+        )
+        front(app, "Today")
+        step("the account menu") {
+            compose.onAllNodes(hasContentDescription("Account", substring = true)).onFirst().performClick()
+            Thread.sleep(700)
+            compose.waitForIdle()
+            Shots.take("menu-account")
+            Shots.shell("input keyevent 4")
+            Thread.sleep(500)
+            compose.waitForIdle()
+        }
+        send(app, Events.select(1))
+        front(app, "Orders")
+        step("the sort menu") {
+            compose.onNodeWithText("Newest first").performClick()
+            Thread.sleep(700)
+            compose.waitForIdle()
+            Shots.take("menu-sort")
+            Shots.shell("input keyevent 4")
+            Thread.sleep(500)
+            compose.waitForIdle()
+        }
+        send(app, Events.openLink("${server.url("/orders/1042")}"))
+        front(app, "Order CH-1042")
+        step("the question") {
+            compose.onNodeWithText("Cancel order").performClick()
+            Thread.sleep(700)
+            compose.waitForIdle()
+            Shots.take("question-cancel-order")
+        }
     }
 }
