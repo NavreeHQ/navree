@@ -24,7 +24,8 @@ them. Where the guidelines and a brand disagree, the guidelines win.
   code, in `navree native:coverage`, in `TestNative`, and on a screenshot.
 - The placement of each part lives in the client's code, one test per rule
   (`packages/apple/Tests/NavreeDesignTests`, the Android client's
-  `DesignRulesTest`). Do not copy a placement into a page. If a client puts
+  `DesignRulesTest`). The Apple client is in development and is not in the
+  repository yet. Do not copy a placement into a page. If a client puts
   something in the wrong place, the fix is a rule in the client, reported
   with a screenshot, never a platform branch in the page.
 - Different systems place the same role differently, on purpose. Creation is a
