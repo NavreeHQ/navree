@@ -25,6 +25,8 @@ public sealed partial class ShellHost : IDisposable
     private readonly Dictionary<long, CancellationTokenSource> streams = [];
     private readonly SerialQueue disk = new();
     private readonly CancellationTokenSource stopped = new();
+    private readonly EnvironmentWatcher environment;
+    private readonly ForegroundTracker foreground = new();
     private string lastCookies = string.Empty;
 
     /// <summary>Makes the host and its core. Nothing is sent to the core until <see cref="Start"/>.</summary>
@@ -53,6 +55,12 @@ public sealed partial class ShellHost : IDisposable
         }
 
         client = new CoreClient(ClientEnvironment.Config(options), OnUpdate, OnProblem);
+
+        // What the system says is told to the core when it changes, not only when the core is made.
+        environment = new EnvironmentWatcher(
+            dispatcher,
+            ClientEnvironment.Settings(),
+            change => client.Send(Events.Environment(change.Dark, change.Contrast, change.TextPercent, change.Locale, change.TimeZone)));
     }
 
     /// <summary>What the app says.</summary>
@@ -97,6 +105,26 @@ public sealed partial class ShellHost : IDisposable
         client.Send(Events.SignedOut);
     }
 
+    /// <summary>
+    /// A window says whether it is shown (not minimised, not hidden). The core is told the app went to the background when the last
+    /// window is no longer shown and that it came back when one is again; it is told nothing for a window opening beside another.
+    /// Called on the UI thread.
+    /// </summary>
+    /// <param name="window">The window.</param>
+    /// <param name="shown">Whether it is shown.</param>
+    public void WindowShown(object window, bool shown)
+    {
+        if (foreground.Moved(window, shown) is bool front)
+        {
+            client.Send(front ? Events.Foreground : Events.Background);
+            if (front)
+            {
+                // The person may have changed the system's settings, or its language, while the app was away.
+                environment.Check();
+            }
+        }
+    }
+
     /// <summary>Tells the core what happened.</summary>
     /// <param name="eventJson">An event, from <see cref="Events"/>.</param>
     public void Send(string eventJson) => client.Send(eventJson);
@@ -124,6 +152,7 @@ public sealed partial class ShellHost : IDisposable
     public void Dispose()
     {
         stopped.Cancel();
+        environment.Dispose();
         client.Dispose();
         network?.Dispose();
         disk.Dispose();
