@@ -138,7 +138,8 @@ every `@navree/*` package carries the same version.
   `Widget::Control` in a described one and `EditCell::control` in a table. Its server check runs on
   every path a value arrives by (`Submit`, wizard steps, drafts read with `Draft::read_for`,
   `EditedValue::read` and `check_controls`) and can read the app's configuration through
-  `ControlCx`.
+  `ControlCx`. A control's ids take the form's prefix (`FormView::id_prefix`) as the other fields'
+  do.
 - The page policy, `ui.policy`: an app allows image, media, connection and font sources for a
   plugin by its namespace (`ui.policy.allow.geo.img_src`), and WebAssembly with one switch; a plugin
   says what it needs with `PageSources`, and the boot says what was asked and what was allowed.

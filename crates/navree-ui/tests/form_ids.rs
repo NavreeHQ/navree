@@ -4,9 +4,35 @@
 use std::collections::BTreeSet;
 
 use chrono::{NaiveDate, NaiveTime};
-use navree_ui::form::{FieldErrors, Rejected, decode};
-use navree_ui::{Form, FormView, Money, Node, Options, Validate, View, render};
+use navree_ui::form::{ControlField, FieldControl, FieldErrors, Rejected, decode};
+use navree_ui::{Form, FormView, Money, Node, Options, Validate, View, el, render};
 use serde::Deserialize;
+
+/// A control of one's own whose group is named by the label's id and described by the help's.
+struct Pin;
+
+impl FieldControl for Pin {
+    fn name(&self) -> &'static str {
+        "app.pin"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        el("div")
+            .slot("app:pin")
+            .attr("role", "group")
+            .attr_opt("aria-labelledby", field.label_id.map(str::to_owned))
+            .attr_opt("aria-describedby", field.described_by.map(str::to_owned))
+            .child(
+                el("input")
+                    .attr("type", "text")
+                    .attr("name", field.name.to_owned())
+                    .attr("inputmode", "numeric"),
+            )
+            .into()
+    }
+}
+
+static PIN: Pin = Pin;
 
 #[derive(Clone, Copy, Debug, Deserialize, Options, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -55,6 +81,10 @@ struct Entry {
     /// Paid
     #[validate(skip)]
     paid: bool,
+    /// Pin
+    #[validate(skip)]
+    #[form(control = PIN, help = "Four digits")]
+    pin: String,
     /// Receipt
     #[validate(skip)]
     #[form(widget = file)]
@@ -232,6 +262,9 @@ fn two_forms_of_one_type_share_no_id_and_every_reference_finds_its_id() {
         r#"id="add-entry-opens-picker""#,
         r#"id="add-entry-city-picker""#,
         r#"id="add-entry-upload-receipt""#,
+        r#"id="add-entry-pin-label""#,
+        r#"aria-labelledby="add-entry-pin-label""#,
+        r#"aria-describedby="add-entry-pin-help""#,
     ] {
         assert!(add.contains(fragment), "{fragment} in {add}");
     }
