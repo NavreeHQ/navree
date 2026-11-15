@@ -1113,3 +1113,85 @@ async fn the_inventory_opens_a_product_with_its_restock_form_where_the_reader_is
     assert!(!web.text().contains(r#""target":"product""#));
     assert!(!web.text().contains(r#""op":"invalidate""#));
 }
+
+/// The header that names the person a native answer is for.
+const PERSON: &str = "x-navree-person";
+
+/// The person a native client is told the answer for `path` is for.
+async fn person_of(app: &TestApp, path: &str) -> Option<String> {
+    app.client()
+        .get(path)
+        .header("x-navree-native", "1")
+        .header("x-navree-client", PHONE)
+        .send()
+        .await
+        .header(PERSON)
+        .map(str::to_owned)
+}
+
+#[tokio::test]
+async fn the_shell_names_the_staff_account_every_time() {
+    let (app, _dir) = boot().await;
+    let first = person_of(&app, "/_navree/native/shell").await;
+    let second = person_of(&app, "/_navree/native/shell").await;
+    assert_eq!(first, Some(store_demo::person::STAFF_ID.to_string()));
+    assert_eq!(first, second);
+}
+
+#[tokio::test]
+async fn every_native_page_names_the_same_person_as_the_shell() {
+    let (app, _dir) = boot().await;
+    let shell = person_of(&app, "/_navree/native/shell").await;
+    assert!(shell.is_some());
+    for path in ["/", "/orders", "/orders/1", "/inventory", "/shelves"] {
+        assert_eq!(person_of(&app, path).await, shell, "{path}");
+    }
+}
+
+#[tokio::test]
+async fn a_browser_gets_the_page_with_no_person_named() {
+    let (app, _dir) = boot().await;
+    let page = app.client().get("/").send().await;
+    assert_eq!(page.status().as_u16(), 200);
+    assert!(
+        page.header("content-type")
+            .is_some_and(|kind| kind.starts_with("text/html")),
+        "{:?}",
+        page.header("content-type")
+    );
+    assert_eq!(page.header(PERSON), None);
+    assert!(page.header("set-cookie").is_none());
+}
+
+#[tokio::test]
+async fn the_visitors_may_hold_more_live_streams_than_one_account_is_given_by_default() {
+    let (app, _dir) = boot().await;
+    // Everyone is the one staff account: sixteen open tabs, the framework's default for an
+    // account, are not all of the shop's visitors.
+    let mut open = Vec::new();
+    for count in 1..=20 {
+        let stream = app
+            .client()
+            .get("/broadcasting/stream?topics=orders")
+            .header("accept", "text/event-stream")
+            .send_stream()
+            .await;
+        assert_eq!(stream.status().as_u16(), 200, "stream {count}");
+        open.push(stream);
+    }
+}
+
+#[tokio::test]
+async fn a_browser_asking_for_an_address_that_does_not_exist_gets_the_404_in_the_app_shell() {
+    let (app, _dir) = boot().await;
+    let page = app
+        .client()
+        .get("/no-such-page")
+        .header("accept", "text/html")
+        .send()
+        .await;
+    assert_eq!(page.status().as_u16(), 404);
+    let html = page.text();
+    // The account the shell shows is there, as on every other page.
+    assert!(html.contains("ravneet.kaur@example.com"), "{html:.600}");
+}

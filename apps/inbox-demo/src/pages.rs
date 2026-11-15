@@ -62,7 +62,7 @@ use crate::views::web_only;
 use crate::views::{Filters, View, ViewCounts, shell, views_src};
 
 /// The cookie that says which agent a visitor works as.
-const AGENT_COOKIE: &str = "inbox_agent";
+pub(crate) const AGENT_COOKIE: &str = "inbox_agent";
 /// The longest message the composer takes, in characters.
 const LONGEST: usize = 5000;
 /// The team, searched by name or team, for the assign combobox.
@@ -136,7 +136,7 @@ struct StepQuery {
 }
 
 /// The value of the cookie `name`.
-fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+pub(crate) fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     headers
         .get_all(COOKIE)
         .iter()
