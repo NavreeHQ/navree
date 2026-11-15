@@ -162,13 +162,16 @@ class LaneMoveTest {
         compose.onRoot().performTouchInput {
             val from = grab.y + 200f
             val to = root.bottom - 6f
-            // Down to the bottom edge, and held there a moment: the lane scrolls by itself while the finger is at the edge.
+            // Down to the bottom edge, and held there for more than three seconds: the lane scrolls by itself, by more than two windows of cards, so the card would leave the list if it were not kept.
             for (step in 1..20) moveTo(Offset(grab.x, from + (to - from) * step / 20f), delayMillis = 16)
-            repeat(70) { moveBy(Offset.Zero, delayMillis = 16) }
+            repeat(200) { moveBy(Offset.Zero, delayMillis = 16) }
             up()
         }
         compose.waitForIdle()
         waitFor("the server told of the move") { moves.size == 1 }
+        // One move, at the drop, with the final place: not one for each card the held card passed on the way.
+        Thread.sleep(1_500)
+        assertEquals("the server was told one move: $moves", 1, moves.size)
         val form = moves.single()
         assertEquals("the card that was held", "0", form["item"])
         assertEquals("in its own lane", "todo", form["from"])
@@ -178,7 +181,7 @@ class LaneMoveTest {
         val order = shown()
         val others = order.filter { it != 0 }
         val at = order.indexOf(0)
-        assertTrue("the lane scrolled under the card: it shows cards from ${others.first()} on, in $order", others.first() >= 5)
+        assertTrue("the lane scrolled under the card: it shows cards from ${others.first()} on, in $order", others.first() >= 25)
         assertEquals("the other cards keep their order", others.sorted(), others)
         if (at + 1 < order.size) {
             assertEquals("the server was told the card stands before the card that is drawn after it: $order", order[at + 1].toString(), form["before"])
