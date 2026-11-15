@@ -84,6 +84,19 @@ internal sealed partial class BoardMoves
         bool sawPending = false;
         bool sawDrawnPending = false;
         Focus? asked = null;
+
+        // Every state the core hands the window is looked at as it arrives, so a form that is pending for a moment is not missed by a look
+        // that comes too late: the form pending in the core, the button of the sheet drawn pending, and the request for the focus.
+        void Seen(ViewState state)
+        {
+            ScreenView? now = state.FrontScreen;
+            sawPending |= now?.Forms.Values.Any(form => form.Pending) == true;
+            asked ??= now?.Focus;
+            FrameworkElement? open = SheetOnScreen();
+            sawDrawnPending |= open is not null && (Below(open).OfType<Button>().Any(button => Regex.IsMatch(Name(button), "comment|send|post", RegexOptions.IgnoreCase) && !button.IsEnabled) || Below(open).OfType<ProgressRing>().Any(ring => ring.IsActive));
+        }
+
+        host.StateChanged += Seen;
         if (reached)
         {
             await PressAsync(EnterKey);
@@ -96,13 +109,11 @@ internal sealed partial class BoardMoves
         // Watched for a while after the press: the form pending in the core and the button drawn pending, and the core's request for the focus.
         for (int sample = 0; sample < 150; sample++)
         {
-            ScreenView? front = host.State.FrontScreen;
-            sawPending |= front?.Forms.Values.Any(form => form.Pending) == true;
-            FrameworkElement? now = SheetOnScreen();
-            sawDrawnPending |= now is not null && Below(now).OfType<Button>().Any(button => Regex.IsMatch(Name(button), "comment|send|post", RegexOptions.IgnoreCase) && !button.IsEnabled) || (now is not null && Below(now).OfType<ProgressRing>().Any(ring => ring.IsActive));
-            asked ??= front?.Focus;
+            Seen(host.State);
             await Task.Delay(15);
         }
+
+        host.StateChanged -= Seen;
 
         await SettleAsync();
         await Task.Delay(1500);

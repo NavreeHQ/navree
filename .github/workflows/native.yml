@@ -500,17 +500,11 @@ jobs:
       # that says PASS is told so, and its line is taken off in the change that fixed it.
       KNOWN_FAILS: |
         \[hands\] FAIL a right click on a row opens its menu
-        \[popover\] FAIL Snooze opens as a flyout
-        \[popover\] FAIL Saved replies opens as a flyout
         \[popover\] FAIL the focus is back on the button
         \[moves\] FAIL dragging the card into the third lane
-        \[press\] FAIL the text back to what it was drawn with is held by the core
-        \[press\] FAIL a field cleared is held empty by the core
-        \[hands\] FAIL the active cell is the same after the rows arrived
         \[hands\] FAIL the focus is in the table after the rows arrived
         \[hands\] FAIL every letter typed across the answers is in the box
         \[hands\] FAIL the box has the focus after the answers
-        \[check\] FAIL (480|840|1280): the sheet shows
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable

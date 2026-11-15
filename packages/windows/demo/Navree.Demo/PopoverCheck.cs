@@ -106,10 +106,33 @@ internal sealed class PopoverCheck(ShellHost host, ShellWindow window, string fo
         Check(label + " opens as a flyout, not as a dialog", presenter is not null && !dialog, "flyout " + (presenter is not null) + ", dialog " + dialog + ", overlays " + string.Join(",", host.State.FrontScreen?.Overlays ?? []));
         if (presenter is not null)
         {
-            Point at = presenter.TransformToVisual(null).TransformPoint(new Point(0, 0));
-            Point from = button.TransformToVisual(null).TransformPoint(new Point(0, 0));
-            double gap = Math.Min(Math.Abs(at.Y - (from.Y + button.ActualHeight)), Math.Abs((at.Y + presenter.ActualHeight) - from.Y));
-            Check(label + " stands beside the button that opened it", gap < 80, "the flyout's edge is " + gap.ToString("0", CultureInfo.InvariantCulture) + " px from the button");
+            // The two rectangles in one space, the button's own, so that no window, popup or scale difference can come between them: the flyout's
+            // is the presenter's box carried into the button's space, and the gap is the distance between their nearest edges (none when they touch).
+            double gap;
+            string said;
+
+            // The page is drawn again when the flyout opens, so the button that was pressed may be a control that has left the window: the
+            // button that stands there now, by the same name, is the one the flyout is measured against.
+            Button? standing = Below(window.Surface).OfType<Button>().FirstOrDefault(candidate => candidate.ActualWidth > 0 && (AutomationProperties.GetName(candidate) == label || candidate.Content as string == label));
+            button = standing ?? button;
+            try
+            {
+                Rect flyout = presenter.TransformToVisual(button).TransformBounds(new Rect(0, 0, presenter.ActualWidth, presenter.ActualHeight));
+                Rect own = new(0, 0, button.ActualWidth, button.ActualHeight);
+                double across = Math.Max(0, Math.Max(flyout.Left - own.Right, own.Left - flyout.Right));
+                double down = Math.Max(0, Math.Max(flyout.Top - own.Bottom, own.Top - flyout.Bottom));
+                gap = Math.Sqrt((across * across) + (down * down));
+                Rect inWindowFlyout = presenter.TransformToVisual(null).TransformBounds(new Rect(0, 0, presenter.ActualWidth, presenter.ActualHeight));
+                Rect inWindowButton = button.TransformToVisual(null).TransformBounds(own);
+                said = "the flyout " + Box(flyout) + " and the button " + Box(own) + " in the button's space; in the window's space " + Box(inWindowFlyout) + " and " + Box(inWindowButton) + "; scale " + button.XamlRoot.RasterizationScale.ToString("0.00", CultureInfo.InvariantCulture) + "; the nearest edges are " + gap.ToString("0", CultureInfo.InvariantCulture) + " px apart";
+            }
+            catch (Exception problem)
+            {
+                gap = double.MaxValue;
+                said = "the two could not be put in one space: " + problem.GetType().Name;
+            }
+
+            Check(label + " stands beside the button that opened it", gap < 40, said);
         }
 
         await ShotAsync("popover-" + label.Replace(' ', '-'));
@@ -123,6 +146,9 @@ internal sealed class PopoverCheck(ShellHost host, ShellWindow window, string fo
         object? focused = FocusManager.GetFocusedElement(window.Surface.XamlRoot);
         Check("the focus is back on the button", ReferenceEquals(focused, button) || (focused is FrameworkElement element && AutomationProperties.GetName(element) == label), "focus is on " + (focused?.GetType().Name ?? "nothing"));
     }
+
+    private static string Box(Rect box) =>
+        string.Create(CultureInfo.InvariantCulture, $"[{box.Left:0},{box.Top:0} {box.Width:0}x{box.Height:0}]");
 
     private static IEnumerable<DependencyObject> Below(DependencyObject root)
     {

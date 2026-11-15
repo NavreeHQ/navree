@@ -169,7 +169,8 @@ internal sealed partial class BoardMoves(ShellHost host, ShellWindow window, str
         ScrollViewer? page = null;
         for (DependencyObject? at = beforeScroll is null ? null : VisualTreeHelper.GetParent(beforeScroll); at is not null; at = VisualTreeHelper.GetParent(at))
         {
-            if (at is ScrollViewer found)
+            // The one that scrolls the page is the ancestor with the most to scroll down, not the outermost.
+            if (at is ScrollViewer found && (page is null || found.ScrollableHeight > page.ScrollableHeight))
             {
                 page = found;
             }
@@ -177,9 +178,15 @@ internal sealed partial class BoardMoves(ShellHost host, ShellWindow window, str
 
         if (page is not null)
         {
-            _ = page.ChangeView(null, 0, null, true);
-            await Task.Delay(800);
+            Say("the page scrolls " + page.ScrollableHeight.ToString("0", CultureInfo.InvariantCulture) + " down and stood at " + page.VerticalOffset.ToString("0", CultureInfo.InvariantCulture) + ", across " + page.HorizontalOffset.ToString("0", CultureInfo.InvariantCulture));
+            for (int attempt = 0; attempt < 10 && (page.VerticalOffset > 1 || page.HorizontalOffset > 1); attempt++)
+            {
+                _ = page.ChangeView(0, 0, null, true);
+                await Task.Delay(400);
+            }
+
             await SettleAsync();
+            Say("the page now stands at " + page.VerticalOffset.ToString("0", CultureInfo.InvariantCulture) + ", across " + page.HorizontalOffset.ToString("0", CultureInfo.InvariantCulture));
         }
 
         Button? handle = HandleOf(picked.Title);
@@ -190,6 +197,19 @@ internal sealed partial class BoardMoves(ShellHost host, ShellWindow window, str
         if (cardElement is null || targetCard is null)
         {
             Check("the card and the lane it is dragged to are on the screen", false, "card " + (cardElement is not null) + ", target " + (targetCard is not null));
+            return;
+        }
+
+        Windows.Foundation.Rect cardBox = cardElement.TransformToVisual(window.Surface).TransformBounds(new Windows.Foundation.Rect(0, 0, cardElement.ActualWidth, cardElement.ActualHeight));
+        Windows.Foundation.Rect targetBox = targetCard.TransformToVisual(window.Surface).TransformBounds(new Windows.Foundation.Rect(0, 0, targetCard.ActualWidth, targetCard.ActualHeight));
+        Say("in the window (" + window.Surface.ActualWidth.ToString("0", CultureInfo.InvariantCulture) + "x" + window.Surface.ActualHeight.ToString("0", CultureInfo.InvariantCulture) + ") the dragged card stands at [" + cardBox.Left.ToString("0", CultureInfo.InvariantCulture) + "," + cardBox.Top.ToString("0", CultureInfo.InvariantCulture) + " " + cardBox.Width.ToString("0", CultureInfo.InvariantCulture) + "x" + cardBox.Height.ToString("0", CultureInfo.InvariantCulture) + "] and the card it is dragged onto at [" + targetBox.Left.ToString("0", CultureInfo.InvariantCulture) + "," + targetBox.Top.ToString("0", CultureInfo.InvariantCulture) + " " + targetBox.Width.ToString("0", CultureInfo.InvariantCulture) + "x" + targetBox.Height.ToString("0", CultureInfo.InvariantCulture) + "]");
+
+        // A lane has a limit and the server refuses a card into a full one ("2/2" under its name). The server keeps what earlier runs did, so a run
+        // on a server that has been used before can find the third lane full; that is the server's answer and not the drag's, and is said so.
+        System.Text.RegularExpressions.Match full = System.Text.RegularExpressions.Regex.Match(DrawnText.Of(window.Content), @"Review\s+(\d+)/(\d+)");
+        if (full.Success && int.Parse(full.Groups[1].Value, CultureInfo.InvariantCulture) >= int.Parse(full.Groups[2].Value, CultureInfo.InvariantCulture))
+        {
+            Say("the third lane is full (" + full.Groups[1].Value + "/" + full.Groups[2].Value + "): the server refuses a card into it, so the drag into it is not checked on this server");
             return;
         }
 

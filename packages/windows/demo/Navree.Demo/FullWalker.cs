@@ -181,10 +181,7 @@ internal sealed class FullWalker(ShellHost host, ShellWindow window, string fold
         try
         {
             string audit = Audit(name);
-            if (width == "w840" || width == "w480")
-            {
-                File.WriteAllText(Path.Combine(folder, prefix + app + "-" + width + "-" + name + "-audit.txt"), audit);
-            }
+            File.WriteAllText(Path.Combine(folder, prefix + app + "-" + width + "-" + name + "-audit.txt"), audit);
         }
         catch (Exception problem)
         {
@@ -282,13 +279,15 @@ internal sealed class FullWalker(ShellHost host, ShellWindow window, string fold
                         text.AppendLine("    ^ NO NAME");
                     }
 
-                    if ((element is ButtonBase or ComboBox or ToggleSwitch or ListViewItem) && (element.ActualWidth < 24 || element.ActualHeight < 24))
+                    // The arrows and the page buttons of a scroll bar are parts of the bar, not targets a person aims at.
+                    if ((element is ButtonBase or ComboBox or ToggleSwitch or ListViewItem) && !InScrollBar(element) && (element.ActualWidth < 24 || element.ActualHeight < 24))
                     {
                         small++;
                         text.AppendLine("    ^ SMALL TARGET " + Fmt(box));
                     }
 
-                    if (rootWidth > 0 && (box.Right > rootWidth + 1 || box.Left < -1))
+                    // A part that is out of view in a region that scrolls across is reached by scrolling: it is not past the edge.
+                    if (rootWidth > 0 && (box.Right > rootWidth + 1 || box.Left < -1) && !InAcrossScroller(element))
                     {
                         beyond++;
                         text.AppendLine("    ^ PAST THE EDGE " + Fmt(box));
@@ -309,12 +308,49 @@ internal sealed class FullWalker(ShellHost host, ShellWindow window, string fold
         }
     }
 
+    private static bool InScrollBar(DependencyObject element)
+    {
+        for (DependencyObject? at = VisualTreeHelper.GetParent(element); at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (at is ScrollBar)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool InAcrossScroller(DependencyObject element)
+    {
+        for (DependencyObject? at = VisualTreeHelper.GetParent(element); at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (at is ScrollViewer { ScrollableWidth: > 0 })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // The words of a control as a screen reader reads them. A row of a list is read from the text it holds: the system's own tool names it
+    // so, while the control's own peer is asked for a name the row's content does not give it.
     private static string Words(FrameworkElement element)
     {
         string named = AutomationProperties.GetName(element);
         if (!string.IsNullOrEmpty(named))
         {
             return named;
+        }
+
+        if (element is ListViewItem row)
+        {
+            string held = string.Join(" ", Texts(row).Take(3));
+            if (held.Length > 0)
+            {
+                return held;
+            }
         }
 
         try
@@ -332,6 +368,24 @@ internal sealed class FullWalker(ShellHost host, ShellWindow window, string fold
         }
 
         return string.Empty;
+    }
+
+    private static IEnumerable<string> Texts(DependencyObject at)
+    {
+        int count = VisualTreeHelper.GetChildrenCount(at);
+        for (int child = 0; child < count; child++)
+        {
+            DependencyObject part = VisualTreeHelper.GetChild(at, child);
+            if (part is TextBlock { Text.Length: > 0 } block)
+            {
+                yield return block.Text;
+            }
+
+            foreach (string inner in Texts(part))
+            {
+                yield return inner;
+            }
+        }
     }
 
     private static Windows.Foundation.Rect Place(FrameworkElement element, FrameworkElement root)
