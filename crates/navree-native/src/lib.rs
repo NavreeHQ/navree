@@ -134,16 +134,21 @@ pub const MAX_ID: usize = 256;
 /// a client is bounded by [`MAX_WORK`].
 pub const MAX_OPS: usize = 1_000;
 
-/// The most work the ops of one answer may ask of a client: 20,000,000 visits
+/// The most work the ops of one answer may ask of a client: 4,000,000 visits
 /// to a node. An op that finds its target by id (nearly every op) may look
 /// through the whole screen, so an answer asks about as many visits as it has
-/// such ops times the nodes the screen holds, counted as for [`MAX_NODES`]. A
-/// client applies none of the ops of an answer that would pass it, says so,
-/// and leaves the screen as it was (and fetches it again). A visit takes some tens of nanoseconds,
-/// so this is about the longest a person can be made to wait for one answer.
-/// The thirteen ops of the most recorded answer reach it only on a screen of
-/// over a million nodes; a thousand ops, on one of twenty thousand.
-pub const MAX_WORK: usize = 20_000_000;
+/// such ops, each times the nodes the screen holds when it runs (counted as
+/// for [`MAX_NODES`], and with what the ops before it brought). A client
+/// applies none of the ops of an answer that would pass it, says so, and
+/// leaves the screen as it was (and fetches it again). In a release build on
+/// a desktop processor a visit costs 15 ns for an op that only searches
+/// (`focus`), 40 to 95 ns for one that changes the screen (`append`,
+/// `morph`, `remove`), and 230 ns for a `merge`, which also reads the whole
+/// screen again; four million visits is a second of the dearest of them, and
+/// a phone is slower. The thirteen ops of the most recorded answer reach it
+/// only on a screen of over 300,000 nodes; a thousand ops, on one of four
+/// thousand.
+pub const MAX_WORK: usize = 4_000_000;
 
 /// How deep the objects and arrays of `json` nest, read without recursion.
 ///
