@@ -35,8 +35,8 @@ pub use navree_kernel::{
 /// What a plugin's UI components name: their files, their form field and the page sources they ask for.
 #[cfg(feature = "ui")]
 pub use navree_ui::{
-    Control, ControlCx, Directive, EditedValue, ExtensionFile, FieldControl, PagePolicy,
-    PageSources, UiExtension,
+    Control, ControlCx, ControlField, Directive, EditedValue, ExtensionFile, FieldControl,
+    PagePolicy, PageSources, UiExtension,
 };
 #[cfg(feature = "view")]
 pub use navree_view::TemplateDir;
