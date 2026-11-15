@@ -2,11 +2,15 @@
 //! is lost, computes are atomic, a wave of callers on one key runs one load,
 //! and cancelled or panicking loaders never wedge a key.
 
+use std::future::poll_fn;
+use std::pin::pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering::SeqCst};
+use std::task::Poll;
 use std::time::{Duration, Instant};
 
 use navree_bounded::{Cache, Compute};
+use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tokio::time::{sleep, timeout};
 
@@ -202,21 +206,40 @@ async fn a_failing_wave_runs_one_load_and_every_caller_sees_the_error() {
     const CALLERS: usize = 64;
     let cache: Cache<u32, u32> = Cache::new(10);
     let loads = Arc::new(AtomicU32::new(0));
+    // One permit for each caller that has asked. The load fails only when
+    // every caller has: an error is not cached, so a caller that first asked
+    // after the load had failed would rightly run a load of its own, and how
+    // soon a busy machine starts 64 tasks is not what this test is about.
+    let asked = Arc::new(Semaphore::new(0));
     let mut callers = JoinSet::new();
     for _ in 0..CALLERS {
-        let (cache, loads) = (cache.clone(), loads.clone());
+        let (cache, loads, asked) = (cache.clone(), loads.clone(), asked.clone());
         callers.spawn(async move {
-            cache
-                .try_get_with(1, async {
-                    loads.fetch_add(1, SeqCst);
-                    sleep(ms(20)).await;
-                    Err::<u32, String>("unavailable".to_owned())
-                })
-                .await
+            let everyone = asked.clone();
+            let mut call = pin!(cache.try_get_with(1, async move {
+                loads.fetch_add(1, SeqCst);
+                // The permits go back as this ends, so a second load, if the
+                // cache ever ran one, would end too and be counted.
+                let _all = everyone
+                    .acquire_many(CALLERS as u32)
+                    .await
+                    .expect("the semaphore is never closed");
+                Err::<u32, String>("unavailable".to_owned())
+            }));
+            // After one poll this caller runs the load or waits for it.
+            let first = poll_fn(|cx| Poll::Ready(call.as_mut().poll(cx))).await;
+            asked.add_permits(1);
+            match first {
+                Poll::Ready(result) => result,
+                Poll::Pending => call.await,
+            }
         });
     }
     let mut errors = Vec::new();
-    while let Some(done) = callers.join_next().await {
+    while let Some(done) = timeout(ms(60_000), callers.join_next())
+        .await
+        .expect("every caller ends")
+    {
         errors.push(done.expect("a caller panicked").unwrap_err());
     }
     assert_eq!(errors.len(), CALLERS);

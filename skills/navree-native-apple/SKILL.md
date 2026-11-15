@@ -39,6 +39,8 @@ an iPhone app resizes on iPadOS and in iPhone Mirroring, so a compact window is
 a phone whatever it runs on. Each rule has a test in
 `packages/apple/Tests/NavreeDesignTests`.
 
+The Apple client is in development and is not in the repository yet.
+
 | Your page says | The client draws |
 |---|---|
 | The shell's destinations (`NavItem`s) | A tab bar at the bottom in a compact window (3 to 5 tabs, a filled symbol and a label each; the rest in the system More tab); in a regular window a tab view that can turn into a sidebar, the shell's groups as its sections when there is more than one group. Never a hamburger, never a drawer, never a custom bar. |
