@@ -15,9 +15,10 @@ use navree_http::{
     Controller, HttpModule, ModuleBuilderHttpExt, RequestWorkspace, RouteDef, RouteKind,
 };
 use navree_kernel::{
-    BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, Navree, PluginInfo,
-    Resolver,
+    BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver,
 };
+use navree_plugin_announcements::Announcements;
+use navree_plugin_pretty::PrettyShell;
 use navree_testing::{TestApp, TestAppBuilder, principal};
 use navree_ui::{
     AppShell, ErrorShell, ModuleBuilderShellExt, NavGroup, NavItem, Shell, ShellNavItem, UiModule,
@@ -136,41 +137,50 @@ impl Module for Outbound {
     }
 }
 
-/// The announcements plugin, a community plugin of this crate (`plugins`).
-const NOTICES: PluginInfo = PluginInfo::new(
-    "navree-plugin-announcements",
-    "plugins",
-    "announcements",
-    "1.0.0",
-)
-.title("Announcements");
+/// The announcements plugin, a community plugin whose crate is this module: the app's modules
+/// at the top of the file (`Desk`, `Grants`, ...) are in no crate it names, so none of them acts
+/// for it.
+mod navree_plugin_announcements {
+    use navree_contracts::{ModuleBuilderPermissionsExt, Permission};
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+    use navree_ui::{ModuleBuilderShellExt, ShellNavItem, icons};
 
-/// The announcements plugin's module: it describes its two permissions and adds three
-/// links, one that needs `announcements.read`, one that needs `announcements.publish`
-/// and one that needs nothing.
-struct Announcements;
+    /// The plugin's info.
+    const NOTICES: PluginInfo = PluginInfo::new(
+        "navree-plugin-announcements",
+        module_path!(),
+        "announcements",
+        "1.0.0",
+    )
+    .title("Announcements");
 
-impl Module for Announcements {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(NOTICES)
-            .permissions(&[
-                Permission::new("announcements.read", "Read the workspace's announcements"),
-                Permission::new(
-                    "announcements.publish",
-                    "Publish an announcement to the workspace",
-                ),
-            ])
-            .nav_item(
-                ShellNavItem::new("Announcements", "/announcements")
-                    .icon(icons::MEGAPHONE)
-                    .permission("announcements.read"),
-            )
-            .nav_item(
-                ShellNavItem::new("New announcement", "/announcements/new")
-                    .permission("announcements.publish")
-                    .order(-1),
-            )
-            .nav_item(ShellNavItem::new("Notice board", "/notice-board"));
+    /// The announcements plugin's module: it describes its two permissions and adds three
+    /// links, one that needs `announcements.read`, one that needs `announcements.publish`
+    /// and one that needs nothing.
+    pub(super) struct Announcements;
+
+    impl Module for Announcements {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(NOTICES)
+                .permissions(&[
+                    Permission::new("announcements.read", "Read the workspace's announcements"),
+                    Permission::new(
+                        "announcements.publish",
+                        "Publish an announcement to the workspace",
+                    ),
+                ])
+                .nav_item(
+                    ShellNavItem::new("Announcements", "/announcements")
+                        .icon(icons::MEGAPHONE)
+                        .permission("announcements.read"),
+                )
+                .nav_item(
+                    ShellNavItem::new("New announcement", "/announcements/new")
+                        .permission("announcements.publish")
+                        .order(-1),
+                )
+                .nav_item(ShellNavItem::new("Notice board", "/notice-board"));
+        }
     }
 }
 
@@ -758,21 +768,24 @@ async fn an_app_with_no_contributed_links_has_no_navigation_route() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-/// The pretty plugin, a community plugin of this crate.
-const PRETTY: PluginInfo = PluginInfo::new(
-    "navree-plugin-pretty",
-    env!("CARGO_CRATE_NAME"),
-    "pretty",
-    "1.0.0",
-);
+/// The pretty plugin, a community plugin whose crate is this module: the app's `OwnShell`, at
+/// the top of the file, is in no crate it names.
+mod navree_plugin_pretty {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+    use navree_ui::ErrorShell;
 
-/// A module of the pretty plugin that builds the shell of the app's error pages.
-struct PrettyShell;
+    /// The plugin's info.
+    const PRETTY: PluginInfo =
+        PluginInfo::new("navree-plugin-pretty", module_path!(), "pretty", "1.0.0");
 
-impl Module for PrettyShell {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(PRETTY)
-            .contribute(ErrorShell::new(|_| async { None }));
+    /// A module of the pretty plugin that builds the shell of the app's error pages.
+    pub(super) struct PrettyShell;
+
+    impl Module for PrettyShell {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PRETTY)
+                .contribute(ErrorShell::new(|_| async { None }));
+        }
     }
 }
 

@@ -1,8 +1,7 @@
 //! What the framework's crates ask the module graph when two modules give one
 //! name to two things. Not public API.
 
-use crate::plugin::names_crate;
-use crate::{AppContext, ModuleId};
+use crate::{AppContext, ModuleId, PluginInfo};
 
 /// Whether `importer` imports `imported`, directly or through the modules it
 /// imports. `false` for the same module, for an id that is not in the app, and
@@ -40,23 +39,33 @@ pub fn is_community_plugin(ctx: &AppContext, module: ModuleId) -> bool {
         .is_some_and(|info| !ctx.inner.graph.first_party.contains(info.name))
 }
 
-/// Whether `module` is a module of the app itself, as far as the kernel can
-/// tell: it is in the app, names no plugin, and its type is in no crate that a
-/// plugin of the app names. A module of a plugin's own crate that does not call
-/// `m.plugin` is not the app's, and neither is a module of a first-party
-/// plugin. The kernel records no crate for the app, so a module of a framework
-/// package that names no plugin counts as the app's, and so does a module of a
-/// plugin that sits in a crate other than the one its plugin names. Not public
+/// The plugin `module` acts for, first-party or not: the plugin it names;
+/// else the plugin of the crate its type path is in, up to its first `<`
+/// (the longest crate name, then the one first in import order); else, for a
+/// module with generic arguments that no module of the app imports directly,
+/// the plugin among its importers' whose crate its arguments name, else the
+/// first of them in import order that is not first-party, else the first.
+/// When its type path gives a first-party plugin and its importers one that is
+/// not, the one that is not. A module's type path is read from the module
+/// value the app or its importer passed and from the type its id names: either
+/// one may name the plugin. `None` for a module of the app, the app root and
+/// an id not in the app. `plugins` lists a plugin's modules by it. Not public
 /// API; Navree's own crates use it.
+pub fn acts_for(ctx: &AppContext, module: ModuleId) -> Option<&PluginInfo> {
+    let graph = &ctx.inner.graph;
+    let first = graph
+        .acts_for
+        .get(graph.module_of(module)?)
+        .copied()
+        .flatten()?;
+    graph.modules[first].plugin.as_ref()
+}
+
+/// Whether `module` is a module of the app: it is in the app and acts for no
+/// plugin (`acts_for`). Not public API; Navree's own crates use it.
 pub fn is_app_module(ctx: &AppContext, module: ModuleId) -> bool {
     let graph = &ctx.inner.graph;
-    let Some(index) = graph.module_of(module) else {
-        return false;
-    };
-    graph.modules[index].plugin.is_none()
-        && !graph
-            .modules
-            .iter()
-            .filter_map(|node| node.plugin.as_ref())
-            .any(|plugin| names_crate(module.type_name(), plugin.crate_name))
+    graph
+        .module_of(module)
+        .is_some_and(|index| graph.acts_for.get(index).copied().flatten().is_none())
 }

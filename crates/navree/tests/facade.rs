@@ -1775,12 +1775,16 @@ fn only_the_indexed_crates_at_the_kernels_version_and_in_their_own_crate_are_fir
     use navree::plugin::PluginInfo;
     let version = env!("CARGO_PKG_VERSION");
     let time = ModuleId::of::<navree::time::TimeModule>();
-    assert_eq!(
+    // The probe is a module of this crate, whatever id it takes: the kernel reads its own type,
+    // so it is not first-party, and may not use the namespace the framework keeps.
+    assert!(
         first_party(Probe(
             time,
             PluginInfo::new("navree-time", "navree_time", "time", version)
-        )),
-        Ok(true)
+        ))
+        .unwrap_err()
+        .contains("which the framework keeps for itself"),
+        "a module of another crate"
     );
     assert!(
         first_party(Probe(
@@ -1810,19 +1814,13 @@ fn only_the_indexed_crates_at_the_kernels_version_and_in_their_own_crate_are_fir
     );
 }
 
+/// A community plugin may not use a namespace the framework keeps. That a first-party plugin
+/// keeps its own is the kernel's unit test
+/// `a_plugin_is_first_party_by_its_modules_own_types_and_keeps_its_reserved_namespace`: no module
+/// of this crate can be first-party, since the kernel reads a module's own type, not its id.
 #[test]
-fn a_first_party_plugin_keeps_its_reserved_namespace_and_a_community_plugin_does_not() {
+fn a_community_plugin_in_a_reserved_namespace_fails_the_boot() {
     use navree::plugin::PluginInfo;
-    let version = env!("CARGO_PKG_VERSION");
-    // A first-party plugin keeps its section's namespace and is reported first-party, which is
-    // what every crate's collision check reads to treat it as one of today's modules.
-    let time = Probe(
-        ModuleId::of::<navree::time::TimeModule>(),
-        PluginInfo::new("navree-time", "navree_time", "time", version),
-    );
-    let report = Navree::app().module(time).plugin_report().expect("boots");
-    assert!(report.plugins[0].first_party);
-    // A community plugin in that namespace fails the boot.
     struct CommunityTime;
     impl Module for CommunityTime {
         fn register(&self, m: &mut ModuleBuilder) {
@@ -1842,6 +1840,53 @@ fn a_first_party_plugin_keeps_its_reserved_namespace_and_a_community_plugin_does
             .to_string(),
         "plugin `navree-plugin-time` uses the namespace `time`, which the framework keeps for itself; set another with plugin_info!(namespace = \"..\")"
     );
+}
+
+#[tokio::test]
+async fn a_module_of_a_community_crate_that_returns_a_first_party_id_acts_for_its_plugin() {
+    use navree::kernel::__private::{acts_for, is_community_plugin};
+    use navree::plugin::PluginInfo;
+    let version = env!("CARGO_PKG_VERSION");
+    let time = ModuleId::of::<navree::time::TimeModule>();
+    // The probe takes navree-time's module id and names navree-time at the kernel's version.
+    // Its own type is of this crate: the plugin is not first-party, so the namespace the
+    // framework keeps is refused.
+    let refused = first_party(Probe(
+        time,
+        PluginInfo::new("navree-time", "navree_time", "time", version),
+    ))
+    .unwrap_err();
+    assert!(
+        refused.contains(
+            "plugin `navree-time` uses the namespace `time`, which the framework keeps for itself"
+        ),
+        "{refused}"
+    );
+    // In a namespace of its own, it is listed under its plugin, which is not first-party, and
+    // the checks of a community plugin hold it.
+    let clock = || {
+        Probe(
+            time,
+            PluginInfo::new("navree-time", "navree_time", "clock", version),
+        )
+    };
+    let report = Navree::app()
+        .module(clock())
+        .plugin_report()
+        .expect("valid");
+    let [plugin] = report.plugins.as_slice() else {
+        panic!("one plugin: {report:?}")
+    };
+    assert_eq!(plugin.info.name, "navree-time");
+    assert!(!plugin.first_party);
+    let listed: Vec<ModuleId> = plugin.modules.iter().map(|module| module.id).collect();
+    assert_eq!(listed, [time]);
+    let app = Navree::app().module(clock()).boot().await.expect("boots");
+    assert_eq!(
+        acts_for(app.ctx(), time).map(|plugin| plugin.name),
+        Some("navree-time")
+    );
+    assert!(is_community_plugin(app.ctx(), time));
 }
 
 /// A plugin embeds its templates and its translations with the macros at the facade's root, and

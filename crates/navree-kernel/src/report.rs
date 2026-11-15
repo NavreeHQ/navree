@@ -56,7 +56,11 @@ pub struct PluginReport {
     /// framework's own packages, at the kernel's version, every module a type
     /// of that package. The JSON's `"first_party"`.
     pub first_party: bool,
-    /// Its modules, in dependency order.
+    /// Its modules, in dependency order: every module that acts for the
+    /// plugin. That is a module that names it, a module of its crate, and a
+    /// generic module that no module of the app imports directly, such as the
+    /// module `AccessModule::for_policy` makes for a policy only the plugin
+    /// imports.
     pub modules: Vec<PluginModuleReport>,
 }
 

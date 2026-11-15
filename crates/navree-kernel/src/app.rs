@@ -8,7 +8,7 @@ use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
-use crate::builder::{ProviderDef, value_def};
+use crate::builder::{Passed, ProviderDef, value_def};
 use crate::command::help_text;
 use crate::container::{AppInner, RequestScope};
 use crate::graph::{Graph, GraphReport, ROOT};
@@ -36,7 +36,8 @@ impl Navree {
 
 /// Collects the root modules of an app, then validates, boots or runs it.
 pub struct AppBuilder {
-    modules: Vec<Box<dyn Module>>,
+    /// The root modules, each with the type it was passed as.
+    modules: Vec<Passed>,
     overrides: Vec<ProviderDef>,
     shutdown: CancellationToken,
     shutdown_timeout: Duration,
@@ -56,7 +57,7 @@ impl Default for AppBuilder {
 impl AppBuilder {
     /// Adds a root module (imported by the implicit app root).
     pub fn module(mut self, m: impl Module) -> Self {
-        self.modules.push(Box::new(m));
+        self.modules.push(Passed::of(m));
         self
     }
 
@@ -115,7 +116,7 @@ impl AppBuilder {
 
     /// Walks and validates the modules (calls every `register` once).
     fn graph(&self) -> Result<Graph, BootErrors> {
-        Graph::build(&self.modules, &self.overrides)
+        Graph::build_passed(&self.modules, &self.overrides)
     }
 
     /// Boots from an already validated graph, so `register` is not called
@@ -363,7 +364,11 @@ impl fmt::Debug for AppBuilder {
         f.debug_struct("AppBuilder")
             .field(
                 "modules",
-                &self.modules.iter().map(|m| m.name()).collect::<Vec<_>>(),
+                &self
+                    .modules
+                    .iter()
+                    .map(|passed| passed.module.name())
+                    .collect::<Vec<_>>(),
             )
             .field(
                 "overrides",

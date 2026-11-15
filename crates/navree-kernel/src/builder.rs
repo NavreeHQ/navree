@@ -41,12 +41,33 @@ pub(crate) struct ProviderDef {
     pub(crate) multi: bool,
 }
 
+/// A module value as the app or an importing module passed it, with the type
+/// it was passed as.
+pub(crate) struct Passed {
+    /// The module.
+    pub(crate) module: Box<dyn Module>,
+    /// `std::any::type_name` of the value passed (that of `Box<dyn Module>` for
+    /// a module passed already boxed): the module's own type, which the plugin
+    /// checks read, whatever type its id names.
+    pub(crate) type_name: &'static str,
+}
+
+impl Passed {
+    /// `module`, passed as a value of type `M`.
+    pub(crate) fn of<M: Module>(module: M) -> Passed {
+        Passed {
+            module: Box::new(module),
+            type_name: std::any::type_name::<M>(),
+        }
+    }
+}
+
 /// Collects what a module registers. Passed to [`Module::register`].
 pub struct ModuleBuilder {
     pub(crate) id: ModuleId,
     pub(crate) name: &'static str,
     pub(crate) global: bool,
-    pub(crate) imports: Vec<Box<dyn Module>>,
+    pub(crate) imports: Vec<Passed>,
     pub(crate) providers: Vec<ProviderDef>,
     pub(crate) exports: Vec<ProviderKey>,
     pub(crate) contributions: Vec<Contribution>,
@@ -113,13 +134,18 @@ impl ModuleBuilder {
 
     /// Imports a module: its exports become visible to this module.
     pub fn import(&mut self, module: impl Module) -> &mut Self {
-        self.imports.push(Box::new(module));
+        self.imports.push(Passed::of(module));
         self
     }
 
     /// Imports several modules (a tuple of up to 16 modules or a `Vec<Box<dyn Module>>`).
     pub fn imports(&mut self, modules: impl IntoModules) -> &mut Self {
-        self.imports.extend(modules.into_modules());
+        self.imports.extend(
+            modules
+                .into_passed_modules()
+                .into_iter()
+                .map(|(module, type_name)| Passed { module, type_name }),
+        );
         self
     }
 

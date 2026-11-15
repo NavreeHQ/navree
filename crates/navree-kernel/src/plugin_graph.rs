@@ -4,7 +4,7 @@ use std::any::TypeId;
 use std::collections::BTreeMap;
 
 use crate::KernelError;
-use crate::graph::{Graph, ModuleNode};
+use crate::graph::{Graph, ModuleNode, ROOT};
 use crate::plugin::{
     FIRST_PARTY, PluginInfo, PublishTag, Publishable, RESERVED_NAMESPACES, destination,
     is_first_party, is_namespace, names_crate,
@@ -20,10 +20,25 @@ struct Member<'g> {
     index: usize,
     /// The module's name.
     module: &'static str,
-    /// The module's full type path.
+    /// The module's own full type path (the type of the value whose
+    /// `register` ran, not its id's): what the first-party rule reads.
     type_name: &'static str,
     /// The plugin the module names.
     info: &'g PluginInfo,
+}
+
+/// A plugin as the attribution reads it: one per plugin of step 4 of
+/// [`Graph::check_plugins`], in that order.
+struct PluginGroup {
+    /// The index of the plugin's first module, whose info is the plugin's.
+    first: usize,
+    /// The crate the plugin names.
+    crate_name: &'static str,
+    /// Whether the kernel finds the plugin first-party (step 5).
+    first_party: bool,
+    /// The modules that name the plugin, by index (but those left out in
+    /// steps 2 and 3).
+    members: Vec<usize>,
 }
 
 impl Graph {
@@ -41,7 +56,8 @@ impl Graph {
     ///    else a later one at another version is one `PluginVersions`; else a
     ///    later one with any other field is one `PluginInfoDiffers`;
     /// 5. first-party plugins (the kernel's list, its version, every module a
-    ///    type of the listed crate) go into `first_party`;
+    ///    type of the listed crate: the module's own type, which its id need
+    ///    not name) go into `first_party`;
     /// 6. a plugin that is not first-party in a reserved namespace:
     ///    `NamespaceReserved`;
     /// 7. a second plugin on a namespace already used: `NamespaceTaken`;
@@ -51,7 +67,12 @@ impl Graph {
     ///    `locales`, does not start with a locale): `UnsafePublishPath`; per
     ///    plugin and tag, the first safe path that differs from an earlier one
     ///    only in case, else the first that another path needs as a folder
-    ///    (`admin` beside `admin/edit.html`): `UnsafePublishPath`.
+    ///    (`admin` beside `admin/edit.html`): `UnsafePublishPath`;
+    /// 9. which plugin each module acts for (the plugin it names; else the
+    ///    plugin of its type's crate; else, for a generic module that only
+    ///    modules acting for plugins import, one of their plugins, one that is
+    ///    not first-party before one that is), recorded for `acts_for` and
+    ///    `plugins`.
     pub(crate) fn check_plugins(&mut self, errors: &mut Vec<KernelError>) {
         let version = env!("CARGO_PKG_VERSION");
         // Each plugin's modules, plugins in first-seen order.
@@ -84,7 +105,7 @@ impl Graph {
             let member = Member {
                 index: m,
                 module: module.name,
-                type_name: module.id.type_name(),
+                type_name: module.type_name,
                 info,
             };
             match plugins
@@ -97,6 +118,8 @@ impl Graph {
         }
 
         let mut first_party = Vec::new();
+        // One group per plugin, in the order of `plugins`, for step 9.
+        let mut groups: Vec<PluginGroup> = Vec::with_capacity(plugins.len());
         // (namespace, plugin) for every namespace a plugin already uses.
         let mut namespaces: Vec<(&'static str, &'static str)> = Vec::new();
         for members in &plugins {
@@ -136,7 +159,8 @@ impl Graph {
             }
 
             let type_names: Vec<&str> = members.iter().map(|member| member.type_name).collect();
-            if is_first_party(first.info, &type_names, FIRST_PARTY, version) {
+            let is_first = is_first_party(first.info, &type_names, FIRST_PARTY, version);
+            if is_first {
                 first_party.push(plugin);
             } else if RESERVED_NAMESPACES.contains(&first.info.namespace) {
                 errors.push(KernelError::NamespaceReserved {
@@ -144,6 +168,12 @@ impl Graph {
                     namespace: first.info.namespace,
                 });
             }
+            groups.push(PluginGroup {
+                first: first.index,
+                crate_name: first.info.crate_name,
+                first_party: is_first,
+                members: members.iter().map(|member| member.index).collect(),
+            });
 
             let namespace = first.info.namespace;
             let taken = namespaces
@@ -221,19 +251,125 @@ impl Graph {
             }
         }
 
+        // Step 9.
+        let acts_for = self.attribution(&groups);
+
         self.first_party.extend(first_party);
+        self.acts_for = acts_for;
     }
 
-    /// Every plugin of the graph and what its modules add: modules in
-    /// dependency order, grouped by plugin name, a plugin's info taken from
-    /// its first module; plugins by name. Nothing is built.
+    /// Which plugin each module acts for, by module index: the `first` of its
+    /// plugin's group, or `None`.
+    ///
+    /// A module acts for the plugin it names. Else, for the plugin of the
+    /// crate its type path is in, up to its first `<`: the type of the module
+    /// value the app or its importer passed, and the type its id names, either
+    /// one (the longest crate name, then the plugin first in import order; a
+    /// plugin that is not first-party before one that is). Else, for a module
+    /// with generic arguments whose direct importers all act for plugins: the
+    /// one of theirs whose crate its arguments name, else the first of them in
+    /// import order that is not first-party, else the first. When its type
+    /// path gives a first-party plugin and its importers one that is not, it
+    /// acts for the one that is not. The root acts for nothing.
+    fn attribution(&self, groups: &[PluginGroup]) -> Vec<Option<usize>> {
+        let mut acts_for: Vec<Option<usize>> = vec![None; self.modules.len()];
+        if groups.is_empty() {
+            return acts_for;
+        }
+        let order = self.import_order();
+        // The modules that import each module directly, in import order.
+        let mut importers: Vec<Vec<usize>> = vec![Vec::new(); self.modules.len()];
+        for &m in &order {
+            for &import in &self.modules[m].imports {
+                importers[import].push(m);
+            }
+        }
+        // The plugins by crate: the longest crate name first, then in the
+        // order of `groups` (the sort is stable).
+        let mut by_crate: Vec<&PluginGroup> = groups.iter().collect();
+        by_crate.sort_by_key(|group| std::cmp::Reverse(group.crate_name.len()));
+        let group = |first: usize| groups.iter().find(|group| group.first == first);
+        let first_party = |first: usize| group(first).is_some_and(|group| group.first_party);
+        // The plugin of the crate `type_name` is in, up to its first `<`.
+        let of_crate = |type_name: &str| {
+            let outer = type_name
+                .split_once('<')
+                .map_or(type_name, |(outer, _)| outer);
+            by_crate
+                .iter()
+                .find(|group| {
+                    outer
+                        .strip_prefix(group.crate_name)
+                        .is_some_and(|rest| rest.starts_with("::"))
+                })
+                .map(|group| group.first)
+        };
+        // Reverse import order is a topological order (the graph has no
+        // import cycle by now): every importer is decided before the modules
+        // it imports.
+        for &m in order.iter().rev() {
+            if m == ROOT {
+                continue;
+            }
+            if let Some(named) = groups.iter().find(|group| group.members.contains(&m)) {
+                acts_for[m] = Some(named.first);
+                continue;
+            }
+            let own = self.modules[m].type_name;
+            let id = self.modules[m].id.type_name();
+            let by_type = match (of_crate(own), of_crate(id)) {
+                (Some(by_own), Some(by_id)) if first_party(by_own) && !first_party(by_id) => {
+                    Some(by_id)
+                }
+                (Some(by_own), _) => Some(by_own),
+                (None, by_id) => by_id,
+            };
+            // Some only when every direct importer acts for a plugin.
+            let generic = own.contains('<') || id.contains('<');
+            let importing: Option<Vec<usize>> = if generic && !importers[m].is_empty() {
+                importers[m].iter().map(|&i| acts_for[i]).collect()
+            } else {
+                None
+            };
+            let by_importers = importing.and_then(|firsts| {
+                firsts
+                    .iter()
+                    .copied()
+                    .find(|&f| {
+                        group(f).is_some_and(|group| {
+                            names_crate(own, group.crate_name) || names_crate(id, group.crate_name)
+                        })
+                    })
+                    .or_else(|| firsts.iter().copied().find(|&f| !first_party(f)))
+                    .or_else(|| firsts.first().copied())
+            });
+            acts_for[m] = match (by_type, by_importers) {
+                (Some(by_type), Some(by_importers))
+                    if first_party(by_type) && !first_party(by_importers) =>
+                {
+                    Some(by_importers)
+                }
+                (Some(by_type), _) => Some(by_type),
+                (None, by_importers) => by_importers,
+            };
+        }
+        acts_for
+    }
+
+    /// Every plugin of the graph and what its modules add: every module that
+    /// acts for a plugin (step 9 of [`check_plugins`](Graph::check_plugins)),
+    /// in dependency order, under that plugin, whose info is its first
+    /// module's; plugins by name. Nothing is built.
     pub(crate) fn plugins_report(&self) -> PluginsReport {
         let mut plugins: Vec<PluginReport> = Vec::new();
         for &m in &self.order {
-            let module = &self.modules[m];
-            let Some(info) = &module.plugin else {
+            let Some(first) = self.acts_for.get(m).copied().flatten() else {
                 continue;
             };
+            let Some(info) = &self.modules[first].plugin else {
+                continue;
+            };
+            let module = &self.modules[m];
             let report = PluginModuleReport {
                 id: module.id,
                 commands: module.commands.iter().map(|command| command.name).collect(),
@@ -289,4 +425,117 @@ fn publishable_counts(module: &ModuleNode) -> Vec<(PublishTag, usize)> {
             (count > 0).then_some((tag, count))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::marker::PhantomData;
+
+    use super::*;
+    use crate::{Module, ModuleBuilder, ModuleId};
+
+    /// A module of the first-party plugin of these tests, whose crate is this module.
+    struct FirstPartyModule;
+    impl Module for FirstPartyModule {
+        fn register(&self, _: &mut ModuleBuilder) {}
+    }
+
+    /// A generic module of this module's crate, standing for one of a first-party package.
+    struct Wrap<T>(PhantomData<fn() -> T>);
+    impl<T: 'static> Module for Wrap<T> {
+        fn register(&self, _: &mut ModuleBuilder) {}
+    }
+
+    /// A type of no plugin's crate.
+    struct Shared;
+
+    /// The community plugin's module: it imports `Wrap<Shared>`, which no module of the app
+    /// imports.
+    struct Community;
+    impl Module for Community {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.import(Wrap::<Shared>(PhantomData));
+        }
+    }
+
+    #[test]
+    fn a_generic_module_only_plugins_import_is_never_the_apps() {
+        let roots: Vec<Box<dyn Module>> = vec![Box::new(FirstPartyModule), Box::new(Community)];
+        let graph = Graph::build(&roots, &[]).expect("valid");
+        let index = |id: ModuleId| graph.module_of(id).expect("in the graph");
+        let first_party = index(ModuleId::of::<FirstPartyModule>());
+        let community = index(ModuleId::of::<Community>());
+        let wrap = index(ModuleId::of::<Wrap<Shared>>());
+        // `Wrap`'s type is of the first-party plugin's crate, and its one importer acts for
+        // a plugin that is not first-party: it acts for that one.
+        let groups = |community_is_first_party: bool| {
+            [
+                PluginGroup {
+                    first: first_party,
+                    crate_name: module_path!(),
+                    first_party: true,
+                    members: vec![first_party],
+                },
+                PluginGroup {
+                    first: community,
+                    crate_name: "navree_plugin_khata",
+                    first_party: community_is_first_party,
+                    members: vec![community],
+                },
+            ]
+        };
+        let acts_for = graph.attribution(&groups(false));
+        assert_eq!(acts_for[wrap], Some(community));
+        assert_eq!(acts_for[first_party], Some(first_party));
+        assert_eq!(acts_for[community], Some(community));
+        assert_eq!(acts_for[ROOT], None, "the root acts for nothing");
+        // With both plugins first-party, the plugin of its crate.
+        assert_eq!(graph.attribution(&groups(true))[wrap], Some(first_party));
+    }
+
+    /// A module that names the plugin `.0`.
+    struct Names(PluginInfo);
+    impl Module for Names {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(self.0.clone());
+        }
+    }
+
+    #[test]
+    fn a_plugin_is_first_party_by_its_modules_own_types_and_keeps_its_reserved_namespace() {
+        let version = env!("CARGO_PKG_VERSION");
+        let notes = PluginInfo::new("navree-plugin-flags", "navree_kernel", "flag_notes", version);
+        let roots: Vec<Box<dyn Module>> = vec![Box::new(Names(notes))];
+        let mut graph = Graph::build(&roots, &[]).expect("a community plugin in its own namespace");
+        let m = graph
+            .module_of(ModuleId::of::<Names>())
+            .expect("in the graph");
+        // The module names navree-flags, in its reserved namespace. Its own type is not of
+        // navree-flags' crate, whatever crate its id is in: not first-party, and refused.
+        graph.modules[m].plugin = Some(PluginInfo::new(
+            "navree-flags",
+            "navree_kernel",
+            "flags",
+            version,
+        ));
+        let mut errors = Vec::new();
+        graph.check_plugins(&mut errors);
+        assert!(
+            matches!(
+                errors.as_slice(),
+                [KernelError::NamespaceReserved {
+                    plugin: "navree-flags",
+                    namespace: "flags"
+                }]
+            ),
+            "{errors:?}"
+        );
+        // Read as a module of navree-flags' own crate: first-party, and the namespace is its.
+        graph.modules[m].type_name = "navree_flags::module::FlagsModule";
+        let mut errors = Vec::new();
+        graph.check_plugins(&mut errors);
+        assert!(errors.is_empty(), "{errors:?}");
+        assert!(graph.first_party.contains("navree-flags"));
+        assert_eq!(graph.acts_for[m], Some(m));
+    }
 }

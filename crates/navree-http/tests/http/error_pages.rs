@@ -14,7 +14,8 @@ use navree_http::{
     AppError, ErrorContext, ErrorPages, GlobalLayer, IntoResponse, LayerSlot, ModuleBuilderHttpExt,
     RouteDef, RouteKind,
 };
-use navree_kernel::{BoxFuture, Module, ModuleBuilder, PluginInfo};
+use navree_kernel::{BoxFuture, Module, ModuleBuilder};
+use navree_plugin_pretty::PrettyPages;
 
 use crate::support::Setup;
 
@@ -222,20 +223,25 @@ async fn an_app_without_the_module_answers_in_json_as_before() {
     assert!(!varies_on_accept(&response), "{:?}", response.headers);
 }
 
-/// The pretty pages plugin, a community plugin of this test crate.
-const PRETTY: PluginInfo = PluginInfo::new(
-    "navree-plugin-pretty",
-    env!("CARGO_CRATE_NAME"),
-    "pretty",
-    "1.0.0",
-);
+/// The pretty pages plugin, a community plugin whose crate is this module: the app's
+/// `AppPages` and the test app's own modules are in no crate it names.
+mod navree_plugin_pretty {
+    use navree_http::ModuleBuilderHttpExt;
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
 
-/// A module of the pretty pages plugin that answers the app's errors with `.0`.
-struct PrettyPages(Pages);
+    use super::Pages;
 
-impl Module for PrettyPages {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(PRETTY).error_pages(self.0.clone());
+    /// The plugin's info.
+    const PRETTY: PluginInfo =
+        PluginInfo::new("navree-plugin-pretty", module_path!(), "pretty", "1.0.0");
+
+    /// A module of the pretty pages plugin that answers the app's errors with `.0`.
+    pub(super) struct PrettyPages(pub(super) Pages);
+
+    impl Module for PrettyPages {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PRETTY).error_pages(self.0.clone());
+        }
     }
 }
 

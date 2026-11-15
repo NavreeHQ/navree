@@ -5,7 +5,7 @@ use std::any::TypeId;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 
-use crate::builder::{Contribution, ProviderDef};
+use crate::builder::{Contribution, Passed, ProviderDef};
 use crate::lifecycle::LifecycleDef;
 use crate::{
     BootErrors, CommandSpec, KernelError, Module, ModuleBuilder, ModuleId, PluginInfo, ProviderKey,
@@ -166,6 +166,11 @@ pub(crate) struct ModuleNode {
     pub(crate) plugin: Option<PluginInfo>,
     /// Whether the module called `m.plugin(..)` more than once.
     pub(crate) plugin_twice: bool,
+    /// `std::any::type_name` of the module value whose `register` ran, as the
+    /// app or its importer passed it (that of `Box<dyn Module>` for a module
+    /// passed already boxed): the module's own type, which its id need not
+    /// name. The plugin checks read it (see [`Graph::check_plugins`]).
+    pub(crate) type_name: &'static str,
 }
 
 /// A registered provider and the module that owns it.
@@ -226,13 +231,47 @@ pub(crate) struct Graph {
     /// Names of the plugins the kernel finds first-party (see
     /// [`Graph::check_plugins`]).
     pub(crate) first_party: HashSet<&'static str>,
+    /// Per module, the plugin it acts for, as the index of that plugin's first
+    /// module (the one whose info is the plugin's), or `None`: step 9 of
+    /// [`Graph::check_plugins`]. Empty until the checks run.
+    pub(crate) acts_for: Vec<Option<usize>>,
 }
 
 impl Graph {
     /// Walks the modules from the implicit root, applies `overrides` (value
     /// definitions replacing unnamed providers) and validates the graph.
+    /// `roots` are the modules the app passed, each with the type it was
+    /// passed as.
+    pub(crate) fn build_passed(
+        roots: &[Passed],
+        overrides: &[ProviderDef],
+    ) -> Result<Graph, BootErrors> {
+        let roots: Vec<(&dyn Module, &'static str)> = roots
+            .iter()
+            .map(|passed| (passed.module.as_ref(), passed.type_name))
+            .collect();
+        Self::build_from(&roots, overrides)
+    }
+
+    /// [`build_passed`](Graph::build_passed) for root modules passed already
+    /// boxed: each has the type `Box<dyn Module>`.
+    #[cfg(test)]
     pub(crate) fn build(
         roots: &[Box<dyn Module>],
+        overrides: &[ProviderDef],
+    ) -> Result<Graph, BootErrors> {
+        let boxed = std::any::type_name::<Box<dyn Module>>();
+        let roots: Vec<(&dyn Module, &'static str)> = roots
+            .iter()
+            .map(|module| (module.as_ref(), boxed))
+            .collect();
+        Self::build_from(&roots, overrides)
+    }
+
+    /// Walks the modules from the implicit root (each root module with the
+    /// type it was passed as), applies `overrides` and validates the graph.
+    fn build_from(
+        roots: &[(&dyn Module, &'static str)],
         overrides: &[ProviderDef],
     ) -> Result<Graph, BootErrors> {
         let walked = walk(roots)?;
@@ -825,21 +864,31 @@ fn merge(into: &mut VisibleMap, from: &VisibleMap) {
 /// The output of `Module::register` for one module.
 struct Registered {
     builder: ModuleBuilder,
+    /// The type the registered module value was passed as.
+    type_name: &'static str,
     import_ids: Vec<ModuleId>,
 }
 
 /// A module value to register: a root module borrowed from the app builder or
-/// an import owned by the walk.
+/// an import owned by the walk, each with the type it was passed as.
 enum Source<'a> {
-    Root(&'a dyn Module),
-    Import(Box<dyn Module>),
+    Root(&'a dyn Module, &'static str),
+    Import(Passed),
 }
 
 impl Source<'_> {
     fn module(&self) -> &dyn Module {
         match self {
-            Source::Root(m) => *m,
-            Source::Import(m) => m.as_ref(),
+            Source::Root(m, _) => *m,
+            Source::Import(passed) => passed.module.as_ref(),
+        }
+    }
+
+    /// `std::any::type_name` of the module value, as it was passed.
+    fn type_name(&self) -> &'static str {
+        match self {
+            Source::Root(_, type_name) => *type_name,
+            Source::Import(passed) => passed.type_name,
         }
     }
 }
@@ -850,7 +899,7 @@ struct Restart(ModuleId, &'static str);
 
 /// Calls `register` once per module id, starting from the implicit root.
 /// Configured (`for_root`) instances win over plain imports of the same id.
-fn walk(roots: &[Box<dyn Module>]) -> Result<Vec<Registered>, BootErrors> {
+fn walk(roots: &[(&dyn Module, &'static str)]) -> Result<Vec<Registered>, BootErrors> {
     let mut deferred = HashSet::new();
     loop {
         match Walker::new(&deferred).run(roots) {
@@ -895,7 +944,7 @@ impl<'a, 'd> Walker<'a, 'd> {
 
     fn run(
         mut self,
-        roots: &'a [Box<dyn Module>],
+        roots: &[(&'a dyn Module, &'static str)],
     ) -> Result<Result<Vec<Registered>, Vec<KernelError>>, Restart> {
         let root_id = ModuleId::named::<AppRoot>("App");
         let mut root = ModuleBuilder::new(root_id, root_id.name());
@@ -903,10 +952,11 @@ impl<'a, 'd> Walker<'a, 'd> {
         self.registered.insert(root_id);
         self.out.push(Registered {
             builder: root,
-            import_ids: roots.iter().map(|m| m.id()).collect(),
+            type_name: std::any::type_name::<AppRoot>(),
+            import_ids: roots.iter().map(|(m, _)| m.id()).collect(),
         });
-        for module in roots {
-            self.enqueue(Source::Root(module.as_ref()))?;
+        for &(module, type_name) in roots {
+            self.enqueue(Source::Root(module, type_name))?;
         }
         loop {
             if let Some(source) = self.configured_queue.pop_front() {
@@ -969,7 +1019,8 @@ impl<'a, 'd> Walker<'a, 'd> {
         self.registered.insert(id);
         self.out.push(Registered {
             builder,
-            import_ids: imports.iter().map(|m| m.id()).collect(),
+            type_name: source.type_name(),
+            import_ids: imports.iter().map(|import| import.module.id()).collect(),
         });
         for import in imports {
             self.enqueue(Source::Import(import))?;
@@ -1024,6 +1075,7 @@ fn assemble(walked: Vec<Registered>, errors: &mut Vec<KernelError>) -> Graph {
             commands: builder.commands,
             plugin: builder.plugin,
             plugin_twice: builder.plugin_twice,
+            type_name: registered.type_name,
         });
     }
     Graph {
@@ -1036,6 +1088,7 @@ fn assemble(walked: Vec<Registered>, errors: &mut Vec<KernelError>) -> Graph {
         multi: HashMap::new(),
         located: HashMap::new(),
         first_party: HashSet::new(),
+        acts_for: Vec::new(),
     }
 }
 

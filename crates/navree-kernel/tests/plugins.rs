@@ -1,11 +1,12 @@
 //! Plugins: what a module says about itself, the boot checks, the report and the
 //! `plugins` built-in. This file's crate is `plugins`, in the package `navree-kernel`.
 
+use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use navree_kernel::{BootErrors, KernelError, Module, ModuleBuilder, ModuleId, Navree};
-use navree_kernel::{BoxError, CommandSpec, Factory};
+use navree_kernel::{BoxError, CommandSpec, ConfiguredModule, Factory};
 use navree_kernel::{PluginInfo, plugin_info};
 use navree_kernel::{PublishTag, Publishable};
 
@@ -458,6 +459,14 @@ impl Module for Announcements {
     }
 }
 
+/// A module of the app beside a plugin of `plugin_info!()`, whose crate is this whole file
+/// (`plugins`): every module type of this file is of that crate, and `Plain` would be listed
+/// under the plugin. So the app's module here is one of another crate, the kernel's own
+/// `ConfiguredModule`, with the id of `String`.
+fn module_of_another_crate() -> impl Module {
+    ConfiguredModule::<String, ()>::from_config(|_, _| {})
+}
+
 #[tokio::test]
 async fn the_plugins_report_needs_no_boot_and_lists_what_each_module_adds() {
     let built = Arc::new(AtomicUsize::new(0));
@@ -465,7 +474,7 @@ async fn the_plugins_report_needs_no_boot_and_lists_what_each_module_adds() {
         .module(Announcements {
             built: built.clone(),
         })
-        .module(Plain)
+        .module(module_of_another_crate())
         .plugin_report()
         .expect("valid");
     let [plugin] = report.plugins.as_slice() else {
@@ -631,8 +640,10 @@ async fn a_module_of_a_plugin_the_kernel_does_not_find_first_party_is_a_communit
     );
 }
 
-/// A module of the app's own crate. This file is one crate, the plugin's, so the module takes the
-/// id of a type of another crate.
+/// A module of the app: its type is at the top of this file, outside the modules that stand for
+/// a plugin's crate below. Its id is that of a type of another crate, `String`; the kernel reads
+/// the module's own type too, so the id alone would not make it the app's beside a plugin whose
+/// crate is this whole file.
 struct Outside;
 impl Module for Outside {
     fn id(&self) -> ModuleId {
@@ -645,9 +656,10 @@ impl Module for Outside {
 #[tokio::test]
 async fn a_module_of_the_app_names_no_plugin_and_is_in_no_plugins_crate() {
     use navree_kernel::__private::is_app_module;
+    use navree_plugin_notices::{Helper, NoticesModule};
     let app = Navree::app()
-        .module(NoticesModule)
-        .module(Plain)
+        .module(NoticesModule::with_policy())
+        .module(Helper)
         .module(Outside)
         .boot()
         .await
@@ -661,11 +673,419 @@ async fn a_module_of_the_app_names_no_plugin_and_is_in_no_plugins_crate() {
         "a module of a plugin"
     );
     assert!(
-        !is_app_module(app.ctx(), ModuleId::of::<Plain>()),
+        !is_app_module(app.ctx(), ModuleId::of::<Helper>()),
         "names no plugin, but it is in the crate the plugin names"
     );
     assert!(
         !is_app_module(app.ctx(), ModuleId::of::<Shop>()),
         "not in the app"
     );
+}
+
+// Which plugin a module acts for. No plugin of this file's crate (`plugins`) is in these apps:
+// its crate would hold every type at the top of this file.
+
+/// The notices plugin: its crate is this module.
+mod navree_plugin_notices {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+    /// The plugin's info.
+    pub const NOTICES: PluginInfo =
+        PluginInfo::new("navree-plugin-notices", module_path!(), "notices", "1.0.0");
+
+    /// A policy type of the plugin, named in a generic module of another crate.
+    pub struct Open;
+
+    /// The plugin's module: it names the plugin, then registers what its function adds.
+    pub struct NoticesModule(pub fn(&mut ModuleBuilder));
+
+    impl NoticesModule {
+        /// The plugin's module importing `PolicyOf<Open>`, as a plugin imports its policy.
+        pub fn with_policy() -> NoticesModule {
+            NoticesModule(|m| {
+                m.import(super::PolicyOf::<Open>::new());
+            })
+        }
+    }
+
+    impl Module for NoticesModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(NOTICES);
+            (self.0)(m);
+        }
+    }
+
+    /// A module of the plugin's crate that names no plugin.
+    pub struct Helper;
+
+    impl Module for Helper {
+        fn register(&self, _: &mut ModuleBuilder) {}
+    }
+
+    /// The notice board plugin, a crate nested in the notices crate.
+    pub mod board {
+        use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+        /// The plugin's info.
+        pub const BOARD: PluginInfo = PluginInfo::new(
+            "navree-plugin-notice-board",
+            module_path!(),
+            "notice_board",
+            "1.0.0",
+        );
+
+        /// The notice board's module.
+        pub struct BoardModule;
+
+        impl Module for BoardModule {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.plugin(BOARD);
+            }
+        }
+
+        /// A module of the notice board's crate that names no plugin.
+        pub struct BoardHelper;
+
+        impl Module for BoardHelper {
+            fn register(&self, _: &mut ModuleBuilder) {}
+        }
+    }
+}
+
+/// The weather and monsoon plugins: two plugins of one crate, this module.
+mod navree_plugin_weather {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+    /// The weather plugin's module.
+    pub struct WeatherModule;
+
+    impl Module for WeatherModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PluginInfo::new(
+                "navree-plugin-weather",
+                module_path!(),
+                "weather",
+                "1.0.0",
+            ));
+        }
+    }
+
+    /// The monsoon plugin's module.
+    pub struct MonsoonModule;
+
+    impl Module for MonsoonModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PluginInfo::new(
+                "navree-plugin-monsoon",
+                module_path!(),
+                "monsoon",
+                "1.0.0",
+            ));
+        }
+    }
+
+    /// A module of the crate of both that names no plugin.
+    pub struct Rain;
+
+    impl Module for Rain {
+        fn register(&self, _: &mut ModuleBuilder) {}
+    }
+}
+
+/// A type of a crate that is no plugin's, such as a plugin's `-core` crate.
+mod khata_core {
+    /// A policy type of that crate.
+    pub struct Open;
+}
+
+/// The khata plugin: its crate is this module.
+mod navree_plugin_khata {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+    /// The plugin's info.
+    pub const KHATA: PluginInfo =
+        PluginInfo::new("navree-plugin-khata", module_path!(), "khata", "1.0.0");
+
+    /// A policy type of the plugin.
+    pub struct Open;
+
+    /// The plugin's module: it names the plugin, then registers what its function adds.
+    pub struct KhataModule(pub fn(&mut ModuleBuilder));
+
+    impl Module for KhataModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(KHATA);
+            (self.0)(m);
+        }
+    }
+}
+
+/// A generic module of this crate standing for `AccessModule::for_policy::<P>()`: it contributes a
+/// `Grant`.
+struct PolicyOf<P>(PhantomData<fn() -> P>);
+
+impl<P> PolicyOf<P> {
+    fn new() -> PolicyOf<P> {
+        PolicyOf(PhantomData)
+    }
+}
+
+impl<P: 'static> Module for PolicyOf<P> {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(Grant);
+    }
+}
+
+/// What `PolicyOf` contributes.
+struct Grant;
+
+/// A generic module that imports `PolicyOf<P>`.
+struct Outer<P>(PhantomData<fn() -> P>);
+
+impl<P: 'static> Module for Outer<P> {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.import(PolicyOf::<P>::new());
+    }
+}
+
+/// A type of this crate, of no plugin's.
+struct Shared;
+
+/// The name of the plugin `module` acts for in `app`.
+fn acting_for(app: &navree_kernel::App, module: ModuleId) -> Option<&'static str> {
+    navree_kernel::__private::acts_for(app.ctx(), module).map(|plugin| plugin.name)
+}
+
+#[tokio::test]
+async fn a_wrapper_module_acts_for_the_plugin_that_imports_it_and_for_the_app_that_does() {
+    use navree_plugin_notices::{NoticesModule, Open};
+    let policy = ModuleId::of::<PolicyOf<Open>>();
+
+    // Only the plugin imports it: the plugin's.
+    let app = Navree::app()
+        .module(NoticesModule::with_policy())
+        .module(Outside)
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(acting_for(&app, policy), Some("navree-plugin-notices"));
+    assert_eq!(
+        acting_for(&app, ModuleId::of::<NoticesModule>()),
+        Some("navree-plugin-notices")
+    );
+    assert_eq!(acting_for(&app, ModuleId::named::<String>("Outside")), None);
+    assert_eq!(acting_for(&app, ModuleId::of::<Shop>()), None, "not in the app");
+
+    // The app imports it too: the app's.
+    let app = Navree::app()
+        .module(NoticesModule::with_policy())
+        .module(PolicyOf::<Open>::new())
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(acting_for(&app, policy), None);
+
+    // Only the app imports it: the app's.
+    let app = Navree::app()
+        .module(NoticesModule(|_| {}))
+        .module(PolicyOf::<Open>::new())
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(acting_for(&app, policy), None);
+
+    // Two levels below the plugin: both the plugin's.
+    let app = Navree::app()
+        .module(NoticesModule(|m| {
+            m.import(Outer::<Open>(PhantomData));
+        }))
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(
+        acting_for(&app, ModuleId::of::<Outer<Open>>()),
+        Some("navree-plugin-notices")
+    );
+    assert_eq!(acting_for(&app, policy), Some("navree-plugin-notices"));
+}
+
+#[tokio::test]
+async fn a_module_of_a_plugins_crate_acts_for_it_without_naming_it() {
+    use navree_kernel::__private::{is_app_module, is_community_plugin};
+    use navree_plugin_notices::{Helper, NoticesModule};
+    let app = Navree::app()
+        .module(NoticesModule::with_policy())
+        .module(Helper)
+        .module(Outside)
+        .boot()
+        .await
+        .expect("boots");
+    let helper = ModuleId::of::<Helper>();
+    assert_eq!(acting_for(&app, helper), Some("navree-plugin-notices"));
+    assert!(
+        !is_community_plugin(app.ctx(), helper),
+        "it names no plugin"
+    );
+    assert!(!is_app_module(app.ctx(), helper));
+    assert!(is_app_module(
+        app.ctx(),
+        ModuleId::named::<String>("Outside")
+    ));
+}
+
+#[tokio::test]
+async fn the_most_specific_crate_decides_which_plugin_a_module_acts_for() {
+    use navree_plugin_notices::board::{BoardHelper, BoardModule};
+    use navree_plugin_notices::{Helper, NoticesModule};
+    let app = Navree::app()
+        .module(NoticesModule::with_policy())
+        .module(BoardModule)
+        .module(Helper)
+        .module(BoardHelper)
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(
+        acting_for(&app, ModuleId::of::<Helper>()),
+        Some("navree-plugin-notices")
+    );
+    assert_eq!(
+        acting_for(&app, ModuleId::of::<BoardHelper>()),
+        Some("navree-plugin-notice-board")
+    );
+
+    // Two plugins of one crate: the plugin whose module the app lists first.
+    use navree_plugin_weather::{MonsoonModule, Rain, WeatherModule};
+    let rain = ModuleId::of::<Rain>();
+    let app = Navree::app()
+        .module(WeatherModule)
+        .module(MonsoonModule)
+        .module(Rain)
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(acting_for(&app, rain), Some("navree-plugin-weather"));
+    let app = Navree::app()
+        .module(MonsoonModule)
+        .module(WeatherModule)
+        .module(Rain)
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(acting_for(&app, rain), Some("navree-plugin-monsoon"));
+}
+
+#[test]
+fn plugins_lists_a_policy_module_under_its_plugin() {
+    use navree_plugin_notices::{NoticesModule, Open};
+    let report = Navree::app()
+        .module(NoticesModule::with_policy())
+        .plugin_report()
+        .expect("valid");
+    let [plugin] = report.plugins.as_slice() else {
+        panic!("one plugin: {report:?}")
+    };
+    let ids: Vec<ModuleId> = plugin.modules.iter().map(|module| module.id).collect();
+    assert_eq!(
+        ids,
+        [
+            ModuleId::of::<PolicyOf<Open>>(),
+            ModuleId::of::<NoticesModule>()
+        ],
+        "in dependency order"
+    );
+    assert_eq!(plugin.modules[0].contributions, [("plugins::Grant", 1)]);
+    let text = report.to_string();
+    let lines: Vec<&str> = text.lines().collect();
+    for expected in [
+        "  PolicyOf<plugins::navree_plugin_notices::Open>  plugins::PolicyOf<plugins::navree_plugin_notices::Open>",
+        "    adds      1 Grant",
+    ] {
+        assert!(lines.contains(&expected), "{text}");
+    }
+
+    // The app imports the policy module too: the plugin lists its own module alone.
+    let report = Navree::app()
+        .module(NoticesModule::with_policy())
+        .module(PolicyOf::<Open>::new())
+        .plugin_report()
+        .expect("valid");
+    let ids: Vec<ModuleId> = report.plugins[0]
+        .modules
+        .iter()
+        .map(|module| module.id)
+        .collect();
+    assert_eq!(ids, [ModuleId::of::<NoticesModule>()]);
+}
+
+#[tokio::test]
+async fn a_generic_module_only_plugins_import_is_never_the_apps() {
+    use navree_plugin_khata::KhataModule;
+    use navree_plugin_notices::NoticesModule;
+
+    // A policy type of the plugin's `-core` crate: the plugin's.
+    let core = ModuleId::of::<PolicyOf<khata_core::Open>>();
+    let app = Navree::app()
+        .module(KhataModule(|m| {
+            m.import(PolicyOf::<khata_core::Open>::new());
+        }))
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(acting_for(&app, core), Some("navree-plugin-khata"));
+
+    // A wrapper two plugins import: the plugin the app lists first.
+    let shared = ModuleId::of::<PolicyOf<Shared>>();
+    let notices = || {
+        NoticesModule(|m| {
+            m.import(PolicyOf::<Shared>::new());
+        })
+    };
+    let khata = || {
+        KhataModule(|m| {
+            m.import(PolicyOf::<Shared>::new());
+        })
+    };
+    let app = Navree::app()
+        .module(notices())
+        .module(khata())
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(acting_for(&app, shared), Some("navree-plugin-notices"));
+    let app = Navree::app()
+        .module(khata())
+        .module(notices())
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(acting_for(&app, shared), Some("navree-plugin-khata"));
+
+    // Its arguments name one of them: that one, whatever the order.
+    let own = ModuleId::of::<PolicyOf<navree_plugin_khata::Open>>();
+    let app = Navree::app()
+        .module(NoticesModule(|m| {
+            m.import(PolicyOf::<navree_plugin_khata::Open>::new());
+        }))
+        .module(KhataModule(|m| {
+            m.import(PolicyOf::<navree_plugin_khata::Open>::new());
+        }))
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(acting_for(&app, own), Some("navree-plugin-khata"));
+
+    // The app imports it as well: the app's.
+    let app = Navree::app()
+        .module(NoticesModule(|m| {
+            m.import(PolicyOf::<navree_plugin_khata::Open>::new());
+        }))
+        .module(KhataModule(|m| {
+            m.import(PolicyOf::<navree_plugin_khata::Open>::new());
+        }))
+        .module(PolicyOf::<navree_plugin_khata::Open>::new())
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(acting_for(&app, own), None);
 }

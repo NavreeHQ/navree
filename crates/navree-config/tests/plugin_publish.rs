@@ -10,7 +10,8 @@ use navree_config::{
     ConfigModule, ConfigRegistry, ConfigSection, ConfigSources, FieldSchema, FieldType,
     ModuleBuilderConfigExt, PublishOptions, SectionRegistration, SectionSchema, publish_section,
 };
-use navree_kernel::{Module, ModuleBuilder, Navree, PublishTag, Publishable, plugin_info};
+use navree_kernel::{Module, ModuleBuilder, Navree};
+use navree_plugin_announcements::AnnouncementsModule;
 use serde::Deserialize;
 
 /// Held by each test while it runs in its folder (the current directory is the process's).
@@ -98,19 +99,34 @@ struct CrmOptions {
     currency: String,
 }
 
-/// A plugin with the namespace `announcements`, two sections, `announcements` and
-/// `announcements.feed`, and one views file, `list.html`.
-struct AnnouncementsModule;
+/// The plugin's crate. Every module of this file's crate (`plugin_publish`) would act for a
+/// plugin that names that crate, so the plugin's crate is this module, and the app's
+/// `CrmModule` stays at the top of the file.
+mod navree_plugin_announcements {
+    use navree_config::ModuleBuilderConfigExt;
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo, PublishTag, Publishable};
 
-impl Module for AnnouncementsModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(plugin_info!(namespace = "announcements"))
+    use super::{AnnouncementsOptions, FeedOptions};
+
+    /// A plugin with the namespace `announcements`, two sections, `announcements` and
+    /// `announcements.feed`, and one views file, `list.html`.
+    pub(super) struct AnnouncementsModule;
+
+    impl Module for AnnouncementsModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PluginInfo::new(
+                "navree-plugin-announcements",
+                module_path!(),
+                "announcements",
+                "1.0.0",
+            ))
             .config_section::<AnnouncementsOptions>()
             .config_section::<FeedOptions>()
             .contribute(Publishable::new(PublishTag::Views).file(
                 "list.html",
                 "<ul><li>Fee for Ludhiana: ₹1,00,000</li></ul>".as_bytes(),
             ));
+        }
     }
 }
 

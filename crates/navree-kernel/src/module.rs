@@ -158,11 +158,31 @@ pub trait Injectable: Sized + Send + Sync + 'static {
 pub trait IntoModules {
     /// Converts into boxed modules, in order.
     fn into_modules(self) -> Vec<Box<dyn Module>>;
+
+    /// Converts into boxed modules, in order, each with `std::any::type_name`
+    /// of the value it was given as: a module given already boxed has the type
+    /// `Box<dyn Module>`. The kernel reads a module's own type from it. Not
+    /// public API; the kernel calls it.
+    #[doc(hidden)]
+    fn into_passed_modules(self) -> Vec<(Box<dyn Module>, &'static str)>
+    where
+        Self: Sized,
+    {
+        let boxed = std::any::type_name::<Box<dyn Module>>();
+        self.into_modules()
+            .into_iter()
+            .map(|module| (module, boxed))
+            .collect()
+    }
 }
 
 impl<M: Module> IntoModules for M {
     fn into_modules(self) -> Vec<Box<dyn Module>> {
         vec![Box::new(self)]
+    }
+
+    fn into_passed_modules(self) -> Vec<(Box<dyn Module>, &'static str)> {
+        vec![(Box::new(self), std::any::type_name::<M>())]
     }
 }
 
@@ -179,6 +199,15 @@ macro_rules! tuple_into_modules {
             fn into_modules(self) -> Vec<Box<dyn Module>> {
                 let ($($name,)+) = self;
                 vec![$(Box::new($name) as Box<dyn Module>),+]
+            }
+
+            #[allow(non_snake_case)]
+            fn into_passed_modules(self) -> Vec<(Box<dyn Module>, &'static str)> {
+                let ($($name,)+) = self;
+                vec![$((
+                    Box::new($name) as Box<dyn Module>,
+                    std::any::type_name::<$name>(),
+                )),+]
             }
         }
     };
