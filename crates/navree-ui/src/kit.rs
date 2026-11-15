@@ -279,9 +279,7 @@ fn tied<'a>(node: &'a Node, above: &str, depth: u32) -> Option<(&'a Element, Str
                 .iter()
                 .find_map(|child| tied(child, &path, depth + 1))
         }
-        Node::Fragment(nodes) => nodes
-            .iter()
-            .find_map(|child| tied(child, above, depth + 1)),
+        Node::Fragment(nodes) => nodes.iter().find_map(|child| tied(child, above, depth + 1)),
         Node::Empty | Node::Text(_) | Node::Int(_) | Node::Raw(_) | Node::Static(_) => None,
     }
 }

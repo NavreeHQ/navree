@@ -873,11 +873,7 @@ fn holds(node: &Node, depth: u32) -> bool {
     }
     match node {
         Node::Element(element) => {
-            takes_password(element)
-                || element
-                    .children
-                    .iter()
-                    .any(|child| holds(child, depth + 1))
+            takes_password(element) || element.children.iter().any(|child| holds(child, depth + 1))
         }
         Node::Fragment(nodes) => nodes.iter().any(|child| holds(child, depth + 1)),
         _ => false,

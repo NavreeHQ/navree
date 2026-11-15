@@ -225,7 +225,10 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
                 let compressing = compressing.get().copied().unwrap_or(true);
                 // The app's policy, when it is not the toolkit's own: the layer then puts it on
                 // every page and fragment that carries the toolkit's policy.
-                let policy = policy.get().cloned().filter(|policy| !policy.is_the_toolkits());
+                let policy = policy
+                    .get()
+                    .cloned()
+                    .filter(|policy| !policy.is_the_toolkits());
                 Ok(
                     router.layer(middleware::from_fn(move |request: Request, next: Next| {
                         reply_layer(compressing, policy.clone(), request, next)

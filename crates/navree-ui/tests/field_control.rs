@@ -154,7 +154,10 @@ struct Parcel {
 }
 
 #[derive(Debug, Deserialize, Validate, Form)]
-#[allow(dead_code, reason = "the form is read and its check run; its field is not used")]
+#[allow(
+    dead_code,
+    reason = "the form is read and its check run; its field is not used"
+)]
 struct Dropoff {
     /// Pin code
     #[validate(skip)]
@@ -163,7 +166,10 @@ struct Dropoff {
 }
 
 #[derive(Debug, Deserialize, Validate, Form)]
-#[allow(dead_code, reason = "the form is read and its check run; its field is not used")]
+#[allow(
+    dead_code,
+    reason = "the form is read and its check run; its field is not used"
+)]
 struct Watched {
     /// Code
     #[validate(skip)]
@@ -434,10 +440,11 @@ async fn a_draft_read_back_runs_the_controls_check() {
 
     let app = boot().await;
     let language = Language::of(Some(app.ctx())).await;
-    let errors = draft
-        .read_for::<Parcel>("parcel", &language)
-        .unwrap_err();
-    assert_eq!(errors["pin_code"], ["We deliver to Ludhiana and Jalandhar only"]);
+    let errors = draft.read_for::<Parcel>("parcel", &language).unwrap_err();
+    assert_eq!(
+        errors["pin_code"],
+        ["We deliver to Ludhiana and Jalandhar only"]
+    );
     // Read with no language, the check has no configuration to read.
     assert!(draft.read::<Parcel>("parcel").is_ok());
 }
@@ -483,7 +490,10 @@ async fn a_controls_check_reads_its_plugins_configuration_through_the_app() {
         &language,
     )
     .unwrap_err();
-    assert_eq!(errors["pin_code"], ["We deliver to Ludhiana and Jalandhar only"]);
+    assert_eq!(
+        errors["pin_code"],
+        ["We deliver to Ludhiana and Jalandhar only"]
+    );
     let taken = decode_for::<Parcel>(
         &pairs(&[("recipient", "Kuldeep Gill"), ("pin_code", "141001")]),
         &language,
@@ -744,7 +754,11 @@ fn said_of(control: &dyn FieldControl) -> String {
         Err(payload) => payload
             .downcast_ref::<String>()
             .cloned()
-            .or_else(|| payload.downcast_ref::<&str>().map(|text| (*text).to_owned()))
+            .or_else(|| {
+                payload
+                    .downcast_ref::<&str>()
+                    .map(|text| (*text).to_owned())
+            })
             .unwrap_or_default(),
     }
 }
@@ -771,7 +785,10 @@ fn assert_control_refuses_an_unlabelled_hidden_control_one_that_ignores_disabled
     );
 
     let said = said_of(&Misnamed);
-    assert_eq!(said, "control app.misnamed: draws no form field named drop_at");
+    assert_eq!(
+        said,
+        "control app.misnamed: draws no form field named drop_at"
+    );
 
     kit::assert_control(&PIN_CODE);
     kit::assert_control(&DELIVERY_PIN);
@@ -832,7 +849,10 @@ async fn an_edited_value_the_type_cannot_read_is_refused_in_the_forms_words() {
     let app = boot().await;
     let response = post(&app, "/deliveries/42/seats", "value=x", true).await;
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(response.json_value()["ops"][0]["text"], "Value is not valid.");
+    assert_eq!(
+        response.json_value()["ops"][0]["text"],
+        "Value is not valid."
+    );
     let response = post(&app, "/deliveries/42/seats", "value=4", true).await;
     assert_eq!(response.status(), StatusCode::OK);
 }

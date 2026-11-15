@@ -266,8 +266,9 @@ impl<T> FromRequest for EditedValue<T> {
         let limit = BodyLimit::of(&parts.extensions);
         let bytes = read_body(body, limit).await.map_err(|error| match error {
             BodyError::TooLarge => navree_http::AppError::payload_too_large(limit),
-            other => navree_http::AppError::from_status(other.status())
-                .with_detail(other.to_string()),
+            other => {
+                navree_http::AppError::from_status(other.status()).with_detail(other.to_string())
+            }
         })?;
         let text = urlencoded::parse(&bytes)
             .find(|(name, _)| name == "value")
