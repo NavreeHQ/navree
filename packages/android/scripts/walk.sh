@@ -110,6 +110,29 @@ rotate() {
 # The smallest number among the orders (CS-nnnnnn) that are in the dump.
 lowest_order() { ui texts | grep -o 'CS-[0-9]*' | sort | head -1 | tr -d 'CS-'; }
 
+# Cold starts, timed: what the system says it took to show the first frame and to show the page
+# (the app reports when it is fully drawn), and the app's own marks of where the time went.
+timed_starts() {
+  local n
+  say "== how long a cold start takes (${1:-this build})"
+  for n in 1 2 3; do
+    "$ADB" shell input keyevent KEYCODE_HOME
+    stop_app
+    sleep 2
+    "$ADB" logcat -c
+    "$ADB" shell am start -W -n "$PKG/$ACTIVITY" | grep -E 'ThisTime|TotalTime|WaitTime' | tr '\n' ' ' | tee -a "$OUT/walk.txt"
+    echo >> "$OUT/walk.txt"
+    wait_for Dashboard 30 > /dev/null
+    sleep 2
+    "$ADB" logcat -d | grep -E 'NavreeStart|Fully drawn' | sed 's/^.*\(NavreeStart\|ActivityTaskManager\)/\1/' | tee -a "$OUT/walk.txt"
+  done
+}
+
+if [ "${ONLY:-}" = starts ]; then
+  timed_starts "${BUILD:-this build}"
+  exit 0
+fi
+
 # ---------------------------------------------------------------- starts
 
 # The screens' pictures run with animations off; a person's device has them on, and a spinner that waits is a moving one.
@@ -131,6 +154,8 @@ stop_app
 launch
 strip cold-second 14
 check "a second start shows the first screen" wait_for Dashboard 20
+
+timed_starts "the debug build"
 
 say "== no network at start, with a page kept"
 "$ADB" shell input keyevent KEYCODE_HOME
@@ -211,7 +236,8 @@ sleep 1
 tap Back
 sleep 2
 dump
-check "the search view is closed" bash -c "! python3 -I '$HERE/ui.py' '$OUT/window.xml' has Kaur"
+# What stays is the words in the bar: the view is closed when its own way back is gone.
+check "the search view is closed" bash -c "! python3 -I '$HERE/ui.py' '$OUT/window.xml' has Back"
 
 say "== an order opens and closes"
 dump

@@ -202,6 +202,17 @@ jobs:
             :navree-push-fcm:assembleDebug \
             :demo:assembleDebug
 
+      # The demo as a store ships it (not debuggable), signed with a key made here, to time a start on.
+      - name: Release build of the demo
+        continue-on-error: true
+        run: |
+          gradle --console=plain :demo:assembleRelease
+          apk=$(ls demo/build/outputs/apk/release/*.apk | head -1)
+          keytool -genkeypair -keystore "$RUNNER_TEMP/release.jks" -storepass releasepass -keypass releasepass \
+            -alias release -keyalg RSA -keysize 2048 -validity 30 -dname "CN=Demo"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$RUNNER_TEMP/release.jks" --ks-pass pass:releasepass \
+            --key-pass pass:releasepass --out demo/build/outputs/apk/release/demo-release-signed.apk "$apk"
+
       - name: Keep Gradle's caches
         if: steps.gradle-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -228,6 +239,7 @@ jobs:
           path: |
             packages/android/navree-native/build/outputs/apk/androidTest/debug/*.apk
             packages/android/demo/build/outputs/apk/debug/*.apk
+            packages/android/demo/build/outputs/apk/release/demo-release-signed.apk
           retention-days: 14
 
   # The store, inbox and board demos, answering native clients, for the device
@@ -431,6 +443,28 @@ jobs:
           status=$?
           cp "$RUNNER_TEMP"/demo/walk-server.log "$RUNNER_TEMP/walk/" || true
           exit $status
+
+      # The same start, timed, on the build a store would ship.
+      - name: Starts of the release build
+        if: always() && matrix.device == 'phone'
+        continue-on-error: true
+        run: |
+          adb="$ANDROID_HOME/platform-tools/adb"
+          apk=$(ls "$RUNNER_TEMP"/apks/demo/build/outputs/apk/release/demo-release-signed.apk 2>/dev/null | head -1)
+          if [ -z "$apk" ]; then echo "no release build was made"; exit 0; fi
+          "$adb" uninstall com.navree.demo > /dev/null
+          "$adb" install -r "$apk"
+          chmod +x packages/android/scripts/walk.sh
+          ADB="$adb" OUT="$RUNNER_TEMP/walk-release" ONLY=starts BUILD="the release build" packages/android/scripts/walk.sh
+
+      - name: Keep the starts of the release build
+        if: always() && matrix.device == 'phone'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-walk-release
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/walk-release
+          retention-days: 30
 
       - name: Keep the walk
         if: always() && matrix.device == 'phone'

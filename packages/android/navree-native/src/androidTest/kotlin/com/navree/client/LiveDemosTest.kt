@@ -1,8 +1,18 @@
 package com.navree.client
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.isPopup
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
@@ -18,10 +28,13 @@ import com.navree.client.core.Events
 import com.navree.client.core.ScreenView
 import com.navree.client.core.Stage
 import com.navree.client.design.ListRules
+import com.navree.client.design.ReorderRules
 import com.navree.client.design.ScreenRules
 import com.navree.client.design.walk
 import com.navree.protocol.Navree
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -132,10 +145,11 @@ class LiveDemosTest {
         val field = compose.onAllNodes(hasSetTextAction()).onFirst()
         runCatching {
             field.performClick()
-            // The search view opens as a field of its own: the words go to the one that has the focus now.
+            // The search view opens as a field of its own: the words go to the one that has the focus, once it has it.
             compose.waitForIdle()
-            Thread.sleep(700)
             val focused = compose.onAllNodes(hasSetTextAction() and isFocused())
+            runCatching { compose.waitUntil(8_000) { focused.fetchSemanticsNodes().isNotEmpty() } }
+            Thread.sleep(300)
             if (focused.fetchSemanticsNodes().isNotEmpty()) focused.onFirst().performTextInput(words) else compose.onAllNodes(hasSetTextAction()).onLast().performTextInput(words)
         }.onFailure { return }
         Thread.sleep(2500)
@@ -186,5 +200,108 @@ class LiveDemosTest {
         val app = start(origin!!)
         destinations(app, "board")
         openFirstRow(app, "board-card")
+    }
+
+    /** The cards of every lane of a board, as the tree says. */
+    private fun cards(screen: Navree.Screen?): List<Navree.Row> =
+        screen?.body.let { body -> body?.walk().orEmpty() }.filterIsInstance<Navree.List>().filter { it.reorder != null }
+            .flatMap { it.children.filterIsInstance<Navree.Row>() }.toList()
+
+    /** The cards of the lane whose list has this id. */
+    private fun lane(screen: Navree.Screen?, id: String?): List<Navree.Row> =
+        screen?.body.let { body -> body?.walk().orEmpty() }.filterIsInstance<Navree.List>().filter { it.id == id }
+            .flatMap { it.children.filterIsInstance<Navree.Row>() }.toList()
+
+    /** The labels a card carries (the badges that have a dot). */
+    private fun labels(card: Navree.Row): List<String> = card.walk().filterIsInstance<Navree.Badge>().filter { it.dot }.map { it.text }.toList()
+
+    @Test
+    fun theBoardsFiltersNarrowTheBoardAndClearAgain() {
+        val origin = arguments.getString("board")
+        assumeTrue("no board demo was named", origin != null)
+        val app = start(origin!!)
+        val before = cards(front(app)?.screen)
+        assertTrue("the board has cards", before.isNotEmpty())
+        assertTrue("and not only bugs", before.any { "Bug" !in labels(it) })
+        // A filter is a chip that opens its choices, not a field with a box.
+        compose.onNode(hasText("Label") and hasClickAction()).performClick()
+        Thread.sleep(500)
+        Shots.take("board-filter-menu")
+        compose.onAllNodes(hasText("Bug") and hasAnyAncestor(isPopup())).onFirst().performClick()
+        waitFor("a board of bugs only") {
+            val now = cards(front(app)?.screen)
+            now.isNotEmpty() && now.all { labels(it) == listOf("Bug") }
+        }
+        Thread.sleep(800)
+        Shots.take("board-filtered")
+        compose.onNode(hasText("Clear filters") and hasClickAction()).performClick()
+        waitFor("every card again") { cards(front(app)?.screen).any { "Bug" !in labels(it) } }
+        settled(app)
+        Shots.take("board-filter-cleared")
+    }
+
+    @Test
+    fun aCardMovesToAnotherLaneByItsHandle() {
+        val origin = arguments.getString("board")
+        assumeTrue("no board demo was named", origin != null)
+        val app = start(origin!!)
+        val screen = front(app)?.screen
+        val lists = screen?.body?.walk().orEmpty().filterIsInstance<Navree.List>().filter { it.reorder != null && it.children.any { child -> child is Navree.Row } }.toList()
+        assertTrue("the board has lanes with cards", lists.size >= 2)
+        val from = lists.first()
+        val card = from.children.filterIsInstance<Navree.Row>().first()
+        val (target, name) = ReorderRules.targets(screen?.body, from).first()
+        // A card has no row of fields to move it by: its handle opens the moves.
+        assertTrue("no Move row on a card", compose.onAllNodes(hasText("Move") and hasClickAction()).fetchSemanticsNodes().isEmpty())
+        compose.onAllNodes(hasContentDescription("Move ${card.title}"), useUnmergedTree = true).onFirst().performClick()
+        Thread.sleep(500)
+        Shots.take("board-card-menu")
+        compose.onAllNodes(hasText("Move to $name") and hasAnyAncestor(isPopup())).onFirst().performClick()
+        waitFor("the card in $name") { lane(front(app)?.screen, target.id).any { it.title == card.title } }
+        settled(app)
+        Shots.take("board-card-moved")
+        // And back, so the next look finds the board as it was.
+        send(app, Events.move(front(app)!!.id, card.id!!, target.id!!, from.id!!, null))
+        waitFor("the card back where it was") { lane(front(app)?.screen, target.id).none { it.title == card.title } }
+    }
+
+    @Test
+    fun aFormThatIsRefusedShowsWhatIsWrongAndTheFirstFieldTakesTheFocus() {
+        val origin = arguments.getString("board")
+        assumeTrue("no board demo was named", origin != null)
+        val app = start(origin!!)
+        val card = cards(front(app)?.screen).first()
+        compose.onAllNodesWithText(card.title).onFirst().performClick()
+        waitFor("the card opened") { front(app)?.overlays?.isNotEmpty() == true || app.driver.nav.modals.isNotEmpty() }
+        settled(app)
+        val send = compose.onAllNodes(hasText("Comment") and hasClickAction()).onFirst()
+        runCatching { send.performScrollTo() }
+        send.performClick()
+        val wrong = SemanticsMatcher.keyIsDefined(SemanticsProperties.Error)
+        waitFor("the field says what is wrong") { compose.onAllNodes(wrong).fetchSemanticsNodes().isNotEmpty() }
+        Thread.sleep(800)
+        Shots.take("board-card-form-errors")
+        waitFor("the field in error has the focus") { compose.onAllNodes(wrong and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun aFieldThatIsDoneWithLetsGoOfTheFocusWithoutTheSearchTakingIt() {
+        val origin = arguments.getString("store")
+        assumeTrue("no store demo was named", origin != null)
+        val app = start(origin!!)
+        send(app, Events.select(2))
+        settled(app)
+        val fields = compose.onAllNodes(hasSetTextAction())
+        assertTrue("a search and a restock field", fields.fetchSemanticsNodes().size >= 2)
+        val restock = fields[1]
+        restock.performClick()
+        restock.performTextInput("7")
+        restock.performImeAction()
+        Thread.sleep(1500)
+        compose.waitForIdle()
+        // No field has the focus, so no keyboard is up; the search is still there to be reached.
+        assertEquals("no field holds the focus", 0, compose.onAllNodes(hasSetTextAction() and isFocused()).fetchSemanticsNodes().size)
+        assertTrue("the search is still a field", compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty())
+        Shots.take("store-restock-done")
     }
 }
