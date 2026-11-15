@@ -1118,6 +1118,8 @@ pub struct AppPage {
     topbar: Option<Node>,
     /// The browser tab's title, in place of the heading.
     document_title: Option<Cow<'static, str>>,
+    /// Starts from a clean document: see [`fresh`](Self::fresh).
+    fresh: bool,
 }
 
 impl AppPage {
@@ -1152,6 +1154,7 @@ impl AppPage {
             app_fonts: shell.app_fonts.clone(),
             topbar: None,
             document_title: None,
+            fresh: false,
             shell,
         }
     }
@@ -1278,12 +1281,40 @@ impl AppPage {
         self
     }
 
+    /// This page starts from a clean document and keeps the toolkit's strict policy: in an app
+    /// with a UI extension, a plugin's island script or an allowed policy source, entering or
+    /// leaving it is a full page load, no answer it gives is drawn into a page that is not fresh,
+    /// it is served with [`PAGE_CSP`](crate::PAGE_CSP), and no extension mounts on it. In any
+    /// other app it does nothing. Mark the pages that take a password, a code or a PIN: see
+    /// [`View::fresh`], which this gives the view the page becomes.
+    ///
+    /// [`Tab::fresh`](crate::Tab::fresh) is another thing: it marks a lazy tab panel that loads
+    /// again each time its tab is shown.
+    ///
+    /// ```
+    /// use navree_ui::Shell;
+    ///
+    /// let html = Shell::new("Kesar")
+    ///     .page("Confirm your password", "/account/confirm")
+    ///     .fresh()
+    ///     .to_view()
+    ///     .to_html();
+    /// // Outside a request nothing is written.
+    /// assert!(!html.contains("data-ui-fresh-page"));
+    /// ```
+    pub fn fresh(mut self) -> Self {
+        self.fresh = true;
+        self
+    }
+
     /// The whole document.
     pub fn to_view(self) -> View {
         // A native client draws the chrome itself: its view keeps the page.
         #[cfg(feature = "native-preview")]
         if crate::native::scope::native().is_some() {
-            return native::noted(self);
+            let fresh = self.fresh;
+            let view = native::noted(self);
+            return if fresh { view.fresh() } else { view };
         }
         self.in_shell()
     }
@@ -1410,6 +1441,9 @@ impl AppPage {
             .appearance(self.appearance)
             .status(self.status)
             .body((wrapper, toaster));
+        if self.fresh {
+            view = view.fresh();
+        }
         if let Some(density) = self.density {
             view = view.density(density);
         }

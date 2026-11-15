@@ -7,16 +7,18 @@ use std::sync::{Arc, Mutex};
 use http::Method;
 use http::header::CONTENT_SECURITY_POLICY;
 use navree_config::{Config, ConfigSection, ConfigSources, FRAMEWORK_SECTIONS};
-use navree_http::{AppError, Controller, HttpModule, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{AppError, Controller, HttpModule, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{
-    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, PluginInfo, ProviderKey, Resolver,
+    BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, PluginInfo, ProviderKey,
+    Resolver,
 };
-use navree_testing::{TestApp, TestAppBuilder};
+use navree_testing::{TestApp, TestAppBuilder, TestResponse};
 use navree_ui::app_files::IMAGE_CSP;
 use navree_ui::pages::region_answer;
 use navree_ui::{
-    AppImage, Directive, LazyItem, LazyPage, PAGE_CSP, PagePolicy, PagePolicyOptions, PageSources,
-    Text, UiModule, View, el,
+    AppImage, AppShell, Directive, ExtensionFile, IslandScript, LazyItem, LazyPage, Node,
+    PAGE_CSP, PagePolicy, PagePolicyOptions, PageSources, Reply, SafeHtml, Shell, Text,
+    UiExtension, UiModule, View, assets, el,
 };
 use serde_json::json;
 
@@ -73,6 +75,35 @@ static MARK: AppImage = AppImage::new(
     "mark",
     br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14"/></svg>"#,
     8 * 1024,
+);
+
+/// A map component of the plugin `geo`: a script and a stylesheet, scoped for its namespace.
+static MAP: UiExtension = UiExtension::new("geo", "map")
+    .script(ExtensionFile::__new(
+        b"export const contract = 1; export function mount() {}",
+        "1a2b3c4d5e6f",
+        None,
+    ))
+    .sheet(ExtensionFile::__new(
+        br#":where([data-slot^="geo:"]){.pin{color:red}}"#,
+        "0f9e8d7c6b5a",
+        Some("geo"),
+    ))
+    .contract(1)
+    .routes(&["/geo/"]);
+
+/// A clock drawn by a script, once under the namespace of the plugin `geo` and once with no
+/// namespace, as the app's own scripts are.
+static CLOCK: IslandScript = IslandScript::new(
+    "clock",
+    b"export function mount(body) { body.textContent = 'IST'; }",
+    1024,
+)
+.namespace("geo");
+static PLAIN_CLOCK: IslandScript = IslandScript::new(
+    "clock",
+    b"export function mount(body) { body.textContent = 'IST'; }",
+    1024,
 );
 
 /// An app with the toolkit and the pages below.
@@ -141,6 +172,35 @@ impl Module for GeoAskingForAnything {
     }
 }
 
+/// The plugin `geo` with its map component: an app with a UI extension.
+struct GeoWithMap;
+
+impl Module for GeoWithMap {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(geo());
+        m.contribute(MAP);
+    }
+}
+
+/// The plugin `geo` with an island script of its own, under its namespace.
+struct GeoWithClock;
+
+impl Module for GeoWithClock {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(geo());
+        m.contribute(CLOCK);
+    }
+}
+
+/// A module of the app with an island script of its own: what apps of today have.
+struct AppClock;
+
+impl Module for AppClock {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(PLAIN_CLOCK);
+    }
+}
+
 /// A module of the app that serves a picture of its own.
 struct LogoModule;
 
@@ -201,14 +261,104 @@ impl Controller for Pages {
                 )
             })
             .public(),
+            // A map of the plugin `geo`, a sign-in page that is fresh and one that is not, an
+            // account page of the app's shell that is fresh and one that is not.
+            RouteDef::on(Method::GET, "!/map", || async {
+                View::new("Map").body(el("main").child(el("div").slot("geo:map").extension(&MAP)))
+            })
+            .public()
+            .page(),
+            RouteDef::on(Method::GET, "!/sign-in", || async { sign_in(true) })
+                .public()
+                .page(),
+            RouteDef::on(Method::GET, "!/sign-in-plain", || async { sign_in(false) })
+                .public()
+                .page(),
+            RouteDef::on(Method::GET, "!/account", |shell: AppShell| async move {
+                shell
+                    .page("Account")
+                    .fresh()
+                    .body(el("p").child("Meera Sharma, Jalandhar"))
+            })
+            .public()
+            .page(),
+            RouteDef::on(Method::GET, "!/account-plain", |shell: AppShell| async move {
+                shell
+                    .page("Account")
+                    .body(el("p").child("Meera Sharma, Jalandhar"))
+            })
+            .public()
+            .page(),
+            // Pages that are not fresh and take a password or a code, one under a pattern, and
+            // one that writes its field as a string, which is not read.
+            RouteDef::on(Method::GET, "!/pin", || async {
+                View::new("PIN").body(el("form").child(password("pin")))
+            })
+            .public()
+            .page(),
+            RouteDef::on(Method::GET, "!/pin/{id}", |Path(id): Path<String>| async move {
+                View::new(format!("PIN {id}")).body(el("form").child(password("pin")))
+            })
+            .public()
+            .page(),
+            RouteDef::on(Method::GET, "!/otp", || async {
+                View::new("Code").body(
+                    el("form").child(
+                        el("input")
+                            .attr("type", "text")
+                            .attr("name", "code")
+                            .attr("autocomplete", "one-time-code"),
+                    ),
+                )
+            })
+            .public()
+            .page(),
+            RouteDef::on(Method::GET, "!/pin-raw", || async {
+                let field = Node::Raw(SafeHtml::trusted(
+                    r#"<input type="password" name="pin">"#,
+                ));
+                View::new("PIN").body(el("form").child(field))
+            })
+            .public()
+            .page(),
+            // A reply that draws a password field into the page it answers.
+            RouteDef::on(Method::POST, "!/workspace/delete", || async {
+                Reply::ops(Vec::new()).morph(
+                    "confirm",
+                    el("div").id("confirm").child(password("password")),
+                )
+            })
+            .public(),
         ]
     }
+}
+
+/// A password input.
+fn password(name: &'static str) -> navree_ui::Element {
+    el("input").attr("type", "password").attr("name", name)
+}
+
+/// The sign-in page of an app with a map: a password field and the map component, marked fresh
+/// or not.
+fn sign_in(fresh: bool) -> View {
+    let page = View::new("Sign in").body(
+        el("form")
+            .attr("method", "post")
+            .attr("action", "/sign-in")
+            .child((password("password"), el("div").slot("geo:map").extension(&MAP))),
+    );
+    if fresh { page.fresh() } else { page }
 }
 
 struct PagesModule;
 
 impl Module for PagesModule {
     fn register(&self, m: &mut ModuleBuilder) {
+        // The app's shell, which the account pages are drawn in.
+        m.factory(Factory::<Shell>::new(|_| async {
+            Ok(Arc::new(Shell::new("Agra")))
+        }))
+        .exports::<Shell>();
         m.controller::<Pages>();
     }
 }
@@ -245,6 +395,49 @@ fn logged(capture: &LogCapture, level: &str, text: &str) -> bool {
         .lines()
         .iter()
         .any(|line| line.contains(level) && line.contains(text))
+}
+
+/// How many warnings in the log hold `text`.
+fn warnings(capture: &LogCapture, text: &str) -> usize {
+    capture
+        .lines()
+        .iter()
+        .filter(|line| line.contains("WARN") && line.contains(text))
+        .count()
+}
+
+/// The page at `path`, asked for as a browser does.
+async fn page(app: &TestApp, path: &str) -> TestResponse {
+    app.client()
+        .get(path)
+        .header("accept", BROWSER)
+        .send()
+        .await
+        .assert_status(200)
+}
+
+/// The opening tag of the root element of `html`.
+fn root_tag(html: &str) -> &str {
+    let start = html.find("<html").expect("a root element");
+    let length = html[start..].find('>').expect("a closed tag");
+    &html[start..start + length]
+}
+
+/// Every header of `response` but the two that differ from one answer to the next, in order.
+fn headers_of(response: &TestResponse) -> Vec<(String, String)> {
+    let mut headers: Vec<(String, String)> = response
+        .headers()
+        .iter()
+        .filter(|(name, _)| !matches!(name.as_str(), "x-request-id" | "date"))
+        .map(|(name, value)| {
+            (
+                name.as_str().to_owned(),
+                String::from_utf8_lossy(value.as_bytes()).into_owned(),
+            )
+        })
+        .collect();
+    headers.sort();
+    headers
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -666,4 +859,193 @@ fn the_source_grammar_matches_the_shared_cases() {
         read += 1;
     }
     assert!(read >= 100, "{read} cases");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_fresh_page_keeps_the_toolkits_policy_when_the_app_allows_sources() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let app = with_tiles().build().await;
+    // The sign-in page and the account page keep the toolkit's policy; a page of the app that is
+    // not fresh carries the composed one.
+    assert_eq!(policy_of(&app, "/sign-in").await, PAGE_CSP);
+    assert_eq!(policy_of(&app, "/account").await, PAGE_CSP);
+    assert_eq!(policy_of(&app, "/map").await, WITH_TILES);
+    assert_eq!(policy_of(&app, "/sign-in-plain").await, WITH_TILES);
+    // A fresh page answered to a region's fetch keeps it too.
+    let region = policy_with(
+        &app,
+        "/sign-in",
+        &[("x-navree-ui", "1"), ("x-navree-region", "security")],
+    )
+    .await;
+    assert_eq!(region, PAGE_CSP);
+    // A policy the app widened turns pages that start clean on, though it has no extension.
+    let sign_in = page(&app, "/sign-in").await;
+    assert_eq!(sign_in.header("x-navree-fresh"), Some("1"));
+    assert!(root_tag(&sign_in.text()).ends_with(" data-ui-fresh-page"));
+    assert!(page(&app, "/map").await.header("x-navree-fresh").is_none());
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_fresh_page_writes_its_mark_header_and_no_extension_link_in_an_app_with_extensions() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let app = builder().module(GeoWithMap).build().await;
+
+    // The sign-in page is fresh: its mark is the last attribute of the root element, its answer
+    // says so, and it links no extension file and loads no extensions module.
+    let sign_in = page(&app, "/sign-in").await;
+    let html = sign_in.text();
+    assert!(
+        html.starts_with(r#"<!doctype html><html lang="en""#),
+        "{html}"
+    );
+    assert!(root_tag(&html).ends_with(" data-ui-fresh-page"), "{html}");
+    assert_eq!(sign_in.header("x-navree-fresh"), Some("1"));
+    assert_eq!(sign_in.header("content-security-policy"), Some(PAGE_CSP));
+    for absent in ["data-ui-ext-link", "modulepreload", assets::EXTENSIONS_URL] {
+        assert!(!html.contains(absent), "`{absent}` in {html}");
+    }
+
+    // The same component on a page that is not fresh has its links and its module, and no mark.
+    let map = page(&app, "/map").await;
+    let html = map.text();
+    assert!(!root_tag(&html).contains("data-ui-fresh"), "{html}");
+    assert!(map.header("x-navree-fresh").is_none());
+    for present in [
+        format!(
+            r#"<link rel="stylesheet" href="{}" data-ui-ext-link>"#,
+            MAP.sheet_url().expect("a stylesheet")
+        ),
+        format!(
+            r#"<link rel="modulepreload" href="{}">"#,
+            MAP.script_url().expect("a script")
+        ),
+        assets::EXTENSIONS_URL.to_owned(),
+    ] {
+        assert!(html.contains(&present), "`{present}` is not in {html}");
+    }
+
+    // Written outside a request, a fresh page never carries the mark.
+    assert!(
+        !View::new("Sign in")
+            .fresh()
+            .to_html()
+            .contains("data-ui-fresh-page")
+    );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn in_an_app_without_extensions_a_fresh_page_is_written_and_navigated_as_before() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    // No extension, no plugin island and nothing allowed: a page marked fresh is the page it
+    // always was, byte for byte and header for header.
+    let app = builder().build().await;
+    for (marked, unmarked) in [("/sign-in", "/sign-in-plain"), ("/account", "/account-plain")] {
+        let marked = page(&app, marked).await;
+        let unmarked = page(&app, unmarked).await;
+        assert_eq!(marked.text(), unmarked.text(), "the same bytes");
+        assert_eq!(headers_of(&marked), headers_of(&unmarked));
+        assert!(marked.header("x-navree-fresh").is_none());
+        assert_eq!(marked.header("content-security-policy"), Some(PAGE_CSP));
+        assert!(!marked.text().contains("data-ui-fresh"), "{}", marked.text());
+    }
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_page_with_a_password_field_that_is_not_fresh_is_warned_once_per_route() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let said = |path: &str| {
+        warnings(
+            &capture,
+            &format!(
+                "page {path} holds a password field and is not fresh: call .fresh() on its View or AppPage"
+            ),
+        )
+    };
+    let app = builder().module(GeoWithMap).build().await;
+    // A page asked twice is named once, a code field is named, a fresh page is not, and the name
+    // is the route's pattern, never the address asked for.
+    for _ in 0..2 {
+        page(&app, "/pin").await;
+    }
+    page(&app, "/otp").await;
+    page(&app, "/sign-in").await;
+    page(&app, "/pin/42").await;
+    page(&app, "/pin/43").await;
+    assert_eq!(said("/pin"), 1);
+    assert_eq!(said("/otp"), 1);
+    assert_eq!(said("/sign-in"), 0);
+    assert_eq!(said("/pin/{id}"), 1);
+    assert_eq!(said("/pin/42") + said("/pin/43"), 0);
+    // Only elements are read: a field written inside a string is not seen, and a page with no
+    // field is not named.
+    page(&app, "/pin-raw").await;
+    page(&app, "/map").await;
+    assert_eq!(said("/pin-raw") + said("/map"), 0);
+    app.shutdown().await.unwrap();
+
+    // An app with no extension and nothing allowed warns nothing.
+    let before = warnings(&capture, "holds a password field");
+    let app = builder().build().await;
+    page(&app, "/pin").await;
+    page(&app, "/otp").await;
+    assert_eq!(warnings(&capture, "holds a password field"), before);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_reply_that_sends_a_password_field_as_ops_is_warned_about_in_an_app_with_extensions() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let text = "route /workspace/delete sends a password field as ops into a page that may hold plugin code: draw it on a fresh page and answer with a redirect to it";
+    let delete = |app: &TestApp| {
+        app.client()
+            .post("/workspace/delete")
+            .header("x-navree-ui", "1")
+            .send()
+    };
+    let app = builder().module(GeoWithMap).build().await;
+    delete(&app).await.assert_status(200);
+    delete(&app).await.assert_status(200);
+    assert_eq!(warnings(&capture, text), 1);
+    app.shutdown().await.unwrap();
+
+    // An app with no extension and nothing allowed warns nothing.
+    let app = builder().build().await;
+    delete(&app).await.assert_status(200);
+    assert_eq!(warnings(&capture, text), 1, "no new warning");
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugins_island_script_turns_fresh_pages_on() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    // A plugin's island script is one built under a namespace: with it the app has pages that
+    // start clean, though it has no UI extension and allows nothing.
+    let app = builder().module(GeoWithClock).build().await;
+    let sign_in = page(&app, "/sign-in").await;
+    assert!(
+        root_tag(&sign_in.text()).ends_with(" data-ui-fresh-page"),
+        "{}",
+        sign_in.text()
+    );
+    assert_eq!(sign_in.header("x-navree-fresh"), Some("1"));
+    assert_eq!(sign_in.header("content-security-policy"), Some(PAGE_CSP));
+    assert!(page(&app, "/sign-in-plain").await.header("x-navree-fresh").is_none());
+    app.shutdown().await.unwrap();
+
+    // The app's own island script, with no namespace, as apps of today have: nothing changes.
+    let app = builder().module(AppClock).build().await;
+    let sign_in = page(&app, "/sign-in").await;
+    assert!(!sign_in.text().contains("data-ui-fresh"), "{}", sign_in.text());
+    assert!(sign_in.header("x-navree-fresh").is_none());
+    app.shutdown().await.unwrap();
 }
