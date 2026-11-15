@@ -46,6 +46,10 @@ every `@navree/*` package carries the same version.
 - `navree config:check --env <name>` reads `config/env/<name>.toml` in place of the file of the
   environment the app would pick, as a boot in that environment would, so a setting made only in
   `config/env/production.toml` is seen by `--env production` with no `APP_ENV` set.
+- `navree make:model` looks at every file it would write before it writes the first, so a companion
+  that already exists (the migration `make:module` made in the same second, for one) stops it
+  before the model and the files ahead of it are written; it used to leave them, and the changes to
+  the module, behind while saying that nothing was written.
 
 ## [1.2.2] - 2026-11-14
 
