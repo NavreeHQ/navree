@@ -5727,6 +5727,18 @@
         "generics": "",
         "args": "",
         "doc": "Turns off dragging columns to a new width."
+      },
+      {
+        "name": "without_columns_picker",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the Columns picker out of the toolbar, for a small table whose columns are all shown. The table then draws the columns it starts with (every one not marked `hidden` and not taken away with `TableQuery::without_columns`) whatever `cols` the address names, and writes no `cols` into a link, a form or a saved view. It has no way to hide or move a column either, since both would write `cols`: no \"Hide column\" in a heading's menu and no dragging a heading to a new place. Widths are their own, and `fixed_widths` turns them off. The query is not changed: `TableQuery::visible_columns` still says what the address named."
+      },
+      {
+        "name": "without_density_switch",
+        "generics": "",
+        "args": "",
+        "doc": "Leaves the Density switch out of the toolbar, for a table with the one density. The table then draws the default density whatever `density` the address names, and writes no `density` into a link, a form or a saved view. The query is not changed: `TableQuery::density` still says what the address named."
       }
     ],
     "variants": [],
@@ -8950,6 +8962,18 @@
         "generics": "",
         "args": "name: impl Into<String>, value: impl Into<String>",
         "doc": "Adds a hidden field that posts `value` as `name`, as it is: an id, or the step the form is at. The field is the page's, not one of the form's own, so a form read back with `Submit` drops it."
+      },
+      {
+        "name": "id_prefix",
+        "generics": "",
+        "args": "prefix: impl Into<String>",
+        "doc": "Puts `prefix` and a hyphen before every id the form writes, and before every reference to one: the form's own, each field's (a label's `for`, `aria-describedby`, `aria-labelledby`), the ids of its help and its error, and those of the pickers, uploads and sliders it draws. Two forms of one type on one page, such as the same small entry form in two dialogs, then share no id. What the form posts is as it was, so the handler reads it as before."
+      },
+      {
+        "name": "form_id",
+        "generics": "",
+        "args": "",
+        "doc": "The id of the `<form>` element: the form's own id, or, with an `id_prefix`, that after the prefix and a hyphen. A button outside the form, in a dialog's footer, names it in its `form` attribute."
       }
     ],
     "variants": [],
@@ -21608,6 +21632,12 @@
         "generics": "",
         "args": "",
         "doc": "Writes it inline: `<span>`."
+      },
+      {
+        "name": "tone",
+        "generics": "",
+        "args": "tone: Tone",
+        "doc": "Colours the words by what they mean: a balance at its limit in `Tone::Danger`, a paid one in `Tone::Success`. It is the `data-tone` a `Badge` reads, drawn as the colour of the text and nothing else: no pill, no tint. It works on `muted` and `code` text and on `inline` text, and the tone's colour wins over the colour of the look. A `Tone::Named` colour comes from the stylesheet; `Tone::Neutral` writes nothing. The colour never carries the meaning alone: say it in the words too."
       }
     ],
     "variants": [],
