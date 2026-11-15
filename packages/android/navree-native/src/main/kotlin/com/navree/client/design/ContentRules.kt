@@ -408,6 +408,17 @@ object ContentRules {
         Navree.Tone.INFO -> ToneRole.Info
     }
 
+    /** The least a column of facts has, in dp: a fact holds an address or a phone number on one line. */
+    const val FACT_COLUMN_DP = 300
+
+    /**
+     * How many columns facts stand in: two where the window is wide, the text
+     * is not large and the room they are drawn in (0 when it is not known)
+     * holds two columns of the least width; else one.
+     */
+    fun factColumns(window: WindowInfo, roomDp: Float): Int =
+        if (window.width >= WidthClass.Expanded && !window.largeText && (roomDp <= 0f || roomDp >= 2 * FACT_COLUMN_DP)) 2 else 1
+
     /** A gap of the tree in dp: a step of the spacing scale is 4 dp, Material's grid. */
     fun gap(steps: Int): Int = steps.coerceIn(0, 16) * 4
 

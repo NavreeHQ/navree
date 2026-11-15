@@ -461,6 +461,17 @@ class FormRulesTest {
     }
 }
 
+class FactColumnsTest {
+    @Test
+    fun facts_stand_in_two_columns_only_where_the_room_holds_two() {
+        assertEquals(2, ContentRules.factColumns(WindowInfo.Tablet, 0f))
+        assertEquals(2, ContentRules.factColumns(WindowInfo.Tablet, 900f))
+        assertEquals("a dialog of 512 dp", 1, ContentRules.factColumns(WindowInfo.Tablet, 512f))
+        assertEquals(1, ContentRules.factColumns(WindowInfo.Phone, 0f))
+        assertEquals(1, ContentRules.factColumns(WindowInfo.Tablet.copy(fontScale = 1.5f), 900f))
+    }
+}
+
 class ColumnShareTest {
     private fun column(label: String, role: Navree.ColumnRole? = null) = Navree.Column(label = label, role = role)
     private fun row(vararg cells: String) = Navree.TableRow(cells = cells.map { Navree.Text(value = it) })

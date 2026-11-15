@@ -457,7 +457,7 @@ private fun FactsView(node: Navree.Facts, place: Place, modifier: Modifier) {
         FactFigures(node, modifier)
         return
     }
-    val columns = if (window.width >= com.navree.client.design.WidthClass.Expanded && !window.largeText) 2 else 1
+    val columns = ContentRules.factColumns(window, LocalRoom.current)
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         for (line in node.items.chunked(columns)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {

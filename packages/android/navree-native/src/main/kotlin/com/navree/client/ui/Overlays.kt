@@ -159,7 +159,9 @@ private fun TaskSheet(sheet: Navree.Sheet, place: Place, full: Boolean, close: (
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     sheet.subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    for (child in sheet.children) NodeView(child, inner)
+                    // What the content has to be drawn in: the dialog's most, or the window, less the content's sides.
+                    val room = (if (full) LocalUi.current.window.widthDp.toFloat() else 560f) - 48f
+                    Roomed(room) { for (child in sheet.children) NodeView(child, inner) }
                     if (placed.foot.isNotEmpty()) {
                         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             for (button in placed.foot) QuietButton(button, inner)
