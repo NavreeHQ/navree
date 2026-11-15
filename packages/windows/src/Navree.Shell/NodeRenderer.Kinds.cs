@@ -306,11 +306,8 @@ internal sealed partial class NodeRenderer
         if (stack.Wrap)
         {
             WrapPanel flow = new() { HorizontalSpacing = WindowRules.Space(stack.Gap), VerticalSpacing = WindowRules.Space(stack.Gap), Margin = new Thickness(WindowRules.Space(stack.Pad)) };
-            foreach (Models.Node child in stack.Children)
-            {
-                flow.Children.Add(Render(child));
-            }
-
+            Group run = Run(stack.Children, new PanelHost(flow.Children), () => 0);
+            UpdateRun<Models.Stack>(node => node with { Children = [] }, run, node => node.Children, node => node.Wrap);
             shown = flow;
         }
         else

@@ -235,7 +235,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
                     placed.HorizontalAlignment = child is Models.Chart ? HorizontalAlignment.Stretch : Across(align);
                 }
             });
-            UpdateRun<Models.Stack>(node => node with { Children = [] }, run, node => node.Children, node => AxisOf(node) == Models.Axis.Vertical && node.Appear is null);
+            UpdateRun<Models.Stack>(node => node with { Children = [] }, run, node => node.Children, node => AxisOf(node) == Models.Axis.Vertical && !node.Wrap);
             return panel;
         }
 
@@ -251,7 +251,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
                     placed.VerticalAlignment = stack.Align is null ? VerticalAlignment.Center : Down(stack.Align);
                 }
             });
-            UpdateRun<Models.Stack>(node => node with { Children = [] }, folded, node => node.Children, node => AxisOf(node) == Models.Axis.Horizontal && Folds(node) && node.Appear is null);
+            UpdateRun<Models.Stack>(node => node with { Children = [] }, folded, node => node.Children, node => AxisOf(node) == Models.Axis.Horizontal && Folds(node) && !node.Wrap);
             return folding;
         }
 
@@ -274,10 +274,9 @@ internal sealed partial class NodeRenderer(RenderContext context)
 
             Grid.SetColumn((FrameworkElement)element, at);
         }, resizable: false);
-        bool plainRow = !WindowRules.IsLanes(stack.Children) && stack.Justify is not (Models.Justify.End or Models.Justify.Center or Models.Justify.Between);
-        if (plainRow)
+        if (!WindowRules.IsLanes(stack.Children))
         {
-            UpdateRun<Models.Stack>(node => node with { Children = [] }, columns, node => node.Children, node => AxisOf(node) == Models.Axis.Horizontal && !Folds(node) && node.Appear is null && !WindowRules.IsLanes(node.Children));
+            UpdateRun<Models.Stack>(node => node with { Children = [] }, columns, node => node.Children, node => AxisOf(node) == Models.Axis.Horizontal && !Folds(node) && !node.Wrap && !WindowRules.IsLanes(node.Children));
         }
 
         if (WindowRules.IsLanes(stack.Children))
@@ -314,6 +313,14 @@ internal sealed partial class NodeRenderer(RenderContext context)
                 spread.Children.Add(item);
             }
 
+            // The children are now the even columns of the spread, with the room between them in the odd ones.
+            Action<Models.Node, UIElement, int>? placed = columns.Place;
+            columns.Host = new PanelHost(spread.Children);
+            columns.Place = (child, element, at) =>
+            {
+                placed?.Invoke(child, element, at);
+                Grid.SetColumn((FrameworkElement)element, at * 2);
+            };
             return spread;
         }
 

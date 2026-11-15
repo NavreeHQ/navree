@@ -495,6 +495,15 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
 
         await Task.Delay(900);
         Say("the core's answers since the press: " + (PageReports.Total - reports) + " passes over the page; overlays held: " + (host.State.FrontScreen?.Overlays.Count ?? 0));
+        foreach (PageReport pass in PageReports.All.TakeLast(Math.Max(0, PageReports.Total - reports)))
+        {
+            Say("a pass: " + pass.Kind + ", drew " + pass.Rendered + " (" + pass.Kinds + "), " + pass.Stood + " stood, " + pass.Updated + " updated, " + pass.Replaced + " drawn again");
+        }
+
+        foreach (string note in PageReports.Notes.TakeLast(6))
+        {
+            Say("why a part was drawn again: " + note);
+        }
         bool closed = !VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Any(popup => popup.Child is not null && Below(popup.Child).Any(part => part is FlyoutPresenter or ContentDialog));
         Check("Escape took " + label + " away", closed, closed ? "nothing is open" : "something is still open");
         Button? again = ButtonNamed(label);

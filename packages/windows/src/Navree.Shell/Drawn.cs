@@ -202,7 +202,7 @@ internal sealed class ItemsHost(ItemCollection items) : IHost
 internal sealed class Group
 {
     /// <summary>Where the elements of the run stand.</summary>
-    internal required IHost Host { get; init; }
+    internal required IHost Host { get; set; }
 
     /// <summary>The place in the host where the first element of the run stands, as the run is now.</summary>
     internal required Func<int> Start { get; init; }
@@ -211,7 +211,7 @@ internal sealed class Group
     internal List<Drawn> Records { get; } = [];
 
     /// <summary>What a child needs put on its element when it takes its place (alignment, a column of a grid).</summary>
-    internal Action<Models.Node, UIElement, int>? Place { get; init; }
+    internal Action<Models.Node, UIElement, int>? Place { get; set; }
 
     /// <summary>Whether children may be added, taken out and moved; a run that cannot (the columns of a grid) is drawn again when they are.</summary>
     internal bool Resizable { get; init; } = true;
