@@ -128,6 +128,14 @@ every `@navree/*` package carries the same version.
   that name, which then runs instead, so a tool that reads the commands by position finds two more
   entries before the app's own. `help` lists the two among the built-in commands, so its first
   column is wider.
+- An app with `CacheModule`, `QueueModule`, `SessionModule`, `RealtimeModule`, `MailModule`,
+  `StorageModule`, `NotifyModule`, `SearchModule` or `AiModule` lists one more provider of that
+  module in `check --graph` and `introspect --json`: the one the boot builds to check the drivers
+  modules register, whether or not a test replaces the module's service (`ChosenBackend` for the
+  cache, which also builds a registered store once; `CheckedStores` for the queue and the
+  sessions; `CheckedBackplanes`; `TransportRegistrations` for mail; `CheckedDrivers` for storage,
+  notifications and AI; `CheckedEngines` for search). A tool that reads a module's providers by
+  position finds one more.
 - Six inherent methods are new on existing types: `ModuleBuilder::plugin`, `AppContext::plugin`,
   `AppContext::plugins`, `AppBuilder::plugin_report`, `ModuleId::named` and `ModuleId::type_name`.
   An app whose own extension trait gives these types a method named `plugin`, `plugins`,
