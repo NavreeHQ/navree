@@ -97,6 +97,7 @@ pub mod components;
 pub mod compress;
 pub mod dates;
 pub mod described;
+pub mod extension;
 pub mod flags;
 pub mod flow;
 pub mod form;
@@ -134,6 +135,7 @@ mod zone;
 pub use app_files::{AppFont, AppImage, AppSheet, FontDisplay, ImageKind};
 pub use cmd::{Cmd, Commands, Trigger};
 pub use components::*;
+pub use extension::{ExtensionFile, UiExtension};
 /// Country flags under the name the facade documents: `navree::flags` is feature flags,
 /// so an app that has both writes `navree::ui::country_flags::IN`.
 pub use flags as country_flags;
