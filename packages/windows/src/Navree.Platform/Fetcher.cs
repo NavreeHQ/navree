@@ -143,6 +143,71 @@ public sealed class HttpFetcher : IFetcher, IDisposable
     /// <inheritdoc />
     public void Dispose() => client.Dispose();
 
+    /// <summary>
+    /// Opens a stream of server-sent events at a whole address of the app's origins, with the app's cookies, and follows no
+    /// redirect. Calls <paramref name="onOpen"/> when the server has answered 200 with an event stream, and
+    /// <paramref name="onEvent"/> with the name of each event, until the stream ends. A stream that fails, or is not an event
+    /// stream, is answered by its status (or 0), and the core asks again when it wants to: the client never reconnects by itself.
+    /// </summary>
+    /// <param name="url">The whole address the core wrote.</param>
+    /// <param name="headers">The headers the core gave.</param>
+    /// <param name="onOpen">Called once the stream is open.</param>
+    /// <param name="onEvent">Called for each event, with its name.</param>
+    /// <param name="cancel">Cancelled when the core closes the stream.</param>
+    /// <returns>The status the stream ended with: 200 when it ended normally, 0 when it could not be had at all.</returns>
+    public async Task<int> StreamAsync(
+        string url,
+        IReadOnlyList<KeyValuePair<string, string>> headers,
+        Func<Task> onOpen,
+        Func<string?, Task> onEvent,
+        CancellationToken cancel)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        ArgumentNullException.ThrowIfNull(headers);
+        if (!origins.Ours(url))
+        {
+            return 0;
+        }
+
+        try
+        {
+            using HttpRequestMessage request = new(HttpMethod.Get, url);
+            foreach (KeyValuePair<string, string> header in headers)
+            {
+                if (!HeaderRules.CanCarry(header.Key, header.Value))
+                {
+                    return 0;
+                }
+
+                if (!header.Key.Equals("cookie", StringComparison.OrdinalIgnoreCase) && !header.Key.Equals("host", StringComparison.OrdinalIgnoreCase))
+                {
+                    request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                }
+            }
+
+            if (cookies.Header(url, clock()) is string cookie)
+            {
+                request.Headers.TryAddWithoutValidation("Cookie", cookie);
+            }
+
+            using HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancel).ConfigureAwait(false);
+            int status = (int)response.StatusCode;
+            if (status != 200 || response.Content.Headers.ContentType?.MediaType?.Equals("text/event-stream", StringComparison.OrdinalIgnoreCase) != true)
+            {
+                return status;
+            }
+
+            await onOpen().ConfigureAwait(false);
+            await using Stream stream = await response.Content.ReadAsStreamAsync(cancel).ConfigureAwait(false);
+            await EventStream.ReadAsync(stream, onEvent, cancel).ConfigureAwait(false);
+            return 200;
+        }
+        catch (Exception problem) when (problem is HttpRequestException or IOException or OperationCanceledException or InvalidOperationException)
+        {
+            return 0;
+        }
+    }
+
     /// <summary>The most bytes a picture may have: 10 MiB.</summary>
     public const long MostPictureBytes = 10L * 1024 * 1024;
 

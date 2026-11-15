@@ -21,6 +21,7 @@ public sealed class ShellHost : IDisposable
     private readonly HttpFetcher? network;
     private readonly Dictionary<long, CancellationTokenSource> running = [];
     private readonly Dictionary<long, CancellationTokenSource> timers = [];
+    private readonly Dictionary<long, CancellationTokenSource> streams = [];
     private readonly SerialQueue disk = new();
     private readonly CancellationTokenSource stopped = new();
     private string lastCookies = string.Empty;
@@ -219,9 +220,20 @@ public sealed class ShellHost : IDisposable
                 }
 
                 break;
-            case StreamOpenEffect:
-            case StreamCloseEffect:
-                // Live streams are not carried out yet: a list that has one is kept up to date when it is asked again.
+            case StreamOpenEffect open:
+                // With recorded answers there is no server to stream from: the stream stays opening, as one does that nobody answers.
+                if (network is not null)
+                {
+                    _ = StreamAsync(open);
+                }
+
+                break;
+            case StreamCloseEffect close:
+                if (streams.Remove(close.Stream, out CancellationTokenSource? streaming))
+                {
+                    streaming.Cancel();
+                }
+
                 break;
             case ExitEffect:
                 break;
@@ -290,6 +302,40 @@ public sealed class ShellHost : IDisposable
         {
             lastCookies = now;
             disk.Run(() => kept.Write("cookies", now));
+        }
+    }
+
+    private async Task StreamAsync(StreamOpenEffect open)
+    {
+        CancellationTokenSource work = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token);
+        streams[open.Stream] = work;
+        int status;
+        try
+        {
+            status = await Task.Run(() => network!.StreamAsync(
+                open.Url,
+                open.Headers,
+                () =>
+                {
+                    client.Send(Events.StreamOpened(open.Stream));
+                    return Task.CompletedTask;
+                },
+                name =>
+                {
+                    client.Send(Events.StreamEvent(open.Stream, name));
+                    return Task.CompletedTask;
+                },
+                work.Token)).ConfigureAwait(true);
+        }
+        finally
+        {
+            work.Dispose();
+        }
+
+        // The core closed it itself (it is no longer listed) or the app is ending: nobody is told it ended.
+        if (streams.Remove(open.Stream) && !stopped.IsCancellationRequested)
+        {
+            client.Send(Events.StreamClosed(open.Stream, status));
         }
     }
 

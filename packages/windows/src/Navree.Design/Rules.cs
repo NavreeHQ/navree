@@ -62,6 +62,18 @@ public static class WindowRules
     /// <returns>Whether it is a side pane.</returns>
     public static bool UsesSidePane(WidthClass width, bool large) => width == WidthClass.Expanded && large;
 
+    /// <summary>
+    /// Whether a stack the page lays out across is laid out down in a narrow window: it holds something that needs the width
+    /// of the window itself (a field, a form, a table, a section, a list), which would run off its edge beside another.
+    /// </summary>
+    /// <param name="width">The window's class.</param>
+    /// <param name="children">What the stack holds.</param>
+    /// <returns>Whether it is laid out down.</returns>
+    public static bool FoldsDown(WidthClass width, IEnumerable<Models.Node> children) =>
+        width == WidthClass.Compact
+        && children.Count() > 1
+        && children.Any(child => child is Models.Field or Models.Form or Models.Table or Models.Section or Models.List or Models.Card);
+
     /// <summary>The space of a step of the protocol's spacing: four effective pixels, the grid of the Windows design guidance.</summary>
     /// <param name="steps">How many steps.</param>
     /// <returns>Effective pixels.</returns>

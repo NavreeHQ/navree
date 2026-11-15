@@ -134,10 +134,25 @@ internal sealed class Walker(ShellHost host, ShellWindow window, string folder)
     {
         await SettleAsync();
         string file = Path.Combine(folder, prefix + width + "-" + screen + ".png");
+        if (host.State.FrontScreen?.Content is WebContent)
+        {
+            // The system's web view draws on a surface of its own that a picture of the content cannot hold: the pictures
+            // taken from outside the app are the ones that show it.
+            Say("no picture of " + Path.GetFileName(file) + ": the screen is a web page");
+            return;
+        }
+
         try
         {
             await WindowPicture.SaveAsync((Microsoft.UI.Xaml.Controls.Panel)window.Surface, file);
             Say("wrote " + Path.GetFileName(file));
+            if (prefix == "light-")
+            {
+                string tree = Path.Combine(folder, prefix + width + "-" + screen + "-ui.txt");
+                File.WriteAllText(tree, AutomationDump.Of(window.Surface));
+                Say("wrote " + Path.GetFileName(tree));
+            }
+
             if (window.CurrentPage is Microsoft.UI.Xaml.Controls.Panel page)
             {
                 string whole = Path.Combine(folder, prefix + width + "-" + screen + "-page.png");

@@ -136,6 +136,11 @@ internal sealed partial class NodeRenderer(RenderContext context)
     private UIElement DrawStack(Models.Stack stack)
     {
         Models.Axis axis = stack.Wide is Models.Axis wide && context.Width != WidthClass.Compact ? wide : stack.Axis;
+        if (axis == Models.Axis.Horizontal && WindowRules.FoldsDown(context.Width, stack.Children))
+        {
+            axis = Models.Axis.Vertical;
+        }
+
         double gap = WindowRules.Space(stack.Gap);
         Thickness pad = new(WindowRules.Space(stack.Pad));
         if (axis == Models.Axis.Vertical)

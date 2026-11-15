@@ -40,6 +40,17 @@ public sealed class RulesTests
     }
 
     [TestMethod]
+    public void A_stack_across_that_holds_a_field_is_laid_out_down_in_a_narrow_window_only()
+    {
+        Models.Node[] withField = [new Models.Field { Input = new Models.TextInput(), Name = "units" }, new Models.Button { Label = "Restock" }];
+        Models.Node[] words = [new Models.Text { Value = "Kitchen" }, new Models.Text { Value = "Reorder at 14" }];
+        Assert.IsTrue(WindowRules.FoldsDown(WidthClass.Compact, withField));
+        Assert.IsFalse(WindowRules.FoldsDown(WidthClass.Medium, withField));
+        Assert.IsFalse(WindowRules.FoldsDown(WidthClass.Compact, words));
+        Assert.IsFalse(WindowRules.FoldsDown(WidthClass.Compact, [new Models.Field { Input = new Models.TextInput(), Name = "units" }]));
+    }
+
+    [TestMethod]
     public void The_core_is_told_the_class_by_its_own_words_and_the_smallest_window_leaves_snap_layouts_working()
     {
         Assert.AreEqual("compact", WindowRules.Word(WidthClass.Compact));
