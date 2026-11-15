@@ -87,4 +87,16 @@ class CompositionRulesTest {
         assertNotNull(screen.pager)
         assertEquals(screen.pager, PagerRules.inBar(screen))
     }
+
+    @Test
+    fun a_wall_of_cards_beside_a_side_column_goes_above_it_where_its_share_holds_one_column() {
+        val cards = List(4) { Navree.Card() }
+        val wall = Navree.Stack(grow = true, children = listOf(Navree.Grid(min = 160, gap = 3, children = cards)))
+        val side = Navree.Stack(grow = true, children = listOf(Navree.Text(value = "Top sellers")))
+        val line = Navree.Stack(axis = Navree.Axis.VERTICAL, wide = Navree.Axis.HORIZONTAL, gap = 4, children = listOf(wall, side))
+        assertEquals("a medium window: one column of cards in half the room", Navree.Axis.VERTICAL, CompositionRules.laidAxis(line, line.children, 656f, 16f, 1f))
+        assertEquals("a wide one: two columns of cards in half", Navree.Axis.HORIZONTAL, CompositionRules.laidAxis(line, line.children, 1012f, 16f, 1f))
+        assertEquals(0f, CompositionRules.growingLeastDp(side, 1f), 0.001f)
+        assertEquals(332f, CompositionRules.growingLeastDp(wall, 1f), 0.001f)
+    }
 }

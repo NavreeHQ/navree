@@ -67,12 +67,14 @@ internal data class Place(
     val overlay: String? = null,
     /** A dialog's own buttons are the confirmation; they are not asked about again. */
     val inDialog: Boolean = false,
-    /** The address of the screen shown beside this one, when a list and its detail share the window. */
-    val selectedUrl: String? = null,
+    /** The address of the row that is the open one: the one that leads to the page shown beside the list, or to the screen's own. */
+    val openAddress: String? = null,
     /** A node that is drawn elsewhere: a form's button that the app bar or a dialog's foot holds. */
     val omit: Navree.Node? = null,
     /** Drawn in a cell of a wide table, whose column heading already names what is in it. */
     val inCell: Boolean = false,
+    /** The screen's bar says its title: a heading that says it again is not drawn. */
+    val titleInBar: Boolean = false,
 ) {
     val id: Long get() = screen.id
 

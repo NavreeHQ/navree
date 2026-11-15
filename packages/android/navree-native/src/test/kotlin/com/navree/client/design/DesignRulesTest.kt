@@ -851,14 +851,32 @@ class LanesTest {
 }
 
 class RepeatedTitleTest {
+    private val heading = Navree.Text(value = "All open", heading = 2, style = Navree.TextStyle.TITLE)
+
     @Test
     fun a_heading_that_says_the_bars_title_is_not_said_again() {
-        val heading = Navree.Text(value = "All open", heading = 2, style = Navree.TextStyle.TITLE)
-        assertTrue(ScreenRules.repeatsTitle(heading, "All open"))
-        assertTrue("case and spaces do not matter", ScreenRules.repeatsTitle(heading, " all open "))
-        assertFalse("another title", ScreenRules.repeatsTitle(heading, "Closed"))
-        assertFalse("words that are no heading", ScreenRules.repeatsTitle(Navree.Text(value = "All open"), "All open"))
-        assertFalse("a screen with no title", ScreenRules.repeatsTitle(heading, null))
+        assertTrue(ScreenRules.repeatsTitle(heading, "All open", titleInBar = true))
+        assertTrue("case and spaces do not matter", ScreenRules.repeatsTitle(heading, " all open ", titleInBar = true))
+        assertFalse("another title", ScreenRules.repeatsTitle(heading, "Closed", titleInBar = true))
+        assertFalse("words that are no heading", ScreenRules.repeatsTitle(Navree.Text(value = "All open"), "All open", titleInBar = true))
+        assertFalse("a screen with no title", ScreenRules.repeatsTitle(heading, null, titleInBar = true))
+    }
+
+    @Test
+    fun a_heading_stays_where_the_bar_does_not_say_the_title() {
+        assertFalse(ScreenRules.repeatsTitle(heading, "All open", titleInBar = false))
+    }
+
+    @Test
+    fun the_plan_says_whether_the_bar_draws_the_title() {
+        val body = Navree.Text(value = "Sign in", heading = 1)
+        val plain = Navree.Screen(title = "Sign in", body = body)
+        assertTrue("a plain bar", ScreenRules.plan(plain, ScreenContext(root = true), WindowInfo.Phone).titleInBar)
+        assertFalse("a screen without the app's chrome has no bar", ScreenRules.plan(plain, ScreenContext(chrome = false), WindowInfo.Phone).titleInBar)
+        val searching = Navree.Screen(title = "Orders", body = body, search = Navree.Search(name = "q"))
+        assertFalse("the search bar shows the field", ScreenRules.plan(searching, ScreenContext(root = true), WindowInfo.Phone).titleInBar)
+        val days = Navree.Screen(title = "Sleep", body = body, pager = Navree.DayPager(date = "2026-11-13", day = "Friday"))
+        assertFalse("a bar that holds the day pager shows the day", ScreenRules.plan(days, ScreenContext(root = true), WindowInfo.Phone).titleInBar)
     }
 }
 
@@ -870,6 +888,37 @@ class OpenRowTest {
         assertFalse("another page", ListRules.shows("/inbox/211", "/inbox/11"))
         assertFalse("the list's own page", ListRules.shows("/inbox", "/inbox/11"))
         assertFalse("nothing shown", ListRules.shows(null, "/inbox/11"))
+    }
+
+    @Test
+    fun a_path_matches_whole_segment_by_whole_segment() {
+        assertFalse(ListRules.shows("/x/inbox/11", "/inbox/11"))
+        assertTrue("a closing slash and a fragment count for nothing", ListRules.shows("/inbox/11/#top", "/inbox/11"))
+    }
+
+    @Test
+    fun rows_that_differ_only_by_their_query_do_not_all_match() {
+        val rows = listOf("/inbox?folder=sent", "/inbox?folder=drafts", "/inbox?folder=trash")
+        assertEquals("/inbox?folder=drafts", ListRules.openAddress("/inbox?folder=drafts", rows))
+        assertEquals("the cursor the shown page carries does not matter", "/inbox?folder=drafts", ListRules.openAddress("/inbox?folder=drafts&after=40", rows))
+        assertNull("none of them", ListRules.openAddress("/inbox?folder=spam", rows))
+    }
+
+    @Test
+    fun the_row_that_says_most_of_the_shown_page_is_the_open_one_and_the_first_of_equals() {
+        val rows = listOf("/inbox", "/inbox?folder=drafts&label=work", "/inbox?folder=drafts")
+        assertEquals("/inbox?folder=drafts&label=work", ListRules.openAddress("/inbox?folder=drafts&label=work&after=9", rows))
+        assertEquals("/inbox?folder=drafts", ListRules.openAddress("/inbox?folder=drafts", rows))
+        assertEquals("a row with no query beside one with a query: the one with the query", "/inbox?folder=drafts", ListRules.openAddress("/inbox?folder=drafts", listOf("/inbox", "/inbox?folder=drafts")))
+        assertEquals("equals: the first", "/inbox/7", ListRules.openAddress("/inbox/7", listOf("/inbox/7", "/inbox/7")))
+    }
+
+    @Test
+    fun the_addresses_of_a_screens_rows_are_those_of_its_rows_and_its_tables_rows() {
+        val list = Navree.List(children = listOf(Navree.Row(title = "A", action = Navree.Action.Navigate("/a")), Navree.Row(title = "B")))
+        val table = Navree.Table(columns = listOf(Navree.Column(label = "Order")), rows = listOf(Navree.TableRow(action = Navree.Action.Navigate("/orders/1"), cells = listOf(Navree.Text(value = "1")))))
+        assertEquals(listOf("/a", "/orders/1"), ListRules.rowAddresses(Navree.Stack(children = listOf(list, table))))
+        assertEquals(emptyList<String>(), ListRules.rowAddresses(null))
     }
 }
 
@@ -910,7 +959,7 @@ class WideListStatesTest {
 class ShortLineTest {
     @Test
     fun a_line_with_a_dial_that_leaves_most_of_the_card_empty_is_put_in_the_middle() {
-        assertTrue(CompositionRules.holdsDial(listOf(Navree.Ring(value = 83.0), Navree.Text(value = "words"))))
+        assertTrue(CompositionRules.holdsDial(listOf(Navree.Ring(max = 100.0, value = 83.0), Navree.Text(value = "words"))))
         assertFalse(CompositionRules.holdsDial(listOf(Navree.Text(value = "words"))))
         assertTrue(CompositionRules.centresShortLine(usedPx = 550, roomPx = 1265))
         assertFalse("a line that fills most of its card stays at the start", CompositionRules.centresShortLine(usedPx = 900, roomPx = 1265))

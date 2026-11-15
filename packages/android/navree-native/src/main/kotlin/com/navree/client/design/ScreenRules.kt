@@ -137,6 +137,8 @@ data class ScreenPlan(
     val pullToRefresh: Boolean,
     /** Whether the search is the screen's own, or the search box of its main table's query. */
     val searchInQuery: Boolean = false,
+    /** Whether the bar says the screen's title, so a heading that says it again is left out. */
+    val titleInBar: Boolean = false,
 )
 
 /**
@@ -176,8 +178,16 @@ object ScreenRules {
      * Whether a node is a heading that only says the screen's title, which the
      * top app bar already says: it is not said a second time under the bar.
      */
-    fun repeatsTitle(node: Navree.Node, title: String?): Boolean =
-        node is Navree.Text && node.heading != null && title != null && node.value.trim().equals(title.trim(), ignoreCase = true)
+    fun repeatsTitle(node: Navree.Node, title: String?, titleInBar: Boolean): Boolean =
+        titleInBar && node is Navree.Text && node.heading != null && title != null && node.value.trim().equals(title.trim(), ignoreCase = true)
+
+    /**
+     * Whether the top app bar says the screen's title: a plain bar does. No bar
+     * (a screen without the app's chrome), the search bar (it shows the field)
+     * and a bar that holds the day pager (it shows the day) do not, and then a
+     * heading in the body is the only place the screen is named.
+     */
+    fun titleInBar(bar: BarKind, pagerInBar: Boolean): Boolean = (bar == BarKind.Small || bar == BarKind.TwoLine) && !pagerInBar
 
     fun plan(screen: Navree.Screen, context: ScreenContext, window: WindowInfo): ScreenPlan {
         val modal = context.presentation != Presentation.Stack
@@ -268,6 +278,7 @@ object ScreenRules {
             avatar = avatar,
             pullToRefresh = screen.refresh && context.presentation == Presentation.Stack,
             searchInQuery = searchPlace != SearchPlace.None && screen.search == null,
+            titleInBar = titleInBar(bar, PagerRules.inBar(screen) != null),
         )
     }
 

@@ -87,12 +87,12 @@ internal fun cardsSideBySide(blocks: List<Block>): Boolean = blocks.any { block 
 }
 
 /** Whether the node draws anything where it stands. Overlays are drawn over the screen, not in it. */
-internal fun inFlow(node: Navree.Node, screen: ScreenView): Boolean = when {
+internal fun inFlow(node: Navree.Node, screen: ScreenView, titleInBar: Boolean = false): Boolean = when {
     node is Navree.Stack && node.hidden -> false
     screen.hidden(node.nodeId) -> false
     node is Navree.Sheet || node is Navree.Dialog || node is Navree.Popover -> false
     node is Navree.Toolbar -> false
-    ScreenRules.repeatsTitle(node, screen.screen?.title) -> false
+    ScreenRules.repeatsTitle(node, screen.screen?.title, titleInBar) -> false
     // A day pager that leads the screen stands in the app bar.
     node is Navree.DayPager && screen.screen?.let { PagerRules.inBar(it) } === node -> false
     // The buttons for chosen rows are the contextual app bar's.
@@ -126,6 +126,7 @@ internal fun blocks(
     omit: Navree.Node? = null,
     hoisted: Navree.Form? = null,
     fontScale: Float = 1f,
+    titleInBar: Boolean = false,
 ): List<Block> {
     val out = ArrayList<Block>()
     val cardColumns = ContentRules.cardColumns(widthDp, fontScale)
@@ -140,12 +141,12 @@ internal fun blocks(
     fun groupable(node: Navree.Node): Boolean = node is Navree.Row || (node is Navree.Field && node.input is Navree.ToggleInput)
 
     fun add(node: Navree.Node, path: String, form: String?, region: String?, top: Boolean) {
-        if (node === omit || !inFlow(node, screen)) return
+        if (node === omit || !inFlow(node, screen, titleInBar)) return
         when (node) {
             is Navree.Stack -> if (CompositionRules.splitsIntoBlocks(node, widthDp.toFloat())) {
                 val gap = ContentRules.gap(node.gap)
                 var any = false
-                val shown = node.children.count { it !== omit && inFlow(it, screen) }
+                val shown = node.children.count { it !== omit && inFlow(it, screen, titleInBar) }
                 var run = ArrayList<Pair<Int, Navree.Node>>()
                 fun flush() {
                     for (line in run.chunked(cardColumns)) {
@@ -157,12 +158,12 @@ internal fun blocks(
                 }
                 node.children.forEachIndexed { index, child ->
                     // On a wide window, cards that follow each other stand side by side.
-                    if (cardColumns > 1 && card(child) && child !== omit && inFlow(child, screen)) {
+                    if (cardColumns > 1 && card(child) && child !== omit && inFlow(child, screen, titleInBar)) {
                         run.add(index to child)
                         return@forEachIndexed
                     }
                     if (run.isNotEmpty()) flush()
-                    if (child !== omit && inFlow(child, screen)) {
+                    if (child !== omit && inFlow(child, screen, titleInBar)) {
                         val before = out.size
                         if (any && gap > 0) out += Block.Space(key("$path/$index/gap", null), gap)
                         val spaced = out.size
@@ -178,10 +179,10 @@ internal fun blocks(
                 if (run.isNotEmpty()) flush()
             } else {
                 // A row of parts whose only part is drawn elsewhere draws nothing.
-                if (node.children.any { it !== omit && inFlow(it, screen) }) out += Block.Single(key(path, node.id), node, form)
+                if (node.children.any { it !== omit && inFlow(it, screen, titleInBar) }) out += Block.Single(key(path, node.id), node, form)
             }
             is Navree.Region -> {
-                val shown = node.children.filter { inFlow(it, screen) }
+                val shown = node.children.filter { inFlow(it, screen, titleInBar) }
                 if (shown.isEmpty() && (node.lazy || screen.regions[node.id]?.loading == true)) {
                     out += Block.Waiting(key("$path/waiting", null), node.id)
                 } else {
@@ -198,7 +199,7 @@ internal fun blocks(
             } else {
                 node.id?.let { id -> if (node.before != null) out += Block.Before(key("$path/before", null), id) }
                 node.children.forEachIndexed { index, child ->
-                    if (inFlow(child, screen)) {
+                    if (inFlow(child, screen, titleInBar)) {
                         if (child is Navree.Row || child is Navree.FeedRow) {
                             out += Block.Item(key("$path/$index", child.nodeId), child, Group.None, form)
                         } else {
@@ -218,8 +219,8 @@ internal fun blocks(
                     out += Block.Single(key("$path/actions", null), Navree.Stack(axis = Navree.Axis.HORIZONTAL, gap = 2, wrap = true, children = node.actions), form)
                 }
                 // A list inside a section gives the section its rows.
-                val items = node.children.filter { inFlow(it, screen) }
-                    .flatMap { child -> if (child is Navree.List && child.more == null && child.reorder == null) child.children.filter { inFlow(it, screen) } else listOf(child) }
+                val items = node.children.filter { inFlow(it, screen, titleInBar) }
+                    .flatMap { child -> if (child is Navree.List && child.more == null && child.reorder == null) child.children.filter { inFlow(it, screen, titleInBar) } else listOf(child) }
                 if (node.style == Navree.SectionStyle.INSET && items.isNotEmpty() && items.all(::groupable)) {
                     items.forEachIndexed { index, item ->
                         val group = when {
@@ -233,7 +234,7 @@ internal fun blocks(
                 } else {
                     var any = title != null
                     node.children.forEachIndexed { index, child ->
-                        if (inFlow(child, screen)) {
+                        if (inFlow(child, screen, titleInBar)) {
                             if (any && child !is Navree.Row && child !is Navree.List) out += Block.Space(key("$path/$index/gap", null), 8)
                             add(child, "$path/$index", form, region, top = false)
                             any = true

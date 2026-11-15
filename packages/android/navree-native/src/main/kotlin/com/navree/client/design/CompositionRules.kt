@@ -153,7 +153,24 @@ object CompositionRules {
         val wanted = axis(stack, roomDp)
         if (wanted != Navree.Axis.HORIZONTAL || stack.wrap) return wanted
         val leasts = shown.map { leastAcrossDp(it, fontScale) }
-        return if (fitsAcross(roomDp, leasts, gapDp)) Navree.Axis.HORIZONTAL else Navree.Axis.VERTICAL
+        if (!fitsAcross(roomDp, leasts, gapDp)) return Navree.Axis.VERTICAL
+        // Each part that grows is given an equal share of what is left of the line: a wall of cards that would have
+        // one column in its share (and so end far below its neighbour) goes above it instead, as the guidance for a
+        // supporting pane has the supporting content go below the main one where the main one does not fit its half.
+        val share = roomLeftDp(roomDp, shown, gapDp, fontScale)
+        return if (shown.filter(::grows).all { share >= growingLeastDp(it, fontScale) }) Navree.Axis.HORIZONTAL else Navree.Axis.VERTICAL
+    }
+
+    /**
+     * The least a part that grows needs of its share of a line, in dp: a stack
+     * that holds a wall of cards (a grid of at least three, with no count of
+     * columns of its own) needs two columns of them; other parts give way.
+     */
+    fun growingLeastDp(node: Navree.Node, fontScale: Float): Float {
+        if (node !is Navree.Stack) return 0f
+        val wall = node.walk().filterIsInstance<Navree.Grid>().firstOrNull { it.cols == null && it.children.size >= 3 } ?: return 0f
+        val column = ((wall.min ?: 160) * fontScale.coerceAtLeast(1f)).toInt().coerceAtLeast(48)
+        return (2 * column + wall.gap * STEP_DP).toFloat()
     }
 
     /**
