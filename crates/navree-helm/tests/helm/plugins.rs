@@ -657,8 +657,14 @@ async fn an_apps_page_whose_template_is_not_html_is_warned_about_and_renders_as_
 /// extension, `overview` with it.
 fn app_html_pages(m: &mut ModuleBuilder) {
     m.templates(&[
-        ("admin/summary.html", "<p class=\"summary\">{{ data.note }}</p>"),
-        ("admin/overview.html", "<p class=\"overview\">{{ data.note }}</p>"),
+        (
+            "admin/summary.html",
+            "<p class=\"summary\">{{ data.note }}</p>",
+        ),
+        (
+            "admin/overview.html",
+            "<p class=\"overview\">{{ data.note }}</p>",
+        ),
     ])
     .helm_page(
         HelmPage::new("summary", "Summary")
