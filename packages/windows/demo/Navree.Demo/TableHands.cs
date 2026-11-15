@@ -54,6 +54,9 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
     private static extern bool SetForegroundWindow(IntPtr window);
 
     [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int index);
 
     internal async Task RunAsync()
@@ -116,6 +119,30 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
         await ShotAsync("hands-wheel");
     }
 
+    // A cell for the walk's pointer to press: one that holds no button (the order number is a button that opens the order in a pane, and the focus goes into
+    // the pane) and that is wholly inside the window, so the pointer does not land on the taskbar or off the screen. The table is scrolled to its top when no
+    // such cell is in view.
+    private async Task<FrameworkElement?> CellToClickAsync(Navree.Controls.DataTable table)
+    {
+        double height = window.Surface.ActualHeight;
+        FrameworkElement? Find() => Below(table).OfType<FrameworkElement>()
+            .Where(element => element.GetType().Name == "DataTableCell" && element.ActualWidth > 0 && !Below(element).OfType<Button>().Any()
+                && element.TransformToVisual(table).TransformPoint(new Point(0, 0)).Y > 60
+                && element.TransformToVisual(window.Surface).TransformPoint(new Point(0, 0)).Y + element.ActualHeight < height - 40)
+            .OrderBy(element => element.TransformToVisual(window.Surface).TransformPoint(new Point(0, 0)).Y)
+            .FirstOrDefault();
+        FrameworkElement? found = Find();
+        if (found is null && Below(table).OfType<ScrollView>().FirstOrDefault() is { } scroll)
+        {
+            scroll.ScrollTo(0, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled));
+            await Task.Delay(1500);
+            found = Find();
+        }
+
+        Say("the cell to click is " + (found is null ? "none" : "a " + found.GetType().Name + " at " + found.TransformToVisual(window.Surface).TransformPoint(new Point(0, 0)).Y.ToString("0", CultureInfo.InvariantCulture) + " of the window's " + height.ToString("0", CultureInfo.InvariantCulture)));
+        return found;
+    }
+
     private async Task KeysAsync()
     {
         Say("== the keys");
@@ -125,10 +152,10 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
             return;
         }
 
-        FrameworkElement? cell = Below(table).OfType<FrameworkElement>().FirstOrDefault(element => element.GetType().Name == "DataTableCell" && element.ActualWidth > 0 && element.TransformToVisual(table).TransformPoint(new Point(0, 0)).Y > 60);
+        FrameworkElement? cell = await CellToClickAsync(table);
         if (cell is not null)
         {
-            await ClickAsync(cell);
+            await ClickAsync(cell, "the first cell before the table is asked for its first rows again");
         }
 
         // The wheel before this took the rows to their end: the table is asked for its first rows again, so that the end is a place where more come.
@@ -142,10 +169,10 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
 
             await Task.Delay(1500);
             table = TableNow() ?? table;
-            FrameworkElement? first = Below(table).OfType<FrameworkElement>().FirstOrDefault(element => element.GetType().Name == "DataTableCell" && element.ActualWidth > 0 && element.TransformToVisual(table).TransformPoint(new Point(0, 0)).Y > 60);
+            FrameworkElement? first = await CellToClickAsync(table);
             if (first is not null)
             {
-                await ClickAsync(first);
+                await ClickAsync(first, "the first cell of the rows as they are now");
             }
         }
 
@@ -155,6 +182,8 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
 
         // End in a grid goes to the last column of the row; Control and End goes to the last row, where more rows are asked for.
         Foreground();
+        await Task.Delay(300);
+        Say("just before Control and End: the focus is on " + FocusedWords() + ", the table's active cell is " + Words(table.ActiveCell) + ", the window of the app is the foreground window: " + (GetForegroundWindow() == WinRT.Interop.WindowNative.GetWindowHandle(window)));
         keybd_event(0x11, 0, 0, UIntPtr.Zero);
         await Task.Delay(60);
         Press(End);
@@ -311,16 +340,43 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
         mouse_event(MoveTo | Absolute, (int)((long)x * 65535 / (width - 1)), (int)((long)y * 65535 / (height - 1)), 0, UIntPtr.Zero);
     }
 
-    private async Task ClickAsync(FrameworkElement element)
+    private async Task ClickAsync(FrameworkElement element, string why = "")
     {
         Foreground();
         (int x, int y) = ScreenOf(element, element.ActualWidth / 2, element.ActualHeight / 2);
+        if (why.Length > 0)
+        {
+            Windows.Foundation.Point inWindow = element.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(element.ActualWidth / 2, element.ActualHeight / 2));
+            Say("the click for " + why + ": on a " + element.GetType().Name + " " + element.ActualWidth.ToString("0", CultureInfo.InvariantCulture) + " by " + element.ActualHeight.ToString("0", CultureInfo.InvariantCulture)
+                + " at " + inWindow.X.ToString("0", CultureInfo.InvariantCulture) + "," + inWindow.Y.ToString("0", CultureInfo.InvariantCulture) + " in the window, the scale is " + element.XamlRoot.RasterizationScale.ToString("0.00", CultureInfo.InvariantCulture)
+                + ", the point on the screen is " + x + "," + y + ", the screen is " + GetSystemMetrics(0) + " by " + GetSystemMetrics(1) + ", the window of the app is the foreground window: " + (GetForegroundWindow() == WinRT.Interop.WindowNative.GetWindowHandle(window)));
+        }
+
         Move(x, y);
         await Task.Delay(250);
         mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero);
         await Task.Delay(80);
         mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
-        await Task.Delay(500);
+        if (why.Length > 0)
+        {
+            List<string> seen = [];
+            for (int waited = 0; waited < 500; waited += 50)
+            {
+                await Task.Delay(50);
+                seen.Add((waited + 50) + " ms: " + (Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(window.Surface.XamlRoot)?.GetType().Name ?? "nothing"));
+            }
+
+            Say("the focus after the press, every 50 ms: " + string.Join(", ", seen));
+        }
+        else
+        {
+            await Task.Delay(500);
+        }
+
+        if (why.Length > 0)
+        {
+            Say("after the click for " + why + ": the focus is on " + FocusedWords() + ", the table's active cell is " + Words(TableNow()?.ActiveCell) + ", the window of the app is the foreground window: " + (GetForegroundWindow() == WinRT.Interop.WindowNative.GetWindowHandle(window)));
+        }
     }
 
     private static void Press(byte key)
