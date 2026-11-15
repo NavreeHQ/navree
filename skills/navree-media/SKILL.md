@@ -19,7 +19,7 @@ code: when in doubt read `crates/navree-media/src` and its tests in
 
 ```toml
 [dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["media"] } # or "media-ffmpeg"
+navree = { version = "1", features = ["media"] } # or "media-ffmpeg"
 ```
 
    This brings `navree::media` and puts `MediaModule`, `Media`, `HasMedia`

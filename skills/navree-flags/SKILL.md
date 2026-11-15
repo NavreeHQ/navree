@@ -20,7 +20,7 @@ and `crates/navree/tests/flags.rs` (the docs examples through the facade).
 
 ```toml
 [dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["flags"] }
+navree = { version = "1", features = ["flags"] }
 ```
 
    This brings `navree::flags` (the crate plus the `#[flag]` macro) and puts

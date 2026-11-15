@@ -19,7 +19,7 @@ setting names `redis`, so drivers are switched one by one. The source is
 
 ```toml
 [dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["redis"] }
+navree = { version = "1", features = ["redis"] }
 ```
 
 2. Add `RedisModule` (global; in the prelude with `redis`) and switch the

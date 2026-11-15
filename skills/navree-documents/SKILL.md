@@ -20,7 +20,7 @@ The docs page is `docs/packages/documents.mdx`.
 
 ```toml
 [dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["documents"] }
+navree = { version = "1", features = ["documents"] }
 ```
 
    This brings `navree::documents` and puts `DocumentsModule` and

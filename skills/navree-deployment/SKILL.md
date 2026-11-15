@@ -23,9 +23,10 @@ the app on your own setup.
 1. Build: `cargo build --release` (binary: `target/release/<package>`).
    Build on the target platform (or cross-compile). No OpenSSL or SQLite
    library is needed at runtime (SQLite is compiled in only with the
-   `sqlite` feature). Until the crates are published, the machine that
-   builds the release needs the Navree checkout at the path in `Cargo.toml`
-   (or point the dependency at the Git repository).
+   `sqlite` feature). The crates come from crates.io, so the build machine needs
+   no Navree checkout, unless `Cargo.toml` points `navree` at one by `path`
+   (an app made with `--navree-path`): use `navree = { version = "1", .. }`
+   for the release.
 2. Copy to the server: the binary, `config/app.toml` and a writable
    `storage/` (plus `resources/views/` if you use template files).
 

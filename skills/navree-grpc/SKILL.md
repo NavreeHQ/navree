@@ -23,7 +23,7 @@ is the docs page's example through the facade).
 
 ```toml
 [dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["grpc"] }
+navree = { version = "1", features = ["grpc"] }
 tonic = "0.14"
 tonic-prost = "0.14"
 prost = "0.14"

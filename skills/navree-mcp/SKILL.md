@@ -22,7 +22,7 @@ Navigator (`navree mcp`), configured by nothing in the app.
 1. Dependencies (`Cargo.toml`):
 
    ```toml
-   navree = { git = "https://github.com/NavreeHQ/navree", features = ["mcp"] }
+   navree = { version = "1", features = ["mcp"] }
    ```
 
 2. Add the module in `src/app.rs` (after `HttpModule`, `DatabaseModule`,

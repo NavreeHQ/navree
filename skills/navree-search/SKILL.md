@@ -16,7 +16,7 @@ Everything below is in the code; when in doubt read
 1. Turn on the feature and add the module after the database and the queue:
 
 ```toml
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["search"] }
+navree = { version = "1", features = ["search"] }
 ```
 
 ```rust,ignore
