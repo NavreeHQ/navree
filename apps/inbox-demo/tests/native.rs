@@ -255,3 +255,56 @@ async fn a_browser_asking_for_an_address_that_does_not_exist_gets_the_404_in_the
     // The account the shell shows is there, as on every other page.
     assert!(html.contains("@support.example.com"), "{html:.600}");
 }
+
+/// Runs `ask`, and says the statements it ran (and not those of the app's clocks, which
+/// run beside it).
+async fn statements_of(
+    ask: impl std::future::Future<Output = navree::testing::TestResponse>,
+) -> (navree::testing::TestResponse, Vec<String>) {
+    let (response, ran) = navree::db::QueryLog::capture(ask).await;
+    (response, ran.into_iter().map(|query| query.sql).collect())
+}
+
+#[tokio::test]
+async fn a_page_that_is_not_found_runs_no_query_on_the_conversations() {
+    let (app, _dir) = boot_desk().await;
+    let (page, ran) = statements_of(
+        app.client()
+            .get("/no-such-page")
+            .header("accept", "text/html")
+            .send(),
+    )
+    .await;
+    assert_eq!(page.status().as_u16(), 404);
+    assert!(page.text().contains("@support.example.com"));
+    // The shell it is drawn in is read (the agent, the team): the log sees the app's statements.
+    assert!(!ran.is_empty());
+    assert!(
+        ran.iter().all(|sql| !sql.contains("conversations")),
+        "{ran:?}"
+    );
+    // The inbox's own page counts them, as it did.
+    let (_, ran) = statements_of(
+        app.client()
+            .get("/inbox")
+            .header("accept", "text/html")
+            .send(),
+    )
+    .await;
+    assert!(ran.iter().any(|sql| sql.contains("conversations")));
+}
+
+#[tokio::test]
+async fn the_shell_a_native_client_draws_its_navigation_from_keeps_its_counts() {
+    let (app, _dir) = boot_desk().await;
+    let (shell, ran) = statements_of(
+        app.client()
+            .get("/_navree/native/shell")
+            .header("x-navree-native", "1")
+            .header("x-navree-client", PHONE)
+            .send(),
+    )
+    .await;
+    assert!(ran.iter().any(|sql| sql.contains("conversations")));
+    assert!(shell.text().contains("\"badge\""), "{:.400}", shell.text());
+}
