@@ -41,6 +41,10 @@ object Audit {
         val density = node.layoutInfo.density.density
         val widthDp = node.size.width / density
         val heightDp = node.size.height / density
+        // What a finger can hit: the node's own size widened to the minimum touch size by the component, where it is.
+        val touch = node.touchBoundsInRoot
+        val touchWidthDp = touch.width / density
+        val touchHeightDp = touch.height / density
         val named = name(node)
         val clickable = config.contains(SemanticsActions.OnClick) || config.contains(SemanticsActions.OnLongClick)
         val role = config.getOrNull(SemanticsProperties.Role)?.toString()
@@ -58,8 +62,8 @@ object Audit {
         }
         if (clickable && !config.contains(SemanticsProperties.Disabled)) {
             if (named.isEmpty()) faults += "UNNAMED control ${widthDp.toInt()}x${heightDp.toInt()}dp at ${node.boundsInRoot}"
-            if (minOf(widthDp, heightDp) < TARGET_DP - 0.5f && widthDp > 0f) {
-                faults += "SMALL ${widthDp.toInt()}x${heightDp.toInt()}dp \"$named\""
+            if (minOf(touchWidthDp, touchHeightDp) < TARGET_DP - 0.5f && widthDp > 0f) {
+                faults += "SMALL ${touchWidthDp.toInt()}x${touchHeightDp.toInt()}dp \"$named\""
             }
         }
         node.children.forEach { walk(it, depth + 1, lines, faults) }

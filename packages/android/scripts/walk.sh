@@ -242,9 +242,9 @@ if [ -n "$at" ]; then
   "$ADB" shell input text 7
   shot restock-typed
   "$ADB" shell input keyevent KEYCODE_ENTER
-  sleep 3
+  # The message stays a few seconds: look for it at once, then take its picture.
+  check "the keyboard's action sends the restock and a message follows" wait_for_part "Restocked" 6
   shot restock-sent
-  check "the keyboard's action sends the restock and a message follows" wait_for_part "Restocked" 10
 else
   say "FAIL no field to type in"
   fails=$((fails + 1))
@@ -254,7 +254,7 @@ fi
 
 say "== the app ended by the system, and opened again, with no network"
 tap Orders
-wait_for Search 20
+check "Orders is the place it was in" wait_for Fulfilment 20
 "$ADB" shell input keyevent KEYCODE_HOME
 sleep 3
 "$ADB" shell am kill "$PKG"
@@ -266,11 +266,17 @@ strip returned-offline 12
 dump
 shot returned-offline
 say "returned with no network says: $(ui texts | tr '\n' '|' | cut -c1-300)"
-check "it returns to the destination it was on" bash -c "python3 -I '$HERE/ui.py' '$OUT/window.xml' has Search || python3 -I '$HERE/ui.py' '$OUT/window.xml' has 'Try again'"
+check "it comes back with the way to try again" ui has "Try again"
 check "no person is named before the server has said who" bash -c "! python3 -I '$HERE/ui.py' '$OUT/window.xml' contains 'Account,'"
 check "the network is back" net on
 tap "Try again" > /dev/null 2>&1
-check "the person is named once the server has answered" wait_for_part "Account, " 30
+sleep 6
+dump
+shot returned-online
+say "after trying again it says: $(ui texts | tr '
+' '|' | cut -c1-300)"
+check "it returns to the place it was in and shows it" ui has Fulfilment
+check "the person is named once the server has answered" wait_for_part "Account, " 20
 
 say "walk done: $fails failed"
 [ "$fails" -eq 0 ]
