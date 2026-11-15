@@ -752,7 +752,10 @@ is. Do not clone the `Shell` and apply it with `Shell::for_request`: that draws
 none of the links other modules add with `m.nav_item`, which a shell built with
 `.contributed()` draws through `AppShell` for the readers who may open them. An
 app made by `navree new` does this in one extractor, `Desk`
-(`src/ui/shell.rs`): take `Desk` where this skill says `AppShell`.
+(`src/ui/shell.rs`): take `Desk` where this skill says `AppShell`. On the
+`AppShell`, `header_slot(node)` puts a workspace switcher under the app's name
+(`Shell::header_slot` for every page) and `csrf(token)` gives the shell's own
+forms the session's token.
 
 ## What is not shipped
 
