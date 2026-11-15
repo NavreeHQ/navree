@@ -31,6 +31,21 @@ public sealed class RulesTests
     }
 
     [TestMethod]
+    public void A_size_in_effective_pixels_is_the_same_window_at_every_display_scale()
+    {
+        Assert.AreEqual(1000, WindowRules.Raw(1000, 1.0));
+        Assert.AreEqual(1750, WindowRules.Raw(1000, 1.75));
+        Assert.AreEqual(1250, WindowRules.Raw(1000, 1.25));
+        Assert.AreEqual(2000, WindowRules.Raw(1000, 2.0));
+        Assert.AreEqual(841, WindowRules.Raw(840.2, 1.0), "rounded up, never smaller than asked");
+        Assert.AreEqual(1000, WindowRules.Raw(1000, 0), "a scale that is nothing counts as one");
+        Assert.AreEqual(1000, WindowRules.Raw(1000, double.NaN));
+        Assert.AreEqual(0, WindowRules.Raw(-5, 1.5));
+        Assert.AreEqual(571.4, WindowRules.Effective(1000, 1.75), 0.05);
+        Assert.AreEqual(1000.0, WindowRules.Effective(WindowRules.Raw(1000, 1.75), 1.75), 0.6);
+    }
+
+    [TestMethod]
     public void A_list_has_a_detail_beside_it_but_a_screen_that_lays_out_panes_of_its_own_stands_alone()
     {
         Models.Node list = new Models.Stack { Children = [new Models.List()] };

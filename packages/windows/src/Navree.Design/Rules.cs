@@ -27,6 +27,22 @@ public static class WindowRules
     /// <summary>The smallest a window may be made: wide enough for snap layouts to keep working.</summary>
     public const double SmallestWindow = 500;
 
+    /// <summary>
+    /// A size in effective pixels as the device pixels the system sizes windows in at a display scale. Every size the client gives a window goes
+    /// through this: a size written in device pixels is a different window on each display (a thousand by seven hundred is 571 by 400 at 175 percent).
+    /// </summary>
+    /// <param name="effective">The size in effective pixels.</param>
+    /// <param name="scale">How many device pixels make one effective pixel; a scale that is not a number above nothing counts as one.</param>
+    /// <returns>The size in device pixels, rounded up so a window is never smaller than asked.</returns>
+    public static int Raw(double effective, double scale) =>
+        (int)Math.Ceiling(Math.Max(0, effective) * (scale > 0 && double.IsFinite(scale) ? scale : 1.0));
+
+    /// <summary>A size in device pixels as effective pixels at a display scale.</summary>
+    /// <param name="raw">The size in device pixels.</param>
+    /// <param name="scale">How many device pixels make one effective pixel.</param>
+    /// <returns>The size in effective pixels.</returns>
+    public static double Effective(int raw, double scale) => raw / (scale > 0 && double.IsFinite(scale) ? scale : 1.0);
+
     /// <summary>The width a list takes when it stands beside its detail.</summary>
     public const double ListPane = 380;
 

@@ -32,13 +32,17 @@ public sealed partial class ShellWindow
         content.Children.Insert(2, settingsHost);
         navigation.IsSettingsVisible = true;
 
-        // The window may be made no smaller than snap layouts allow; the maximise button stays the system's.
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        // The window may be made no smaller than snap layouts allow; the maximise button stays the system's. The least size is in device
+        // pixels, so it is given again whenever the window's display scale changes (the window is moved to another display, or the scale is changed).
+        ApplyLeastSize();
+        root.Loaded += (_, _) =>
         {
-            (int smallestWidth, int smallestHeight) = PlacementRules.Smallest(WindowFrame.ScaleOf(WinRT.Interop.WindowNative.GetWindowHandle(this)));
-            presenter.PreferredMinimumWidth = smallestWidth;
-            presenter.PreferredMinimumHeight = smallestHeight;
-        }
+            ApplyLeastSize();
+            if (root.XamlRoot is { } xamlRoot)
+            {
+                xamlRoot.Changed += (_, _) => ApplyLeastSize();
+            }
+        };
 
         navigation.ItemInvoked += OnItemInvoked;
         root.KeyboardAccelerators.Add(Accelerator(VirtualKey.N, VirtualKeyModifiers.Control, () => host.Place?.OpenWindow()));
@@ -48,6 +52,18 @@ public sealed partial class ShellWindow
         if (host.HasStopped)
         {
             OfferRestart();
+        }
+    }
+
+    // The least size, in device pixels at the scale the window has now.
+    private void ApplyLeastSize()
+    {
+        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            double scale = root.XamlRoot?.RasterizationScale ?? WindowFrame.ScaleOf(WinRT.Interop.WindowNative.GetWindowHandle(this));
+            (int smallestWidth, int smallestHeight) = PlacementRules.Smallest(scale);
+            presenter.PreferredMinimumWidth = smallestWidth;
+            presenter.PreferredMinimumHeight = smallestHeight;
         }
     }
 

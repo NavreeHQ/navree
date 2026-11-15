@@ -178,8 +178,8 @@ internal sealed class TrayWindow : Window
         RectInt32 area = DisplayArea.GetFromPoint(new PointInt32(icon.CentreX, icon.CentreY), DisplayAreaFallback.Nearest).WorkArea;
         nint handle = Microsoft.UI.Win32Interop.GetWindowFromWindowId(AppWindow.Id);
         double scale = WindowFrame.ScaleOf(handle);
-        int width = (int)(WidthEpx * scale);
-        int height = (int)((ChromeEpx + RowEpx * Math.Min(Math.Max(rows, 1), 8)) * scale);
+        int width = WindowRules.Raw(WidthEpx, scale);
+        int height = WindowRules.Raw(ChromeEpx + (RowEpx * Math.Min(Math.Max(rows, 1), 8)), scale);
         (int left, int top) = TrayRules.Place(icon, width, height, new Box(area.X, area.Y, area.X + area.Width, area.Y + area.Height));
         AppWindow.MoveAndResize(new RectInt32(left, top, width, height));
         AppWindow.Show();

@@ -41,11 +41,15 @@ internal sealed class ScreenWindow : Window
         root.Children.Add(presenter);
         Content = root;
         SetTitleBar(titleBar);
-        if (AppWindow.Presenter is OverlappedPresenter overlapped)
+        ApplyLeastSize();
+        root.Loaded += (_, _) =>
         {
-            nint handle = Microsoft.UI.Win32Interop.GetWindowFromWindowId(AppWindow.Id);
-            overlapped.PreferredMinimumWidth = (int)(WindowRules.SmallestWindow * WindowFrame.ScaleOf(handle));
-        }
+            ApplyLeastSize();
+            if (root.XamlRoot is { } xamlRoot)
+            {
+                xamlRoot.Changed += (_, _) => ApplyLeastSize();
+            }
+        };
 
         if (rightToLeft)
         {
@@ -59,6 +63,16 @@ internal sealed class ScreenWindow : Window
         Show(host.State);
     }
 
+    // The least width, in device pixels at the scale the window has now.
+    private void ApplyLeastSize()
+    {
+        if (AppWindow.Presenter is OverlappedPresenter overlapped)
+        {
+            double scale = root.XamlRoot?.RasterizationScale ?? WindowFrame.ScaleOf(Microsoft.UI.Win32Interop.GetWindowFromWindowId(AppWindow.Id));
+            overlapped.PreferredMinimumWidth = WindowRules.Raw(WindowRules.SmallestWindow, scale);
+        }
+    }
+
     /// <summary>The screen this window shows.</summary>
     internal long ScreenId => screenId;
 
@@ -67,8 +81,8 @@ internal sealed class ScreenWindow : Window
     {
         nint handle = Microsoft.UI.Win32Interop.GetWindowFromWindowId(AppWindow.Id);
         double scale = WindowFrame.ScaleOf(handle);
-        int width = (int)(widthEpx * scale);
-        int height = (int)(heightEpx * scale);
+        int width = WindowRules.Raw(widthEpx, scale);
+        int height = WindowRules.Raw(heightEpx, scale);
         (int left, int top) = PlacementRules.Cascade(from, work, width, height);
         AppWindow.MoveAndResize(new RectInt32(left, top, width, height));
     }

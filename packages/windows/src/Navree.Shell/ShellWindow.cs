@@ -142,11 +142,8 @@ public sealed partial class ShellWindow : Window
     public void Size(int widthEpx, int heightEpx)
     {
         double scale = root.XamlRoot?.RasterizationScale ?? 1.0;
-        AppWindow.Resize(new SizeInt32((int)(widthEpx * scale), (int)(heightEpx * scale)));
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.PreferredMinimumWidth = (int)(WindowRules.SmallestWindow * scale);
-        }
+        AppWindow.Resize(new SizeInt32(WindowRules.Raw(widthEpx, scale), WindowRules.Raw(heightEpx, scale)));
+        ApplyLeastSize();
     }
 
     private static KeyboardAccelerator Accelerator(VirtualKey key, VirtualKeyModifiers modifiers, Action run)

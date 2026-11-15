@@ -52,7 +52,8 @@ internal sealed class KindsWalker(Window window, string folder)
 
                 foreach (int width in Widths)
                 {
-                    window.AppWindow.Resize(new SizeInt32(width + 16, 1000));
+                    double scale = root.XamlRoot?.RasterizationScale ?? 1.0;
+                    window.AppWindow.Resize(new SizeInt32(Navree.Design.WindowRules.Raw(width + 16, scale), Navree.Design.WindowRules.Raw(1000, scale)));
                     await Task.Delay(300);
                     FrameworkElement page = KindsGallery.Draw(screen, width);
                     scroller.Content = page;
