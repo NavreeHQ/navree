@@ -319,7 +319,9 @@ With nothing opened, the list has the window.
   `android:supportsRtl="true"` (a window of its own resolves its direction only
   for an app that does; the client logs a warning at start when it is missing),
   and a dialog or a popup takes its direction from the composition it is opened
-  from.
+  from. The right to left look of the device tests is the composition's
+  direction: the system's own bars, its keyboard and its back gesture are not
+  turned by it, and the language the system holds is not changed.
 - A service worker a page registers is held to the origins the web view is:
   its requests to any other origin are answered 403. A page's own scripts open
   a socket or start a worker only for an address on the app's origins. What a
