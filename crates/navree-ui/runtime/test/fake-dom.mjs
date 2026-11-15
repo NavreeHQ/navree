@@ -677,6 +677,10 @@ class FakeInput extends FakeControl {
   get defaultValue() {
     return this.getAttribute("value") ?? "";
   }
+  // As in a browser, the default is the `value` attribute; a value already typed stays.
+  set defaultValue(v) {
+    this.setAttribute("value", v);
+  }
 }
 class FakeTextArea extends FakeControl {
   constructor() {
@@ -690,9 +694,31 @@ class FakeTextArea extends FakeControl {
     this._value = String(v);
   }
 }
+class FakeOption extends FakeHTMLElement {
+  constructor() {
+    super("option");
+    this._selected = null;
+  }
+  // As in a browser: chosen as drawn (the `selected` attribute) until a choice is made.
+  get defaultSelected() {
+    return this.hasAttribute("selected");
+  }
+  set defaultSelected(on) {
+    this.toggleAttribute("selected", !!on);
+  }
+  get selected() {
+    return this._selected ?? this.defaultSelected;
+  }
+  set selected(on) {
+    this._selected = !!on;
+  }
+}
 class FakeSelect extends FakeControl {
   constructor() {
     super("select");
+  }
+  get options() {
+    return this._descendants().filter((el) => el instanceof FakeOption);
   }
 }
 class FakeButton extends FakeControl {
@@ -754,7 +780,7 @@ class FakeTableCell extends FakeHTMLElement {
   }
 }
 
-const KINDS = { a: FakeAnchor, input: FakeInput, textarea: FakeTextArea, select: FakeSelect, button: FakeButton, dialog: FakeDialog, form: FakeForm, template: FakeTemplate, tr: FakeTableRow, td: FakeTableCell, th: FakeTableCell };
+const KINDS = { a: FakeAnchor, input: FakeInput, textarea: FakeTextArea, select: FakeSelect, option: FakeOption, button: FakeButton, dialog: FakeDialog, form: FakeForm, template: FakeTemplate, tr: FakeTableRow, td: FakeTableCell, th: FakeTableCell };
 
 /** @param {string} tag */
 function make(tag) {
