@@ -675,6 +675,7 @@ const REQUIRED: &[&str] = &[
     "origin-places",
     "keep-restore",
     "keep-shell",
+    "changed-own-form",
 ];
 
 #[test]
