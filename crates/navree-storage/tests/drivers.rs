@@ -386,7 +386,7 @@ async fn a_disk_driver_that_asks_for_storage_fails_the_boot_naming_the_cycle() {
 
 #[tokio::test]
 async fn an_unregistered_disk_driver_fails_the_boot_naming_m_disk_driver() {
-    let unregistered = "storage.disks.uploads.driver is `godown`, but no module registers a disk driver under that name with m.disk_driver (known: local, memory, s3, gcs, azure, sanduk)";
+    let unregistered = "storage.disks.uploads.driver does not name a built-in disk driver or one a module registers with m.disk_driver (known: local, memory, s3, gcs, azure, sanduk)";
     let sources = || uploads(json!({"driver": "godown"}));
     let error = boot_error(
         Navree::app()

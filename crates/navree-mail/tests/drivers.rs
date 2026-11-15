@@ -264,7 +264,7 @@ async fn an_unregistered_or_doubly_registered_mail_transport_fails_the_boot_nami
     // A name registered as a mail transport in the process (by a module of
     // another app), which no module of this app registers.
     register_in("mail.transport", "chitthi_dak").unwrap();
-    let unregistered = "mail.transport is `chitthi_dak`, but no module registers a mail transport under that name with m.mail_transport (known: log, array, smtp, smtps, ses, mailgun, postmark, resend, failover)";
+    let unregistered = "mail.transport does not name a built-in mail transport or one a module registers with m.mail_transport (known: log, array, smtp, smtps, ses, mailgun, postmark, resend, failover)";
     let sources = || mail(json!({"transport": "chitthi_dak"}));
     let add = |app: AppBuilder| app.module(views()).module(MailModule::from_config());
     let text = boot(sources(), add).await;
@@ -278,7 +278,7 @@ async fn an_unregistered_or_doubly_registered_mail_transport_fails_the_boot_nami
     let sources = || mail(json!({"transport": "sanduk_tijori"}));
     let text = boot(sources(), add).await;
     assert!(text.contains("unknown mail transport (expected"), "{text}");
-    assert!(!text.contains("but no module registers"), "{text}");
+    assert!(!text.contains("or one a module registers"), "{text}");
     let text = check_text(sources(), add).await;
     assert!(text.contains("unknown mail transport (expected"), "{text}");
 

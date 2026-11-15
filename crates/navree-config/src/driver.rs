@@ -841,7 +841,7 @@ pub async fn build_driver<X: ?Sized + Send + Sync + 'static>(
         .find(|factory| factory.value.slot == slot.key() && factory.value.name == name);
     let Some(found) = found else {
         let drivers = registered(&app);
-        return Err(unregistered(slot, key, name.as_str(), &drivers).into());
+        return Err(unregistered(slot, key, &drivers).into());
     };
     let mut ctx = DriverContext::new(&app, name, settings_key, instance).await;
     ctx.held = settings;
@@ -1053,16 +1053,12 @@ fn known(slot: &DriverSlot, drivers: &[RegisteredDriver]) -> String {
     known_names(slot, drivers).join(", ")
 }
 
-/// `{key}` names `{name}`, which no module registered for `slot`.
-pub(crate) fn unregistered(
-    slot: &DriverSlot,
-    key: &str,
-    name: &str,
-    drivers: &[RegisteredDriver],
-) -> String {
+/// `{key}` names a driver that is neither built in nor registered for
+/// `slot`. The value is not repeated: a configuration error never says one
+/// back.
+pub(crate) fn unregistered(slot: &DriverSlot, key: &str, drivers: &[RegisteredDriver]) -> String {
     format!(
-        "{key} is `{name}`, but no module registers {} {} under that name with {} (known: {})",
-        article(slot.what()),
+        "{key} does not name a built-in {} or one a module registers with {} (known: {})",
         slot.what(),
         slot.register(),
         known(slot, drivers)
@@ -1239,7 +1235,7 @@ pub(crate) fn check_names(
                 && !slot.built_in().contains(&name.as_str())
                 && !is_registered(slot, &name, drivers)
             {
-                let message = unregistered(slot, &key, &name, drivers);
+                let message = unregistered(slot, &key, drivers);
                 report.errors.push(ConfigError::Driver { key, message });
             }
         }

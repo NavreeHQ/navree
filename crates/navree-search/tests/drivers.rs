@@ -197,10 +197,13 @@ async fn config_check_reads_the_search_engine_as_the_boot_does() {
     .await;
     assert!(text.contains("config:check: ok ("), "{text}");
 
-    // Not registered: both name `kosh`, read as the boot reads it.
-    let unregistered = "search.engine is `kosh`, but no module registers a search engine under that name with m.search_engine (known: postgres, database, meilisearch, typesense, tantivy, memory)";
+    // Not registered: both refuse it, read as the boot reads it (trimmed,
+    // in lower case), and neither says the value back.
+    let unregistered = "search.engine does not name a built-in search engine or one a module registers with m.search_engine (known: postgres, database, meilisearch, typesense, tantivy, memory)";
     let error = boot_error(" Kosh ").await;
     assert!(error.contains(unregistered), "{error}");
+    assert!(!error.to_lowercase().contains("kosh"), "{error}");
     let text = check_text(sources(), |app| app.module(SearchModule::from_config())).await;
     assert!(text.contains(&format!("error    {unregistered}")), "{text}");
+    assert!(!text.to_lowercase().contains("kosh"), "{text}");
 }

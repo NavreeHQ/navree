@@ -360,14 +360,17 @@ async fn config_check_fails_on_an_unregistered_driver_as_the_boot_does() {
     let text = check_text(sources(), |app| app.module(VaultModule).module(ChestModule)).await;
     assert!(text.contains("config:check: ok ("), "{text}");
 
-    // A name no module registers.
-    let unregistered = "vault.kind is `tijori`, but no module registers a vault kind under that name with m.vault_kind (known: memory, chest)";
+    // A name no module registers: the key and the names known, never the
+    // value.
+    let unregistered = "vault.kind does not name a built-in vault kind or one a module registers with m.vault_kind (known: memory, chest)";
     let sources = || vault(json!({"kind": "tijori"}));
     let add = |app: AppBuilder| app.module(VaultModule).module(ChestModule);
     let text = boot(sources(), add).await;
     assert!(text.contains(unregistered), "{text}");
+    assert!(!text.contains("tijori"), "{text}");
     let text = check_text(sources(), add).await;
     assert!(text.contains(&format!("error    {unregistered}")), "{text}");
+    assert!(!text.contains("tijori"), "{text}");
 
     // One name registered twice, although it is not the selected one.
     let twice = "vault kind `chest` is registered by both `ChestModule` and `SecondChestModule`; register it once";
@@ -396,7 +399,7 @@ async fn config_check_fails_on_an_unregistered_driver_as_the_boot_does() {
     let add = |app: AppBuilder| app.module(VaultModule).module(ChestModule);
     let text = boot(sources(), add).await;
     assert!(text.contains(&selector), "{text}");
-    assert!(!text.contains("but no module registers"), "{text}");
+    assert!(!text.contains("or one a module registers"), "{text}");
     let text = check_text(sources(), add).await;
     assert_eq!(
         text.lines()
@@ -406,7 +409,7 @@ async fn config_check_fails_on_an_unregistered_driver_as_the_boot_does() {
         "{text}"
     );
     assert!(text.contains(&selector), "{text}");
-    assert!(!text.contains("but no module registers"), "{text}");
+    assert!(!text.contains("or one a module registers"), "{text}");
 
     // A module given its options in code does not read the selector.
     let text = check_text(vault(json!({"kind": "tijori"})), |app| {
@@ -414,7 +417,7 @@ async fn config_check_fails_on_an_unregistered_driver_as_the_boot_does() {
             .module(ChestModule)
     })
     .await;
-    assert!(!text.contains("but no module registers"), "{text}");
+    assert!(!text.contains("or one a module registers"), "{text}");
 
     // A table of tables: each table names its driver, or is named after it.
     let sources = vault(json!({
@@ -428,7 +431,7 @@ async fn config_check_fails_on_an_unregistered_driver_as_the_boot_does() {
     })
     .await;
     assert!(
-        text.contains("error    vault.boxes.almari.driver is `tijori`, but no module registers a vault box under that name with m.vault_box (known: memory, chest)"),
+        text.contains("error    vault.boxes.almari.driver does not name a built-in vault box or one a module registers with m.vault_box (known: memory, chest)"),
         "{text}"
     );
     assert!(!text.contains("vault.boxes.chest"), "{text}");

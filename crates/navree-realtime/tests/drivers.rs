@@ -212,7 +212,7 @@ async fn an_unregistered_backplane_fails_the_boot_naming_m_backplane() {
         .expect_err("no backplane named chithi");
     let message = error.to_string();
     assert!(
-        message.contains("realtime.backplane is `chithi`, but no module registers a backplane under that name with m.backplane (known: none, redis, kabootar)"),
+        message.contains("realtime.backplane does not name a built-in backplane or one a module registers with m.backplane (known: none, redis, kabootar)"),
         "{message}"
     );
 }
