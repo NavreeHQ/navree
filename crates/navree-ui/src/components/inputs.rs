@@ -695,6 +695,9 @@ pub struct Field {
     help: Option<Node>,
     error: Option<String>,
     control: Node,
+    /// Whether the label carries an id of its own (`{id}-label`): only a form field drawn by a
+    /// control asks for it.
+    label_id: bool,
 }
 
 impl Field {
@@ -708,7 +711,16 @@ impl Field {
             help: None,
             error: None,
             control: Node::Empty,
+            label_id: false,
         }
+    }
+
+    /// Gives the label an id of its own, the field's id and `-label`, for a control whose parts
+    /// that are not inputs are labelled by it. Only a form field drawn by a control asks.
+    #[doc(hidden)]
+    pub fn label_with_id(mut self) -> Field {
+        self.label_id = true;
+        self
     }
 
     /// Sets the help below the control.
@@ -751,9 +763,11 @@ impl Field {
         };
         let mut control = self.control;
         tie_control(&mut control, &self.id, self.error.is_some(), described);
+        let label_id = self.label_id.then(|| format!("{}-label", self.id));
         let label = el("label")
             .slot("label")
             .attr("for", self.id)
+            .attr_opt("id", label_id)
             .child(self.label);
         let label = if self.required {
             label.child(
