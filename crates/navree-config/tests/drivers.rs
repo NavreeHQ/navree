@@ -535,10 +535,7 @@ async fn a_factory_that_asks_for_the_service_it_is_built_for_fails_the_boot_nami
         .await
         .expect("a kept handle does not wait")
         .unwrap();
-    assert_eq!(
-        booted.0.as_deref().map(String::as_str),
-        Some("pehredar")
-    );
+    assert_eq!(booted.0.as_deref().map(String::as_str), Some("pehredar"));
     drop(app);
 }
 

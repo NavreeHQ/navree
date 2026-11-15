@@ -1690,12 +1690,16 @@ fn before_unit_tests(text: &str) -> &str {
 fn only_a_test_module_ends_the_part_of_a_file_that_is_read() {
     let file = "fn a() {}\n#[cfg(test)]\nuse std::fmt;\nfn b() {}\n\n#[cfg(test)]\nmod tests {\n    fn c() {}\n}\n";
     let read = before_unit_tests(file);
-    assert!(read.contains("fn b()") && !read.contains("fn c()"), "{read}");
+    assert!(
+        read.contains("fn b()") && !read.contains("fn c()"),
+        "{read}"
+    );
     assert_eq!(before_unit_tests("fn a() {}\n"), "fn a() {}\n");
     let one_line = "fn a() {}\n#[cfg(test)] mod tests { fn c() {} }\n";
     assert_eq!(before_unit_tests(one_line), "fn a() {}\n");
     // An attribute or a comment between the mark and the module hides neither.
-    let spaced = "fn a() {}\n#[cfg(test)]\n#[allow(dead_code)]\n// stand-ins\npub(crate) mod tests {}\n";
+    let spaced =
+        "fn a() {}\n#[cfg(test)]\n#[allow(dead_code)]\n// stand-ins\npub(crate) mod tests {}\n";
     assert_eq!(before_unit_tests(spaced), "fn a() {}\n");
 }
 
