@@ -586,8 +586,9 @@ const HIERARCHY: &[Rule] = &[
     // The system app (e2e/): one binary on the `navree` facade that wires
     // every package for the Docker system tests.
     rule("system-app", 9, &["navree"]),
-    // The toolkit's proof pages: one binary on the `navree` facade.
-    rule("ui-proof", 9, &["navree"]),
+    // The toolkit's proof pages: one binary on the `navree` facade, and on the worked example of a
+    // plugin's own UI components, whose map and field its extensions page draws.
+    rule("ui-proof", 9, &["navree", "navree-plugin-geo"]),
     rule("ui-table-proof", 9, &["navree"]),
     // The worked example of a plugin's own UI components (plugins/geo): one crate on the facade.
     rule("navree-plugin-geo", 9, &["navree"]),

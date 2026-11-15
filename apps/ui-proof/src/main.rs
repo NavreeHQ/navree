@@ -33,6 +33,7 @@
 //! | `/charts/grids` | the calendar and matrix heat maps and the scatter plot in every state |
 //! | `/app-blocks` | the app's own stylesheet and typeface, figure tiles, an info tip, chart skeletons, a breathing guide, a dock, a day pager and a view switcher |
 //! | `/islands` | a part of the page drawn in the browser by a script of the app's own, through a morph and away |
+//! | `/extensions` | components of the app's own and of a plugin: mounting, new props and leaving, owned bodies and the seal, calls to the app's routes, a script that asks for another site's file, a sheet scoped to its components, pages that start clean, an inline editor with a control of a plugin's own, and the plugin's map |
 //! | `/parts` | the small parts of the base components, the colour picker, an avatar group, a trace, a questionnaire, a select with flags, flags by pointer and a sparkline in each row |
 //! | `/site` | a public website of marketing blocks: home, pricing, privacy, contact, sitemap and robots |
 //! | `/widgets` | a home-screen widget builder: a sortable grid of tiles, saved as they move, and the widget drawn as a PNG on the server |
@@ -60,6 +61,7 @@ mod dates;
 mod deal_form;
 mod deals;
 mod display;
+mod extensions;
 mod flow;
 mod gallery;
 mod grids;
@@ -167,12 +169,19 @@ impl Module for ProofModule {
             .controller::<grids::GridPages>()
             .controller::<app_blocks::AppBlockPages>()
             .controller::<islands::IslandPages>()
+            .controller::<extensions::ExtensionPages>()
             .controller::<compare::ComparePages>()
             .controller::<parts::PartsPages>()
             .controller::<site::SitePages>()
             .controller::<widgets::WidgetPages>();
         // The script the islands page draws its island with, served by the toolkit.
         m.contribute(islands::TALLY);
+        // The components of the extensions page: a pad with a script and a sheet, a component whose
+        // script asks for another site's file, and one of a sheet only, served by the toolkit under
+        // the namespace `app`.
+        m.contribute(extensions::PAD);
+        m.contribute(extensions::OUTSIDE);
+        m.contribute(extensions::STYLED);
         // The app's own stylesheet and typeface, served by the toolkit.
         m.contribute(app_blocks::BRAND);
         m.contribute(app_blocks::FONT);
@@ -214,6 +223,12 @@ fn main() -> Result<(), BoxError> {
             "APP_HTTP__SERVER__MAX_CONNECTIONS_PER_IP".to_owned(),
             std::env::var("UI_PROOF_CONNECTIONS_PER_IP").unwrap_or_else(|_| "100000".to_owned()),
         ),
+        // The map plugin draws its tiles from this app's own route, so the page policy allows
+        // them with nothing allowed for any other site.
+        (
+            "APP_GEO__TILES".to_owned(),
+            "/proof/tiles/{z}/{x}/{y}".to_owned(),
+        ),
     ];
     let sources = ConfigSources::new().env_vars("APP_", settings);
     let app = Navree::app()
@@ -224,6 +239,7 @@ fn main() -> Result<(), BoxError> {
             // proof app must look like the release one.
             PagesOptions::default().debug(std::env::var_os("UI_PROOF_DEBUG").is_some()),
         ))
+        .module(navree_plugin_geo::GeoModule)
         .module(ProofModule);
     // A development build only (`--features logbook`), and then only when asked: it
     // records every request, which a speed measurement shouldn't pay for.

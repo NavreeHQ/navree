@@ -7,6 +7,8 @@ on:
     paths:
       - "crates/navree-ui/**"
       - "crates/navree-ui-macros/**"
+      - "crates/navree-ui-ext-macros/**"
+      - "plugins/**"
       - "apps/ui-proof/**"
       - "apps/store-demo/**"
       - "apps/inbox-demo/**"
