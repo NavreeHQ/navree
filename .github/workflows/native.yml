@@ -213,6 +213,7 @@ jobs:
       - name: The walk's own tests
         run: |
           python3 -I scripts/ui_test.py
+          python3 -I scripts/read_run_test.py
           bash scripts/walk_test.sh
 
       # The demo as a store ships it (not debuggable), signed with a key made here, to time a start on.
@@ -313,7 +314,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # `tests` is how many device tests a look runs on that device: the number in the run's `OK (N tests)`.
+          # `tests` is how many device tests end in a look on that device, skipped ones included: the number in the run's `OK (N tests)`.
           - device: phone
             profile: pixel_7
             tests: 48
@@ -423,23 +424,18 @@ jobs:
           adb="$ANDROID_HOME/platform-tools/adb"
           "$adb" install -r -t "$RUNNER_TEMP"/apks/navree-native/build/outputs/apk/androidTest/debug/*.apk
           status=0
-          # What a run of the device tests said, read: it passed, and it ran as many tests as this
-          # device is expected to (a test that stopped running, or an assumption that skipped one,
-          # changes the number).
+          # What a run of the device tests said, read from the statuses of its tests (`-r`), not from the line
+          # `OK (N tests)`, which counts a test that skipped on an assumption as run and so cannot see one: the
+          # run finished, no test failed, as many tests ended as this device is expected to end (`matrix.tests`),
+          # and the tests that skipped are the ones scripts/device-skips.txt lists for this look, no more and no fewer.
           read_run() {
-            local file=$1 what=$2 expected=$3 count
-            if ! grep -q '^OK (' "$file"; then
-              echo "::error title=$what::The device tests did not end with OK."
-              return 1
-            fi
+            local file=$1 what=$2 look=$3 expected=$4
+            sed -n '/^INSTRUMENTATION_RESULT/,$p' "$file" | head -200
             if [ -n "$expected" ]; then
-              count=$(sed -n 's/^OK (\([0-9]*\) tests\{0,1\}).*/\1/p' "$file" | head -1)
-              if [ "$count" != "$expected" ]; then
-                echo "::error title=$what::The device tests ran $count tests; this device is expected to run $expected."
-                return 1
-              fi
+              python3 -I packages/android/scripts/read_run.py "$file" --look "$look" --count "$expected" --skips packages/android/scripts/device-skips.txt
+            else
+              python3 -I packages/android/scripts/read_run.py "$file" --look "$look"
             fi
-            echo "$what: ${count:-?} tests"
           }
           # A tablet is pictured on its side and upright; a phone upright.
           orientations="portrait"
@@ -476,13 +472,13 @@ jobs:
             if ! "$adb" shell settings put global hidden_api_policy 1; then
               echo "::warning title=Language::The hidden API setting was not made ($name, $look)."
             fi
-            "$adb" shell am instrument -w -e class com.navree.client.LanguageTest -e look "$look" -e device "$name" \
-              com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/instrument-$name-$look-language.txt"
-            read_run "$RUNNER_TEMP/instrument-$name-$look-language.txt" "language $name $look" "" || status=1
+            "$adb" shell am instrument -r -w -e class com.navree.client.LanguageTest -e look "$look" -e device "$name" \
+              com.navree.client.test/androidx.test.runner.AndroidJUnitRunner > "$RUNNER_TEMP/instrument-$name-$look-language.txt"
+            read_run "$RUNNER_TEMP/instrument-$name-$look-language.txt" "language $name $look" "$look" "" || status=1
             echo "system configuration: $("$adb" shell am get-config | tr '\n' ' ' | cut -c1-300)"
-            "$adb" shell am instrument -w -e look "$look" -e device "$name" -e store http://10.0.2.2:8095 -e inbox http://10.0.2.2:8096 -e board http://10.0.2.2:8097 \
-              com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/instrument-$name-$look.txt"
-            read_run "$RUNNER_TEMP/instrument-$name-$look.txt" "device tests $name $look" "${{ matrix.tests }}" || status=1
+            "$adb" shell am instrument -r -w -e look "$look" -e device "$name" -e store http://10.0.2.2:8095 -e inbox http://10.0.2.2:8096 -e board http://10.0.2.2:8097 \
+              com.navree.client.test/androidx.test.runner.AndroidJUnitRunner > "$RUNNER_TEMP/instrument-$name-$look.txt"
+            read_run "$RUNNER_TEMP/instrument-$name-$look.txt" "device tests $name $look" "$look" "${{ matrix.tests }}" || status=1
           done
           done
           exit $status

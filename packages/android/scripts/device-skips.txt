@@ -1,0 +1,11 @@
+# The device tests that skip, and in which look, read by `read_run.py`: `<looks> <test> <reason>`. A `?` in front
+# of the test says it may skip or run. A test that skips and is not listed fails the job, and so does a test listed
+# here that no longer skips. The count `OK (N tests)` cannot see a skip; the statuses of the run can.
+
+all FolderScreensTest#readingListsFollowThePictures no folder of recorded answers is named in the run's arguments
+all LiveDemosTest#theStoresOrdersCanBeChosenWhereTheTableLetsThem the store demo's orders table sends no select
+dark,large LiveDemosTest#theBoardsFiltersNarrowTheBoardAndClearAgain walked in the light and right to left looks only
+dark,large LiveDemosTest#aCardMovesToAnotherLaneByItsHandle walked in the light and right to left looks only
+dark,large LiveDemosTest#aFormThatIsRefusedShowsWhatIsWrongAndTheFirstFieldTakesTheFocus walked in the light and right to left looks only
+dark,large LiveDemosTest#aFieldThatIsDoneWithLetsGoOfTheFocusWithoutTheSearchTakingIt walked in the light and right to left looks only
+all ?ScreensTest#aTabWalkThroughAFormStopsOnceAtEachPickedField the recorded form screen is shown as a web page, not a native screen
