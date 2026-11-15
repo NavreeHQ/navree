@@ -110,9 +110,9 @@ pub(crate) fn hash(bytes: &[u8]) -> String {
 pub(crate) fn ceiling(file: &str, length: usize, most: &Expr, what: Ceiling) -> TokenStream {
     let shown = quote!(#most).to_string();
     let message = match what {
-        Ceiling::Script => format!(
-            "extension_script!: {file} is {length} bytes, over its ceiling of {shown}"
-        ),
+        Ceiling::Script => {
+            format!("extension_script!: {file} is {length} bytes, over its ceiling of {shown}")
+        }
         Ceiling::Sheet => format!(
             "extension_sheet!: {file} is {length} bytes once scoped, over its ceiling of {shown}"
         ),

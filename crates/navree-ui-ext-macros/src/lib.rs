@@ -189,8 +189,7 @@ mod tests {
     const NOT_TAKEN: &str =
         "is not taken: a plugin's sheet styles its own components, and bundles what it needs";
     const OUTSIDE: &str = "can style outside the component: & appears once, outside :is/:where/:not/:has, and never before + or ~";
-    const URL_TEXT: &str =
-        "url(..) in a plugin's sheet is a data: URL; ship pictures as AppImage and pass their address";
+    const URL_TEXT: &str = "url(..) in a plugin's sheet is a data: URL; ship pictures as AppImage and pass their address";
     const PLAIN: &str = "the sheet does not parse the same once served; write it in plain CSS";
 
     fn scope(source: &str) -> Result<String, String> {
@@ -223,10 +222,7 @@ mod tests {
     }
 
     fn selector_refusal(line: u32, selector: &str) -> String {
-        at(
-            line,
-            &format!("the selector `{selector}` {OUTSIDE}"),
-        )
+        at(line, &format!("the selector `{selector}` {OUTSIDE}"))
     }
 
     fn global_refusal(line: u32, name: &str, form: &str) -> String {
@@ -329,13 +325,8 @@ mod tests {
         );
 
         // A sheet's ceiling is on the scoped bytes, and says so.
-        let tokens = file::ceiling(
-            "assets/map.css",
-            40_000,
-            &expr("32 * 1024"),
-            Ceiling::Sheet,
-        )
-        .to_string();
+        let tokens =
+            file::ceiling("assets/map.css", 40_000, &expr("32 * 1024"), Ceiling::Sheet).to_string();
         assert!(
             tokens.contains(
                 "extension_sheet!: assets/map.css is 40000 bytes once scoped, over its ceiling of 32 * 1024"
@@ -346,13 +337,7 @@ mod tests {
 
     #[test]
     fn a_brace_in_a_path_or_a_ceiling_is_written_twice_in_the_message() {
-        let tokens = file::ceiling(
-            "assets/{a}.js",
-            9,
-            &expr("{ 5 }"),
-            Ceiling::Script,
-        )
-        .to_string();
+        let tokens = file::ceiling("assets/{a}.js", 9, &expr("{ 5 }"), Ceiling::Script).to_string();
         assert!(tokens.contains("assets/{{a}}.js"), "{tokens}");
         assert!(tokens.contains("{{ 5 }}"), "{tokens}");
     }
@@ -413,7 +398,10 @@ mod tests {
         );
         assert!(script.contains("\"/crate/assets/map.js\""), "{script}");
         assert!(
-            script.contains(&format!("\"{}\"", file::hash(b"export const contract = 1;"))),
+            script.contains(&format!(
+                "\"{}\"",
+                file::hash(b"export const contract = 1;")
+            )),
             "{script}"
         );
         assert!(script.contains("::core::option::Option::None"), "{script}");
@@ -490,11 +478,7 @@ mod tests {
         // Tokens that were next to each other stay so: a unicode range is three tokens.
         assert_eq!(
             scope("@font-face{unicode-range:U+0025-00FF}").as_deref(),
-            Ok(format!(
-                "@font-face{{unicode-range:U+0025-00FF}}{}",
-                wrapped("")
-            )
-            .as_str())
+            Ok(format!("@font-face{{unicode-range:U+0025-00FF}}{}", wrapped("")).as_str())
         );
     }
 
@@ -631,7 +615,10 @@ mod tests {
             assert!(!output.contains(dropped), "{dropped} is in {output}");
         }
         // One wrapper, whose closing brace is the last character.
-        assert!(output.starts_with(":where([data-slot^=\"geo:\"]){"), "{output}");
+        assert!(
+            output.starts_with(":where([data-slot^=\"geo:\"]){"),
+            "{output}"
+        );
         assert!(output.ends_with('}'), "{output}");
         assert_eq!(output.matches(":where([data-slot").count(), 1, "{output}");
         // And it reads back as what was checked.
@@ -644,16 +631,16 @@ mod tests {
         // In an address, a string, a comment, a name's escape, a hash and a dropped declaration.
         let source = ".a{background:url(data:a}b);content:\"}\";x:y}\n.b\\7d {color:red}\n/* } */ .c{color:blue; *d:e}f{g:h} <!-- -->";
         let output = scope(source).expect("taken");
-        assert!(output.starts_with(":where([data-slot^=\"geo:\"]){"), "{output}");
+        assert!(
+            output.starts_with(":where([data-slot^=\"geo:\"]){"),
+            "{output}"
+        );
         assert!(output.ends_with('}'), "{output}");
         assert!(output.contains(".b\\}{color:red}"), "{output}");
         // Read as a browser reads it, the served sheet is the one wrapper and nothing after it.
         let again = sheet::rules(&output, FILE).expect("reads");
         assert_eq!(again.len(), 1, "{output}");
-        assert_eq!(
-            sheet::scoped(source, "geo", FILE).expect("checked"),
-            again
-        );
+        assert_eq!(sheet::scoped(source, "geo", FILE).expect("checked"), again);
     }
 
     // ------------------------------------------------------------------------- selectors
@@ -678,19 +665,13 @@ mod tests {
             );
         }
         // The same inside a rule: `&` is the rule's own selector there.
-        assert_eq!(
-            refused(".a{& .b &{}}"),
-            selector_refusal(1, "& .b &")
-        );
+        assert_eq!(refused(".a{& .b &{}}"), selector_refusal(1, "& .b &"));
         assert_eq!(
             refused(".a{.b:has(&){x:y}}"),
             selector_refusal(1, ".b:has(&)")
         );
         // One part of a list is enough, and the line is the part's.
-        assert_eq!(
-            refused(".a,\n:has(&){}"),
-            selector_refusal(2, ":has(&)")
-        );
+        assert_eq!(refused(".a,\n:has(&){}"), selector_refusal(2, ":has(&)"));
 
         // Context before `&` is allowed, because the subject is still `&` or inside it.
         for selector in [
@@ -733,10 +714,7 @@ mod tests {
             selector_refusal(1, "~ .b")
         );
         for selector in ["& > .x", ".x + .y", "&>.x", ".x ~ & .y"] {
-            assert!(
-                scope(&format!("{selector}{{}}")).is_ok(),
-                "{selector}"
-            );
+            assert!(scope(&format!("{selector}{{}}")).is_ok(), "{selector}");
         }
         assert!(scope(".a{ > .b{} }").is_ok());
         assert!(scope(".a{ .b + .c{} }").is_ok());
@@ -884,7 +862,11 @@ mod tests {
             ("@layer geo,geo--b;", "geo"),
             ("@layer base.geo--x{}", "base"),
         ] {
-            assert_eq!(refused(source), global_refusal(1, name, "geo--"), "{source}");
+            assert_eq!(
+                refused(source),
+                global_refusal(1, name, "geo--"),
+                "{source}"
+            );
         }
         // A name that is only the namespace and two dashes names nothing.
         assert_eq!(
@@ -1011,7 +993,11 @@ mod tests {
             (".a{view-transition-name:all}", "all", "--geo--"),
             (".a{anchor-name:var(--n)}", "var(--n)", "--geo--"),
             (".a{anchor-name:\"--geo--x\"}", "\"--geo--x\"", "--geo--"),
-            (".a{anchor-name:--geo--a --geo--b}", "--geo--a --geo--b", "--geo--"),
+            (
+                ".a{anchor-name:--geo--a --geo--b}",
+                "--geo--a --geo--b",
+                "--geo--",
+            ),
             (".a{anchor-name:--GEO--x}", "--GEO--x", "--geo--"),
             (".a{anchor-name:--geo--}", "--geo--", "--geo--"),
             (".a{anchor-name:--other--x}", "--other--x", "--geo--"),
@@ -1022,11 +1008,7 @@ mod tests {
             (".a{scroll-timeline:x}", "x", "--geo--"),
             (".a{view-timeline:--geo--v, --w x}", "--w x", "--geo--"),
         ] {
-            assert_eq!(
-                refused(source),
-                global_refusal(1, name, form),
-                "{source}"
-            );
+            assert_eq!(refused(source), global_refusal(1, name, form), "{source}");
         }
         // They are checked in a nested rule, a group and a custom property's neighbours alike.
         assert_eq!(
@@ -1053,12 +1035,19 @@ mod tests {
             ("@font-face{font-family:Open Sans}", "Open Sans"),
             ("@font-face{font-family:\"Inter\"}", "Inter"),
             ("@font-face{font-family:var(--f)}", "var(--f)"),
-            ("@font-face{font-family:\"geo--a\", \"geo--b\"}", "\"geo--a\", \"geo--b\""),
+            (
+                "@font-face{font-family:\"geo--a\", \"geo--b\"}",
+                "\"geo--a\", \"geo--b\"",
+            ),
             ("@font-face{font-family:geo--}", "geo--"),
             ("@font-face{font-family:Geo--x}", "Geo--x"),
             ("@font-face{FONT-FAMILY:x}", "x"),
         ] {
-            assert_eq!(refused(source), global_refusal(1, name, "geo--"), "{source}");
+            assert_eq!(
+                refused(source),
+                global_refusal(1, name, "geo--"),
+                "{source}"
+            );
         }
     }
 
@@ -1222,7 +1211,10 @@ mod tests {
 -->"#;
         let output = scope(source).expect("taken");
         // Exactly one wrapper, whose closing brace is the last character.
-        assert!(output.starts_with(":where([data-slot^=\"geo:\"]){"), "{output}");
+        assert!(
+            output.starts_with(":where([data-slot^=\"geo:\"]){"),
+            "{output}"
+        );
         assert!(output.ends_with('}'), "{output}");
         assert_eq!(output.matches(":where([data-slot").count(), 1, "{output}");
         assert!(!output.contains("*zoom") && !output.contains("<!--") && !output.contains("-->"));

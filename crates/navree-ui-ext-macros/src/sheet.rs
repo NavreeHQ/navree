@@ -86,7 +86,10 @@ enum Kind {
     /// The word after an `@`, unescaped.
     AtKeyword(String),
     /// A `#` and a name; `id` when the name is an identifier.
-    Hash { name: String, id: bool },
+    Hash {
+        name: String,
+        id: bool,
+    },
     /// A string, unescaped.
     Str(String),
     /// An address written as `url(` and no quote, unescaped.
@@ -934,7 +937,10 @@ impl Scoper<'_> {
     fn decl(&self, decl: &Decl) -> Result<(), Fail> {
         walk(&decl.value, false)?;
         match decl.name.to_ascii_lowercase().as_str() {
-            "anchor-name" | "position-anchor" | "view-transition-name" | "scroll-timeline-name"
+            "anchor-name"
+            | "position-anchor"
+            | "view-transition-name"
+            | "scroll-timeline-name"
             | "view-timeline-name" => self.global_values(decl, false, false),
             "timeline-scope" | "anchor-scope" => self.global_values(decl, true, false),
             // The shorthands that set a name and then more.
@@ -1007,21 +1013,15 @@ impl Scoper<'_> {
                 },
             ] => self.global(name, false, meta.line)?,
             _ => {
-                return Err(Fail::NotPlain {
-                    line: at.meta.line,
-                });
+                return Err(Fail::NotPlain { line: at.meta.line });
             }
         }
         let Some(Body::Rules(frames)) = &at.body else {
-            return Err(Fail::NotPlain {
-                line: at.meta.line,
-            });
+            return Err(Fail::NotPlain { line: at.meta.line });
         };
         for frame in frames {
             let Rule::Style(frame) = frame else {
-                return Err(Fail::NotPlain {
-                    line: at.meta.line,
-                });
+                return Err(Fail::NotPlain { line: at.meta.line });
             };
             if !is_keyframe_selector(&frame.prelude) {
                 return Err(Fail::NotPlain {
@@ -1044,9 +1044,7 @@ impl Scoper<'_> {
                 },
             ] => self.global(name, true, meta.line)?,
             _ => {
-                return Err(Fail::NotPlain {
-                    line: at.meta.line,
-                });
+                return Err(Fail::NotPlain { line: at.meta.line });
             }
         }
         self.descriptors(at)
@@ -1063,9 +1061,7 @@ impl Scoper<'_> {
                 },
             ] => self.global(name, false, meta.line)?,
             _ => {
-                return Err(Fail::NotPlain {
-                    line: at.meta.line,
-                });
+                return Err(Fail::NotPlain { line: at.meta.line });
             }
         }
         self.descriptors(at)
@@ -1074,9 +1070,7 @@ impl Scoper<'_> {
     /// A `@font-face` rule: no prelude, and each family it names under this namespace.
     fn font_face(&self, at: &At) -> Result<(), Fail> {
         if !trimmed(&at.prelude).is_empty() {
-            return Err(Fail::NotPlain {
-                line: at.meta.line,
-            });
+            return Err(Fail::NotPlain { line: at.meta.line });
         }
         self.descriptors(at)?;
         let Some(Body::Members(members)) = &at.body else {
@@ -1132,9 +1126,7 @@ impl Scoper<'_> {
     fn descriptors(&self, at: &At) -> Result<(), Fail> {
         match &at.body {
             Some(Body::Members(members)) => self.declarations(members),
-            _ => Err(Fail::NotPlain {
-                line: at.meta.line,
-            }),
+            _ => Err(Fail::NotPlain { line: at.meta.line }),
         }
     }
 
@@ -1157,9 +1149,7 @@ impl Scoper<'_> {
         let tokens = trimmed(&at.prelude);
         let names = split_commas(tokens);
         if tokens.is_empty() || (!statement && names.len() > 1) {
-            return Err(Fail::NotPlain {
-                line: at.meta.line,
-            });
+            return Err(Fail::NotPlain { line: at.meta.line });
         }
         for name in names {
             self.layer_name(trimmed(name), at.meta.line)?;
@@ -1330,9 +1320,7 @@ fn is_data(address: &str) -> bool {
 fn reads_an_address(tokens: &[Tok]) -> bool {
     tokens.iter().any(|token| match &token.kind {
         Kind::Ident(word) => word.eq_ignore_ascii_case("url"),
-        Kind::Function(name, inner) => {
-            name.eq_ignore_ascii_case("type") || reads_an_address(inner)
-        }
+        Kind::Function(name, inner) => name.eq_ignore_ascii_case("type") || reads_an_address(inner),
         Kind::Paren(inner) | Kind::Square(inner) | Kind::Curly(inner) => reads_an_address(inner),
         _ => false,
     })
