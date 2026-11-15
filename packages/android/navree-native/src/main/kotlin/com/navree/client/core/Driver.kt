@@ -149,8 +149,16 @@ class Driver(private val engine: Engine) {
     /**
      * What the core keeps for a launch after the system ended the app, as
      * JSON text to store as it is, or null when there is nothing to keep.
+     * A snapshot that says `person_unknown` (the app's shell has not yet named
+     * anybody in this launch, so it holds nothing of a person) is nothing to
+     * keep: the one already stored stays. A core that does not send the field
+     * sends snapshots that are always kept.
      */
-    fun snapshot(): String? = query(part("snapshot"))?.toString()
+    fun snapshot(): String? {
+        val snapshot = query(part("snapshot")) ?: return null
+        val unknown = ((snapshot as? JsonObject)?.get("person_unknown") as? JsonPrimitive)?.contentOrNull == "true"
+        return if (unknown) null else snapshot.toString()
+    }
 
     private fun readScreen(id: Long) {
         val view = query(

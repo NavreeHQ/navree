@@ -150,6 +150,14 @@ class DriverTest {
     }
 
     @Test
+    fun a_snapshot_taken_before_the_shell_named_anybody_is_not_kept() {
+        val unknown = Driver(Scripted(ArrayDeque(), mapOf("snapshot" to """{"version":1,"screens":[],"person_unknown":true}""")))
+        assertNull("the stored snapshot stays", unknown.snapshot())
+        val known = Driver(Scripted(ArrayDeque(), mapOf("snapshot" to """{"version":1,"screens":[],"person_unknown":false}""")))
+        assertEquals("""{"version":1,"screens":[],"person_unknown":false}""", known.snapshot())
+    }
+
+    @Test
     fun the_snapshot_is_handed_over_as_the_core_wrote_it() {
         val driver = Driver(Scripted(ArrayDeque(), mapOf("snapshot" to """{"version":1,"screens":[]}""")))
         assertEquals("""{"version":1,"screens":[]}""", driver.snapshot())
