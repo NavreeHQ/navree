@@ -694,6 +694,8 @@ function failed(el, status) {
   // A lazy region is asked for once; with Retry it can be asked again, but a later swap doesn't.
   // The mark stays for whatever draws the failure and wasn't there yet to hear the event.
   el.removeAttribute("data-ui-lazy");
+  // Nothing more is on its way: a region that says it failed is not one to wait for.
+  el.removeAttribute("aria-busy");
   el.setAttribute("data-ui-failed", String(status));
   el.dispatchEvent(new CustomEvent("ui:region-error", { bubbles: true, detail: { status } }));
 }
