@@ -9,7 +9,8 @@
 //!   fresh one. A build the core has not seen empties what is kept.
 //! - A write makes every other screen out of date; each is fetched again when
 //!   it comes to the front. So does a write whose answer failed or was too
-//!   large to read: the server may have written before it did.
+//!   large to read: the server may have written before it did. A write that
+//!   never left the device (no network) is no write.
 //! - What can't be read is never a crash: the web view for a page, a fresh
 //!   fetch for a change to one.
 
@@ -2204,6 +2205,8 @@ impl Core {
         let Some(asked) = self.inner.pending.remove(&response.request) else {
             return;
         };
+        self.inner.never_left =
+            self.inner.synthetic || response.error == Some(TransportError::Offline);
         let response = self.same_session(&asked, response);
         let response = self.keeping(&asked, response);
         let Some(response) = self.follow(&asked, response) else {
@@ -2838,21 +2841,40 @@ mod tests {
 
     /// An answer to a write that failed, or that is larger than any answer
     /// may be, still counts as a write for what is kept and for the other
-    /// screens: the server may have written before it failed.
+    /// screens: the server may have written before it failed. A write that
+    /// never left the device (no network) does not.
     #[test]
-    fn a_write_answered_with_a_failure_still_counts_as_a_write() {
+    fn a_write_answered_with_a_failure_counts_as_a_write_unless_it_never_left_the_device() {
         let page = r#"{"navree":1,"build":"b1","vocab":0,"screen":{"title":"Order","body":{"t":"form","id":"note","method":"post","action":"/orders/1/note","children":[{"t":"field","id":"text","name":"text","input":{"t":"text"}},{"t":"button","label":"Save","action":{"t":"submit"}}]}}}"#;
         let too_large = format!("{page}{}", " ".repeat(navree_native::MAX_BODY));
         let failures = [
             (
                 "no network",
+                false,
                 Response {
                     error: Some(TransportError::Offline),
                     ..Response::default()
                 },
             ),
             (
+                "a timeout after the request was sent",
+                true,
+                Response {
+                    error: Some(TransportError::Timeout),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a connection that failed in some other way",
+                true,
+                Response {
+                    error: Some(TransportError::Other),
+                    ..Response::default()
+                },
+            ),
+            (
                 "a 503",
+                true,
                 Response {
                     status: 503,
                     content_type: Some("text/html".to_owned()),
@@ -2862,6 +2884,7 @@ mod tests {
             ),
             (
                 "an answer too large",
+                true,
                 Response {
                     status: 200,
                     content_type: Some(CONTENT_TYPE.to_owned()),
@@ -2870,7 +2893,7 @@ mod tests {
                 },
             ),
         ];
-        for (what, failure) in failures {
+        for (what, counts, failure) in failures {
             let mut core = started();
             core.send(Event::Response(Response {
                 request: 2,
@@ -2900,9 +2923,10 @@ mod tests {
                 })
                 .unwrap_or_else(|| panic!("{what}: the form is sent: {sent:?}"));
             core.send(Event::Response(Response { request, ..failure }));
-            assert!(
+            assert_eq!(
                 core.inner.epoch > epoch,
-                "{what}: it was not counted as a write"
+                counts,
+                "{what}: counted as a write, or not"
             );
         }
     }
