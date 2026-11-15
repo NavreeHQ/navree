@@ -357,7 +357,8 @@ public sealed partial class ChartView : KindControl
                 canvas.Shapes.Put(Ink.Rule(along, frame.Y0, along, frame.Y1, palette.Divider), 0, 0);
                 if (!small)
                 {
-                    canvas.Text(canvas.Caption(MarkWords(mark, style)), along, frame.Y1 + 4, Across.Middle, Down.Top);
+                    string words = MarkWords(mark, style);
+                    canvas.Text(canvas.Caption(words), AxisRules.LabelStart(along, Ink.Measure(words, LabelSize).Width, canvas.Width), frame.Y1 + 4, Across.Start, Down.Top);
                 }
             }
             else
@@ -738,7 +739,9 @@ public sealed partial class ChartView : KindControl
         int levels = chart.Levels.Count;
         int count = Math.Max(AxisRules.Count(chart), 1);
         double laneHeight = Guard.Length(canvas.Height - 24) / levels;
-        double x0 = 0;
+
+        // The names of the levels stand in a gutter of their own at the side, so no stage is drawn under one.
+        double x0 = Math.Min(chart.Levels.Select(level => Ink.Measure(level, 11, strong: true).Width).Max() + 10, canvas.Width * 0.4);
         double x1 = canvas.Width;
         double X(double place) => x0 + ((x1 - x0) * place / count);
         double Lane(int level) => laneHeight * (levels - 1 - level);
@@ -776,7 +779,8 @@ public sealed partial class ChartView : KindControl
         {
             if (at < chart.Labels.Count)
             {
-                canvas.Text(canvas.Caption(chart.Labels[at]), X(at), canvas.Height - 18, Across.Start, Down.Top);
+                double wide = Ink.Measure(chart.Labels[at], LabelSize).Width;
+                canvas.Text(canvas.Caption(chart.Labels[at]), AxisRules.LabelStart(X(at) + (wide / 2), wide, canvas.Width), canvas.Height - 18, Across.Start, Down.Top);
             }
         }
 

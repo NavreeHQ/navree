@@ -67,7 +67,7 @@ public sealed partial class GaugeView : KindControl
         StackPanel stack = new() { Spacing = 10 };
         PlotSurface plot = new()
         {
-            Height = diameter * GaugeRules.HeightShare,
+            Height = GaugeRules.Height(diameter, Ink.Measure("0", 11).Height),
             MaxWidth = diameter,
             Ideal = diameter,
             AccessName = name,
@@ -137,7 +137,7 @@ public sealed partial class GaugeView : KindControl
     private void PaintOpen(PlotCanvas canvas, double baseDiameter)
     {
         Palette palette = canvas.Palette;
-        double diameter = Math.Min(canvas.Width, canvas.Height / GaugeRules.HeightShare);
+        double diameter = GaugeRules.DiameterFor(canvas.Width, canvas.Height, Ink.Measure("0", 11).Height);
         double stroke = diameter * 0.085;
         double radius = (diameter / 2) - (stroke / 2);
         double cx = canvas.Width / 2;

@@ -298,6 +298,17 @@ public static class AxisRules
     public static int Count(Models.Chart chart) =>
         Math.Max(chart.Labels.Count, chart.Series.Count == 0 ? 0 : chart.Series.Max(series => series.Values.Count));
 
+    /// <summary>Where a label under a mark starts so it is centred on the mark and never stands past the surface: at the edge, a label stays whole and is no longer centred.</summary>
+    /// <param name="centre">The mark's place across.</param>
+    /// <param name="width">The label's width.</param>
+    /// <param name="room">The surface's width.</param>
+    /// <returns>Where the label starts.</returns>
+    public static double LabelStart(double centre, double width, double room)
+    {
+        double wide = Guard.Length(width);
+        return Math.Clamp(Guard.Finite(centre) - (wide / 2), 0, Math.Max(Guard.Length(room) - wide, 0));
+    }
+
     /// <summary>Where a value stands between two ends, 0 to 1; outside, at the nearer end.</summary>
     /// <param name="value">The value.</param>
     /// <param name="low">The lower end.</param>
