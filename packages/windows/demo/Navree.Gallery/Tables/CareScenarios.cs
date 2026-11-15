@@ -514,15 +514,15 @@ internal static class CareScenarios
             return;
         }
 
-        DataTableHeaderCell plan = table.HeaderRow!.Headers.First(h => table.Model!.Columns[h.ColumnIndex].Key == "plan");
-        (int X, int Y) from = Mouse.ScreenOf(window, plan, new Windows.Foundation.Point(30, plan.ActualHeight / 2));
+        DataTableHeaderCell city = table.HeaderRow!.Headers.First(h => table.Model!.Columns[h.ColumnIndex].Key == "city");
+        (int X, int Y) from = Mouse.ScreenOf(window, city, new Windows.Foundation.Point(30, city.ActualHeight / 2));
         (int X, int Y) edge = Mouse.ScreenOf(window, scroll, new Windows.Foundation.Point(scroll.ViewportWidth - 6, 10));
         string order() => string.Join(" ", table.Shown.Select(c => c.Column.Key));
-        Report.Line($"[care-edge-drag] the view is at {scroll.HorizontalOffset:0.#} of {scroll.ScrollableWidth:0.#}; columns {order()}; the Plan heading is at screen {from.X}, the edge at {edge.X}");
+        Report.Line($"[care-edge-drag] the view is at {scroll.HorizontalOffset:0.#} of {scroll.ScrollableWidth:0.#}; columns {order()}; the City heading is at screen {from.X}, the edge at {edge.X}");
         await Mouse.DragAndHoldAsync(from, edge, 900);
         await Task.Delay(500);
-        Report.Line($"[care-edge-drag] after holding the Plan heading near the end edge: the view is at {scroll.HorizontalOffset:0.#} of {scroll.ScrollableWidth:0.#}; columns {order()}");
-        await Handshake.StepAsync("care-edge-drag", "after a heading was held near the end edge of the view");
+        Report.Line($"[care-edge-drag] after holding the City heading near the end edge: the view is at {scroll.HorizontalOffset:0.#} of {scroll.ScrollableWidth:0.#}; columns {order()}");
+        await Handshake.StepAsync("care-edge-drag", "after the City heading was held near the end edge of the view");
     }
 
     // A row's menu from a right click, the menu key, Shift and F10, and the dots of the row: each opens the menu the row has, with its
