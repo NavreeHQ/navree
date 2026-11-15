@@ -41,8 +41,28 @@ public static class PagerRules
     /// <param name="day">The day's text.</param>
     /// <param name="culture">The culture.</param>
     /// <returns>The words, or the text itself when it is not a day.</returns>
-    public static string Words(string day, CultureInfo? culture = null) =>
-        Day(day) is DateOnly found ? found.ToString("D", culture ?? ClientCulture.Current) : day;
+    public static string Words(string day, CultureInfo? culture = null)
+    {
+        CultureInfo use = culture ?? ClientCulture.Current;
+        return Day(day) is DateOnly found ? found.ToString(LongPattern(use), use) : day;
+    }
+
+    /// <summary>
+    /// The culture's long date, except that a date written day first has no comma before its year ("Friday, 13 November 2026"; some
+    /// machines' data for English (India) put one there).
+    /// </summary>
+    /// <param name="culture">The culture.</param>
+    /// <returns>The pattern.</returns>
+    public static string LongPattern(CultureInfo culture)
+    {
+        string pattern = culture.DateTimeFormat.LongDatePattern;
+        string bare = pattern.Replace("dddd", string.Empty, StringComparison.Ordinal);
+        int dayAt = bare.IndexOf('d', StringComparison.Ordinal);
+        int monthAt = bare.IndexOf("MMMM", StringComparison.Ordinal);
+        return dayAt >= 0 && monthAt > dayAt
+            ? System.Text.RegularExpressions.Regex.Replace(pattern, @"MMMM,(\s*)y", "MMMM$1y")
+            : pattern;
+    }
 
     /// <summary>What the pager says of its day to a screen reader: its name and its date.</summary>
     /// <param name="pager">The pager.</param>
