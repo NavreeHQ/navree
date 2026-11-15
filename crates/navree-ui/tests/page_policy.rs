@@ -16,9 +16,9 @@ use navree_testing::{TestApp, TestAppBuilder, TestResponse};
 use navree_ui::app_files::IMAGE_CSP;
 use navree_ui::pages::region_answer;
 use navree_ui::{
-    AppImage, AppShell, Directive, ExtensionFile, IslandScript, LazyItem, LazyPage, Node,
-    PAGE_CSP, PagePolicy, PagePolicyOptions, PageSources, Reply, SafeHtml, Shell, Text,
-    UiExtension, UiModule, View, assets, el,
+    AppImage, AppShell, Directive, ExtensionFile, IslandScript, LazyItem, LazyPage, Node, PAGE_CSP,
+    PagePolicy, PagePolicyOptions, PageSources, Reply, SafeHtml, Shell, Text, UiExtension,
+    UiModule, View, assets, el,
 };
 use serde_json::json;
 
@@ -117,12 +117,10 @@ fn builder() -> TestAppBuilder {
 
 /// The same, with the tile host of the plugin `geo` allowed.
 fn with_tiles() -> TestAppBuilder {
-    builder()
-        .module(Geo)
-        .config(
-            "ui.policy.allow.geo.img_src",
-            json!(["https://tile.openstreetmap.org"]),
-        )
+    builder().module(Geo).config(
+        "ui.policy.allow.geo.img_src",
+        json!(["https://tile.openstreetmap.org"]),
+    )
 }
 
 /// The plugin that ships the map: its namespace is `geo`.
@@ -237,11 +235,7 @@ impl Controller for Pages {
             .public()
             .page(),
             RouteDef::on(Method::GET, "!/fragments/zones", || async {
-                region_answer(
-                    el("div")
-                        .id("zones")
-                        .child("Model Town and Sarabha Nagar"),
-                )
+                region_answer(el("div").id("zones").child("Model Town and Sarabha Nagar"))
             })
             .public(),
             RouteDef::on(Method::GET, "!/rows", || async {
@@ -255,10 +249,7 @@ impl Controller for Pages {
             .public()
             .page(),
             RouteDef::on(Method::GET, "!/own-policy", || async {
-                (
-                    [(CONTENT_SECURITY_POLICY, "default-src 'none'")],
-                    "no page",
-                )
+                ([(CONTENT_SECURITY_POLICY, "default-src 'none'")], "no page")
             })
             .public(),
             // A map of the plugin `geo`, a sign-in page that is fresh and one that is not, an
@@ -282,11 +273,15 @@ impl Controller for Pages {
             })
             .public()
             .page(),
-            RouteDef::on(Method::GET, "!/account-plain", |shell: AppShell| async move {
-                shell
-                    .page("Account")
-                    .body(el("p").child("Meera Sharma, Jalandhar"))
-            })
+            RouteDef::on(
+                Method::GET,
+                "!/account-plain",
+                |shell: AppShell| async move {
+                    shell
+                        .page("Account")
+                        .body(el("p").child("Meera Sharma, Jalandhar"))
+                },
+            )
             .public()
             .page(),
             // Pages that are not fresh and take a password or a code, one under a pattern, and
@@ -296,9 +291,13 @@ impl Controller for Pages {
             })
             .public()
             .page(),
-            RouteDef::on(Method::GET, "!/pin/{id}", |Path(id): Path<String>| async move {
-                View::new(format!("PIN {id}")).body(el("form").child(password("pin")))
-            })
+            RouteDef::on(
+                Method::GET,
+                "!/pin/{id}",
+                |Path(id): Path<String>| async move {
+                    View::new(format!("PIN {id}")).body(el("form").child(password("pin")))
+                },
+            )
             .public()
             .page(),
             RouteDef::on(Method::GET, "!/otp", || async {
@@ -314,9 +313,7 @@ impl Controller for Pages {
             .public()
             .page(),
             RouteDef::on(Method::GET, "!/pin-raw", || async {
-                let field = Node::Raw(SafeHtml::trusted(
-                    r#"<input type="password" name="pin">"#,
-                ));
+                let field = Node::Raw(SafeHtml::trusted(r#"<input type="password" name="pin">"#));
                 View::new("PIN").body(el("form").child(field))
             })
             .public()
@@ -345,7 +342,10 @@ fn sign_in(fresh: bool) -> View {
         el("form")
             .attr("method", "post")
             .attr("action", "/sign-in")
-            .child((password("password"), el("div").slot("geo:map").extension(&MAP))),
+            .child((
+                password("password"),
+                el("div").slot("geo:map").extension(&MAP),
+            )),
     );
     if fresh { page.fresh() } else { page }
 }
@@ -500,7 +500,12 @@ async fn a_response_with_its_own_policy_is_left_alone() {
     let app = with_tiles().module(LogoModule).build().await;
     // The picture keeps the policy that runs nothing, and a route that writes a policy of its
     // own keeps it, while the app's pages carry the composed one.
-    let logo = app.client().get(&MARK.url()).send().await.assert_status(200);
+    let logo = app
+        .client()
+        .get(&MARK.url())
+        .send()
+        .await
+        .assert_status(200);
     assert_eq!(logo.header("content-security-policy"), Some(IMAGE_CSP));
     assert_eq!(policy_of(&app, "/own-policy").await, "default-src 'none'");
     assert_eq!(policy_of(&app, "/deliveries").await, WITH_TILES);
@@ -514,14 +519,10 @@ async fn a_source_outside_the_grammar_fails_the_boot_naming_the_key() {
     let forms = "'self', data:, blob: or an https origin such as https://tile.openstreetmap.org";
 
     // A path, a key that is neither a namespace nor app, and more than 32 sources.
-    let error = boot_error(
-        builder()
-            .module(Geo)
-            .config(
-                "ui.policy.allow.geo.img_src",
-                json!(["https://tiles.example/a.png"]),
-            ),
-    )
+    let error = boot_error(builder().module(Geo).config(
+        "ui.policy.allow.geo.img_src",
+        json!(["https://tiles.example/a.png"]),
+    ))
     .await;
     assert!(
         error.contains(&format!(
@@ -531,18 +532,19 @@ async fn a_source_outside_the_grammar_fails_the_boot_naming_the_key() {
     );
     assert!(!error.contains("tiles.example/a.png"), "{error}");
 
-    let error = boot_error(
-        builder()
-            .module(Geo)
-            .config("ui.policy.allow.Geo.img_src", json!(["https://tiles.example"])),
-    )
+    let error = boot_error(builder().module(Geo).config(
+        "ui.policy.allow.Geo.img_src",
+        json!(["https://tiles.example"]),
+    ))
     .await;
     assert!(
         error.contains("ui.policy.allow.Geo: `Geo` is neither a namespace nor app"),
         "{error}"
     );
 
-    let many: Vec<String> = (0..33).map(|n| format!("https://t{n}.tiles.example")).collect();
+    let many: Vec<String> = (0..33)
+        .map(|n| format!("https://t{n}.tiles.example"))
+        .collect();
     let error = boot_error(
         builder()
             .module(Geo)
@@ -553,7 +555,9 @@ async fn a_source_outside_the_grammar_fails_the_boot_naming_the_key() {
         error.contains("ui.policy.allow.geo.img_src lists more than 32 sources"),
         "{error}"
     );
-    let few: Vec<String> = (0..32).map(|n| format!("https://t{n}.tiles.example")).collect();
+    let few: Vec<String> = (0..32)
+        .map(|n| format!("https://t{n}.tiles.example"))
+        .collect();
     builder()
         .module(Geo)
         .config("ui.policy.allow.geo.img_src", json!(few))
@@ -634,9 +638,10 @@ async fn localhost_is_refused_in_production_and_staging() {
     let capture = LogCapture::default();
     let _guard = capture.install();
     let local = || {
-        builder()
-            .module(Geo)
-            .config("ui.policy.allow.geo.img_src", json!(["http://localhost:8090"]))
+        builder().module(Geo).config(
+            "ui.policy.allow.geo.img_src",
+            json!(["http://localhost:8090"]),
+        )
     };
     for environment in ["production", "staging"] {
         let error = boot_error(local().config("app.env", environment)).await;
@@ -741,7 +746,11 @@ async fn the_boot_says_what_each_plugin_asked_for_and_what_the_app_allowed() {
         "WARN",
         "page policy: plugin `geo` asks for img-src https://tile.openstreetmap.org (map tiles), which the app does not allow; what needs it shows its fallback (allow it with ui.policy.allow.geo.img_src)"
     ));
-    assert!(!logged(&capture, "INFO", "every page but the fresh ones is served with"));
+    assert!(!logged(
+        &capture,
+        "INFO",
+        "every page but the fresh ones is served with"
+    ));
     app.shutdown().await.unwrap();
 
     // Asked and allowed: an info line for the ask, and one for the header the pages carry.
@@ -756,7 +765,11 @@ async fn the_boot_says_what_each_plugin_asked_for_and_what_the_app_allowed() {
         "INFO",
         &format!("page policy: every page but the fresh ones is served with: {WITH_TILES}")
     ));
-    assert!(!logged(&capture, "WARN", "which plugin `geo` does not ask for"));
+    assert!(!logged(
+        &capture,
+        "WARN",
+        "which plugin `geo` does not ask for"
+    ));
     app.shutdown().await.unwrap();
 
     // Allowed and not asked: a warning.
@@ -764,7 +777,10 @@ async fn the_boot_says_what_each_plugin_asked_for_and_what_the_app_allowed() {
         .module(Geo)
         .config(
             "ui.policy.allow.geo.img_src",
-            json!(["https://tile.openstreetmap.org", "https://cdn.ludhiana.example"]),
+            json!([
+                "https://tile.openstreetmap.org",
+                "https://cdn.ludhiana.example"
+            ]),
         )
         .build()
         .await;
@@ -782,7 +798,10 @@ async fn an_allowance_for_a_namespace_no_plugin_has_is_applied_and_warned() {
     let _guard = capture.install();
     let app = builder()
         .module(Geo)
-        .config("ui.policy.allow.maps.img_src", json!(["https://maps.example"]))
+        .config(
+            "ui.policy.allow.maps.img_src",
+            json!(["https://maps.example"]),
+        )
         .config(
             "ui.policy.allow.app.img_src",
             json!(["https://cdn.ludhiana.example"]),
@@ -799,7 +818,11 @@ async fn an_allowance_for_a_namespace_no_plugin_has_is_applied_and_warned() {
         "WARN",
         "page policy: ui.policy.allow.maps names no plugin of this app; its sources are allowed on every page all the same"
     ));
-    assert!(!logged(&capture, "WARN", "ui.policy.allow.app names no plugin"));
+    assert!(!logged(
+        &capture,
+        "WARN",
+        "ui.policy.allow.app names no plugin"
+    ));
     app.shutdown().await.unwrap();
 }
 
@@ -821,7 +844,10 @@ async fn page_policy_allows_answers_as_the_header_does() {
     assert!(policy.allows(Directive::ImgSrc, "https://a.b.tiles.example"));
     assert!(!policy.allows(Directive::ImgSrc, "https://tiles.example"));
     assert!(!policy.allows(Directive::ImgSrc, "https://atiles.example"));
-    assert!(policy.allows(Directive::ImgSrc, "https://tile.openstreetmap.org/15/1/2.png"));
+    assert!(policy.allows(
+        Directive::ImgSrc,
+        "https://tile.openstreetmap.org/15/1/2.png"
+    ));
     // A port the listing does not name is another origin; the scheme's own port is the same.
     assert!(!policy.allows(Directive::ImgSrc, "https://tile.openstreetmap.org:8443"));
     assert!(policy.allows(Directive::ImgSrc, "https://tile.openstreetmap.org:443"));
@@ -852,10 +878,15 @@ fn the_source_grammar_matches_the_shared_cases() {
         let &[key, source, verdict] = parts.as_slice() else {
             panic!("a case is a key, a source and a verdict, apart by tabs: {line:?}");
         };
-        let sources = ConfigSources::new().set(&format!("ui.policy.allow.app.{key}"), json!([source]));
+        let sources =
+            ConfigSources::new().set(&format!("ui.policy.allow.app.{key}"), json!([source]));
         let config = Config::load(&sources).expect("the configuration loads");
         let taken = config.typed::<PagePolicyOptions>().is_ok();
-        assert_eq!(taken, verdict == "accept", "{key} takes {source:?}: {verdict}");
+        assert_eq!(
+            taken,
+            verdict == "accept",
+            "{key} takes {source:?}: {verdict}"
+        );
         read += 1;
     }
     assert!(read >= 100, "{read} cases");
@@ -945,14 +976,21 @@ async fn in_an_app_without_extensions_a_fresh_page_is_written_and_navigated_as_b
     // No extension, no plugin island and nothing allowed: a page marked fresh is the page it
     // always was, byte for byte and header for header.
     let app = builder().build().await;
-    for (marked, unmarked) in [("/sign-in", "/sign-in-plain"), ("/account", "/account-plain")] {
+    for (marked, unmarked) in [
+        ("/sign-in", "/sign-in-plain"),
+        ("/account", "/account-plain"),
+    ] {
         let marked = page(&app, marked).await;
         let unmarked = page(&app, unmarked).await;
         assert_eq!(marked.text(), unmarked.text(), "the same bytes");
         assert_eq!(headers_of(&marked), headers_of(&unmarked));
         assert!(marked.header("x-navree-fresh").is_none());
         assert_eq!(marked.header("content-security-policy"), Some(PAGE_CSP));
-        assert!(!marked.text().contains("data-ui-fresh"), "{}", marked.text());
+        assert!(
+            !marked.text().contains("data-ui-fresh"),
+            "{}",
+            marked.text()
+        );
     }
     app.shutdown().await.unwrap();
 }
@@ -1039,13 +1077,22 @@ async fn a_plugins_island_script_turns_fresh_pages_on() {
     );
     assert_eq!(sign_in.header("x-navree-fresh"), Some("1"));
     assert_eq!(sign_in.header("content-security-policy"), Some(PAGE_CSP));
-    assert!(page(&app, "/sign-in-plain").await.header("x-navree-fresh").is_none());
+    assert!(
+        page(&app, "/sign-in-plain")
+            .await
+            .header("x-navree-fresh")
+            .is_none()
+    );
     app.shutdown().await.unwrap();
 
     // The app's own island script, with no namespace, as apps of today have: nothing changes.
     let app = builder().module(AppClock).build().await;
     let sign_in = page(&app, "/sign-in").await;
-    assert!(!sign_in.text().contains("data-ui-fresh"), "{}", sign_in.text());
+    assert!(
+        !sign_in.text().contains("data-ui-fresh"),
+        "{}",
+        sign_in.text()
+    );
     assert!(sign_in.header("x-navree-fresh").is_none());
     app.shutdown().await.unwrap();
 }
