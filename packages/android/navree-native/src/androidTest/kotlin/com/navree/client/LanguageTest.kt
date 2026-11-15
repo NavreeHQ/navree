@@ -32,9 +32,11 @@ class LanguageTest {
         Shots.rule = compose
     }
 
+    @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
     @Test
-    fun aDialogAndAMenuHaveTheLooksDirection() {
+    fun aDialogAMenuAndASheetHaveTheLooksDirection() {
         var menu by androidx.compose.runtime.mutableStateOf(false)
+        var sheet by androidx.compose.runtime.mutableStateOf(false)
         compose.setContent {
             MaterialTheme {
                 Shots.Looked {
@@ -42,6 +44,7 @@ class LanguageTest {
                         Text("Screen")
                         AlertDialog(onDismissRequest = {}, confirmButton = { TextButton({}) { Text("Yes") } }, dismissButton = { TextButton({}) { Text("No") } }, title = { Text("Question") })
                         DropdownMenu(expanded = menu, onDismissRequest = {}) { DropdownMenuItem(text = { Text("Item") }, onClick = {}) }
+                        if (sheet) androidx.compose.material3.ModalBottomSheet(onDismissRequest = {}) { Text("Sheet") }
                     }
                 }
             }
@@ -51,6 +54,10 @@ class LanguageTest {
         compose.runOnUiThread { menu = true }
         compose.waitForIdle()
         Shots.requireWindowsFollowTheScreen("a dialog and a menu")
+        compose.runOnUiThread { sheet = true }
+        compose.waitForIdle()
+        Thread.sleep(800)
+        Shots.requireWindowsFollowTheScreen("a dialog, a menu and a sheet")
         Shots.take("language-windows")
     }
 }

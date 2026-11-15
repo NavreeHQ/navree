@@ -88,21 +88,31 @@ object Shots {
 
     /**
      * The layout direction each window the test can see has, as the system
-     * resolved it: the screen's own, and every dialog's, menu's and sheet's.
+     * resolved it, with whether it is the activity's own window (the screen,
+     * which the right to left look lays out right to left by its composition)
+     * or one opened over it: a dialog, a menu, a picker, a sheet.
      */
-    fun windows(): List<Int> {
+    fun windows(): List<Pair<Boolean, Int>> {
         val provider = rule ?: return emptyList()
-        return provider.onAllNodes(isRoot()).fetchSemanticsNodes().map { node -> (node.root as? android.view.View)?.layoutDirection ?: -1 }
+        val decor = ((provider as? androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>)?.activity as? android.app.Activity)?.window?.decorView
+        return provider.onAllNodes(isRoot()).fetchSemanticsNodes().map { node ->
+            val view = node.root as? android.view.View
+            (view != null && view.rootView === decor) to (view?.layoutDirection ?: -1)
+        }
     }
 
-    /** What the look wants every window to have: right to left for the right to left look, left to right for the others. */
+    /** What the look wants every window opened over the screen to have: right to left for the right to left look, left to right for the others. */
     val wantedDirection: Int get() = if (look == "rtl") android.view.View.LAYOUT_DIRECTION_RTL else android.view.View.LAYOUT_DIRECTION_LTR
 
-    /** Fails when a window open now has another direction than the look's: everything opened over a screen has the screen's direction. */
+    /**
+     * Fails when a window opened over the screen has another direction than the
+     * look's, or when none is open: everything opened over a screen has the
+     * direction of the screen under it.
+     */
     fun requireWindowsFollowTheScreen(what: String) {
-        val found = windows()
-        if (found.isEmpty() || found.any { it != wantedDirection }) {
-            throw WindowDirectionError("$what: the windows have the directions $found, the look wants $wantedDirection")
+        val over = windows().filter { !it.first }.map { it.second }
+        if (over.isEmpty() || over.any { it != wantedDirection }) {
+            throw WindowDirectionError("$what: the windows opened over the screen have the directions $over, the look wants $wantedDirection")
         }
     }
 
@@ -118,7 +128,7 @@ object Shots {
             // As above: an extra.
         }
         try {
-            put("$device-$look-$name.windows.txt", "directions of the windows: ${windows()}; the look wants $wantedDirection\n")
+            put("$device-$look-$name.windows.txt", "windows (is it the activity's own, its direction): ${windows()}; over the screen the look wants $wantedDirection\n")
         } catch (_: Throwable) {
             // An extra, as above.
         }
