@@ -53,6 +53,7 @@ public sealed record Pairing(IReadOnlyList<int> Old, IReadOnlyList<int> Gone, IR
 public static class PageRules
 {
     private static readonly ConditionalWeakTable<Models.Node, byte[]> Digests = new();
+    private static readonly ConditionalWeakTable<Models.TableRow, byte[]> RowDigests = new();
 
     /// <summary>
     /// A short stamp of a node's written form: two nodes that write the same have the same stamp. The models are records whose lists compare by
@@ -88,6 +89,35 @@ public static class PageRules
         ArgumentNullException.ThrowIfNull(a);
         ArgumentNullException.ThrowIfNull(b);
         return ReferenceEquals(a, b) || (a.GetType() == b.GetType() && Digest(a).AsSpan().SequenceEqual(Digest(b)));
+    }
+
+    /// <summary>Whether two rows of a table are equal by value, all the way down: the cells, the actions, the detail, what is chosen and what is open.</summary>
+    /// <param name="a">One row.</param>
+    /// <param name="b">The other.</param>
+    /// <returns>True when they write the same.</returns>
+    public static bool SameRow(Models.TableRow a, Models.TableRow b)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(b);
+        return ReferenceEquals(a, b) || RowDigest(a).AsSpan().SequenceEqual(RowDigest(b));
+    }
+
+    private static byte[] RowDigest(Models.TableRow row)
+    {
+        if (RowDigests.TryGetValue(row, out byte[]? held))
+        {
+            return held;
+        }
+
+        ArrayBufferWriter<byte> buffer = new(512);
+        using (Utf8JsonWriter writer = new(buffer))
+        {
+            Models.WriteTableRow(writer, row);
+        }
+
+        byte[] stamp = SHA256.HashData(buffer.WrittenSpan);
+        RowDigests.AddOrUpdate(row, stamp);
+        return stamp;
     }
 
     /// <summary>The nodes inside a node, the table's row details included: every place a part that has an id can stand.</summary>

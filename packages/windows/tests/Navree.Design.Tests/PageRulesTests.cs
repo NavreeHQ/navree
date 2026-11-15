@@ -239,6 +239,20 @@ public sealed class PageRulesTests
         Assert.IsFalse(PageRules.Pair(Texts("a", "b"), Texts("a", "b")).Refused);
     }
 
+    [TestMethod]
+    public void A_row_of_a_table_is_the_same_when_it_writes_the_same_and_not_when_one_cell_changed()
+    {
+        const string Page = """
+            {"t":"table","id":"t","columns":[{"label":"A"}],"rows":[{"id":"r1","cells":[{"t":"text","value":"VALUE"}]},{"id":"r2","cells":[{"t":"text","value":"x"}]}]}
+            """;
+        Models.Table one = (Models.Table)Read(Page.Replace("VALUE", "Rs 5", StringComparison.Ordinal));
+        Models.Table again = (Models.Table)Read(Page.Replace("VALUE", "Rs 5", StringComparison.Ordinal));
+        Models.Table other = (Models.Table)Read(Page.Replace("VALUE", "Rs 6", StringComparison.Ordinal));
+        Assert.IsTrue(PageRules.SameRow(one.Rows[0], again.Rows[0]));
+        Assert.IsFalse(PageRules.SameRow(one.Rows[0], other.Rows[0]));
+        Assert.IsTrue(PageRules.SameRow(one.Rows[1], other.Rows[1]));
+    }
+
     // ---- helpers -----------------------------------------------------------------------------------------
 
     private static IReadOnlyList<Models.Node> Texts(params string[] ids) =>

@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Navree.Controls;
 using Navree.Design;
+using Navree.Design.Pages;
 using Navree.Design.Tables;
 using Navree.Protocol;
 using Navree.Runtime;
@@ -36,8 +37,10 @@ internal sealed partial class NodeRenderer
             }
         }
 
+        // What the handlers read is the table as it stands when they are used: an answer that brings the table up to date puts the new rows here.
+        TableHold hold = new(table);
         ProtocolTableModel model = new(table, context.Screen);
-        ProtocolTablePresenter presenter = new(table, Render, MenuFor, nodes => Column(nodes), Submit);
+        ProtocolTablePresenter presenter = new(table, node => RenderLoose(node), MenuFor, nodes => Column(nodes), Submit);
         DataTable view = new()
         {
             Model = model,
@@ -61,14 +64,7 @@ internal sealed partial class NodeRenderer
             view.EmptyContent = Render(table.Empty);
         }
 
-        Dictionary<string, Models.TableRow> byKey = new(StringComparer.Ordinal);
-        foreach (Models.TableRow row in table.Rows.Where(row => row.Id is not null))
-        {
-            // Two rows with one id: the first is the one the id names.
-            _ = byKey.TryAdd(row.Id!, row);
-        }
-
-        view.ApplyChoice(byKey.Values.Where(row => row.Selected).Select(row => row.Id!), model.AcrossOn);
+        view.ApplyChoice(hold.ByKey.Values.Where(row => row.Selected).Select(row => row.Id!), model.AcrossOn);
         view.ChoiceRequested += (_, e) =>
         {
             if (id is null)
@@ -125,7 +121,7 @@ internal sealed partial class NodeRenderer
         };
         view.RowInvoked += (_, e) =>
         {
-            if (!byKey.TryGetValue(e.Key, out Models.TableRow? row))
+            if (!hold.ByKey.TryGetValue(e.Key, out Models.TableRow? row))
             {
                 return;
             }
@@ -134,7 +130,7 @@ internal sealed partial class NodeRenderer
             {
                 Act(row.Action, null, row.Id, null, inOverlay);
             }
-            else if (ProtocolTableModel.PrimaryOf(table, row) is { } primary)
+            else if (ProtocolTableModel.PrimaryOf(hold.Table, row) is { } primary)
             {
                 Submit(primary.Button, primary.Form);
             }
@@ -142,7 +138,7 @@ internal sealed partial class NodeRenderer
         view.DetailToggled += (_, e) => context.Send(Events.Overlay(screen, e.Key, e.Open));
         view.EditRequested += (_, e) =>
         {
-            if (byKey.TryGetValue(e.Key, out Models.TableRow? row) && ProtocolTableModel.EditOf(row) is { } edit)
+            if (hold.ByKey.TryGetValue(e.Key, out Models.TableRow? row) && ProtocolTableModel.EditOf(row) is { } edit)
             {
                 Submit(edit.Button, edit.Form);
             }
@@ -170,7 +166,100 @@ internal sealed partial class NodeRenderer
         }
 
         panel.Children.Add(view);
+
+        // An answer brings the table up to date where it stands: its model takes the new rows and says what changed, so the table keeps its place, its
+        // active cell, its widths and what is chosen; its search box and filters are fields, which stand and show what the screen holds for them.
+        Drawn me = current!;
+        me.Update = now =>
+        {
+            if (now is not Models.Table next || me.Node is not Models.Table previous || !TableStands(previous, next))
+            {
+                return false;
+            }
+
+            if (!PageRules.Same(QueryNode(previous), QueryNode(next)) && !UpdateToolbar(me, previous, next))
+            {
+                return false;
+            }
+
+            bool chosenBefore = hold.Table.Rows.Where(row => row.Selected).Select(row => row.Id).SequenceEqual(next.Rows.Where(row => row.Selected).Select(row => row.Id));
+            hold.Put(next);
+            presenter.Table = next;
+            model.Apply(next, context.Screen);
+            if (!chosenBefore || model.AcrossOn != view.AcrossChosen)
+            {
+                view.ApplyChoice(hold.ByKey.Values.Where(row => row.Selected).Select(row => row.Id!), model.AcrossOn);
+            }
+
+            return true;
+        };
         return panel;
+    }
+
+    private static Models.Node QueryNode(Models.Table table) => table.Query is null ? new Models.Spacer() : table.Query;
+
+    // What a table that stands holds the same: what it is, how it is named, what it says when empty, and whether rows can be chosen. Its rows, its
+    // columns (the sort a heading shows), its cursors and its summary are what an answer changes.
+    private static bool TableStands(Models.Table previous, Models.Table next) =>
+        previous.Id == next.Id
+        && previous.Caption == next.Caption
+        && (previous.Empty is null) == (next.Empty is null)
+        && (previous.Empty is null || PageRules.Same(previous.Empty, next.Empty!))
+        && (previous.Select is null) == (next.Select is null)
+        && (previous.Query is null) == (next.Query is null)
+        && previous.Columns.Count == next.Columns.Count
+        && previous.Columns.Select(column => column.Key ?? column.Label).SequenceEqual(next.Columns.Select(column => column.Key ?? column.Label));
+
+    // The fields of the query form are drawn in the bar above the table and are brought up to date where they stand; a query with other fields is a table drawn again.
+    private bool UpdateToolbar(Drawn me, Models.Table previous, Models.Table next)
+    {
+        List<Models.Node> was = QueryFields(previous.Query!);
+        List<Models.Node> now = QueryFields(next.Query!);
+        if (was.Count != now.Count)
+        {
+            return false;
+        }
+
+        for (int at = 0; at < was.Count; at++)
+        {
+            Drawn? record = me.Children.FirstOrDefault(child => ReferenceEquals(child.Node, was[at]));
+            if (record is null)
+            {
+                return false;
+            }
+
+            _ = Refresh(record, now[at]);
+        }
+
+        return !Failed;
+    }
+
+    // The nodes the query form is drawn from, in the order they are drawn: the search field, then the rest.
+    private static List<Models.Node> QueryFields(Models.Form query)
+    {
+        Models.Field? search = query.Children.OfType<Models.Field>().FirstOrDefault(field => field.Input is Models.TextInput { Kind: Models.TextKind.Search });
+        return search is null ? [.. query.Children] : [search, .. query.Children.Where(child => !ReferenceEquals(child, search))];
+    }
+
+    /// <summary>The table a drawn table of the protocol stands for now, with its rows by key.</summary>
+    private sealed class TableHold
+    {
+        internal TableHold(Models.Table table) => Put(table);
+
+        internal Models.Table Table { get; private set; } = null!;
+
+        internal Dictionary<string, Models.TableRow> ByKey { get; private set; } = [];
+
+        internal void Put(Models.Table table)
+        {
+            Table = table;
+            ByKey = new Dictionary<string, Models.TableRow>(StringComparer.Ordinal);
+            foreach (Models.TableRow row in table.Rows.Where(row => row.Id is not null))
+            {
+                // Two rows with one id: the first is the one the id names.
+                _ = ByKey.TryAdd(row.Id!, row);
+            }
+        }
     }
 
     private bool SaysTheTitle(string caption) =>
@@ -290,35 +379,142 @@ internal sealed partial class NodeRenderer
     }
 }
 
-/// <summary>A protocol table as the table control reads it: a snapshot of the rows the core sent, with the state of its cursor.</summary>
+/// <summary>
+/// A protocol table as the table control reads it: the rows the core sent, with the state of its cursor. When an answer brings the table up to
+/// date the model takes the new rows and tells the table what changed (rows joined at an end, rows drawn again, every row new, other columns, another
+/// cursor), so the table that is on the screen stays and keeps its place.
+/// </summary>
 internal sealed class ProtocolTableModel : IDataTableModel
 {
     private const int Sample = 40;
 
-    private readonly Models.Table table;
-    private readonly DataTableColumn[] columns;
+    private Models.Table table;
+    private DataTableColumn[] columns;
     private readonly Dictionary<string, int> places = new(StringComparer.Ordinal);
-    private readonly ListState? state;
+    private List<Models.TableRow> rows;
+    private ListState? state;
+    private EventHandler<DataTableModelChangedEventArgs>? changed;
 
     internal ProtocolTableModel(Models.Table protocol, ScreenView screen)
     {
         table = protocol;
-        state = protocol.Id is { } id && screen.Lists.TryGetValue(id, out ListState? held) ? held : null;
+        state = StateOf(protocol, screen);
         columns = protocol.Columns.Select((column, index) => ColumnOf(column, index, protocol.Rows)).ToArray();
-        for (int i = 0; i < protocol.Rows.Count; i++)
+        rows = [.. protocol.Rows];
+        Place();
+    }
+
+    private static ListState? StateOf(Models.Table protocol, ScreenView screen) =>
+        protocol.Id is { } id && screen.Lists.TryGetValue(id, out ListState? held) ? held : null;
+
+    private void Place()
+    {
+        places.Clear();
+        for (int i = 0; i < rows.Count; i++)
         {
-            if (protocol.Rows[i].Id is { } key)
+            if (rows[i].Id is { } key)
             {
                 places[key] = i;
             }
         }
     }
 
+    /// <summary>The table the model holds now.</summary>
+    internal Models.Table Table => table;
+
     /// <inheritdoc />
     public event EventHandler<DataTableModelChangedEventArgs>? Changed
     {
-        add { }
-        remove { }
+        add => changed += value;
+        remove => changed -= value;
+    }
+
+    /// <summary>
+    /// Takes the table that stands there now and says what changed: the columns, the rows (joined at the end or the start, drawn again where they
+    /// stand, or every one new), the cursors and the summary.
+    /// </summary>
+    /// <param name="next">The table.</param>
+    /// <param name="screen">The screen it is on.</param>
+    internal void Apply(Models.Table next, ScreenView screen)
+    {
+        DataTableCursor later = Later;
+        DataTableCursor earlier = Earlier;
+        string? summary = Summary;
+        DataTableColumn[] nextColumns = next.Columns.Select((column, index) => ColumnOf(column, index, next.Rows)).ToArray();
+        bool columnsChanged = !columns.AsSpan().SequenceEqual(nextColumns);
+        List<Models.TableRow> before = rows;
+        (List<Models.TableRow> after, DataTableModelChangedEventArgs[] events) = Diff(before, [.. next.Rows]);
+        table = next;
+        state = StateOf(next, screen);
+        columns = nextColumns;
+        rows = after;
+        Place();
+        if (columnsChanged)
+        {
+            changed?.Invoke(this, new DataTableModelChangedEventArgs(DataTableChangeKind.Columns));
+        }
+
+        foreach (DataTableModelChangedEventArgs one in events)
+        {
+            changed?.Invoke(this, one);
+        }
+
+        if (later != Later || earlier != Earlier)
+        {
+            changed?.Invoke(this, new DataTableModelChangedEventArgs(DataTableChangeKind.Cursor));
+        }
+
+        if (summary != Summary)
+        {
+            changed?.Invoke(this, new DataTableModelChangedEventArgs(DataTableChangeKind.Summary));
+        }
+    }
+
+    // How the rows held become the rows there are now: rows joined at the end or at the start, rows that stand but were drawn again, or all new.
+    // The rows that are unchanged stay the same objects, so what was drawn for them is kept.
+    private static (List<Models.TableRow> Rows, DataTableModelChangedEventArgs[] Events) Diff(List<Models.TableRow> before, List<Models.TableRow> after)
+    {
+        DataTableModelChangedEventArgs[] reset = [new DataTableModelChangedEventArgs(DataTableChangeKind.Reset)];
+        if (before.Any(row => row.Id is null) || after.Any(row => row.Id is null) || before.Count == 0 || after.Count < before.Count)
+        {
+            return (after, reset);
+        }
+
+        int joined = after.Count - before.Count;
+        int offset;
+        if (Enumerable.Range(0, before.Count).All(at => before[at].Id == after[at].Id))
+        {
+            offset = 0;
+        }
+        else if (Enumerable.Range(0, before.Count).All(at => before[at].Id == after[joined + at].Id))
+        {
+            offset = joined;
+        }
+        else
+        {
+            return (after, reset);
+        }
+
+        List<DataTableModelChangedEventArgs> events = [];
+        for (int at = 0; at < before.Count; at++)
+        {
+            if (PageRules.SameRow(before[at], after[offset + at]))
+            {
+                after[offset + at] = before[at];
+            }
+            else
+            {
+                events.Add(new DataTableModelChangedEventArgs(DataTableChangeKind.Replace, offset + at, 1));
+            }
+        }
+
+        if (joined > 0)
+        {
+            // The rows that joined are told first: the places of the rows drawn again are the places they have now.
+            events.Insert(0, new DataTableModelChangedEventArgs(DataTableChangeKind.Insert, offset == 0 ? before.Count : 0, joined));
+        }
+
+        return (after, [.. events]);
     }
 
     /// <summary>Whether every record that matches is chosen.</summary>
@@ -328,7 +524,7 @@ internal sealed class ProtocolTableModel : IDataTableModel
     public IReadOnlyList<DataTableColumn> Columns => columns;
 
     /// <inheritdoc />
-    public int RowCount => table.Rows.Count;
+    public int RowCount => rows.Count;
 
     /// <inheritdoc />
     public DataTableLoadState State => DataTableLoadState.Ready;
@@ -351,7 +547,7 @@ internal sealed class ProtocolTableModel : IDataTableModel
     /// <inheritdoc />
     public DataTableRecord GetRow(int index)
     {
-        Models.TableRow row = table.Rows[index];
+        Models.TableRow row = rows[index];
         Choosable choosable = table.Select is null || row.Id is null ? Choosable.None : row.Unchoosable ? Choosable.No : Choosable.Yes;
         bool edit = EditOf(row) is not null;
         bool menu = row.Actions.Any(node => node is Models.Button or Models.Menu) || edit;
@@ -527,12 +723,15 @@ internal static class TextBlockWidth
 
 /// <summary>Draws a protocol table's cells: each is a node, drawn by the shell as it draws it anywhere.</summary>
 internal sealed class ProtocolTablePresenter(
-    Models.Table table,
+    Models.Table initial,
     Func<Models.Node, UIElement> render,
     Func<IEnumerable<Models.Node>, MenuFlyout> menu,
     Func<IEnumerable<Models.Node>, UIElement> column,
     Action<Models.Button, string?> submit) : IDataTablePresenter
 {
+    /// <summary>The table the cells are drawn for, as it stands now: its columns and the first rows say what is looked for in the rest.</summary>
+    internal Models.Table Table { get; set; } = initial;
+
     // A mark and the gap after it, beside the words of a state.
     private const double MarkWidth = 16;
 
@@ -582,7 +781,7 @@ internal sealed class ProtocolTablePresenter(
             return null;
         }
 
-        int title = table.Columns.ToList().FindIndex(c => c.Role == Models.ColumnRole.Title);
+        int title = Table.Columns.ToList().FindIndex(c => c.Role == Models.ColumnRole.Title);
         List<string> lines = title >= 0 && title < row.Cells.Count ? Lines(row.Cells[title]) : [];
         return lines.Count > 1 ? lines[1] : null;
     }
@@ -595,7 +794,7 @@ internal sealed class ProtocolTablePresenter(
             return record.Key ?? string.Empty;
         }
 
-        int title = table.Columns.ToList().FindIndex(c => c.Role == Models.ColumnRole.Title);
+        int title = Table.Columns.ToList().FindIndex(c => c.Role == Models.ColumnRole.Title);
         List<string> lines = row.Cells.Count == 0 ? [] : Lines(row.Cells[Math.Max(title, 0)]);
         return lines.Count > 0 ? lines[0] : record.Key ?? string.Empty;
     }
@@ -688,7 +887,7 @@ internal sealed class ProtocolTablePresenter(
 
     /// <inheritdoc />
     public double BesideWords(int columnIndex) =>
-        columnIndex < table.Columns.Count && table.Rows.Take(40).Any(row => columnIndex < row.Cells.Count && row.Cells[columnIndex] is Models.Badge { Dot: true }) ? MarkWidth : 0;
+        columnIndex < Table.Columns.Count && Table.Rows.Take(40).Any(row => columnIndex < row.Cells.Count && row.Cells[columnIndex] is Models.Badge { Dot: true }) ? MarkWidth : 0;
 
     /// <inheritdoc />
     public UIElement? CreateDetail(in DataTableRecord record) =>
@@ -721,7 +920,7 @@ internal sealed class ProtocolTablePresenter(
         if (!drawn.TryGetValue((row, index), out UIElement? element))
         {
             Models.Node node = row.Cells[index];
-            DataTableAlign align = index < table.Columns.Count ? AlignOf(table.Columns[index]) : DataTableAlign.Start;
+            DataTableAlign align = index < Table.Columns.Count ? AlignOf(Table.Columns[index]) : DataTableAlign.Start;
             element = render(node);
             Settle(element, align);
             drawn[(row, index)] = element;
