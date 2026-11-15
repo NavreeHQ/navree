@@ -255,7 +255,15 @@ impl Core {
     }
 
     /// Where the person is now, for a client to store. See [`Snapshot`].
+    ///
+    /// While a snapshot waits for this launch's shell, that one is what is
+    /// given back, as it was: the screens are not put back yet, so what the
+    /// core holds now says nothing of where the person was, and storing it
+    /// would lose their place.
     pub fn snapshot(&self) -> Snapshot {
+        if let Some(waiting) = &self.inner.restore {
+            return waiting.clone();
+        }
         let view: &ViewState = &self.view;
         let screens = |stack: &[ScreenId]| -> Vec<KeptScreen> {
             stack

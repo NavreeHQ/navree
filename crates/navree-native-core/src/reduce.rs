@@ -821,6 +821,14 @@ impl Core {
             // The person the kept shell named was the last launch's word, so
             // its going is no sign-out, and nothing kept goes with it.
             self.inner.user = None;
+            // A snapshot waited for a shell that did not come: it is not
+            // used, and nothing is left holding it.
+            if self.inner.restore.take().is_some() {
+                self.report(
+                    "snapshot",
+                    "a snapshot is not used: this launch's shell did not give a shell".to_owned(),
+                );
+            }
         } else if self.inner.has_shell {
             return;
         }
