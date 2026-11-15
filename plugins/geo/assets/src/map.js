@@ -68,8 +68,7 @@ export function mount(el, props, ui) {
       .catch(() => {});
   }
 
-  // Typing a point is fine; Enter in a table cell must not post it, only a pick on the map does.
-  if (input) ui.on(input, "keydown", (/** @type {KeyboardEvent} */ e) => { if (e.key === "Enter") e.stopPropagation(); });
+  // The field takes keys as any text field does: in a table cell, Enter and Escape in it are the cell's own.
   if (locate) ui.on(locate, "click", () => navigator.geolocation?.getCurrentPosition((p) => pick({ lat: p.coords.latitude, lng: p.coords.longitude })));
 
   // An inline edit the server refused: the cell goes back to the point it had, and so does the pin. One it
