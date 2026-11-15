@@ -141,19 +141,54 @@ pub fn icon_labelled(icon: Icon, label: impl Into<std::borrow::Cow<'static, str>
     )
 }
 
-/// Adds `id`, `attr`, `on` and `span` to a component whose `el` field is its root
-/// element.
-macro_rules! root_methods {
+/// Gives each type named the methods every component of the toolkit has on its root element:
+/// `id`, `attr`, `on`, `hotkey`, `hotkey_within` and `span`. Each type is a struct with a field
+/// called `el` that holds its root `Element`. A component of your own, in a plugin or in an
+/// app, takes them the same way the toolkit's own do. A generic component writes its own
+/// methods.
+///
+/// Turn the component into a `Node` with [`component_node!`](crate::component_node) and an
+/// `into_node` method of its own.
+///
+/// ```
+/// use navree_ui::{Element, Node, el};
+///
+/// /// A row of stars.
+/// pub struct Rating {
+///     el: Element,
+///     stars: u8,
+/// }
+///
+/// navree_ui::component_methods!(Rating);
+/// navree_ui::component_node!(Rating);
+///
+/// impl Rating {
+///     /// A rating of `stars` out of five.
+///     pub fn new(stars: u8) -> Self {
+///         Self { el: el("div").slot("app:rating"), stars }
+///     }
+///
+///     fn into_node(self) -> Node {
+///         self.el.child(i64::from(self.stars)).into()
+///     }
+/// }
+///
+/// let html = navree_ui::render(&Rating::new(4).id("delivery-rating").span(2).into());
+/// assert!(html.contains(r#"id="delivery-rating""#));
+/// assert!(html.contains(r#"data-span="2""#));
+/// ```
+#[macro_export]
+macro_rules! component_methods {
     ($($type:ident),+ $(,)?) => {
         $(impl $type {
             /// Sets the root element's `id`.
-            pub fn id(mut self, id: impl Into<$crate::node::AttrValue>) -> Self {
+            pub fn id(mut self, id: impl Into<$crate::AttrValue>) -> Self {
                 self.el = self.el.id(id);
                 self
             }
 
             /// Sets an attribute on the root element.
-            pub fn attr(mut self, name: &'static str, value: impl Into<$crate::node::AttrValue>) -> Self {
+            pub fn attr(mut self, name: &'static str, value: impl Into<$crate::AttrValue>) -> Self {
                 self.el = self.el.attr(name, value);
                 self
             }
@@ -165,27 +200,26 @@ macro_rules! root_methods {
                 self
             }
 
-            /// Makes `key` a shortcut that clicks this, or focuses it if it is a field:
-            /// see [`Element::hotkey`](crate::Element::hotkey).
+            /// Makes `key` a shortcut that clicks this, or focuses it if it is a field: see the
+            /// hotkey method of Element.
             pub fn hotkey(mut self, key: &str) -> Self {
                 self.el = self.el.hotkey(key);
                 self
             }
 
-            /// Makes `key` a shortcut that works only while the focus is inside the
-            /// element whose id is `scope`: see
-            /// [`Element::hotkey_within`](crate::Element::hotkey_within).
+            /// Makes `key` a shortcut that works only while the focus is inside the element
+            /// whose id is `scope`: see the hotkey_within method of Element.
             pub fn hotkey_within(mut self, key: &str, scope: &str) -> Self {
                 self.el = self.el.hotkey_within(key, scope);
                 self
             }
 
-            /// Takes `columns` columns of a [`Grid`](crate::Grid).
+            /// Takes `columns` columns of a grid.
             pub fn span(mut self, columns: u8) -> Self {
-                self.el = self.el.attr("data-span", $crate::components::layout::span_name(columns));
+                self.el = self.el.attr("data-span", $crate::__private::span_name(columns));
                 self
             }
         })+
     };
 }
-pub(crate) use root_methods;
+pub(crate) use crate::component_methods as root_methods;

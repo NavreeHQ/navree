@@ -1032,10 +1032,40 @@ tuples!(A B C D E F G H I J);
 tuples!(A B C D E F G H I J K);
 tuples!(A B C D E F G H I J K L);
 
-/// Implements `From<$type> for Node` by calling the type's `into_node`.
-macro_rules! into_node {
+/// Turns each type named into a `Node` by calling its own `into_node` method, so the component
+/// can be given wherever a node goes: as a child, as a page's body, in a table's cell. It is
+/// the last step of a component of your own, once its root element is built; the toolkit's own
+/// components end the same way.
+///
+/// ```
+/// use navree_ui::{Element, Node, el};
+///
+/// /// A badge with a city in it.
+/// pub struct CityBadge {
+///     el: Element,
+///     city: &'static str,
+/// }
+///
+/// navree_ui::component_node!(CityBadge);
+///
+/// impl CityBadge {
+///     /// A badge for `city`.
+///     pub fn new(city: &'static str) -> Self {
+///         Self { el: el("span").slot("app:city-badge"), city }
+///     }
+///
+///     fn into_node(self) -> Node {
+///         self.el.child(self.city).into()
+///     }
+/// }
+///
+/// let page = navree_ui::View::new("Depots").body(CityBadge::new("Ludhiana"));
+/// assert!(page.to_html().contains("Ludhiana"));
+/// ```
+#[macro_export]
+macro_rules! component_node {
     ($($type:ty),+ $(,)?) => {
-        $(impl From<$type> for $crate::node::Node {
+        $(impl ::core::convert::From<$type> for $crate::Node {
             #[inline]
             fn from(value: $type) -> Self {
                 value.into_node()
@@ -1043,7 +1073,7 @@ macro_rules! into_node {
         })+
     };
 }
-pub(crate) use into_node;
+pub(crate) use crate::component_node as into_node;
 
 #[cfg(test)]
 mod tests {
