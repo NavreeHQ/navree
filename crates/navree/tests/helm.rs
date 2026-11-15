@@ -8,10 +8,12 @@ use navree::helm::{
     Action, ActionResult, Field, Filter, FormData, HelmLink, HelmPage, HelmWidget, Metric,
     RecordOf, Resource, SaveContext,
 };
+use navree::lighthouse::LighthouseModule;
 use navree::orm::Builder;
 use navree::plugin::prelude::*;
 use navree::prelude::*;
-use navree::testing::{TestApp, TestAppBuilder, principal};
+use navree::testing::{TestApp, TestAppBuilder, TestClient, principal};
+use navree::ui::{ExtensionFile, PAGE_CSP, UiExtension};
 use serde_json::json;
 
 mod models {
@@ -671,4 +673,69 @@ async fn the_docs_link_and_card_show_to_reps_only() {
     let html = dashboard(meera.id).await;
     assert!(!html.contains(r#"href="/reports/sales""#), "{html}");
     assert!(!html.contains("data-helm-widget"), "{html}");
+}
+
+/// A component of the app's own, with a stylesheet: an app that contributes one has pages that
+/// start from a clean document.
+static PROOF: UiExtension = UiExtension::new("app", "proof").sheet(ExtensionFile::__new(
+    br#":where([data-slot^="app:"]){}"#,
+    "aaaaaaaaaaaa",
+    Some("app"),
+));
+
+/// The module that contributes [`PROOF`].
+struct ProofModule;
+
+impl Module for ProofModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(PROOF);
+    }
+}
+
+/// What the page at `path` says of itself: whether its root element holds the mark of a page
+/// that starts clean, the header that says so, and its content security policy.
+async fn fresh_mark(client: &TestClient, path: &str) -> (bool, Option<String>, Option<String>) {
+    let page = client
+        .get(path)
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(200);
+    let html = page.text();
+    let start = html.find("<html").expect("a root element");
+    let root = &html[start..start + html[start..].find('>').expect("a closed tag")];
+    (
+        root.contains("data-ui-fresh-page"),
+        page.header("x-navree-fresh").map(str::to_owned),
+        page.header("content-security-policy").map(str::to_owned),
+    )
+}
+
+// Staff act on every tenant in the panel and in the monitoring dashboard, and neither draws a
+// plugin component: in an app with a UI extension their pages start from a clean document and
+// keep the toolkit's policy; in an app with none they are the pages they always were.
+#[tokio::test]
+async fn helm_and_lighthouse_pages_are_fresh() {
+    for (has_extension, marked) in [(true, true), (false, false)] {
+        let builder = app_builder().module(LighthouseModule::from_config());
+        let app = if has_extension {
+            builder.module(ProofModule).build().await
+        } else {
+            builder.build().await
+        };
+        let staff = create_user(&app, "priya@example.com", "rep").await;
+        // The role that may open the panel may open the dashboard too.
+        let db = app.get::<navree::db::Db>().await;
+        let access = app.get::<navree::access::AccessService>().await;
+        let uow = db.uow(None, None).await;
+        access.grant(&uow, "rep", "lighthouse.view").await.unwrap();
+        uow.commit().await.unwrap();
+        let rep = app.acting_as(principal(staff.id));
+        for path in ["/admin", "/_lighthouse"] {
+            let (root_marked, header, policy) = fresh_mark(&rep, path).await;
+            assert_eq!(root_marked, marked, "{path}: the mark");
+            assert_eq!(header.as_deref(), marked.then_some("1"), "{path}: the header");
+            assert_eq!(policy.as_deref(), Some(PAGE_CSP), "{path}: the policy");
+        }
+    }
 }
