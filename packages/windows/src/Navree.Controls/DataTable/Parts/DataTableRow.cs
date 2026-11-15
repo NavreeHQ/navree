@@ -95,6 +95,11 @@ public sealed class DataTableRow : Control
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
+        Diag.Guard("a row's template", MakeParts);
+    }
+
+    private void MakeParts()
+    {
         root = GetTemplateChild("PART_Root") as Grid;
         chrome = GetTemplateChild("PART_Chrome") as Grid;
         scrollCells = GetTemplateChild("PART_ScrollCells") as Canvas;

@@ -63,6 +63,11 @@ public sealed partial class DataTable
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
+        Diag.Guard("the table's template", WireTemplate);
+    }
+
+    private void WireTemplate()
+    {
         headerHost = GetTemplateChild("PART_HeaderHost") as Border;
         scroll = GetTemplateChild("PART_Scroll") as ScrollView;
         repeater = GetTemplateChild("PART_Rows") as ItemsRepeater;
@@ -133,13 +138,13 @@ public sealed partial class DataTable
         }
     }
 
-    private void OnLoaded()
+    private void OnLoaded() => Diag.Guard("the table loaded", () =>
     {
         loaded = true;
         AttachSticky();
         RecomputeMetrics();
         RebuildColumns(remeasure: true);
-    }
+    });
 
     private void OnUnloaded()
     {
@@ -172,7 +177,7 @@ public sealed partial class DataTable
         OnViewportChanged();
     }
 
-    private void OnViewportChanged()
+    private void OnViewportChanged() => Diag.Guard("the viewport changed", () =>
     {
         if (!loaded || scroll is null)
         {
@@ -180,7 +185,7 @@ public sealed partial class DataTable
         }
 
         RebuildColumns(remeasure: false);
-    }
+    });
 
     private void OnScrolled()
     {
@@ -192,14 +197,14 @@ public sealed partial class DataTable
         CheckCursors();
     }
 
-    private void OnRowPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
+    private void OnRowPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args) => Diag.Guard("a row was prepared", () =>
     {
         if (args.Element is DataTableRow row)
         {
             liveRows.Add(row);
             row.Bind(this, args.Index);
         }
-    }
+    });
 
     private void OnRowClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
     {

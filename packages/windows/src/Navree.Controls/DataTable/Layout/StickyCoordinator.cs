@@ -98,6 +98,7 @@ internal sealed class StickyCoordinator
         scroll.SizeChanged += (_, _) => OnExtentChanged();
         foreach ((UIElement element, StickyRole role) in parts)
         {
+            EnableTranslation(element, role);
             PrepareClip(element, role);
         }
 
@@ -131,13 +132,9 @@ internal sealed class StickyCoordinator
     internal void Register(UIElement element, StickyRole role)
     {
         parts[element] = role;
-        if (role is StickyRole.Start or StickyRole.End or StickyRole.Header)
+        if (attached)
         {
-            ElementCompositionPreview.SetIsTranslationEnabled(element, true);
-        }
-
-        if (compositor is not null)
-        {
+            EnableTranslation(element, role);
             Begin(element, role);
         }
     }
@@ -159,7 +156,7 @@ internal sealed class StickyCoordinator
     /// </summary>
     internal void Mirror()
     {
-        if (built && Mode == StickyMode.Compositor)
+        if (!attached || (built && Mode == StickyMode.Compositor))
         {
             return;
         }
@@ -196,6 +193,14 @@ internal sealed class StickyCoordinator
                     element.Opacity = StickyMath.EdgeOpacityEnd(position, min, max, rtl);
                     break;
             }
+        }
+    }
+
+    private static void EnableTranslation(UIElement element, StickyRole role)
+    {
+        if (role is StickyRole.Start or StickyRole.End or StickyRole.Header)
+        {
+            ElementCompositionPreview.SetIsTranslationEnabled(element, true);
         }
     }
 

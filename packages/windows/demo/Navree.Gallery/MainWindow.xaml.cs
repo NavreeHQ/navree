@@ -27,6 +27,7 @@ public sealed partial class MainWindow : Window
     private async void OnRootLoaded(object sender, RoutedEventArgs e)
     {
         Report.Open(arguments.Out);
+        Navree.Controls.DataTable.Watch(Report.Line);
         if (arguments.Run.Count == 0)
         {
             Stage.Child = new Microsoft.UI.Xaml.Controls.TextBlock

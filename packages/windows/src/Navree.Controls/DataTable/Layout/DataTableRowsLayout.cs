@@ -36,6 +36,13 @@ internal sealed class DataTableRowsLayout : VirtualizingLayout
     /// <inheritdoc />
     protected override Size MeasureOverride(VirtualizingLayoutContext context, Size availableSize)
     {
+        Size result = new(0, 0);
+        Diag.Guard("the rows were measured", () => result = MeasureRows(context, availableSize));
+        return result;
+    }
+
+    private Size MeasureRows(VirtualizingLayoutContext context, Size availableSize)
+    {
         realized.Clear();
         int count = context.ItemCount;
         double width = RowWidth > 0 ? RowWidth : (double.IsInfinity(availableSize.Width) ? 0 : availableSize.Width);
