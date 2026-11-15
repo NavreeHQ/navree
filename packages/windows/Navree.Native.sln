@@ -39,6 +39,10 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Navree.Platform", "src\Navr
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Navree.Platform.Tests", "tests\Navree.Platform.Tests\Navree.Platform.Tests.csproj", "{26293D40-A3F9-49D1-8E1B-CC25CE2188DA}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Navree.Presence", "src\Navree.Presence\Navree.Presence.csproj", "{5B2E7F61-3C94-4A18-9D0A-7E1C2B6F8A43}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Navree.Presence.Tests", "tests\Navree.Presence.Tests\Navree.Presence.Tests.csproj", "{C81F4D27-6A53-4E90-B7D2-0F9A3E5C1B68}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -105,6 +109,14 @@ Global
 		{26293D40-A3F9-49D1-8E1B-CC25CE2188DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{26293D40-A3F9-49D1-8E1B-CC25CE2188DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{26293D40-A3F9-49D1-8E1B-CC25CE2188DA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5B2E7F61-3C94-4A18-9D0A-7E1C2B6F8A43}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5B2E7F61-3C94-4A18-9D0A-7E1C2B6F8A43}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5B2E7F61-3C94-4A18-9D0A-7E1C2B6F8A43}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5B2E7F61-3C94-4A18-9D0A-7E1C2B6F8A43}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C81F4D27-6A53-4E90-B7D2-0F9A3E5C1B68}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C81F4D27-6A53-4E90-B7D2-0F9A3E5C1B68}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C81F4D27-6A53-4E90-B7D2-0F9A3E5C1B68}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C81F4D27-6A53-4E90-B7D2-0F9A3E5C1B68}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -125,5 +137,7 @@ Global
 		{F7E130FB-006D-48E9-A380-0BEB872CB39D} = {313ED949-9D43-45A6-A308-4BDABF6E5554}
 		{14A91BDD-5141-4BB3-9D9F-5418A2FC1371} = {313ED949-9D43-45A6-A308-4BDABF6E5554}
 		{26293D40-A3F9-49D1-8E1B-CC25CE2188DA} = {313ED949-9D43-45A6-A308-4BDABF6E5554}
+		{5B2E7F61-3C94-4A18-9D0A-7E1C2B6F8A43} = {96365585-2872-4A8B-B620-DE27B502EFC2}
+		{C81F4D27-6A53-4E90-B7D2-0F9A3E5C1B68} = {313ED949-9D43-45A6-A308-4BDABF6E5554}
 	EndGlobalSection
 EndGlobal
