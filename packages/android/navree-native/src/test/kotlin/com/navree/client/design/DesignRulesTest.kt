@@ -889,6 +889,37 @@ class OpenRowTest {
         assertFalse("the list's own page", ListRules.shows("/inbox", "/inbox/11"))
         assertFalse("nothing shown", ListRules.shows(null, "/inbox/11"))
     }
+
+    @Test
+    fun a_path_matches_whole_segment_by_whole_segment() {
+        assertFalse(ListRules.shows("/x/inbox/11", "/inbox/11"))
+        assertTrue("a closing slash and a fragment count for nothing", ListRules.shows("/inbox/11/#top", "/inbox/11"))
+    }
+
+    @Test
+    fun rows_that_differ_only_by_their_query_do_not_all_match() {
+        val rows = listOf("/inbox?folder=sent", "/inbox?folder=drafts", "/inbox?folder=trash")
+        assertEquals("/inbox?folder=drafts", ListRules.openAddress("/inbox?folder=drafts", rows))
+        assertEquals("the cursor the shown page carries does not matter", "/inbox?folder=drafts", ListRules.openAddress("/inbox?folder=drafts&after=40", rows))
+        assertNull("none of them", ListRules.openAddress("/inbox?folder=spam", rows))
+    }
+
+    @Test
+    fun the_row_that_says_most_of_the_shown_page_is_the_open_one_and_the_first_of_equals() {
+        val rows = listOf("/inbox", "/inbox?folder=drafts&label=work", "/inbox?folder=drafts")
+        assertEquals("/inbox?folder=drafts&label=work", ListRules.openAddress("/inbox?folder=drafts&label=work&after=9", rows))
+        assertEquals("/inbox?folder=drafts", ListRules.openAddress("/inbox?folder=drafts", rows))
+        assertEquals("a row with no query beside one with a query: the one with the query", "/inbox?folder=drafts", ListRules.openAddress("/inbox?folder=drafts", listOf("/inbox", "/inbox?folder=drafts")))
+        assertEquals("equals: the first", "/inbox/7", ListRules.openAddress("/inbox/7", listOf("/inbox/7", "/inbox/7")))
+    }
+
+    @Test
+    fun the_addresses_of_a_screens_rows_are_those_of_its_rows_and_its_tables_rows() {
+        val list = Navree.List(children = listOf(Navree.Row(title = "A", action = Navree.Action.Navigate("/a")), Navree.Row(title = "B")))
+        val table = Navree.Table(columns = listOf(Navree.Column(label = "Order")), rows = listOf(Navree.TableRow(action = Navree.Action.Navigate("/orders/1"), cells = listOf(Navree.Text(value = "1")))))
+        assertEquals(listOf("/a", "/orders/1"), ListRules.rowAddresses(Navree.Stack(children = listOf(list, table))))
+        assertEquals(emptyList<String>(), ListRules.rowAddresses(null))
+    }
 }
 
 class OwnLinkTest {

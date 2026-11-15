@@ -412,7 +412,7 @@ internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = M
 /** Whether a row leads to the screen shown beside the list. */
 private fun isSelected(action: Navree.Action?, place: Place): Boolean {
     val href = (action as? Navree.Action.Navigate)?.href ?: return false
-    return ListRules.shows(place.selectedUrl, href)
+    return place.openAddress != null && href == place.openAddress
 }
 
 /**

@@ -265,7 +265,9 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     val context = info.context.copy(toolbar = bars.isNotEmpty())
     val plan = remember(arranged, context, window) { ScreenRules.plan(arranged, context, window) }
     // The row that leads to the page shown beside the list is marked; a screen that holds its own list marks the row of its own page.
-    val place = Place(view, selectedUrl = info.selectedUrl ?: view.url.ifEmpty { null }, titleInBar = plan.titleInBar)
+    val shownUrl = info.selectedUrl ?: view.url.ifEmpty { null }
+    val open = remember(screen.body, shownUrl) { ListRules.openAddress(shownUrl, ListRules.rowAddresses(screen.body)) }
+    val place = Place(view, openAddress = open, titleInBar = plan.titleInBar)
     val list = rememberLazyListState()
     var searching by rememberSaveable { mutableStateOf(false) }
     val pinned = TopAppBarDefaults.pinnedScrollBehavior()

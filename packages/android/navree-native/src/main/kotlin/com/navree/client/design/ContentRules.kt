@@ -85,12 +85,58 @@ object ListRules {
         return runs.map { if (it.href == own) it.copy(href = null) else it }
     }
 
-    /** Whether the page at `shown` is the one a row leading to `href` opens: the row is then marked as the one open. */
+    private val schemeAndHost = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://[^/]*")
+
+    /** The path of an address, whole: no scheme and host, no query, no fragment, no closing slash. */
+    private fun pathOf(address: String): String {
+        val path = address.substringBefore('#').substringBefore('?').replaceFirst(schemeAndHost, "").trimEnd('/')
+        return path.ifEmpty { "/" }
+    }
+
+    private fun decoded(text: String): String = try {
+        java.net.URLDecoder.decode(text, "UTF-8")
+    } catch (_: IllegalArgumentException) {
+        text
+    }
+
+    /** The pairs of an address's query, in the order they stand. */
+    private fun pairsOf(address: String): List<Pair<String, String>> =
+        address.substringBefore('#').substringAfter('?', "").split('&').filter { it.isNotEmpty() }
+            .map { decoded(it.substringBefore('=')) to decoded(it.substringAfter('=', "")) }
+
+    /**
+     * Whether the page at `shown` is the one a row leading to `href` opens: the
+     * paths are equal, segment by segment (`/x/inbox/11` is not `/inbox/11`),
+     * and every pair of the row's query is among the shown page's (the shown
+     * page may carry more, such as a cursor). A fragment counts for nothing.
+     */
     fun shows(shown: String?, href: String): Boolean {
         if (shown.isNullOrEmpty() || href.isEmpty()) return false
-        val path = shown.substringBefore('?').substringBefore('#')
-        val target = href.substringBefore('?').substringBefore('#')
-        return target.isNotEmpty() && (path == target || path.endsWith(target))
+        if (pathOf(shown) != pathOf(href)) return false
+        val have = pairsOf(shown)
+        return pairsOf(href).all { it in have }
+    }
+
+    /**
+     * The address, among the addresses of a screen's rows, whose row is the open
+     * one: of those that match the shown page the one that says most of it (most
+     * query pairs), the first of equals. Null when none matches.
+     */
+    fun openAddress(shown: String?, addresses: List<String>): String? =
+        addresses.filter { shows(shown, it) }.maxByOrNull { pairsOf(it).size }
+
+    /** The addresses the rows of a screen lead to, each row's tap that goes to a page. */
+    fun rowAddresses(body: Navree.Node?): List<String> {
+        if (body == null) return emptyList()
+        val out = ArrayList<String>()
+        for (node in body.walk()) {
+            when (node) {
+                is Navree.Row -> (node.action as? Navree.Action.Navigate)?.href?.let { out += it }
+                is Navree.Table -> node.rows.forEach { row -> (row.action as? Navree.Action.Navigate)?.href?.let { out += it } }
+                else -> Unit
+            }
+        }
+        return out
     }
 
     /** The most a lane of a board stands wide, in dp: lanes stay together in a wide window and do not stretch. */
