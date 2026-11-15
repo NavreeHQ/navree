@@ -196,6 +196,36 @@ class HealthScreensTest {
         assertEquals("the card opened the screen it leads to", "Shelves", (front?.content as? Content.Native)?.screen?.title)
     }
 
+    /**
+     * The set of rings `activity-rings` of the Activity card: where the card
+     * gives it more width than its dial and legend need (a tablet) they stand
+     * together in the middle of that width, the room before the dial being the
+     * room after the legend; where the width is taken up (a phone) they stand at
+     * the start. Found by the tags the set's parts carry, which are its node id's.
+     */
+    @Test
+    fun theActivityRingsStandInTheMiddleOfTheirWidthWhereItIsWiderThanTheyNeed() {
+        val app = start(designedAtRoot = true)
+        front(app, "Today")
+        val set = androidx.compose.ui.test.hasTestTag("rings:activity-rings")
+        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(set)
+        compose.waitForIdle()
+        val room = compose.onNode(set).fetchSemanticsNode().boundsInRoot
+        val dial = compose.onNode(androidx.compose.ui.test.hasTestTag("dial:activity-rings")).fetchSemanticsNode().boundsInRoot
+        val legend = compose.onNode(androidx.compose.ui.test.hasTestTag("legend:activity-rings")).fetchSemanticsNode().boundsInRoot
+        val groupLeft = minOf(dial.left, legend.left)
+        val groupRight = maxOf(dial.right, legend.right)
+        val before = groupLeft - room.left
+        val after = room.right - groupRight
+        val density = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+        val widerThanNeeded = (groupRight - groupLeft) < room.width * com.navree.client.design.CompositionRules.SHORT_LINE
+        if (widerThanNeeded) {
+            assertTrue("the rings stand in the middle of their width: ${before / density} dp before them, ${after / density} dp after", kotlin.math.abs(before - after) <= 8 * density)
+        } else {
+            assertTrue("where the width is taken up the rings stand at the start: ${before / density} dp before them", kotlin.math.abs(before) <= 2 * density || kotlin.math.abs(after) <= 2 * density)
+        }
+    }
+
     /** A screen of days turns to the day before or after when it is swiped along, the way the page moves with the finger. */
     @Test
     fun aSwipeTurnsTheDay() {

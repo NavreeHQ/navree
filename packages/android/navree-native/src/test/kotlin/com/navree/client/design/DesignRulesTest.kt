@@ -995,6 +995,9 @@ class ShortLineTest {
         assertFalse(CompositionRules.holdsDial(listOf(Navree.Text(value = "words"))))
         assertTrue(CompositionRules.centresShortLine(usedPx = 550, roomPx = 1265))
         assertTrue("the health score: a ring and a line fill 1,140 of 1,912 px", CompositionRules.centresShortLine(usedPx = 1140, roomPx = 1912))
+        assertTrue("the Activity card: a dial and its legend fill 268 of 968 dp", CompositionRules.centresRings(groupPx = 268, roomPx = 968))
+        assertFalse("on a phone the width is taken up: 268 of 328 dp", CompositionRules.centresRings(groupPx = 268, roomPx = 328))
+        assertFalse("no room known", CompositionRules.centresRings(groupPx = 268, roomPx = 0))
         assertFalse("a line that fills most of its card stays at the start", CompositionRules.centresShortLine(usedPx = 900, roomPx = 1265))
         assertFalse("no room known", CompositionRules.centresShortLine(usedPx = 100, roomPx = 0))
     }

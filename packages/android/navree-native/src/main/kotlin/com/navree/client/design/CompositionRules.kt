@@ -83,6 +83,15 @@ object CompositionRules {
     fun centresShortLine(usedPx: Int, roomPx: Int): Boolean = roomPx > 0 && usedPx < roomPx * SHORT_LINE
 
     /**
+     * Whether a set of rings with its legend (the dial and the legend beside it,
+     * `groupPx` wide together) stands in the middle of the `roomPx` it is given:
+     * when it is given more than it needs, by the share of a short line. Where the
+     * width is taken up (a phone) it stands at the start as before. The set's own
+     * title stays where a title stands, at the start.
+     */
+    fun centresRings(groupPx: Int, roomPx: Int): Boolean = centresShortLine(groupPx, roomPx)
+
+    /**
      * How tall the cards of one line are: the tallest height any of them has
      * been seen to have (a card never shrinks under a line's other cards).
      */

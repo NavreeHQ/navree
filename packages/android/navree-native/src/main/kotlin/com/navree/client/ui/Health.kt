@@ -67,6 +67,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -352,11 +353,11 @@ internal fun RingsView(node: Navree.Rings, modifier: Modifier = Modifier) {
     val beside = LocalInLine.current || low
     // The rings and their heading are one group the width of the wider of the two, the heading and the dial at the group's start edge: a stack that
     // centres its parts (its `align`) then centres the group, which a Column that took the whole width would have left at the start.
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(if (node.id != null) modifier.testTag("rings:${node.id}") else modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // The rings keep to the width of their words, so what stands beside them keeps the rest of the line.
         if (!low) ChartHeading(node.title, node.hint, fill = false)
         val dial: @Composable () -> Unit = {
-            Box(Modifier.size(diameter.dp).clearAndSetSemantics { contentDescription = said }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(diameter.dp).then(if (node.id != null) Modifier.testTag("dial:${node.id}") else Modifier).clearAndSetSemantics { contentDescription = said }, contentAlignment = Alignment.Center) {
                 Canvas(Modifier.fillMaxSize()) {
                     val px = stroke.dp.toPx()
                     rings.indices.forEach { index ->
@@ -382,10 +383,19 @@ internal fun RingsView(node: Navree.Rings, modifier: Modifier = Modifier) {
             }
         }
         if (node.legend && !low) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            // A set of rings that is given more width than its dial and legend need (a card on a tablet) has them stand together in the middle of that width;
+            // its title stays at the start. Beside other parts, and where the width is taken up, nothing changes.
+            Row(
+                if (beside) Modifier else Modifier.centredWhenShort(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
                 dial()
                 // The legend is as wide as its words, so what stands beside the rings keeps the rest of the line.
-                Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    Modifier.weight(1f, fill = false).then(if (node.id != null) Modifier.testTag("legend:${node.id}") else Modifier),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     rings.forEachIndexed { index, ring ->
                         Column {
                             Text(ring.name, style = MaterialTheme.typography.labelLarge, color = inks[index].mark)
