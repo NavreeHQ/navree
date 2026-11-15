@@ -23,7 +23,6 @@ import mockwebserver3.MockWebServer
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -54,8 +53,8 @@ class ScreensTest {
     }
 
     /** Starts the app against the recorded answers in `folder`, and waits for its first screen. */
-    private fun start(folder: String, routes: Map<String, String> = emptyMap()): NavreeSession {
-        server.dispatcher = Recorded(folder, routes)
+    private fun start(folder: String, routes: Map<String, String> = emptyMap(), read: ((String) -> String?)? = null): NavreeSession {
+        server.dispatcher = Recorded(folder, routes, read)
         server.start()
         val origin = server.url("/").toString().trimEnd('/')
         val config = NavreeConfig(origin = origin, name = "Charkha Supply Co.", seed = null, loopbackHttp = true, openAnyLink = true)
@@ -181,21 +180,43 @@ class ScreensTest {
     }
 
     /**
+     * The protocol's own form example without the two kinds of field this
+     * client does not draw (`input:colour` and `input:file` are in its list of
+     * what is shown whole in the web view, so a screen that holds one is a web
+     * page): what is left is a native form.
+     */
+    private fun formWithoutWhatIsShownInTheWebView(): String {
+        val text = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().context.assets.open("screen-form.json").use { it.readBytes().decodeToString() }
+        fun clean(node: Any?) {
+            when (node) {
+                is org.json.JSONObject -> node.keys().asSequence().toList().forEach { clean(node.get(it)) }
+                is org.json.JSONArray -> {
+                    for (at in node.length() - 1 downTo 0) {
+                        val part = node.get(at)
+                        val kind = (part as? org.json.JSONObject)?.optJSONObject("input")?.optString("t")
+                        if (kind == "colour" || kind == "file") node.remove(at) else clean(part)
+                    }
+                }
+            }
+        }
+        val root = org.json.JSONObject(text)
+        clean(root)
+        return root.toString()
+    }
+
+    /**
      * A hardware keyboard's Tab through the protocol's own form example, which
      * has fields that are picked, not typed (a choice, a date): each is one
-     * stop, the layer over the field, with its name. Where the client does not
-     * show the recorded form as a native screen the test says so and is a
-     * skip in the report.
+     * stop, the layer over the field, with its name, and the typed field under
+     * it is none.
      */
     @Test
     fun aTabWalkThroughAFormStopsOnceAtEachPickedField() {
-        val app = start("", routes = mapOf("/_navree/native/shell" to "shell", "/" to "screen-dashboard", "/customers/new" to "screen-form"))
+        val form = formWithoutWhatIsShownInTheWebView()
+        val app = start("", routes = mapOf("/_navree/native/shell" to "shell", "/" to "screen-dashboard", "/customers/new" to "screen-form"), read = { file -> if (file == "screen-form.json") form else null })
         front(app, "Today")
         send(app, Events.openLink("${server.url("/customers/new")}"))
-        val arrived = runCatching { compose.waitUntil(15_000) { (app.driver.nav.front?.let { app.driver.screens[it] }?.content as? Content.Native)?.screen?.title == "New customer" } }.isSuccess
-        val shown = app.driver.nav.front?.let { app.driver.screens[it] }
-        assumeTrue("the recorded form screen did not come as a native screen: in front ${shown?.content?.let { it::class.simpleName }} titled ${(shown?.content as? Content.Native)?.screen?.title}", arrived)
-        compose.waitForIdle()
+        front(app, "New customer")
         val stops = ArrayList<String>()
         repeat(45) { press ->
             compose.onRoot().performKeyInput { pressKey(Key.Tab) }
@@ -212,7 +233,7 @@ class ScreensTest {
             stops += named
         }
         stops.zipWithNext().forEach { (before, after) -> assertTrue("the stop \"$after\" came twice running", before != after) }
-        // Each picked field is one stop of a loop, not two.
+        // Each picked field is one stop of a loop, not two: its label starts the name of one stop, in the first loop.
         for (label in listOf("City", "Tier", "Customer since")) {
             val found = stops.count { it.startsWith(label) }
             assertTrue("$label is a stop at most once in each loop of the form: $found in ${stops.size} presses", found in 1..2)
