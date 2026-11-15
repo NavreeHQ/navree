@@ -421,7 +421,7 @@ For a `from` route, the authorizer:
 
 1. runs the type-level check;
 2. loads the record by its primary key in the request's unit of work, with `SELECT ... FOR UPDATE` on PostgreSQL and MySQL (on SQLite the write transaction already serialises writers);
-3. answers 404 when there is no such record, or when the id can't be one (not a UUID for a UUID key, say);
+3. answers 404 when there is no such record, when it is soft-deleted, or when the id can't be one (not a UUID for a UUID key, say);
 4. checks the rules against the record, and answers 403 when they say no;
 5. keeps the record for the handler.
 
@@ -431,7 +431,7 @@ Conditions see the record as JSON with one member per column, named like the col
 
 <Callout type="warning" title="Soft-deleted records">
 
-The record loader doesn't know about soft deletes. A soft-deleted row still loads, so a user the rules refuse gets a 403 rather than a 404, which tells them the record existed. Check `deleted_at` in your handler or service.
+A soft-deleted record (its `deleted_at` is set) is a 404 before any rule is checked, so a user the rules refuse can't tell it was there. Lists, and records whose parent is soft-deleted, are the app's to filter.
 
 </Callout>
 

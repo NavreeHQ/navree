@@ -37,8 +37,9 @@ Go through it in order; each item says how to check.
   the `can` rules they restrict.
 - [ ] `navree access:explain <user> <action> <Subject> [id]` for the
   surprising cases.
-- [ ] Soft-deleted records: handlers check `deleted_at` (record checks
-  still load them).
+- [ ] Soft-deleted records: a `from = "id"` route answers 404 for them before
+  any rule; lists and records whose parent is soft-deleted are filtered in
+  the handler or service.
 - [ ] Tests cover guest (401), user without the grant (403) and owner/role
   (2xx) for every sensitive route.
 - [ ] Workspace apps: `navree check` passes `workspace.entities`,
