@@ -106,7 +106,8 @@ public sealed partial class DataTable
         {
             DataTableColumn c = columns[index];
             double width = widths.TryGetValue(c.Key, out double known) ? known : ColumnSizing.LeastWidth(c.Kind);
-            return new ColumnSpec(c.Key, c.Kind, width, c.Kind == ColumnKind.Title && !personWidths.Contains(c.Key));
+            bool sized = personWidths.Contains(c.Key);
+            return new ColumnSpec(c.Key, c.Kind, width, c.Kind == ColumnKind.Title && !sized, sized);
         }
 
         List<ColInfo> startInfos = start.Select(i => new ColInfo(columns[i].Key, columns[i].Kind, columns[i].Role, columns[i].Secondary)).ToList();

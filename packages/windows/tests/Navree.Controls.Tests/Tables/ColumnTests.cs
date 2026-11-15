@@ -113,49 +113,110 @@ public sealed class ColumnLayoutTests
     }
 
     [TestMethod]
-    public void A_table_a_little_too_wide_takes_the_room_from_the_name_before_it_scrolls()
+    public void A_table_a_little_too_wide_takes_the_room_from_the_other_columns_and_keeps_the_name_whole()
     {
-        // 752 wide in 704: the name gives 48 and nothing is cut off at the frozen end.
+        // 752 wide in 704: the name has its 240 and what is over, 48, is taken from city, amount and stage in proportion to what each can give.
         ColumnLayout layout = ColumnLayoutBuilder.Build(Four(), 1, Actions, 40, 704);
         Same.Number(704, layout.RowWidth);
-        Same.Number(192, layout.Columns[0].Width);
-        Same.Number(232, layout.Fs);
+        Same.Number(240, layout.Columns[0].Width);
+        Same.Items([137.0, 106.0, 109.0], layout.Columns.Skip(1).Take(3).Select(c => c.Width));
+        Same.Number(280, layout.Fs);
         Same.Number(72, layout.Fe);
-        Same.Number(400, layout.ScrollWidth);
-        Same.Items([40.0, 232.0, 392.0, 512.0, 632.0], layout.Columns.Select(c => c.X));
+        Same.Number(352, layout.ScrollWidth);
+        Same.Items([40.0, 280.0, 417.0, 523.0, 632.0], layout.Columns.Select(c => c.X));
     }
 
     [TestMethod]
-    public void A_table_too_wide_even_then_scrolls_and_keeps_its_end_group()
+    public void A_table_too_wide_even_after_the_other_columns_gave_takes_from_the_name_and_then_scrolls()
     {
-        // At 560 the name is not frozen (it would fill more than half), gives all it may (240 to 120) and 72 is still over.
-        ColumnLayout layout = ColumnLayoutBuilder.Build(Four(), 1, Actions, 40, 560);
+        // At 400 the other columns give all they may (to 64, 56 and 72), the name gives 120 (240 to 120) and 24 is still over.
+        ColumnLayout layout = ColumnLayoutBuilder.Build(Four(), 1, Actions, 40, 400);
         Assert.AreEqual(0, layout.FrozenStartApplied);
-        Same.Number(120, layout.Columns[0].Width);
-        Same.Number(632, layout.RowWidth);
+        Same.Items([120.0, 64.0, 56.0, 72.0], layout.Columns.Take(4).Select(c => c.Width));
+        Same.Number(424, layout.RowWidth);
         Same.Number(40, layout.Fs);
         Same.Number(72, layout.Fe);
-        Same.Number(520, layout.ScrollWidth);
+        Same.Number(312, layout.ScrollWidth);
         Assert.IsTrue(layout.EndFrozen);
-        Same.Items([40.0, 160.0, 320.0, 440.0, 560.0], layout.Columns.Select(c => c.X));
+        Same.Items([40.0, 160.0, 224.0, 280.0, 352.0], layout.Columns.Select(c => c.X));
         Same.Items(
             [ColumnGroup.Scroll, ColumnGroup.Scroll, ColumnGroup.Scroll, ColumnGroup.Scroll, ColumnGroup.FrozenEnd],
             layout.Columns.Select(c => c.Group));
     }
 
     [TestMethod]
-    public void A_width_a_person_gave_to_the_name_is_not_taken_back()
+    public void A_name_asking_for_more_than_its_words_need_gives_the_rest_before_any_other_column_does()
+    {
+        ColumnSpec[] wide =
+        [
+            new("title", ColumnKind.Title, 400, true),
+            new("city", ColumnKind.Words, 160, false),
+            new("amount", ColumnKind.Number, 120, false),
+        ];
+        // 680 wide in 600: the name has 160 above its need and gives 80 of it; city and amount keep what they asked for.
+        ColumnLayout layout = ColumnLayoutBuilder.Build(wide, 0, [], 0, 600);
+        Same.Items([320.0, 160.0, 120.0], layout.Columns.Select(c => c.Width));
+        Same.Number(600, layout.RowWidth);
+    }
+
+    [TestMethod]
+    public void A_width_a_person_gave_to_a_column_is_not_taken_back_to_make_room()
     {
         ColumnSpec[] given =
         [
-            new("title", ColumnKind.Title, 240, false),
+            new("title", ColumnKind.Title, 240, true),
+            new("city", ColumnKind.Words, 160, false, Sized: true),
+            new("amount", ColumnKind.Number, 120, false),
+            new("stage", ColumnKind.Status, 120, false),
+        ];
+        ColumnLayout layout = ColumnLayoutBuilder.Build(given, 0, [], 0, 540);
+        Same.Number(160, layout.Columns[1].Width);
+        Same.Number(240, layout.Columns[0].Width);
+        Same.Number(540, layout.RowWidth);
+        Same.Items([62.0, 78.0], layout.Columns.Skip(2).Select(c => c.Width));
+    }
+
+    [TestMethod]
+    public void The_inventory_of_the_store_demo_at_840_gives_the_name_its_words_and_the_other_columns_give_first()
+    {
+        // Product (the name), Category, In stock, Level, and the field with its button, as the table measures them; Price is secondary.
+        // The window is 840 wide and the table 709: its scroll view is 707.
+        ColInfo[] inventory =
+        [
+            new("product", ColumnKind.Title, ColumnRole.Title, false),
+            new("category", ColumnKind.Words, ColumnRole.None, false),
+            new("stock", ColumnKind.Number, ColumnRole.None, false),
+            new("level", ColumnKind.Status, ColumnRole.Status, false),
+            new("restock", ColumnKind.Controls, ColumnRole.None, false),
+            new("price", ColumnKind.Number, ColumnRole.None, true),
+        ];
+        double[] asks = [240, 112, 104, 112, 224, 96];
+        IReadOnlyList<int> shown = ColumnSet.Shown(inventory, new HashSet<string>(), new HashSet<string>(), asks, 707);
+        Same.Items([0, 1, 2, 3, 4], shown);
+
+        ColumnSpec[] specs = [.. shown.Select(i => new ColumnSpec(inventory[i].Key, inventory[i].Kind, asks[i], inventory[i].Kind == ColumnKind.Title))];
+        ColumnLayout layout = ColumnLayoutBuilder.Build(specs, 1, [], 0, 707);
+        Same.Number(240, layout.Columns[0].Width);
+        Same.Items([82.0, 74.0, 87.0], layout.Columns.Skip(1).Take(3).Select(c => c.Width));
+        Same.Number(224, layout.Columns[4].Width);
+        Same.Number(707, layout.RowWidth);
+        Assert.IsTrue(layout.Columns.Skip(1).Take(3).Select(c => c.Width).Zip([64.0, 56.0, 72.0]).All(p => p.First >= p.Second), "no column goes below its least");
+    }
+
+    [TestMethod]
+    public void A_width_a_person_gave_to_the_name_is_not_taken_back_and_the_other_columns_give_instead()
+    {
+        ColumnSpec[] given =
+        [
+            new("title", ColumnKind.Title, 240, false, Sized: true),
             new("city", ColumnKind.Words, 160, false),
             new("amount", ColumnKind.Number, 120, false),
             new("stage", ColumnKind.Status, 120, false),
         ];
         ColumnLayout layout = ColumnLayoutBuilder.Build(given, 1, Actions, 40, 704);
         Same.Number(240, layout.Columns[0].Width);
-        Same.Number(752, layout.RowWidth);
+        Same.Number(704, layout.RowWidth);
+        Same.Items([137.0, 106.0, 109.0], layout.Columns.Skip(1).Take(3).Select(c => c.Width));
     }
 
     [TestMethod]
@@ -164,10 +225,9 @@ public sealed class ColumnLayoutTests
         ColumnLayout layout = ColumnLayoutBuilder.Build(Four(), 1, Actions, 40, 703);
         Assert.AreEqual(0, layout.FrozenStartApplied);
         Same.Number(40, layout.Fs);
-        Same.Number(191, layout.Columns[0].Width);
-        Same.Number(591, layout.ScrollWidth);
+        Same.Number(240, layout.Columns[0].Width);
+        Same.Items([137.0, 105.0, 109.0], layout.Columns.Skip(1).Take(3).Select(c => c.Width));
         Same.Number(703, layout.RowWidth);
-        Same.Items([40.0, 231.0, 391.0, 511.0, 631.0], layout.Columns.Select(c => c.X));
     }
 
     [TestMethod]
@@ -186,9 +246,10 @@ public sealed class ColumnLayoutTests
         ];
         ColumnLayout layout = ColumnLayoutBuilder.Build(shown, 1, Actions, 40, 958);
         Same.Number(958, layout.RowWidth);
-        Same.Number(196, layout.Columns[0].Width);
+        Same.Number(240, layout.Columns[0].Width);
         // Nothing is left to scroll: what the end group covers is nothing.
         Same.Number(958 - layout.Fe, layout.Columns[6].X + layout.Columns[6].Width);
+        Assert.IsTrue(layout.Columns.Skip(1).Take(6).All(c => c.Width >= 56), "no column goes below its least");
     }
 
     [TestMethod]
