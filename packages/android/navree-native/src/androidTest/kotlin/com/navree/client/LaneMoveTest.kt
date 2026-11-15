@@ -196,6 +196,9 @@ class LaneMoveTest {
     @Test
     fun aCardMovedByTheKeyboardAndByItsMenuKeepsTheFocusAndStandsWhereTheMoveSays() {
         open(200)
+        // A button takes the focus only when the keyboard is what is in use (a touch screen's taps do not focus it): a key says so.
+        compose.onRoot().performKeyInput { pressKey(Key.Tab) }
+        compose.waitForIdle()
         handle(0).performSemanticsAction(SemanticsActions.RequestFocus)
         compose.waitForIdle()
         assertTrue("the first card's handle has the focus", focused(0))
