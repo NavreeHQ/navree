@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "navree.core": {
+        "type": "Project"
+      },
+      "navree.design": {
+        "type": "Project",
+        "dependencies": {
+          "Navree.Protocol": "[1.0.0, )"
+        }
+      },
+      "navree.protocol": {
+        "type": "Project"
+      },
+      "navree.runtime": {
+        "type": "Project",
+        "dependencies": {
+          "Navree.Core": "[1.0.0, )",
+          "Navree.Protocol": "[1.0.0, )"
+        }
+      }
+    }
+  }
+}
