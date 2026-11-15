@@ -61,38 +61,41 @@ internal sealed partial class RowsSource : IList, INotifyCollectionChanged, IKey
         CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
     }
 
-    /// <summary>Adds rows at the end.</summary>
+    /// <summary>Adds rows at a place.</summary>
+    /// <param name="at">The place of the first new row.</param>
     /// <param name="rows">The rows.</param>
-    internal void Append(IReadOnlyList<RowHandle> rows)
+    internal void InsertRows(int at, IReadOnlyList<RowHandle> rows)
     {
         if (rows.Count == 0)
         {
             return;
         }
 
-        int at = items.Count;
-        items.AddRange(rows);
-        for (int i = 0; i < rows.Count; i++)
+        at = Math.Clamp(at, 0, items.Count);
+        bool atEnd = at == items.Count;
+        items.InsertRange(at, rows);
+        if (atEnd)
         {
-            places[rows[i].Key] = at + i;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                places[rows[i].Key] = at + i;
+            }
+        }
+        else
+        {
+            Reindex();
         }
 
         CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, rows.ToList(), at));
     }
 
+    /// <summary>Adds rows at the end.</summary>
+    /// <param name="rows">The rows.</param>
+    internal void Append(IReadOnlyList<RowHandle> rows) => InsertRows(items.Count, rows);
+
     /// <summary>Adds rows at the start.</summary>
     /// <param name="rows">The rows.</param>
-    internal void Prepend(IReadOnlyList<RowHandle> rows)
-    {
-        if (rows.Count == 0)
-        {
-            return;
-        }
-
-        items.InsertRange(0, rows);
-        Reindex();
-        CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, rows.ToList(), 0));
-    }
+    internal void Prepend(IReadOnlyList<RowHandle> rows) => InsertRows(0, rows);
 
     /// <summary>Takes rows out.</summary>
     /// <param name="at">The place of the first.</param>

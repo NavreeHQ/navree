@@ -281,7 +281,9 @@ public sealed class TextTablePresenter<T> : IDataTablePresenter
     public Func<T, string?>? Second { get; set; }
 
     /// <inheritdoc />
-    public UIElement CreateCell(DataTableColumn column, RowShape shape) => new TextBlock
+    public UIElement CreateCell(DataTableColumn column, RowShape shape) => column.Role == ColumnRole.Actions
+        ? new DataTableGlyph { Glyph = Glyphs.More, Width = 32, Height = 32, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
+        : new TextBlock
     {
         TextTrimming = column.Kind == ColumnKind.Number ? TextTrimming.Clip : TextTrimming.CharacterEllipsis,
         TextWrapping = TextWrapping.NoWrap,
@@ -295,15 +297,30 @@ public sealed class TextTablePresenter<T> : IDataTablePresenter
     };
 
     /// <inheritdoc />
-    public void BindCell(UIElement cell, in DataTableRecord record, int columnIndex) =>
-        ((TextBlock)cell).Text = CellText(record, columnIndex);
+    public void BindCell(UIElement cell, in DataTableRecord record, int columnIndex)
+    {
+        if (cell is TextBlock text)
+        {
+            text.Text = CellText(record, columnIndex);
+        }
+        else if (cell is DataTableGlyph glyph)
+        {
+            glyph.Visibility = record.HasMenu ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
 
     /// <inheritdoc />
-    public void ClearCell(UIElement cell) => ((TextBlock)cell).Text = string.Empty;
+    public void ClearCell(UIElement cell)
+    {
+        if (cell is TextBlock text)
+        {
+            text.Text = string.Empty;
+        }
+    }
 
     /// <inheritdoc />
     public string CellText(in DataTableRecord record, int columnIndex) =>
-        record.Data is T item ? model.Source[columnIndex].Text(item) : string.Empty;
+        record.Data is T item && model.Source[columnIndex].Role != ColumnRole.Actions ? model.Source[columnIndex].Text(item) : string.Empty;
 
     /// <inheritdoc />
     public string? SecondLine(in DataTableRecord record) => record.Data is T item ? Second?.Invoke(item) : null;
@@ -312,7 +329,8 @@ public sealed class TextTablePresenter<T> : IDataTablePresenter
     public string RowName(in DataTableRecord record) => model.Source.Count > 0 ? CellText(record, 0) : record.Key ?? string.Empty;
 
     /// <inheritdoc />
-    public int ControlCount(in DataTableRecord record, int columnIndex) => 0;
+    public int ControlCount(in DataTableRecord record, int columnIndex) =>
+        model.Source[columnIndex].Role == ColumnRole.Actions && record.HasMenu ? 1 : 0;
 
     /// <inheritdoc />
     public UIElement? CreateDetail(in DataTableRecord record) => record.Data is T item ? Detail?.Invoke(item) : null;

@@ -21,6 +21,9 @@ public sealed partial class MainWindow : Window
     /// <summary>The stage a scenario puts its content on.</summary>
     internal Microsoft.UI.Xaml.Controls.Border StageHost => Stage;
 
+    /// <summary>The element whose theme a scenario sets to show light and dark.</summary>
+    internal FrameworkElement ThemeHost => Root;
+
     private async void OnRootLoaded(object sender, RoutedEventArgs e)
     {
         Report.Open(arguments.Out);

@@ -10,27 +10,41 @@ internal static class ExperimentRunner
         Handshake.Open(arguments.Out);
         foreach (string name in arguments.Run)
         {
-            switch (name)
+            try
             {
-                case "translation":
-                    await TranslationExperiment.RunAsync(window);
-                    break;
-                case "values":
-                    await ValuesExperiment.RunAsync(window);
-                    break;
-                case "stick":
-                    await StickExperiment.RunAsync(window, StickyMode.Compositor, rtl: false);
-                    await StickExperiment.RunAsync(window, StickyMode.Compositor, rtl: true);
-                    await StickExperiment.RunAsync(window, StickyMode.UiThread, rtl: false);
-                    await StickExperiment.RunAsync(window, StickyMode.Static, rtl: false);
-                    break;
-                case "anchor":
-                    await AnchorExperiment.RunAsync(window);
-                    break;
-                default:
-                    Report.Line("unknown scenario: " + name);
-                    break;
+                await RunOneAsync(window, name);
             }
+            catch (Exception problem)
+            {
+                Report.Line($"[{name}] ended with an exception: {problem}");
+            }
+        }
+    }
+
+    private static async Task RunOneAsync(MainWindow window, string name)
+    {
+        switch (name)
+        {
+            case "table":
+                await TableScenarios.RunAsync(window, TableScenarios.All);
+                break;
+            case "translation":
+                await TranslationExperiment.RunAsync(window);
+                break;
+            case "values":
+                await ValuesExperiment.RunAsync(window);
+                break;
+            case "stick":
+                await StickExperiment.RunAsync(window, StickyMode.Compositor, rtl: false);
+                await StickExperiment.RunAsync(window, StickyMode.Compositor, rtl: true);
+                await StickExperiment.RunAsync(window, StickyMode.UiThread, rtl: false);
+                break;
+            case "anchor":
+                await AnchorExperiment.RunAsync(window);
+                break;
+            default:
+                Report.Line("unknown scenario: " + name);
+                break;
         }
     }
 }

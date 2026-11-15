@@ -10,11 +10,8 @@ namespace Navree.Controls;
 /// <summary>How the parts that stay in place are moved against the scroll.</summary>
 internal enum StickyMode
 {
-    /// <summary>By expression animations on the compositor, with the same numbers written to the elements at rest.</summary>
+    /// <summary>By expression animations on the compositor; nothing is written to the elements.</summary>
     Compositor,
-
-    /// <summary>By expression animations only while the scroll view is not idle; at rest by numbers written to the elements.</summary>
-    Static,
 
     /// <summary>Only by numbers written to the elements from the scroll view's change events.</summary>
     UiThread,
@@ -64,7 +61,6 @@ internal sealed class StickyCoordinator
     private bool rtl;
     private double fs;
     private double fe;
-    private bool animating;
     private bool built;
     private bool attached;
 
@@ -100,7 +96,6 @@ internal sealed class StickyCoordinator
         scroll.ViewChanged += (_, _) => Mirror();
         scroll.ExtentChanged += (_, _) => OnExtentChanged();
         scroll.SizeChanged += (_, _) => OnExtentChanged();
-        scroll.StateChanged += (_, _) => OnStateChanged();
         foreach ((UIElement element, StickyRole role) in parts)
         {
             PrepareClip(element, role);
@@ -157,9 +152,18 @@ internal sealed class StickyCoordinator
         }
     }
 
-    /// <summary>Writes the numbers to the elements as the scroll view stands now.</summary>
+    /// <summary>
+    /// Writes the numbers to the elements as the scroll view stands now. It is not done while the
+    /// animations run: a number written to an element's translation is added to what an animation
+    /// of the same translation gives, so the element would be moved twice.
+    /// </summary>
     internal void Mirror()
     {
+        if (built && Mode == StickyMode.Compositor)
+        {
+            return;
+        }
+
         double reach = Math.Max(0, scroll.ScrollableWidth);
         (double min, double max) = rtl ? (-reach, 0.0) : (0.0, reach);
         double position = rtl ? -scroll.HorizontalOffset : scroll.HorizontalOffset;
@@ -219,41 +223,12 @@ internal sealed class StickyCoordinator
         }
 
         built = true;
-        animating = Mode == StickyMode.Compositor;
         foreach ((UIElement element, StickyRole role) in parts)
         {
             Begin(element, role);
         }
 
         return true;
-    }
-
-    private void OnStateChanged()
-    {
-        if (Mode != StickyMode.Static)
-        {
-            return;
-        }
-
-        bool moving = scroll.State != ScrollingInteractionState.Idle;
-        if (moving == animating)
-        {
-            return;
-        }
-
-        animating = moving;
-        foreach ((UIElement element, StickyRole role) in parts)
-        {
-            if (moving)
-            {
-                Begin(element, role);
-            }
-            else
-            {
-                Mirror();
-                End(element, role);
-            }
-        }
     }
 
     private bool BuildAnimations()
@@ -288,7 +263,7 @@ internal sealed class StickyCoordinator
 
     private void Begin(UIElement element, StickyRole role)
     {
-        if (Mode == StickyMode.UiThread || compositor is null || (Mode == StickyMode.Static && !animating))
+        if (Mode == StickyMode.UiThread || compositor is null)
         {
             PrepareClip(element, role);
             return;
@@ -302,6 +277,12 @@ internal sealed class StickyCoordinator
         }
 
         Visual visual = ElementCompositionPreview.GetElementVisual(element);
+        if (role is StickyRole.Start or StickyRole.End or StickyRole.Header)
+        {
+            // What was written before is added to what the animation gives, so it is taken away first.
+            element.Translation = Vector3.Zero;
+        }
+
         switch (role)
         {
             case StickyRole.Start:
