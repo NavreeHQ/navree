@@ -56,6 +56,8 @@ class WebWorkersTest {
         .body("<!doctype html><html><head><meta charset=\"utf-8\"></head><body>$body</body></html>")
         .build()
 
+    private var documentCheck = false
+
     private fun openedBy(page: String, origins: Origins, base: String): WebView {
         var web: WebView? = null
         compose.setContent {
@@ -65,7 +67,7 @@ class WebWorkersTest {
                     WebView(context).apply {
                         settings.javaScriptEnabled = true
                         webViewClient = OriginWebClient(origins, onLink = {})
-                        guardDocuments(this, origins)
+                        documentCheck = guardDocuments(this, origins)
                         web = this
                     }
                 },
@@ -119,12 +121,13 @@ class WebWorkersTest {
     }
 
     @Test
-    fun whatASocketToAnotherOriginDoes() {
+    fun aSocketGoesOnlyToTheAppsOrigins() {
         app.start()
         other.start()
         val base = app.url("/").toString().trimEnd('/')
         val origins = Origins(base, loopbackHttp = true)
         val reached = Collections.synchronizedList(ArrayList<String>())
+        val ours = Collections.synchronizedList(ArrayList<String>())
         other.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 otherAsked += request.method + " " + request.url.encodedPath + " upgrade=" + request.headers["Upgrade"]
@@ -139,10 +142,19 @@ class WebWorkersTest {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val path = request.url.encodedPath
                 appAsked += request.method + " " + path
-                return if (path == "/") {
-                    page("<p>ours</p><script>try { var s = new WebSocket('ws://localhost:${other.port}/socket'); s.onopen = function(){ new Image().src = '/socket-open' }; s.onerror = function(){ new Image().src = '/socket-error' } } catch (e) { new Image().src = '/socket-refused' }</script>")
-                } else {
-                    MockResponse.Builder().code(204).build()
+                return when (path) {
+                    "/" -> page(
+                        "<p>ours</p><script>" +
+                            "try { var s = new WebSocket('ws://localhost:${other.port}/socket'); s.onopen = function(){ new Image().src = '/socket-open' }; s.onerror = function(){ new Image().src = '/socket-error' } } catch (e) { new Image().src = '/socket-refused' }" +
+                            "try { var t = new WebSocket('ws://localhost:${app.port}/own-socket'); t.onopen = function(){ new Image().src = '/own-socket-open' } } catch (e) { new Image().src = '/own-socket-refused' }" +
+                            "</script>",
+                    )
+                    "/own-socket" -> MockResponse.Builder().webSocketUpgrade(object : WebSocketListener() {
+                        override fun onOpen(webSocket: WebSocket, response: Response) {
+                            ours += "opened"
+                        }
+                    }).build()
+                    else -> MockResponse.Builder().code(204).build()
                 }
             }
         }
@@ -151,6 +163,12 @@ class WebWorkersTest {
         compose.waitForIdle()
         val said = "a page's socket to another origin: the other server was asked $otherAsked, the socket opened: $reached, the page was told: ${appAsked.filter { it.contains("socket") }}"
         android.util.Log.i("WebWorkersTest", said)
-        Shots.put("socket-asked.txt", said + "\n")
+        Shots.put("socket-asked.txt", said + "\n" + "the page's own socket opened: $ours; the document check is on: $documentCheck\n")
+        // Where the system's web view runs the check at the start of every document, a socket to
+        // another origin is refused before it is made, and the page's own opens.
+        if (documentCheck) {
+            assertFalse("a socket reached another origin: $otherAsked", otherAsked.isNotEmpty())
+            assertTrue("the page's own socket opens", ours.isNotEmpty())
+        }
     }
 }

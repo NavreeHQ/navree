@@ -94,7 +94,8 @@ class WebRulesTest {
         assertTrue("a failure of the check empties the document too", script.endsWith("catch(e){stop()}})();"))
         assertTrue("a document with no origin of its own is judged by its address", script.contains("o!=='null'") && script.contains("location.href"))
         assertTrue("only a web address can pass", script.contains("if(s!=='http'&&s!=='https')return false"))
-        assertTrue("it is short: it holds up every load", script.length < 1_500)
+        assertTrue("a page's own WebSocket goes only where its loads do", script.contains("self.WebSocket") && script.contains("SecurityError"))
+        assertTrue("it is short: it holds up every load", script.length < 2_000)
     }
 
     @Test

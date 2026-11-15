@@ -142,6 +142,10 @@ object WebRules {
             "var h=u.hostname,p=u.port?+u.port:(s==='http'?80:443);" +
             "for(var i=0;i<r.length;i++){var x=r[i],n=x[1];if(x[0]===s&&x[2]===p&&(n===h||(n.indexOf('*.')===0&&h.length>n.length-1&&h.slice(1-n.length)===n.slice(1))))return true}" +
             "return false}" +
+            // A socket is not a request the web view's client is asked about: the page's own WebSocket goes only to the same places.
+            "var W=self.WebSocket;if(W){var N=function(u,q){var t=new URL(new URL(u,location.href).href.replace(/^ws/,'http'));" +
+            "if(!at(t.href))throw new DOMException('Not allowed','SecurityError');return q===undefined?new W(u):new W(u,q)};" +
+            "N.prototype=W.prototype;['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(k){N[k]=W[k]});self.WebSocket=N}" +
             "try{var o=self.origin;if(o!=='null'){if(!at(o))stop();return}" +
             "var l=location.href;if(l.indexOf('about:')===0)return;if(!at(l))stop()}catch(e){stop()}})();"
     }
