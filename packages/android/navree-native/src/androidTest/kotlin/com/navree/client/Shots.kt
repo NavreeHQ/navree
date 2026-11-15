@@ -34,25 +34,9 @@ object Shots {
     @Composable
     fun Looked(content: @Composable () -> Unit) {
         if (look == "rtl") {
-            // The windows a dialog or a menu opens read their direction from the activity's resources, not from the composition.
-            val context = androidx.compose.ui.platform.LocalContext.current
-            androidx.compose.runtime.remember(context) { windowsFollow(context) }
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { content() }
         } else {
             content()
-        }
-    }
-
-    /** The activity's resources say the layout runs right to left, so every window it opens does too. */
-    private fun windowsFollow(context: android.content.Context) {
-        try {
-            val resources = context.resources
-            val configuration = android.content.res.Configuration(resources.configuration)
-            configuration.setLayoutDirection(java.util.Locale("ar"))
-            @Suppress("DEPRECATION")
-            resources.updateConfiguration(configuration, resources.displayMetrics)
-        } catch (_: Throwable) {
-            // The composition alone is mirrored then.
         }
     }
 
