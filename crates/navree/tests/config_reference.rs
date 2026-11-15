@@ -183,6 +183,8 @@ fn sections() -> Vec<SectionRegistration> {
     sections.push(SectionRegistration::of::<navree::time::TimeOptions>());
     #[cfg(feature = "ui")]
     sections.push(SectionRegistration::of::<navree::ui::UiOptions>());
+    #[cfg(feature = "ui")]
+    sections.push(SectionRegistration::of::<navree::ui::PagePolicyOptions>());
     #[cfg(feature = "validation")]
     sections.push(SectionRegistration::of::<
         navree::validation::ValidationOptions,

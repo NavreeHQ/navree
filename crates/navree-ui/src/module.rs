@@ -24,6 +24,7 @@ use navree_kernel::{
 
 use crate::op::{Envelope, PendingOps, UI_HEADER, is_prefetch};
 use crate::pages::{PagesOptions, REGION_HEADER, Renderer, UiOptions};
+use crate::policy::{PagePolicy, PagePolicyOptions};
 use crate::shell::FLASH_COOKIE;
 use crate::{assets, compress};
 
@@ -136,6 +137,7 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     // The `ui` section is read by the factory below (an app need not have
     // `ConfigModule`), so it is registered here without a provider.
     m.config_section::<UiOptions>();
+    m.config_section::<PagePolicyOptions>();
     m.factory(Factory::<PagesOptions>::new(move |r: Resolver| {
         let explicit = pages.clone();
         async move {
@@ -147,6 +149,11 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
             Ok(Arc::new(options.checked()))
         }
     }));
+    // The policy every page is served with: the toolkit's own, widened only by what the app's
+    // `ui.policy` section allows. A key or a source outside the rules stops the boot.
+    m.factory(Factory::<PagePolicy>::new(|r: Resolver| async move {
+        Ok(Arc::new(crate::policy::build(&r.app()).await?))
+    }));
     if always {
         m.contribute(UiAlways);
     }
@@ -154,11 +161,21 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     // Whether the app compresses its answers (`http.compression`), settled with the gate:
     // off, the toolkit compresses nothing either.
     let compressing: Arc<OnceLock<bool>> = Arc::new(OnceLock::new());
+    // The app's page policy, settled with the gate and read by the layer: the layer touches no
+    // response when the policy is the toolkit's own.
+    let policy: Arc<OnceLock<Arc<PagePolicy>>> = Arc::new(OnceLock::new());
+    // Whether pages that start clean are on in this app: it has a UI extension, a plugin's
+    // island script, or a policy other than the toolkit's.
+    let fresh: Arc<OnceLock<bool>> = Arc::new(OnceLock::new());
     let for_gate = slot.clone();
     let compressing_for_gate = compressing.clone();
+    let policy_for_gate = policy.clone();
+    let fresh_for_gate = fresh.clone();
     m.factory(Factory::<UiGate>::new(move |r: Resolver| {
         let slot = for_gate.clone();
         let compressing = compressing_for_gate.clone();
+        let policy = policy_for_gate.clone();
+        let fresh = fresh_for_gate.clone();
         async move {
             let ctx = r.app();
             let on = ctx
@@ -181,6 +198,18 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
             // The links modules add with `m.nav_item`, checked once: an address that is not
             // a path of this app stops the boot.
             let links = crate::shell::links::check(&ctx)?;
+            // The page policy is composed here, before any route is built: a key or a source of
+            // `ui.policy` outside the rules stops the boot.
+            let page_policy = r.get::<PagePolicy>().await?;
+            // Pages that start clean are on where plugin code can reach a page: an app with a UI
+            // extension, a plugin's island script, or a policy widened by the app.
+            let starts_clean = !ctx
+                .contributions::<crate::extension::UiExtension>()
+                .is_empty()
+                || plugin_islands(&ctx)
+                || !page_policy.is_the_toolkits();
+            let _ = policy.set(page_policy);
+            let _ = fresh.set(starts_clean);
             let _ = slot.set(wanted);
             Ok(Arc::new(UiGate(slot, Arc::new(links))))
         }
@@ -193,9 +222,12 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
         move |_, router| {
             if slot.get().copied().unwrap_or(false) {
                 let compressing = compressing.get().copied().unwrap_or(true);
+                // The app's policy, when it is not the toolkit's own: the layer then puts it on
+                // every page and fragment that carries the toolkit's policy.
+                let policy = policy.get().cloned().filter(|policy| !policy.is_the_toolkits());
                 Ok(
                     router.layer(middleware::from_fn(move |request: Request, next: Next| {
-                        reply_layer(compressing, request, next)
+                        reply_layer(compressing, policy.clone(), request, next)
                     })),
                 )
             } else {
@@ -341,10 +373,29 @@ pub(crate) async fn render_json(
     }))
 }
 
+/// Whether a plugin's island script is in the app: one built with a namespace, which is how a
+/// plugin's script is named, or one a module of a plugin that is not one of the framework's own
+/// contributes. Such an app has pages that start clean, as one with a UI extension has.
+fn plugin_islands(ctx: &AppContext) -> bool {
+    ctx.contributions::<crate::island::IslandScript>()
+        .iter()
+        .any(|script| {
+            script.value.namespace.is_some()
+                || navree_kernel::__private::is_community_plugin(ctx, script.module.id)
+        })
+}
+
 /// Swaps a reply's fallback for its ops when the request came from the runtime,
 /// and sends rendered responses in brotli to clients that take it, unless the
-/// app turned compression off (`compressing` is false).
-async fn reply_layer(compressing: bool, mut request: Request, next: Next) -> Response {
+/// app turned compression off (`compressing` is false). When the app widened its page policy
+/// (`policy` is its own, not the toolkit's), the pages and fragments that carry the toolkit's
+/// policy leave with the app's.
+async fn reply_layer(
+    compressing: bool,
+    policy: Option<Arc<PagePolicy>>,
+    mut request: Request,
+    next: Next,
+) -> Response {
     if !compressing {
         request.extensions_mut().insert(compress::Off);
     }
@@ -353,7 +404,10 @@ async fn reply_layer(compressing: bool, mut request: Request, next: Next) -> Res
     // a browser's is handed back untouched.
     #[cfg(feature = "native-preview")]
     let (request, next) = match crate::native::swap::layer(asked, request, next).await {
-        Ok(response) => return response,
+        Ok(mut response) => {
+            apply_policy(policy.as_deref(), &mut response);
+            return response;
+        }
         Err(back) => back,
     };
     let from_runtime = asked.is_runtime();
@@ -366,6 +420,7 @@ async fn reply_layer(compressing: bool, mut request: Request, next: Next) -> Res
         .then(|| operation_kind(&method, request.headers()));
     let started = std::time::Instant::now();
     let mut response = next.run(request).await;
+    apply_policy(policy.as_deref(), &mut response);
     let ops = response
         .extensions()
         .get::<PendingOps>()
@@ -401,6 +456,14 @@ async fn reply_layer(compressing: bool, mut request: Request, next: Next) -> Res
         record_operation(kind, &response, ops, started);
     }
     compress::encode(&method, &accept, response).await
+}
+
+/// Gives `response` the app's page policy, when the app has one that is not the toolkit's own
+/// and the response carries the toolkit's.
+fn apply_policy(policy: Option<&PagePolicy>, response: &mut Response) {
+    if let Some(policy) = policy {
+        crate::policy::apply(policy, response);
+    }
 }
 
 /// Records an operation the runtime or a native client asked for, in the
