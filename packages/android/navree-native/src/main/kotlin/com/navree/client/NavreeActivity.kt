@@ -245,7 +245,7 @@ open class NavreeActivity : ComponentActivity() {
 }
 
 @Composable
-private fun Host(session: NavreeSession) {
+internal fun Host(session: NavreeSession) {
     val window = rememberWindow()
     val configuration = LocalConfiguration.current
     val driver = session.driver

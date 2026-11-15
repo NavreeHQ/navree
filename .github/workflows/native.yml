@@ -359,6 +359,17 @@ jobs:
           adb="$ANDROID_HOME/platform-tools/adb"
           "$adb" install -r -t "$RUNNER_TEMP"/apks/navree-native/build/outputs/apk/androidTest/debug/*.apk
           status=0
+          # A tablet is pictured on its side and upright; a phone upright.
+          orientations="portrait"
+          if [ "${{ matrix.device }}" = tablet ]; then orientations="landscape portrait"; fi
+          "$adb" shell settings put system accelerometer_rotation 0
+          for orientation in $orientations; do
+          # The pixel tablet's own orientation is the wide one; turned a quarter it stands upright.
+          rotation=0
+          name="${{ matrix.device }}"
+          if [ "${{ matrix.device }}" = tablet ] && [ "$orientation" = portrait ]; then rotation=1; name=tablet-portrait; fi
+          "$adb" shell settings put system user_rotation "$rotation"
+          sleep 3
           for look in light dark large rtl; do
             night=no; scale=1.0; rtl=0
             case "$look" in
@@ -380,9 +391,17 @@ jobs:
               "$adb" shell settings put system font_scale "$scale"
               sleep 3
             fi
-            "$adb" shell am instrument -w -e look "$look" -e device "${{ matrix.device }}" -e store http://10.0.2.2:8095 -e inbox http://10.0.2.2:8096 -e board http://10.0.2.2:8097 \
-              com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/instrument-$look.txt"
-            if ! grep -q '^OK (' "$RUNNER_TEMP/instrument-$look.txt"; then status=1; fi
+            "$adb" shell am instrument -w -e look "$look" -e device "$name" -e store http://10.0.2.2:8095 -e inbox http://10.0.2.2:8096 -e board http://10.0.2.2:8097 \
+              com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/instrument-$name-$look.txt"
+            if ! grep -q '^OK (' "$RUNNER_TEMP/instrument-$name-$look.txt"; then status=1; fi
+          done
+          # The next way up starts from left to right.
+          "$adb" shell setprop debug.force_rtl false || true
+          "$adb" shell settings put global debug.force_rtl 0
+          "$adb" shell settings put system font_scale 1.05
+          sleep 3
+          "$adb" shell settings put system font_scale 1.0
+          sleep 3
           done
           mkdir -p "$RUNNER_TEMP/screens"
           "$adb" pull /data/local/tmp/navree-screens "$RUNNER_TEMP/screens/" || true

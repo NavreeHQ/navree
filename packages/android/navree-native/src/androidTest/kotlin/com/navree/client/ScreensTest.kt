@@ -7,11 +7,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.navree.client.core.Content
 import com.navree.client.core.Events
 import com.navree.client.core.Stage
-import com.navree.client.ui.NavreeApp
 import mockwebserver3.MockWebServer
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,6 +27,11 @@ import org.junit.runner.RunWith
 class ScreensTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Before
+    fun readingListsFollowThePictures() {
+        Shots.rule = compose
+    }
 
     private val server = MockWebServer()
 
@@ -46,7 +51,8 @@ class ScreensTest {
             made = NavreeSession(compose.activity.application, config, origin.toHttpUrl())
             made.effects.activity = compose.activity
         }
-        compose.setContent { Shots.Looked { NavreeApp(made.driver, config, image = made::image) } }
+        Shots.tree = { treeOf(made) }
+        compose.setContent { Shots.Looked { Host(made) } }
         waitFor("the app is ready", 60_000) { made.driver.nav.stage == Stage.Ready }
         return made
     }
@@ -69,6 +75,10 @@ class ScreensTest {
         Thread.sleep(600)
         compose.waitForIdle()
     }
+
+    /** What the screen in front is, as a tree, for the file beside each picture. */
+    private fun treeOf(session: NavreeSession): String? =
+        session.driver.nav.front?.let { session.driver.screens[it] }?.screen?.let { com.navree.protocol.Navree.json.encodeToString(com.navree.protocol.Navree.Screen.serializer(), it) }
 
     private fun send(session: NavreeSession, event: kotlinx.serialization.json.JsonObject) {
         compose.runOnUiThread { session.driver.send(event) }

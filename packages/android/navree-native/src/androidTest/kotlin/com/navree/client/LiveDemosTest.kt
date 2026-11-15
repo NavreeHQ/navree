@@ -2,6 +2,8 @@ package com.navree.client
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
@@ -18,10 +20,10 @@ import com.navree.client.core.Stage
 import com.navree.client.design.ListRules
 import com.navree.client.design.ScreenRules
 import com.navree.client.design.walk
-import com.navree.client.ui.NavreeApp
 import com.navree.protocol.Navree
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,6 +39,11 @@ import org.junit.runner.RunWith
 class LiveDemosTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Before
+    fun readingListsFollowThePictures() {
+        Shots.rule = compose
+    }
 
     private val arguments = InstrumentationRegistry.getArguments()
 
@@ -62,6 +69,10 @@ class LiveDemosTest {
         compose.waitForIdle()
     }
 
+    /** What the screen in front is, as a tree, for the file beside each picture. */
+    private fun treeOf(app: NavreeSession): String? =
+        app.driver.nav.front?.let { app.driver.screens[it] }?.screen?.let { com.navree.protocol.Navree.json.encodeToString(com.navree.protocol.Navree.Screen.serializer(), it) }
+
     private fun send(app: NavreeSession, event: kotlinx.serialization.json.JsonObject) {
         compose.runOnUiThread { app.driver.send(event) }
     }
@@ -73,7 +84,8 @@ class LiveDemosTest {
             app = NavreeSession(compose.activity.application, config, origin.toHttpUrl())
             app.effects.activity = compose.activity
         }
-        compose.setContent { Shots.Looked { NavreeApp(app.driver, config, image = app::image) } }
+        Shots.tree = { treeOf(app) }
+        compose.setContent { Shots.Looked { Host(app) } }
         waitFor("the app is ready", 60_000) { app.driver.nav.stage == Stage.Ready }
         settled(app)
         return app
@@ -120,7 +132,11 @@ class LiveDemosTest {
         val field = compose.onAllNodes(hasSetTextAction()).onFirst()
         runCatching {
             field.performClick()
-            field.performTextInput(words)
+            // The search view opens as a field of its own: the words go to the one that has the focus now.
+            compose.waitForIdle()
+            Thread.sleep(700)
+            val focused = compose.onAllNodes(hasSetTextAction() and isFocused())
+            if (focused.fetchSemanticsNodes().isNotEmpty()) focused.onFirst().performTextInput(words) else compose.onAllNodes(hasSetTextAction()).onLast().performTextInput(words)
         }.onFailure { return }
         Thread.sleep(2500)
         compose.waitForIdle()
