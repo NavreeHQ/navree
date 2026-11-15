@@ -211,10 +211,14 @@ internal sealed class FullWalker(ShellHost host, ShellWindow window, string fold
         Windows.Graphics.PointInt32 at = window.AppWindow.Position;
         Windows.Graphics.SizeInt32 size = window.AppWindow.Size;
         Box screen = ScreenCapture.Screen();
-        int left = Math.Max(screen.Left, at.X);
+        // The window's rectangle holds an invisible border the system keeps for resizing (seven pixels at 96 DPI at the sides and below): left out, so
+        // the picture is of the window and not of what is behind it.
+        double scale = window.Surface.XamlRoot?.RasterizationScale ?? 1.0;
+        int border = (int)Math.Round(7 * scale);
+        int left = Math.Max(screen.Left, at.X + border);
         int top = Math.Max(screen.Top, at.Y);
-        int right = Math.Min(screen.Right, at.X + size.Width);
-        int bottom = Math.Min(screen.Bottom, at.Y + size.Height);
+        int right = Math.Min(screen.Right, at.X + size.Width - border);
+        int bottom = Math.Min(screen.Bottom, at.Y + size.Height - border);
         return new Box(left, top, right, bottom);
     }
 
@@ -414,6 +418,29 @@ internal sealed class FullWalker(ShellHost host, ShellWindow window, string fold
         }
 
         Say("the app did not get ready: " + host.State.Nav.Stage + " " + host.State.Nav.Failure);
+        await Reach();
+    }
+
+    // What a plain request from this process to the server says, so a failure to get ready can be told apart from a refusal by the client.
+    private async Task Reach()
+    {
+        string[] arguments = Environment.GetCommandLineArgs();
+        int at = Array.IndexOf(arguments, "--server");
+        if (at < 0 || at + 1 >= arguments.Length)
+        {
+            return;
+        }
+
+        try
+        {
+            using HttpClient client = new() { Timeout = TimeSpan.FromSeconds(10) };
+            using HttpResponseMessage reply = await client.GetAsync(arguments[at + 1] + "/_navree/native/shell");
+            Say("a plain request to " + arguments[at + 1] + " answered " + (int)reply.StatusCode);
+        }
+        catch (Exception problem)
+        {
+            Say("a plain request to " + arguments[at + 1] + " failed: " + problem.GetType().Name + ": " + problem.Message + " / " + problem.InnerException?.Message);
+        }
     }
 
     // The core has nothing left to do and nothing is loading: two calm moments in a row.
