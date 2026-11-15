@@ -7,12 +7,18 @@ on:
       - "crates/navree-native/**"
       - "crates/navree-native-core/**"
       - "packages/android/**"
+      - "apps/store-demo/**"
+      - "apps/inbox-demo/**"
+      - "apps/board-demo/**"
       - ".github/workflows/native.yml"
   pull_request:
     paths:
       - "crates/navree-native/**"
       - "crates/navree-native-core/**"
       - "packages/android/**"
+      - "apps/store-demo/**"
+      - "apps/inbox-demo/**"
+      - "apps/board-demo/**"
       - ".github/workflows/native.yml"
 
 permissions:
@@ -253,6 +259,9 @@ jobs:
 
       - name: Build the demos
         run: cargo build -p store-demo -p inbox-demo -p board-demo --features store-demo/native-preview,inbox-demo/native-preview,board-demo/native-preview
+
+      - name: Test the demos' native answers
+        run: cargo test -p store-demo -p inbox-demo -p board-demo --features store-demo/native-preview,inbox-demo/native-preview,board-demo/native-preview --test native
 
       - name: Keep the demos
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
