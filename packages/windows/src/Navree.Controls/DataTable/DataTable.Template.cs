@@ -42,7 +42,7 @@ public sealed partial class DataTable
     private bool stickyAttached;
 
     /// <summary>How the header and the frozen columns are kept in place; the way a run chose.</summary>
-    internal static StickyMode StickyWay { get; set; } = StickyMode.UiThread;
+    internal static StickyMode StickyWay { get; set; } = StickyMode.Compositor;
 
     /// <summary>The scroll view the rows are in; null before the template is made.</summary>
     internal ScrollView? Scroller => scroll;

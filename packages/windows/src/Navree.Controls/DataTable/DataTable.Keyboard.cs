@@ -98,9 +98,20 @@ public sealed partial class DataTable
             return header is { } h && cell.Column >= 0 && cell.Column < h.Headers.Count ? h.Headers[cell.Column] : null;
         }
 
-        return repeater?.TryGetElement(cell.Row) is DataTableRow row && cell.Column >= 0 && cell.Column < row.Cells.Count
-            ? row.Cells[cell.Column]
-            : null;
+        if (repeater is null || Model is not { } model || cell.Row >= model.RowCount)
+        {
+            return null;
+        }
+
+        // The active row is kept made wherever it stands, so it is asked for by its place and made if it is not.
+        DataTableRow? row = repeater.TryGetElement(cell.Row) as DataTableRow;
+        if (row is null)
+        {
+            row = repeater.GetOrCreateElement(cell.Row) as DataTableRow;
+            repeater.UpdateLayout();
+        }
+
+        return row is not null && cell.Column >= 0 && cell.Column < row.Cells.Count ? row.Cells[cell.Column] : null;
     }
 
     /// <summary>Makes a cell the active one, scrolls it into view, and gives it focus.</summary>

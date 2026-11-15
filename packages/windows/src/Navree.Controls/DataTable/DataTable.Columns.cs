@@ -174,7 +174,7 @@ public sealed partial class DataTable
         foreach (int index in order)
         {
             DataTableColumn column = columns[index];
-            if (!remeasure && widths.ContainsKey(column.Key))
+            if ((!remeasure && widths.ContainsKey(column.Key)) || personWidths.Contains(column.Key))
             {
                 continue;
             }

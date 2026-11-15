@@ -191,3 +191,23 @@ foreach ($pic in (Get-ChildItem $OutDir -Filter 'trans-*.png' | Sort-Object Name
     }
     Note ($pic.Name + ': ' + ($parts -join '; '))
 }
+
+# The pictures of bars in a container that flows right to left: where each ended up, as a span of
+# picture columns. The container starts at column 101 and is 700 wide, so a bar with no movement
+# stands against its right end, at 760 to 800 (a 40 wide bar) or 461 to 800 (a 300 wide one).
+$mirror = @(
+    @('red, written translation of 100', 255, 0, 0),
+    @('blue, animated translation of 100', 0, 0, 255),
+    @('green, clip of 100 from the left', 0, 200, 0),
+    @('orange, animated clip of 100 from the left', 255, 128, 0),
+    @('purple, not moved', 150, 0, 150)
+)
+foreach ($pic in (Get-ChildItem $OutDir -Filter 'mirror-*.png' | Sort-Object Name)) {
+    $size = [PictureReader]::Size($pic.FullName)
+    $parts = @()
+    foreach ($m in $mirror) {
+        $b = [PictureReader]::Bounds($pic.FullName, $m[1], $m[2], $m[3], 0, $size[0], 0, $size[1])
+        $parts += ($m[0] + ': ' + (Span $b))
+    }
+    Note ($pic.Name + ': ' + ($parts -join '; '))
+}

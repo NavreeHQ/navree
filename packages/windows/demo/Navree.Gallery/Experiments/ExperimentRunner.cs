@@ -25,6 +25,9 @@ internal static class ExperimentRunner
     {
         switch (name)
         {
+            case "mirror":
+                await MirrorExperiment.RunAsync(window);
+                break;
             case "parts":
                 await PartsScenario.RunAsync(window);
                 break;

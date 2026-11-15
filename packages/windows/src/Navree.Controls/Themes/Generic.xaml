@@ -199,7 +199,6 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock x:Name="PART_Text"
                                        FontWeight="SemiBold"
@@ -215,16 +214,18 @@
                                       VerticalAlignment="Center"
                                       Visibility="Collapsed"
                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <FontIcon x:Name="PART_Options"
-                                      Grid.Column="2"
-                                      FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                      FontSize="12"
-                                      Glyph="&#xE712;"
-                                      IsTextScaleFactorEnabled="False"
-                                      VerticalAlignment="Center"
-                                      Opacity="0"
-                                      Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+
                         </Grid>
+                        <FontIcon x:Name="PART_Options"
+                                  HorizontalAlignment="Right"
+                                  Margin="0,0,14,0"
+                                  FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                  FontSize="12"
+                                  Glyph="&#xE712;"
+                                  IsTextScaleFactorEnabled="False"
+                                  VerticalAlignment="Center"
+                                  Opacity="0"
+                                  Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         <local:ResizeGrip x:Name="PART_Grip" Width="8" HorizontalAlignment="Right" />
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
