@@ -187,7 +187,7 @@ public sealed class StartupTests
         }
         finally
         {
-            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Navree\Tests", throwOnMissingSubKey: false);
+            Registry.CurrentUser.DeleteSubKeyTree(root, throwOnMissingSubKey: false);
         }
     }
 
@@ -207,7 +207,7 @@ public sealed class StartupTests
         }
         finally
         {
-            Registry.CurrentUser.DeleteSubKeyTree(@"Software\Navree\Tests", throwOnMissingSubKey: false);
+            Registry.CurrentUser.DeleteSubKeyTree(root, throwOnMissingSubKey: false);
         }
     }
 }

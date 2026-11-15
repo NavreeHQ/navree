@@ -73,7 +73,7 @@ public sealed partial class ShellWindow
 
         settingsPage ??= new SettingsPage(host.Place);
         settingsHost.Child = settingsPage;
-        settingsHost.Background = Look.Resource("LayerFillColorDefaultBrush");
+        settingsHost.Background = Look.Resource("SolidBackgroundFillColorBaseBrush");
         settingsHost.Visibility = Visibility.Visible;
         settingsOpen = true;
         updatingSelection = true;

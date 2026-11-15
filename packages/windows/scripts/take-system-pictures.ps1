@@ -74,7 +74,7 @@ foreach ($walk in $walks) {
     $arguments = @('--system-walk', $OutDir) + $walk.Arguments
     $process = Start-Demo $arguments $first
     $first = $false
-    Say ("the walk " + (Wait-Demo $process 240))
+    Say ("the walk " + (Wait-Demo $process 100))
 }
 
 # What comes from outside, tried on the app while it runs as it would for a person.
@@ -121,6 +121,9 @@ if ($null -ne $running) {
 } else {
     Say "the first copy did not start"
 }
+
+$log = if ($Packaged) { $null } else { Join-Path (Split-Path -Parent $Exe) 'navree-demo.log' }
+if ($log -and (Test-Path $log)) { Copy-Item $log (Join-Path $OutDir 'navree-demo-log.txt') }
 
 Say ""
 Say "== what the walks and the probe wrote"

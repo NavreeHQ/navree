@@ -17,6 +17,7 @@ public partial class App : Application
     private ShellHost? host;
     private ShellWindow? window;
     private SystemPlace? place;
+    private DispatcherQueueTimer? probeTimer;
 
     /// <summary>Starts the app.</summary>
     public App()
@@ -99,16 +100,24 @@ public partial class App : Application
     // The app runs as it would for a person while something outside it (a second start, an address on its scheme) is tried on it; then it says what it was told.
     private void Probe(string file)
     {
-        DispatcherQueueTimer timer = DispatcherQueue.GetForCurrentThread().CreateTimer();
-        timer.Interval = TimeSpan.FromSeconds(45);
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) =>
+        // Kept in a field: a timer nothing holds is collected, and never fires.
+        probeTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
+        probeTimer.Interval = TimeSpan.FromSeconds(45);
+        probeTimer.IsRepeating = false;
+        probeTimer.Tick += (_, _) =>
         {
             File.WriteAllLines(file, place?.Log ?? []);
-            place?.LetExit();
-            Exit();
+            Finish(place);
         };
-        timer.Start();
+        probeTimer.Start();
+    }
+
+    /// <summary>Ends a run that nobody is watching: the windows are closed and the app exits; a run that is still there a while after is ended by force, so it never hangs a job.</summary>
+    internal static void Finish(SystemPlace? place)
+    {
+        place?.LetExit();
+        _ = Task.Delay(15000).ContinueWith(_ => Environment.Exit(0), TaskScheduler.Default);
+        Current.Exit();
     }
 
     private static string? Option(string[] arguments, string name)

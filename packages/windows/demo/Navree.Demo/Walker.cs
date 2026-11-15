@@ -54,8 +54,7 @@ internal sealed class Walker(ShellHost host, ShellWindow window, string folder, 
         {
             Say("done");
             File.WriteAllLines(Path.Combine(folder, prefix + "walk.txt"), log);
-            place?.LetExit();
-            Application.Current.Exit();
+            App.Finish(place);
         }
     }
 

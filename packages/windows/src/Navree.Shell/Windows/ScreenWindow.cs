@@ -24,7 +24,7 @@ internal sealed class ScreenWindow : Window
     private readonly Action raiseMain;
     private long? frontWas;
 
-    internal ScreenWindow(ShellHost host, long screenId, Action raiseMain)
+    internal ScreenWindow(ShellHost host, long screenId, Action raiseMain, bool rightToLeft = false)
     {
         this.host = host;
         this.screenId = screenId;
@@ -45,6 +45,12 @@ internal sealed class ScreenWindow : Window
         {
             nint handle = Microsoft.UI.Win32Interop.GetWindowFromWindowId(AppWindow.Id);
             overlapped.PreferredMinimumWidth = (int)(WindowRules.SmallestWindow * WindowFrame.ScaleOf(handle));
+        }
+
+        if (rightToLeft)
+        {
+            root.FlowDirection = FlowDirection.RightToLeft;
+            WindowFrame.SetRightToLeft(Microsoft.UI.Win32Interop.GetWindowFromWindowId(AppWindow.Id), true);
         }
 
         frontWas = host.State.Nav.Front;

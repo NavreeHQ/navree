@@ -404,7 +404,7 @@ public sealed class SystemPlace : IDisposable
             return false;
         }
 
-        ScreenWindow window = new(host, front, OpenMainWindow);
+        ScreenWindow window = new(host, front, OpenMainWindow, main.IsRightToLeft);
         PointInt32 position = main.AppWindow.Position;
         SizeInt32 size = main.AppWindow.Size;
         RectInt32 at = new(position.X, position.Y, size.Width, size.Height);
@@ -442,11 +442,44 @@ public sealed class SystemPlace : IDisposable
         }
 
         HideIcon();
+        CloseWindows();
         Application.Current.Exit();
     }
 
-    /// <summary>Lets the app end with no question asked: the walk that pictures the app ends this way.</summary>
-    public void LetExit() => quitting = true;
+    /// <summary>Lets the app end with no question asked, and closes the windows besides the main one: the walk that pictures the app ends this way.</summary>
+    public void LetExit()
+    {
+        quitting = true;
+        CloseWindows();
+    }
+
+    // Every window of the app is closed before the app ends: one left open, hidden or not, can keep it from ending.
+    private void CloseWindows()
+    {
+        foreach (ScreenWindow window in screens.ToArray())
+        {
+            try
+            {
+                window.Close();
+            }
+            catch (Exception)
+            {
+                // A window that is already closing is closed.
+            }
+        }
+
+        screens.Clear();
+        try
+        {
+            small?.Close();
+        }
+        catch (Exception)
+        {
+            // Likewise.
+        }
+
+        small = null;
+    }
 
     private void OnClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
@@ -515,10 +548,16 @@ public sealed class SystemPlace : IDisposable
     /// <summary>Shows the small window by the icon, or takes it away.</summary>
     public void ToggleSmallWindow()
     {
-        small ??= new TrayWindow(this, host.Options.AppName);
+        if (small is null)
+        {
+            small = new TrayWindow(this, host.Options.AppName);
+            small.SetFlowDirection(main.IsRightToLeft);
+        }
+
         small.Refresh(Places(), Count);
-        Box icon = tray?.Rectangle() ?? Corner();
-        small.Toggle(icon);
+        Box? said = tray?.Rectangle();
+        Say("the system says the icon is " + (said is Box spot ? "at " + spot.Left + "," + spot.Top + " to " + spot.Right + "," + spot.Bottom : "nowhere it can tell"));
+        small.Toggle(said ?? Corner());
     }
 
     // Where the icon is when the system cannot say: the bottom right corner of the screen the main window is on.

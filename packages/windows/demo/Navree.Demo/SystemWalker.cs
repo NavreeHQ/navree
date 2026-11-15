@@ -130,7 +130,9 @@ internal sealed class SystemWalker(ShellHost host, ShellWindow window, SystemPla
                 window.ToggleFullScreen();
                 await Task.Delay(2000);
                 Say("the window takes the whole screen: " + window.IsFullScreen);
+                await Task.Delay(1500);
                 await Screen(prefix, "full-screen");
+                await Content(prefix, "full-screen-content");
                 window.ToggleFullScreen();
                 await Task.Delay(1500);
                 Say("the window takes the whole screen: " + window.IsFullScreen + " again");
@@ -164,8 +166,7 @@ internal sealed class SystemWalker(ShellHost host, ShellWindow window, SystemPla
 
             Say("done");
             File.WriteAllLines(Path.Combine(folder, prefix + "system-walk.txt"), log);
-            place.LetExit();
-            Application.Current.Exit();
+            App.Finish(place);
         }
     }
 

@@ -18,7 +18,7 @@ internal sealed class TrayWindow : Window
 {
     private const double WidthEpx = 320;
     private const double RowEpx = 44;
-    private const double ChromeEpx = 168;
+    private const double ChromeEpx = 146;
     private readonly SystemPlace place;
     private readonly string app;
     private readonly TextBlock title;
@@ -104,6 +104,15 @@ internal sealed class TrayWindow : Window
                 HideNow();
             }
         };
+    }
+
+    /// <summary>Lays the window out from the right, for a language that runs that way.</summary>
+    internal void SetFlowDirection(bool rightToLeft)
+    {
+        if (Content is FrameworkElement root)
+        {
+            root.FlowDirection = rightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+        }
     }
 
     /// <summary>Shows what the window holds: the places, and how many things wait.</summary>
