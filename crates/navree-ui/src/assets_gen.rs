@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "15ad60e894c5";
+pub const BUILD: &str = "821f88bd3c9a";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-600ada4ab90b.js";
