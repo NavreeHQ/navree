@@ -62,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
@@ -297,7 +298,7 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
                         if (dayPager != null) {
                             Modifier.pointerInput(dayPager.previous, dayPager.next, dayRtl) {
                                 var dragged = 0f
-                                androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                                detectHorizontalDragGestures(
                                     onDragStart = { dragged = 0f },
                                     onDragEnd = {
                                         PagerRules.swipe(dragged / dayDensity, dayRtl, dayPager.previous, dayPager.next)?.let {
