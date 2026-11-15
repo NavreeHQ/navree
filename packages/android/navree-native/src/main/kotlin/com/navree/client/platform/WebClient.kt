@@ -119,6 +119,14 @@ object WebRules {
      * just put in is prepared, so such a script is no longer in the document
      * and never runs; and the root element taken out if it is there already.
      * A failure of the check itself empties the document too.
+     *
+     * The same script puts a check in front of the page's own `WebSocket`,
+     * `Worker` and `SharedWorker`, which are not requests the web view's client
+     * is asked about: one is made only for an address on the origins (so never
+     * from a `blob:` or `data:` address). It holds for the scripts of the
+     * document and of its frames. It does not reach into a worker: a script
+     * that already runs in a worker from one of the app's addresses opens what
+     * it likes, and so does a service worker.
      */
     fun documentScript(origins: List<Triple<String, String, Int>>): String {
         val rules = buildJsonArray {
@@ -142,11 +150,15 @@ object WebRules {
             "var h=u.hostname,p=u.port?+u.port:(s==='http'?80:443);" +
             "for(var i=0;i<r.length;i++){var x=r[i],n=x[1];if(x[0]===s&&x[2]===p&&(n===h||(n.indexOf('*.')===0&&h.length>n.length-1&&h.slice(1-n.length)===n.slice(1))))return true}" +
             "return false}" +
-            // A socket is not a request the web view's client is asked about: the page's own WebSocket goes only to the same places.
-            "var W=self.WebSocket;if(W){var N=function(u,q){var t=new URL(new URL(u,location.href).href.replace(/^ws/,'http'));" +
-            "if(!at(t.href))throw new DOMException('Not allowed','SecurityError');return q===undefined?new W(u):new W(u,q)};" +
-            "N.prototype=W.prototype;['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(k){N[k]=W[k]});self.WebSocket=N}" +
-            "try{var o=self.origin;if(o!=='null'){if(!at(o))stop();return}" +
+            // Neither a socket nor a worker is a request the web view's client is asked about, and a
+            // document-start script does not run inside a worker: the page's own scripts may open a
+            // socket or start a worker only where its loads may go (never from a `blob:` or `data:`
+            // address). The check and the wrappers are one `try`: a failure of either empties the document.
+            "try{var wrap=function(k,s){var C=self[k];if(!C)return;var N=function(u,q){var h=new URL(u,document.baseURI).href;if(s)h=h.replace(/^ws/,'http');" +
+            "if(!at(h))throw new DOMException('Not allowed','SecurityError');return q===undefined?new C(u):new C(u,q)};" +
+            "N.prototype=C.prototype;C.prototype.constructor=N;['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(n){if(n in C)N[n]=C[n]});self[k]=N};" +
+            "wrap('WebSocket',1);wrap('Worker');wrap('SharedWorker');" +
+            "var o=self.origin;if(o!=='null'){if(!at(o))stop();return}" +
             "var l=location.href;if(l.indexOf('about:')===0)return;if(!at(l))stop()}catch(e){stop()}})();"
     }
 

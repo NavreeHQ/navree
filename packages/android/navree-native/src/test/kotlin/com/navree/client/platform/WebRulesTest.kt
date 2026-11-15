@@ -94,8 +94,29 @@ class WebRulesTest {
         assertTrue("a failure of the check empties the document too", script.endsWith("catch(e){stop()}})();"))
         assertTrue("a document with no origin of its own is judged by its address", script.contains("o!=='null'") && script.contains("location.href"))
         assertTrue("only a web address can pass", script.contains("if(s!=='http'&&s!=='https')return false"))
-        assertTrue("a page's own WebSocket goes only where its loads do", script.contains("self.WebSocket") && script.contains("SecurityError"))
-        assertTrue("it is short: it holds up every load", script.length < 2_000)
+        assertTrue("it is short: it holds up every load", script.length < 1_500)
+    }
+
+    @Test
+    fun a_page_opens_a_socket_or_starts_a_worker_only_where_its_loads_may_go() {
+        val script = WebRules.documentScript(Origins("https://shop.example").documentOrigins())
+        for (kind in listOf("WebSocket", "Worker", "SharedWorker")) assertTrue("$kind is checked", script.contains("wrap('$kind'"))
+        assertTrue("a refusal says what it is", script.contains("SecurityError"))
+        assertTrue("an address is judged as the page's loads are, so a blob: or data: address is refused", script.contains("if(!at(h))throw"))
+        assertTrue("the original is not reached through the instance's constructor", script.contains("C.prototype.constructor=N"))
+    }
+
+    @Test
+    fun a_failure_to_put_the_checks_in_empties_the_document() {
+        val script = WebRules.documentScript(Origins("https://shop.example").documentOrigins())
+        val wrappers = script.indexOf("wrap('WebSocket'")
+        val guarded = script.lastIndexOf("try{", wrappers)
+        val origin = script.indexOf("var o=self.origin")
+        val handler = script.indexOf("catch(e){stop()}")
+        assertTrue("the wrappers are made inside a try: $guarded $wrappers", wrappers > 0 && guarded in 0 until wrappers)
+        assertTrue("and before the origin is checked: $wrappers $origin", wrappers in 0 until origin)
+        assertTrue("whose handler empties the document, after both: $origin $handler", origin in 0 until handler)
+        assertFalse("one try holds the wrappers and the check", script.substring(guarded + 4, handler).contains("try{"))
     }
 
     @Test
