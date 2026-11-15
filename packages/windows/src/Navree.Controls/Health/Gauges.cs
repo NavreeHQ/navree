@@ -108,7 +108,7 @@ public sealed partial class GaugeView : KindControl
         return stack;
     }
 
-    // The system's small circular gauge, for a gauge beside other words.
+    // A small round gauge, for a gauge beside other words.
     private void PaintSmall(PlotCanvas canvas)
     {
         double side = Math.Min(canvas.Width, canvas.Height);

@@ -13,7 +13,7 @@ using Navree.Protocol;
 namespace Navree.Controls.Health;
 
 /// <summary>
-/// A figure: one number that matters, as the Health app's summary shows one. Its label with its icon in the measure's colour, the number
+/// A figure: one number that matters: its label with its icon in the measure's colour, the number
 /// large with its unit beside it, how it stands and which way it is going under it, the page's line after that, a small ring or gauge
 /// at its end and a small chart under it. When it opens something, a tap on it does.
 /// </summary>

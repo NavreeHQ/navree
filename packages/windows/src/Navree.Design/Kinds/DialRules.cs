@@ -99,7 +99,7 @@ public static class RingRules
         ring.Value is double value ? ring.Shown ?? NumberWords.Amount(value, culture) : "\u2013";
 }
 
-/// <summary>Concentric rings, the first outside, as the system's activity rings.</summary>
+/// <summary>Concentric rings, the first outside.</summary>
 public static class RingsRules
 {
     /// <summary>At most six are drawn, as the protocol says.</summary>
@@ -166,7 +166,7 @@ public static class RingsRules
 /// <summary>A gauge: a value on an open arc.</summary>
 public static class GaugeRules
 {
-    /// <summary>The arc runs through this many degrees, open at the foot, as the system's circular gauge is.</summary>
+    /// <summary>The arc runs through this many degrees, open at the foot.</summary>
     public const double Sweep = 240;
 
     /// <summary>The angle of the arc's start, in degrees from three o'clock going clockwise: the lower left.</summary>

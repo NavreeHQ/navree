@@ -44,7 +44,7 @@ public static class KindHooks
 /// <summary>Arcs the rings and gauges share.</summary>
 internal static class RingArcs
 {
-    /// <summary>One arc of a ring in the manner of the system's activity rings: its track all round in the hue made faint, the value from twelve o'clock clockwise with round ends, and past the goal a second lap over the first.</summary>
+    /// <summary>One arc of a ring: its track all round in the hue made faint, the value from twelve o'clock clockwise with round ends, and past the goal a second lap over the first.</summary>
     internal static void Draw(PlotCanvas canvas, double cx, double cy, double radius, double stroke, RingRules.Sweep? sweep, Windows.UI.Color start, Windows.UI.Color end)
     {
         canvas.Shapes.Put(Ink.Stroked(Ink.Arc(cx, cy, radius, -90, 359.9), canvas.Palette.Track(start), stroke), 0, 0);
@@ -218,7 +218,7 @@ public sealed partial class RingView : KindControl
     }
 }
 
-/// <summary>Concentric rings, the first outside, drawn as the system's activity rings, with the values over their goals beside them in each ring's colour.</summary>
+/// <summary>Concentric rings, the first outside, with the values over their goals beside them in each ring's colour.</summary>
 public sealed partial class RingsView : KindControl
 {
     private readonly Models.Rings rings;
