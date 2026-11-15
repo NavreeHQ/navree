@@ -120,6 +120,20 @@ try {
 } catch { Say "video: failed: $($_.Exception.Message)" }
 
 Say ""
+Say "== the display, made larger"
+foreach ($size in @(@(1920, 1080), @(1680, 1050), @(1600, 900), @(1366, 768), @(1280, 720))) {
+    try {
+        Set-DisplayResolution -Width $size[0] -Height $size[1] -Force -ErrorAction Stop | Out-Null
+        Start-Sleep -Seconds 2
+        $now = [System.Windows.Forms.SystemInformation]::PrimaryMonitorSize
+        Say ("Set-DisplayResolution " + $size[0] + "x" + $size[1] + ": the screen is now " + $now)
+        if ($now.Width -eq $size[0]) { break }
+    } catch {
+        Say ("Set-DisplayResolution " + $size[0] + "x" + $size[1] + ": failed: " + $_.Exception.Message)
+    }
+}
+
+Say ""
 Say "== the demo, started from $Exe"
 $folder = Split-Path -Parent $Exe
 $started = Get-Date
