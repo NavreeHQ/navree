@@ -14,13 +14,16 @@
 //!
 //! Starting from one (`restore`, in place of `start`) fetches the shell as
 //! any start does. Only when this launch's shell (not one kept on the
-//! device) names the same person as the snapshot was taken for, told by id
-//! where there is one, are the stacks put back, each screen with its address and
+//! device) names the same person as the snapshot was taken for, told by their
+//! id, are the stacks put back, each screen with its address and
 //! title and nothing else; the one in front is fetched at once and the others
 //! as they come to the front. What was typed goes back into a screen when its
 //! page arrives, into the fields that are still there and still of the same
 //! kind. A snapshot of another version, another origin or another person is
-//! not used, and the app starts as it does the first time.
+//! not used, and the app starts as it does the first time. A person the
+//! server names without an id can't be told from another of the same name
+//! and email: nothing is kept in a snapshot for them, and nothing is put back
+//! for them from one.
 
 use std::collections::BTreeMap;
 
@@ -101,16 +104,28 @@ pub struct Snapshot {
     pub modals: Vec<KeptModal>,
 }
 
-/// A name for the person a shell is for, which says nothing of them.
-fn person_of(user: Option<&crate::cache::Who>) -> Option<String> {
-    user.map(|who| match &who.id {
-        Some(id) => crate::sign_in::fingerprint(&format!("navree-person-id\n{id}")),
-        None => crate::sign_in::fingerprint(&format!(
-            "navree-person\n{}\n{}",
-            who.name,
-            who.email.as_deref().unwrap_or("")
-        )),
-    })
+/// Who a snapshot is for.
+#[derive(Debug, PartialEq, Eq)]
+enum Person {
+    /// Nobody was signed in.
+    Nobody,
+    /// A person, by a name for their id that says nothing of them.
+    Told(String),
+    /// A person the server names without an id: not told from another of the
+    /// same name and email, so no snapshot is for them.
+    Unknown,
+}
+
+fn person_of(user: Option<&crate::cache::Who>) -> Person {
+    match user {
+        None => Person::Nobody,
+        Some(who) => match &who.id {
+            Some(id) => Person::Told(crate::sign_in::fingerprint(&format!(
+                "navree-person-id\n{id}"
+            ))),
+            None => Person::Unknown,
+        },
+    }
 }
 
 /// What a system may fill a field with, by the web's names, that a snapshot
@@ -249,18 +264,26 @@ impl Core {
                 .map(kept)
                 .collect()
         };
+        let (person, keeps) = match person_of(self.inner.user.as_ref()) {
+            Person::Nobody => (None, true),
+            Person::Told(person) => (Some(person), true),
+            // Nothing says which of the people of that name this is: nothing
+            // of where they are, or of what they typed, is kept.
+            Person::Unknown => (None, false),
+        };
         Snapshot {
             version: SNAPSHOT_VERSION,
             origin: self.config.origin.clone(),
-            person: person_of(self.inner.user.as_ref()),
+            person,
             selected: view
                 .destinations
                 .get(view.selected)
-                .map(|destination| destination.href.clone()),
+                .map(|destination| destination.href.clone())
+                .filter(|_| keeps),
             destinations: view
                 .destinations
                 .iter()
-                .filter(|destination| !destination.stack.is_empty())
+                .filter(|destination| keeps && !destination.stack.is_empty())
                 .map(|destination| KeptStack {
                     href: destination.href.clone(),
                     stack: screens(&destination.stack),
@@ -271,7 +294,7 @@ impl Core {
             modals: view
                 .modals
                 .iter()
-                .filter(|modal| !modal.locked)
+                .filter(|modal| keeps && !modal.locked)
                 .map(|modal| KeptModal {
                     present: modal.present,
                     stack: screens(&modal.stack),
@@ -310,11 +333,19 @@ impl Core {
         let Some(snapshot) = self.inner.restore.take() else {
             return false;
         };
-        if snapshot.person != person_of(self.inner.user.as_ref()) {
-            self.report(
-                "snapshot",
-                "a snapshot taken for another person is not used".to_owned(),
-            );
+        let now = person_of(self.inner.user.as_ref());
+        let theirs = match (&snapshot.person, &now) {
+            (None, Person::Nobody) => true,
+            (Some(held), Person::Told(now)) => held == now,
+            _ => false,
+        };
+        if !theirs {
+            let said = if now == Person::Unknown {
+                "a snapshot is not used for a person the server names without an id"
+            } else {
+                "a snapshot taken for another person is not used"
+            };
+            self.report("snapshot", said.to_owned());
             return false;
         }
         // Only onto a core that holds no screen yet.
@@ -500,13 +531,14 @@ mod tests {
     }
 
     #[test]
-    fn the_person_a_snapshot_is_for_is_told_by_id_where_there_is_one() {
+    fn the_person_a_snapshot_is_for_is_told_by_id_and_by_nothing_else() {
         let who = |id: Option<&str>, name: &str| Who {
             id: id.map(str::to_owned),
             name: name.to_owned(),
             email: None,
         };
         let ravneet = person_of(Some(&who(Some("u-ra01"), "Ravneet Kaur")));
+        assert!(matches!(ravneet, Person::Told(_)));
         // A new name is the same person; the same name with another id is not.
         assert_eq!(
             ravneet,
@@ -516,7 +548,10 @@ mod tests {
             ravneet,
             person_of(Some(&who(Some("u-ra02"), "Ravneet Kaur")))
         );
-        assert_ne!(ravneet, person_of(Some(&who(None, "Ravneet Kaur"))));
-        assert_ne!(ravneet, person_of(None));
+        // Without an id nobody can be told from another of the same name:
+        // not from the person with an id, not from nobody, and not from
+        // themselves in another launch, since no snapshot is for them.
+        assert_eq!(person_of(Some(&who(None, "Ravneet Kaur"))), Person::Unknown);
+        assert_eq!(person_of(None), Person::Nobody);
     }
 }

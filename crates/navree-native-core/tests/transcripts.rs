@@ -676,6 +676,7 @@ const REQUIRED: &[&str] = &[
     "keep-restore",
     "keep-shell",
     "changed-own-form",
+    "snapshot-no-id",
 ];
 
 #[test]
