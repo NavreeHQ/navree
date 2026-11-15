@@ -13,7 +13,7 @@
       }
     },
     {
-      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/shell-app.json",
       "expect": {
         "changed": [
@@ -27,7 +27,7 @@
       }
     },
     {
-      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "store/dashboard.json",
       "expect": {
         "changed": [
@@ -44,7 +44,7 @@
     },
     {
       "note": "The shell, asked again at once since the session may have changed unseen, names the person again.",
-      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/shell-app.json",
       "expect": {
         "changed": [
@@ -91,7 +91,7 @@
     },
     {
       "note": "It is another person: the snapshot is not used, and nothing of it shows.",
-      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/shell-app.json",
       "expect": {
         "changed": [
@@ -110,7 +110,7 @@
       ]
     },
     {
-      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "store/dashboard.json",
       "expect": {
         "changed": [
@@ -123,7 +123,7 @@
     },
     {
       "note": "The shell, asked again at once since the session may have changed unseen, names the person again.",
-      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/shell-app.json",
       "expect": {
         "changed": [

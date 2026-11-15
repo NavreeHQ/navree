@@ -13,7 +13,7 @@
     },
     {
       "note": "The shell arrives, and the first screen is asked for.",
-      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/shell-health.json",
       "expect": {
         "changed": [
@@ -28,7 +28,7 @@
     },
     {
       "note": "Today: each pillar is a card that opens its screen and grows into it.",
-      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "../../../navree-native/corpus/screen-designed-health.json",
       "expect": {
         "changed": [
@@ -58,7 +58,7 @@
       ]
     },
     {
-      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/designed-day-before.json",
       "expect": {
         "changed": [
@@ -86,7 +86,7 @@
       ]
     },
     {
-      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/designed-sleep.json",
       "expect": {
         "changed": [
@@ -162,13 +162,13 @@
         {"at":"/modals/0/stack","is":[4]},
         {"at":"/screens/4/from","is":"night-card"}
       ],
-      "snapshot": {"destinations":[{"href":"/","stack":[{"title":"Thursday","url":"/?date=2026-11-12"},{"from":"pillar-sleep","title":"Sleep","url":"/sleep?date=2026-11-12"}]}],"modals":[{"present":"sheet","stack":[{"from":"night-card","url":"/sleep/night"}]}],"origin":"https://shop.example","person":"3cf923612bb089c4437bcb4de035c0d8d14445dbf4a046908f3bf61885b9272d","selected":"/","version":1}
+      "snapshot": {"destinations":[{"href":"/","stack":[{"title":"Thursday","url":"/?date=2026-11-12"},{"from":"pillar-sleep","title":"Sleep","url":"/sleep?date=2026-11-12"}]}],"modals":[{"present":"sheet","stack":[{"from":"night-card","url":"/sleep/night"}]}],"origin":"https://shop.example","person":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e","selected":"/","version":1}
     },
     {
       "note": "The system ended the app. It starts again from the snapshot: the shell is asked for first.",
       "restart": true,
       "last": true,
-      "send": {"t":"restore","snapshot":{"destinations":[{"href":"/","stack":[{"title":"Thursday","url":"/?date=2026-11-12"},{"from":"pillar-sleep","title":"Sleep","url":"/sleep?date=2026-11-12"}]}],"modals":[{"present":"sheet","stack":[{"from":"night-card","url":"/sleep/night"}]}],"origin":"https://shop.example","person":"3cf923612bb089c4437bcb4de035c0d8d14445dbf4a046908f3bf61885b9272d","selected":"/","version":1}},
+      "send": {"t":"restore","snapshot":{"destinations":[{"href":"/","stack":[{"title":"Thursday","url":"/?date=2026-11-12"},{"from":"pillar-sleep","title":"Sleep","url":"/sleep?date=2026-11-12"}]}],"modals":[{"present":"sheet","stack":[{"from":"night-card","url":"/sleep/night"}]}],"origin":"https://shop.example","person":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e","selected":"/","version":1}},
       "expect": {
         "changed": [],
         "effects": [
@@ -178,7 +178,7 @@
     },
     {
       "note": "The stacks are put back, and each screen is from the part it was opened from: the client can shrink the sheet into the night's card and the Sleep screen into its pillar.",
-      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/shell-health.json",
       "expect": {
         "changed": [
