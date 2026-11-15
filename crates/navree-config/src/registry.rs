@@ -465,6 +465,7 @@ pub const FRAMEWORK_SECTIONS: &[&str] = &[
     "storage",
     "time",
     "ui",
+    "ui.policy",
     "validation",
     "view",
     "webhooks",

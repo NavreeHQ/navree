@@ -297,6 +297,11 @@ async fn render(request: &ErrorContext, error: &AppError) -> Option<Response> {
         HeaderValue::from_static("accept, x-navree-ui, x-navree-native"),
     );
     headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    // The pipeline draws an error outside every layer of the app, so no layer gives its page the
+    // app's page policy: it is given here, as it is to any other page.
+    if let Some(policy) = request.ctx.try_get::<crate::policy::PagePolicy>().await {
+        crate::policy::apply(&policy, &mut response);
+    }
     Some(response)
 }
 

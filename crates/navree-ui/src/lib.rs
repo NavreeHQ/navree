@@ -119,6 +119,7 @@ pub mod op;
 pub mod pages;
 #[cfg(feature = "phone")]
 pub mod phone;
+pub mod policy;
 pub mod render;
 pub mod select;
 pub mod seo;
@@ -162,6 +163,7 @@ pub use pages::{
 };
 #[cfg(feature = "phone")]
 pub use phone::{PhoneInput, PhoneLabels};
+pub use policy::{Directive, PagePolicy, PagePolicyOptions, PageSources, PolicySources};
 pub use render::{Measure, measure, render, render_into};
 #[cfg(feature = "orm")]
 pub use select::OptionSource;
