@@ -449,7 +449,7 @@ jobs:
         run: |
           $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
           $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" | Select-Object -First 1
-          $exports = & $dumpbin.FullName /exports packages/windows/native/win-x64/navree_native_core.dll | Select-String 'navree_'
+          $exports = & $dumpbin.FullName /exports packages/windows/native/win-x64/navree_native_core.dll | Select-String '\snavree_(core|bytes)_'
           $exports
           if (@($exports).Count -ne 5) { throw "expected five exported functions, found $(@($exports).Count)" }
 
@@ -464,6 +464,13 @@ jobs:
             & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -all -property displayName
           } else { "no vswhere" }
           Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\Include" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+          "nuget sources of the solution:"
+          dotnet nuget list source
+          "nuget sources of the machine:"
+          Push-Location $env:RUNNER_TEMP
+          dotnet nuget list source
+          Pop-Location
+          Get-ChildItem "${env:ProgramFiles(x86)}\NuGet\Config" -ErrorAction SilentlyContinue | ForEach-Object { "machine config: $($_.FullName)"; Get-Content $_.FullName }
 
       # What a machine with only the .NET SDK has: no Visual Studio and no Windows SDK.
       - name: Hide Visual Studio and the Windows SDK
@@ -483,6 +490,12 @@ jobs:
                 "hidden: $folder"
               } catch { "not hidden: $folder ($($_.Exception.Message))" }
             } else { "not there: $folder" }
+          }
+          # Visual Studio's installer leaves a machine-wide NuGet source that points into its own folder.
+          $offline = Get-ChildItem "${env:ProgramFiles(x86)}\NuGet\Config" -Filter '*Offline*' -ErrorAction SilentlyContinue
+          foreach ($config in $offline) {
+            Rename-Item -LiteralPath $config.FullName -NewName ($config.Name + '.hidden')
+            "hidden: $($config.FullName)"
           }
 
       # The dotnet command alone: restore, then build the whole solution.
