@@ -204,6 +204,15 @@ internal sealed partial class BoardMoves(ShellHost host, ShellWindow window, str
         Windows.Foundation.Rect targetBox = targetCard.TransformToVisual(window.Surface).TransformBounds(new Windows.Foundation.Rect(0, 0, targetCard.ActualWidth, targetCard.ActualHeight));
         Say("in the window (" + window.Surface.ActualWidth.ToString("0", CultureInfo.InvariantCulture) + "x" + window.Surface.ActualHeight.ToString("0", CultureInfo.InvariantCulture) + ") the dragged card stands at [" + cardBox.Left.ToString("0", CultureInfo.InvariantCulture) + "," + cardBox.Top.ToString("0", CultureInfo.InvariantCulture) + " " + cardBox.Width.ToString("0", CultureInfo.InvariantCulture) + "x" + cardBox.Height.ToString("0", CultureInfo.InvariantCulture) + "] and the card it is dragged onto at [" + targetBox.Left.ToString("0", CultureInfo.InvariantCulture) + "," + targetBox.Top.ToString("0", CultureInfo.InvariantCulture) + " " + targetBox.Width.ToString("0", CultureInfo.InvariantCulture) + "x" + targetBox.Height.ToString("0", CultureInfo.InvariantCulture) + "]");
 
+        // A lane has a limit and the server refuses a card into a full one ("2/2" under its name). The server keeps what earlier runs did, so a run
+        // on a server that has been used before can find the third lane full; that is the server's answer and not the drag's, and is said so.
+        System.Text.RegularExpressions.Match full = System.Text.RegularExpressions.Regex.Match(DrawnText.Of(window.Content), @"Review\s+(\d+)/(\d+)");
+        if (full.Success && int.Parse(full.Groups[1].Value, CultureInfo.InvariantCulture) >= int.Parse(full.Groups[2].Value, CultureInfo.InvariantCulture))
+        {
+            Say("the third lane is full (" + full.Groups[1].Value + "/" + full.Groups[2].Value + "): the server refuses a card into it, so the drag into it is not checked on this server");
+            return;
+        }
+
         // Pressed at the card's lower left, where the words and the buttons are not, and let go on the middle of a card of another lane.
         (int fromX, int fromY) = ScreenOf(cardElement, 12, cardElement.ActualHeight - 6);
         (int toX, int toY) = ScreenOf(targetCard, targetCard.ActualWidth / 2, targetCard.ActualHeight * 0.75);
