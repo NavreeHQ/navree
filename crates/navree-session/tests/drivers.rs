@@ -3,7 +3,6 @@
 //! name that resolves to nothing, or to two things, fails the boot.
 
 #[path = "session/support.rs"]
-#[allow(dead_code)]
 mod support;
 
 use std::sync::{Arc, Mutex};
