@@ -7,6 +7,11 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.isPopup
@@ -191,6 +196,40 @@ class LiveDemosTest {
         Shots.take("store-orders-selecting")
         send(app, Events.choose(front(app)!!.id, table.id ?: "", null, false))
         settled(app)
+    }
+
+    /**
+     * A hardware keyboard's Tab through a screen of fields and buttons (the store's inventory) stops only where something can be
+     * seen and said: every stop is a control with a name and a bound a finger
+     * could hit, and the field that is picked, not typed, is one stop.
+     */
+    @Test
+    fun aTabWalkThroughTheStoresInventoryStopsOnlyWhereSomethingCanBeSeenAndSaid() {
+        val origin = arguments.getString("store")
+        assumeTrue("no store demo was named", origin != null)
+        val app = start(origin!!)
+        send(app, Events.select(2))
+        settled(app)
+        val stops = ArrayList<String>()
+        repeat(30) { press ->
+            compose.onRoot().performKeyInput { pressKey(Key.Tab) }
+            compose.waitForIdle()
+            val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
+            assertTrue("press ${press + 1} of Tab landed on nothing that can be seen or said; the stops so far: $stops", focused.size == 1)
+            val node = focused.single()
+            val density = node.layoutInfo.density.density
+            val config = node.config
+            val named = listOfNotNull(
+                config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", "),
+                config.getOrNull(SemanticsProperties.Text)?.joinToString(", ") { it.text },
+                config.getOrNull(SemanticsProperties.EditableText)?.text,
+            ).filter { it.isNotEmpty() }.joinToString(" | ")
+            assertTrue("press ${press + 1}: the stop has no name; the stops so far: $stops", named.isNotEmpty())
+            assertTrue("press ${press + 1}: \"$named\" is ${node.size.width / density}x${node.size.height / density} dp, too small to see", node.size.width / density >= 8f && node.size.height / density >= 8f)
+            stops += named.take(40)
+        }
+        // No stop has the same name as the one before it: a field with something drawn over it would be two stops.
+        stops.zipWithNext().forEach { (before, after) -> assertTrue("the stop \"$after\" came twice running", before != after) }
     }
 
     @Test
