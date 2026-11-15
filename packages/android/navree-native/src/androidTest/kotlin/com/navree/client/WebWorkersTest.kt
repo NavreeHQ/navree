@@ -5,6 +5,7 @@ import android.webkit.ServiceWorkerController
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -128,9 +129,10 @@ class WebWorkersTest {
 
     /**
      * A web view with the client's checks, loading the app's page. With [documents] false the
-     * check at the start of every document is not added: the control.
+     * check at the start of every document is not added; with [rules] false the web view's client
+     * is the system's own and checks nothing: the controls.
      */
-    private fun openedBy(origins: Origins, documents: Boolean = true) {
+    private fun openedBy(origins: Origins, documents: Boolean = true, rules: Boolean = true) {
         var web: WebView? = null
         var added = !documents
         compose.setContent {
@@ -139,10 +141,19 @@ class WebWorkersTest {
                 factory = { context ->
                     WebView(context).apply {
                         settings.javaScriptEnabled = true
-                        webViewClient = object : OriginWebClient(origins, onLink = {}) {
-                            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                                seen += request.url.toString()
-                                return super.shouldInterceptRequest(view, request)
+                        webViewClient = if (rules) {
+                            object : OriginWebClient(origins, onLink = {}) {
+                                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                                    seen += request.url.toString()
+                                    return super.shouldInterceptRequest(view, request)
+                                }
+                            }
+                        } else {
+                            object : WebViewClient() {
+                                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                                    seen += request.url.toString()
+                                    return null
+                                }
                             }
                         }
                         if (documents) added = guardDocuments(this, origins)
@@ -194,7 +205,7 @@ class WebWorkersTest {
             "self.addEventListener('fetch', function(e){ if (new URL(e.request.url).pathname === '/through-the-worker') e.respondWith(fetch('$elsewhere/from-fetch', {mode: 'cors'}).then(function(r){ return r.text() }).then(function(t){ return new Response('reached:' + t) }, function(){ return new Response('blocked') })) });"
 
     // The page registers the worker, waits until it controls the page, and says what a fetch the worker answers came to.
-    private val registers = "<p>ours</p><script>navigator.serviceWorker.register('/sw.js').then(function(){ return navigator.serviceWorker.ready }).then(function(){ return fetch('/through-the-worker') }).then(function(r){ return r.text() })" +
+    private val registers = "<p>ours</p><script>navigator.serviceWorker.register('/sw.js').then(function(){ return navigator.serviceWorker.ready }).then(function(){ return navigator.serviceWorker.controller ? 0 : new Promise(function(done){ navigator.serviceWorker.addEventListener('controllerchange', done) }) }).then(function(){ return fetch('/through-the-worker') }).then(function(r){ return r.text() })" +
         ".then(function(t){ new Image().src = '/says?m=' + encodeURIComponent(t) }, function(e){ new Image().src = '/says?m=' + encodeURIComponent('failed: ' + e) })</script>"
 
     @Test
@@ -237,16 +248,29 @@ class WebWorkersTest {
         "fetch('$elsewhere/from-worker', {mode: 'cors'}).then(function(r){ return r.text() }).then(function(t){ postMessage('fetch reached:' + t) }, function(){ postMessage('fetch blocked') });" +
             "try { importScripts('$elsewhere/import.js'); postMessage('import reached') } catch (e) { postMessage('import blocked') }"
 
+    private fun pageWithAWorker() =
+        "<p>ours</p><script>var w = new Worker('/w.js'); w.onmessage = function(e){ new Image().src = '/says?m=' + encodeURIComponent(e.data) }; w.onerror = function(){ new Image().src = '/says?m=worker-error' }</script>"
+
     @Test
-    fun whatAWorkerOfThePagesOwnReachesIsRecordedWithWhatTheClientWasAskedAbout() {
-        serve(
-            { "<p>ours</p><script>var w = new Worker('/w.js'); w.onmessage = function(e){ new Image().src = '/says?m=' + encodeURIComponent(e.data) }; w.onerror = function(){ new Image().src = '/says?m=worker-error' }</script>" },
-            { mapOf("/w.js" to reportsWhatItReaches()) },
-        )
+    fun aWorkerOfThePagesOwnNeverReachesAnotherOrigin() {
+        // A dedicated worker's fetch and importScripts are asked of the web view's client, which refuses them.
+        serve({ pageWithAWorker() }, { mapOf("/w.js" to reportsWhatItReaches()) })
         openedBy(Origins(base, loopbackHttp = true))
         waitForSaid(2)
-        settle("dedicated-worker.txt", "a worker of the page's own, started from /w.js, with the client's rules on documents")
-        assertTrue("the worker ran: $said", said.isNotEmpty())
+        settle("dedicated-worker.txt", "a worker of the page's own, started from /w.js, with the client's rules")
+        assertEquals("what the worker was told", listOf("fetch blocked", "import blocked"), said.sorted())
+        assertEquals("the other origin was asked: $otherAsked", emptyList<String>(), otherAsked.toList())
+        assertTrue("the worker's requests were asked of the client: $seen", seen.contains("$elsewhere/from-worker") && seen.contains("$elsewhere/import.js"))
+    }
+
+    @Test
+    fun aWorkerOfThePagesOwnReachesAnotherOriginWhereTheClientHasNoRules() {
+        serve({ pageWithAWorker() }, { mapOf("/w.js" to reportsWhatItReaches()) })
+        openedBy(Origins(base, loopbackHttp = true), documents = false, rules = false)
+        waitForSaid(2)
+        settle("dedicated-worker-control.txt", "a worker of the page's own, with a client that checks nothing")
+        assertEquals("what the worker was told", listOf("fetch reached:elsewhere", "import reached"), said.sorted())
+        assertTrue("the other origin was asked by the worker: $otherAsked", otherAsked.contains("GET /from-worker"))
     }
 
     // ------------------------------------------------------------------ workers made from an address of their own
@@ -320,7 +344,24 @@ class WebWorkersTest {
     }
 
     @Test
-    fun whatASocketOpenedInsideAWorkerReachesIsRecorded() {
+    fun whatASocketOpenedFromAFrameThePageMakesReachesIsRecorded() {
+        documentChecks()
+        serve({
+            "<p>ours</p><script>" +
+                madeOrRefused("empty-frame", "var f = document.createElement('iframe'); document.body.appendChild(f); new f.contentWindow.WebSocket('ws://localhost:${other.port}/socket')") +
+                "</script><iframe srcdoc=\"<script>try { new WebSocket('ws://localhost:${other.port}/socket'); new Image().src = '/says?m=srcdoc-made' } catch (e) { new Image().src = '/says?m=srcdoc-refused' }</script>\"></iframe>"
+        })
+        openedBy(Origins(base, loopbackHttp = true))
+        waitForSaid(2)
+        settle("socket-in-frame.txt", "a socket opened from a frame the page made, an empty one and one with srcdoc")
+        assertTrue("both frames said what they did: $said", said.size == 2)
+    }
+
+    // What the client cannot cover: the check at the start of a document does not run inside a worker, and a
+    // socket is not a request the client is asked about. This test says so; the day it fails, the README
+    // says something that is no longer true.
+    @Test
+    fun aSocketOpenedInsideAWorkerIsNotCheckedByTheClient() {
         documentChecks()
         serve(
             { "<p>ours</p><script>var w = new Worker('/socket-worker.js'); w.onmessage = function(e){ new Image().src = '/says?m=' + encodeURIComponent(e.data) }</script>" },
@@ -329,6 +370,8 @@ class WebWorkersTest {
         openedBy(Origins(base, loopbackHttp = true))
         waitForSaid()
         settle("socket-in-worker.txt", "a socket opened inside a worker the page started from one of the app's addresses")
-        assertTrue("the worker ran: $said", said.isNotEmpty())
+        assertEquals("the worker's socket opened", listOf("socket opened"), said.toList())
+        assertTrue("the socket reached the other origin: $otherAsked", otherAsked.any { it.startsWith("UPGRADE") })
+        assertEquals("the client was not asked about the socket: $seen", emptyList<String>(), seen.filter { it.startsWith(elsewhere) })
     }
 }
