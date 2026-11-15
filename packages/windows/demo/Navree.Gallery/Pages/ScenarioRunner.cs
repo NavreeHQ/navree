@@ -8,6 +8,16 @@ internal static class ScenarioRunner
     internal static async Task RunAsync(MainWindow window, GalleryArguments arguments)
     {
         Handshake.Open(arguments.Out);
+        try
+        {
+            Windows.UI.ViewManagement.AccessibilitySettings access = new();
+            Report.Line($"[settings] text scale {new Windows.UI.ViewManagement.UISettings().TextScaleFactor}, high contrast {access.HighContrast} ({access.HighContrastScheme})");
+        }
+        catch (Exception problem)
+        {
+            Report.Line("[settings] could not be read: " + problem.Message);
+        }
+
         foreach (string name in arguments.Run)
         {
             try
@@ -33,6 +43,12 @@ internal static class ScenarioRunner
                 break;
             case "parts":
                 await PartsScenario.RunAsync(window);
+                break;
+            case "tabletext":
+                await TableScenarios.RunAsync(window, ["standard", "chosen", "narrow", "sorted", "rtl"], lightOnly: true);
+                break;
+            case "rows100k":
+                await HugeScenario.RunAsync(window);
                 break;
             case "table":
                 await TableScenarios.RunAsync(window, TableScenarios.All);

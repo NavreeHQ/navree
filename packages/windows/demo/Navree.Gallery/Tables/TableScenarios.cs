@@ -21,11 +21,11 @@ internal static class TableScenarios
     /// <param name="window">The window.</param>
     /// <param name="names">The scenarios.</param>
     /// <returns>A task that ends when all are done.</returns>
-    internal static async Task RunAsync(MainWindow window, IEnumerable<string> names)
+    internal static async Task RunAsync(MainWindow window, IEnumerable<string> names, bool lightOnly = false)
     {
         foreach (string name in names)
         {
-            foreach (ElementTheme theme in new[] { ElementTheme.Light, ElementTheme.Dark })
+            foreach (ElementTheme theme in lightOnly ? new[] { ElementTheme.Light } : new[] { ElementTheme.Light, ElementTheme.Dark })
             {
                 try
                 {
@@ -306,10 +306,11 @@ internal static class TableScenarios
         table.ChoiceRequested += (_, e) => events.Add($"choice keys={string.Join(',', e.Keys)} on={e.On} all={e.All} across={e.Across}");
         table.RowInvoked += (_, e) => events.Add("invoked " + e.Key);
         table.SortRequested += (_, e) => events.Add("sort " + e.Column.Key);
+        table.EditRequested += (_, e) => events.Add("edit " + e.Key);
         Keys.Foreground(window);
         table.RestoreFocus();
         await Task.Delay(500);
-        string Where() => $"active {table.ActiveCell?.RowKey}/{table.ActiveCell?.ColumnKey}, chosen {table.ChosenCount}, sideways {table.Scroller?.HorizontalOffset:0.#}, focus on {FocusName(table)}";
+        string Where() => $"active {table.ActiveCell?.RowKey}/{table.ActiveCell?.ColumnKey}, chosen {table.ChosenCount}, said '{table.LastAnnouncement}', sideways {table.Scroller?.HorizontalOffset:0.#}, focus on {FocusName(table)}";
         Report.Line($"[{tag}] start: {Where()}");
 
         async Task Step(string said, VirtualKey key, params VirtualKey[] with)
@@ -343,6 +344,7 @@ internal static class TableScenarios
         await Step("Down", VirtualKey.Down);
         await Step("Space", VirtualKey.Space);
         await Step("Space", VirtualKey.Space);
+        await Step("F2 to edit", VirtualKey.F2);
         await Step("G typed to find a name", VirtualKey.G);
         await Step("A typed to go on", VirtualKey.A);
     }

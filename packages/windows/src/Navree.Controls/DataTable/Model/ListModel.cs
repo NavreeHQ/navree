@@ -283,18 +283,27 @@ public sealed class TextTablePresenter<T> : IDataTablePresenter
     /// <inheritdoc />
     public UIElement CreateCell(DataTableColumn column, RowShape shape) => column.Role == ColumnRole.Actions
         ? new DataTableGlyph { Glyph = Glyphs.More, Width = 32, Height = 32, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
-        : new TextBlock
+        : Words(column);
+
+    // A cell of words: when its column is too narrow the words are cut with an ellipsis, and all of them are in a tooltip.
+    private static TextBlock Words(DataTableColumn column)
     {
-        TextTrimming = column.Kind == ColumnKind.Number ? TextTrimming.Clip : TextTrimming.CharacterEllipsis,
-        TextWrapping = TextWrapping.NoWrap,
-        VerticalAlignment = VerticalAlignment.Center,
-        HorizontalAlignment = column.Align switch
+        TextBlock block = new()
         {
-            DataTableAlign.End => HorizontalAlignment.Right,
-            DataTableAlign.Center => HorizontalAlignment.Center,
-            _ => HorizontalAlignment.Left,
-        },
-    };
+            TextTrimming = column.Kind == ColumnKind.Number ? TextTrimming.Clip : TextTrimming.CharacterEllipsis,
+            TextWrapping = TextWrapping.NoWrap,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = column.Align switch
+            {
+                DataTableAlign.End => HorizontalAlignment.Right,
+                DataTableAlign.Center => HorizontalAlignment.Center,
+                _ => HorizontalAlignment.Left,
+            },
+        };
+        block.IsTextTrimmedChanged += (sender, _) =>
+            ToolTipService.SetToolTip(sender, sender.IsTextTrimmed ? sender.Text : null);
+        return block;
+    }
 
     /// <inheritdoc />
     public void BindCell(UIElement cell, in DataTableRecord record, int columnIndex)

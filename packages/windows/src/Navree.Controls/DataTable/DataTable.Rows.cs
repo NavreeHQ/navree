@@ -123,6 +123,19 @@ public sealed partial class DataTable
                 RebuildColumns(remeasure: false);
                 UpdateState();
                 UpdateBulkBar();
+                if (Model is { } stated && stated.State != lastLoadState)
+                {
+                    lastLoadState = stated.State;
+                    if (stated.State == DataTableLoadState.Loading)
+                    {
+                        Announce(DataTableStrings.Get("DataTable_Loading"));
+                    }
+                    else if (stated.State == DataTableLoadState.Failed && stated.FailureMessage is { } why)
+                    {
+                        Announce(why);
+                    }
+                }
+
                 break;
             case DataTableChangeKind.Cursor:
                 askedAfterAt = askedBeforeAt = -1;
@@ -216,6 +229,7 @@ public sealed partial class DataTable
         }
 
         askedAfterAt = askedBeforeAt = -1;
+        NoteRowsAdded(count, earlier: index == 0 && rows.Count > count);
         CheckCursors();
     }
 
@@ -420,6 +434,7 @@ public sealed partial class DataTable
             {
                 heldLimitRaised = true;
                 RaiseHeldLimitReached();
+                Announce(DataTableStrings.Get("DataTable_HeldLimit", Choosing.FormatCount(limit, Culture)));
                 UpdateFooter();
             }
 

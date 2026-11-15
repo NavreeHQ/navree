@@ -100,7 +100,7 @@ public sealed partial class DataTable
         {
             DataTableColumn c = columns[index];
             double width = widths.TryGetValue(c.Key, out double known) ? known : ColumnSizing.LeastWidth(c.Kind);
-            return new ColumnSpec(c.Key, c.Kind, width, c.Kind == ColumnKind.Title);
+            return new ColumnSpec(c.Key, c.Kind, width, c.Kind == ColumnKind.Title && !personWidths.Contains(c.Key));
         }
 
         hasCheckColumn = model.Choice.Available;

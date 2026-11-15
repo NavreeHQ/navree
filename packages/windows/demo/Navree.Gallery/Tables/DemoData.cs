@@ -108,6 +108,7 @@ internal static class DemoData
         {
             HasMenuOf = _ => true,
             HasActionOf = _ => true,
+            HasEditOf = _ => true,
         };
         model.Choice = new DataTableChoiceOptions(true, true, 1204);
         if (sorted is not null)

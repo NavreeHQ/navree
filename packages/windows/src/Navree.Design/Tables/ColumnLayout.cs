@@ -135,6 +135,27 @@ public static class ColumnLayoutBuilder
         double scrollWidth = Sum(ColumnGroup.Scroll);
         double sum = fs + scrollWidth + fe;
 
+        // A table a little too wide takes the room from the flexible column, down to the least a person may make it,
+        // before it scrolls: a value is not cut by the frozen end group when a column can give a little.
+        if (sum > viewport)
+        {
+            for (int i = 0; i < shown.Count; i++)
+            {
+                if (!shown[i].Flexible)
+                {
+                    continue;
+                }
+
+                double least = ColumnSizing.ResizeRange(shown[i].Kind).Min;
+                double give = Math.Min(sum - viewport, Math.Max(0, widths[i] - least));
+                widths[i] -= give;
+                fs = gutter + Sum(ColumnGroup.FrozenStart);
+                scrollWidth = Sum(ColumnGroup.Scroll);
+                sum = fs + scrollWidth + fe;
+                break;
+            }
+        }
+
         // Room left over goes to the flexible column, else to the last words column, within its range.
         if (sum < viewport)
         {

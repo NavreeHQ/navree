@@ -114,7 +114,21 @@ public sealed partial class DataTableAutomationPeer : FrameworkElementAutomation
             return ProviderFromPeer(FrameworkElementAutomationPeer.CreatePeerForElement(made.Cells[column]));
         }
 
-        return null!;
+        return RowProvider(row);
+    }
+
+    // A row's provider: its own peer when it is made, else a stand-in that can ask for it to be made.
+    private IRawElementProviderSimple RowProvider(int index)
+    {
+        if (table.Model is not { } model || index < 0 || index >= model.RowCount || model.GetRow(index).Key is not { } key)
+        {
+            return null!;
+        }
+
+        DataTableRow? made = table.RealizedRows().FirstOrDefault(r => r.Index == index);
+        return made is not null
+            ? ProviderFromPeer(FrameworkElementAutomationPeer.CreatePeerForElement(made))
+            : ProviderFromPeer(new DataTableRowStandInAutomationPeer(table, index, key));
     }
 
     /// <inheritdoc />
@@ -136,19 +150,36 @@ public sealed partial class DataTableAutomationPeer : FrameworkElementAutomation
     /// <inheritdoc />
     public IRawElementProviderSimple FindItemByProperty(IRawElementProviderSimple startAfter, AutomationProperty automationProperty, object value)
     {
-        bool byId = automationProperty == AutomationElementIdentifiers.AutomationIdProperty;
-        bool byName = automationProperty == AutomationElementIdentifiers.NameProperty;
-        if (!byId && !byName)
+        if (table.Model is not { } model)
         {
             return null!;
         }
 
-        foreach (DataTableRow row in table.RealizedRows())
+        // With no property, the next row after the one given, or the first.
+        if (automationProperty is null)
         {
-            string? text = byId ? row.Key : table.Presenter?.RowName(row.Record);
-            if (string.Equals(text, value as string, StringComparison.Ordinal))
+            int after = -1;
+            if (startAfter?.GetPropertyValue(30011) is string startKey)
             {
-                return ProviderFromPeer(FrameworkElementAutomationPeer.CreatePeerForElement(row));
+                after = model.IndexOfKey(startKey);
+            }
+
+            return RowProvider(after + 1);
+        }
+
+        if (automationProperty == AutomationElementIdentifiers.AutomationIdProperty && value is string key)
+        {
+            return RowProvider(model.IndexOfKey(key));
+        }
+
+        if (automationProperty == AutomationElementIdentifiers.NameProperty && value is string name && table.Presenter is { } presenter)
+        {
+            for (int i = 0; i < model.RowCount; i++)
+            {
+                if (string.Equals(presenter.RowName(model.GetRow(i)), name, StringComparison.Ordinal))
+                {
+                    return RowProvider(i);
+                }
             }
         }
 
@@ -518,4 +549,49 @@ public sealed partial class DataTableCellAutomationPeer : FrameworkElementAutoma
 
     /// <inheritdoc />
     protected override bool IsContentElementCore() => cell.Role == CellRole.Data;
+}
+
+/// <summary>
+/// A row that is not made, told to assistive technology as a row that can be made on request: it has a
+/// name and an id and one pattern, which makes the row. Asking for it changes nothing on screen.
+/// </summary>
+public sealed partial class DataTableRowStandInAutomationPeer : AutomationPeer, IVirtualizedItemProvider
+{
+    private readonly DataTable table;
+    private readonly int index;
+    private readonly string key;
+
+    /// <summary>Makes the stand-in.</summary>
+    /// <param name="owner">The table.</param>
+    /// <param name="place">The row's place.</param>
+    /// <param name="rowKey">The row's key.</param>
+    public DataTableRowStandInAutomationPeer(DataTable owner, int place, string rowKey)
+    {
+        table = owner;
+        index = place;
+        key = rowKey;
+    }
+
+    /// <inheritdoc />
+    public void Realize() => table.RealizeRow(index);
+
+    /// <inheritdoc />
+    protected override object? GetPatternCore(PatternInterface patternInterface) =>
+        patternInterface == PatternInterface.VirtualizedItem ? this : null;
+
+    /// <inheritdoc />
+    protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.DataItem;
+
+    /// <inheritdoc />
+    protected override string GetClassNameCore() => nameof(DataTableRow);
+
+    /// <inheritdoc />
+    protected override string GetNameCore() =>
+        table.Model is { } model && table.Presenter is { } presenter && index < model.RowCount ? presenter.RowName(model.GetRow(index)) : key;
+
+    /// <inheritdoc />
+    protected override string GetAutomationIdCore() => key;
+
+    /// <inheritdoc />
+    protected override bool IsOffscreenCore() => true;
 }

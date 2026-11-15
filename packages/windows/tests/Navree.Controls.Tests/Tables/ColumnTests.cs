@@ -113,18 +113,49 @@ public sealed class ColumnLayoutTests
     }
 
     [TestMethod]
-    public void A_table_wider_than_the_viewport_scrolls_and_keeps_its_frozen_parts()
+    public void A_table_a_little_too_wide_takes_the_room_from_the_name_before_it_scrolls()
     {
+        // 752 wide in 704: the name gives 48 and nothing is cut off at the frozen end.
         ColumnLayout layout = ColumnLayoutBuilder.Build(Four(), 1, Actions, 40, 704);
-        Same.Number(752, layout.RowWidth);
-        Same.Number(280, layout.Fs);
+        Same.Number(704, layout.RowWidth);
+        Same.Number(192, layout.Columns[0].Width);
+        Same.Number(232, layout.Fs);
         Same.Number(72, layout.Fe);
         Same.Number(400, layout.ScrollWidth);
+        Same.Items([40.0, 232.0, 392.0, 512.0, 632.0], layout.Columns.Select(c => c.X));
+    }
+
+    [TestMethod]
+    public void A_table_too_wide_even_then_scrolls_and_keeps_its_end_group()
+    {
+        // At 560 the name is not frozen (it would fill more than half), gives all it may (240 to 120) and 72 is still over.
+        ColumnLayout layout = ColumnLayoutBuilder.Build(Four(), 1, Actions, 40, 560);
+        Assert.AreEqual(0, layout.FrozenStartApplied);
+        Same.Number(120, layout.Columns[0].Width);
+        Same.Number(632, layout.RowWidth);
+        Same.Number(40, layout.Fs);
+        Same.Number(72, layout.Fe);
+        Same.Number(520, layout.ScrollWidth);
         Assert.IsTrue(layout.EndFrozen);
-        Same.Items([40.0, 280.0, 440.0, 560.0, 680.0], layout.Columns.Select(c => c.X));
+        Same.Items([40.0, 160.0, 320.0, 440.0, 560.0], layout.Columns.Select(c => c.X));
         Same.Items(
-            [ColumnGroup.FrozenStart, ColumnGroup.Scroll, ColumnGroup.Scroll, ColumnGroup.Scroll, ColumnGroup.FrozenEnd],
+            [ColumnGroup.Scroll, ColumnGroup.Scroll, ColumnGroup.Scroll, ColumnGroup.Scroll, ColumnGroup.FrozenEnd],
             layout.Columns.Select(c => c.Group));
+    }
+
+    [TestMethod]
+    public void A_width_a_person_gave_to_the_name_is_not_taken_back()
+    {
+        ColumnSpec[] given =
+        [
+            new("title", ColumnKind.Title, 240, false),
+            new("city", ColumnKind.Words, 160, false),
+            new("amount", ColumnKind.Number, 120, false),
+            new("stage", ColumnKind.Status, 120, false),
+        ];
+        ColumnLayout layout = ColumnLayoutBuilder.Build(given, 1, Actions, 40, 704);
+        Same.Number(240, layout.Columns[0].Width);
+        Same.Number(752, layout.RowWidth);
     }
 
     [TestMethod]
@@ -133,9 +164,31 @@ public sealed class ColumnLayoutTests
         ColumnLayout layout = ColumnLayoutBuilder.Build(Four(), 1, Actions, 40, 703);
         Assert.AreEqual(0, layout.FrozenStartApplied);
         Same.Number(40, layout.Fs);
-        Same.Number(640, layout.ScrollWidth);
-        Same.Number(752, layout.RowWidth);
-        Same.Items([40.0, 280.0, 440.0, 560.0, 680.0], layout.Columns.Select(c => c.X));
+        Same.Number(191, layout.Columns[0].Width);
+        Same.Number(591, layout.ScrollWidth);
+        Same.Number(703, layout.RowWidth);
+        Same.Items([40.0, 231.0, 391.0, 511.0, 631.0], layout.Columns.Select(c => c.X));
+    }
+
+    [TestMethod]
+    public void The_columns_of_the_gallery_table_fit_a_viewport_of_958_without_scrolling()
+    {
+        // Name, City, Phone, Plan, Amount, Status, Last seen and the actions, as measured at 100 percent: 1002 wide before.
+        ColumnSpec[] shown =
+        [
+            new("name", ColumnKind.Title, 240, true),
+            new("city", ColumnKind.Words, 116, false),
+            new("phone", ColumnKind.Words, 130, false),
+            new("plan", ColumnKind.Words, 80, false),
+            new("amount", ColumnKind.Number, 103, false),
+            new("status", ColumnKind.Status, 90, false),
+            new("seen", ColumnKind.Words, 131, false),
+        ];
+        ColumnLayout layout = ColumnLayoutBuilder.Build(shown, 1, Actions, 40, 958);
+        Same.Number(958, layout.RowWidth);
+        Same.Number(196, layout.Columns[0].Width);
+        // Nothing is left to scroll: what the end group covers is nothing.
+        Same.Number(958 - layout.Fe, layout.Columns[6].X + layout.Columns[6].Width);
     }
 
     [TestMethod]

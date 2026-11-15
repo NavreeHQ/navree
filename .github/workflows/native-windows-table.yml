@@ -66,7 +66,7 @@ jobs:
         run: |
           $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
           if (-not $exe) { throw "the gallery was not built" }
-          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\gallery" -Run "table,pointer,stick,anchor"
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\gallery" -Run "table,pointer,rows100k,stick,anchor"
 
       - name: What the gallery measured
         if: always()
@@ -76,6 +76,51 @@ jobs:
             "---- $name"
             if (Test-Path "$env:RUNNER_TEMP/gallery/$name") { Get-Content "$env:RUNNER_TEMP/gallery/$name" } else { "(not written)" }
           }
+
+      # The same tables at larger text and in the system's high contrast colours. The system may not take
+      # either on a hosted machine, so what it was told and what the gallery read are both kept.
+      - name: Run the gallery at larger text
+        if: always()
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          $key = 'HKCU:\Software\Microsoft\Accessibility'
+          if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
+          try {
+            foreach ($scale in 150, 225) {
+              Set-ItemProperty -Path $key -Name TextScaleFactor -Value $scale -Type DWord -Force
+              Start-Sleep -Seconds 2
+              powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\gallery-text$scale" -Run "tabletext" -Seconds 200
+            }
+          } finally {
+            Remove-ItemProperty -Path $key -Name TextScaleFactor -ErrorAction SilentlyContinue
+          }
+
+      - name: Run the gallery in high contrast
+        if: always()
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          try {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -On
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\gallery-contrast" -Run "tabletext" -Seconds 200
+          } finally {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -Off
+          }
+
+      - name: Keep the larger text and high contrast pictures
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-gallery-settings
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/gallery-text150
+            ${{ runner.temp }}/gallery-text225
+            ${{ runner.temp }}/gallery-contrast
+          retention-days: 30
 
       - name: Keep the pictures and measurements
         if: always()

@@ -10,6 +10,11 @@ public sealed partial class DataTable
     private FrameworkElement? toolbarPresenter;
     private int bulkSynced = -1;
     private string lastAnnouncement = string.Empty;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? choiceTimer;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? addedTimer;
+    private int addedLater;
+    private int addedEarlier;
+    private DataTableLoadState lastLoadState = DataTableLoadState.Ready;
 
     private void WireBulkBar()
     {
@@ -81,12 +86,98 @@ public sealed partial class DataTable
         bulkSynced = BulkActions.Count;
     }
 
+    // The count of rows chosen is said once the person has stopped for 400 ms, so a held key does not talk.
     private void AnnounceChoice()
+    {
+        choiceTimer ??= DispatcherQueue.CreateTimer();
+        choiceTimer.Stop();
+        choiceTimer.Interval = TimeSpan.FromMilliseconds(400);
+        choiceTimer.IsRepeating = false;
+        choiceTimer.Tick -= OnChoiceTimer;
+        choiceTimer.Tick += OnChoiceTimer;
+        choiceTimer.Start();
+    }
+
+    private void OnChoiceTimer(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
         (_, int chosen) = CountChoice();
         long? total = Model?.Choice.AcrossTotal;
         Announcement announcement = Announcements.Chosen(chosen, total, choice.Across);
         Announce(DataTableStrings.Get(announcement));
+    }
+
+    // Rows that join while focus is in the table are said once, a second after the last.
+    private void NoteRowsAdded(int count, bool earlier)
+    {
+        if (!FocusIsInside())
+        {
+            return;
+        }
+
+        if (earlier)
+        {
+            addedEarlier += count;
+        }
+        else
+        {
+            addedLater += count;
+        }
+
+        addedTimer ??= DispatcherQueue.CreateTimer();
+        addedTimer.Stop();
+        addedTimer.Interval = TimeSpan.FromSeconds(1);
+        addedTimer.IsRepeating = false;
+        addedTimer.Tick -= OnAddedTimer;
+        addedTimer.Tick += OnAddedTimer;
+        addedTimer.Start();
+    }
+
+    private void OnAddedTimer(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        if (addedLater > 0)
+        {
+            Announce(DataTableStrings.Get(Announcements.RowsAdded(addedLater, earlier: false)));
+        }
+
+        if (addedEarlier > 0)
+        {
+            Announce(DataTableStrings.Get(Announcements.RowsAdded(addedEarlier, earlier: true)));
+        }
+
+        addedLater = 0;
+        addedEarlier = 0;
+    }
+
+    private bool FocusIsInside()
+    {
+        DependencyObject? at = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        while (at is not null)
+        {
+            if (ReferenceEquals(at, this))
+            {
+                return true;
+            }
+
+            at = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(at);
+        }
+
+        return false;
+    }
+
+    /// <summary>Makes a row that is far from the view, as assistive technology asks.</summary>
+    /// <param name="index">The row's place.</param>
+    internal void RealizeRow(int index)
+    {
+        if (repeater is null || Model is not { } model || index < 0 || index >= model.RowCount)
+        {
+            return;
+        }
+
+        rowsLayout.PinnedIndex = index;
+        rowsLayout.Reflow();
+        _ = repeater.GetOrCreateElement(index);
+        repeater.UpdateLayout();
+        ReleasePinSoon();
     }
 
     private void Announce(string words)
