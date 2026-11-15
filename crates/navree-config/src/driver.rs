@@ -345,13 +345,7 @@ impl DriverContext {
     /// `ConfigModule`.
     pub fn settings<T: DeserializeOwned + Default>(&self) -> Result<T, BoxError> {
         if let Some(held) = &self.held {
-            let table = from_held_json(held, ConfigSources::DEFAULT_MAX_DEPTH).map_err(|_| {
-                ConfigError::TooDeep {
-                    what: format!("`{}`", self.settings_key),
-                    limit: ConfigSources::DEFAULT_MAX_DEPTH,
-                }
-            })?;
-            return Ok(read_settings_at(&self.settings_key, &table)?);
+            return read_settings(held).map_err(|message| self.unreadable(message));
         }
         let Some(config) = &self.config else {
             return Err(format!(
@@ -361,9 +355,18 @@ impl DriverContext {
             .into());
         };
         match self.configured(config) {
-            Some(table) => Ok(read_settings_at(&self.settings_key, table)?),
+            Some(table) => read_table(table).map_err(|message| self.unreadable(message)),
             None => Ok(T::default()),
         }
+    }
+
+    /// The error of settings that do not read, at the settings key.
+    fn unreadable(&self, message: String) -> BoxError {
+        ConfigError::Section {
+            key: self.settings_key.clone(),
+            message,
+        }
+        .into()
     }
 
     /// The table of the driver's settings in `config`: for a driver built
@@ -387,14 +390,19 @@ impl DriverContext {
     }
 }
 
-/// Reads `table`, a driver's settings at `key`, as `T`: values convert as
-/// the configuration's do, and the error names `key` and the setting,
-/// never a value (see [`read_table`]).
-fn read_settings_at<T: DeserializeOwned>(key: &str, table: &Value) -> Result<T, ConfigError> {
-    read_table(table).map_err(|message| ConfigError::Section {
-        key: key.to_owned(),
-        message,
-    })
+/// Reads `table`, the settings a driver kind's module holds for a driver
+/// (a disk's table), as `T`, exactly as `DriverContext::settings` reads
+/// them: values convert as the configuration's do (`"2222"` from the
+/// environment fills a `u16`, `"true"` a `bool`), and the error, its
+/// message alone, names the setting and never a value of the table.
+///
+/// Not public API: what the driver kinds of Navree call.
+#[doc(hidden)]
+pub fn read_settings<T: DeserializeOwned>(table: &Json) -> Result<T, String> {
+    let limit = ConfigSources::DEFAULT_MAX_DEPTH;
+    let table = from_held_json(table, limit)
+        .map_err(|_| format!("the settings nest deeper than the limit of {limit} levels"))?;
+    read_table(&table)
 }
 
 /// Reads `table`, a driver's settings, as `T`, with the configuration's
