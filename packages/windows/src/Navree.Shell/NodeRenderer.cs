@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using Navree.Design;
+using Navree.Design.Pages;
 using Navree.Protocol;
 using Navree.Runtime;
 using ShapePath = Microsoft.UI.Xaml.Shapes.Path;
@@ -24,6 +25,9 @@ internal sealed partial class NodeRenderer(RenderContext context)
     // The record of the part being drawn: the one a part drawn inside it is a child of.
     private Drawn? current;
 
+    // The record a part drawn on its own (to be put in a part that stands) is to be a child of, which the part's own drawing may ask about.
+    private Drawn? adopter;
+
     /// <summary>Draws a node.</summary>
     internal UIElement Render(Models.Node node) => current is null ? RenderLoose(node) : RenderRecord(node).Element;
 
@@ -32,7 +36,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
     {
         Drawn record = new(node)
         {
-            Parent = current,
+            Parent = current ?? adopter,
             Screen = context.Screen,
             Form = currentForm,
             Overlay = currentOverlay,
@@ -202,70 +206,78 @@ internal sealed partial class NodeRenderer(RenderContext context)
             _ => VerticalAlignment.Top,
         };
 
-    private UIElement DrawStack(Models.Stack stack)
+    // The way a stack runs, by the room the window gives it and by whether its parts fit side by side.
+    private Models.Axis AxisOf(Models.Stack stack)
     {
         Models.Axis axis = stack.Wide is Models.Axis wide && context.Width != WidthClass.Compact ? wide : stack.Axis;
-        if (axis == Models.Axis.Horizontal && WindowRules.FoldsDown(context.Width, stack.Children))
-        {
-            axis = Models.Axis.Vertical;
-        }
+        return axis == Models.Axis.Horizontal && WindowRules.FoldsDown(context.Width, stack.Children) ? Models.Axis.Vertical : axis;
+    }
 
+    // Across, where nothing grows to take what is left and the parts are not lanes: a row that goes on to a second line when its parts do not fit.
+    private static bool Folds(Models.Stack stack) =>
+        !stack.Children.Any(child => child is Models.Stack { Grow: true } or Models.Chart)
+        && !WindowRules.IsLanes(stack.Children)
+        && stack.Justify is not (Models.Justify.End or Models.Justify.Center);
+
+    private UIElement DrawStack(Models.Stack stack)
+    {
+        Models.Axis axis = AxisOf(stack);
         double gap = WindowRules.Space(stack.Gap);
         Thickness pad = new(WindowRules.Space(stack.Pad));
         if (axis == Models.Axis.Vertical)
         {
             StackPanel panel = new() { Spacing = gap, Padding = pad };
-            foreach (Models.Node child in stack.Children)
+            Group run = Run(stack.Children, new PanelHost(panel.Children), () => 0, (child, element, _) =>
             {
-                UIElement element = Render(child);
                 if (stack.Align is Models.Align align && element is FrameworkElement placed)
                 {
                     // A chart has no width of its own: put in the middle it would be as wide as nothing, so it takes the width of the stack.
                     placed.HorizontalAlignment = child is Models.Chart ? HorizontalAlignment.Stretch : Across(align);
                 }
-
-                panel.Children.Add(element);
-            }
-
+            });
+            UpdateRun<Models.Stack>(node => node with { Children = [] }, run, node => node.Children, node => AxisOf(node) == Models.Axis.Vertical && node.Appear is null);
             return panel;
         }
 
         // Across, where nothing grows to take what is left and the parts are not lanes: a row that goes on to a second line when its parts do not fit
         // side by side, so a title keeps its line and its words wrap at the spaces (a word is broken only when it alone is wider than the line).
-        if (!stack.Children.Any(child => child is Models.Stack { Grow: true } or Models.Chart)
-            && !WindowRules.IsLanes(stack.Children)
-            && stack.Justify is not (Models.Justify.End or Models.Justify.Center))
+        if (Folds(stack))
         {
             Navree.Controls.Composition.FoldRow folding = new() { Spacing = gap, LineSpacing = Math.Min(gap, 8), Margin = pad, Between = stack.Justify == Models.Justify.Between };
-            foreach (Models.Node child in stack.Children)
+            Group folded = Run(stack.Children, new PanelHost(folding.Children), () => 0, (_, element, _) =>
             {
-                UIElement element = Render(child);
                 if (element is FrameworkElement placed)
                 {
                     placed.VerticalAlignment = stack.Align is null ? VerticalAlignment.Center : Down(stack.Align);
                 }
-
-                folding.Children.Add(element);
-            }
-
+            });
+            UpdateRun<Models.Stack>(node => node with { Children = [] }, folded, node => node.Children, node => AxisOf(node) == Models.Axis.Horizontal && Folds(node) && node.Appear is null);
             return folding;
         }
 
         // Across: each child in a column of a grid, the ones that grow taking what is left.
         Grid row = new() { ColumnSpacing = gap, Padding = pad };
-        int at = 0;
         foreach (Models.Node child in stack.Children)
         {
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+        }
+
+        // The columns are the children, one each: a child that comes or goes is a stack drawn again.
+        Group columns = Run(stack.Children, new PanelHost(row.Children), () => 0, (child, element, at) =>
+        {
             bool grows = child is Models.Stack { Grow: true } or Models.Chart;
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = grows ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });
-            UIElement element = Render(child);
+            row.ColumnDefinitions[at].Width = grows ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
             if (element is FrameworkElement placed)
             {
                 placed.VerticalAlignment = stack.Align is null ? VerticalAlignment.Center : Down(stack.Align);
             }
 
-            Grid.SetColumn((FrameworkElement)element, at++);
-            row.Children.Add(element);
+            Grid.SetColumn((FrameworkElement)element, at);
+        }, resizable: false);
+        bool plainRow = !WindowRules.IsLanes(stack.Children) && stack.Justify is not (Models.Justify.End or Models.Justify.Center or Models.Justify.Between);
+        if (plainRow)
+        {
+            UpdateRun<Models.Stack>(node => node with { Children = [] }, columns, node => node.Children, node => AxisOf(node) == Models.Axis.Horizontal && !Folds(node) && node.Appear is null && !WindowRules.IsLanes(node.Children));
         }
 
         if (WindowRules.IsLanes(stack.Children))
@@ -335,6 +347,8 @@ internal sealed partial class NodeRenderer(RenderContext context)
     private UIElement DrawSection(Models.Section section)
     {
         StackPanel body = new() { Spacing = 12 };
+        Group? actionRun = null;
+        int before = 0;
         if (section.Title is not null || section.Subtitle is not null || section.Actions.Count > 0)
         {
             Grid header = new() { ColumnSpacing = 12 };
@@ -357,33 +371,39 @@ internal sealed partial class NodeRenderer(RenderContext context)
             if (section.Actions.Count > 0)
             {
                 StackPanel actions = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
-                foreach (Models.Node action in section.Actions)
-                {
-                    actions.Children.Add(Render(action));
-                }
-
+                actionRun = Run(section.Actions, new PanelHost(actions.Children), () => 0);
                 Grid.SetColumn(actions, 1);
                 header.Children.Add(actions);
             }
 
             body.Children.Add(header);
+            before++;
         }
 
         if (section.Hint is not null)
         {
             body.Children.Add(DrawHint(section.Hint));
+            before++;
         }
 
-        foreach (Models.Node child in section.Children)
+        int leading = before;
+        Group childRun = Run(section.Children, new PanelHost(body.Children), () => leading);
+        Group footerRun = Run(section.Footer, new PanelHost(body.Children), () => leading + childRun.Records.Count);
+        bool hadActions = actionRun is not null;
+        Drawn me = current!;
+        me.Update = now =>
         {
-            body.Children.Add(Render(child));
-        }
+            if (now is not Models.Section next || me.Node is not Models.Section previous || hadActions != next.Actions.Count > 0)
+            {
+                return false;
+            }
 
-        foreach (Models.Node footer in section.Footer)
-        {
-            body.Children.Add(Render(footer));
-        }
-
+            static Models.Section Bare(Models.Section node) => node with { Children = [], Footer = [], Actions = [] };
+            return PageRules.Same(Bare(previous), Bare(next))
+                && (actionRun is null || actionRun.Update(this, me, next.Actions))
+                && childRun.Update(this, me, next.Children)
+                && footerRun.Update(this, me, next.Footer);
+        };
         return section.Style == Models.SectionStyle.Plain ? body : Cardlike(body, 16);
     }
 
@@ -404,8 +424,24 @@ internal sealed partial class NodeRenderer(RenderContext context)
     private UIElement DrawSplit(Models.Split split)
     {
         Navree.Controls.Composition.PaneRow row = new() { SecondFirstWhenStacked = HoldsCurrent(split.Detail) && !HoldsCurrent(split.Primary) };
-        row.Children.Add(Render(split.Primary));
-        row.Children.Add(Render(split.Detail));
+        Group panes = Run([split.Primary, split.Detail], new PanelHost(row.Children), () => 0, resizable: false);
+        Drawn me = current!;
+        me.Update = now =>
+        {
+            if (now is not Models.Split next || me.Node is not Models.Split previous)
+            {
+                return false;
+            }
+
+            static Models.Split Bare(Models.Split node) => node with { Primary = new Models.Spacer(), Detail = new Models.Spacer() };
+            if (!PageRules.Same(Bare(previous), Bare(next)) || !panes.Update(this, me, [next.Primary, next.Detail]))
+            {
+                return false;
+            }
+
+            row.SecondFirstWhenStacked = HoldsCurrent(next.Detail) && !HoldsCurrent(next.Primary);
+            return true;
+        };
         return row;
     }
 
@@ -421,37 +457,81 @@ internal sealed partial class NodeRenderer(RenderContext context)
     private UIElement DrawPane(Models.Pane pane)
     {
         StackPanel column = new() { Spacing = 8 };
+        int titled = 0;
         if (!string.IsNullOrEmpty(pane.Title))
         {
             TextBlock title = Look.Label(pane.Title, "BodyStrongTextBlockStyle");
             AutomationProperties.SetHeadingLevel(title, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
             column.Children.Add(title);
+            titled = 1;
         }
 
-        foreach (Models.Node child in pane.Children)
-        {
-            column.Children.Add(Render(child));
-        }
-
+        Group run = Run(pane.Children, new PanelHost(column.Children), () => titled);
+        UpdateRun<Models.Pane>(node => node with { Children = [] }, run, node => node.Children);
         return column;
     }
 
     private UIElement DrawDisclosure(Models.Disclosure disclosure)
     {
+        StackPanel inside = new() { Spacing = 8 };
+        Group run = Run(disclosure.Children, new PanelHost(inside.Children), () => 0);
         Expander expander = new()
         {
             Header = disclosure.Label,
             IsExpanded = disclosure.Open,
-            Content = Column(disclosure.Children),
+            Content = inside,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
         };
+        bool applying = false;
         if (disclosure.Id is string id)
         {
-            expander.Expanding += (_, _) => context.Send(Events.Overlay(context.Screen.Id, id, true));
-            expander.Collapsed += (_, _) => context.Send(Events.Overlay(context.Screen.Id, id, false));
+            expander.Expanding += (_, _) =>
+            {
+                if (!applying)
+                {
+                    context.Send(Events.Overlay(context.Screen.Id, id, true));
+                }
+            };
+            expander.Collapsed += (_, _) =>
+            {
+                if (!applying)
+                {
+                    context.Send(Events.Overlay(context.Screen.Id, id, false));
+                }
+            };
         }
 
+        // Open or shut is the person's to say and the core's to confirm: when the core's word differs from the control's, the control that stands is set.
+        Drawn me = current!;
+        me.Update = now =>
+        {
+            if (now is not Models.Disclosure next || me.Node is not Models.Disclosure previous)
+            {
+                return false;
+            }
+
+            static Models.Disclosure Bare(Models.Disclosure node) => node with { Children = [], Open = false };
+            if (!PageRules.Same(Bare(previous), Bare(next)) || !run.Update(this, me, next.Children))
+            {
+                return false;
+            }
+
+            if (expander.IsExpanded != next.Open)
+            {
+                applying = true;
+                try
+                {
+                    expander.IsExpanded = next.Open;
+                }
+                finally
+                {
+                    applying = false;
+                }
+            }
+
+            return true;
+        };
         return expander;
     }
 
@@ -914,26 +994,60 @@ internal sealed partial class NodeRenderer(RenderContext context)
     private UIElement DrawRegion(Models.Region region)
     {
         StackPanel panel = new() { Spacing = 8 };
-        RegionView? state = context.Screen.Regions.TryGetValue(region.Id, out RegionView? held) ? held : null;
-        foreach (Models.Node child in region.Children)
+        Group run = Run(region.Children, new PanelHost(panel.Children), () => 0);
+        UIElement? aside = RegionAside(region);
+        if (aside is not null)
         {
-            panel.Children.Add(Render(child));
+            panel.Children.Add(aside);
         }
 
+        // What the region says of itself (its failure, a ring while it waits for its first children) stands after the children and is made again with the state.
+        Drawn me = current!;
+        me.Update = now =>
+        {
+            if (now is not Models.Region next || me.Node is not Models.Region previous)
+            {
+                return false;
+            }
+
+            static Models.Region Bare(Models.Region node) => node with { Children = [] };
+            if (!PageRules.Same(Bare(previous), Bare(next)) || !run.Update(this, me, next.Children))
+            {
+                return false;
+            }
+
+            if (aside is not null)
+            {
+                _ = panel.Children.Remove(aside);
+            }
+
+            aside = RegionAside(next);
+            if (aside is not null)
+            {
+                panel.Children.Add(aside);
+            }
+
+            return true;
+        };
+        return panel;
+    }
+
+    // The failure a region shows, or the ring while it waits for its first children; none when it is well.
+    private UIElement? RegionAside(Models.Region region)
+    {
+        RegionView? state = context.Screen.Regions.TryGetValue(region.Id, out RegionView? held) ? held : null;
         if (state?.Failure is not null)
         {
             InfoBar failed = new() { IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Error, Title = Words.Failure(state.Failure.ToString()!.ToLowerInvariant()).Title };
             Button again = new() { Content = "Try again" };
             again.Click += (_, _) => context.Send(Events.RegionRetry(context.Screen.Id, region.Id));
             failed.ActionButton = again;
-            panel.Children.Add(failed);
-        }
-        else if (state?.Loading == true && region.Children.Count == 0)
-        {
-            panel.Children.Add(new ProgressRing { IsActive = true, Width = 28, Height = 28, HorizontalAlignment = HorizontalAlignment.Center });
+            return failed;
         }
 
-        return panel;
+        return state?.Loading == true && region.Children.Count == 0
+            ? new ProgressRing { IsActive = true, Width = 28, Height = 28, HorizontalAlignment = HorizontalAlignment.Center }
+            : null;
     }
 
     // ---- acting -----------------------------------------------------------------------------------------

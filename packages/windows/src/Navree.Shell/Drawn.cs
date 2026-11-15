@@ -235,11 +235,13 @@ internal sealed class Group
         }
 
         int place = Host.IndexOf(old.Element);
-        Place?.Invoke(fresh.Node, fresh.Element, at);
-        if (place >= 0)
+        if (place < 0)
         {
-            Host.Set(place, fresh.Element);
+            return false;
         }
+
+        Place?.Invoke(fresh.Node, fresh.Element, at);
+        Host.Set(place, fresh.Element);
 
         Records[at] = fresh;
         return true;

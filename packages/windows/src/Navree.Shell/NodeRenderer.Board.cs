@@ -25,17 +25,16 @@ internal sealed partial class NodeRenderer
     private static bool HoldsCards(Models.List list) =>
         list.Id is not null && list.Reorder is not null && list.Children.OfType<Models.Row>().Any(row => row.Detail.Count > 0);
 
-    private UIElement CardsOf(Models.List list)
+    // The rows of a list of cards: the rows only, each drawn as a card.
+    private static IReadOnlyList<Models.Node> KeptRows(Models.List list) => [.. list.Children.OfType<Models.Row>()];
+
+    private UIElement CardsOf(Models.List list, out Group run)
     {
         string listId = list.Id!;
         StackPanel lane = new() { Spacing = 8, AllowDrop = true, MinHeight = 56, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
         Border indicator = new() { Height = 3, CornerRadius = new CornerRadius(1.5), Background = Look.Resource("AccentFillColorDefaultBrush"), Tag = null };
         AutomationProperties.SetName(lane, "Cards");
-        List<Models.Row> rows = [.. list.Children.OfType<Models.Row>()];
-        foreach (Models.Row row in rows)
-        {
-            lane.Children.Add(CardOf(row, list, rows));
-        }
+        run = Run(KeptRows(list), new PanelHost(lane.Children), () => 0);
 
         // Where in the lane a card dropped at this height would stand (the rule says: before the first card whose middle is below it).
         string? Before(double y)
@@ -91,7 +90,9 @@ internal sealed partial class NodeRenderer
         return lane;
     }
 
-    private UIElement CardOf(Models.Row row, Models.List list, IReadOnlyList<Models.Row> rows)
+    // A card is drawn for a row of a list of cards. What a press on it asks (the lanes, the places of the cards) is read from the screen as it is when
+    // the press happens, never from the lists the card was drawn beside, so a card that stands across a move of another card acts on the board as it is.
+    private UIElement CardOf(Models.Row row, Models.List list)
     {
         string rowId = row.Id ?? row.Key ?? row.Title;
         string listId = list.Id!;
@@ -124,7 +125,7 @@ internal sealed partial class NodeRenderer
             }
         }
 
-        Button handle = HandleOf(row, rowId, list, rows);
+        Button handle = HandleOf(row, rowId, listId);
         Grid grid = new() { ColumnSpacing = 4 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -193,7 +194,7 @@ internal sealed partial class NodeRenderer
     }
 
     // The handle: a grip of dots, which is the card's place for the keyboard and for its menu.
-    private Button HandleOf(Models.Row row, string rowId, Models.List list, IReadOnlyList<Models.Row> rows)
+    private Button HandleOf(Models.Row row, string rowId, string listId)
     {
         Microsoft.UI.Xaml.Controls.Canvas grip = new() { Width = 12, Height = 18 };
         for (int dot = 0; dot < 6; dot++)
@@ -214,10 +215,11 @@ internal sealed partial class NodeRenderer
         };
         AutomationProperties.SetName(handle, "Move " + row.Title);
         AutomationProperties.SetHelpText(handle, "Alt, Shift and an arrow key moves the card; Enter opens a menu of where it can go.");
-        int index = rows.ToList().FindIndex(other => (other.Id ?? other.Key ?? other.Title) == rowId);
         PageKeeper.Mark(handle, "move:" + rowId);
-        List<Models.List> lanes = Lanes(list);
-        MenuFlyout menu = MoveMenu(row, rowId, list, rows, index, lanes);
+
+        // The menu is made when it opens, from the board as it is then: which places are open, and which lanes there are.
+        MenuFlyout menu = new();
+        menu.Opening += (_, _) => FillMoveMenu(menu, rowId, listId);
         handle.Flyout = menu;
         handle.KeyDown += (_, e) =>
         {
@@ -230,17 +232,17 @@ internal sealed partial class NodeRenderer
 
             (string Lane, string? Before)? target = e.Key switch
             {
-                VirtualKey.Up => Within(list, rows, index, up: true),
-                VirtualKey.Down => Within(list, rows, index, up: false),
-                VirtualKey.Left => Beside(lanes, list, index, -1),
-                VirtualKey.Right => Beside(lanes, list, index, 1),
+                VirtualKey.Up => Within(listId, rowId, up: true),
+                VirtualKey.Down => Within(listId, rowId, up: false),
+                VirtualKey.Left => Beside(listId, rowId, -1),
+                VirtualKey.Right => Beside(listId, rowId, 1),
                 _ => null,
             };
             if (target is { } there)
             {
                 e.Handled = true;
                 CardFocus.Wanted = rowId;
-                context.Send(Events.Move(context.Screen.Id, rowId, list.Id!, there.Lane, there.Before));
+                context.Send(Events.Move(context.Screen.Id, rowId, listId, there.Lane, there.Before));
             }
         };
         if (CardFocus.Wanted == rowId)
@@ -259,25 +261,30 @@ internal sealed partial class NodeRenderer
         return handle;
     }
 
-    private MenuFlyout MoveMenu(Models.Row row, string rowId, Models.List list, IReadOnlyList<Models.Row> rows, int index, IReadOnlyList<Models.List> lanes)
+    private void FillMoveMenu(MenuFlyout menu, string rowId, string listId)
     {
-        MenuFlyout menu = new();
+        menu.Items.Clear();
+        Models.List? list = ListNow(listId);
+        List<Models.Row> rows = list is null ? [] : [.. list.Children.OfType<Models.Row>()];
+        int index = rows.FindIndex(other => RowOf(other) == rowId);
         MenuFlyoutItem up = new() { Text = "Move up", IsEnabled = index > 0 };
-        up.Click += (_, _) => Send(Within(list, rows, index, up: true));
+        up.Click += (_, _) => Send(Within(listId, rowId, up: true));
         MenuFlyoutItem down = new() { Text = "Move down", IsEnabled = index >= 0 && index < rows.Count - 1 };
-        down.Click += (_, _) => Send(Within(list, rows, index, up: false));
+        down.Click += (_, _) => Send(Within(listId, rowId, up: false));
         menu.Items.Add(up);
         menu.Items.Add(down);
 
         // Where else it can go: the lanes the move form of the card offers, a lane that is full or that the page forbids shown but not offered.
-        Models.Field? to = row.Detail.SelectMany(Tree.Walk).OfType<Models.Field>().FirstOrDefault(field => field.Name == "to_list");
-        if (to?.Input is Models.ChoiceInput choice && choice.Options.Count > 0)
+        Models.Row? row = index >= 0 ? rows[index] : null;
+        Models.Field? to = row?.Detail.SelectMany(Tree.Walk).OfType<Models.Field>().FirstOrDefault(field => field.Name == "to_list");
+        if (list is not null && to?.Input is Models.ChoiceInput choice && choice.Options.Count > 0)
         {
+            List<Models.List> lanes = Lanes(list);
             menu.Items.Add(new MenuFlyoutSeparator());
             foreach (Models.ChoiceOption option in choice.Options)
             {
                 Models.List? lane = lanes.FirstOrDefault(candidate => candidate.Reorder?.Key == option.Value);
-                bool here = lane is not null && lane.Id == list.Id;
+                bool here = lane is not null && lane.Id == listId;
                 MenuFlyoutItem item = new() { Text = "Move to " + option.Label, IsEnabled = lane is not null && !here && !option.Disabled };
                 if (lane?.Id is string laneId)
                 {
@@ -288,19 +295,21 @@ internal sealed partial class NodeRenderer
             }
         }
 
-        return menu;
-
         void Send((string Lane, string? Before)? target)
         {
             if (target is { } there)
             {
                 CardFocus.Wanted = rowId;
-                context.Send(Events.Move(context.Screen.Id, rowId, list.Id!, there.Lane, there.Before));
+                context.Send(Events.Move(context.Screen.Id, rowId, listId, there.Lane, there.Before));
             }
         }
     }
 
-    // The lists of the card's group, in the order they stand on the screen.
+    // The list with this id, as the screen has it now.
+    private Models.List? ListNow(string listId) =>
+        context.Screen.Screen is Models.Screen screen ? Tree.Nodes(screen).OfType<Models.List>().FirstOrDefault(other => other.Id == listId) : null;
+
+    // The lists of the card's group, in the order they stand on the screen now.
     private List<Models.List> Lanes(Models.List list)
     {
         string? group = list.Reorder?.Group;
@@ -315,17 +324,30 @@ internal sealed partial class NodeRenderer
     private static string RowOf(Models.Row row) => row.Id ?? row.Key ?? row.Title;
 
     // One place up or down in the lane, by the rule of the steps; nowhere from an end.
-    private static (string, string?)? Within(Models.List list, IReadOnlyList<Models.Row> rows, int index, bool up)
+    private (string, string?)? Within(string listId, string rowId, bool up)
     {
-        List<string> ids = [.. rows.Select(RowOf)];
+        if (ListNow(listId) is not { } list)
+        {
+            return null;
+        }
+
+        List<string> ids = [.. list.Children.OfType<Models.Row>().Select(RowOf)];
+        int index = ids.IndexOf(rowId);
         CardStep step = up ? CardMoves.Up(ids, index) : CardMoves.Down(ids, index);
-        return step.Possible ? (list.Id!, step.Before) : null;
+        return step.Possible ? (listId, step.Before) : null;
     }
 
     // The next lane across, at the same height where it has a card there, else at its end.
-    private static (string, string?)? Beside(IReadOnlyList<Models.List> lanes, Models.List list, int index, int step)
+    private (string, string?)? Beside(string listId, string rowId, int step)
     {
-        int at = CardMoves.Neighbour(lanes.ToList().FindIndex(lane => lane.Id == list.Id), lanes.Count, step);
+        if (ListNow(listId) is not { } list)
+        {
+            return null;
+        }
+
+        List<Models.List> lanes = Lanes(list);
+        int index = list.Children.OfType<Models.Row>().Select(RowOf).ToList().IndexOf(rowId);
+        int at = CardMoves.Neighbour(lanes.FindIndex(lane => lane.Id == listId), lanes.Count, step);
         if (at < 0)
         {
             return null;

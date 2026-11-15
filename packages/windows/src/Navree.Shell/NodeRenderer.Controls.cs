@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Navree.Design;
+using Navree.Design.Pages;
 using Navree.Protocol;
 using Navree.Runtime;
 
@@ -159,30 +160,74 @@ internal sealed partial class NodeRenderer
 
     // ---- lists and rows ----------------------------------------------------------------------------------
 
+    // The parts of a list that stand around its rows: the press that asks for older rows above them, and what asks for the next rows (or says that
+    // they could not be had) under them. Both follow the list's state, so they are made again when it changes.
+    private UIElement? ListHead(Models.List list)
+    {
+        if (list.Id is not string beforeId || list.Before is null)
+        {
+            return null;
+        }
+
+        // Older rows are above the first (a conversation's earlier messages): they are asked for by a press, not by reaching the top, or a
+        // list that starts at its top would load all of its history one page after another.
+        ListState? older = context.Screen.Lists.TryGetValue(beforeId, out ListState? olderState) ? olderState : null;
+        if (older?.LoadingBefore == true)
+        {
+            return new ProgressRing { IsActive = true, Width = 24, Height = 24, Margin = new Thickness(12), HorizontalAlignment = HorizontalAlignment.Center };
+        }
+
+        Button earlier = new() { Content = older?.FailedBefore == true ? "Try loading earlier again" : "Show earlier", HorizontalAlignment = HorizontalAlignment.Center };
+        earlier.Click += (_, _) => context.Send(Events.More(context.Screen.Id, beforeId, before: true));
+        return earlier;
+    }
+
+    private UIElement? ListTail(Models.List list)
+    {
+        if (list.Id is not string id || list.More is null)
+        {
+            return null;
+        }
+
+        ListState? loading = context.Screen.Lists.TryGetValue(id, out ListState? current) ? current : null;
+        if (loading?.Failed == true)
+        {
+            Button again = new() { Content = "Try loading more again", HorizontalAlignment = HorizontalAlignment.Center };
+            again.Click += (_, _) => context.Send(Events.More(context.Screen.Id, id));
+            return again;
+        }
+
+        // The end of the list is near when this is: rows come by cursor, never all at once.
+        FrameworkElement sentinel = loading?.Loading == true
+            ? new ProgressRing { IsActive = true, Width = 24, Height = 24, Margin = new Thickness(12) }
+            : new Microsoft.UI.Xaml.Controls.Border { Height = 1 };
+        bool asked = false;
+        bool busy = loading?.Loading == true;
+        sentinel.EffectiveViewportChanged += (_, e) =>
+        {
+            if (!asked && !busy && e.BringIntoViewDistanceY < 240)
+            {
+                asked = true;
+                context.Send(Events.More(context.Screen.Id, id));
+            }
+        };
+        return sentinel;
+    }
+
     private UIElement DrawList(Models.List list)
     {
         StackPanel panel = new() { Spacing = 0 };
-        if (list.Id is string beforeId && list.Before is not null)
+        UIElement? head = ListHead(list);
+        if (head is not null)
         {
-            // Older rows are above the first (a conversation's earlier messages): they are asked for by a press, not by reaching the top, or a
-            // list that starts at its top would load all of its history one page after another.
-            ListState? older = context.Screen.Lists.TryGetValue(beforeId, out ListState? olderState) ? olderState : null;
-            if (older?.LoadingBefore == true)
-            {
-                panel.Children.Add(new ProgressRing { IsActive = true, Width = 24, Height = 24, Margin = new Thickness(12), HorizontalAlignment = HorizontalAlignment.Center });
-            }
-            else
-            {
-                Button earlier = new() { Content = older?.FailedBefore == true ? "Try loading earlier again" : "Show earlier", HorizontalAlignment = HorizontalAlignment.Center };
-                earlier.Click += (_, _) => context.Send(Events.More(context.Screen.Id, beforeId, before: true));
-                panel.Children.Add(earlier);
-            }
+            panel.Children.Add(head);
         }
 
+        Group rows;
         if (HoldsCards(list))
         {
             // The cards of a board: each a card with what it holds, moved by dragging, by the keys or by its handle's menu.
-            panel.Children.Add(CardsOf(list));
+            panel.Children.Add(CardsOf(list, out rows));
         }
         else
         {
@@ -193,28 +238,37 @@ internal sealed partial class NodeRenderer
             };
             ScrollViewer.SetVerticalScrollMode(view, ScrollMode.Disabled);
             ScrollViewer.SetVerticalScrollBarVisibility(view, ScrollBarVisibility.Disabled);
-            int place = 0;
-            foreach (Models.Node child in list.Children)
+            if (list.Ordered)
             {
-                UIElement drawn = Render(child);
-                if (list.Ordered && child is Models.Row && drawn is FrameworkElement rowElement)
+                // A numbered list says its numbers: each row is put in a grid with its number, which is a list drawn again when its rows change.
+                int place = 0;
+                foreach (Models.Node child in list.Children)
                 {
-                    // A numbered list says its numbers; the row's tap and its name stay the row's.
-                    place++;
-                    Grid numbered = new() { ColumnSpacing = 8, Tag = rowElement.Tag };
-                    numbered.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                    numbered.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                    TextBlock number = Look.Label(place.ToString(System.Globalization.CultureInfo.CurrentCulture) + ".", "BodyTextBlockStyle", muted: true);
-                    number.VerticalAlignment = VerticalAlignment.Center;
-                    number.MinWidth = 24;
-                    AutomationProperties.SetAccessibilityView(number, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
-                    Grid.SetColumn(rowElement, 1);
-                    numbered.Children.Add(number);
-                    numbered.Children.Add(rowElement);
-                    drawn = numbered;
+                    UIElement drawn = Render(child);
+                    if (child is Models.Row && drawn is FrameworkElement rowElement)
+                    {
+                        place++;
+                        Grid numbered = new() { ColumnSpacing = 8, Tag = rowElement.Tag };
+                        numbered.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                        numbered.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                        TextBlock number = Look.Label(place.ToString(System.Globalization.CultureInfo.CurrentCulture) + ".", "BodyTextBlockStyle", muted: true);
+                        number.VerticalAlignment = VerticalAlignment.Center;
+                        number.MinWidth = 24;
+                        AutomationProperties.SetAccessibilityView(number, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+                        Grid.SetColumn(rowElement, 1);
+                        numbered.Children.Add(number);
+                        numbered.Children.Add(rowElement);
+                        drawn = numbered;
+                    }
+
+                    view.Items.Add(drawn);
                 }
 
-                view.Items.Add(drawn);
+                rows = new Group { Host = new ItemsHost(view.Items), Start = () => 0 };
+            }
+            else
+            {
+                rows = Run(list.Children, new ItemsHost(view.Items), () => 0);
             }
 
             string? tapForm = currentForm;
@@ -227,34 +281,65 @@ internal sealed partial class NodeRenderer
                 }
             };
             panel.Children.Add(view);
+            _ = view;
         }
 
-        if (list.Id is string id && list.More is not null)
+        UIElement? tail = ListTail(list);
+        if (tail is not null)
         {
-            ListState? loading = context.Screen.Lists.TryGetValue(id, out ListState? current) ? current : null;
-            if (loading?.Failed == true)
+            panel.Children.Add(tail);
+        }
+
+        // The rows are brought up to date where they stand; what asks for earlier and for more rows is made again with the list's state, and the
+        // cursors are only asked about, never read, so a new cursor is not a change of the list.
+        Drawn me = current!;
+        bool ordered = list.Ordered;
+        if (!ordered)
+        {
+            me.Update = now =>
             {
-                Button again = new() { Content = "Try loading more again", HorizontalAlignment = HorizontalAlignment.Center };
-                again.Click += (_, _) => context.Send(Events.More(context.Screen.Id, id));
-                panel.Children.Add(again);
-            }
-            else
-            {
-                // The end of the list is near when this is: rows come by cursor, never all at once.
-                FrameworkElement sentinel = loading?.Loading == true
-                    ? new ProgressRing { IsActive = true, Width = 24, Height = 24, Margin = new Thickness(12) }
-                    : new Microsoft.UI.Xaml.Controls.Border { Height = 1 };
-                bool asked = false;
-                sentinel.EffectiveViewportChanged += (_, e) =>
+                if (now is not Models.List next || me.Node is not Models.List previous || next.Ordered || HoldsCards(next) != HoldsCards(previous))
                 {
-                    if (!asked && loading?.Loading != true && e.BringIntoViewDistanceY < 240)
-                    {
-                        asked = true;
-                        context.Send(Events.More(context.Screen.Id, id));
-                    }
-                };
-                panel.Children.Add(sentinel);
-            }
+                    return false;
+                }
+
+                IReadOnlyList<Models.Node> kept = HoldsCards(next) ? KeptRows(next) : next.Children;
+
+                static Models.List Bare(Models.List node) => node with { Children = [], More = node.More is null ? null : string.Empty, Before = node.Before is null ? null : string.Empty, Since = node.Since is null ? null : string.Empty };
+                if (!PageRules.Same(Bare(previous), Bare(next)) || !rows.Update(this, me, kept))
+                {
+                    return false;
+                }
+
+                if (head is not null)
+                {
+                    _ = panel.Children.Remove(head);
+                }
+
+                if (tail is not null)
+                {
+                    _ = panel.Children.Remove(tail);
+                }
+
+                head = ListHead(next);
+                if (head is not null)
+                {
+                    panel.Children.Insert(0, head);
+                }
+
+                tail = ListTail(next);
+                if (tail is not null)
+                {
+                    panel.Children.Add(tail);
+                }
+
+                if (panel.Children.OfType<ListView>().FirstOrDefault() is { } shownRows)
+                {
+                    shownRows.IsItemClickEnabled = next.Children.OfType<Models.Row>().Any(row => row.Action is not null);
+                }
+
+                return true;
+            };
         }
 
         return panel;
@@ -265,6 +350,11 @@ internal sealed partial class NodeRenderer
 
     private UIElement DrawRow(Models.Row row)
     {
+        if (current?.Parent?.Node is Models.List parentList && HoldsCards(parentList))
+        {
+            return CardOf(row, parentList);
+        }
+
         Grid grid = new() { ColumnSpacing = 12, Padding = new Thickness(0, 6, 0, 6), MinHeight = 40 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });

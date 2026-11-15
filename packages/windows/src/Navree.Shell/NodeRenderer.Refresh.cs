@@ -48,10 +48,11 @@ internal sealed partial class NodeRenderer
     /// <returns>The node's record, not yet in its owner.</returns>
     internal Drawn RenderIn(Drawn owner, Models.Node node, string? form, string? overlay)
     {
-        (string? outerForm, string? outerOverlay, Drawn? outer) = (currentForm, currentOverlay, current);
+        (string? outerForm, string? outerOverlay, Drawn? outer, Drawn? outerAdopter) = (currentForm, currentOverlay, current, adopter);
         currentForm = form;
         currentOverlay = overlay;
         current = null;
+        adopter = owner;
         try
         {
             Drawn record = RenderRecord(node);
@@ -63,6 +64,7 @@ internal sealed partial class NodeRenderer
             currentForm = outerForm;
             currentOverlay = outerOverlay;
             current = outer;
+            adopter = outerAdopter;
         }
     }
 
@@ -154,7 +156,8 @@ internal sealed partial class NodeRenderer
     // Draws the node again where the old part stood, in the same form and sheet, and puts it in the old one's place.
     private Drawn Replace(Drawn old, Models.Node now)
     {
-        (string? outerForm, string? outerOverlay, bool outerCovered, string? outerWords, Drawn? outer) = (currentForm, currentOverlay, titleCovered, wordsAbove, current);
+        (string? outerForm, string? outerOverlay, bool outerCovered, string? outerWords, Drawn? outer, Drawn? outerAdopter) = (currentForm, currentOverlay, titleCovered, wordsAbove, current, adopter);
+        adopter = old.Parent;
         currentForm = old.Form;
         currentOverlay = old.Overlay;
         titleCovered = old.CoveredBefore;
@@ -172,6 +175,7 @@ internal sealed partial class NodeRenderer
             titleCovered = outerCovered;
             wordsAbove = outerWords;
             current = outer;
+            adopter = outerAdopter;
         }
 
         if (old.Parent is { } parent && parent.Swap(old, fresh))
