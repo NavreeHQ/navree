@@ -7,16 +7,6 @@ using Navree.Design.Tables;
 
 namespace Navree.Controls;
 
-/// <summary>How the parts that stay in place are moved against the scroll.</summary>
-internal enum StickyMode
-{
-    /// <summary>By expression animations on the compositor; nothing is written to the elements.</summary>
-    Compositor,
-
-    /// <summary>Only by numbers written to the elements from the scroll view's change events.</summary>
-    UiThread,
-}
-
 /// <summary>What a part that stays in place is.</summary>
 internal enum StickyRole
 {
@@ -41,11 +31,12 @@ internal enum StickyRole
 
 /// <summary>
 /// Keeps the header, the frozen columns and the open details in place while the rows scroll
-/// sideways: they are moved on the compositor by expressions over the scroll view's own position,
-/// and at rest the same numbers are written to the elements, which is what pointer hits and
-/// accessibility rectangles read.
+/// sideways: they are moved on the compositor by expressions over the scroll view's own position.
+/// While the animations run nothing is written to the elements, and pointer hits and
+/// accessibility rectangles follow the animation. Until the animations can be made, which waits for
+/// the scroll view's property set, the same numbers are written to the elements.
 /// </summary>
-internal sealed class StickyCoordinator
+internal sealed partial class StickyCoordinator
 {
     private readonly ScrollView scroll;
     private readonly Dictionary<UIElement, StickyRole> parts = [];
@@ -71,11 +62,8 @@ internal sealed class StickyCoordinator
         this.scroll = scroll;
     }
 
-    /// <summary>How the parts are moved.</summary>
-    internal StickyMode Mode { get; set; } = StickyMode.Compositor;
-
-    /// <summary>What happened that a run may want to print: when the animations could first be made.</summary>
-    internal List<string> Notes { get; } = [];
+    // A note for a measuring run to read; a build without the measuring symbol drops every call and what it would have written.
+    partial void Note(string line);
 
     /// <summary>Whether the animations have been made.</summary>
     internal bool Built => built;
@@ -102,14 +90,9 @@ internal sealed class StickyCoordinator
             PrepareClip(element, role);
         }
 
-        if (TryBuild())
-        {
-            Notes.Add("the animations were made when the coordinator was attached");
-        }
-        else
-        {
-            Notes.Add("the scroll view had no property set when the coordinator was attached; it is asked again at every change of its size and extent");
-        }
+        Note(TryBuild()
+            ? "the animations were made when the coordinator was attached"
+            : "the scroll view had no property set when the coordinator was attached; it is asked again at every change of its size and extent");
 
         Mirror();
     }
@@ -156,7 +139,7 @@ internal sealed class StickyCoordinator
     /// </summary>
     internal void Mirror()
     {
-        if (!attached || (built && Mode == StickyMode.Compositor))
+        if (!attached || built)
         {
             return;
         }
@@ -208,7 +191,7 @@ internal sealed class StickyCoordinator
     {
         if (!built && TryBuild())
         {
-            Notes.Add("the animations were made when the scroll view's size or extent changed, at width " + scroll.ExtentWidth.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+            Note("the animations were made when the scroll view's size or extent changed, at width " + scroll.ExtentWidth.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
         }
 
         Mirror();
@@ -268,13 +251,7 @@ internal sealed class StickyCoordinator
 
     private void Begin(UIElement element, StickyRole role)
     {
-        if (Mode == StickyMode.UiThread || compositor is null)
-        {
-            PrepareClip(element, role);
-            return;
-        }
-
-        if (startAnimation is null || endAnimation is null || headerAnimation is null || clipLeftAnimation is null
+        if (compositor is null || startAnimation is null || endAnimation is null || headerAnimation is null || clipLeftAnimation is null
             || clipRightAnimation is null || edgeStartAnimation is null || edgeEndAnimation is null)
         {
             PrepareClip(element, role);
@@ -341,7 +318,7 @@ internal sealed class StickyCoordinator
         }
     }
 
-    // The clip is on the element's visual, made once; in the modes that write numbers it is written by Mirror.
+    // The clip is on the element's visual, made once; until the animations are made it is written by Mirror.
     private InsetClip? PrepareClip(UIElement element, StickyRole role)
     {
         if (role != StickyRole.ScrollCells || compositor is null)

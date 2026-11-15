@@ -100,10 +100,6 @@ public sealed partial class DataTable : Control
     /// <summary>A person changed the columns: widths, order, what is hidden or frozen, the density.</summary>
     public event TypedEventHandler<DataTable, object?>? LayoutChanged;
 
-    /// <summary>Tells the table to report an exception that happens where the framework calls it, to a place a person can read, and to go on.</summary>
-    /// <param name="sink">Where it is written.</param>
-    public static void Watch(Action<string> sink) => Diag.Sink = sink;
-
     /// <summary>The rows and columns.</summary>
     public IDataTableModel? Model
     {

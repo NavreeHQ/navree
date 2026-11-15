@@ -41,9 +41,6 @@ public sealed partial class DataTable
     private bool templateWired;
     private bool stickyAttached;
 
-    /// <summary>How the header and the frozen columns are kept in place; the way a run chose.</summary>
-    internal static StickyMode StickyWay { get; set; } = StickyMode.Compositor;
-
     /// <summary>The scroll view the rows are in; null before the template is made.</summary>
     internal ScrollView? Scroller => scroll;
 
@@ -63,7 +60,7 @@ public sealed partial class DataTable
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
-        Diag.Guard("the table's template", WireTemplate);
+        WireTemplate();
     }
 
     private void WireTemplate()
@@ -104,7 +101,7 @@ public sealed partial class DataTable
         Canvas strip = new();
         strip.Children.Add(header);
         headerHost.Child = strip;
-        sticky = new StickyCoordinator(scroll) { Mode = StickyWay };
+        sticky = new StickyCoordinator(scroll);
         if (edgeStart is not null)
         {
             sticky.Register(edgeStart, StickyRole.EdgeStart);
@@ -143,13 +140,13 @@ public sealed partial class DataTable
         }
     }
 
-    private void OnLoaded() => Diag.Guard("the table loaded", () =>
+    private void OnLoaded()
     {
         loaded = true;
         AttachSticky();
         RecomputeMetrics();
         RebuildColumns(remeasure: true);
-    });
+    }
 
     private void OnUnloaded()
     {
@@ -182,7 +179,7 @@ public sealed partial class DataTable
         OnViewportChanged();
     }
 
-    private void OnViewportChanged() => Diag.Guard("the viewport changed", () =>
+    private void OnViewportChanged()
     {
         if (!loaded || scroll is null)
         {
@@ -190,7 +187,7 @@ public sealed partial class DataTable
         }
 
         RebuildColumns(remeasure: false);
-    });
+    }
 
     private void OnScrolled()
     {
@@ -202,14 +199,14 @@ public sealed partial class DataTable
         CheckCursors();
     }
 
-    private void OnRowPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args) => Diag.Guard("a row was prepared", () =>
+    private void OnRowPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
     {
         if (args.Element is DataTableRow row)
         {
             liveRows.Add(row);
             row.Bind(this, args.Index);
         }
-    });
+    }
 
     private void OnRowClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
     {

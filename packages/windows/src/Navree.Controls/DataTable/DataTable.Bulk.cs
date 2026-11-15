@@ -186,6 +186,6 @@ public sealed partial class DataTable
         RaiseNotification(words);
     }
 
-    /// <summary>The last words the table said to assistive technology; a run reads them.</summary>
+    /// <summary>The last words the table said to assistive technology; a test reads them.</summary>
     internal string LastAnnouncement => lastAnnouncement;
 }

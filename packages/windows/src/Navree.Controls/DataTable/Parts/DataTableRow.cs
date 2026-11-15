@@ -95,7 +95,7 @@ public sealed class DataTableRow : Control
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
-        Diag.Guard("a row's template", MakeParts);
+        MakeParts();
     }
 
     private void MakeParts()

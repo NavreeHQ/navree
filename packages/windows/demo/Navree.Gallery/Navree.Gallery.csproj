@@ -29,7 +29,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Navree.Controls\Navree.Controls.csproj" />
+    <!-- The gallery measures the control with the build that carries the measuring symbol (see the control's project file). -->
+    <ProjectReference Include="..\..\src\Navree.Controls\Navree.Controls.csproj" AdditionalProperties="NavreeMeasuring=true" />
     <ProjectReference Include="..\..\src\Navree.Design\Navree.Design.csproj" />
   </ItemGroup>
 

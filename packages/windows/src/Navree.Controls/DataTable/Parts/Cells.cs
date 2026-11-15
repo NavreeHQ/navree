@@ -188,7 +188,6 @@ public sealed class DataTableHeaderCell : Control
         UpdateState();
         Row?.Owner?.HeaderPressed(this, e);
         Microsoft.UI.Input.PointerPoint point = e.GetCurrentPoint(null);
-        Diag.Say($"[drag] a press on the heading {heading}: left button {point.Properties.IsLeftButtonPressed}, kind {e.Pointer.PointerDeviceType}");
         if (e.Pointer.PointerDeviceType != Microsoft.UI.Input.PointerDeviceType.Touch && point.Properties.IsLeftButtonPressed)
         {
             pressedForDrag = true;

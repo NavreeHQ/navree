@@ -171,7 +171,7 @@ public sealed class ColumnLayoutTests
     }
 
     [TestMethod]
-    public void The_columns_of_the_gallery_table_fit_a_viewport_of_958_without_scrolling()
+    public void The_columns_of_the_sample_table_fit_a_viewport_of_958_without_scrolling()
     {
         // Name, City, Phone, Plan, Amount, Status, Last seen and the actions, as measured at 100 percent: 1002 wide before.
         ColumnSpec[] shown =
@@ -231,7 +231,7 @@ public sealed class StickyMathTests
     }
 
     // The scroll view's positions are negative in right to left, but a translation and a clip are counted
-    // from the start in both flows (seen in a run), so the same rows scrolled by the same amount give the same numbers.
+    // from the start in both flows (as the scroll view reports them), so the same rows scrolled by the same amount give the same numbers.
     [TestMethod]
     [DataRow(0.0, 0.0, -400.0, 0.0, 280.0, 472.0, 0.0, 1.0)]
     [DataRow(-250.0, 250.0, -150.0, -250.0, 530.0, 222.0, 1.0, 1.0)]

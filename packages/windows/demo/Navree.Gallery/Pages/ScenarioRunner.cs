@@ -66,9 +66,8 @@ internal static class ScenarioRunner
                 await ScrollNumbersScenario.RunAsync(window);
                 break;
             case "stick":
-                await StickScenario.RunAsync(window, StickyMode.Compositor, rtl: false);
-                await StickScenario.RunAsync(window, StickyMode.Compositor, rtl: true);
-                await StickScenario.RunAsync(window, StickyMode.UiThread, rtl: false);
+                await StickScenario.RunAsync(window, rtl: false);
+                await StickScenario.RunAsync(window, rtl: true);
                 break;
             case "anchor":
                 await AnchorScenario.RunAsync(window);

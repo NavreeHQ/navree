@@ -20,10 +20,20 @@
     <ProjectReference Include="..\Navree.Design\Navree.Design.csproj" />
   </ItemGroup>
 
-  <!-- The gallery and the tests read the control's inner parts. -->
+  <!-- Only the control's own tests read its inner parts. -->
   <ItemGroup>
-    <InternalsVisibleTo Include="Navree.Gallery" />
     <InternalsVisibleTo Include="Navree.Controls.Tests" />
+  </ItemGroup>
+
+  <!-- The gallery measures the control with a build of its own, which has the symbol NAVREE_MEASURING: it shows the inner
+       parts to the gallery and adds the notes a measuring run reads. A build without the symbol holds none of it. -->
+  <PropertyGroup Condition="'$(NavreeMeasuring)' == 'true'">
+    <DefineConstants>$(DefineConstants);NAVREE_MEASURING</DefineConstants>
+    <BaseOutputPath>bin\measuring\</BaseOutputPath>
+    <IntermediateOutputPath>obj\measuring\$(Configuration)\</IntermediateOutputPath>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(NavreeMeasuring)' == 'true'">
+    <InternalsVisibleTo Include="Navree.Gallery" />
   </ItemGroup>
 
 </Project>
