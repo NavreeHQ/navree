@@ -135,6 +135,14 @@ class LaneMoveTest {
     private fun focused(at: Int) =
         compose.onAllNodes(isFocused() and hasContentDescription("Move ${LaneBoard.title(at)}"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
+    /** What has the focus now, in words. */
+    private fun stopNow(): String = compose.onAllNodes(isFocused(), useUnmergedTree = true).fetchSemanticsNodes().joinToString(" + ") { node ->
+        listOfNotNull(
+            node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", "),
+            node.config.getOrNull(SemanticsProperties.Text)?.joinToString(", ") { it.text },
+        ).joinToString(" | ").ifEmpty { "(a stop with no name)" }
+    }.ifEmpty { "(nothing)" }
+
     /** One of the moves a screen reader or a keyboard is offered on a card's handle. */
     private fun moveWith(at: Int, label: String) {
         val action = handle(at).fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label == label }
@@ -188,20 +196,28 @@ class LaneMoveTest {
         assertTrue("the held card is still drawn", shown().contains(0))
         mark("a picture is taken with the card held")
         Shots.take("lane-held")
-        compose.onRoot().performTouchInput {
+        // The clock is held and moved by hand, a frame at a time: the events of one block are given to the screen at once, with no frame
+        // between them, so a lane that scrolls by itself (it does it a frame at a time) would see the finger arrive and go in one frame.
+        compose.mainClock.autoAdvance = false
+        try {
             val from = grab.y + 200f
             val to = root.bottom - 6f
             // Down to the bottom edge, and held there for more than three seconds: the lane scrolls by itself, by more than two windows of cards, so the card would leave the list if it were not kept.
             for (step in 1..20) {
-                mark("the finger moves to y=${from + (to - from) * step / 20f}")
-                moveTo(Offset(grab.x, from + (to - from) * step / 20f), delayMillis = 16)
+                val y = from + (to - from) * step / 20f
+                mark("the finger moves to y=$y")
+                compose.onRoot().performTouchInput { moveTo(Offset(grab.x, y)) }
+                compose.mainClock.advanceTimeBy(16)
             }
             repeat(200) { n ->
                 if (n % 20 == 0) mark("the finger is held at the edge, ${n * 16} ms")
-                moveBy(Offset.Zero, delayMillis = 16)
+                compose.mainClock.advanceTimeBy(16)
             }
             mark("the finger goes up")
-            up()
+            compose.onRoot().performTouchInput { up() }
+            compose.mainClock.advanceTimeBy(200)
+        } finally {
+            compose.mainClock.autoAdvance = true
         }
         compose.waitForIdle()
         mark("the test is idle after the finger went up")
@@ -233,12 +249,15 @@ class LaneMoveTest {
     @Test
     fun aCardMovedByTheKeyboardAndByItsMenuKeepsTheFocusAndStandsWhereTheMoveSays() {
         open(200)
-        // A button takes the focus only when the keyboard is what is in use (a touch screen's taps do not focus it): a key says so.
-        compose.onRoot().performKeyInput { pressKey(Key.Tab) }
-        compose.waitForIdle()
-        handle(0).performSemanticsAction(SemanticsActions.RequestFocus)
-        compose.waitForIdle()
-        assertTrue("the first card's handle has the focus", focused(0))
+        // The keyboard's Tab walks the screen from its top, a stop at a time, to the first card's handle (a button takes the focus only when the keyboard is in use).
+        val stops = ArrayList<String>()
+        for (press in 1..30) {
+            if (focused(0)) break
+            compose.onRoot().performKeyInput { pressKey(Key.Tab) }
+            compose.waitForIdle()
+            stops += stopNow()
+        }
+        assertTrue("Tab reached the first card's handle; the stops it made: $stops", focused(0))
 
         // The moves a keyboard and a screen reader are offered on the handle.
         moveWith(0, "Move down")
