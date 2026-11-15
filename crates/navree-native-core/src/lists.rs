@@ -20,7 +20,7 @@
 //!   are new, changed or moved, and the ones that left. A client draws those
 //!   again, and not the screen.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use navree_native::Screen;
 use navree_native::node::{Method, Node, Reorder, Table, TableRow};
@@ -183,6 +183,9 @@ impl Core {
         at: Edge,
         more: bool,
     ) {
+        if !self.room(id, crate::weight::of_nodes(&nodes)) {
+            return;
+        }
         let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&id),
             self.inner.screens.get_mut(&id),
@@ -208,13 +211,16 @@ impl Core {
         // What the core kept by the names of the rows that leave goes; a row
         // a newer one takes the place of gives its names up to it.
         let mut forgotten = Vec::new();
+        // The ids that leave, looked up in a set: a list of many rows and an
+        // answer that names many costs the two, not their product.
+        let gone: BTreeSet<&str> = gone.iter().map(String::as_str).collect();
         {
             let arriving: BTreeSet<&str> = nodes.iter().filter_map(Node::id).collect();
             for child in &list.children {
                 let Some(child_id) = child.id() else {
                     continue;
                 };
-                let leaves = gone.iter().any(|gone| gone == child_id);
+                let leaves = gone.contains(child_id);
                 if !leaves && !arriving.contains(child_id) {
                     continue;
                 }
@@ -252,18 +258,16 @@ impl Core {
             .children
             .iter()
             .filter_map(Node::id)
-            .filter(|id| gone.iter().any(|gone| gone == id))
+            .filter(|id| gone.contains(id))
             .map(str::to_owned)
             .collect();
-        list.children.retain(|child| {
-            !child
-                .id()
-                .is_some_and(|id| gone.iter().any(|gone| gone == id))
-        });
+        list.children
+            .retain(|child| !child.id().is_some_and(|id| gone.contains(id)));
         Names {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
             server: &mut inner.server_ids,
+            next: &mut inner.next_names,
         }
         .name(&mut nodes, Some(target));
         let fresh: BTreeSet<String> = Survey::of(nodes.iter())
@@ -276,20 +280,26 @@ impl Core {
             .iter()
             .map(|node| node.id().map(str::to_owned))
             .collect();
+        // Where each row of the list stands, the first of a name: found once,
+        // since a row that is changed takes its own place and no row moves.
+        let mut places: BTreeMap<String, usize> = BTreeMap::new();
+        for (place, child) in list.children.iter().enumerate() {
+            if let Some(child_id) = child.id() {
+                places.entry(child_id.to_owned()).or_insert(place);
+            }
+        }
+        let mut coming: BTreeSet<String> = BTreeSet::new();
         let mut new: Vec<Node> = Vec::new();
         for node in nodes {
-            let place = node.id().and_then(|id| {
-                list.children
-                    .iter()
-                    .position(|child| child.id() == Some(id))
-            });
+            let place = node.id().and_then(|id| places.get(id).copied());
             match place {
                 Some(place) => list.children[place] = node,
                 // A row is never in a list twice: of two new ones with one id the first stays.
-                None if node
-                    .id()
-                    .is_some_and(|id| new.iter().any(|other| other.id() == Some(id))) => {}
-                None => new.push(node),
+                None if node.id().is_some_and(|id| coming.contains(id)) => {}
+                None => {
+                    coming.extend(node.id().map(str::to_owned));
+                    new.push(node);
+                }
             }
         }
         match at {
@@ -557,6 +567,18 @@ impl Core {
         } else {
             return;
         }
+        // Rows the screen had no room for are not the start of the list.
+        if self.inner.size_said {
+            if let Some(state) = self
+                .view
+                .screens
+                .get_mut(&id)
+                .and_then(|view| view.lists.get_mut(list))
+            {
+                state.failed_before = true;
+            }
+            return self.list_changed(id, list);
+        }
         // An answer that left `before` as it was has nothing before it.
         let same = self.view.screens.get(&id).and_then(now).as_deref() == Some(was);
         if same {
@@ -594,7 +616,7 @@ impl Core {
         rows.dedup();
         gone.sort_unstable();
         gone.dedup();
-        gone.retain(|id| !rows.contains(id));
+        gone.retain(|id| rows.binary_search(id).is_err());
         if rows.is_empty() && gone.is_empty() {
             // Only what the list says of itself changed.
             return self.list_changed(screen, list);
@@ -655,6 +677,9 @@ impl Core {
             };
             return self.add_rows(id, target, page);
         }
+        if !self.room(id, crate::weight::of_rows(&rows)) {
+            return;
+        }
         let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&id),
             self.inner.screens.get_mut(&id),
@@ -673,15 +698,19 @@ impl Core {
             .get(table.id.as_deref().unwrap_or(target))
             .is_some_and(|state| state.across);
         // A record is never in a table twice.
-        rows.retain(|row| {
-            row.id
-                .as_ref()
-                .is_none_or(|id| !table.rows.iter().any(|held| held.id.as_ref() == Some(id)))
-        });
+        {
+            let held: BTreeSet<&str> = table
+                .rows
+                .iter()
+                .filter_map(|row| row.id.as_deref())
+                .collect();
+            rows.retain(|row| row.id.as_deref().is_none_or(|id| !held.contains(id)));
+        }
         let mut names = Names {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
             server: &mut inner.server_ids,
+            next: &mut inner.next_names,
         };
         for row in &mut rows {
             let scope = row.id.clone();
@@ -707,6 +736,9 @@ impl Core {
     /// Puts `row` in place of the table row `target`. Whether the person
     /// chose the row, and whether they opened what is under it, stay as they were.
     pub(crate) fn table_row(&mut self, id: ScreenId, target: &str, mut row: TableRow) {
+        if !self.room(id, crate::weight::of_rows([&row])) {
+            return;
+        }
         let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&id),
             self.inner.screens.get_mut(&id),
@@ -751,6 +783,7 @@ impl Core {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
             server: &mut inner.server_ids,
+            next: &mut inner.next_names,
         };
         let scope = row.id.clone();
         let scope = scope.as_deref().or(Some(target));

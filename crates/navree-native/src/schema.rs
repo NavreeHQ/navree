@@ -957,7 +957,8 @@ names!(TextKind {
     Search,
     Multiline,
     OneTimeCode
-});
+}
+never written { Unknown });
 object!(TextInput {} {
     kind, value, placeholder, max_length, min, max, step, autofill, readonly, prefix, suffix,
     country

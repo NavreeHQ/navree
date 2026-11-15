@@ -8,7 +8,9 @@
 //! - A new screen shows the kept tree of its address at once and fetches a
 //!   fresh one. A build the core has not seen empties what is kept.
 //! - A write makes every other screen out of date; each is fetched again when
-//!   it comes to the front.
+//!   it comes to the front. So does a write whose answer failed or was too
+//!   large to read: the server may have written before it did. A write that
+//!   never left the device (no network) is no write.
 //! - What can't be read is never a crash: the web view for a page, a fresh
 //!   fetch for a change to one.
 
@@ -28,7 +30,7 @@ use crate::cache::Who;
 use crate::decode::{self, Answer, Read};
 use crate::effect::{Body, Change, Effect, Request, Update, Verb};
 use crate::event::{Event, Response, StreamState, TransportError};
-use crate::origin::{Target, https_address, openable, path_of, route_matches};
+use crate::origin::{Target, https_address, openable};
 use crate::state::{
     App, Asked, Content, Destination, Failure, Goes, Held, Message, MessageInner, Modal, Notice,
     Pending, ScreenId, ScreenInner, ScreenView, Stage, TimerFor,
@@ -45,6 +47,16 @@ const REGION_HEADER: &str = "x-navree-region";
 const MOST_REDIRECTS: u8 = 5;
 /// How long the answer to a form or a button may take.
 pub(crate) const SEND_LIMIT: u32 = 60_000;
+
+/// What stands behind an address opened outside the app.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum By {
+    /// The person tapped something: a link, a button, a message's button.
+    Tap,
+    /// An answer, by itself: a redirect, an op. The kind is what is said
+    /// when what it asked is refused.
+    Answer(&'static str),
+}
 
 /// A value a server chose, written so it can go in a header: every byte of its
 /// UTF-8 outside `!` to `~`, and `%`, as `%` and two hex digits. A plain ASCII
@@ -181,17 +193,27 @@ impl Core {
             }
             Event::Overlay { screen, id, open } => self.set_open(screen, &id, open),
             Event::Refresh { screen } => self.refresh(screen),
-            Event::RegionRetry { screen, region } => self.fetch_region(screen, &region, None),
+            Event::RegionRetry { screen, region } => {
+                self.acted_on(screen);
+                self.shell_again();
+                self.fetch_region(screen, &region, None)
+            }
             Event::More {
                 screen,
                 id,
                 before: false,
-            } => self.more(screen, &id),
+            } => {
+                self.acted_on(screen);
+                self.more(screen, &id)
+            }
             Event::More {
                 screen,
                 id,
                 before: true,
-            } => self.rows_before(screen, &id),
+            } => {
+                self.acted_on(screen);
+                self.rows_before(screen, &id)
+            }
             Event::RegionGo {
                 screen,
                 region,
@@ -239,6 +261,10 @@ impl Core {
             }
             Event::Background => {
                 self.inner.background = true;
+                // The pause is not kept while the app is away: coming back asks.
+                if let Some(timer) = self.inner.shell_timer.take() {
+                    self.cancel_timer(timer);
+                }
                 // A hidden app holds no stream; what its regions miss is fetched when it is back.
                 if let Some(inner) = self
                     .front()
@@ -256,6 +282,9 @@ impl Core {
                 self.push_forget();
                 self.inner.has_shell = false;
                 self.inner.user = None;
+                self.shell_settled();
+                // A snapshot that waited for the shell was the one who left's.
+                self.inner.restore = None;
                 self.view.app = None;
                 self.view.destinations.clear();
                 self.view.stage = Stage::Starting;
@@ -289,6 +318,12 @@ impl Core {
                     field,
                 }) => self.options_fire(screen, &form, &field),
                 Some(TimerFor::Reopen { stream }) => self.reopen(stream),
+                Some(TimerFor::Shell) => {
+                    // A new pause: a request that gets through may ask once more.
+                    self.inner.shell_timer = None;
+                    self.inner.shell_nudged = false;
+                    self.shell_again();
+                }
                 None => {}
             },
             Event::Stream {
@@ -328,7 +363,8 @@ impl Core {
                     .map(|upgrade| upgrade.url.clone())
                     .filter(|url| !url.is_empty())
                 {
-                    self.open_outside(&url, false);
+                    // The person tapped the upgrade's button.
+                    self.open_outside(&url, false, By::Tap);
                 }
             }
         }
@@ -365,7 +401,7 @@ impl Core {
         self.inner
             .routes
             .iter()
-            .find(|route| route_matches(&route.matches, url))
+            .find(|route| self.inner.origin.on_route(&route.matches, url))
     }
 
     fn headers(&self, body: Option<&Body>, region: Option<&str>) -> Vec<(String, String)> {
@@ -546,17 +582,34 @@ impl Core {
     /// Asks the client to open an address outside the app: the one way an
     /// `open_url` effect is made. Only a whole `http` or `https` address that
     /// reads, written again from its parts, or an address of a scheme the
-    /// system handles, is ever opened; anything else is dropped.
-    pub(crate) fn open_outside(&mut self, url: &str, inside: bool) {
-        if let Some(url) = openable(url) {
-            self.effects.push(Effect::OpenUrl { url, inside });
+    /// system handles, is ever opened; anything else is dropped. The
+    /// system's own (mail, the dialler, messages, maps) open only when a tap
+    /// stands behind them: an answer by itself takes the person to a web
+    /// page, never to those, and what it asked is said, without the address.
+    pub(crate) fn open_outside(&mut self, url: &str, inside: bool, by: By) {
+        let Some(url) = openable(url) else {
+            return;
+        };
+        let web = matches!(
+            crate::origin::scheme_of(&url).as_deref(),
+            Some("http" | "https")
+        );
+        match by {
+            By::Answer(kind) if !web => {
+                if !std::mem::replace(&mut self.inner.refusal_said, true) {
+                    let site = crate::origin::site_of(&url);
+                    self.report("address", format!("{kind} with no tap: {site}"));
+                }
+            }
+            _ => self.effects.push(Effect::OpenUrl { url, inside }),
         }
     }
 
-    /// Opens an address of the app's own outside it, as a whole address.
+    /// Opens an address of the app's own outside it, as a whole address:
+    /// always a web one.
     pub(crate) fn open_ours_outside(&mut self, url: &str) {
         if let Some(url) = self.inner.origin.absolute(url) {
-            self.open_outside(&url, false);
+            self.open_outside(&url, false, By::Answer("external"));
         }
     }
 
@@ -725,7 +778,8 @@ impl Core {
         if !action.post {
             self.navigate(from, &action.href, Present::Auto);
         } else if let Some(screen) = from {
-            self.post(screen, &action.href, action.fields, None);
+            // The person tapped the message's button.
+            self.post(screen, &action.href, action.fields, None, By::Tap);
         }
     }
 
@@ -770,12 +824,104 @@ impl Core {
     }
 
     fn shell_failed(&mut self, failure: Failure) {
+        self.inner.shell_failure = Some(failure);
+        // This launch's shell did not come while the one kept on the device is
+        // drawn. If the request did not get through, the kept bars stay and the
+        // shell is asked for again; an answer that is not a shell gives the
+        // blank one.
+        if self.inner.shell_kept {
+            return match failure {
+                Failure::Offline | Failure::Timeout | Failure::Server => self.shell_unreached(),
+                _ => self.no_shell(),
+            };
+        }
         // A shell that is already drawn stays; only a first load can fail the app.
         if !self.inner.has_shell {
             self.view.stage = Stage::Failed;
             self.view.failure = Some(failure);
             self.touch(Change::Nav);
         }
+    }
+
+    /// This launch's shell request did not get through (no network, a
+    /// timeout, a 5xx, a 429) and the kept shell is drawn: the bars stay, the
+    /// screens show what could not load, a waiting snapshot keeps waiting,
+    /// and the shell is asked for again after a pause that doubles up to a
+    /// minute (and when the person retries, when the app comes to the front,
+    /// and when a request of the app gets through).
+    fn shell_unreached(&mut self) {
+        self.inner.shell_wanted = true;
+        if self.inner.shell_timer.is_none() {
+            let pause = self
+                .inner
+                .shell_pause
+                .max(1_000)
+                .saturating_mul(2)
+                .min(60_000);
+            self.inner.shell_pause = pause;
+            let timer = self.timer(pause, TimerFor::Shell);
+            self.inner.shell_timer = Some(timer);
+        }
+    }
+
+    /// Asks for the shell again when it is wanted: it could not be fetched,
+    /// and nothing is asking now.
+    pub(crate) fn shell_again(&mut self) {
+        if self.inner.shell_wanted {
+            self.fetch_shell();
+        }
+    }
+
+    /// A request of the app got through. When the shell could not be fetched
+    /// because the network was gone, it is asked for again, once in each
+    /// pause; when the shell route itself answered with an error, only the
+    /// pause asks.
+    fn shell_nudge(&mut self) {
+        if self.inner.shell_wanted
+            && !self.inner.shell_nudged
+            && matches!(
+                self.inner.shell_failure,
+                Some(Failure::Offline | Failure::Timeout)
+            )
+        {
+            self.inner.shell_nudged = true;
+            self.fetch_shell();
+        }
+    }
+
+    /// A shell has answered, or the person is gone: nothing is wanted again.
+    pub(crate) fn shell_settled(&mut self) {
+        self.inner.shell_wanted = false;
+        self.inner.shell_pause = 0;
+        self.inner.shell_nudged = false;
+        self.inner.shell_failure = None;
+        if let Some(timer) = self.inner.shell_timer.take() {
+            self.cancel_timer(timer);
+        }
+    }
+
+    /// What the shell asked for gave no shell: a server with no shell still
+    /// has pages, one destination, its first page. The shell kept on the
+    /// device gives way to the same and stays so until a shell answers: it
+    /// was the last launch's, and nothing says this launch's server still
+    /// holds it. A shell already drawn from an answer stays.
+    fn no_shell(&mut self) {
+        if self.inner.shell_kept {
+            // The person the kept shell named was the last launch's word, so
+            // its going is no sign-out, and nothing kept goes with it.
+            self.inner.user = None;
+            // A snapshot waited for a shell that did not come: it is not
+            // used, and nothing is left holding it.
+            if self.inner.restore.take().is_some() {
+                self.report(
+                    "snapshot",
+                    "a snapshot is not used: this launch's shell did not give a shell".to_owned(),
+                );
+            }
+        } else if self.inner.has_shell {
+            return;
+        }
+        self.install(Shell::new("", ""), false);
     }
 
     fn shell_answered(&mut self, response: Response) {
@@ -806,17 +952,20 @@ impl Core {
             .unwrap_or("")
             .trim()
             .to_ascii_lowercase();
+        // A server that asks to wait has not answered the question.
+        if response.status == 429 {
+            return self.shell_failed(Failure::Server);
+        }
         if !(200..300).contains(&response.status) || media != CONTENT_TYPE {
-            // A server with no shell still has pages: one destination, its first page.
-            if !self.inner.has_shell {
-                self.install(Shell::new("", ""));
-            }
-            return;
+            return self.no_shell();
         }
         let header = decode::shell_stamp_of(&response);
         // Read where there is room for it, like any other answer.
         let body = response.body.as_str();
-        let value: Value = decode::with_room(|| serde_json::from_str(body).ok())
+        // A shell larger than any answer may be is not read: it fails below
+        // as one whose shape does not read.
+        let value: Value = (body.len() <= navree_native::MAX_BODY)
+            .then(|| decode::with_room(|| serde_json::from_str(body).ok()).flatten())
             .flatten()
             .unwrap_or(Value::Null);
         if let Some(upgrade) = value
@@ -826,6 +975,8 @@ impl Core {
         {
             self.view.upgrade = Some(newer_app(upgrade));
             self.view.stage = Stage::Upgrade;
+            // An app too old for its server is not waiting for a shell.
+            self.shell_settled();
             return self.touch(Change::Nav);
         }
         match decode::with_room(move || serde_json::from_value::<Shell>(value))
@@ -841,7 +992,7 @@ impl Core {
                 let stamp = (!shell.stamp.is_empty())
                     .then(|| shell.stamp.clone())
                     .or(header);
-                self.install(shell);
+                self.install(shell, false);
                 // The person is the server's word now: what is kept is read
                 // only when it is theirs, and emptied when it is not.
                 let person = self.inner.user.clone();
@@ -853,9 +1004,7 @@ impl Core {
             Ok(_) => self.shell_failed(Failure::Protocol),
             Err(error) => {
                 self.report("decode", format!("shell: {error}"));
-                if !self.inner.has_shell {
-                    self.install(Shell::new("", ""));
-                }
+                self.no_shell();
             }
         }
     }
@@ -863,12 +1012,30 @@ impl Core {
     /// Draws the app from the shell kept at the last launch. False when it
     /// does not read.
     pub(crate) fn shell_from_cache(&mut self, body: &str) -> bool {
-        if let Some(Ok(mut shell)) = decode::with_room(|| serde_json::from_str::<Shell>(body))
+        if body.len() <= navree_native::MAX_BODY
+            && let Some(Ok(mut shell)) = decode::with_room(|| serde_json::from_str::<Shell>(body))
             && shell.navree == MAJOR
         {
             self.shell_pictures(&mut shell);
             self.inner.cache.shell = Some(body.to_owned());
-            self.install(shell);
+            self.install(shell, true);
+            // This launch's shell request may have failed before the kept
+            // shell was read (with no network it fails in milliseconds, the
+            // file takes longer): the end is the same as in the other order,
+            // the kept bars and the shell asked for again.
+            let asking = self
+                .inner
+                .pending
+                .values()
+                .any(|asked| asked.purpose == Pending::Shell);
+            if !asking
+                && matches!(
+                    self.inner.shell_failure,
+                    Some(Failure::Offline | Failure::Timeout | Failure::Server)
+                )
+            {
+                self.shell_unreached();
+            }
             return true;
         }
         false
@@ -897,8 +1064,19 @@ impl Core {
         }
     }
 
-    fn install(&mut self, shell: Shell) {
+    /// Draws the app from a shell. `from_device`: the shell is the one kept on the
+    /// device, drawn before this launch's has answered. It draws the app's
+    /// name and its top-level destinations, each by its label and icon, and
+    /// nothing else of what the shell says: not the context line, the group
+    /// labels, the items below the top level, a count, the person or their
+    /// menu. A snapshot waits for this launch's shell.
+    fn install(&mut self, shell: Shell, from_device: bool) {
         // Who it names: by the id its answer said, else by name and email.
+        // The kept shell is no answer: a request that failed before it was
+        // read is not forgotten.
+        if !from_device {
+            self.shell_settled();
+        }
         let naming = self.inner.naming.take();
         let user = shell.user.as_ref().map(|user| Who {
             id: naming.clone(),
@@ -977,13 +1155,18 @@ impl Core {
                 .iter()
                 .position(|destination| destination.href == item.href);
             let stack = kept.map(|at| old.remove(at).stack).unwrap_or_default();
+            let (group, badge, items) = if from_device {
+                (None, None, Vec::new())
+            } else {
+                (group, item.badge, item.items)
+            };
             self.view.destinations.push(Destination {
                 label: item.label,
                 icon: item.icon,
                 href: item.href,
-                badge: item.badge,
+                badge,
                 group,
-                items: item.items,
+                items,
                 stack,
             });
         }
@@ -999,17 +1182,23 @@ impl Core {
             .unwrap_or(0);
         self.view.app = Some(App {
             name: shell.name,
-            context: shell.context,
+            context: if from_device { None } else { shell.context },
             home: shell.home,
             theme: shell.theme,
-            user: shell.user,
+            user: if from_device { None } else { shell.user },
         });
+        self.inner.shell_kept = from_device;
         if self.view.stage != Stage::Upgrade {
             self.view.stage = Stage::Ready;
             self.view.failure = None;
         }
         self.touch(Change::App);
         self.touch(Change::Nav);
+        // A snapshot, and the links that wait for the shell, wait for this
+        // launch's: the kept shell's person is not yet anybody's word.
+        if from_device && self.inner.restore.is_some() {
+            return;
+        }
         // Where the person was when the system ended the app, if a snapshot says.
         self.restore_stacks();
         if let Some(launch) = self.inner.launch.take() {
@@ -1174,7 +1363,9 @@ impl Core {
         self.who_may_have_changed(false);
         let url = match self.resolve(href, under) {
             Target::Inside(url) => url,
-            Target::Outside(url) => return self.open_outside(&url, false),
+            Target::Outside(url) => {
+                return self.open_outside(&url, false, By::Answer("sign-in"));
+            }
             Target::Refused => return self.said_refused("navigate", href),
         };
         if let (Some(view), Some(inner)) = (
@@ -1192,7 +1383,10 @@ impl Core {
             _ => Present::Full,
         };
         let chrome = route.is_some_and(|route| route.chrome);
-        let name = route.map_or_else(|| path_of(&url), |route| route.matches.clone());
+        let name = route.map_or_else(
+            || self.inner.origin.where_of(&url),
+            |route| route.matches.clone(),
+        );
         // One way in for one session's end, however many requests it failed.
         let up = self.view.modals.iter().any(|modal| {
             modal
@@ -1270,6 +1464,42 @@ impl Core {
         }
     }
 
+    /// Writes the paths `keys` of a device call as whole addresses on the
+    /// app's origin, as a picture's source is written: what the system is
+    /// handed (a page shared) or the client fetches (a file shared, the
+    /// options of a passkey) is never a path for it to read against
+    /// something. One that does not read as one of the app's addresses is
+    /// taken out, and that is said: the name of what was taken out, never the
+    /// address.
+    fn whole_in(&mut self, call: &mut Value, keys: &[&str]) {
+        let Some(call) = call.as_object_mut() else {
+            return;
+        };
+        let mut dropped = Vec::new();
+        for key in keys {
+            let Some(path) = call.get(*key).and_then(Value::as_str) else {
+                continue;
+            };
+            match self.inner.origin.absolute(path) {
+                Some(whole) => {
+                    call.insert((*key).to_owned(), Value::String(whole));
+                }
+                None => {
+                    call.remove(*key);
+                    dropped.push(*key);
+                }
+            }
+        }
+        for key in dropped {
+            self.report(
+                "device",
+                format!(
+                    "the `{key}` of a device call is not an address of the app, and was left out"
+                ),
+            );
+        }
+    }
+
     /// A device call a server's reply started: one of the few that need no
     /// tap. The protocol's types let no other be written into a reply.
     pub(crate) fn reply_call(&mut self, call: ReplyCall) {
@@ -1317,7 +1547,8 @@ impl Core {
                     count: None,
                 });
             }
-            Call::OpenUrl(open) => self.open_outside(open.url.as_str(), open.inside),
+            // Every device call here is one a tap started.
+            Call::OpenUrl(open) => self.open_outside(open.url.as_str(), open.inside, By::Tap),
             Call::AuthSession(session) => {
                 self.sign_in_session(session.start.as_str(), session.ephemeral);
             }
@@ -1403,7 +1634,19 @@ impl Core {
                 if then.is_some() && !self.may_send(id) {
                     return;
                 }
-                let number = self.run(serde_json::to_value(&call), then.is_some());
+                let mut value = serde_json::to_value(&call);
+                // What the system is handed or the client fetches is written whole.
+                let addresses: &[&str] = match &call {
+                    Call::Share(_) => &["href", "file"],
+                    Call::Passkey(_) => &["options"],
+                    _ => &[],
+                };
+                if !addresses.is_empty()
+                    && let Ok(value) = value.as_mut()
+                {
+                    self.whole_in(value, addresses);
+                }
+                let number = self.run(value, then.is_some());
                 if let Some(then) = then {
                     self.inner.calls.insert(
                         number,
@@ -1472,7 +1715,13 @@ impl Core {
             fields.push(pair(TICKET_FIELD, then.ticket.as_str()));
         }
         fields.push(pair(OUTCOME_FIELD, &outcome));
-        self.post(screen, then.href.as_str(), fields, None);
+        self.post(
+            screen,
+            then.href.as_str(),
+            fields,
+            None,
+            By::Answer("device reply"),
+        );
     }
 
     /// Starts the web's sign-in with a provider, in the system's sign-in session.
@@ -1497,7 +1746,7 @@ impl Core {
         let good = response.error.is_none()
             && response.left.is_none()
             && (200..300).contains(&response.status);
-        let answer: Option<Value> = good
+        let answer: Option<Value> = (good && response.body.len() <= navree_native::MAX_BODY)
             .then(|| serde_json::from_str(&response.body).ok())
             .flatten();
         let options = match (&mut known.goes, answer) {
@@ -1611,7 +1860,9 @@ impl Core {
         let good = response.error.is_none()
             && response.left.is_none()
             && (200..300).contains(&response.status);
-        let answer: Option<Value> = serde_json::from_str(&response.body).ok();
+        let answer: Option<Value> = (response.body.len() <= navree_native::MAX_BODY)
+            .then(|| serde_json::from_str(&response.body).ok())
+            .flatten();
         // Anything but a plain yes is not a sign-in. The route says when a
         // second step is still to come, and until it is done nobody is signed in.
         let second = answer
@@ -1712,7 +1963,17 @@ impl Core {
         self.touch_screen(id);
     }
 
+    /// The person acted on a screen: answers refused for their size no longer
+    /// count against it.
+    pub(crate) fn acted_on(&mut self, id: ScreenId) {
+        if let Some(inner) = self.inner.screens.get_mut(&id) {
+            inner.refused = 0;
+        }
+    }
+
     fn refresh(&mut self, id: ScreenId) {
+        self.acted_on(id);
+        self.shell_again();
         self.fetch_page(id, true);
     }
 
@@ -1772,17 +2033,20 @@ impl Core {
         ) else {
             return;
         };
-        let same = path_of(&view.url) == path_of(url) && view.screen().is_some();
+        let same = self.inner.origin.where_of(&view.url) == self.inner.origin.where_of(url)
+            && view.screen().is_some();
         // A question the screen asked was about what it showed before.
         view.question = None;
         inner.held = None;
         inner.form_ids.clear();
         inner.field_ids.clear();
         inner.server_ids.clear();
+        inner.next_names.clear();
         let mut names = Names {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
             server: &mut inner.server_ids,
+            next: &mut inner.next_names,
         };
         names.name(&mut screen.actions, None);
         if let Some(scores) = screen
@@ -1839,10 +2103,11 @@ impl Core {
                 .inner
                 .routes
                 .iter()
-                .find(|route| route_matches(&route.matches, url))
+                .find(|route| self.inner.origin.on_route(&route.matches, url))
                 .is_none_or(|route| route.chrome);
         }
         view.title = Some(screen.title.clone()).filter(|title| !title.is_empty());
+        inner.weight = crate::weight::of_screen(&screen);
         view.content = Content::Native {
             screen: Box::new(screen),
         };
@@ -1912,7 +2177,7 @@ impl Core {
             .inner
             .routes
             .iter()
-            .find(|route| route_matches(&route.matches, url))
+            .find(|route| self.inner.origin.on_route(&route.matches, url))
             .is_none_or(|route| route.chrome);
         self.drop_pending(|purpose| matches!(purpose, Pending::Region { screen, .. } | Pending::More { screen, .. } if *screen == id));
         self.touch_screen(id);
@@ -1983,10 +2248,29 @@ impl Core {
     // Answers.
 
     fn answered(&mut self, response: Response) {
+        // A request of the app that got through, once it is dealt with, asks
+        // for a shell that could not be fetched again (unless it was asked
+        // for already).
+        let got_through =
+            response.error.is_none() && response.status < 500 && response.status != 429;
+        let not_the_shell = self
+            .inner
+            .pending
+            .get(&response.request)
+            .is_some_and(|asked| asked.purpose != Pending::Shell);
+        self.answered_once(response);
+        if got_through && not_the_shell {
+            self.shell_nudge();
+        }
+    }
+
+    fn answered_once(&mut self, response: Response) {
         // An answer nobody waits for any more changes nothing.
         let Some(asked) = self.inner.pending.remove(&response.request) else {
             return;
         };
+        self.inner.never_left =
+            self.inner.synthetic || response.error == Some(TransportError::Offline);
         let response = self.same_session(&asked, response);
         let response = self.keeping(&asked, response);
         let Some(response) = self.follow(&asked, response) else {
@@ -2090,7 +2374,7 @@ impl Core {
     /// a screen the shell presents over the app: the sign-in a session that
     /// ended is sent to.
     pub(crate) fn covers(&self, asked: &str, url: &str) -> Option<(String, Present)> {
-        if path_of(asked) == path_of(url) {
+        if self.inner.origin.where_of(asked) == self.inner.origin.where_of(url) {
             return None;
         }
         let route = self.route(url)?;
@@ -2182,7 +2466,7 @@ impl Core {
             }
             Answer::Left(url) => {
                 // The page moved to another site: it opens there.
-                self.open_outside(&url, false);
+                self.open_outside(&url, false, By::Answer("redirect"));
                 if blank {
                     self.remove(id);
                 } else {
@@ -2254,6 +2538,18 @@ impl Core {
                 }
             }
             None => {
+                // A snapshot waits for this launch's shell, drawn over the kept
+                // one: no screen is opened in its place while the shell is asked.
+                if self.inner.shell_kept
+                    && self.inner.restore.is_some()
+                    && self
+                        .inner
+                        .pending
+                        .values()
+                        .any(|asked| asked.purpose == Pending::Shell)
+                {
+                    return;
+                }
                 let Some(href) = self
                     .view
                     .destinations
@@ -2273,6 +2569,7 @@ impl Core {
     fn settle(&mut self) -> Update {
         self.fail_unsent();
         self.inner.refusal_said = false;
+        self.inner.size_said = false;
         self.ensure_front();
         let front = self.front();
         let stacked = self.view.front_stack().len() > 1;
@@ -2356,7 +2653,7 @@ impl Core {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Config;
+    use crate::{Config, Query};
     use navree_native::{Client, FormFactor, Platform};
 
     #[test]
@@ -2455,6 +2752,141 @@ mod tests {
         }
     }
 
+    #[test]
+    fn what_a_share_hands_the_system_and_fetches_is_a_whole_address_or_nothing() {
+        let mut client = Client::new(Platform::Android, FormFactor::Phone);
+        client.caps = vec!["share".to_owned()];
+        let mut core = Core::new(Config::new("https://shop.example", client));
+        core.send(Event::Start);
+        core.send(Event::Response(Response {
+            request: 1,
+            status: 404,
+            ..Response::default()
+        }));
+        let share = |core: &mut Core, call: serde_json::Value| {
+            let action = serde_json::from_value(serde_json::json!({"t": "device", "call": call}))
+                .expect("a device action");
+            let update = core.send(Event::Act {
+                screen: Some(1),
+                action,
+                form: None,
+                overlay: None,
+                text: None,
+                now: None,
+                ask: None,
+                from: None,
+            });
+            update
+                .effects
+                .into_iter()
+                .find_map(|effect| match effect {
+                    Effect::Device { device, .. } => Some(device),
+                    _ => None,
+                })
+                .expect("the share is started")
+        };
+        let device = share(
+            &mut core,
+            serde_json::json!({"f": "share", "title": "Order CS-20481", "href": "/orders/1?tab=items", "file": "/orders/1/invoice%202026.pdf", "url": "https://pay.example/r/7"}),
+        );
+        assert_eq!(device["href"], "https://shop.example/orders/1?tab=items");
+        assert_eq!(
+            device["file"],
+            "https://shop.example/orders/1/invoice%202026.pdf"
+        );
+        // Another site's page is shared as it was written.
+        assert_eq!(device["url"], "https://pay.example/r/7");
+        // A path the core does not read as one of the app's addresses (white
+        // space other than a plain space) is not handed over at all.
+        let device = share(
+            &mut core,
+            serde_json::json!({"f": "share", "title": "Order", "href": "/orders/\u{3000}1", "file": "/orders/\u{3000}2"}),
+        );
+        assert!(
+            device.get("href").is_none() && device.get("file").is_none(),
+            "{device}"
+        );
+        assert_eq!(device["title"], "Order");
+    }
+
+    /// The address a passkey call has the client fetch is written whole too,
+    /// and an address that is taken out of a device call is said.
+    #[test]
+    fn what_a_passkey_fetches_is_a_whole_address_or_nothing_and_a_dropped_one_is_said() {
+        let mut client = Client::new(Platform::Android, FormFactor::Phone);
+        client.caps = vec!["passkey".to_owned(), "share".to_owned()];
+        let mut core = Core::new(Config::new("https://shop.example", client));
+        core.send(Event::Start);
+        core.send(Event::Response(Response {
+            request: 1,
+            status: 404,
+            ..Response::default()
+        }));
+        let mut call = |call: serde_json::Value| {
+            let action = serde_json::from_value(serde_json::json!({"t": "device", "call": call}))
+                .expect("a device action");
+            core.send(Event::Act {
+                screen: Some(1),
+                action,
+                form: None,
+                overlay: None,
+                text: None,
+                now: None,
+                ask: None,
+                from: None,
+            })
+            .effects
+        };
+        let device_of = |effects: &[Effect]| {
+            effects
+                .iter()
+                .find_map(|effect| match effect {
+                    Effect::Device { device, .. } => Some(device.clone()),
+                    _ => None,
+                })
+                .expect("the call is started")
+        };
+        let said = |effects: &[Effect]| -> Vec<String> {
+            effects
+                .iter()
+                .filter_map(|effect| match effect {
+                    Effect::Report { what, detail } if what == "device" => Some(detail.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        let effects = call(
+            serde_json::json!({"f": "passkey", "mode": "sign_in", "options": "/auth/passkeys/options"}),
+        );
+        assert_eq!(
+            device_of(&effects)["options"],
+            "https://shop.example/auth/passkeys/options"
+        );
+        assert!(said(&effects).is_empty(), "{effects:?}");
+        // A path the core does not read as one of the app's addresses is not
+        // handed over, and that is said, with the name of what was dropped
+        // and never the address.
+        let effects = call(
+            serde_json::json!({"f": "passkey", "mode": "sign_in", "options": "/auth/\u{3000}options"}),
+        );
+        assert!(device_of(&effects).get("options").is_none());
+        let reports = said(&effects);
+        assert_eq!(reports.len(), 1, "{effects:?}");
+        assert!(
+            reports[0].contains("options") && !reports[0].contains("auth"),
+            "{reports:?}"
+        );
+        let effects = call(
+            serde_json::json!({"f": "share", "title": "Order", "href": "/orders/\u{3000}1", "file": "/orders/\u{3000}2"}),
+        );
+        let reports = said(&effects);
+        assert_eq!(reports.len(), 2, "{reports:?}");
+        assert!(
+            reports[0].contains("href") && reports[1].contains("file"),
+            "{reports:?}"
+        );
+    }
+
     /// A core that started against a server with no shell: one destination,
     /// its first page asked for.
     fn started() -> Core {
@@ -2469,6 +2901,127 @@ mod tests {
             ..Response::default()
         }));
         core
+    }
+
+    /// An answer to a write that failed, or that is larger than any answer
+    /// may be, still counts as a write for what is kept and for the other
+    /// screens: the server may have written before it failed. A write that
+    /// never left the device (no network) does not.
+    #[test]
+    fn a_write_answered_with_a_failure_counts_as_a_write_unless_it_never_left_the_device() {
+        let page = r#"{"navree":1,"build":"b1","vocab":0,"screen":{"title":"Order","body":{"t":"form","id":"note","method":"post","action":"/orders/1/note","children":[{"t":"field","id":"text","name":"text","input":{"t":"text"}},{"t":"button","label":"Save","action":{"t":"submit"}}]}}}"#;
+        let too_large = format!("{page}{}", " ".repeat(navree_native::MAX_BODY));
+        let failures = [
+            (
+                "no network",
+                false,
+                Response {
+                    error: Some(TransportError::Offline),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a timeout after the request was sent",
+                true,
+                Response {
+                    error: Some(TransportError::Timeout),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a connection that failed in some other way",
+                true,
+                Response {
+                    error: Some(TransportError::Other),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a 503",
+                true,
+                Response {
+                    status: 503,
+                    content_type: Some("text/html".to_owned()),
+                    body: "<p>".to_owned(),
+                    ..Response::default()
+                },
+            ),
+            (
+                "an answer too large",
+                true,
+                Response {
+                    status: 200,
+                    content_type: Some(CONTENT_TYPE.to_owned()),
+                    body: too_large,
+                    ..Response::default()
+                },
+            ),
+        ];
+        for (what, counts, failure) in failures {
+            let mut core = started();
+            core.send(Event::Response(Response {
+                request: 2,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: page.to_owned(),
+                ..Response::default()
+            }));
+            let epoch = core.inner.epoch;
+            let sent = core.send(Event::Act {
+                screen: Some(1),
+                action: serde_json::from_value(serde_json::json!({"t": "submit"}))
+                    .expect("an action"),
+                form: Some("note".to_owned()),
+                overlay: None,
+                text: None,
+                now: None,
+                ask: None,
+                from: None,
+            });
+            let request = sent
+                .effects
+                .iter()
+                .find_map(|effect| match effect {
+                    Effect::Fetch(request) if request.method == Verb::Post => Some(request.request),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{what}: the form is sent: {sent:?}"));
+            core.send(Event::Response(Response { request, ..failure }));
+            assert_eq!(
+                core.inner.epoch > epoch,
+                counts,
+                "{what}: counted as a write, or not"
+            );
+        }
+    }
+
+    /// Signing out ends what a snapshot waited for, as signing out on purpose
+    /// does: the person who comes back is told by the shell, and the snapshot
+    /// of the one who left is nobody's.
+    #[test]
+    fn a_snapshot_that_waits_for_the_shell_is_dropped_when_the_person_signs_out() {
+        let mut config = Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        );
+        config.cache.persist = true;
+        let mut core = Core::new(config);
+        let waiting = serde_json::json!({
+            "version": 1,
+            "origin": "https://shop.example",
+            "person": "1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e",
+            "selected": "/orders",
+            "destinations": [{"href": "/orders", "stack": [{"url": "/orders"}]}],
+        });
+        core.send(Event::Restore { snapshot: waiting });
+        assert_eq!(
+            core.snapshot().person.as_deref(),
+            Some("1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e"),
+            "the snapshot waits, and is what is given back"
+        );
+        core.send(Event::SignedOut);
+        assert_eq!(core.snapshot().person, None);
+        assert!(core.snapshot().destinations.is_empty());
     }
 
     #[test]
@@ -2686,6 +3239,693 @@ mod tests {
         note(core.send(Event::Select { destination: 2 }));
         note(core.send(page(4)));
         assert!(written.is_empty(), "{written:?}");
+    }
+
+    #[test]
+    fn a_shell_larger_than_any_answer_may_be_is_not_read() {
+        let shell = include_str!("../transcripts/fixtures/store/shell.json");
+        let new = || {
+            Core::new(Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            ))
+        };
+        let with = |body: String| {
+            let mut core = new();
+            core.send(Event::Start);
+            let update = core.send(Event::Response(Response {
+                request: 1,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body,
+                ..Response::default()
+            }));
+            (core, update)
+        };
+        let (core, _) = with(shell.to_owned());
+        assert_eq!(core.view().destinations.len(), 3);
+
+        // The same shell, padded past the cap with white space.
+        let padded = format!("{shell}{}", " ".repeat(navree_native::MAX_BODY));
+        let (core, update) = with(padded.clone());
+        assert_eq!(core.view().destinations.len(), 1, "{:?}", core.view());
+        assert!(
+            update
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Report { what, .. } if what == "decode")),
+            "{update:?}"
+        );
+        // A kept shell that large is not drawn either.
+        assert!(new().shell_from_cache(shell));
+        assert!(!new().shell_from_cache(&padded));
+    }
+
+    /// The shell kept on the device draws the app's name and its top-level
+    /// destinations only, and gives way to the blank shell whenever this
+    /// launch's shell request does not give a shell.
+    #[test]
+    fn the_kept_shell_draws_the_app_and_gives_way_when_this_launchs_shell_is_not_one() {
+        let kept = include_str!("../transcripts/fixtures/made/kept-boot-workspace.json");
+        let started = || {
+            let mut config = Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            );
+            config.cache.persist = true;
+            let mut core = Core::new(config);
+            core.send(Event::Start);
+            core.send(Event::Cache {
+                key: "boot".to_owned(),
+                value: Some(kept.to_owned()),
+            });
+            core
+        };
+        let core = started();
+        let view = core.view();
+        let app = view.app.as_ref().expect("the kept shell is drawn");
+        assert_eq!(app.name, "Charkha Supply Co.");
+        assert_eq!((app.context.as_deref(), app.user.is_some()), (None, false));
+        let labels: Vec<&str> = view
+            .destinations
+            .iter()
+            .map(|destination| destination.label.as_str())
+            .collect();
+        assert_eq!(labels, ["Dashboard", "Orders"]);
+        for destination in &view.destinations {
+            assert!(destination.icon.is_some(), "{destination:?}");
+            assert!(
+                destination.badge.is_none()
+                    && destination.group.is_none()
+                    && destination.items.is_empty(),
+                "{destination:?}"
+            );
+        }
+
+        let shell_answer = |status: u16, content_type: &str, body: &str| Response {
+            request: 1,
+            status,
+            content_type: Some(content_type.to_owned()),
+            body: body.to_owned(),
+            ..Response::default()
+        };
+        let answers = [
+            ("a 404", shell_answer(404, "text/html", "<p>")),
+            ("a 401", shell_answer(401, "text/html", "<p>")),
+            (
+                "an answer of another kind",
+                shell_answer(200, "text/html", "<p>"),
+            ),
+            (
+                "an answer that does not read",
+                shell_answer(200, CONTENT_TYPE, r#"{"navree":1,"build":"#),
+            ),
+            (
+                "a shell of another major",
+                shell_answer(
+                    200,
+                    CONTENT_TYPE,
+                    r#"{"navree":9,"build":"b","name":"x","home":"/"}"#,
+                ),
+            ),
+        ];
+        for (what, answer) in answers {
+            let mut core = started();
+            core.send(Event::Response(answer));
+            let view = core.view();
+            let app = view
+                .app
+                .as_ref()
+                .unwrap_or_else(|| panic!("{what}: no app"));
+            assert_eq!(
+                (
+                    app.name.as_str(),
+                    app.context.as_deref(),
+                    app.user.is_some()
+                ),
+                ("", None, false),
+                "{what}"
+            );
+            assert_eq!(view.destinations.len(), 1, "{what}");
+            let blank = &view.destinations[0];
+            assert!(
+                blank.label.is_empty() && blank.badge.is_none() && blank.items.is_empty(),
+                "{what}: {blank:?}"
+            );
+        }
+    }
+
+    /// A shell request that did not get through (no network, a timeout, a
+    /// 5xx, a 429) leaves the kept bars as they are and is asked for again,
+    /// after a pause that doubles up to a minute.
+    #[test]
+    fn the_kept_shell_stays_and_the_shell_is_asked_for_again_when_the_request_did_not_get_through()
+    {
+        let kept = include_str!("../transcripts/fixtures/made/kept-boot-workspace.json");
+        let started = || {
+            let mut config = Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            );
+            config.cache.persist = true;
+            let mut core = Core::new(config);
+            core.send(Event::Start);
+            core.send(Event::Cache {
+                key: "boot".to_owned(),
+                value: Some(kept.to_owned()),
+            });
+            core
+        };
+        let timer_of = |update: &Update| {
+            update.effects.iter().find_map(|effect| match effect {
+                Effect::Timer { timer, ms } => Some((*timer, *ms)),
+                _ => None,
+            })
+        };
+        let shell_of = |update: &Update| {
+            update.effects.iter().find_map(|effect| match effect {
+                Effect::Fetch(request) if request.url.ends_with(SHELL_PATH) => {
+                    Some(request.request)
+                }
+                _ => None,
+            })
+        };
+        let failures = [
+            (
+                "a 503",
+                Response {
+                    status: 503,
+                    content_type: Some("text/html".to_owned()),
+                    body: "<p>".to_owned(),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a 429",
+                Response {
+                    status: 429,
+                    ..Response::default()
+                },
+            ),
+            (
+                "no network",
+                Response {
+                    error: Some(TransportError::Offline),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a timeout",
+                Response {
+                    error: Some(TransportError::Timeout),
+                    ..Response::default()
+                },
+            ),
+        ];
+        for (what, failure) in failures {
+            let mut core = started();
+            let update = core.send(Event::Response(Response {
+                request: 1,
+                ..failure
+            }));
+            let view = core.view();
+            let app = view
+                .app
+                .as_ref()
+                .unwrap_or_else(|| panic!("{what}: no app"));
+            assert_eq!(app.name, "Charkha Supply Co.", "{what}: the kept bars stay");
+            assert_eq!(view.destinations.len(), 2, "{what}");
+            let (timer, ms) =
+                timer_of(&update).unwrap_or_else(|| panic!("{what}: no pause: {update:?}"));
+            assert_eq!(ms, 2_000, "{what}");
+            // The pause over, the shell is asked for again.
+            let again = core.send(Event::Timer { timer });
+            assert!(shell_of(&again).is_some(), "{what}: {again:?}");
+        }
+
+        // The pause doubles, up to a minute.
+        let mut core = started();
+        let mut update = core.send(Event::Response(Response {
+            request: 1,
+            error: Some(TransportError::Offline),
+            ..Response::default()
+        }));
+        let mut pauses = Vec::new();
+        for _ in 0..8 {
+            let (timer, ms) = timer_of(&update).expect("a pause");
+            pauses.push(ms);
+            let again = core.send(Event::Timer { timer });
+            let request = shell_of(&again).expect("the shell is asked for");
+            update = core.send(Event::Response(Response {
+                request,
+                error: Some(TransportError::Timeout),
+                ..Response::default()
+            }));
+        }
+        assert_eq!(
+            pauses,
+            [2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000, 60_000]
+        );
+    }
+
+    /// Whichever comes first, the shell request's failure or the kept shell
+    /// being read, the end is the same: the kept bars, and the shell asked for
+    /// again. A request that fails with no network fails in milliseconds, long
+    /// before the file the kept shell is read from.
+    #[test]
+    fn a_shell_request_that_failed_before_the_kept_shell_was_read_is_asked_for_again() {
+        let kept = include_str!("../transcripts/fixtures/made/kept-boot-workspace.json");
+        let failures = [
+            (
+                "no network",
+                Response {
+                    error: Some(TransportError::Offline),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a 503",
+                Response {
+                    status: 503,
+                    content_type: Some("text/html".to_owned()),
+                    ..Response::default()
+                },
+            ),
+        ];
+        for (what, failure) in failures {
+            let mut config = Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            );
+            config.cache.persist = true;
+            let mut core = Core::new(config);
+            core.send(Event::Start);
+            core.send(Event::Response(Response {
+                request: 1,
+                ..failure
+            }));
+            let read = core.send(Event::Cache {
+                key: "boot".to_owned(),
+                value: Some(kept.to_owned()),
+            });
+            let view = core.view();
+            assert_eq!(view.stage, crate::Stage::Ready, "{what}");
+            assert_eq!(
+                view.app.as_ref().map(|app| app.name.as_str()),
+                Some("Charkha Supply Co."),
+                "{what}: the kept bars"
+            );
+            let timer = read
+                .effects
+                .iter()
+                .find_map(|effect| match effect {
+                    Effect::Timer { timer, ms: 2_000 } => Some(*timer),
+                    _ => None,
+                })
+                .unwrap_or_else(|| {
+                    panic!("{what}: no pause after the kept shell was read: {read:?}")
+                });
+            // The pause over, the shell is asked for again.
+            let again = core.send(Event::Timer { timer });
+            assert!(
+                again.effects.iter().any(|effect| matches!(
+                    effect,
+                    Effect::Fetch(request) if request.url.ends_with(SHELL_PATH)
+                )),
+                "{what}: {again:?}"
+            );
+        }
+    }
+
+    /// The retry keeps its pace: a request that got through asks for the shell
+    /// again at most once in each pause, and only while the shell's own last
+    /// failure was the network's or a timeout; the pause is not kept while
+    /// the app is away, and an upgrade ends it.
+    #[test]
+    fn the_shell_retry_keeps_its_pace() {
+        let kept = include_str!("../transcripts/fixtures/made/kept-boot-workspace.json");
+        let started = |failure: Response| {
+            let mut config = Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            );
+            config.cache.persist = true;
+            let mut core = Core::new(config);
+            core.send(Event::Start);
+            core.send(Event::Cache {
+                key: "boot".to_owned(),
+                value: Some(kept.to_owned()),
+            });
+            let failed = core.send(Event::Response(Response {
+                request: 1,
+                ..failure
+            }));
+            (core, failed)
+        };
+        let fetches = |update: &Update| -> Vec<(u64, bool)> {
+            update
+                .effects
+                .iter()
+                .filter_map(|effect| match effect {
+                    Effect::Fetch(request) => {
+                        Some((request.request, request.url.ends_with(SHELL_PATH)))
+                    }
+                    _ => None,
+                })
+                .collect()
+        };
+        let unreached = |request: u64| Response {
+            request,
+            error: Some(TransportError::Offline),
+            ..Response::default()
+        };
+        let overloaded = |request: u64| Response {
+            request,
+            status: 503,
+            content_type: Some("text/html".to_owned()),
+            ..Response::default()
+        };
+        // A request of the app that got through: the shells it asks for.
+        let got_through = |core: &mut Core, no_shell: &dyn Fn(u64) -> Response| -> usize {
+            core.fetch(
+                Pending::Send {
+                    screen: 1,
+                    visit: 0,
+                    key: "search".to_owned(),
+                    write: false,
+                    in_place: true,
+                },
+                Method::Get,
+                "/orders",
+                None,
+                PAGE_LIMIT,
+            );
+            let request = core.inner.next.request;
+            core.settle();
+            let update = core.send(Event::Response(Response {
+                request,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: include_str!("../transcripts/fixtures/store/orders.json").to_owned(),
+                ..Response::default()
+            }));
+            let asked: Vec<u64> = fetches(&update)
+                .into_iter()
+                .filter(|(_, shell)| *shell)
+                .map(|(request, _)| request)
+                .collect();
+            for request in &asked {
+                core.send(Event::Response(no_shell(*request)));
+            }
+            asked.len()
+        };
+        let timer_of = |update: &Update| {
+            update.effects.iter().find_map(|effect| match effect {
+                Effect::Timer { timer, .. } => Some(*timer),
+                _ => None,
+            })
+        };
+
+        // The network: a request that got through asks for the shell once in
+        // the pause, and not again until the pause is over.
+        let (mut core, failed) = started(Response {
+            error: Some(TransportError::Offline),
+            ..Response::default()
+        });
+        let timer = timer_of(&failed).expect("a pause");
+        assert_eq!(got_through(&mut core, &unreached), 1, "the first asks");
+        assert_eq!(got_through(&mut core, &unreached), 0, "once in the pause");
+        assert_eq!(got_through(&mut core, &unreached), 0, "once in the pause");
+        // The pause is over: the shell is asked for by the timer, fails, and
+        // the next pause has one more request's worth of asking.
+        let ended = core.send(Event::Timer { timer });
+        let (request, _) = fetches(&ended)
+            .into_iter()
+            .find(|(_, shell)| *shell)
+            .expect("the timer asks");
+        let failed = core.send(Event::Response(unreached(request)));
+        assert!(timer_of(&failed).is_some(), "the next pause");
+        assert_eq!(
+            got_through(&mut core, &unreached),
+            1,
+            "the next pause's one"
+        );
+
+        // The shell route itself answers with an error: only the timer asks.
+        let (mut core, _) = started(Response {
+            status: 503,
+            content_type: Some("text/html".to_owned()),
+            ..Response::default()
+        });
+        for _ in 0..3 {
+            assert_eq!(
+                got_through(&mut core, &overloaded),
+                0,
+                "a shell that answers 503 is not asked for by every request that got through"
+            );
+        }
+
+        // The app goes away: the pause is called off. It comes back: the
+        // shell is asked for, and the pause starts again if that fails.
+        let (mut core, failed) = started(Response {
+            error: Some(TransportError::Offline),
+            ..Response::default()
+        });
+        let timer = failed
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Timer { timer, .. } => Some(*timer),
+                _ => None,
+            })
+            .expect("a pause");
+        let away = core.send(Event::Background);
+        assert!(
+            away.effects.iter().any(
+                |effect| matches!(effect, Effect::CancelTimer { timer: gone } if *gone == timer)
+            ),
+            "{away:?}"
+        );
+        let back = core.send(Event::Foreground);
+        let (request, _) = *fetches(&back)
+            .iter()
+            .find(|(_, shell)| *shell)
+            .expect("the shell is asked for");
+        let again = core.send(Event::Response(unreached(request)));
+        assert!(
+            again
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Timer { .. })),
+            "{again:?}"
+        );
+
+        // An upgrade ends the wanting: the pause is called off.
+        let (mut core, failed) = started(Response {
+            error: Some(TransportError::Offline),
+            ..Response::default()
+        });
+        let timer = failed
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Timer { timer, .. } => Some(*timer),
+                _ => None,
+            })
+            .expect("a pause");
+        let asked = core.send(Event::Timer { timer });
+        let (request, _) = *fetches(&asked)
+            .iter()
+            .find(|(_, shell)| *shell)
+            .expect("the shell is asked for");
+        let upgrade = core.send(Event::Response(Response {
+            request,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: r#"{"upgrade":{"min_app":"9.0.0","url":"https://shop.example/app"}}"#.to_owned(),
+            ..Response::default()
+        }));
+        assert!(
+            !core.inner.shell_wanted && core.inner.shell_timer.is_none(),
+            "an upgrade ends the wanting: {upgrade:?}"
+        );
+    }
+
+    /// A place is not put back over what the person began: the first page,
+    /// asked for while the shell could not be reached, stays when words were
+    /// typed into it that differ from what it gave, or a send from it is on
+    /// its way or waiting; the snapshot is dropped, with a report. A page
+    /// they have only looked at gives way to the place as before.
+    #[test]
+    fn a_snapshot_is_not_put_back_over_what_the_person_began() {
+        let snapshot = serde_json::json!({
+            "version": 1,
+            "origin": "https://shop.example",
+            "person": "1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e",
+            "selected": "/",
+            "destinations": [{"href": "/", "stack": [{"url": "/"}, {"url": "/orders/1/pay"}]}],
+        });
+        let answered = |body: &str, request: u64| Response {
+            request,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            headers: vec![(
+                "x-navree-person".to_owned(),
+                "0193a4b2-0000-7000-8000-00000000ra01".to_owned(),
+            )],
+            body: body.to_owned(),
+            ..Response::default()
+        };
+        let submit = || Event::Act {
+            screen: Some(1),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("an action"),
+            form: Some("memo".to_owned()),
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        };
+        let typed = |text: &str| Event::Field {
+            screen: 1,
+            form: Some("memo".to_owned()),
+            field: "memo-text".to_owned(),
+            value: crate::FieldValue::Text {
+                text: text.to_owned(),
+            },
+        };
+        let cases: Vec<(&str, Vec<Event>, bool)> = vec![
+            ("looked at", Vec::new(), true),
+            ("typed", vec![typed("Call the courier")], false),
+            (
+                "typed and then taken back to what the page gave",
+                vec![typed("Call the courier"), typed("")],
+                true,
+            ),
+            ("a send on its way", vec![submit()], false),
+            (
+                "a send on its way, and one waiting",
+                vec![submit(), typed("Again"), submit()],
+                false,
+            ),
+        ];
+        for (what, begun, gives_way) in cases {
+            let mut config = Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            );
+            config.cache.persist = true;
+            let mut core = Core::new(config);
+            core.send(Event::Restore {
+                snapshot: snapshot.clone(),
+            });
+            core.send(Event::Cache {
+                key: "boot".to_owned(),
+                value: Some(include_str!("../transcripts/fixtures/made/kept-boot.json").to_owned()),
+            });
+            core.send(Event::Response(Response {
+                request: 1,
+                error: Some(TransportError::Offline),
+                ..Response::default()
+            }));
+            core.send(Event::Response(answered(
+                include_str!("../transcripts/fixtures/made/home-memo.json"),
+                2,
+            )));
+            for event in begun {
+                core.send(event);
+            }
+            let update = core.send(Event::Response(answered(
+                include_str!("../transcripts/fixtures/store/shell.json"),
+                3,
+            )));
+            let reported = update
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Report { what, .. } if what == "snapshot"));
+            let stack = &core.view.destinations[0].stack;
+            if gives_way {
+                assert!(
+                    stack.len() == 2 && !reported,
+                    "{what}: the place is put back: {stack:?} {update:?}"
+                );
+            } else {
+                assert!(
+                    stack == &[1] && reported,
+                    "{what}: the first page stays and the snapshot is dropped: {stack:?} {update:?}"
+                );
+            }
+        }
+    }
+
+    /// A snapshot asked for before this launch's shell has answered names
+    /// nobody the server has not named in this launch, and is not a
+    /// visitor's: the client must not store it over a person's.
+    #[test]
+    fn a_snapshot_asked_for_before_this_launchs_shell_answers_says_its_person_is_not_known() {
+        let unknown = |core: &Core| core.part(&Query::Snapshot)["person_unknown"] == true;
+        let mut config = Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        );
+        config.cache.persist = true;
+        let mut core = Core::new(config);
+        core.send(Event::Start);
+        assert!(unknown(&core), "no shell yet");
+        core.send(Event::Cache {
+            key: "boot".to_owned(),
+            value: Some(
+                include_str!("../transcripts/fixtures/made/kept-boot-workspace.json").to_owned(),
+            ),
+        });
+        assert!(unknown(&core), "only the kept shell");
+        let snapshot = core.part(&Query::Snapshot);
+        assert!(
+            snapshot["destinations"].is_null() && snapshot["person"].is_null(),
+            "{snapshot}"
+        );
+        // The shell of this launch answers, and names her.
+        core.send(Event::Response(Response {
+            request: 1,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            headers: vec![(
+                "x-navree-person".to_owned(),
+                "0193a4b2-0000-7000-8000-00000000ra01".to_owned(),
+            )],
+            body: include_str!("../transcripts/fixtures/made/shell-workspace.json").to_owned(),
+            ..Response::default()
+        }));
+        assert!(!unknown(&core), "the shell named her");
+        assert!(core.part(&Query::Snapshot)["person"].is_string());
+        // A snapshot waiting for the shell is the one given back, as it was.
+        let mut config = Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        );
+        config.cache.persist = true;
+        let mut core = Core::new(config);
+        core.send(Event::Restore {
+            snapshot: serde_json::json!({"version": 1, "origin": "https://shop.example", "person": "abc"}),
+        });
+        let waiting = core.part(&Query::Snapshot);
+        assert_eq!(waiting["person"], "abc");
+        assert!(waiting["person_unknown"].is_null());
+        // And a snapshot that says its person is not known is not used.
+        let mut core = Core::new(Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        ));
+        let update = core.send(Event::Restore {
+            snapshot: serde_json::json!({"version": 1, "origin": "https://shop.example", "person_unknown": true}),
+        });
+        assert!(
+            update
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Report { what, .. } if what == "snapshot")),
+            "{update:?}"
+        );
     }
 
     /// Before the list is read, any read answered without the keep header

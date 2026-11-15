@@ -10,7 +10,10 @@
 use navree_native::action::Command;
 use navree_native::device::{Alt, Call, Feature};
 use navree_native::node::{Button, Node, Stack, TableRow};
-use navree_native::{Action, CONTENT_TYPE, Envelope, Input, MAJOR, MAX_NESTING, Op, Screen};
+use navree_native::{
+    Action, CONTENT_TYPE, Envelope, Input, MAJOR, MAX_BODY, MAX_ID, MAX_NESTING, MAX_NODES,
+    MAX_OPS, Op, Screen,
+};
 use serde_json::Value;
 
 use crate::config::Config;
@@ -18,6 +21,7 @@ use crate::event::{Response, TransportError};
 use crate::origin::{Origin, Target};
 use crate::state::Failure;
 use crate::tree::{Slot, slots};
+use crate::weight::Tally;
 
 /// The response header the server names the shell's stamp in, while it does
 /// not write it into the envelope.
@@ -388,6 +392,10 @@ pub(crate) fn envelope_with(
 }
 
 fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<Read, Failure> {
+    // An answer larger than the protocol allows is not read at all.
+    if body.len() > MAX_BODY {
+        return Err(Failure::Protocol);
+    }
     let mut read = Read {
         envelope: blank(),
         missing: Vec::new(),
@@ -420,9 +428,38 @@ fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<
     if read.envelope.navree != MAJOR {
         return Err(Failure::Protocol);
     }
+    // Nor is one that holds more than it allows: what a client does with an
+    // answer grows with its nodes and its ops, and a table's rows, a list of
+    // facts' items and a chart's points weigh as nodes do.
+    if read.envelope.ops.len() > MAX_OPS || !nodes_within(&read.envelope, MAX_NODES) {
+        return Err(Failure::Protocol);
+    }
+    // A page that brings ops is read whole: its ops are held to the budgets
+    // against its own screen, and an answer whose ops would be refused is not
+    // read at all, so a page is never drawn with its ops dropped.
+    if let Some(screen) = &read.envelope.screen
+        && !read.envelope.ops.is_empty()
+    {
+        let brought: Vec<usize> = read.envelope.ops.iter().map(crate::weight::of_op).collect();
+        if !crate::weight::fit(
+            crate::weight::of_screen(screen),
+            &read.envelope.ops,
+            &brought,
+        ) {
+            return Err(Failure::Protocol);
+        }
+    }
+    // What the core names things from is short, before anything is named.
+    if !ids_within(&read.envelope) {
+        return Err(Failure::Protocol);
+    }
     // Icons the answer keeps in one place go back to where they are drawn, so
-    // a screen stands on its own.
-    read.envelope.inline_icons();
+    // a screen stands on its own. Each icon that names a shape takes a copy of
+    // it, so the shapes are added up first, and nothing is copied when they
+    // come to more than a body may hold.
+    if !read.envelope.inline_icons_within(MAX_BODY) {
+        return Err(Failure::Protocol);
+    }
     if let Some(screen) = &mut read.envelope.screen {
         check_screen(screen, config, &mut read.missing, pictures);
     }
@@ -447,6 +484,100 @@ fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<
     read.missing.sort();
     read.missing.dedup();
     Ok(read)
+}
+
+/// Whether every id and name `envelope` gives that the core builds handles and
+/// keys from is at most [`MAX_ID`] bytes: the ids of nodes, a table's rows and
+/// its query form, a field's name, a row's key, the id of a screen's content
+/// and the target of an op.
+fn ids_within(envelope: &Envelope) -> bool {
+    fn short(text: Option<&str>) -> bool {
+        text.is_none_or(|text| text.len() <= MAX_ID)
+    }
+    fn row_short(row: &TableRow) -> bool {
+        short(row.id.as_deref())
+    }
+    let mut stack: Vec<&Node> = Vec::new();
+    if let Some(screen) = &envelope.screen {
+        if !short(screen.id.as_deref()) {
+            return false;
+        }
+        stack.extend(crate::tree::roots(screen));
+    }
+    for op in &envelope.ops {
+        let target = match op {
+            Op::Morph { target, node } | Op::Replace { target, node } => {
+                stack.push(node);
+                Some(target)
+            }
+            Op::Append { target, nodes, .. }
+            | Op::Prepend { target, nodes, .. }
+            | Op::Merge { target, nodes, .. } => {
+                stack.extend(nodes);
+                Some(target)
+            }
+            Op::Rows { target, rows, .. } => {
+                if !rows.iter().all(row_short) {
+                    return false;
+                }
+                stack.extend(rows.iter().flat_map(TableRow::nodes));
+                Some(target)
+            }
+            Op::Row { target, row } => {
+                if !row_short(row) {
+                    return false;
+                }
+                stack.extend(row.nodes());
+                Some(target)
+            }
+            Op::Remove { target }
+            | Op::Open { target }
+            | Op::Close { target }
+            | Op::Focus { target }
+            | Op::Invalidate { target } => Some(target),
+            Op::Errors { form, .. } => Some(form),
+            _ => None,
+        };
+        if !short(target.map(String::as_str)) {
+            return false;
+        }
+    }
+    while let Some(node) = stack.pop() {
+        if !short(node.id()) {
+            return false;
+        }
+        let kept = match node {
+            Node::Field(field) => short(Some(&field.name)),
+            Node::Row(row) => short(row.key.as_deref()),
+            Node::Table(table) => {
+                table.rows.iter().all(row_short)
+                    && short(table.query.as_ref().and_then(|form| form.id.as_deref()))
+            }
+            _ => true,
+        };
+        if !kept {
+            return false;
+        }
+        stack.extend(node.children());
+    }
+    true
+}
+
+/// Whether `envelope` holds at most `cap` nodes, counted across its screen,
+/// its ops and their rows, with the parts that weigh as nodes (see `weight`).
+/// It stops counting once past the cap.
+fn nodes_within(envelope: &Envelope, cap: usize) -> bool {
+    let mut tally = Tally::new(cap);
+    if let Some(screen) = &envelope.screen {
+        tally.screen(screen);
+    }
+    for op in &envelope.ops {
+        tally.op(op);
+        if !tally.within() {
+            break;
+        }
+    }
+    tally.within()
 }
 
 /// Reads a response. `asked` is the address the request went to. The core
@@ -611,6 +742,198 @@ mod tests {
         .unwrap();
         assert!(read.missing.is_empty());
         assert_eq!(kinds(&read.envelope.screen.unwrap().body), ["text"]);
+    }
+
+    #[test]
+    fn an_answer_past_a_cap_fails_as_one_that_could_not_be_read() {
+        use navree_native::{MAX_BODY, MAX_NODES, MAX_OPS};
+        let texts = |count: usize| {
+            let texts = vec![r#"{"t":"text","value":"Ludhiana"}"#; count].join(",");
+            body(&format!(r#"{{"t":"stack","children":[{texts}]}}"#))
+        };
+        // As many nodes as the cap allows (the stack and its texts) are read.
+        assert!(envelope(&texts(MAX_NODES - 1), &config()).is_ok());
+        assert_eq!(
+            envelope(&texts(MAX_NODES), &config()).err(),
+            Some(Failure::Protocol)
+        );
+        // Nodes are counted across the screen and every op together.
+        let half = vec![r#"{"t":"text","value":"Amritsar"}"#; MAX_NODES / 2 + 1].join(",");
+        let ops = format!(
+            r#"{{"navree":1,"build":"b1","vocab":0,"ops":[{{"op":"append","target":"a","nodes":[{half}]}},{{"op":"append","target":"b","nodes":[{half}]}}]}}"#
+        );
+        assert_eq!(envelope(&ops, &config()).err(), Some(Failure::Protocol));
+
+        let ops = |count: usize| {
+            let ops = vec![r#"{"op":"toast","text":"Saved"}"#; count].join(",");
+            format!(r#"{{"navree":1,"build":"b1","vocab":0,"ops":[{ops}]}}"#)
+        };
+        assert!(envelope(&ops(MAX_OPS), &config()).is_ok());
+        assert_eq!(
+            envelope(&ops(MAX_OPS + 1), &config()).err(),
+            Some(Failure::Protocol)
+        );
+
+        // A body past the cap is not read at all, even when what it holds is
+        // small: white space counts.
+        let padded = format!("{}{}", texts(1), " ".repeat(MAX_BODY));
+        assert_eq!(envelope(&padded, &config()).err(), Some(Failure::Protocol));
+        let fits = texts(1);
+        let fits = format!("{fits}{}", " ".repeat(MAX_BODY - fits.len()));
+        assert!(envelope(&fits, &config()).is_ok());
+    }
+
+    #[test]
+    fn an_answer_cannot_grow_past_its_caps_while_it_is_read() {
+        use navree_native::{MAX_BODY, MAX_NODES};
+        // One large shape in the icon table and many icons that name it: each
+        // icon is given a copy when the answer is read, so a body of a
+        // mebibyte would become a hundred. The copies are added up first, and
+        // the answer fails before one is made.
+        let depots = |count: usize| {
+            let icons = vec![r#"{"t":"icon","name":"depot"}"#; count].join(",");
+            let shape = "M".repeat(1 << 20);
+            format!(
+                r#"{{"navree":1,"build":"b1","vocab":0,"icons":{{"depot":{{"paths":["{shape}"]}}}},"screen":{{"title":"Depots","body":{{"t":"stack","children":[{icons}]}}}}}}"#
+            )
+        };
+        let many = depots(100);
+        assert!(many.len() < MAX_BODY);
+        assert_eq!(envelope(&many, &config()).err(), Some(Failure::Protocol));
+        // A few fit, and each is drawn with the shape.
+        let read = envelope(&depots(3), &config()).unwrap();
+        let screen = serde_json::to_value(read.envelope.screen.unwrap()).unwrap();
+        assert_eq!(
+            screen["body"]["children"][2]["paths"][0]
+                .as_str()
+                .map(str::len),
+            Some(1 << 20)
+        );
+
+        // What stands in a tree without being a node weighs as one: a table
+        // of empty rows is not an answer of one node.
+        let table = |rows: usize| {
+            let rows = vec!["{}"; rows].join(",");
+            body(&format!(r#"{{"t":"table","rows":[{rows}]}}"#))
+        };
+        assert!(envelope(&table(MAX_NODES - 1), &config()).is_ok());
+        for rows in [MAX_NODES, 1_000_000] {
+            assert_eq!(
+                envelope(&table(rows), &config()).err(),
+                Some(Failure::Protocol),
+                "{rows} rows"
+            );
+        }
+        for (kind, list, item) in [
+            ("facts", "items", r#"{"label":"City"}"#),
+            ("tabs", "items", r#"{"label":"Open"}"#),
+            ("timeline", "items", r#"{"title":"Packed"}"#),
+            ("toolbar", "items", r#"{"title":"Share","icon":{}}"#),
+        ] {
+            let items = vec![item; MAX_NODES].join(",");
+            let answer = body(&format!(r#"{{"t":"{kind}","{list}":[{items}]}}"#));
+            assert_eq!(
+                envelope(&answer, &config()).err(),
+                Some(Failure::Protocol),
+                "{kind}"
+            );
+        }
+        let points = vec!["1"; MAX_NODES].join(",");
+        let chart = body(&format!(
+            r#"{{"t":"chart","series":[{{"label":"Orders","values":[{points}]}}]}}"#
+        ));
+        assert_eq!(envelope(&chart, &config()).err(), Some(Failure::Protocol));
+        // The rows an op brings weigh the same.
+        let rows = vec!["{}"; MAX_NODES + 1].join(",");
+        let ops = format!(
+            r#"{{"navree":1,"build":"b1","vocab":0,"ops":[{{"op":"rows","target":"ledger","rows":[{rows}]}}]}}"#
+        );
+        assert_eq!(envelope(&ops, &config()).err(), Some(Failure::Protocol));
+    }
+
+    /// A handle, a field's id and a key are built from the ids and names an
+    /// answer gives: one of them is copied into every field of its form, so
+    /// they are short.
+    #[test]
+    fn an_id_or_a_name_longer_than_the_protocol_allows_fails_as_one_that_could_not_be_read() {
+        use navree_native::MAX_ID;
+        // A form whose id is a mebibyte, and a hundred fields that would each carry it.
+        let fields = vec![r#"{"t":"field","name":"city","input":{"t":"text"}}"#; 200].join(",");
+        let long = "a".repeat(1 << 20);
+        let form = body(&format!(
+            r#"{{"t":"form","id":"{long}","method":"post","action":"/x","children":[{fields}]}}"#
+        ));
+        assert!(form.len() < 2 << 20);
+        assert_eq!(envelope(&form, &config()).err(), Some(Failure::Protocol));
+
+        // Every place an answer names something the core keys by, at the
+        // longest and one byte past.
+        type Place = fn(&str) -> String;
+        let places: [(&str, Place); 9] = [
+            ("a node's id", |id| {
+                format!(r#"{{"t":"stack","id":"{id}"}}"#)
+            }),
+            ("a region's id", |id| {
+                format!(r#"{{"t":"region","id":"{id}","src":"/a"}}"#)
+            }),
+            ("a form's id", |id| {
+                format!(r#"{{"t":"form","id":"{id}","children":[]}}"#)
+            }),
+            ("a field's id", |id| {
+                format!(r#"{{"t":"field","id":"{id}","name":"n","input":{{"t":"text"}}}}"#)
+            }),
+            ("a field's name", |name| {
+                format!(r#"{{"t":"field","name":"{name}","input":{{"t":"text"}}}}"#)
+            }),
+            ("a row's key", |key| {
+                format!(r#"{{"t":"row","key":"{key}","title":"t"}}"#)
+            }),
+            ("a table row's id", |id| {
+                format!(r#"{{"t":"table","rows":[{{"id":"{id}"}}]}}"#)
+            }),
+            ("a table query's id", |id| {
+                format!(r#"{{"t":"table","query":{{"id":"{id}"}}}}"#)
+            }),
+            ("a list's id", |id| {
+                format!(r#"{{"t":"list","id":"{id}","children":[]}}"#)
+            }),
+        ];
+        for (place, node) in places {
+            let fits = body(&node(&"a".repeat(MAX_ID)));
+            assert!(
+                envelope(&fits, &config()).is_ok(),
+                "{place}: {MAX_ID} bytes"
+            );
+            let past = body(&node(&"a".repeat(MAX_ID + 1)));
+            assert_eq!(
+                envelope(&past, &config()).err(),
+                Some(Failure::Protocol),
+                "{place}: {} bytes",
+                MAX_ID + 1
+            );
+        }
+        // The target of an op.
+        let op = |target: &str| {
+            format!(
+                r#"{{"navree":1,"build":"b1","vocab":0,"ops":[{{"op":"focus","target":"{target}"}}]}}"#
+            )
+        };
+        assert!(envelope(&op(&"a".repeat(MAX_ID)), &config()).is_ok());
+        assert_eq!(
+            envelope(&op(&"a".repeat(MAX_ID + 1)), &config()).err(),
+            Some(Failure::Protocol)
+        );
+        // The id of a screen's content, and a node deep inside an op's rows.
+        let screen = format!(
+            r#"{{"navree":1,"build":"b1","vocab":0,"screen":{{"title":"t","id":"{}","body":{{"t":"stack"}}}}}}"#,
+            "a".repeat(MAX_ID + 1)
+        );
+        assert_eq!(envelope(&screen, &config()).err(), Some(Failure::Protocol));
+        let rows = format!(
+            r#"{{"navree":1,"build":"b1","vocab":0,"ops":[{{"op":"rows","target":"t","rows":[{{"id":"{}"}}]}}]}}"#,
+            "a".repeat(MAX_ID + 1)
+        );
+        assert_eq!(envelope(&rows, &config()).err(), Some(Failure::Protocol));
     }
 
     #[test]

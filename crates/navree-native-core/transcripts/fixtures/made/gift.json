@@ -62,8 +62,7 @@
       "t": "text"
      },
      "changed": {
-      "t": "submit",
-      "href": "/orders/1/coupon"
+      "t": "submit"
      }
     }
    ]

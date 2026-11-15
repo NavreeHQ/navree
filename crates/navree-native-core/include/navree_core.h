@@ -22,6 +22,14 @@
  * memory; it does not make the order of two racing events meaningful. The
  * thread needs about 1 MiB of stack.
  *
+ * Freeing: navree_core_free may be called while a call is in progress on
+ * another thread. It waits for that call, which finishes with its answer,
+ * then drops the core. A call that comes during or after the free answers
+ * {"error":"the core was freed"}, and a second free does nothing: the
+ * handle's own few bytes (a lock and a mark) are kept for the life of the
+ * process, so no call reads memory that was given back. A client still frees
+ * each core once, when it is done with it.
+ *
  * Addresses: every address in an effect that a client fetches, streams from
  * or shows in the web view is a whole address, scheme://host[:port]/path?query,
  * percent-encoded as a browser sends it, on the app's own origin or one it
@@ -30,13 +38,31 @@
  * character or backslash; the platform reads it as http or https with no user
  * information; its scheme, host and port are an origin of the app. It runs the
  * `ours` list of vectors/addresses.json to prove it (the README, "Addresses").
- * An open_url effect holds only a whole http or https address, or a mailto,
- * tel, sms or geo one.
+ * An open_url effect holds only a whole http or https address, or, only when
+ * the person's tap stands behind it, a mailto, tel, sms or geo one. A client
+ * sends web_link only for a navigation the person started in the web view.
+ *
+ * Sizes: a call copies the bytes it is given before the core can look at
+ * them, so the core's own refusal of a body past MAX_BODY (8 MiB, in
+ * navree-native) comes after the copy. The guard that keeps a very large body
+ * out of memory is the client's transport: it refuses a body larger than
+ * MAX_BODY before it hands it over, by the length the response announces and
+ * by the bytes that have arrived, and answers the core with a failure as for
+ * any answer it could not read. What the core is handed from the device's
+ * store (a snapshot, a kept page, what was kept at the last launch) it wrote
+ * itself.
  *
  * Errors: a call never crashes on bad input. navree_core_new answers NULL for
  * a configuration it can't read. navree_core_send and navree_core_view answer
  * {"error":"..."} for an event or a query they can't read, for a NULL core,
- * and for a failure inside the core, after which the core answers only errors.
+ * and for a failure inside the core, which includes a failure while the call's
+ * own input is read (for navree_core_new, that is a configuration that does
+ * not read: NULL). After such a failure the core has stopped for good: what
+ * it held is dropped, nothing it had queued is sent, and every later
+ * navree_core_send and navree_core_view answers an error. So does a core
+ * whose lock a failure left poisoned. A client says the app must be started
+ * again; it still frees the handle. An input that merely does not read is
+ * only an error: the core goes on.
  */
 
 #ifndef NAVREE_CORE_H
@@ -76,7 +102,8 @@ NavreeBytes navree_core_view(const NavreeCore *core, const uint8_t *query, size_
 /* Gives bytes back to the core. */
 void navree_bytes_free(NavreeBytes bytes);
 
-/* Ends a core. NULL is allowed. No other call may be using it. */
+/* Ends a core. NULL is allowed. A call in progress on another thread finishes
+ * first; later calls on the handle answer an error. */
 void navree_core_free(NavreeCore *core);
 
 #ifdef __cplusplus

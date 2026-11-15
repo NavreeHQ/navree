@@ -18,13 +18,14 @@ use navree_native::action::Present;
 use crate::Core;
 use crate::config::DeepLinks;
 use crate::effect::{Change, Effect};
-use crate::origin::{Target, path_of, route_matches};
-use crate::reduce::Shown;
+use crate::origin::Target;
+use crate::reduce::{By, Shown};
 use crate::state::{Content, Modal, ScreenId};
 
 impl Core {
-    /// Follows `href` as found on the screen `from`. Returns the screen now
-    /// in front of that stack.
+    /// Follows `href` as found on the screen `from`, because the person tapped
+    /// it: only a tap follows a link. Returns the screen now in front of that
+    /// stack.
     pub(crate) fn navigate(
         &mut self,
         from: Option<ScreenId>,
@@ -41,7 +42,7 @@ impl Core {
                 from
             }
             Target::Outside(url) => {
-                self.open_outside(&url, false);
+                self.open_outside(&url, false, By::Tap);
                 from
             }
             Target::Inside(url) => self.go(from, &url, present),
@@ -58,11 +59,13 @@ impl Core {
 
     /// The destination whose own address is `url`'s.
     fn destination_at(&self, url: &str) -> Option<usize> {
-        let path = path_of(url);
-        self.view
-            .destinations
-            .iter()
-            .position(|destination| path_of(&self.destination_url(&destination.href)) == path)
+        let place = self.inner.origin.where_of(url);
+        self.view.destinations.iter().position(|destination| {
+            self.inner
+                .origin
+                .where_of(&self.destination_url(&destination.href))
+                == place
+        })
     }
 
     /// Goes to `url`, an address inside, from the screen `from`.
@@ -78,7 +81,7 @@ impl Core {
             .sign_in
             .paths
             .iter()
-            .any(|pattern| route_matches(pattern, url))
+            .any(|pattern| self.inner.origin.on_route(pattern, url))
         {
             self.sign_in_session(url, false);
             return from;
@@ -224,7 +227,7 @@ impl Core {
         ) else {
             return;
         };
-        if path_of(&view.url) != path_of(url) {
+        if self.inner.origin.where_of(&view.url) != self.inner.origin.where_of(url) {
             // Another page: what was typed and opened here belongs to the page being left.
             inner.dirty.clear();
             if matches!(view.content, Content::Blank) {
@@ -232,7 +235,7 @@ impl Core {
                     .inner
                     .routes
                     .iter()
-                    .find(|route| route_matches(&route.matches, url))
+                    .find(|route| self.inner.origin.on_route(&route.matches, url))
                     .is_none_or(|route| route.chrome);
             }
         }
@@ -483,14 +486,17 @@ impl Core {
         }
         // It is stacked on the destination it belongs to: the one whose address its own starts with.
         self.dismiss_modals();
-        let path = path_of(&url);
+        let path = self.inner.origin.where_of(&url);
         let owner = self
             .view
             .destinations
             .iter()
             .enumerate()
             .filter_map(|(at, destination)| {
-                let root = path_of(&self.destination_url(&destination.href));
+                let root = self
+                    .inner
+                    .origin
+                    .where_of(&self.destination_url(&destination.href));
                 let under = root != "/"
                     && path
                         .strip_prefix(root.as_str())
@@ -535,7 +541,8 @@ impl Core {
             Target::Inside(inside) => {
                 self.go(Some(id), &inside, Present::Auto);
             }
-            Target::Outside(url) => self.open_outside(&url, false),
+            // The client says a link of the page was tapped.
+            Target::Outside(url) => self.open_outside(&url, false, By::Tap),
             Target::Refused => {}
         }
     }

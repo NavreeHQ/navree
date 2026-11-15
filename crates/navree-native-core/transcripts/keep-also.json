@@ -1,5 +1,5 @@
 {
-  "about": "A session belongs to a host. An answer from another origin the app allows (a tenant's subdomain, a payment site) is not compared with the person the shell named, and is never kept on the device: it neither empties what is kept nor asks for the shell again.",
+  "about": "A session belongs to a host, though a cookie may be shared across subdomains. An answer from another origin the app allows (a tenant's subdomain, a payment site) is never kept on the device. When it names nobody it says nothing of the person the shell named: it neither empties what is kept nor asks for the shell again. When it names a person, it is compared with the one the shell named; one that names another person makes the core ask for the shell again (once, while none is on its way) and say so, and empties nothing: only the shell's own answer decides who is signed in.",
   "config": {"also":["https://*.shop.example"],"cache":{"persist":true}},
   "steps": [
     {
@@ -83,6 +83,89 @@
         ],
         "effects": [
           {"t":"stream_open","stream":2,"url":"https://patiala.shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "Another page of Patiala's.",
+      "send": {"t":"act","screen":3,"action":{"t":"navigate","href":"https://patiala.shop.example/y"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://patiala.shop.example/y","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":2}
+        ]
+      }
+    },
+    {
+      "note": "Patiala's answer names the person the shell named: nothing changes.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":4}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":3,"url":"https://patiala.shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "And another.",
+      "send": {"t":"act","screen":4,"action":{"t":"navigate","href":"https://patiala.shop.example/z"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":5}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://patiala.shop.example/z","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":3}
+        ]
+      }
+    },
+    {
+      "note": "Patiala's answer names another person than the shell did. The shell is asked again at once, and that is said; nothing kept is emptied, since only the shell's own answer decides.",
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ha02"]]},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":5}
+        ],
+        "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"report","what":"session","detail":"an answer of another origin was made for another person than the shell named: the shell is asked again, and nothing kept was emptied"},
+          {"t":"stream_open","stream":4,"url":"https://patiala.shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "Another page of Patiala's.",
+      "send": {"t":"act","screen":5,"action":{"t":"navigate","href":"https://patiala.shop.example/w"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":6}
+        ],
+        "effects": [
+          {"t":"fetch","request":8,"method":"get","url":"https://patiala.shop.example/w","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":4}
+        ]
+      }
+    },
+    {
+      "note": "Its answer names the same stranger before the shell has answered: nothing is emptied, the shell's request on its way is not asked again, and it is not said again.",
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ha02"]]},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":6}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":5,"url":"https://patiala.shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
         ]
       }
     }

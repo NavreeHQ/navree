@@ -177,7 +177,7 @@ fn before_fragment(text: &str) -> &str {
 }
 
 /// The scheme an address starts with, in lower case, when it has one.
-fn scheme_of(text: &str) -> Option<String> {
+pub(crate) fn scheme_of(text: &str) -> Option<String> {
     let (scheme, _) = text.split_once(':')?;
     let mut chars = scheme.chars();
     let first = chars.next()?;
@@ -308,6 +308,31 @@ pub(crate) fn path_of(url: &str) -> String {
     }
 }
 
+impl Origin {
+    /// Where `url` is, for comparing places: its path when it is on the home
+    /// origin (as a path or a whole address), and its origin and path when it
+    /// is on another. Two addresses are the same place when these are equal:
+    /// the same path on two origins is two places.
+    pub(crate) fn where_of(&self, url: &str) -> String {
+        if !is_web(url) {
+            return path_of(url);
+        }
+        match split(url) {
+            Some(parts) if parts.site == self.home => parts.path,
+            Some(parts) => format!("{}{}", parts.site.base(), parts.path),
+            // What does not read is a place of its own.
+            None => url.to_owned(),
+        }
+    }
+
+    /// Whether `url` is on the home origin and its path fits `pattern`. The
+    /// shell's routes, and the paths a sign-in goes by, are the home
+    /// origin's.
+    pub(crate) fn on_route(&self, pattern: &str, url: &str) -> bool {
+        self.where_of(url).starts_with('/') && route_matches(pattern, url)
+    }
+}
+
 /// Whether the path of `url` fits `pattern`, where `*` stands for one segment.
 pub(crate) fn route_matches(pattern: &str, url: &str) -> bool {
     let path = path_of(url);
@@ -355,9 +380,27 @@ pub(crate) fn openable(address: &str) -> Option<String> {
     }
     match scheme_of(address).as_deref() {
         Some("http" | "https") => split(address).map(|parts| parts.with_fragment()),
-        Some(scheme) if HANDED_TO_SYSTEM.contains(&scheme) => Some(address.to_owned()),
+        Some(scheme) if HANDED_TO_SYSTEM.contains(&scheme) => Some(for_system(address)),
         _ => None,
     }
+}
+
+/// An address of a scheme the system handles, as it is handed over. A phone
+/// number is ordinarily written with spaces (`tel:+91 98140 12345`), and a
+/// browser follows such a link; the number part of a `tel:` or `sms:`
+/// address (up to its first `;`, `?` or `#`) is written without its ASCII
+/// spaces, so every system is handed one form. Nothing else is changed.
+fn for_system(address: &str) -> String {
+    let Some(scheme) = scheme_of(address).filter(|scheme| matches!(scheme.as_str(), "tel" | "sms"))
+    else {
+        return address.to_owned();
+    };
+    let start = scheme.len() + 1;
+    let end = address[start..]
+        .find([';', '?', '#'])
+        .map_or(address.len(), |at| start + at);
+    let number: String = address[start..end].chars().filter(|c| *c != ' ').collect();
+    format!("{}{number}{}", &address[..start], &address[end..])
 }
 
 /// A whole `https` address that reads, written again from its parts.
@@ -517,7 +560,7 @@ impl Origin {
         }
         match scheme_of(href).as_deref() {
             Some("http" | "https") => self.web(href),
-            Some(scheme) if HANDED_TO_SYSTEM.contains(&scheme) => Reading::Other(href.to_owned()),
+            Some(scheme) if HANDED_TO_SYSTEM.contains(&scheme) => Reading::Other(for_system(href)),
             Some(_) => Reading::Refused,
             None => {
                 let text = href.split('#').next().unwrap_or("");
@@ -892,6 +935,30 @@ mod tests {
     }
 
     #[test]
+    fn a_place_is_its_origin_and_its_path() {
+        let origin = origin();
+        let place = |url| origin.where_of(url);
+        assert_eq!(place("/orders?page=2"), "/orders");
+        assert_eq!(place("https://shop.example/orders#x"), "/orders");
+        assert_eq!(
+            place("https://patiala.shop.example/orders"),
+            "https://patiala.shop.example/orders"
+        );
+        assert_ne!(
+            place("https://patiala.shop.example/orders"),
+            place("/orders")
+        );
+        assert_ne!(
+            place("https://pay.example:8443/orders"),
+            place("https://patiala.shop.example/orders")
+        );
+        // The shell's routes are the home origin's.
+        assert!(origin.on_route("/orders/*", "/orders/7"));
+        assert!(origin.on_route("/orders/*", "https://shop.example/orders/7"));
+        assert!(!origin.on_route("/orders/*", "https://patiala.shop.example/orders/7"));
+    }
+
+    #[test]
     fn a_route_matches_by_segment() {
         assert!(route_matches("/orders/*/edit", "/orders/7/edit?x=1"));
         assert!(route_matches("/sign-in", "/sign-in"));
@@ -927,6 +994,11 @@ mod tests {
         assert_eq!(
             openable("tel:+919876543210").as_deref(),
             Some("tel:+919876543210")
+        );
+        // A device call's address is handed over as a link's is.
+        assert_eq!(
+            openable("sms:+91 98765 43210?body=On my way").as_deref(),
+            Some("sms:+919876543210?body=On my way")
         );
         for refused in [
             "/orders",

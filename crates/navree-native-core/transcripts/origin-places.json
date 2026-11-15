@@ -1,0 +1,131 @@
+{
+  "about": "An app that allows a second origin compares places with their origin, not by path alone. A table that goes to the other origin's address of the same path does not take the screen's address there; a link to the other origin's /orders is not the Orders destination; and the home origin's routes do not let in a link to the other origin.",
+  "config": {"also":["https://patiala.shop.example"]},
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives, with the route /orders/*; the first destination's page is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-routes.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell, asked again at once, names the person again.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-routes.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "Orders is chosen.",
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "note": "The table goes to the other origin's /orders, sorted.",
+      "send": {"t":"region_go","screen":2,"region":"orders","href":"https://patiala.shop.example/orders?sort=-total"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://patiala.shop.example/orders?sort=-total","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","orders"]],"timeout_ms":15000}
+        ]
+      }
+    },
+    {
+      "note": "The region takes that address; the screen keeps its own.",
+      "send": {"t":"response","request":5,"status":200,"url":"https://patiala.shop.example/orders?sort=-total","content_type":"application/vnd.navree.native+json"},
+      "body": "store/orders-open.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/2/url","is":"/orders"}
+      ]
+    },
+    {
+      "note": "A link to the other origin's /orders is another place than the Orders destination: it is stacked on the screen it stands on, which stays.",
+      "send": {"t":"act","screen":2,"action":{"t":"navigate","href":"https://patiala.shop.example/orders"}},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://patiala.shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/1/stack","is":[2,3]}
+      ]
+    },
+    {
+      "note": "A link from outside to the other origin's /orders/7: the home origin's route /orders/* does not name it, so it does not open.",
+      "send": {"t":"open_link","url":"https://patiala.shop.example/orders/7"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    }
+  ]
+}

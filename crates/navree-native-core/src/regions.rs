@@ -25,7 +25,7 @@ use serde_json::{Value, json};
 use crate::Core;
 use crate::decode::Answer;
 use crate::effect::{Change, Effect};
-use crate::origin::{Target, path_of};
+use crate::origin::Target;
 use crate::state::{Content, Notice, Pending, ScreenId, ScreenView, Stream, TimerFor};
 use crate::tree::{Names, Survey, find_in, find_in_mut, has_id, rewrite_in};
 
@@ -409,7 +409,7 @@ impl Core {
         // A table that is its page's content takes the page's address with it.
         if let Some(went) = went
             && let Some(view) = self.view.screens.get_mut(&id)
-            && path_of(&view.url) == path_of(went)
+            && self.inner.origin.where_of(&view.url) == self.inner.origin.where_of(went)
             && view.url != went
         {
             view.url = went.to_owned();
@@ -549,6 +549,19 @@ impl Core {
                 }
             }
         }
+        // A page the screen had no room for is not the end of the list: it
+        // shows its failed state, with its retry, and keeps where its rows are.
+        if self.inner.size_said {
+            if let Some(state) = self
+                .view
+                .screens
+                .get_mut(&id)
+                .and_then(|view| view.lists.get_mut(list))
+            {
+                state.failed = true;
+            }
+            return self.list_changed(id, list);
+        }
         // An answer that left `more` as it was has no page after it.
         let same = self
             .view
@@ -581,6 +594,9 @@ impl Core {
 
     /// Adds the rows of the next page to a table, and takes the page's `more`.
     pub(crate) fn add_rows(&mut self, id: ScreenId, list: &str, mut page: Table) {
+        if !self.room(id, crate::weight::of_rows(&page.rows)) {
+            return;
+        }
         let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&id),
             self.inner.screens.get_mut(&id),
@@ -596,11 +612,15 @@ impl Core {
             return;
         };
         // A record is never in a table twice.
-        page.rows.retain(|row| {
-            row.id
-                .as_ref()
-                .is_none_or(|id| !table.rows.iter().any(|held| held.id.as_ref() == Some(id)))
-        });
+        {
+            let held: std::collections::BTreeSet<&str> = table
+                .rows
+                .iter()
+                .filter_map(|row| row.id.as_deref())
+                .collect();
+            page.rows
+                .retain(|row| row.id.as_deref().is_none_or(|id| !held.contains(id)));
+        }
         // While every record that matches is chosen, so is one that just came.
         let across = lists
             .get(table.id.as_deref().unwrap_or(list))
@@ -609,6 +629,7 @@ impl Core {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
             server: &mut inner.server_ids,
+            next: &mut inner.next_names,
         };
         for row in &mut page.rows {
             let scope = row.id.clone();

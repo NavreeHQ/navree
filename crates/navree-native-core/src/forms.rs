@@ -22,7 +22,7 @@
 //! - A control that asks a question first is held until the person answers:
 //!   yes runs what it was about to do, no lets it go.
 
-use navree_native::action::{Pair, Present};
+use navree_native::action::{Command, Pair, Present};
 use navree_native::node::{Field, Form, Method, Node};
 use navree_native::{Action, Input};
 
@@ -31,7 +31,7 @@ use crate::decode::Answer;
 use crate::effect::{Body, Change, Part};
 use crate::event::FieldValue;
 use crate::origin::Target;
-use crate::reduce::SEND_LIMIT;
+use crate::reduce::{By, SEND_LIMIT};
 use crate::state::{
     Content, FieldView, FormView, Held, Notice, Pending, Question, ScreenId, TimerFor, Waiting,
 };
@@ -246,6 +246,12 @@ impl Core {
         if !same_kind(&held.value, &value) {
             return;
         }
+        // What the field already holds is no change: nothing is redrawn,
+        // nothing is marked as typed, and nothing it says happens as it
+        // changes starts (a value put in by the client and told back).
+        if held.value == value {
+            return;
+        }
         held.value = value;
         // What was wrong with it was wrong with what it held before.
         held.errors.clear();
@@ -293,9 +299,12 @@ impl Core {
             }
             return;
         }
-        // What the field itself says happens as it changes.
+        // What the field itself says happens as it changes. No one tapped:
+        // a change may change what the screen shows and send the form the
+        // field stands in, and nothing else.
         match changed {
             Some(Action::Commands { list }) => {
+                let list = self.only_on_change(id, &handle, list);
                 let held = self
                     .view
                     .screens
@@ -306,7 +315,18 @@ impl Core {
                         FieldValue::Text { text } => Some(text.clone()),
                         _ => Option::None,
                     });
-                self.commands(id, list, held.as_deref());
+                self.commands(id, list, held.as_deref(), Some(&handle));
+            }
+            Some(Action::Submit {
+                form: Some(other), ..
+            }) if !self.is_own_form(id, &handle, &other) => self.refused_on_change("another form"),
+            // The form's data goes where the form says, never to an endpoint
+            // a change names for it.
+            Some(Action::Submit {
+                href: Some(address),
+                ..
+            }) if !self.is_forms_address(id, &handle, &address) => {
+                self.refused_on_change("another address")
             }
             Some(action @ Action::Submit { .. }) if typed => {
                 let timer = self.timer(
@@ -322,14 +342,116 @@ impl Core {
                 }
             }
             Some(action @ Action::Submit { .. }) => self.changed_fire(id, &handle, action),
+            Some(Action::Navigate { .. } | Action::Back | Action::Refresh) => {
+                self.refused_on_change("going somewhere")
+            }
+            Some(Action::Request { .. }) => self.refused_on_change("a request"),
+            Some(Action::Device(_)) => self.refused_on_change("a device call"),
+            Some(Action::Dismiss) => self.refused_on_change("closing"),
+            // An action this build does not know does nothing.
             _ => {}
+        }
+    }
+
+    /// The commands a change of a field in the form `handle` may run: those
+    /// that change what the screen shows, and sending that same form. Copying
+    /// and sending another form wait for a tap; each is said once.
+    fn only_on_change(
+        &mut self,
+        screen: ScreenId,
+        handle: &str,
+        list: Vec<Command>,
+    ) -> Vec<Command> {
+        let mut kept = Vec::with_capacity(list.len());
+        for command in list {
+            match command {
+                Command::Copy { .. } => self.refused_on_change("copying"),
+                Command::Submit { ref id } if !self.is_own_form(screen, handle, id) => {
+                    self.refused_on_change("another form")
+                }
+                command => kept.push(command),
+            }
+        }
+        kept
+    }
+
+    /// Whether `named`, as an action or a command names a form, is the form
+    /// `handle`: its handle on the screen, or the id the server gave it. Two
+    /// forms may have been given one id (a form in each row of a list); the
+    /// handle is what tells them apart, so the form a field stands in is
+    /// always taken by it.
+    pub(crate) fn is_own_form(&self, screen: ScreenId, handle: &str, named: &str) -> bool {
+        handle == named
+            || self
+                .inner
+                .screens
+                .get(&screen)
+                .and_then(|inner| inner.server_ids.get(handle))
+                .is_some_and(|server| server.as_deref() == Some(named))
+    }
+
+    /// Whether `address` is where the form `handle` sends its data anyway:
+    /// its own `action`, or the screen's address when it has none, read as a
+    /// browser reads it.
+    fn is_forms_address(&self, screen: ScreenId, handle: &str, address: &str) -> bool {
+        let Some(view) = self.view.screens.get(&screen) else {
+            return false;
+        };
+        let Some(form) = view.screen().and_then(|tree| form_of(tree, handle)) else {
+            return false;
+        };
+        let own = if form.action.is_empty() {
+            view.url.as_str()
+        } else {
+            form.action.as_str()
+        };
+        let origin = &self.inner.origin;
+        matches!(
+            (origin.resolve(address, &view.url), origin.resolve(own, &view.url)),
+            (Target::Inside(address), Target::Inside(own)) if address == own
+        )
+    }
+
+    /// The handle of the form an action or a command means. `named` is what
+    /// it writes (a form's id), and `own` the form the control stands in, by
+    /// its handle, when it stands in one: with no name it is the control's
+    /// own form, and a name that is that form's is that form, never the first
+    /// form on the screen that the server gave the same id.
+    fn form_for(&self, screen: ScreenId, named: Option<&str>, own: Option<&str>) -> Option<String> {
+        let held = own.filter(|own| {
+            self.inner
+                .screens
+                .get(&screen)
+                .is_some_and(|inner| inner.forms.contains_key(*own))
+        });
+        match (named, held) {
+            (None, Some(own)) => Some(own.to_owned()),
+            (Some(named), Some(own)) if self.is_own_form(screen, own, named) => {
+                Some(own.to_owned())
+            }
+            (named, _) => self.form_named(screen, named.or(own)?),
+        }
+    }
+
+    /// Says, once for each kind while the core runs, that a field's change
+    /// asked for something only a tap may start, and that it was not done.
+    fn refused_on_change(&mut self, kind: &'static str) {
+        if self.inner.change_refused.insert(kind) {
+            self.report("changed", format!("a change of value may not start {kind}"));
         }
     }
 
     /// Sends the form a field stands in, because the field changed and says so.
     pub(crate) fn changed_fire(&mut self, id: ScreenId, handle: &str, action: Action) {
-        if let Action::Submit { form, href, with } = action {
-            self.submit(id, form.as_deref().unwrap_or(handle), href, with);
+        if let Action::Submit { form, href, with } = action
+            && form
+                .as_deref()
+                .is_none_or(|named| self.is_own_form(id, handle, named))
+            && href
+                .as_deref()
+                .is_none_or(|address| self.is_forms_address(id, handle, address))
+        {
+            self.send_form(id, handle.to_owned(), href, with);
         }
     }
 
@@ -778,6 +900,17 @@ impl Core {
         let Some(handle) = self.form_named(id, named) else {
             return;
         };
+        self.send_form(id, handle, href, with);
+    }
+
+    /// Sends the form `handle`, found by the handle it has on the screen.
+    pub(crate) fn send_form(
+        &mut self,
+        id: ScreenId,
+        handle: String,
+        href: Option<String>,
+        with: Option<Pair>,
+    ) {
         if !self.may_send(id) {
             return;
         }
@@ -880,10 +1013,14 @@ impl Core {
         href: &str,
         fields: Vec<Pair>,
         action: Option<Action>,
+        by: By,
     ) {
-        self.request(id, Method::Post, href, fields, action);
+        self.request(id, Method::Post, href, fields, action, by);
     }
 
+    /// Sends a request of its own. `by` says whether a tap stands behind it:
+    /// an address outside the app opens there, and only a tap opens one that
+    /// is not a web page.
     pub(crate) fn request(
         &mut self,
         id: ScreenId,
@@ -891,10 +1028,11 @@ impl Core {
         href: &str,
         fields: Vec<Pair>,
         action: Option<Action>,
+        by: By,
     ) {
         let url = match self.resolve(href, id) {
             Target::Inside(url) => url,
-            Target::Outside(url) => return self.open_outside(&url, false),
+            Target::Outside(url) => return self.open_outside(&url, false, by),
             Target::Refused => return self.said_refused("form", href),
         };
         if !self.may_send(id) {
@@ -1004,6 +1142,7 @@ impl Core {
         if !self.view.holds(id) {
             return;
         }
+        self.acted_on(id);
         self.inner.acting = from;
         self.perform(id, action, form, overlay, text, now);
         self.inner.acting = None;
@@ -1042,9 +1181,9 @@ impl Core {
                 with,
             } => {
                 // The form the button names, or the one it stands in.
-                if let Some(named) = named.or(form) {
+                if let Some(handle) = self.form_for(id, named.as_deref(), form.as_deref()) {
                     self.close_alert(id, overlay.as_deref());
-                    self.submit(id, &named, href, with);
+                    self.send_form(id, handle, href, with);
                 }
             }
             Action::Request {
@@ -1055,9 +1194,9 @@ impl Core {
                 let (method, href, fields) = (*method, href.clone(), fields.clone());
                 // A system alert goes away when one of its buttons is tapped.
                 self.close_alert(id, overlay.as_deref());
-                self.request(id, method, &href, fields, Some(action));
+                self.request(id, method, &href, fields, Some(action), By::Tap);
             }
-            Action::Commands { list } => self.commands(id, list, text.as_deref()),
+            Action::Commands { list } => self.commands(id, list, text.as_deref(), form.as_deref()),
             Action::Back => self.back(),
             Action::Refresh => self.fetch_page(id, true),
             Action::Dismiss => self.dismiss(id, overlay.as_deref()),
@@ -1209,10 +1348,16 @@ impl Core {
         let mut kept = false;
         match answer {
             Answer::Failed(failure) => {
+                // The server may have written before the answer failed or
+                // was too large to read: what is kept can't be trusted. Not
+                // so when the request never left the device.
+                if write && !self.inner.never_left {
+                    self.wrote(id);
+                }
                 self.failed(failure, Some(id));
                 told = true;
             }
-            Answer::Left(url) => self.open_outside(&url, false),
+            Answer::Left(url) => self.open_outside(&url, false, By::Answer("redirect")),
             Answer::Empty => {
                 if write {
                     self.wrote(id);
@@ -1306,7 +1451,9 @@ impl Core {
                         }
                     }
                 } else if cover.as_ref().is_some_and(|route| {
-                    write && worked && leaves(route, &url, shown.is_some(), &ops)
+                    write
+                        && worked
+                        && leaves(&self.inner.origin, route, &url, shown.is_some(), &ops)
                 }) {
                     // The way in the session's end put up has done its work: the
                     // person is back where they were. Who is signed in may have
@@ -1370,7 +1517,7 @@ impl Core {
                     && !inner.replaced.contains(key)
             });
             if kept && there {
-                self.submit(id, key, waiting.href, waiting.with);
+                self.send_form(id, key.to_owned(), waiting.href, waiting.with);
             } else if !told {
                 self.notice(Notice::Unsaved, Some(id));
             }
@@ -1380,13 +1527,19 @@ impl Core {
 
 /// Whether an answer leads away from the route `pattern`: it navigates to
 /// an address the route does not name, or brings a screen from one.
-fn leaves(pattern: &str, url: &str, showed: bool, ops: &[navree_native::Op]) -> bool {
+fn leaves(
+    origin: &crate::origin::Origin,
+    pattern: &str,
+    url: &str,
+    showed: bool,
+    ops: &[navree_native::Op],
+) -> bool {
     let away = ops.iter().any(|op| match op {
-        navree_native::Op::Navigate { href, .. } => !crate::origin::route_matches(pattern, href),
+        navree_native::Op::Navigate { href, .. } => !origin.on_route(pattern, href),
         navree_native::Op::NavigateExternal { .. } => true,
         _ => false,
     });
-    away || (showed && !crate::origin::route_matches(pattern, url))
+    away || (showed && !origin.on_route(pattern, url))
 }
 
 /// What a field holds when a tree first says so.

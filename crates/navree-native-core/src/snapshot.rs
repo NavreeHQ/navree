@@ -7,17 +7,26 @@
 //! into forms and not sent, and which sheets were open. It holds nothing the
 //! server gives again: no tree,
 //! no page, no message. And nothing secret: no cookie, no token of a form or
-//! of a push service, no ticket, no verifier of a sign-in, nothing typed into
-//! a password field, and no file.
+//! of a push service, no ticket, no verifier of a sign-in, and no file; what
+//! was typed only for kinds on a short list of what is safe to keep (never a
+//! field the page marks as a password, a one-time code or a card's, or of a
+//! kind this build does not know; a plain or number field the page does not
+//! mark is kept).
 //!
 //! Starting from one (`restore`, in place of `start`) fetches the shell as
-//! any start does. Only when the shell names the same person as the snapshot
-//! was taken for are the stacks put back, each screen with its address and
+//! any start does. Only when this launch's shell (not one kept on the
+//! device) names the same person as the snapshot was taken for, told by their
+//! id, are the stacks put back, each screen with its address and
 //! title and nothing else; the one in front is fetched at once and the others
 //! as they come to the front. What was typed goes back into a screen when its
 //! page arrives, into the fields that are still there and still of the same
 //! kind. A snapshot of another version, another origin or another person is
-//! not used, and the app starts as it does the first time.
+//! not used, and the app starts as it does the first time. A person the
+//! server names without an id can't be told from another of the same name
+//! and email: nothing is kept in a snapshot for them, and nothing is put back
+//! for them from one. Before this launch's shell has answered, a snapshot
+//! asked for is the waiting one, if there is one, and otherwise says that
+//! its person is not known (`person_unknown`): a client does not store it.
 
 use std::collections::BTreeMap;
 
@@ -96,49 +105,162 @@ pub struct Snapshot {
     /// What was presented over them, the last on top.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub modals: Vec<KeptModal>,
+    /// The core does not know who this is for: this launch's shell has not
+    /// answered yet, or the server names the person without an id. It holds
+    /// nothing, and a client does not store it: it must never replace what is
+    /// stored (a person's place) with it, nor label what it holds with a
+    /// person the server has not named in this launch.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub person_unknown: bool,
 }
 
-/// A name for the person a shell is for, which says nothing of them.
-fn person_of(user: Option<&crate::cache::Who>) -> Option<String> {
-    user.map(|who| match &who.id {
-        Some(id) => crate::sign_in::fingerprint(&format!("navree-person-id\n{id}")),
-        None => crate::sign_in::fingerprint(&format!(
-            "navree-person\n{}\n{}",
-            who.name,
-            who.email.as_deref().unwrap_or("")
-        )),
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+/// Who a snapshot is for.
+#[derive(Debug, PartialEq, Eq)]
+enum Person {
+    /// Nobody was signed in.
+    Nobody,
+    /// A person, by a name for their id that says nothing of them.
+    Told(String),
+    /// A person the server names without an id: not told from another of the
+    /// same name and email, so no snapshot is for them.
+    Unknown,
+}
+
+fn person_of(user: Option<&crate::cache::Who>) -> Person {
+    match user {
+        None => Person::Nobody,
+        Some(who) => match &who.id {
+            Some(id) => Person::Told(crate::sign_in::fingerprint(&format!(
+                "navree-person-id\n{id}"
+            ))),
+            None => Person::Unknown,
+        },
+    }
+}
+
+/// What a system may fill a field with, by the web's names, that a snapshot
+/// may keep: a person's name, their address, how to reach them. Anything
+/// else a field names (a card, a password, a one-time code, a name this
+/// build does not know) is not kept.
+const SAFE_AUTOFILL: [&str; 30] = [
+    "name",
+    "honorific-prefix",
+    "given-name",
+    "additional-name",
+    "family-name",
+    "honorific-suffix",
+    "nickname",
+    "organization-title",
+    "organization",
+    "street-address",
+    "address-line1",
+    "address-line2",
+    "address-line3",
+    "address-level4",
+    "address-level3",
+    "address-level2",
+    "address-level1",
+    "country",
+    "country-name",
+    "postal-code",
+    "language",
+    "url",
+    "email",
+    "tel",
+    "tel-country-code",
+    "tel-national",
+    "tel-area-code",
+    "tel-local",
+    "tel-extension",
+    "off",
+];
+
+/// Whether what a system may fill a field with says it may be kept: every
+/// word of it a section, a part of an address (`shipping`, `home`), or a
+/// name on the short list.
+fn safe_autofill(autofill: Option<&str>) -> bool {
+    autofill.is_none_or(|autofill| {
+        autofill.split_ascii_whitespace().all(|word| {
+            let word = word.to_ascii_lowercase();
+            word.starts_with("section-")
+                || matches!(
+                    word.as_str(),
+                    "shipping" | "billing" | "home" | "work" | "mobile" | "fax" | "pager"
+                )
+                || SAFE_AUTOFILL.contains(&word.as_str())
+        })
     })
 }
 
-/// Whether what a field holds may be kept: never a password, never a file.
+/// Whether what a field holds may be kept: only a kind on the short list of
+/// what is safe to keep. Never a field the page marks as a password, a
+/// one-time code or a card's (by its kind, or by an `autofill` that names
+/// one), a file, or a kind this build does not know. A field the page does
+/// not mark is kept, whatever it holds.
 fn may_keep(input: &Input, value: &FieldValue) -> bool {
-    let secret = matches!(input, Input::Text(text) if text.kind == TextKind::Password);
-    !secret && !matches!(input, Input::File(_)) && !matches!(value, FieldValue::Files { .. })
+    let safe = match input {
+        Input::Text(text) => {
+            matches!(
+                text.kind,
+                TextKind::Plain
+                    | TextKind::Email
+                    | TextKind::Number
+                    | TextKind::Decimal
+                    | TextKind::Phone
+                    | TextKind::Url
+                    | TextKind::Search
+                    | TextKind::Multiline
+            ) && safe_autofill(text.autofill.as_deref())
+        }
+        Input::Toggle(_)
+        | Input::Choice(_)
+        | Input::Choices(_)
+        | Input::Date(_)
+        | Input::Slider(_)
+        | Input::Colour(_)
+        | Input::Range(_) => true,
+        _ => false,
+    };
+    safe && !matches!(value, FieldValue::Files { .. })
+}
+
+/// Calls `each` for every field of the screen that holds what the person put
+/// in it: what it holds is not what the page came with.
+fn each_typed(view: &ScreenView, each: &mut dyn FnMut(&str, &Input, &FieldValue)) {
+    let Some(screen) = view.screen() else {
+        return;
+    };
+    let held: BTreeMap<&String, &FieldValue> = view
+        .forms
+        .values()
+        .flat_map(|form| form.fields.iter().map(|(id, field)| (id, &field.value)))
+        .collect();
+    for root in roots(screen) {
+        walk(root, &mut |node| {
+            if let Node::Field(field) = node
+                && let Some(id) = &field.id
+                && let Some(value) = held.get(id)
+                && **value != value_of(&field.input)
+            {
+                each(id, &field.input, value);
+            }
+        });
+    }
 }
 
 /// What a screen holds that only the person knew.
 fn kept(view: &ScreenView) -> KeptScreen {
     let mut fields = BTreeMap::new();
-    if let Some(screen) = view.screen() {
-        let held: BTreeMap<&String, &FieldValue> = view
-            .forms
-            .values()
-            .flat_map(|form| form.fields.iter().map(|(id, field)| (id, &field.value)))
-            .collect();
-        for root in roots(screen) {
-            walk(root, &mut |node| {
-                if let Node::Field(field) = node
-                    && let Some(id) = &field.id
-                    && let Some(value) = held.get(id)
-                    // What the page itself came with is fetched again with it.
-                    && **value != value_of(&field.input)
-                    && may_keep(&field.input, value)
-                {
-                    fields.insert(id.clone(), (*value).clone());
-                }
-            });
+    // What the page itself came with is fetched again with it.
+    each_typed(view, &mut |id, input, value| {
+        if may_keep(input, value) {
+            fields.insert(id.to_owned(), value.clone());
         }
-    }
+    });
     KeptScreen {
         url: view.url.clone(),
         title: view.title.clone(),
@@ -159,8 +281,19 @@ impl Core {
     }
 
     /// Where the person is now, for a client to store. See [`Snapshot`].
+    ///
+    /// While a snapshot waits for this launch's shell, that one is what is
+    /// given back, as it was: the screens are not put back yet, so what the
+    /// core holds now says nothing of where the person was, and storing it
+    /// would lose their place.
     pub fn snapshot(&self) -> Snapshot {
+        if let Some(waiting) = &self.inner.restore {
+            return waiting.clone();
+        }
         let view: &ViewState = &self.view;
+        // Until this launch's shell has answered, who the person is, is the
+        // device's word (the shell it kept) and not the server's.
+        let answered = self.inner.has_shell && !self.inner.shell_kept;
         let screens = |stack: &[ScreenId]| -> Vec<KeptScreen> {
             stack
                 .iter()
@@ -168,18 +301,27 @@ impl Core {
                 .map(kept)
                 .collect()
         };
+        let (person, keeps) = match person_of(self.inner.user.as_ref()) {
+            _ if !answered => (None, false),
+            Person::Nobody => (None, true),
+            Person::Told(person) => (Some(person), true),
+            // Nothing says which of the people of that name this is: nothing
+            // of where they are, or of what they typed, is kept.
+            Person::Unknown => (None, false),
+        };
         Snapshot {
             version: SNAPSHOT_VERSION,
             origin: self.config.origin.clone(),
-            person: person_of(self.inner.user.as_ref()),
+            person,
             selected: view
                 .destinations
                 .get(view.selected)
-                .map(|destination| destination.href.clone()),
+                .map(|destination| destination.href.clone())
+                .filter(|_| keeps),
             destinations: view
                 .destinations
                 .iter()
-                .filter(|destination| !destination.stack.is_empty())
+                .filter(|destination| keeps && !destination.stack.is_empty())
                 .map(|destination| KeptStack {
                     href: destination.href.clone(),
                     stack: screens(&destination.stack),
@@ -190,12 +332,13 @@ impl Core {
             modals: view
                 .modals
                 .iter()
-                .filter(|modal| !modal.locked)
+                .filter(|modal| keeps && !modal.locked)
                 .map(|modal| KeptModal {
                     present: modal.present,
                     stack: screens(&modal.stack),
                 })
                 .collect(),
+            person_unknown: !keeps,
         }
     }
 
@@ -206,6 +349,12 @@ impl Core {
             match serde_json::from_value::<Snapshot>(snapshot) {
                 Ok(snapshot) if snapshot.version != SNAPSHOT_VERSION => {
                     self.report("snapshot", format!("a snapshot of version {} is not used: this build reads version {SNAPSHOT_VERSION}", snapshot.version));
+                }
+                Ok(snapshot) if snapshot.person_unknown => {
+                    self.report(
+                        "snapshot",
+                        "a snapshot that does not know its person is not used".to_owned(),
+                    );
                 }
                 Ok(snapshot) if snapshot.origin != self.config.origin => {
                     self.report(
@@ -223,22 +372,71 @@ impl Core {
         self.start();
     }
 
+    /// Whether the person began something on a screen held: words typed into
+    /// it that differ from what the page gave, or a send from it on its way
+    /// or waiting.
+    fn begun_on_a_screen(&self) -> bool {
+        self.view.screens.iter().any(|(id, view)| {
+            let mut typed = false;
+            each_typed(view, &mut |_, _, _| typed = true);
+            typed
+                || self
+                    .inner
+                    .screens
+                    .get(id)
+                    .is_some_and(|inner| !inner.sending.is_empty() || !inner.waiting.is_empty())
+        })
+    }
+
     /// The shell is here: the stacks of the snapshot are put back, when it
     /// was taken for the person the shell names. True when they were.
     pub(crate) fn restore_stacks(&mut self) -> bool {
         let Some(snapshot) = self.inner.restore.take() else {
             return false;
         };
-        if snapshot.person != person_of(self.inner.user.as_ref()) {
-            self.report(
-                "snapshot",
-                "a snapshot taken for another person is not used".to_owned(),
-            );
+        let now = person_of(self.inner.user.as_ref());
+        let theirs = match (&snapshot.person, &now) {
+            (None, Person::Nobody) => true,
+            (Some(held), Person::Told(now)) => held == now,
+            _ => false,
+        };
+        if !theirs {
+            let said = if now == Person::Unknown {
+                "a snapshot is not used for a person the server names without an id"
+            } else {
+                "a snapshot taken for another person is not used"
+            };
+            self.report("snapshot", said.to_owned());
             return false;
         }
-        // Only onto a core that holds no screen yet.
+        // Only onto a core where the person has not moved on: with no screen,
+        // or with only the first page of the first destination, which was
+        // asked for while the shell could not be fetched, and which gives way
+        // unless they began something on it: words typed that differ from
+        // what the page gave, or a send on its way or waiting.
         if !self.view.screens.is_empty() {
-            return false;
+            let untouched = self.view.modals.is_empty()
+                && self.view.selected == 0
+                && self
+                    .view
+                    .destinations
+                    .iter()
+                    .all(|destination| destination.stack.len() <= 1)
+                && !self.begun_on_a_screen();
+            if !untouched {
+                self.report(
+                    "snapshot",
+                    "a snapshot is not used: the person had already moved on".to_owned(),
+                );
+                return false;
+            }
+            let ids: Vec<ScreenId> = self.view.screens.keys().copied().collect();
+            for id in ids {
+                self.close(id);
+            }
+            for destination in &mut self.view.destinations {
+                destination.stack.clear();
+            }
         }
         let mut any = false;
         let put = |core: &mut Core, screens: Vec<KeptScreen>| -> Vec<ScreenId> {
@@ -362,5 +560,84 @@ impl Core {
         for target in restored.open {
             self.set_open(id, &target, true);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cache::Who;
+    use navree_native::input::{TextInput, ToggleInput};
+
+    fn text(kind: TextKind, autofill: Option<&str>) -> Input {
+        Input::Text(TextInput {
+            kind,
+            autofill: autofill.map(str::to_owned),
+            ..TextInput::default()
+        })
+    }
+
+    #[test]
+    fn only_a_kind_on_the_short_list_is_kept() {
+        let typed = FieldValue::Text {
+            text: "x".to_owned(),
+        };
+        for safe in [
+            text(TextKind::Plain, None),
+            text(TextKind::Multiline, None),
+            text(TextKind::Email, Some("email")),
+            text(
+                TextKind::Plain,
+                Some("section-gift shipping address-level2"),
+            ),
+            text(TextKind::Phone, Some("work tel")),
+        ] {
+            assert!(may_keep(&safe, &typed), "{safe:?}");
+        }
+        assert!(may_keep(
+            &Input::Toggle(ToggleInput::default()),
+            &FieldValue::Flag { on: true }
+        ));
+        for secret in [
+            text(TextKind::Password, None),
+            text(TextKind::OneTimeCode, None),
+            // A kind a newer server wrote that this build does not know.
+            text(TextKind::Unknown, None),
+            text(TextKind::Plain, Some("one-time-code")),
+            text(TextKind::Plain, Some("current-password")),
+            text(TextKind::Number, Some("cc-number")),
+            text(TextKind::Number, Some("billing cc-csc")),
+            text(TextKind::Plain, Some("cc-name")),
+            text(TextKind::Plain, Some("transaction-amount")),
+            text(TextKind::Plain, Some("username webauthn")),
+            Input::Unknown,
+        ] {
+            assert!(!may_keep(&secret, &typed), "{secret:?}");
+        }
+    }
+
+    #[test]
+    fn the_person_a_snapshot_is_for_is_told_by_id_and_by_nothing_else() {
+        let who = |id: Option<&str>, name: &str| Who {
+            id: id.map(str::to_owned),
+            name: name.to_owned(),
+            email: None,
+        };
+        let ravneet = person_of(Some(&who(Some("u-ra01"), "Ravneet Kaur")));
+        assert!(matches!(ravneet, Person::Told(_)));
+        // A new name is the same person; the same name with another id is not.
+        assert_eq!(
+            ravneet,
+            person_of(Some(&who(Some("u-ra01"), "Ravneet Kaur Sidhu")))
+        );
+        assert_ne!(
+            ravneet,
+            person_of(Some(&who(Some("u-ra02"), "Ravneet Kaur")))
+        );
+        // Without an id nobody can be told from another of the same name:
+        // not from the person with an id, not from nobody, and not from
+        // themselves in another launch, since no snapshot is for them.
+        assert_eq!(person_of(Some(&who(None, "Ravneet Kaur"))), Person::Unknown);
+        assert_eq!(person_of(None), Person::Nobody);
     }
 }

@@ -54,8 +54,16 @@ fn untick_others(node: &mut Node, target: &str, group: &str) -> bool {
 
 impl Core {
     /// Runs commands on a screen, in order. `text` is what the control they
-    /// run on holds, when it holds text.
-    pub(crate) fn commands(&mut self, id: ScreenId, list: Vec<Command>, text: Option<&str>) {
+    /// run on holds, when it holds text, and `own` the handle of the form it
+    /// stands in, when it stands in one: a command that sends a form by the
+    /// id the server gave it sends this one when it is the one meant.
+    pub(crate) fn commands(
+        &mut self,
+        id: ScreenId,
+        list: Vec<Command>,
+        text: Option<&str>,
+        own: Option<&str>,
+    ) {
         for command in list {
             match command {
                 Command::Toggle { id: target } => {
@@ -96,7 +104,12 @@ impl Core {
                     self.put_state(id, &target, state, !on);
                 }
                 Command::Focus { id: target } => self.focus(id, target),
-                Command::Submit { id: form } => self.submit(id, &form, None, None),
+                Command::Submit { id: form } => {
+                    match own.filter(|own| self.is_own_form(id, own, &form)) {
+                        Some(own) => self.send_form(id, own.to_owned(), None, None),
+                        None => self.submit(id, &form, None, None),
+                    }
+                }
                 Command::Text { id: target, text } => self.put_text(id, &target, text),
                 Command::Count { id: target, max } => {
                     // Characters as a person counts them, not bytes.

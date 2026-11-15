@@ -670,6 +670,14 @@ const REQUIRED: &[&str] = &[
     "keep-unseen",
     "keep-also",
     "keep-stale-shell",
+    "changed-limits",
+    "outside-taps",
+    "origin-places",
+    "keep-restore",
+    "keep-shell",
+    "changed-own-form",
+    "snapshot-no-id",
+    "shell-retry",
 ];
 
 #[test]

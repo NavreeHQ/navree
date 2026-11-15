@@ -162,6 +162,7 @@ impl Core {
         self.inner.signing_in = false;
         self.inner.has_shell = false;
         self.inner.user = None;
+        self.shell_settled();
         self.inner.restore = None;
         self.push_forget();
         self.view.app = None;

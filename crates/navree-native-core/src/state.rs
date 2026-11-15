@@ -727,6 +727,8 @@ pub(crate) enum TimerFor {
         form: String,
         action: Box<Action>,
     },
+    /// The shell could not be fetched: ask for it again.
+    Shell,
     /// A searched choice was typed in: ask for options when the typing pauses.
     Options {
         screen: ScreenId,
@@ -835,10 +837,23 @@ pub(crate) struct ScreenInner {
     pub visit: u64,
     /// What it shows may be out of date: it is fetched again when it comes to the front.
     pub stale: bool,
+    /// What the screen's tree takes, in the weight of `weight`: counted when
+    /// a page is shown, and added to as ops bring more. It is never less than
+    /// what the tree holds, so it is counted afresh before anything is
+    /// refused for it.
+    pub weight: usize,
+    /// How many answers were refused for their size since the person last
+    /// acted on the screen or an answer of ops was applied to it: after the
+    /// first the screen is not fetched again on their account, so a server
+    /// that answers so every time is not asked again and again.
+    pub refused: u8,
     pub form_ids: BTreeSet<String>,
     pub field_ids: BTreeSet<String>,
     /// The id the server gave each form, by the form's id here.
     pub server_ids: BTreeMap<String, Option<String>>,
+    /// The next suffix to try for a name that is taken, by the name (with
+    /// `form:` or `field:` before it): what repeats is named in one pass.
+    pub next_names: BTreeMap<String, u32>,
     pub forms: BTreeMap<String, FormMeta>,
     /// The fields the person changed, by id.
     pub dirty: BTreeSet<String>,
@@ -1009,8 +1024,18 @@ pub(crate) struct Inner {
     pub event_start: u64,
     /// An answer the core makes itself (a request never sent) is being read.
     pub synthetic: bool,
+    /// The answer being read says its request never left the device: no
+    /// network, or one the core failed itself. A write that never left did
+    /// not happen.
+    pub never_left: bool,
     /// An address an answer gave did not read, and that was said, in this event.
     pub refusal_said: bool,
+    /// Something an answer brought was refused for its size, and that was
+    /// said, in this event.
+    pub size_said: bool,
+    /// The kinds of thing a field's change asked for and was refused, each
+    /// said once.
+    pub change_refused: BTreeSet<&'static str>,
     pub screens: BTreeMap<ScreenId, ScreenInner>,
     /// The build the kept trees belong to.
     pub build: Option<String>,
@@ -1054,6 +1079,23 @@ pub(crate) struct Inner {
     pub land: Option<String>,
     /// A snapshot to start from, once the shell says who is signed in.
     pub restore: Option<crate::snapshot::Snapshot>,
+    /// The shell drawn is the one kept on the device: this launch's has not
+    /// answered yet, so nothing of a person is drawn or put back.
+    pub shell_kept: bool,
+    /// This launch's shell request did not get through while the kept shell
+    /// is drawn: it is asked for again, by a pause, a retry, or a request of
+    /// the app that got through.
+    pub shell_wanted: bool,
+    /// The pause before the shell is asked for again, in milliseconds; it
+    /// doubles with each failure, up to a minute.
+    pub shell_pause: u32,
+    /// The timer of that pause, while one runs.
+    pub shell_timer: Option<u64>,
+    /// A request that got through has asked for the shell in this pause.
+    pub shell_nudged: bool,
+    /// How this launch's last shell request failed, until a shell answers:
+    /// it may fail before the kept shell has been read.
+    pub shell_failure: Option<Failure>,
     /// The id of the part whose action is being carried out now: a screen
     /// that action opens keeps it.
     pub acting: Option<String>,

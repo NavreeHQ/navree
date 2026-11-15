@@ -1,5 +1,5 @@
 {
-  "about": "What the device keeps between launches. A page is written to the client's store only when its answer says it may be kept (`x-navree-keep: 1`, which the server sends when the page's `Cache-Control` does not say `no-store`); an answer that no longer says so removes what was kept for its address. At the next launch the kept shell is drawn at once, but a kept page waits until this launch's shell has answered over the network and named the same person: another person or nobody empties everything kept, and a shell that can't be reached means no kept page is drawn at all.",
+  "about": "What the device keeps between launches. A page is written to the client's store only when its answer says it may be kept (`x-navree-keep: 1`, which the server sends when the page's `Cache-Control` does not say `no-store`); an answer that no longer says so removes what was kept for its address. At the next launch the kept shell is drawn at once, but a kept page waits until this launch's shell has answered over the network and named the same person: another person or nobody empties everything kept, and a shell that can't be reached means no kept page is drawn at all, while the kept bars stay and the shell is asked for again.",
   "config": {"cache":{"persist":true}},
   "steps": [
     {
@@ -394,11 +394,13 @@
       }
     },
     {
-      "note": "The shell can't be reached. The kept shell stays drawn; no kept page is read.",
+      "note": "The shell can't be reached. The kept shell stays drawn, with the Orders tab and its page on their way; no kept page is read; the shell is asked for again after a pause.",
       "send": {"t":"response","request":1,"error":"offline"},
       "expect": {
         "changed": [],
-        "effects": []
+        "effects": [
+          {"t":"timer","timer":1,"ms":2000}
+        ]
       }
     },
     {

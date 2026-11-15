@@ -463,12 +463,22 @@ pub(crate) struct Names<'a> {
     pub fields: &'a mut BTreeSet<String>,
     /// The id the server gave each form, by the id the form has here.
     pub server: &'a mut BTreeMap<String, Option<String>>,
+    /// The next suffix to try for each name that is taken.
+    pub next: &'a mut BTreeMap<String, u32>,
 }
 
+/// What a form is named from: its id, or, with none, a stem of its address no
+/// longer than an id may be, so a long address is not copied into the name of
+/// every field of the form (two forms that share the stem are still two: a
+/// name is made free after it is chosen).
 fn base_of(form: &Form) -> String {
-    form.id
-        .clone()
-        .unwrap_or_else(|| format!("@{}", form.action))
+    form.id.clone().unwrap_or_else(|| {
+        let mut end = form.action.len().min(navree_native::MAX_ID);
+        while !form.action.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("@{}", &form.action[..end])
+    })
 }
 
 fn count_bases(node: &Node, counts: &mut BTreeMap<String, usize>) {
@@ -486,14 +496,50 @@ fn count_bases(node: &Node, counts: &mut BTreeMap<String, usize>) {
     }
 }
 
-fn free(taken: &BTreeSet<String>, stem: String) -> String {
+/// The longest form id a field's name carries whole.
+const FORM_STEM: usize = 64;
+
+/// What a field with no id of its own is named from, of its form: the form's
+/// id when that is short; when it is long, its beginning and a number made of
+/// all of it, so a long id (up to what an id may be, twice over for a form
+/// that is repeated) is not copied into the name of every field of the form,
+/// and two long ids that begin alike do not share the names of their fields.
+fn form_stem(handle: &str) -> std::borrow::Cow<'_, str> {
+    if handle.len() <= FORM_STEM {
+        return std::borrow::Cow::Borrowed(handle);
+    }
+    let mut end = 48;
+    while !handle.is_char_boundary(end) {
+        end -= 1;
+    }
+    // FNV-1a: the same number on every device, for as long as the id is.
+    let number = handle.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
+        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+    });
+    std::borrow::Cow::Owned(format!("{}~{number:08x}", &handle[..end]))
+}
+
+/// A name not in `taken`: `stem`, or `stem~2`, `stem~3`, ... The next suffix
+/// to try is remembered for the stem (`next`, under `kind`), so a name an
+/// answer repeats a hundred thousand times is made a hundred thousand times,
+/// and not a hundred thousand times over the ones before.
+fn free(
+    taken: &BTreeSet<String>,
+    next: &mut BTreeMap<String, u32>,
+    kind: &str,
+    stem: String,
+) -> String {
     if !taken.contains(&stem) {
         return stem;
     }
-    (2u32..)
-        .map(|n| format!("{stem}~{n}"))
-        .find(|name| !taken.contains(name))
-        .unwrap_or(stem)
+    let key = format!("{kind}{stem}");
+    let from = next.get(&key).copied().unwrap_or(2);
+    let (n, name) = (from..)
+        .map(|n| (n, format!("{stem}~{n}")))
+        .find(|(_, name)| !taken.contains(name))
+        .unwrap_or((from, stem));
+    next.insert(key, n.saturating_add(1));
+    name
 }
 
 impl Names<'_> {
@@ -522,7 +568,7 @@ impl Names<'_> {
             Some(scope) if repeated => format!("{base}~{scope}"),
             _ => base,
         };
-        let handle = free(self.forms, stem);
+        let handle = free(self.forms, self.next, "form:", stem);
         self.forms.insert(handle.clone());
         self.server.insert(handle.clone(), server);
         form.id = Some(handle.clone());
@@ -532,14 +578,14 @@ impl Names<'_> {
     fn field(&mut self, field: &mut Field, form: Option<&str>) {
         let own = field.id.clone().filter(|id| !self.fields.contains(id));
         let id = own.unwrap_or_else(|| {
-            let mut stem = format!("{}.{}", form.unwrap_or(""), field.name);
+            let mut stem = format!("{}.{}", form_stem(form.unwrap_or("")), field.name);
             if let Input::Toggle(toggle) = &field.input
                 && let Some(value) = &toggle.value
             {
                 stem.push('=');
                 stem.push_str(value);
             }
-            free(self.fields, stem)
+            free(self.fields, self.next, "field:", stem)
         });
         self.fields.insert(id.clone());
         field.id = Some(id);
@@ -1044,6 +1090,46 @@ mod tests {
         })
     }
 
+    /// A form with no id is named from its address, and an address may be
+    /// long: the name is a short stem of it, so it is not copied into every
+    /// field of the form, and two forms that share the stem are still two.
+    #[test]
+    fn a_form_with_no_id_is_named_from_a_short_stem_of_its_address() {
+        let field = |name: &str| {
+            Node::Field(Field {
+                name: name.to_owned(),
+                ..Field::default()
+            })
+        };
+        let form = |address: String| {
+            Node::Form(Form {
+                action: address,
+                children: vec![field("city"), field("pin")],
+                ..Form::default()
+            })
+        };
+        let long = format!("/orders/{}", "x".repeat(10_000));
+        let mut nodes = vec![form(format!("{long}/1")), form(format!("{long}/2"))];
+        let (mut forms, mut fields, mut server) =
+            (BTreeSet::new(), BTreeSet::new(), BTreeMap::new());
+        let mut next = BTreeMap::new();
+        Names {
+            forms: &mut forms,
+            fields: &mut fields,
+            server: &mut server,
+            next: &mut next,
+        }
+        .name(&mut nodes, None);
+        assert_eq!(forms.len(), 2, "{forms:?}");
+        assert!(
+            forms.iter().all(|handle| handle.len() < 300),
+            "a handle is {} bytes",
+            forms.iter().map(String::len).max().unwrap_or(0)
+        );
+        assert_eq!(fields.len(), 4);
+        assert!(fields.iter().all(|field| field.len() < 320), "{fields:?}");
+    }
+
     #[test]
     fn the_first_node_in_document_order_wins() {
         // The outer `refund` is a dialog, the inner one a form; `b` is there twice.
@@ -1294,10 +1380,12 @@ mod tests {
         })];
         let (mut forms, mut fields, mut server) =
             (BTreeSet::new(), BTreeSet::new(), BTreeMap::new());
+        let mut next = BTreeMap::new();
         Names {
             forms: &mut forms,
             fields: &mut fields,
             server: &mut server,
+            next: &mut next,
         }
         .name(&mut nodes, None);
         assert_eq!(
@@ -1326,6 +1414,7 @@ mod tests {
             forms: &mut forms,
             fields: &mut fields,
             server: &mut server,
+            next: &mut next,
         }
         .name(&mut later, Some("panel"));
         assert_eq!(

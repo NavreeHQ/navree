@@ -1,0 +1,36 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Courier",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "text",
+     "value": "Gurdeep Sandhu, Jalandhar"
+    },
+    {
+     "t": "button",
+     "id": "call",
+     "label": "Call the courier",
+     "action": {
+      "t": "navigate",
+      "href": "tel:+919814012345"
+     }
+    },
+    {
+     "t": "button",
+     "id": "book",
+     "label": "Book a pickup",
+     "action": {
+      "t": "request",
+      "method": "post",
+      "href": "/courier/book"
+     }
+    }
+   ]
+  }
+ }
+}

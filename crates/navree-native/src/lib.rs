@@ -88,6 +88,68 @@ pub const MAX_DEPTH: usize = 64;
 /// view. See [`nesting`].
 pub const MAX_NESTING: usize = 127;
 
+/// The most bytes an answer's body may hold: 8 MiB. A client fails a larger
+/// answer as one it could not read, before reading it. The largest answer
+/// recorded so far, a page of fifty rows of the store's inventory, is about
+/// 30 KB; this is more than two hundred and fifty times that, and holds a
+/// page with every chart at the most points the vocabulary allows. The shapes
+/// of an envelope's icon table, once for each icon that names one, may add up
+/// to no more than this either: a shape is written into every icon that uses it.
+pub const MAX_BODY: usize = 8 * 1024 * 1024;
+
+/// The most nodes an answer may hold, counted across its screen, its ops and
+/// its rows together: 100,000. What stands in a tree without being a node, a
+/// table's rows and columns, the items of a list of facts, the tabs of a set
+/// of tabs, the points of a chart, counts as one node each. A client fails an
+/// answer with more as one it could not read. The largest page recorded so far
+/// holds about 410 (fifty rows of the store's inventory); the most the core is
+/// shown to read in one answer, a list of ten thousand rows beside a table of
+/// ten thousand, holds about 80,000. A page that comes near it should be cut
+/// into pages by cursor.
+pub const MAX_NODES: usize = 100_000;
+
+/// The most nodes a screen may hold: 400,000, four times [`MAX_NODES`] and
+/// counted the same way. A page that comes as one answer is held to
+/// `MAX_NODES`; what comes to a screen over time (rows by cursor, the changes
+/// of a list that is kept up to date, a region's answer, an op) is held to
+/// this. A client applies none of the ops of an answer that would take the
+/// screen past it, says so, and fetches the screen again; a list that asked
+/// for more rows shows its failed state, and a list that is kept up to date
+/// stops asking for what changed until something tells it to.
+pub const MAX_SCREEN_NODES: usize = 4 * MAX_NODES;
+
+/// The longest an id or a name an answer gives may be, in bytes: 256. A node's
+/// `id` (a form's, a region's, a list's, a table row's), a field's `name`, a
+/// row's `key` and the `target` of an op are what a client keys the screen by,
+/// and a form's handle and its fields' ids are built from them, so a long one
+/// would be copied into every field of its form. A client fails an answer that
+/// holds a longer one as one it could not read, before anything is named from
+/// it. The longest id in the recorded answers is 36 bytes (a UUID).
+pub const MAX_ID: usize = 256;
+
+/// The most ops one answer may hold: 1,000. A client fails an answer with
+/// more as one it could not read. The most recorded so far is 13 (a board
+/// moving its cards). The cap does not bound the work of the ops: each op that
+/// finds its target looks through the screen for it, so what an answer asks of
+/// a client is bounded by [`MAX_WORK`].
+pub const MAX_OPS: usize = 1_000;
+
+/// The most work the ops of one answer may ask of a client: 4,000,000 visits
+/// to a node. An op that finds its target by id (nearly every op) may look
+/// through the whole screen, so an answer asks about as many visits as it has
+/// such ops, each times the nodes the screen holds when it runs (counted as
+/// for [`MAX_NODES`], and with what the ops before it brought). A client
+/// applies none of the ops of an answer that would pass it, says so, and
+/// leaves the screen as it was (and fetches it again). In a release build on
+/// a desktop processor a visit costs 15 ns for an op that only searches
+/// (`focus`), 40 to 95 ns for one that changes the screen (`append`,
+/// `morph`, `remove`), and 230 ns for a `merge`, which also reads the whole
+/// screen again; four million visits is a second of the dearest of them, and
+/// a phone is slower. The thirteen ops of the most recorded answer reach it
+/// only on a screen of over 300,000 nodes; a thousand ops, on one of four
+/// thousand.
+pub const MAX_WORK: usize = 4_000_000;
+
 /// How deep the objects and arrays of `json` nest, read without recursion.
 ///
 /// ```

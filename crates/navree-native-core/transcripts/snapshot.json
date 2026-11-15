@@ -1,5 +1,5 @@
 {
-  "about": "The system ends the app to make room, and the app starts again where the person was. The snapshot a client stores holds the stacks, each screen's address and title, what the person had typed and not sent, and which sheets were open: no tree, no token, and nothing typed into a password field. Starting from it fetches the shell first; each screen is fetched when it comes to the front, and what was typed goes back in when its page arrives.",
+  "about": "The system ends the app to make room, and the app starts again where the person was. The snapshot a client stores holds the stacks, each screen's address and title, what the person had typed and not sent, and which sheets were open: no tree, no token, and nothing typed into a password field. The shell names the person by an id, and a snapshot is for that id. Starting from it fetches the shell first; each screen is fetched when it comes to the front, and what was typed goes back in when its page arrives.",
   "steps": [
     {
       "note": "The app starts and asks for its shell.",
@@ -13,7 +13,7 @@
     },
     {
       "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
-      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/shell-app.json",
       "expect": {
         "changed": [
@@ -28,7 +28,7 @@
     },
     {
       "note": "The first page.",
-      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "store/dashboard.json",
       "expect": {
         "changed": [
@@ -41,7 +41,7 @@
     },
     {
       "note": "The shell, asked again at once since the session may have changed unseen, names the person again.",
-      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/shell-app.json",
       "expect": {
         "changed": [
@@ -64,7 +64,7 @@
       }
     },
     {
-      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "store/orders.json",
       "expect": {
         "changed": [
@@ -89,7 +89,7 @@
       }
     },
     {
-      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/note.json",
       "expect": {
         "changed": [
@@ -141,7 +141,7 @@
       }
     },
     {
-      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/order-new.json",
       "expect": {
         "changed": [
@@ -166,13 +166,13 @@
         "changed": [],
         "effects": []
       },
-      "snapshot": {"destinations":[{"href":"/","stack":[{"title":"Dashboard","url":"/"}]},{"href":"/orders","stack":[{"title":"Orders","url":"/orders"},{"fields":{"note-text":{"t":"text","text":"Wrap the dupattas separately"}},"open":["gift"],"title":"Order CS-20481","url":"/orders/1/note"}]}],"modals":[{"present":"sheet","stack":[{"fields":{"order-new.customer":{"t":"text","text":"Jasleen Kaur"}},"title":"New order","url":"/orders/new"}]}],"origin":"https://shop.example","person":"3cf923612bb089c4437bcb4de035c0d8d14445dbf4a046908f3bf61885b9272d","selected":"/orders","version":1}
+      "snapshot": {"destinations":[{"href":"/","stack":[{"title":"Dashboard","url":"/"}]},{"href":"/orders","stack":[{"title":"Orders","url":"/orders"},{"fields":{"note-text":{"t":"text","text":"Wrap the dupattas separately"}},"open":["gift"],"title":"Order CS-20481","url":"/orders/1/note"}]}],"modals":[{"present":"sheet","stack":[{"fields":{"order-new.customer":{"t":"text","text":"Jasleen Kaur"}},"title":"New order","url":"/orders/new"}]}],"origin":"https://shop.example","person":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e","selected":"/orders","version":1}
     },
     {
       "note": "The system ended the app. It starts again from the snapshot: the shell is asked for first.",
       "restart": true,
       "last": true,
-      "send": {"t":"restore","snapshot":{"destinations":[{"href":"/","stack":[{"title":"Dashboard","url":"/"}]},{"href":"/orders","stack":[{"title":"Orders","url":"/orders"},{"fields":{"note-text":{"t":"text","text":"Wrap the dupattas separately"}},"open":["gift"],"title":"Order CS-20481","url":"/orders/1/note"}]}],"modals":[{"present":"sheet","stack":[{"fields":{"order-new.customer":{"t":"text","text":"Jasleen Kaur"}},"title":"New order","url":"/orders/new"}]}],"origin":"https://shop.example","person":"3cf923612bb089c4437bcb4de035c0d8d14445dbf4a046908f3bf61885b9272d","selected":"/orders","version":1}},
+      "send": {"t":"restore","snapshot":{"destinations":[{"href":"/","stack":[{"title":"Dashboard","url":"/"}]},{"href":"/orders","stack":[{"title":"Orders","url":"/orders"},{"fields":{"note-text":{"t":"text","text":"Wrap the dupattas separately"}},"open":["gift"],"title":"Order CS-20481","url":"/orders/1/note"}]}],"modals":[{"present":"sheet","stack":[{"fields":{"order-new.customer":{"t":"text","text":"Jasleen Kaur"}},"title":"New order","url":"/orders/new"}]}],"origin":"https://shop.example","person":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e","selected":"/orders","version":1}},
       "expect": {
         "changed": [],
         "effects": [
@@ -182,7 +182,7 @@
     },
     {
       "note": "The shell names the same person: the stacks are put back, each screen with its address and its title and nothing to show yet. The one in front is fetched.",
-      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/shell-app.json",
       "expect": {
         "changed": [
@@ -210,7 +210,7 @@
     },
     {
       "note": "Its page arrives, and what was typed is back in it.",
-      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/order-new.json",
       "expect": {
         "changed": [
@@ -237,7 +237,7 @@
     },
     {
       "note": "The note is back, the page's sheet is open again, and the PIN is empty.",
-      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/note.json",
       "expect": {
         "changed": [

@@ -32,7 +32,7 @@ use crate::Core;
 use crate::effect::{Change, Effect, Part};
 use crate::event::{Response, TransportError};
 use crate::forms::encode;
-use crate::origin::{Target, path_of};
+use crate::origin::Target;
 use crate::state::{Failure, HandOver, Modal, Notice, Pending, ScreenId};
 
 /// The fewest random bytes a sign-in is made from: 32 for the verifier and
@@ -517,7 +517,7 @@ impl Core {
         ) {
             view.chrome = false;
             // When a write from it leads away from this page, it has done its work.
-            inner.cover = Some(path_of(&url));
+            inner.cover = Some(self.inner.origin.where_of(&url));
             inner.second_step = true;
         }
         self.view.modals.push(Modal {

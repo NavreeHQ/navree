@@ -1,0 +1,202 @@
+{
+  "about": "What a change of value may start. A field's change runs with no tap: it may change what the screen shows and may send the form the field stands in (a filter that sends itself), and nothing else. Copying, another form, going to an address, a request of its own and a device call happen only from a tap; each kind refused is said once.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives; the first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The orders, with a filter form whose fields say what their change does, and a card form beside it.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/order-filter.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A filter that names the card form as what its change sends: the card form is not sent, and that is said.",
+      "send": {"t":"field","screen":1,"form":"filter","field":"city","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"filter"}
+        ],
+        "effects": [
+          {"t":"report","what":"changed","detail":"a change of value may not start another form"}
+        ]
+      }
+    },
+    {
+      "note": "A filter whose change runs commands: the note is shown and its own form is sent; the copy and the card form are refused. Only the copy is said: another form was said already.",
+      "send": {"t":"field","screen":1,"form":"filter","field":"late","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"report","what":"changed","detail":"a change of value may not start copying"},
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders?late=on&city=on","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":60000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/0/children/2/hidden","is":null}
+      ]
+    },
+    {
+      "note": "The filter answers with the orders it chose, the note hidden again.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/order-filter.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The same change again once the filter has answered: the note is shown again and the form sent again. Nothing is said again.",
+      "send": {"t":"field","screen":1,"form":"filter","field":"late","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders?late=on","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":60000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/0/children/2/hidden","is":null}
+      ]
+    },
+    {
+      "note": "A change that would go to a page of the app: refused, and said.",
+      "send": {"t":"field","screen":1,"form":"filter","field":"near","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"filter"}
+        ],
+        "effects": [
+          {"t":"report","what":"changed","detail":"a change of value may not start going somewhere"}
+        ]
+      }
+    },
+    {
+      "note": "A change that would open the dialler: refused; going somewhere was said already.",
+      "send": {"t":"field","screen":1,"form":"filter","field":"call","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"filter"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A change that would start a share sheet: refused, and said.",
+      "send": {"t":"field","screen":1,"form":"filter","field":"share","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"filter"}
+        ],
+        "effects": [
+          {"t":"report","what":"changed","detail":"a change of value may not start a device call"}
+        ]
+      }
+    },
+    {
+      "note": "A change that would post a request of its own: refused, and said.",
+      "send": {"t":"field","screen":1,"form":"filter","field":"pay","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"filter"}
+        ],
+        "effects": [
+          {"t":"report","what":"changed","detail":"a change of value may not start a request"}
+        ]
+      }
+    },
+    {
+      "note": "The filter answers again.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/order-filter.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A filter that sends its own form as it changes still does.",
+      "send": {"t":"field","screen":1,"form":"filter","field":"paid","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/orders?paid=on&late=on&near=on&call=on&share=on&pay=on","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":60000}
+        ]
+      }
+    },
+    {
+      "note": "The filter answers.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/order-filter.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A filter whose change names an address that is not its form's own: refused, and said. The form's data does not go to an endpoint the form did not name.",
+      "send": {"t":"field","screen":1,"form":"filter","field":"export","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"filter"}
+        ],
+        "effects": [
+          {"t":"report","what":"changed","detail":"a change of value may not start another address"}
+        ]
+      }
+    },
+    {
+      "note": "One that names its form's own address is the same as naming none: the form is sent.",
+      "send": {"t":"field","screen":1,"form":"filter","field":"again","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/orders?paid=on&late=on&near=on&call=on&share=on&pay=on&export=on&again=on","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":60000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/forms/filter/pending","is":true}
+      ]
+    }
+  ]
+}
