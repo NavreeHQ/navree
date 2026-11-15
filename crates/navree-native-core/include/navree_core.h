@@ -42,6 +42,16 @@
  * the person's tap stands behind it, a mailto, tel, sms or geo one. A client
  * sends web_link only for a navigation the person started in the web view.
  *
+ * Sizes: a call copies the bytes it is given before the core can look at
+ * them, so the core's own refusal of a body past MAX_BODY (8 MiB, in
+ * navree-native) comes after the copy. The guard that keeps a very large body
+ * out of memory is the client's transport: it refuses a body larger than
+ * MAX_BODY before it hands it over, by the length the response announces and
+ * by the bytes that have arrived, and answers the core with a failure as for
+ * any answer it could not read. What the core is handed from the device's
+ * store (a snapshot, a kept page, what was kept at the last launch) it wrote
+ * itself.
+ *
  * Errors: a call never crashes on bad input. navree_core_new answers NULL for
  * a configuration it can't read. navree_core_send and navree_core_view answer
  * {"error":"..."} for an event or a query they can't read, for a NULL core,
