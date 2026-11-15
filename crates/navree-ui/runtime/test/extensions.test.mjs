@@ -121,18 +121,21 @@ test("calls update after a morph that reaches the element", () => {
 
 test("leaves an element that is gone or names another script", async () => {
   const first = g.uis.gone;
+  // The page swap of the test before gave it an update: what counts is what comes from here.
+  const before = calls("gone").length;
+  const since = () => calls("gone").slice(before);
   // The same component, built again: another hash.
   $("gone").setAttribute("data-ui-ext", `${EXT}/proof.pad-fedcba987654.js`);
   swap();
   assert.equal(first.signal.aborted, true);
-  await until(() => calls("gone").length === 3 && $("gone").hasAttribute("data-ui-mounted"), "the new script to mount");
-  assert.deepEqual(calls("gone"), ["mount", "leave", "mount"]);
+  await until(() => since().length === 2 && $("gone").hasAttribute("data-ui-mounted"), "the new script to mount");
+  assert.deepEqual(since(), ["leave", "mount"]);
   const second = g.uis.gone;
   assert.notEqual(second, first);
 
   $("gone").remove();
   swap();
-  assert.deepEqual(calls("gone"), ["mount", "leave", "mount", "leave"]);
+  assert.deepEqual(since(), ["leave", "mount", "leave"]);
   assert.equal(second.signal.aborted, true);
 });
 
