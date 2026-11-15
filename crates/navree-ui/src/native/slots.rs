@@ -1510,6 +1510,24 @@ mod tests {
     }
 
     #[test]
+    fn a_text_reads_its_words_and_its_tone() {
+        let N::Text(balance) = read(Text::new("₹1,250.00").tone(Tone::Danger)) else {
+            panic!("not text");
+        };
+        assert_eq!(balance.value, "₹1,250.00");
+        assert_eq!(balance.tone, Some(n::Tone::Danger));
+        // A colour with no meaning has no tone, and no tone is none.
+        let N::Text(violet) = read(Text::new("Ludhiana").tone(Tone::named("violet"))) else {
+            panic!("not text");
+        };
+        assert_eq!(violet.tone, None);
+        let N::Text(plain) = read(Text::new("Ludhiana")) else {
+            panic!("not text");
+        };
+        assert_eq!(plain.tone, None);
+    }
+
+    #[test]
     fn a_button_reads_its_look_as_a_role_and_what_it_does() {
         let N::Button(open) = read(
             Button::destructive("Cancel order")

@@ -7,8 +7,9 @@
 /* Text */
 [data-slot=heading]{color:var(--fg);font-weight:600;line-height:1.25;letter-spacing:-.01em}
 h1[data-slot=heading]{font-size:1.5rem}h2[data-slot=heading]{font-size:1.25rem}h3[data-slot=heading]{font-size:1rem}h4[data-slot=heading]{font-size:.875rem}
-[data-slot=text]{&[data-variant=muted]{color:var(--fg-2);font-size:13px}&[data-variant=lead]{color:var(--fg-1);font-size:1rem}&[data-variant=code]{font-family:var(--font-mono);font-size:13px}}
+[data-slot=text]{&[data-variant=muted]{color:var(--fg-2);font-size:13px}&[data-variant=lead]{color:var(--fg-1);font-size:1rem}&[data-variant=code]{font-family:var(--font-mono);font-size:13px}&[data-tone]{color:var(--tone)}}
 [data-slot=code],[data-slot=kbd]{font-family:var(--font-mono);font-size:12px;border-radius:var(--radius);background:var(--ink-2);padding:.0625rem .25rem}
+[data-slot=code][data-tone]{color:var(--tone)}
 [data-slot=kbd]{display:inline-flex;align-items:center;justify-content:center;min-width:1.25rem;height:1.25rem;border:1px solid var(--line-2);color:var(--fg-2);font-family:var(--font-sans)}
 
 /* Surfaces */
