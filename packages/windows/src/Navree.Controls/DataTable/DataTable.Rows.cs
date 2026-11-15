@@ -101,6 +101,7 @@ public sealed partial class DataTable
         if (Model is { } attached)
         {
             modelStamp = StampOf(attached);
+            reportedRowCount = attached.RowCount;
         }
     }
 
@@ -314,10 +315,15 @@ public sealed partial class DataTable
             ReleasePinSoon(PinOwner.Anchor);
         }
 
+        bool wider = Presenter is { } presenterNow && GrowWidths(model, presenterNow, index, count);
         if (newSecondLine || newDetail)
         {
             // A page that needs a second line or a detail the rows so far did not: the shape of the rows and the columns follow it.
             RecomputeMetrics();
+            RebuildColumns(remeasure: false);
+        }
+        else if (wider)
+        {
             RebuildColumns(remeasure: false);
         }
 

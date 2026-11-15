@@ -211,6 +211,39 @@ public sealed partial class DataTable
         }
     }
 
+    // Rows that join later may hold words wider than the first rows did: a column the person gave no width grows to the room they need,
+    // and never narrows. True when a width grew.
+    private bool GrowWidths(IDataTableModel model, IDataTablePresenter presenter, int first, int count)
+    {
+        bool grew = false;
+        int sample = Math.Min(count, 60);
+        IReadOnlyList<DataTableColumn> columns = model.Columns;
+        for (int index = 0; index < columns.Count; index++)
+        {
+            DataTableColumn column = columns[index];
+            if (column.Kind == ColumnKind.Controls || column.Role == ColumnRole.Subtitle || personWidths.Contains(column.Key) || !widths.TryGetValue(column.Key, out double known))
+            {
+                continue;
+            }
+
+            double widest = 0;
+            double beside = presenter.BesideWords(index);
+            for (int r = first; r < first + sample && r < model.RowCount; r++)
+            {
+                widest = Math.Max(widest, measurer.Width(presenter.CellText(model.GetRow(r), index), TextStyle.Body) + beside);
+            }
+
+            double wanted = ColumnSizing.AutoWidth(column.Kind, widest, column.Sort is not null);
+            if (wanted > known)
+            {
+                widths[column.Key] = wanted;
+                grew = true;
+            }
+        }
+
+        return grew;
+    }
+
     /// <summary>The column a header cell stands for, by its grid column, or minus one.</summary>
     private int GridColumnOf(string columnKey)
     {

@@ -265,10 +265,39 @@ internal static class TableScenarios
             + $"extent {scroll?.ExtentWidth:0.#} by {scroll?.ExtentHeight:0.#}; rows made {table.RowsLayout.LastRealized.Count}; "
             + (layout is null ? "no layout" : $"row width {layout.RowWidth:0.#}, frozen {layout.Fs:0.#} and {layout.Fe:0.#}, gutter {layout.Gutter:0.#}"));
         Report.Line($"[{tag}] columns: " + string.Join(", ", table.Shown.Select(c => $"{c.Column.Key} {c.Placed.Width:0.#}@{c.Placed.X:0.#} {c.Placed.Group}")));
+        Report.Line($"[{tag}] cells whose words are cut: {CutCells(table)}");
         if (table.RowsRepeater?.TryGetElement(0) is DataTableRow row)
         {
             Report.Line($"[{tag}] first row: " + string.Join(" | ", row.Cells.Select(c => (c.Content as TextBlock)?.Text ?? c.Content?.GetType().Name ?? "-")));
         }
+    }
+
+    // How many of the cells made hold words that are cut, of how many hold words.
+    internal static string CutCells(DataTable table)
+    {
+        int words = 0;
+        int cut = 0;
+        foreach ((int _, UIElement element) in table.RowsLayout.LastRealized)
+        {
+            if (element is not DataTableRow row)
+            {
+                continue;
+            }
+
+            foreach (DataTableCell cell in row.Cells)
+            {
+                if (cell.Content is TextBlock { Text.Length: > 0 } block)
+                {
+                    words++;
+                    if (block.IsTextTrimmed)
+                    {
+                        cut++;
+                    }
+                }
+            }
+        }
+
+        return $"{cut} of {words}";
     }
 
     // The table asks for rows near its ends, and rows that join above the view leave the view where it was.

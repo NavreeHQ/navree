@@ -389,14 +389,38 @@ public sealed class DataTableRow : Control
         string state = RowVisual.State(chosen, pressed, over, ContrastColours.IsOn && !IsHeader);
         VisualStateManager.GoToState(this, state, false);
 
-        // The words of a row that is the highlight take the highlight's text colour; any other row's words take what the style gives.
-        if (RowVisual.TextOnHighlight(state) && textOnHighlight?.Background is { } brush)
+        // The words of a row that is the highlight take the highlight's text colour, and so does every part of it: the box, the chevron, the dots.
+        bool highlighted = RowVisual.TextOnHighlight(state);
+        if (highlighted && textOnHighlight?.Background is { } brush)
         {
             Foreground = brush;
         }
         else
         {
             ClearValue(ForegroundProperty);
+        }
+
+        if (check is not null)
+        {
+            check.OnHighlight = highlighted;
+        }
+
+        if (chevron is not null)
+        {
+            chevron.OnHighlight = highlighted;
+        }
+
+        foreach (DataTableCell cell in cells)
+        {
+            switch (cell.Content)
+            {
+                case DataTableGlyph glyph:
+                    glyph.OnHighlight = highlighted;
+                    break;
+                case DataTableListContent list:
+                    list.OnHighlight = highlighted;
+                    break;
+            }
         }
     }
 

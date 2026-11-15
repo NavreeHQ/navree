@@ -214,15 +214,15 @@ internal static class CareScenarios
     // The end of the rows is near and the host was asked once; a refresh with the same count of rows asks again.
     private static async Task RefreshSameCountAsync(MainWindow window)
     {
-        ListDataTableModel<Customer> model = Rows(0, 50);
+        ListDataTableModel<Customer> model = Rows(0, 18);
         model.Later = new DataTableCursor(true, CursorState.Idle);
         List<string> asked = [];
         DataTable table = await ShowAsync(window, model, before: t => t.MoreRequested += (_, e) => asked.Add(e.Direction.ToString()));
         await Task.Delay(1200);
-        Report.Line($"[care-refresh-same-count] 50 rows held, the end is near: asked {asked.Count} time(s): {string.Join(",", asked)}");
-        model.Reset(DemoData.Make(0, 50));
+        Report.Line($"[care-refresh-same-count] 18 rows held, the end is near: asked {asked.Count} time(s): {string.Join(",", asked)}");
+        model.Reset(DemoData.Make(0, 18));
         await Task.Delay(1500);
-        Report.Line($"[care-refresh-same-count] the rows were replaced by 50 others: asked {asked.Count} time(s) in all: {string.Join(",", asked)}; held {model.RowCount}; the view is at {table.Scroller?.VerticalOffset:0.#}");
+        Report.Line($"[care-refresh-same-count] the rows were replaced by 18 others: asked {asked.Count} time(s) in all: {string.Join(",", asked)}; held {model.RowCount}; the view is at {table.Scroller?.VerticalOffset:0.#}");
         await Handshake.StepAsync("care-refresh-same-count", "the table after a refresh with the same count of rows");
     }
 
@@ -241,6 +241,8 @@ internal static class CareScenarios
         await Task.Delay(800);
         DataTableRow? row = table.RowsRepeater?.TryGetElement(2) as DataTableRow;
         Report.Line($"[care-detail-open] row c00002 arrived with its detail open: detail made {row?.DetailContent is not null}, open {table.IsDetailOpen("c00002")}; row c00001 open {table.IsDetailOpen("c00001")}");
+        Report.Line($"[care-detail-open] cells whose words are cut: {TableScenarios.CutCells(table)}");
+        await Handshake.StepAsync("care-detail-open-sent", "the table as the server sent it: the detail of the third row, Tarun Arora, is open");
         if (row is not null)
         {
             table.ToggleDetail(row);
@@ -250,7 +252,7 @@ internal static class CareScenarios
             Report.Line($"[care-detail-open] the person shut it and the row was drawn again with the detail still said open: open {table.IsDetailOpen("c00002")}");
         }
 
-        await Handshake.StepAsync("care-detail-open", "a row that arrived with its detail open");
+        await Handshake.StepAsync("care-detail-open-shut", "the same table after the person shut the detail and the row was drawn again with the detail still said open: it stays shut");
     }
 
     // The density a person chose and kept is the density of the rows from the first draw.
@@ -302,7 +304,9 @@ internal static class CareScenarios
         int at = model.IndexOfKey(key);
         double stands = (at * table.RowHeight) - scroll.VerticalOffset;
         Report.Line($"[care-late-shape] 30 more rows with a second line and a detail: row {table.RowHeight:0.##} tall, shape {table.Shape}, chevron column {table.HasChevronColumn}; the view is at {scroll.VerticalOffset:0.#} and row {key} (now {at}) stands {stands:0.#} from its top");
-        await Handshake.StepAsync("care-late-shape", "the table after a later page needed a second line and a detail");
+        Scroll(table, (30 * table.RowHeight) - 120);
+        await Task.Delay(900);
+        await Handshake.StepAsync("care-late-shape", "the table after a later page needed a second line and a detail, scrolled to the rows of that page");
     }
 
     private static async Task<WeakReference> ShowAndDropAsync(MainWindow window, ListDataTableModel<Customer> model)
@@ -495,7 +499,7 @@ internal static class CareScenarios
         ListDataTableModel<Customer> model = Rows(0, 100);
         DataTable table = await ShowAsync(window, model, before: t =>
         {
-            t.Width = 640;
+            t.Width = 820;
             t.HorizontalAlignment = HorizontalAlignment.Left;
         });
         Keys.Foreground(window);
@@ -512,15 +516,15 @@ internal static class CareScenarios
             return;
         }
 
-        DataTableHeaderCell plan = table.HeaderRow!.Headers.First(h => table.Model!.Columns[h.ColumnIndex].Key == "plan");
-        (int X, int Y) from = Mouse.ScreenOf(window, plan, new Windows.Foundation.Point(30, plan.ActualHeight / 2));
+        DataTableHeaderCell city = table.HeaderRow!.Headers.First(h => table.Model!.Columns[h.ColumnIndex].Key == "city");
+        (int X, int Y) from = Mouse.ScreenOf(window, city, new Windows.Foundation.Point(30, city.ActualHeight / 2));
         (int X, int Y) edge = Mouse.ScreenOf(window, scroll, new Windows.Foundation.Point(scroll.ViewportWidth - 6, 10));
         string order() => string.Join(" ", table.Shown.Select(c => c.Column.Key));
-        Report.Line($"[care-edge-drag] the view is at {scroll.HorizontalOffset:0.#} of {scroll.ScrollableWidth:0.#}; columns {order()}; the Plan heading is at screen {from.X}, the edge at {edge.X}");
+        Report.Line($"[care-edge-drag] the view is at {scroll.HorizontalOffset:0.#} of {scroll.ScrollableWidth:0.#}; columns {order()}; the City heading is at screen {from.X}, the edge at {edge.X}");
         await Mouse.DragAndHoldAsync(from, edge, 900);
         await Task.Delay(500);
-        Report.Line($"[care-edge-drag] after holding the Plan heading near the end edge: the view is at {scroll.HorizontalOffset:0.#} of {scroll.ScrollableWidth:0.#}; columns {order()}");
-        await Handshake.StepAsync("care-edge-drag", "after a heading was held near the end edge of the view");
+        Report.Line($"[care-edge-drag] after holding the City heading near the end edge: the view is at {scroll.HorizontalOffset:0.#} of {scroll.ScrollableWidth:0.#}; columns {order()}");
+        await Handshake.StepAsync("care-edge-drag", "after the City heading was held near the end edge of the view");
     }
 
     // A row's menu from a right click, the menu key, Shift and F10, and the dots of the row: each opens the menu the row has, with its

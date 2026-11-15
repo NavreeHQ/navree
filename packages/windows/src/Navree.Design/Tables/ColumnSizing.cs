@@ -51,7 +51,10 @@ public static class ColumnSizing
     private const double CellPadding = 24;
     private const double SortSlot = 20;
 
-    /// <summary>The width a column asks for from what it holds.</summary>
+    /// <summary>
+    /// The width a column asks for from what it holds: the room its widest words need, never less than the column's least and never
+    /// more than its most. A name asks for no more than <see cref="ColumnSet.TitleNeed"/>, so one very long name does not push the others out.
+    /// </summary>
     /// <param name="kind">What the column holds.</param>
     /// <param name="widestText">The width of its widest words, the heading's or a cell's.</param>
     /// <param name="sortable">Whether the heading has room for a sort mark.</param>
@@ -67,14 +70,29 @@ public static class ColumnSizing
         double room = Math.Ceiling(widestText) + CellPadding + (sortable ? SortSlot : 0);
         return kind switch
         {
-            ColumnKind.Title => Math.Max(room, 240),
-            ColumnKind.Words => Math.Clamp(room, 80, 260),
-            ColumnKind.Number => Math.Clamp(room, 64, 160),
-            ColumnKind.Status => Math.Clamp(room, 90, 200),
+            ColumnKind.Title => Math.Clamp(room, LeastWidth(ColumnKind.Title), ColumnSet.TitleNeed),
+            ColumnKind.Words => Math.Clamp(room, LeastWidth(ColumnKind.Words), 260),
+            ColumnKind.Number => Math.Clamp(room, LeastWidth(ColumnKind.Number), 160),
+            ColumnKind.Status => Math.Clamp(room, LeastWidth(ColumnKind.Status), 200),
             ColumnKind.Controls => Math.Ceiling(controlWidth) + CellPadding,
             ColumnKind.Leading => 56,
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Not a kind of column."),
         };
+    }
+
+    /// <summary>The width that fits all of what a column holds, as a person asks for it: within what a person may make the column, whatever the column asks for by itself.</summary>
+    /// <param name="kind">What the column holds.</param>
+    /// <param name="widestText">The width of its widest words, the heading's or a cell's.</param>
+    /// <param name="sortable">Whether the heading has room for a sort mark.</param>
+    /// <returns>The width in effective pixels.</returns>
+    public static double FitWidth(ColumnKind kind, double widestText, bool sortable)
+    {
+        if (!(widestText >= 0))
+        {
+            throw new ArgumentOutOfRangeException(nameof(widestText), widestText, "A width is zero or more.");
+        }
+
+        return Clamp(kind, Math.Ceiling(widestText) + CellPadding + (sortable ? SortSlot : 0));
     }
 
     /// <summary>The narrowest and the widest a person may make a column.</summary>

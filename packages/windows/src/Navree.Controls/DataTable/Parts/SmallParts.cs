@@ -9,6 +9,7 @@ public sealed class DataTableCheck : Control
 {
     private HeaderBoxState state;
     private bool available = true;
+    private bool onHighlight;
 
     /// <summary>Makes a box.</summary>
     public DataTableCheck()
@@ -25,6 +26,20 @@ public sealed class DataTableCheck : Control
         {
             state = value;
             Update();
+        }
+    }
+
+    /// <summary>Whether the box is on a row that is the highlight in a contrast theme, where it is drawn in the highlight's text colour.</summary>
+    internal bool OnHighlight
+    {
+        get => onHighlight;
+        set
+        {
+            if (onHighlight != value)
+            {
+                onHighlight = value;
+                Update();
+            }
         }
     }
 
@@ -56,7 +71,17 @@ public sealed class DataTableCheck : Control
         };
         VisualStateManager.GoToState(this, check, false);
         VisualStateManager.GoToState(this, available ? "Enabled" : "Unavailable", false);
-        VisualStateManager.GoToState(this, ContrastColours.IsOn && state != HeaderBoxState.Off ? "ContrastOn" : "ContrastOff", false);
+        string contrast = onHighlight
+            ? state switch
+            {
+                HeaderBoxState.On => "OnHighlightChecked",
+                HeaderBoxState.Indeterminate => "OnHighlightIndeterminate",
+                _ => "OnHighlightOff",
+            }
+            : ContrastColours.IsOn && state != HeaderBoxState.Off
+                ? state == HeaderBoxState.Indeterminate ? "ContrastOnIndeterminate" : "ContrastOn"
+                : "ContrastOff";
+        VisualStateManager.GoToState(this, contrast, false);
     }
 }
 
@@ -72,6 +97,7 @@ public sealed class DataTableGlyph : Control
 
     private bool over;
     private bool pressed;
+    private bool onHighlight;
 
     /// <summary>Makes a glyph.</summary>
     public DataTableGlyph()
@@ -85,6 +111,20 @@ public sealed class DataTableGlyph : Control
     {
         get => (string)GetValue(GlyphProperty);
         set => SetValue(GlyphProperty, value);
+    }
+
+    /// <summary>Whether the glyph is on a row that is the highlight in a contrast theme, where it is drawn in the highlight's text colour.</summary>
+    internal bool OnHighlight
+    {
+        get => onHighlight;
+        set
+        {
+            if (onHighlight != value)
+            {
+                onHighlight = value;
+                UpdateState();
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -137,7 +177,10 @@ public sealed class DataTableGlyph : Control
     }
 
     private void UpdateState() =>
-        VisualStateManager.GoToState(this, pressed || over ? (ContrastColours.IsOn ? "Highlighted" : pressed ? "Pressed" : "PointerOver") : "Normal", false);
+        VisualStateManager.GoToState(
+            this,
+            ContrastColours.IsOn && (onHighlight || pressed || over) ? "Highlighted" : pressed ? "Pressed" : over ? "PointerOver" : "Normal",
+            false);
 }
 
 /// <summary>Whether the system's contrast colours are on.</summary>

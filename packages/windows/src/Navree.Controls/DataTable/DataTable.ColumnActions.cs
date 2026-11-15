@@ -268,7 +268,7 @@ public sealed partial class DataTable
             widest = Math.Max(widest, measurer.Width(presenter.CellText(model.GetRow(i), cell.ColumnIndex), TextStyle.Body));
         }
 
-        widths[column.Key] = ColumnSizing.Clamp(column.Kind, ColumnSizing.AutoWidth(column.Kind, widest, column.Sort is not null));
+        widths[column.Key] = ColumnSizing.FitWidth(column.Kind, widest, column.Sort is not null);
         personWidths.Add(column.Key);
         ColumnsChangedByPerson(Announcements.ColumnWidth(column.Header, (int)Math.Round(widths[column.Key])));
     }
