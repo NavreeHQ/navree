@@ -2369,6 +2369,9 @@
         "person": {
           "type": "string"
         },
+        "person_unknown": {
+          "type": "boolean"
+        },
         "selected": {
           "type": "string"
         },

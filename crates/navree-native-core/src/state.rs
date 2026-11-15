@@ -727,6 +727,8 @@ pub(crate) enum TimerFor {
         form: String,
         action: Box<Action>,
     },
+    /// The shell could not be fetched: ask for it again.
+    Shell,
     /// A searched choice was typed in: ask for options when the typing pauses.
     Options {
         screen: ScreenId,
@@ -1068,6 +1070,15 @@ pub(crate) struct Inner {
     /// The shell drawn is the one kept on the device: this launch's has not
     /// answered yet, so nothing of a person is drawn or put back.
     pub shell_kept: bool,
+    /// This launch's shell request did not get through while the kept shell
+    /// is drawn: it is asked for again, by a pause, a retry, or a request of
+    /// the app that got through.
+    pub shell_wanted: bool,
+    /// The pause before the shell is asked for again, in milliseconds; it
+    /// doubles with each failure, up to a minute.
+    pub shell_pause: u32,
+    /// The timer of that pause, while one runs.
+    pub shell_timer: Option<u64>,
     /// The id of the part whose action is being carried out now: a screen
     /// that action opens keeps it.
     pub acting: Option<String>,
