@@ -417,6 +417,20 @@ impl View {
             out.push_str(&url);
             out.push_str("\" data-ui-theme>");
         }
+        // The files of the extensions the page's elements name (those in table rows too): their
+        // sheets after the toolkit's and the theme's and before the app's own, so the app's rules
+        // win at equal weight. Only the address of a served file is ever written, which holds
+        // lower-case letters, digits and `/ . _ -` only.
+        let named = uses
+            .meets(Uses::EXTENSIONS.with(Uses::EXTENSION_SHEETS))
+            .then(|| crate::extension::named(self.body_node()));
+        if let Some(named) = &named {
+            for url in &named.sheets {
+                out.push_str("<link rel=\"stylesheet\" href=\"");
+                out.push_str(url);
+                out.push_str("\" data-ui-ext-link>");
+            }
+        }
         // The app's own, last of the sheets: its fonts' rules, then its stylesheets.
         for font in &self.app_fonts {
             out.push_str("<link rel=\"stylesheet\" href=\"");
@@ -431,6 +445,15 @@ impl View {
         out.push_str("<link rel=\"icon\" href=\"");
         out.push_str(assets::FAVICON_URL);
         out.push_str("\">");
+        // The scripts of those extensions are fetched ahead, so they are there when the runtime
+        // mounts them.
+        if let Some(named) = &named {
+            for url in &named.scripts {
+                out.push_str("<link rel=\"modulepreload\" href=\"");
+                out.push_str(url);
+                out.push_str("\">");
+            }
+        }
         for url in assets::scripts(uses) {
             out.push_str("<script type=\"module\" src=\"");
             out.push_str(url);

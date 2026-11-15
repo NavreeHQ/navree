@@ -766,6 +766,55 @@ mod tests {
         );
     }
 
+    /// The attributes an extension's element carries are the toolkit's own hooks: rich text
+    /// never keeps one, and no policy can list one.
+    #[cfg(feature = "html")]
+    #[test]
+    fn the_sanitizer_drops_extension_attributes_whatever_the_policy() {
+        let attributes = [
+            "data-ui-ext",
+            "data-ui-ext-sheet",
+            "data-ui-ext-routes",
+            "data-ui-props",
+        ];
+        for attribute in attributes {
+            let generic = HtmlPolicy {
+                generic_attributes: set([attribute]),
+                ..HtmlPolicy::default()
+            };
+            let error = generic.check().unwrap_err();
+            assert!(
+                error.starts_with(&format!(
+                    "validation.html.generic_attributes: `{attribute}`"
+                )),
+                "{error}"
+            );
+            let error = HtmlPolicy::default()
+                .allow_attributes("div", [attribute])
+                .check()
+                .unwrap_err();
+            assert!(
+                error.starts_with(&format!(
+                    "validation.html.tag_attributes: `{attribute}` on `div`"
+                )),
+                "{error}"
+            );
+        }
+        // A policy written before they were hooks, or built by hand without `check`, still
+        // cleans them away.
+        let policy = HtmlPolicy {
+            generic_attributes: set(attributes),
+            ..HtmlPolicy::default().allow_tags(["div"])
+        };
+        assert!(policy.check().is_err());
+        assert_eq!(
+            policy.clean(
+                r#"<div data-ui-ext="/_navree/ui/ext/geo.map-1a2b3c4d5e6f.js" data-ui-ext-sheet="x" data-ui-ext-routes="/" data-ui-props="{}">Ludhiana</div>"#
+            ),
+            "<div>Ludhiana</div>"
+        );
+    }
+
     #[test]
     fn options_deserialize_with_defaults() {
         let policy: HtmlPolicy = serde_json::from_value(serde_json::json!({

@@ -19,6 +19,8 @@
 //! `app`. A plugin contributing an extension outside its namespace stops the boot, and so
 //! do two modules giving one extension name to different files.
 
+use crate::node::{AttrValue, Node, Uses};
+
 /// Where extension files are served.
 pub const EXTENSION_PATH: &str = "/_navree/ui/ext";
 
@@ -528,6 +530,103 @@ fn is_address(value: &str, ext: &str) -> bool {
         .is_some_and(|file| file.ext == ext)
 }
 
+/// The deepest a walk of a tree goes, as the renderer's: what is below is left out.
+const MAX_DEPTH: u32 = 512;
+
+/// The files a tree's elements name: the scripts to preload and the stylesheets to link, each
+/// address once, in the order the tree names them. Only addresses of served files are kept.
+#[derive(Default)]
+pub(crate) struct Named {
+    pub(crate) scripts: Vec<String>,
+    pub(crate) sheets: Vec<String>,
+}
+
+/// What `node` names. It reads the attributes of every element whose own bits meet
+/// [`Uses::EXTENSIONS`] or [`Uses::EXTENSION_SHEETS`], and, inside such an element, the text of
+/// every raw node that is not under stored content (a table's rows are written as one raw
+/// string, drawn from the cells the app gave).
+pub(crate) fn named(node: &Node) -> Named {
+    let mut found = Named::default();
+    walk(node, false, false, 0, &mut found);
+    found
+}
+
+/// One step of [`named`]: `inside` says an element above (or this one) carries an extension
+/// bit, `stored` that an element above carries `data-ui-stored`.
+fn walk(node: &Node, inside: bool, stored: bool, depth: u32, found: &mut Named) {
+    if depth > MAX_DEPTH {
+        return;
+    }
+    match node {
+        Node::Element(element) => {
+            let bits = element
+                .uses
+                .meets(Uses::EXTENSIONS.with(Uses::EXTENSION_SHEETS));
+            if bits {
+                for (attribute, is_sheet) in [("data-ui-ext", false), ("data-ui-ext-sheet", true)] {
+                    if let Some(value) = element.get(attribute).and_then(AttrValue::as_text) {
+                        take(&value, is_sheet, found);
+                    }
+                }
+            }
+            let inside = inside || bits;
+            let stored = stored || element.get("data-ui-stored").is_some();
+            for child in &element.children {
+                walk(child, inside, stored, depth + 1, found);
+            }
+        }
+        Node::Fragment(nodes) => {
+            for child in nodes {
+                walk(child, inside, stored, depth + 1, found);
+            }
+        }
+        Node::Raw(markup) if inside && !stored => {
+            for (attribute, value) in markup_values(markup.as_str()) {
+                take(value, attribute == "data-ui-ext-sheet", found);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Keeps `value` in the list it belongs to when it is the address of a served file and the
+/// list has it not yet.
+fn take(value: &str, is_sheet: bool, found: &mut Named) {
+    let (list, served) = if is_sheet {
+        (&mut found.sheets, is_sheet_address(value))
+    } else {
+        (&mut found.scripts, is_script_address(value))
+    };
+    if served && !list.iter().any(|have| have == value) {
+        list.push(value.to_owned());
+    }
+}
+
+/// The values of the extension attributes written in `markup`, with the attribute each follows
+/// (`data-ui-ext` or `data-ui-ext-sheet`), in the order they stand: each is what follows
+/// the name, an equals sign and a double quote, up to the next double quote. A value is not
+/// checked here.
+pub(crate) fn markup_values(markup: &str) -> Vec<(&'static str, &str)> {
+    let mut found: Vec<(usize, &'static str, &str)> = Vec::new();
+    for attribute in ["data-ui-ext-sheet", "data-ui-ext"] {
+        let needle = format!("{attribute}=\"");
+        let mut from = 0;
+        while let Some(at) = markup[from..].find(&needle) {
+            let start = from + at + needle.len();
+            let Some(length) = markup[start..].find('"') else {
+                break;
+            };
+            found.push((from + at, attribute, &markup[start..start + length]));
+            from = start + length;
+        }
+    }
+    found.sort_by_key(|(at, _, _)| *at);
+    found
+        .into_iter()
+        .map(|(_, attribute, value)| (attribute, value))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -808,6 +907,68 @@ mod tests {
         let alike = UiExtension::new("geo", "map").routes(&["/geo-v2/", "/a.b/", "/x_y/", "/9/"]);
         assert_eq!(alike.routes_of().len(), 4);
         assert!(UiExtension::new("geo", "map").routes_of().is_empty());
+    }
+
+    #[test]
+    fn what_a_tree_names_is_read_from_elements_with_the_bits_and_the_raw_text_inside_them() {
+        use crate::html::SafeHtml;
+        use crate::node::el;
+
+        let map_script = MAP.script_url().expect("a script").to_owned();
+        let map_sheet = MAP.sheet_url().expect("a sheet").to_owned();
+        let badge_sheet = BADGE.sheet_url().expect("a sheet").to_owned();
+        let row = || {
+            Node::Raw(SafeHtml::trusted(format!(
+                r#"<span data-ui-ext-sheet="{badge_sheet}"></span><b data-ui-ext="{map_script}"></b><i data-ui-ext="/_navree/ui/island/clock-0123456789ab.js"></i><u data-ui-ext-sheet="{badge_sheet}"></u>"#
+            )))
+        };
+
+        // A table's rows are one raw string inside an element that carries the bits.
+        let table: Node = el("div").uses(Uses::EXTENSION_SHEETS).child(row()).into();
+        let found = named(&table);
+        assert_eq!(found.scripts, [map_script.clone()]);
+        assert_eq!(found.sheets, [badge_sheet.clone()]);
+
+        // The same text outside an element with the bits, or under stored content, names nothing.
+        for tree in [
+            Node::from(el("div").child(row())),
+            Node::from(
+                el("div")
+                    .uses(Uses::EXTENSIONS)
+                    .child(el("div").flag("data-ui-stored", true).child(row())),
+            ),
+            Node::from(
+                el("div")
+                    .uses(Uses::EXTENSIONS)
+                    .child(Node::Static(r#"<b data-ui-ext="/_navree/ui/ext/geo.map-1a2b3c4d5e6f.js"></b>"#)),
+            ),
+        ] {
+            let found = named(&tree);
+            assert!(found.scripts.is_empty() && found.sheets.is_empty());
+        }
+
+        // An attribute is read from an element that carries the bits only, and the grammar is
+        // checked: another origin, a query and a folder above name nothing.
+        let tree: Node = el("section")
+            .children((
+                el("div").extension(&MAP),
+                el("div").extension(&MAP),
+                el("span").extension(&BADGE),
+                el("p").attr("data-ui-ext", map_script.clone()),
+                el("p")
+                    .uses(Uses::EXTENSIONS)
+                    .attr("data-ui-ext", "https://cdn.example/_navree/ui/ext/geo.map-1a2b3c4d5e6f.js"),
+                el("p")
+                    .uses(Uses::EXTENSION_SHEETS)
+                    .attr("data-ui-ext-sheet", format!("{badge_sheet}?v=2")),
+                el("p")
+                    .uses(Uses::EXTENSION_SHEETS)
+                    .attr("data-ui-ext-sheet", "/_navree/ui/ext/../app/x.css"),
+            ))
+            .into();
+        let found = named(&tree);
+        assert_eq!(found.scripts, [map_script]);
+        assert_eq!(found.sheets, [map_sheet, badge_sheet]);
     }
 
     #[test]

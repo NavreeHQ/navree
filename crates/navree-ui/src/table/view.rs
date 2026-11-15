@@ -2624,7 +2624,15 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     out.push_str("-detail\"");
                 }
                 let _ = write!(out, "><td colspan=\"{span}\">");
-                crate::render::render_into(&mut out, &detail(row));
+                // What an open detail names (an extension's files) is linked from the page's
+                // head like what a cell names, so only those bits join the table's.
+                let drawn = detail(row);
+                self.cell_uses.set(
+                    self.cell_uses
+                        .get()
+                        .with(crate::render::measure(&drawn).uses.extension_bits()),
+                );
+                crate::render::render_into(&mut out, &drawn);
                 out.push_str("</td></tr>");
             }
             if index == 0 {

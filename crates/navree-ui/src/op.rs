@@ -508,6 +508,13 @@ impl Reply {
     fn fallback_response(self) -> (Response, Envelope, StatusCode) {
         let mut envelope = Envelope::new(self.ops);
         envelope.modules = assets::scripts(self.uses).collect();
+        // An extension with a stylesheet only has no script of its own, but the extensions
+        // module links the stylesheet of an element that arrives in a reply.
+        if self.uses.meets(crate::node::Uses::EXTENSION_SHEETS)
+            && !envelope.modules.contains(&assets::EXTENSIONS_URL)
+        {
+            envelope.modules.push(assets::EXTENSIONS_URL);
+        }
         let signed_out = self.signed_out;
         let mut response = match self.fallback {
             Fallback::Redirect(href) => {
