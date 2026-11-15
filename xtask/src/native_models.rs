@@ -1511,6 +1511,10 @@ impl CSharp<'_> {
 
     /// A `Func<JsonElement, T>` that reads a value of this shape.
     fn reader(&self, ty: &Ty, at: &str) -> Result<String, String> {
+        self.reader_at(ty, at, 0)
+    }
+
+    fn reader_at(&self, ty: &Ty, at: &str, depth: usize) -> Result<String, String> {
         Ok(match ty {
             Ty::Text => "Reading.Text".to_owned(),
             Ty::Bool => "Reading.Flag".to_owned(),
@@ -1523,17 +1527,20 @@ impl CSharp<'_> {
                 _ => format!("Read{}", Self::flat(name)),
             },
             Ty::List(item) => format!(
-                "static element => Reading.ListOf<{}>(element, {})",
+                "static element{depth} => Reading.ListOf<{}>(element{depth}, {})",
                 self.ty(item),
-                self.reader(item, at)?
+                self.reader_at(item, at, depth + 1)?
             ),
             Ty::Map(item) => format!(
-                "static element => Reading.MapOf<{}>(element, {})",
+                "static element{depth} => Reading.MapOf<{}>(element{depth}, {})",
                 self.ty(item),
-                self.reader(item, at)?
+                self.reader_at(item, at, depth + 1)?
             ),
-            Ty::Optional(_) => {
-                return Err(format!("{at}: an optional value inside a list or a map"));
+            Ty::Optional(inner) => {
+                let held = self.ty(inner);
+                let read = self.reader_at(inner, at, depth + 1)?;
+                let kind = if self.is_value(inner) { "NullV" } else { "NullRef" };
+                format!("static element{depth} => Reading.{kind}<{held}>(element{depth}, {read})")
             }
         })
     }
@@ -1596,8 +1603,16 @@ impl CSharp<'_> {
                 "w.WriteStartObject(); foreach (var pair{depth} in {value}) {{ w.WritePropertyName(pair{depth}.Key); {} }} w.WriteEndObject();",
                 self.write_value(item, &format!("pair{depth}.Value"), depth + 1, at)?
             ),
-            Ty::Optional(_) => {
-                return Err(format!("{at}: an optional value inside a list or a map"));
+            Ty::Optional(inner) => {
+                let held = if self.is_value(inner) {
+                    format!("{value}.Value")
+                } else {
+                    value.to_owned()
+                };
+                format!(
+                    "if ({value} is null) {{ w.WriteNullValue(); }} else {{ {} }}",
+                    self.write_value(inner, &held, depth + 1, at)?
+                )
             }
         })
     }
@@ -2117,7 +2132,7 @@ mod tests {
             "Tone = Reading.Word<Tone>(json, \"tone\", ReadTone, Tone.Neutral),",
             "Count = Reading.Or<long>(json, \"count\", Reading.Long, 0L),",
             "Props = Reading.OptV<JsonElement>(json, \"props\", Reading.Any),",
-            "Items = Reading.Or<IReadOnlyList<Node>>(json, \"items\", static element => Reading.ListOf<Node>(element, ReadNode), []),",
+            "Items = Reading.Or<IReadOnlyList<Node>>(json, \"items\", static element0 => Reading.ListOf<Node>(element0, ReadNode), []),",
             "case \"gap\": return ReadNodeGap(json);",
             "case \"line_break\": return new NodeLineBreak();",
             "Alt = Reading.Opt<Node>(json, \"alt\", ReadNode),",

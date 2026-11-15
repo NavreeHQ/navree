@@ -222,6 +222,24 @@ public static class Reading
         return EqualityComparer<T>.Default.Equals(word, default) ? null : word;
     }
 
+    /// <summary>Reads a value that may be <c>null</c>, as an item of a list.</summary>
+    /// <typeparam name="T">The value's type, a struct.</typeparam>
+    /// <param name="json">The value.</param>
+    /// <param name="read">Reads it when it is not null.</param>
+    /// <returns>The value, or null.</returns>
+    public static T? NullV<T>(JsonElement json, Func<JsonElement, T> read)
+        where T : struct =>
+        json.ValueKind == JsonValueKind.Null ? null : read(json);
+
+    /// <summary>Reads a value that may be <c>null</c>, as an item of a list.</summary>
+    /// <typeparam name="T">The value's type, a class.</typeparam>
+    /// <param name="json">The value.</param>
+    /// <param name="read">Reads it when it is not null.</param>
+    /// <returns>The value, or null.</returns>
+    public static T? NullRef<T>(JsonElement json, Func<JsonElement, T> read)
+        where T : class =>
+        json.ValueKind == JsonValueKind.Null ? null : read(json);
+
     private static JsonException Wrong(JsonElement json, string expected) =>
         new("expected " + expected + ", found " + json.ValueKind);
 }
