@@ -119,7 +119,8 @@ public static class FlagInline
     /// <returns>The element.</returns>
     public static UIElement Create(string text, Func<string, FrameworkElement> words, double flagHeight)
     {
-        StackPanel line = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
+        // The words and the flags go onto a new line where the room runs out, as the words of a text do.
+        Composition.WrapPanel line = new() { HorizontalSpacing = 6, VerticalSpacing = 2 };
         foreach (FlagText.Piece piece in FlagText.Split(text))
         {
             if (piece.Country is not null)
