@@ -840,7 +840,7 @@ private fun SearchTopBar(
  * of its choices. Choosing tells the core, which asks for the rows again.
  */
 @Composable
-private fun FilterBar(form: Navree.Form, place: Place, sends: Boolean) {
+internal fun FilterBar(form: Navree.Form, place: Place, sends: Boolean) {
     val ui = LocalUi.current
     val inForm = place.copy(form = form.id)
     val bar = remember(form) { FilterRules.bar(form) }

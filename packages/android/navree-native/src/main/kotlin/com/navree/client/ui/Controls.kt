@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.platform.LocalDensity
 import com.navree.client.design.TooltipRules
+import com.navree.client.design.FilterRules
 import com.navree.client.design.ScreenRules
 import com.navree.protocol.Navree
 
@@ -302,6 +303,11 @@ internal fun MenuHeading(text: String) {
 /** A form that is part of other content: its fields and its button, in the order the page gave them. */
 @Composable
 internal fun FormView(node: Navree.Form, place: Place, modifier: Modifier = Modifier) {
+    // A form of nothing but filters, where it stands in a part drawn whole (a pane of a split, a card), is the same row of chips.
+    if (FilterRules.bar(node) != null) {
+        FilterBar(node, place, sends = true)
+        return
+    }
     val inner = place.copy(form = node.id)
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for (child in node.children) NodeView(child, inner)
