@@ -213,8 +213,16 @@ public sealed partial class DataTable
         // is not raised for a desktop window.
         if (themeSettings is null && XamlRoot?.ContentIslandEnvironment is { } environment)
         {
-            themeSettings = Microsoft.UI.System.ThemeSettings.CreateForWindowId(environment.AppWindowId);
-            themeSettings.Changed += OnHighContrastChanged;
+            try
+            {
+                themeSettings = Microsoft.UI.System.ThemeSettings.CreateForWindowId(environment.AppWindowId);
+                themeSettings.Changed += OnHighContrastChanged;
+            }
+            catch (Exception)
+            {
+                // The window has no settings to listen to; the contrast colours are read each time a row is drawn.
+                themeSettings = null;
+            }
         }
 
         if (XamlRoot is { } root)
