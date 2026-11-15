@@ -20,7 +20,7 @@ namespace Navree.Demo;
 /// brought up to date where it stands, not drawn again. Each scenario holds a reference to what the person is using (a text box, the table, a button,
 /// a sheet) before the answer, uses it with the real keys and the real pointer, and reads that it is the same object afterwards, with what the person
 /// did still in it and the focus where it was. Which scenarios run follows the server: the store (orders), the inbox (a popover), the board (a
-/// disclosure, a sheet, cards moved by the keys). What was done is written to <c>page.txt</c>.
+/// sheet, cards moved by the keys), no server (a disclosure, the colour field and the file field). What was done is written to <c>page.txt</c>.
 /// </summary>
 internal sealed partial class PageWalk(ShellHost host, ShellWindow window, string folder, string? server, PageFetcher? served = null)
 {
@@ -532,15 +532,12 @@ internal sealed partial class PageWalk(ShellHost host, ShellWindow window, strin
         Below(window.Surface).OfType<Button>().FirstOrDefault(candidate => candidate.ActualWidth > 0 && (AutomationProperties.GetName(candidate) == label || candidate.Content as string == label));
 
     // ================================================================================================================
-    // The board: a disclosure (line 7), a sheet sent with a wrong value (line 6), a card moved and another pressed (line 10)
+    // The board: a sheet sent with a wrong value (line 6), a card moved and another pressed (line 10). The board draws no disclosure on its screen (a
+    // card's detail is not drawn), so the disclosure is walked on the screen of the walk's own that holds one, not here.
     // ================================================================================================================
 
     private async Task BoardAsync()
     {
-        host.Send(Events.Select(0));
-        await SettleAsync();
-        await Task.Delay(1500);
-        await DisclosureAsync();
         host.Send(Events.Select(0));
         await SettleAsync();
         await Task.Delay(1500);
