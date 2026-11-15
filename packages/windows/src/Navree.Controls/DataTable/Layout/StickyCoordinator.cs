@@ -169,13 +169,13 @@ internal sealed class StickyCoordinator
             switch (role)
             {
                 case StickyRole.Start:
-                    element.Translation = new Vector3((float)StickyMath.StartTranslation(position), 0, 0);
+                    element.Translation = new Vector3((float)StickyMath.StartTranslation(position, rtl), 0, 0);
                     break;
                 case StickyRole.End:
                     element.Translation = new Vector3((float)StickyMath.EndTranslation(position, min, max, rtl), 0, 0);
                     break;
                 case StickyRole.Header:
-                    element.Translation = new Vector3((float)StickyMath.HeaderTranslation(position), 0, 0);
+                    element.Translation = new Vector3((float)StickyMath.HeaderTranslation(position, rtl), 0, 0);
                     break;
                 case StickyRole.ScrollCells:
                     if (ElementCompositionPreview.GetElementVisual(element).Clip is InsetClip clip)
@@ -256,7 +256,7 @@ internal sealed class StickyCoordinator
 
         startAnimation = Make(StickyMath.StartExpression(rtl));
         endAnimation = Make(StickyMath.EndExpression(rtl));
-        headerAnimation = Make(StickyMath.HeaderExpression());
+        headerAnimation = Make(StickyMath.HeaderExpression(rtl));
         (string left, string right) = StickyMath.ClipExpressions(rtl);
         clipLeftAnimation = Make(left);
         clipRightAnimation = Make(right);

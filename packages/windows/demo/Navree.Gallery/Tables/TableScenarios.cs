@@ -12,7 +12,7 @@ namespace Navree.Gallery;
 internal static class TableScenarios
 {
     private static readonly string[] Standard =
-        ["standard", "chosen", "sorted", "loading", "empty", "failed", "scrolled", "detail", "cursor", "menu", "rowmenu", "layout", "narrow", "keys"];
+        ["standard", "chosen", "sorted", "loading", "empty", "failed", "scrolled", "detail", "cursor", "menu", "rowmenu", "layout", "narrow", "more", "keys"];
 
     /// <summary>The scenarios a run of "table" covers.</summary>
     internal static IReadOnlyList<string> All => Standard;
@@ -67,6 +67,11 @@ internal static class TableScenarios
         if (name == "keys")
         {
             await KeysAsync(window, table, tag);
+        }
+
+        if (name == "more" && model is not null)
+        {
+            await MoreAsync(table, model, tag);
         }
 
         await Handshake.StepAsync("table-" + tag, "the " + name + " table in " + theme);
@@ -153,6 +158,12 @@ internal static class TableScenarios
             case "scrolled":
                 table.Scroller?.ScrollTo(420, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
                 await Task.Delay(800);
+                if (table.HeaderRow?.ChromeLayer is { } headerChrome && table.RowsRepeater?.TryGetElement(0) is DataTableRow first && first.ChromeLayer is { } rowChrome)
+                {
+                    string Where(FrameworkElement e) => $"x {e.TransformToVisual(table).TransformPoint(new Windows.Foundation.Point(0, 0)).X:0.#}, width {e.ActualWidth:0.#}, translation {e.Translation.X:0.#}";
+                    Report.Line($"[scrolled] the scroll view is at {table.Scroller?.HorizontalOffset:0.#}; header row {Where(table.HeaderRow)}; header chrome {Where(headerChrome)}; row {Where(first)}; row chrome {Where(rowChrome)}; header frozen layer {Where(table.HeaderRow.FrozenStart!)}");
+                }
+
                 break;
             case "detail":
                 foreach (int index in new[] { 1, 4 })
@@ -218,6 +229,66 @@ internal static class TableScenarios
         {
             Report.Line($"[{tag}] first row: " + string.Join(" | ", row.Cells.Select(c => (c.Content as TextBlock)?.Text ?? c.Content?.GetType().Name ?? "-")));
         }
+    }
+
+    // The table asks for rows near its ends, and rows that join above the view leave the view where it was.
+    private static async Task MoreAsync(DataTable table, ListDataTableModel<Customer> model, string tag)
+    {
+        List<string> asked = [];
+        int earlierMade = 0;
+        table.MoreRequested += (_, e) =>
+        {
+            asked.Add(e.Direction.ToString());
+            if (e.Direction == MoreDirection.After)
+            {
+                model.Later = new DataTableCursor(true, CursorState.Loading);
+                table.DispatcherQueue.TryEnqueue(async () =>
+                {
+                    await Task.Delay(300);
+                    model.Append(DemoData.Make(model.RowCount, 100));
+                    model.Later = new DataTableCursor(model.RowCount < 900, CursorState.Idle);
+                });
+            }
+            else
+            {
+                model.Earlier = new DataTableCursor(true, CursorState.Loading);
+                table.DispatcherQueue.TryEnqueue(async () =>
+                {
+                    await Task.Delay(300);
+                    model.Prepend(DemoData.Make(1000 + (earlierMade * 50), 50));
+                    earlierMade++;
+                    model.Earlier = new DataTableCursor(earlierMade < 2, CursorState.Idle);
+                });
+            }
+        };
+
+        ScrollView? scroll = table.Scroller;
+        if (scroll is null)
+        {
+            return;
+        }
+
+        model.Later = new DataTableCursor(true, CursorState.Idle);
+        Report.Line($"[{tag}] held {model.RowCount} rows");
+        for (int step = 0; step < 3; step++)
+        {
+            scroll.ScrollTo(0, Math.Max(0, scroll.ExtentHeight - scroll.ViewportHeight), new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
+            await Task.Delay(1500);
+            Report.Line($"[{tag}] after going to the end: held {model.RowCount} rows, asked {string.Join(",", asked)}");
+        }
+
+        // Rows that join before the first held row, with the view part way down.
+        model.Earlier = new DataTableCursor(true, CursorState.Idle);
+        scroll.ScrollTo(0, 3000, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
+        await Task.Delay(1000);
+        string key = model.GetRow((int)(scroll.VerticalOffset / table.RowHeight)).Key ?? string.Empty;
+        double before = scroll.VerticalOffset;
+        int rowsBefore = model.RowCount;
+        model.Prepend(DemoData.Make(2000, 50));
+        await Task.Delay(1200);
+        int at = model.IndexOfKey(key);
+        double top = (at * table.RowHeight) - scroll.VerticalOffset;
+        Report.Line($"[{tag}] 50 rows joined the start: the row that was at the top of the view, {key}, is now row {at} and stands {top:0.#} from the top of the view; offset {before:0.#} to {scroll.VerticalOffset:0.#}; held {rowsBefore} to {model.RowCount}; asked {string.Join(",", asked)}");
     }
 
     private static async Task KeysAsync(MainWindow window, DataTable table, string tag)

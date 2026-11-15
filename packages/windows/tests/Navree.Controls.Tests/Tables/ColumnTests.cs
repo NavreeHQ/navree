@@ -167,9 +167,9 @@ public sealed class StickyMathTests
     public void Left_to_right_what_is_kept_follows_the_position(
         double position, double start, double end, double header, double left, double right, double edgeStart, double edgeEnd)
     {
-        Same.Number(start, StickyMath.StartTranslation(position));
+        Same.Number(start, StickyMath.StartTranslation(position, false));
         Same.Number(end, StickyMath.EndTranslation(position, 0, 400, false));
-        Same.Number(header, StickyMath.HeaderTranslation(position));
+        Same.Number(header, StickyMath.HeaderTranslation(position, false));
         (double l, double r) = StickyMath.ScrollClipInsets(position, 0, 400, 280, 72, false);
         Same.Number(left, l);
         Same.Number(right, r);
@@ -177,17 +177,20 @@ public sealed class StickyMathTests
         Same.Number(edgeEnd, StickyMath.EdgeOpacityEnd(position, 0, 400, false));
     }
 
+    // The scroll view's positions are negative in right to left, but a translation and a clip are counted
+    // from the start in both flows (seen in a run), so the same rows scrolled by the same amount give the same numbers.
     [TestMethod]
-    [DataRow(0.0, 0.0, 400.0, 0.0, 472.0, 280.0, 0.0, 1.0)]
-    [DataRow(-4.0, -4.0, 396.0, 4.0, 468.0, 284.0, 0.5, 1.0)]
-    [DataRow(-250.0, -250.0, 150.0, 250.0, 222.0, 530.0, 1.0, 1.0)]
-    [DataRow(-400.0, -400.0, 0.0, 400.0, 72.0, 680.0, 1.0, 0.0)]
-    public void Right_to_left_the_same_holds_with_the_signs_the_scroll_view_uses(
+    [DataRow(0.0, 0.0, -400.0, 0.0, 280.0, 472.0, 0.0, 1.0)]
+    [DataRow(-250.0, 250.0, -150.0, -250.0, 530.0, 222.0, 1.0, 1.0)]
+    [DataRow(-400.0, 400.0, 0.0, -400.0, 680.0, 72.0, 1.0, 0.0)]
+    [DataRow(-4.0, 4.0, -396.0, -4.0, 284.0, 468.0, 0.5, 1.0)]
+    [DataRow(-396.0, 396.0, -4.0, -396.0, 676.0, 76.0, 1.0, 0.5)]
+    public void Right_to_left_the_same_numbers_hold_from_the_negative_positions_the_scroll_view_gives(
         double position, double start, double end, double header, double left, double right, double edgeStart, double edgeEnd)
     {
-        Same.Number(start, StickyMath.StartTranslation(position));
+        Same.Number(start, StickyMath.StartTranslation(position, true));
         Same.Number(end, StickyMath.EndTranslation(position, -400, 0, true));
-        Same.Number(header, StickyMath.HeaderTranslation(position));
+        Same.Number(header, StickyMath.HeaderTranslation(position, true));
         (double l, double r) = StickyMath.ScrollClipInsets(position, -400, 0, 280, 72, true);
         Same.Number(left, l);
         Same.Number(right, r);
@@ -213,9 +216,9 @@ public sealed class StickyMathTests
                     ["layout.Fe"] = 72,
                 };
 
-                Same.Number(StickyMath.StartTranslation(position), Evaluate(StickyMath.StartExpression(rtl), names));
+                Same.Number(StickyMath.StartTranslation(position, rtl), Evaluate(StickyMath.StartExpression(rtl), names));
                 Same.Number(StickyMath.EndTranslation(position, min, max, rtl), Evaluate(StickyMath.EndExpression(rtl), names));
-                Same.Number(StickyMath.HeaderTranslation(position), Evaluate(StickyMath.HeaderExpression(), names));
+                Same.Number(StickyMath.HeaderTranslation(position, rtl), Evaluate(StickyMath.HeaderExpression(rtl), names));
                 (double left, double right) = StickyMath.ScrollClipInsets(position, min, max, 280, 72, rtl);
                 (string leftExpression, string rightExpression) = StickyMath.ClipExpressions(rtl);
                 Same.Number(left, Evaluate(leftExpression, names));
@@ -224,6 +227,18 @@ public sealed class StickyMathTests
                 Same.Number(StickyMath.EdgeOpacityStart(position, min, max, rtl), Evaluate(startEdge, names));
                 Same.Number(StickyMath.EdgeOpacityEnd(position, min, max, rtl), Evaluate(endEdge, names));
             }
+        }
+    }
+
+    [TestMethod]
+    public void The_two_flows_scrolled_the_same_way_give_the_same_numbers()
+    {
+        foreach (double scrolled in new[] { 0.0, 3.0, 120.0, 400.0 })
+        {
+            Same.Number(StickyMath.StartTranslation(scrolled, false), StickyMath.StartTranslation(-scrolled, true));
+            Same.Number(StickyMath.EndTranslation(scrolled, 0, 400, false), StickyMath.EndTranslation(-scrolled, -400, 0, true));
+            Same.Number(StickyMath.HeaderTranslation(scrolled, false), StickyMath.HeaderTranslation(-scrolled, true));
+            Assert.AreEqual(StickyMath.ScrollClipInsets(scrolled, 0, 400, 280, 72, false), StickyMath.ScrollClipInsets(-scrolled, -400, 0, 280, 72, true));
         }
     }
 
