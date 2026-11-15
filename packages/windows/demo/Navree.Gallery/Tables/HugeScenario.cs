@@ -96,18 +96,15 @@ internal static class HugeScenario
         table.ClearChoice();
 
         // A row far away, asked for by assistive technology and made on request.
-        if (FrameworkElementAutomationPeer.CreatePeerForElement(table).GetPattern(PatternInterface.ItemContainer) is IItemContainerProvider container)
+        if (FrameworkElementAutomationPeer.CreatePeerForElement(table) is DataTableAutomationPeer peer)
         {
             string key = model.GetRow(50_000).Key!;
-            IRawElementProviderSimple? found = container.FindItemByProperty(null!, AutomationElementIdentifiers.AutomationIdProperty, key);
-            bool placeholder = found?.GetPatternProvider(10020) is IVirtualizedItemProvider;
-            Report.Line($"[rows100k] asked for {key} by its id: found {found is not null}, a row that can be made on request {placeholder}");
-            if (found?.GetPatternProvider(10020) is IVirtualizedItemProvider virtualized)
-            {
-                virtualized.Realize();
-                await Task.Delay(500);
-                Report.Line($"[rows100k] after Realize the row is {(table.RowsRepeater?.TryGetElement(50_000) is not null ? "made" : "not made")}");
-            }
+            IRawElementProviderSimple? found = ((IItemContainerProvider)peer).FindItemByProperty(null!, AutomationElementIdentifiers.AutomationIdProperty, key);
+            DataTableRowStandInAutomationPeer? standIn = peer.RowStandIn(50_000);
+            Report.Line($"[rows100k] asked for {key} by its id: found {found is not null}; its stand-in is called '{standIn?.GetName()}' and has the id {standIn?.GetAutomationId()}; it is made now: {table.RowsRepeater?.TryGetElement(50_000) is not null}");
+            standIn?.Realize();
+            await Task.Delay(500);
+            Report.Line($"[rows100k] after Realize the row is {(table.RowsRepeater?.TryGetElement(50_000) is not null ? "made" : "not made")}");
         }
 
         await Handshake.StepAsync("table-rows100k-light", "a table of a hundred thousand rows, at the last row");

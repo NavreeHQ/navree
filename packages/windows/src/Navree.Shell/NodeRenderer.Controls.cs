@@ -278,9 +278,9 @@ internal sealed partial class NodeRenderer
         return grid;
     }
 
-    // A table is drawn as a list for now: each row folded by its columns' roles, as the other clients fold it
-    // when there is no room for columns. The table of our own (columns, frozen cells, choosing) is not drawn yet.
-    private UIElement DrawTable(Models.Table table)
+    // A table drawn as a list of folded rows, as the other clients fold a table when there is no room for columns.
+    // The table of our own (NodeRenderer.Table.cs) draws every table; this stays for a table that cannot be given a table's room.
+    private UIElement DrawTableAsList(Models.Table table)
     {
         StackPanel panel = new() { Spacing = 4 };
         if (table.Caption is not null)

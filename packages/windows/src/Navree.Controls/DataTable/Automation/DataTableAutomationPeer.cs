@@ -82,6 +82,7 @@ public sealed partial class DataTable
 public sealed partial class DataTableAutomationPeer : FrameworkElementAutomationPeer, IGridProvider, ITableProvider, ISelectionProvider, IItemContainerProvider
 {
     private readonly DataTable table;
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<IRawElementProviderSimple, string> providerKeys = new();
 
     /// <summary>Makes the peer.</summary>
     /// <param name="owner">The table.</param>
@@ -126,10 +127,20 @@ public sealed partial class DataTableAutomationPeer : FrameworkElementAutomation
         }
 
         DataTableRow? made = table.RealizedRows().FirstOrDefault(r => r.Index == index);
-        return made is not null
+        IRawElementProviderSimple provider = made is not null
             ? ProviderFromPeer(FrameworkElementAutomationPeer.CreatePeerForElement(made))
             : ProviderFromPeer(new DataTableRowStandInAutomationPeer(table, index, key));
+        providerKeys.AddOrUpdate(provider, key);
+        return provider;
     }
+
+    /// <summary>The stand-in for a row that is not made, which can ask for it to be made.</summary>
+    /// <param name="index">The row's place.</param>
+    /// <returns>The stand-in, or null when there is no such row.</returns>
+    internal DataTableRowStandInAutomationPeer? RowStandIn(int index) =>
+        table.Model is { } model && index >= 0 && index < model.RowCount && model.GetRow(index).Key is { } key
+            ? new DataTableRowStandInAutomationPeer(table, index, key)
+            : null;
 
     /// <inheritdoc />
     public IRawElementProviderSimple[] GetColumnHeaders() =>
@@ -159,7 +170,7 @@ public sealed partial class DataTableAutomationPeer : FrameworkElementAutomation
         if (automationProperty is null)
         {
             int after = -1;
-            if (startAfter?.GetPropertyValue(30011) is string startKey)
+            if (startAfter is not null && providerKeys.TryGetValue(startAfter, out string? startKey))
             {
                 after = model.IndexOfKey(startKey);
             }

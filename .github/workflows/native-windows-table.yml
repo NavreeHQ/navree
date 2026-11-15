@@ -34,6 +34,7 @@ jobs:
         run: |
           dotnet restore tests/Navree.Controls.Tests/Navree.Controls.Tests.csproj
           dotnet restore demo/Navree.Gallery/Navree.Gallery.csproj
+          dotnet restore src/Navree.Shell/Navree.Shell.csproj
 
       - name: Build
         shell: pwsh
@@ -41,6 +42,7 @@ jobs:
         run: |
           dotnet build tests/Navree.Controls.Tests/Navree.Controls.Tests.csproj -c Release --no-restore
           dotnet build demo/Navree.Gallery/Navree.Gallery.csproj -c Release --no-restore
+          dotnet build src/Navree.Shell/Navree.Shell.csproj -c Release --no-restore
 
       - name: Unit tests
         shell: pwsh
