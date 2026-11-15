@@ -22,7 +22,7 @@ namespace Navree.Demo;
 /// did still in it and the focus where it was. Which scenarios run follows the server: the store (orders), the inbox (a popover), the board (a
 /// disclosure, a sheet, cards moved by the keys). What was done is written to <c>page.txt</c>.
 /// </summary>
-internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder, string? server)
+internal sealed partial class PageWalk(ShellHost host, ShellWindow window, string folder, string? server, PageFetcher? served = null)
 {
     private const uint MoveTo = 0x0001;
     private const uint LeftDown = 0x0002;
@@ -93,6 +93,7 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
                     await SettleAsync();
                     await Task.Delay(1500);
                     await GuardedAsync("the disclosure", DisclosureAsync);
+                    await GuardedAsync("the colour field and the file field", InputsAsync);
                     break;
                 case "8095":
                     await StoreAsync();

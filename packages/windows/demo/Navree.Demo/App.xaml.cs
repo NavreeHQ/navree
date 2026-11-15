@@ -70,10 +70,13 @@ public partial class App : Application
             ChoicesFolder = testing ? Path.Combine(Path.GetTempPath(), "navree-demo-place-" + Environment.ProcessId) : null,
         };
         string? sheet = Option(arguments, "--sheet");
+        PageFetcher? served = live is null && Option(arguments, "--page") is not null && CorpusFetcher.Folders() is var (pageCorpus, _)
+            ? new PageFetcher(pageCorpus)
+            : null;
         IFetcher? fetcher = sheet is not null && CorpusFetcher.Folders() is var (corpus, sheets)
             ? new CorpusFetcher(corpus, sheets)
-            : live is null && Option(arguments, "--page") is not null && CorpusFetcher.Folders() is var (pageCorpus, _)
-                ? new PageFetcher(pageCorpus)
+            : served is not null
+                ? served
             : Array.IndexOf(arguments, "--offline") >= 0
                 ? new OfflineFetcher()
                 : answers is null ? null : new FixtureFetcher(answers, Array.IndexOf(arguments, "--search") >= 0);
@@ -100,6 +103,7 @@ public partial class App : Application
                 WebFolder = webFolder,
                 AnswerFirst = testing ? DemoAnswers.SignOut : null,
                 Place = placeOptions,
+                MostFileBytes = served is not null ? 300_000 : Navree.Design.Inputs.FileRules.MostBytes,
             };
 
         // A run that is to start with the icon in the notification area has the person's choice for it made beforehand.
@@ -111,6 +115,11 @@ public partial class App : Application
         try
         {
             host = new ShellHost(options, DispatcherQueue.GetForCurrentThread());
+            if (served is not null)
+            {
+                served.Files = host.Files.Open;
+            }
+
             host.Problem += what => File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "navree-demo.log"), "problem: " + what + Environment.NewLine);
             window = new ShellWindow(host);
             window.SetFlowDirection(Array.IndexOf(arguments, "--rtl") >= 0);
@@ -129,7 +138,7 @@ public partial class App : Application
 
         if (Option(arguments, "--page") is string pageFolder)
         {
-            _ = new PageWalk(host, window, pageFolder, live).RunAsync();
+            _ = new PageWalk(host, window, pageFolder, live, served).RunAsync();
         }
         else if (Option(arguments, "--walk") is string folder)
         {
