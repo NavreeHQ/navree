@@ -1000,3 +1000,12 @@ class ActionsInALineTest {
         assertFalse(MenuRules.showsLabel("circle-dot", " "))
     }
 }
+
+class LaneBleedTest {
+    @Test
+    fun a_row_of_lanes_runs_out_into_the_margins_and_never_overflows_where_it_has_no_limit() {
+        assertEquals(432, ListRules.bledWidthPx(400, 32))
+        assertEquals("no limit stays none", Int.MAX_VALUE, ListRules.bledWidthPx(Int.MAX_VALUE, 32))
+        assertTrue("near the limit it does not wrap round", ListRules.bledWidthPx(Int.MAX_VALUE - 10, 32) in 1 until Int.MAX_VALUE)
+    }
+}
