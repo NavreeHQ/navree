@@ -6203,6 +6203,7 @@ dependencies = [
  "navree-testing",
  "navree-time",
  "navree-ui",
+ "navree-ui-ext-macros",
  "navree-ui-macros",
  "navree-validation",
  "proptest",
@@ -6219,6 +6220,17 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "navree-ui-ext-macros"
+version = "1.2.2"
+dependencies = [
+ "cssparser",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
 ]
 
 [[package]]
