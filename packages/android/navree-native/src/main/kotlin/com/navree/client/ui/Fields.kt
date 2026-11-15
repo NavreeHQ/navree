@@ -498,7 +498,8 @@ private fun PickerField(
     label: String? = field.label,
     description: String? = null,
 ) {
-    Box(modifier) {
+    // The field and the layer that takes the touch are one stop for a screen reader, not a named field and an unnamed button.
+    Box(modifier.semantics(mergeDescendants = true) {}) {
         OutlinedTextField(
             value = text,
             onValueChange = {},
