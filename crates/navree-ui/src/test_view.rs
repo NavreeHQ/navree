@@ -6,6 +6,7 @@ use serde::de::DeserializeOwned;
 
 use navree_validation::Validate;
 
+use crate::extension::UiExtension;
 use crate::form::{FieldErrors, Form, Language, decode, decode_for};
 use crate::node::{AttrValue, Element, Node};
 use crate::view::View;
@@ -211,5 +212,26 @@ impl TestView {
         T: Form + DeserializeOwned + Validate,
     {
         decode_for::<T>(&self.form_values(), language)
+    }
+
+    /// Whether the page names `extension`: an element on it (a cell of a table and an open
+    /// detail row too) carries the address of its script or of its stylesheet. A test of a
+    /// component asserts that the page that draws it links its files.
+    ///
+    /// ```ignore
+    /// use navree_ui::{TestView, View, el};
+    ///
+    /// // `MAP` is the extension of plugins/geo, whose tests prove this example.
+    /// let page = View::new("Deliveries").body(el("div").slot("geo:map").extension(&MAP));
+    /// assert!(TestView::of(&page).uses_extension(&MAP));
+    /// ```
+    pub fn uses_extension(&self, extension: &UiExtension) -> bool {
+        let named = crate::extension::named(&self.body);
+        extension
+            .script_url()
+            .is_some_and(|url| named.scripts.iter().any(|have| have == url))
+            || extension
+                .sheet_url()
+                .is_some_and(|url| named.sheets.iter().any(|have| have == url))
     }
 }

@@ -19,8 +19,11 @@
 
 use std::borrow::Cow;
 
+use serde::Serialize;
+
 use crate::cmd::{Cmd, Commands};
-use crate::html::{Href, SafeHtml};
+use crate::extension::UiExtension;
+use crate::html::{Href, LocalHref, SafeHtml};
 
 /// One thing in a page.
 #[derive(Clone, Debug, Default)]
@@ -334,6 +337,11 @@ impl Uses {
     /// The sortable grid's stylesheet: the grid, its tiles and their tools, linked with
     /// every sortable grid, one that doesn't move too.
     pub const SORTABLE_GRID_STYLES: Self = Self(1 << 42);
+    /// The extensions module: mounts the scripts elements name, links sheets that arrive
+    /// later, and seals what a script draws. It needs the core runtime.
+    pub const EXTENSIONS: Self = Self(1 << 43);
+    /// No script: the head links the stylesheets the page's elements name.
+    pub const EXTENSION_SHEETS: Self = Self(1 << 44);
 
     /// Both sets together.
     #[must_use]
@@ -354,6 +362,16 @@ impl Uses {
     /// Whether this is [`Uses::NONE`].
     pub const fn is_none(self) -> bool {
         self.0 == 0
+    }
+
+    /// The extension bits of these, and nothing else.
+    pub(crate) const fn extension_bits(self) -> Self {
+        Self(self.0 & (Self::EXTENSIONS.0 | Self::EXTENSION_SHEETS.0))
+    }
+
+    /// These without the extension bits.
+    pub(crate) const fn without_extensions(self) -> Self {
+        Self(self.0 & !(Self::EXTENSIONS.0 | Self::EXTENSION_SHEETS.0))
     }
 }
 
@@ -733,6 +751,154 @@ impl Element {
         self
     }
 
+    /// Makes this element the root of `extension`: it carries the addresses of the extension's
+    /// script and stylesheet, the route prefixes its script may call, and the attributes a
+    /// morph from the server leaves as the script set them. The page links the stylesheet and
+    /// preloads the script, and the browser mounts the script on this element once. Give the
+    /// element a slot of the namespace, a colon and a word (`geo:map`), which is what the
+    /// stylesheet is scoped to.
+    ///
+    /// A second call replaces what the first wrote. An element that is an island names the
+    /// extension's stylesheet only: its script is the island's own.
+    ///
+    /// ```ignore
+    /// use navree_ui::{el, render};
+    ///
+    /// // `MAP` is the extension of plugins/geo, whose tests prove this example.
+    /// let html = render(&el("div").slot("geo:map").extension(&MAP).into());
+    /// assert!(html.contains("data-ui-ext="));
+    /// ```
+    #[must_use]
+    pub fn extension(self, extension: &'static UiExtension) -> Self {
+        self.named_extension(extension, None)
+    }
+
+    /// [`extension`](Self::extension) with props for the script: any value that serializes to
+    /// JSON. They go in an attribute, escaped as every attribute is, and the script receives
+    /// them parsed, so a value can't become markup or code. A value that can't be written as
+    /// JSON is written as `null`.
+    ///
+    /// ```ignore
+    /// use navree_ui::{el, render};
+    ///
+    /// #[derive(serde::Serialize)]
+    /// struct Place {
+    ///     city: &'static str,
+    ///     zoom: u8,
+    /// }
+    ///
+    /// // `MAP` is the extension of plugins/geo, whose tests prove this example.
+    /// let place = Place { city: "Ludhiana", zoom: 12 };
+    /// let html = render(&el("div").slot("geo:map").extension_with(&MAP, &place).into());
+    /// assert!(html.contains("data-ui-props="));
+    /// ```
+    #[must_use]
+    pub fn extension_with(self, extension: &'static UiExtension, props: &impl Serialize) -> Self {
+        let json = serde_json::to_string(props).unwrap_or_else(|_| "null".to_owned());
+        self.named_extension(extension, Some(json))
+    }
+
+    /// Lets this element's script call exactly `href`, beside its extension's route
+    /// prefixes: for an address only the server can name, such as the drop of one delivery.
+    /// The query and the fragment are left out, and so is an address that is not a path of this
+    /// site, or that holds whitespace (write it percent-encoded). Call it after
+    /// [`extension`](Self::extension), which replaces the addresses an earlier call wrote.
+    ///
+    /// ```ignore
+    /// use navree_ui::{el, render};
+    ///
+    /// // `MAP` is the extension of plugins/geo, whose tests prove this example.
+    /// let element = el("div").slot("geo:map").extension(&MAP).extension_call("/deliveries/42/drop");
+    /// assert!(render(&element.into()).contains("=/deliveries/42/drop"));
+    /// ```
+    #[must_use]
+    pub fn extension_call(mut self, href: impl Into<LocalHref>) -> Self {
+        let href = href.into();
+        let path = href.as_str().split(['?', '#']).next().unwrap_or_default();
+        if !path.starts_with('/') || path.chars().any(char::is_whitespace) {
+            return self;
+        }
+        let token = format!("={path}");
+        let held = self
+            .get("data-ui-ext-routes")
+            .and_then(AttrValue::as_text)
+            .map(Cow::into_owned);
+        match held {
+            Some(list) if list.split(' ').any(|have| have == token) => {}
+            Some(list) => self.put("data-ui-ext-routes", format!("{list} {token}")),
+            None => self.put("data-ui-ext-routes", token),
+        }
+        self
+    }
+
+    /// Sets attribute `name` to `value`, in place when the element has it already.
+    fn put(&mut self, name: &'static str, value: String) {
+        let value = AttrValue::Text(value.into_boxed_str());
+        match self.attrs.iter_mut().find(|attr| attr.name == name) {
+            Some(attr) => attr.value = value,
+            None => self.attrs.push(Attr { name, value }),
+        }
+    }
+
+    /// Writes what an element carries for `extension`, in this order, each only as it applies:
+    /// the script's address, the stylesheet's, the route prefixes, the attributes a morph leaves
+    /// (the toolkit's two and the extension's own, joined to any the element has), and the
+    /// props. What an earlier call wrote is replaced.
+    fn named_extension(mut self, extension: &'static UiExtension, props: Option<String>) -> Self {
+        const OWN: [&str; 4] = [
+            "data-ui-ext",
+            "data-ui-ext-sheet",
+            "data-ui-ext-routes",
+            "data-ui-props",
+        ];
+        self.uses = self.uses.without_extensions();
+        // An island's script, props and kept attributes are its own: only the sheet is named.
+        if self.attrs.iter().any(|attr| attr.name == "data-ui-island") {
+            debug_assert!(
+                extension.script_file().is_none(),
+                "an element is an island or carries an extension script, not both"
+            );
+            self.attrs.retain(|attr| attr.name != "data-ui-ext-sheet");
+            if let Some(sheet) = extension.sheet_url() {
+                self.put("data-ui-ext-sheet", sheet.to_owned());
+                self.uses = self.uses.with(Uses::EXTENSION_SHEETS);
+            }
+            return self;
+        }
+        self.attrs.retain(|attr| !OWN.contains(&attr.name));
+        if let Some(script) = extension.script_url() {
+            self.put("data-ui-ext", script.to_owned());
+            self.uses = self.uses.with(Uses::EXTENSIONS).with(Uses::CORE);
+        }
+        if let Some(sheet) = extension.sheet_url() {
+            self.put("data-ui-ext-sheet", sheet.to_owned());
+            self.uses = self.uses.with(Uses::EXTENSION_SHEETS);
+        }
+        if !extension.routes_of().is_empty() {
+            self.put("data-ui-ext-routes", extension.routes_of().join(" "));
+        }
+        let mut kept: Vec<String> = Vec::new();
+        let held = self
+            .get("data-ui-keep-attrs")
+            .and_then(AttrValue::as_text)
+            .map(Cow::into_owned);
+        let tokens = held
+            .iter()
+            .flat_map(|held| held.split_whitespace())
+            .chain(["data-ui-mounted", "data-ui-failed"])
+            .chain(extension.keeps_of().iter().copied());
+        for token in tokens {
+            if !kept.iter().any(|have| have == token) {
+                kept.push(token.to_owned());
+            }
+        }
+        self.put("data-ui-keep-attrs", kept.join(" "));
+        if let Some(json) = props {
+            self.put("data-ui-props", json);
+        }
+        self
+    }
+
     /// Adds one child.
     #[inline]
     #[must_use]
@@ -1011,5 +1177,208 @@ mod tests {
             "{}",
             std::mem::size_of::<Node>()
         );
+    }
+
+    use crate::extension::ExtensionFile;
+
+    /// A map with a script and a stylesheet, and a badge with a stylesheet only.
+    static MAP: UiExtension = UiExtension::new("geo", "map")
+        .script(ExtensionFile::__new(
+            b"export const contract = 1; export function mount() {}",
+            "1a2b3c4d5e6f",
+            None,
+        ))
+        .sheet(ExtensionFile::__new(
+            b"/* the map's stylesheet, scoped for geo */",
+            "0f9e8d7c6b5a",
+            Some("geo"),
+        ))
+        .contract(1)
+        .keeps(&["data-moving"])
+        .routes(&["/geo/"]);
+    static BADGE: UiExtension = UiExtension::new("geo", "badge").sheet(ExtensionFile::__new(
+        b"/* the badge's stylesheet, scoped for geo */",
+        "aaaaaaaaaaaa",
+        Some("geo"),
+    ));
+
+    const MAP_ATTRIBUTES: &str = r#" data-ui-ext="/_navree/ui/ext/geo.map-1a2b3c4d5e6f.js" data-ui-ext-sheet="/_navree/ui/ext/geo.map-0f9e8d7c6b5a.css" data-ui-ext-routes="/geo/""#;
+
+    #[test]
+    fn an_element_with_an_extension_names_its_files_and_asks_for_the_modules() {
+        let element = el("div").slot("geo:map").extension(&MAP);
+        assert_eq!(
+            crate::render(&element.clone().into()),
+            format!(
+                r#"<div data-slot="geo:map"{MAP_ATTRIBUTES} data-ui-keep-attrs="data-ui-mounted data-ui-failed data-moving"></div>"#
+            )
+        );
+        assert!(element.uses.has(Uses::EXTENSIONS));
+        assert!(element.uses.has(Uses::EXTENSION_SHEETS));
+        assert!(element.uses.has(Uses::CORE));
+
+        // What the element kept already stays in front of what the extension keeps.
+        let held = el("div")
+            .attr("data-ui-keep-attrs", "data-collapsed")
+            .slot("geo:map")
+            .extension(&MAP);
+        assert_eq!(
+            held.get("data-ui-keep-attrs"),
+            Some(&AttrValue::Text(
+                "data-collapsed data-ui-mounted data-ui-failed data-moving".into()
+            ))
+        );
+        let repeated = el("div")
+            .attr("data-ui-keep-attrs", "data-moving data-ui-failed")
+            .extension(&MAP);
+        assert_eq!(
+            repeated.get("data-ui-keep-attrs"),
+            Some(&AttrValue::Text(
+                "data-moving data-ui-failed data-ui-mounted".into()
+            ))
+        );
+
+        // A second call replaces the attributes and the extension bits of the first.
+        let replaced = el("div")
+            .extension_with(&MAP, &serde_json::json!({ "zoom": 15 }))
+            .extension(&BADGE);
+        assert!(replaced.get("data-ui-ext").is_none());
+        assert!(replaced.get("data-ui-ext-routes").is_none());
+        assert!(replaced.get("data-ui-props").is_none());
+        assert_eq!(
+            replaced.get("data-ui-ext-sheet"),
+            Some(&AttrValue::Text(
+                "/_navree/ui/ext/geo.badge-aaaaaaaaaaaa.css".into()
+            ))
+        );
+        assert!(replaced.uses.has(Uses::EXTENSION_SHEETS));
+        assert!(!replaced.uses.has(Uses::EXTENSIONS));
+    }
+
+    #[test]
+    fn a_sheet_only_extension_asks_for_no_script() {
+        let element = el("span").extension(&BADGE);
+        assert_eq!(
+            crate::render(&element.clone().into()),
+            r#"<span data-ui-ext-sheet="/_navree/ui/ext/geo.badge-aaaaaaaaaaaa.css" data-ui-keep-attrs="data-ui-mounted data-ui-failed"></span>"#
+        );
+        assert_eq!(element.uses, Uses::EXTENSION_SHEETS);
+    }
+
+    #[test]
+    fn an_island_names_the_sheet_and_keeps_its_own_script_and_props() {
+        let island = || {
+            el("div")
+                .attr("data-ui-island", "/_navree/ui/island/clock-0123456789ab.js")
+                .attr("data-ui-props", "{}")
+                .uses(Uses::ISLAND)
+        };
+        let styled = island().extension(&BADGE);
+        assert_eq!(
+            crate::render(&styled.clone().into()),
+            r#"<div data-ui-island="/_navree/ui/island/clock-0123456789ab.js" data-ui-props="{}" data-ui-ext-sheet="/_navree/ui/ext/geo.badge-aaaaaaaaaaaa.css"></div>"#
+        );
+        assert!(styled.uses.has(Uses::ISLAND));
+        assert!(styled.uses.has(Uses::EXTENSION_SHEETS));
+        assert!(!styled.uses.has(Uses::EXTENSIONS));
+    }
+
+    /// An island and an extension script on one element is a mistake that a debug build reports.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "an element is an island or carries an extension script, not both")]
+    fn an_island_with_an_extension_script_is_refused_in_a_debug_build() {
+        let _ = el("div")
+            .attr("data-ui-island", "/_navree/ui/island/clock-0123456789ab.js")
+            .extension(&MAP);
+    }
+
+    #[test]
+    fn extension_call_adds_one_exact_address() {
+        let plain = crate::render(&el("div").extension(&MAP).into());
+        let called = crate::render(
+            &el("div")
+                .extension(&MAP)
+                .extension_call("/deliveries/42/drop?from=table")
+                .into(),
+        );
+        assert_eq!(
+            called,
+            plain.replace(
+                r#"data-ui-ext-routes="/geo/""#,
+                r#"data-ui-ext-routes="/geo/ =/deliveries/42/drop""#
+            )
+        );
+        // The same address twice is one address; another one is another.
+        let twice = el("div")
+            .extension(&MAP)
+            .extension_call("/deliveries/42/drop")
+            .extension_call("/deliveries/42/drop#top")
+            .extension_call("/deliveries/43/drop");
+        assert_eq!(
+            twice.get("data-ui-ext-routes"),
+            Some(&AttrValue::Text(
+                "/geo/ =/deliveries/42/drop =/deliveries/43/drop".into()
+            ))
+        );
+        // An extension with no prefixes gets the attribute from the call.
+        let only = el("div")
+            .extension(&BADGE)
+            .extension_call("/deliveries/42/drop");
+        assert_eq!(
+            only.get("data-ui-ext-routes"),
+            Some(&AttrValue::Text("=/deliveries/42/drop".into()))
+        );
+        // A relative address, the page itself, another site and a path with a space add nothing.
+        for refused in [
+            "relative",
+            "#",
+            "?x=1",
+            "//other.example/geo/x",
+            "https://other.example/geo/x",
+            "/deliveries/42 /drop",
+            "",
+        ] {
+            let element = el("div").extension(&MAP).extension_call(refused);
+            assert_eq!(crate::render(&element.into()), plain, "{refused:?}");
+        }
+    }
+
+    #[test]
+    fn extension_props_are_escaped_json() {
+        #[derive(serde::Serialize)]
+        struct Props {
+            note: &'static str,
+            city: &'static str,
+        }
+        let props = Props {
+            note: "</div><script>alert(1)</script>",
+            city: "Ludhiana",
+        };
+        let html = crate::render(&el("div").extension_with(&MAP, &props).into());
+        assert!(
+            html.contains(
+                r#" data-ui-props="{&quot;note&quot;:&quot;&lt;/div&gt;&lt;script&gt;alert(1)&lt;/script&gt;&quot;,&quot;city&quot;:&quot;Ludhiana&quot;}""#
+            ),
+            "{html}"
+        );
+        assert!(!html.contains("<script"), "{html}");
+        // Props that JSON can't write are `null`: a map keyed by pairs.
+        let pairs = std::collections::BTreeMap::from([((1, 2), "x")]);
+        let html = crate::render(&el("div").extension_with(&MAP, &pairs).into());
+        assert!(html.contains(r#" data-ui-props="null""#), "{html}");
+    }
+
+    #[test]
+    fn the_extension_bits_are_two_modules_of_their_own() {
+        assert_eq!(Uses::EXTENSIONS.0.count_ones(), 1);
+        assert_eq!(Uses::EXTENSION_SHEETS.0.count_ones(), 1);
+        assert_ne!(Uses::EXTENSIONS, Uses::EXTENSION_SHEETS);
+        let both = Uses::EXTENSIONS.with(Uses::EXTENSION_SHEETS).with(Uses::CORE);
+        assert_eq!(
+            both.extension_bits(),
+            Uses::EXTENSIONS.with(Uses::EXTENSION_SHEETS)
+        );
+        assert_eq!(both.without_extensions(), Uses::CORE);
     }
 }
