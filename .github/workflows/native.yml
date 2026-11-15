@@ -260,9 +260,6 @@ jobs:
       - name: Build the demos
         run: cargo build -p store-demo -p inbox-demo -p board-demo --features store-demo/native-preview,inbox-demo/native-preview,board-demo/native-preview
 
-      - name: Test the demos' native answers
-        run: cargo test -p store-demo -p inbox-demo -p board-demo --features store-demo/native-preview,inbox-demo/native-preview,board-demo/native-preview --test native
-
       - name: Keep the demos
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -273,6 +270,10 @@ jobs:
             target/debug/inbox-demo
             target/debug/board-demo
           retention-days: 7
+
+      # After the demos are kept, so the ones the devices use are the ones built above and not a build made for tests.
+      - name: Test the demos' native answers
+        run: cargo test -p store-demo -p inbox-demo -p board-demo --features store-demo/native-preview,inbox-demo/native-preview,board-demo/native-preview --test native
 
   # The device tests on an emulator, on a phone and on a tablet: each screen in
   # four looks (light, dark, the largest text, right to left), photographed.
