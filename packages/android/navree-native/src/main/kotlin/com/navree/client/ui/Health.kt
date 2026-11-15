@@ -381,7 +381,12 @@ internal fun RingsView(node: Navree.Rings, modifier: Modifier = Modifier) {
             }
         }
         if (node.legend && !low) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            // In a card wider than the rings and their legend need, the group (not its heading) stands in the card's middle, not at its start with the rest empty.
+            Row(
+                if (LocalInCard.current && !beside) Modifier.centredWhenShort() else Modifier,
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
                 dial()
                 // The legend is as wide as its words, so what stands beside the rings keeps the rest of the line.
                 Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(12.dp)) {

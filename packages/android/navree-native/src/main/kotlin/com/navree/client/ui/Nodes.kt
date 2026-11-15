@@ -244,8 +244,7 @@ internal fun NodeView(node: Navree.Node, place: Place, modifier: Modifier = Modi
         is Navree.Gauge -> HealthGaugeView(node, modifier)
         is Navree.Figure -> HealthFigureView(node, place, modifier)
         is Navree.Ring -> RingView(node, modifier)
-        // In a card wider than the rings and their legend need, the group stands in the card's middle, not at its start with the rest empty.
-        is Navree.Rings -> RingsView(node, if (LocalInCard.current) modifier.fillMaxWidth().centredWhenShort() else modifier)
+        is Navree.Rings -> RingsView(node, modifier)
         is Navree.DayClock -> DayClockView(node, modifier)
         is Navree.DayPager -> DayPagerView(node, place, modifier)
         is Navree.Meter -> MeterView(node, modifier)
