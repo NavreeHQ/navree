@@ -8,7 +8,7 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class LaneRulesTest {
+class LazyLaneRulesTest {
     /** Six rows 100 px tall, one after another from 0, as a lazy list reports them. */
     private val rows = (0..5).map { LaneRules.Slot(it, it * 100, 100) }
 
