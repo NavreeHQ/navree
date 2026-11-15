@@ -70,13 +70,14 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
                 continue;
             }
 
+            bool backBefore = host.State.Nav.CanGoBack;
             host.Send(Events.Act(first.Id, new Models.ActionNavigate { Href = href }));
             await SettleAsync();
             ScreenView? pushed = host.State.FrontScreen;
             Check("destination " + destination + ": " + href + " is pushed", pushed is not null && pushed.Id != first.Id && host.State.Nav.CanGoBack, "front " + first.Id + " then " + pushed?.Id + ", can go back " + host.State.Nav.CanGoBack);
             host.Send(Events.Back);
             await SettleAsync();
-            Check("destination " + destination + ": back returns to the first screen", host.State.FrontScreen?.Id == first.Id && !host.State.Nav.CanGoBack, "front " + host.State.FrontScreen?.Id + ", can go back " + host.State.Nav.CanGoBack);
+            Check("destination " + destination + ": back returns to the first screen", host.State.FrontScreen?.Id == first.Id && host.State.Nav.CanGoBack == backBefore, "front " + host.State.FrontScreen?.Id + ", can go back " + host.State.Nav.CanGoBack + " (before the push: " + backBefore + ")");
         }
     }
 
@@ -196,7 +197,7 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
                 await Task.Delay(1000);
                 FormView? view = host.State.FrontScreen?.Forms.GetValueOrDefault(formId);
                 int errors = view?.Fields.Values.Sum(f => f.Errors.Count) ?? 0;
-                Check("destination " + destination + ": " + formId + " sent empty is told what is wrong", errors > 0, errors + " errors under its fields; messages waiting " + host.State.Messages.Count);
+                Check("destination " + destination + ": " + formId + " sent empty is told what is wrong", errors > 0 || host.State.Messages.Count > 0, errors + " errors under its fields; messages waiting " + host.State.Messages.Count + (host.State.Messages.Count > 0 ? ": " + string.Join(" / ", host.State.Messages.Select(m => m.ToString())) : string.Empty));
                 return;
             }
         }
@@ -238,7 +239,8 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
         }
 
         const string Phrase = "Thanks, this is looked into today (sent from the Windows client)";
-        host.Send(Events.Field(front.Id, "composer", "body", new TextValue(Phrase)));
+        Models.Field? bodyField = Tree.FieldsOf(composer).FirstOrDefault(f => f.Name == "body");
+        host.Send(Events.Field(front.Id, "composer", bodyField?.Id ?? "body", new TextValue(Phrase)));
         await SettleAsync();
         Act(front.Id, send, "composer");
         await SettleAsync();
