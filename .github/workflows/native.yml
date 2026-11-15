@@ -403,21 +403,32 @@ jobs:
 
       # What the web view's engine costs the first time something asks for it, asked first by each of the two
       # things that start it, each in a process of its own, three times. The numbers are in the run's summary.
+      # A run in which an install failed, the instrument crashed or a test did not pass, or that left no
+      # numbers, fails the step.
       - name: The web view's engine, timed
-        continue-on-error: true
         run: |
           adb="$ANDROID_HOME/platform-tools/adb"
           "$adb" install -r -t "$RUNNER_TEMP"/apks/navree-native/build/outputs/apk/androidTest/debug/*.apk
           echo "### The web view's engine, the first time it is asked for (${{ matrix.device }}, an emulator)" >> "$GITHUB_STEP_SUMMARY"
+          : > "$RUNNER_TEMP/no-skips.txt"
+          status=0
           for method in theFirstNativeRequestStartsTheEngineThroughTheCookieJar theGuardOnServiceWorkersStartsTheEngineWhenItIsAskedFirst; do
             for run in 1 2 3; do
+              file="$RUNNER_TEMP/engine-$method-$run.txt"
               "$adb" logcat -c
-              "$adb" shell am instrument -w -e cold 1 -e look light -e device "${{ matrix.device }}" -e class "com.navree.client.WebEngineStartTest#$method" \
-                com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/engine-$method-$run.txt" | grep -E '^(OK|FAILURES)' || true
-              "$adb" logcat -d -s WebEngineStart:I | grep 'WebEngineStart' | sed 's/^.*WebEngineStart *: *//' | tee -a "$GITHUB_STEP_SUMMARY"
+              "$adb" shell am instrument -r -w -e cold 1 -e look light -e device "${{ matrix.device }}" -e class "com.navree.client.WebEngineStartTest#$method" \
+                com.navree.client.test/androidx.test.runner.AndroidJUnitRunner > "$file"
+              python3 -I packages/android/scripts/read_run.py "$file" --look light --count 1 --skips "$RUNNER_TEMP/no-skips.txt" || status=1
+              numbers=$("$adb" logcat -d -s WebEngineStart:I | grep 'WebEngineStart' | sed 's/^.*WebEngineStart *: *//')
+              if [ -z "$numbers" ]; then
+                echo "::error title=The web view's engine, timed::$method, run $run, left no numbers."
+                status=1
+              fi
+              echo "$numbers" | tee -a "$GITHUB_STEP_SUMMARY"
               echo >> "$GITHUB_STEP_SUMMARY"
             done
           done
+          exit $status
 
       - name: Screens
         run: |
