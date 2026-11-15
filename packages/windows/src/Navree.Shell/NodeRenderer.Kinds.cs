@@ -124,6 +124,8 @@ internal sealed partial class NodeRenderer
                 return Composed.Layers(layers, Render);
             case Models.Shape shape:
                 return Composed.Shape(shape);
+            case Models.Grid grid when WindowRules.IsLanes(grid.Children):
+                return DrawLanes(grid);
             case Models.Grid grid:
                 return Composed.Grid(grid, Render);
             case Models.Carousel carousel:
@@ -216,6 +218,29 @@ internal sealed partial class NodeRenderer
     }
 
     // ---- the day a screen is about -----------------------------------------------------------------------
+
+    // A grid of lanes (the columns of a board): side by side down to a least width each, and scrolled across below that, never wrapped onto a
+    // second row far below the first; laid out down in a compact window.
+    private UIElement DrawLanes(Models.Grid grid)
+    {
+        double gap = WindowRules.Space(grid.Gap);
+        if (context.Width == WidthClass.Compact)
+        {
+            return Column(grid.Children, Math.Max(gap, 16));
+        }
+
+        Grid row = new() { ColumnSpacing = gap };
+        int at = 0;
+        foreach (Models.Node child in grid.Children)
+        {
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            UIElement lane = Render(child);
+            Grid.SetColumn((FrameworkElement)lane, at++);
+            row.Children.Add(lane);
+        }
+
+        return InLanes(row, gap);
+    }
 
     private UIElement DrawPager(Models.DayPager pager)
     {
