@@ -283,6 +283,10 @@ jobs:
     env:
       IMAGE: system-images;android-35;google_apis;x86_64
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: packages/android/scripts
+
       - name: The APKs
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -306,7 +310,9 @@ jobs:
             nohup ./inbox-demo > inbox.log 2>&1 &
           PORT=8097 BOARD_SIMULATOR=off BOARD_DATABASE_URL="sqlite://$RUNNER_TEMP/demo/board.db?mode=rwc" \
             nohup ./board-demo > board.log 2>&1 &
-          for port in 8095 8096 8097; do
+          # The demo app's own build reaches its server at 8787: the walk uses this one.
+          PORT=8787 STORE_SIMULATOR=off STORE_DATABASE_URL="sqlite://$RUNNER_TEMP/demo/walk.db?mode=rwc"             nohup ./store-demo > walk-server.log 2>&1 &
+          for port in 8095 8096 8097 8787; do
             for _ in $(seq 1 240); do
               if curl -s -o /dev/null "http://127.0.0.1:$port/"; then echo "port $port answers"; break; fi
               sleep 1
@@ -410,6 +416,30 @@ jobs:
           cp "$RUNNER_TEMP"/demo/*.log "$RUNNER_TEMP/screens/" || true
           ls -R "$RUNNER_TEMP/screens"
           exit $status
+
+      # The demo app itself, on the phone: a start second by second with and without a network,
+      # back, turning, a link, a form, the app ended by the system and opened again.
+      - name: Walk
+        if: always() && matrix.device == 'phone'
+        run: |
+          adb="$ANDROID_HOME/platform-tools/adb"
+          "$adb" install -r "$RUNNER_TEMP"/apks/demo/build/outputs/apk/debug/demo-debug.apk
+          "$adb" shell cmd uimode night no
+          "$adb" shell settings put system font_scale 1.0
+          chmod +x packages/android/scripts/walk.sh
+          ADB="$adb" OUT="$RUNNER_TEMP/walk" packages/android/scripts/walk.sh
+          status=$?
+          cp "$RUNNER_TEMP"/demo/walk-server.log "$RUNNER_TEMP/walk/" || true
+          exit $status
+
+      - name: Keep the walk
+        if: always() && matrix.device == 'phone'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-walk
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/walk
+          retention-days: 30
 
       - name: Keep the screens
         if: always()
