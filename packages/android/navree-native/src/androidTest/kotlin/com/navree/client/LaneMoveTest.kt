@@ -26,6 +26,7 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
+import com.navree.client.ui.LaneTrace
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.navree.client.core.Content
 import mockwebserver3.Dispatcher
@@ -65,6 +66,14 @@ class LaneMoveTest {
     /** The forms of the moves the server was told, in order. */
     private val moves = CopyOnWriteArrayList<Map<String, String>>()
 
+    /** What happened while a card was dragged, a line each, with the time in ms since the test began: written beside the pictures. */
+    private val trace = java.util.Collections.synchronizedList(ArrayList<String>())
+    private val began = System.nanoTime()
+
+    private fun mark(what: String) {
+        trace += "${(System.nanoTime() - began) / 1_000_000} ms $what"
+    }
+
     @After
     fun stop() {
         server.close()
@@ -76,7 +85,9 @@ class LaneMoveTest {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 if (request.method == "POST" && request.url.encodedPath == "/cards/move") {
-                    moves += LaneBoard.form(request.body?.utf8().orEmpty())
+                    val form = LaneBoard.form(request.body?.utf8().orEmpty())
+                    moves += form
+                    mark("SERVER told of a move: $form")
                     return MockResponse.Builder().code(204).build()
                 }
                 return served.dispatch(request)
@@ -148,26 +159,52 @@ class LaneMoveTest {
 
     @Test
     fun aCardHeldPastTheBottomOfALaneOfTwoHundredCardsScrollsTheLaneUnderItAndStandsWhereItIsLetGo() {
+        // Whatever comes of it, the file beside the pictures says what the drag did, a line for each step of it.
+        LaneTrace.tap = { line -> mark(line) }
+        try {
+            dragAndDrop()
+        } finally {
+            LaneTrace.tap = null
+            mark("the cards drawn at the end: ${runCatching { shown() }.getOrNull()}; the server was told: $moves")
+            Shots.put("${Shots.device}-${Shots.look}-lane-drag-trace.txt", trace.joinToString("\n") + "\n")
+        }
+    }
+
+    private fun dragAndDrop() {
         open(200)
         val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
         val grab = handle(0).fetchSemanticsNode().boundsInRoot.center
+        mark("the window is ${root.width} x ${root.height} px; the handle of card 0 is at $grab")
         compose.onRoot().performTouchInput {
+            mark("the finger goes down on the handle")
             down(grab)
             // Into the lane, clear of its edges: the card lifts and follows the finger, and nothing scrolls.
-            for (step in 1..10) moveTo(Offset(grab.x, grab.y + 20f * step), delayMillis = 16)
+            for (step in 1..10) {
+                mark("the finger moves to y=${grab.y + 20f * step}")
+                moveTo(Offset(grab.x, grab.y + 20f * step), delayMillis = 16)
+            }
         }
         compose.waitForIdle()
         assertTrue("the held card is still drawn", shown().contains(0))
+        mark("a picture is taken with the card held")
         Shots.take("lane-held")
         compose.onRoot().performTouchInput {
             val from = grab.y + 200f
             val to = root.bottom - 6f
             // Down to the bottom edge, and held there for more than three seconds: the lane scrolls by itself, by more than two windows of cards, so the card would leave the list if it were not kept.
-            for (step in 1..20) moveTo(Offset(grab.x, from + (to - from) * step / 20f), delayMillis = 16)
-            repeat(200) { moveBy(Offset.Zero, delayMillis = 16) }
+            for (step in 1..20) {
+                mark("the finger moves to y=${from + (to - from) * step / 20f}")
+                moveTo(Offset(grab.x, from + (to - from) * step / 20f), delayMillis = 16)
+            }
+            repeat(200) { n ->
+                if (n % 20 == 0) mark("the finger is held at the edge, ${n * 16} ms")
+                moveBy(Offset.Zero, delayMillis = 16)
+            }
+            mark("the finger goes up")
             up()
         }
         compose.waitForIdle()
+        mark("the test is idle after the finger went up")
         waitFor("the server told of the move") { moves.size == 1 }
         // One move, at the drop, with the final place: not one for each card the held card passed on the way.
         Thread.sleep(1_500)
@@ -188,8 +225,8 @@ class LaneMoveTest {
         } else {
             assertTrue("the card is the last drawn: the card it stands before is further down (${form["before"]}), $order", (form["before"]?.toIntOrNull() ?: Int.MAX_VALUE) > others.last())
         }
-        val card = compose.onAllNodes(hasText(LaneBoard.title(0))).onFirst().fetchSemanticsNode().boundsInRoot
-        assertTrue("the card stands in the lower part of the window, where the finger was: ${card.top} of ${root.height}", card.top > root.height * 0.4f)
+        // The finger was let go at the bottom edge, so the card stands in the last place that is wholly drawn: one of the last two cards.
+        assertTrue("the card, let go at the bottom edge, stands among the last two cards drawn: place $at of ${order.size} in $order", at >= order.size - 2)
         Shots.take("lane-dropped")
     }
 

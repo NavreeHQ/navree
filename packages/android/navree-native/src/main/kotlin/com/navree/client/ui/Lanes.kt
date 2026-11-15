@@ -72,6 +72,15 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
+ * A tap on what a drag does, for a test to write down frame by frame: it is told a line each time a row is
+ * picked up, dragged, put in a place, scrolled for, let go or lost. Nothing in the app sets it.
+ */
+internal object LaneTrace {
+    @Volatile
+    var tap: ((String) -> Unit)? = null
+}
+
+/**
  * What a list of rows that are moved is while a row of it is in hand, and
  * after the drop until the core's next screen shows the move.
  *
@@ -106,6 +115,19 @@ internal class LaneState {
 
     private var baseList: Navree.List? = null
     private var baseIds: List<String> = emptyList()
+
+    /** Tells the tap, if a test set one, what the drag is at: the row, where it stands, where the finger is, and what the list shows. */
+    fun note(what: String, state: LazyListState?, listId: String?) {
+        val tap = LaneTrace.tap ?: return
+        val info = state?.layoutInfo
+        val seen = info?.visibleItemsInfo
+        val own = seen?.firstOrNull { it.key == LaneRules.key(listId, held.orEmpty()) }
+        tap(
+            "$what held=$held place=${order?.indexOf(held)} index=${own?.index} offset=${own?.offset} finger=${startOffset + offsetY} " +
+                "offsetY=$offsetY start=$startOffset size=$heldSize towards=$towards first=${seen?.firstOrNull()?.index} last=${seen?.lastOrNull()?.index} " +
+                "viewStart=${info?.viewportStartOffset} viewEnd=${info?.viewportEndOffset} total=${info?.totalItemsCount}",
+        )
+    }
 
     /** The ids of the rows of the list that are moved, in the list's own order; made once for a list. */
     fun baseOf(list: Navree.List): List<String> {
@@ -166,12 +188,14 @@ internal class LaneState {
         offsetY = 0f
         towards = 0f
         held = id
+        note("begin", state, list.id)
         return true
     }
 
-    fun drag(dy: Float) {
+    fun drag(dy: Float, state: LazyListState? = null, listId: String? = null) {
         offsetY += dy
         if (dy != 0f) towards = if (dy < 0f) -1f else 1f
+        note("drag dy=$dy", state, listId)
     }
 
     /** Where the row in hand is to be drawn against where its item stands: how far its layer is moved, in px. */
@@ -200,6 +224,7 @@ internal class LaneState {
         val heldTop = info.visibleItemsInfo.firstOrNull { it.key == ownKey }?.offset
         val to = LaneRules.landing(from, startOffset + offsetY, heldSize, slots, info.viewportStartOffset, info.viewportEndOffset, heldTop)
         if (to != from) order = LaneRules.moved(shown.ids, from, to)
+        note("follow from=$from to=$to heldTop=$heldTop slots=${slots.size}", state, list.id)
     }
 
     /** How far the list is to scroll in this frame, in px, for the row in hand. */
@@ -220,12 +245,15 @@ internal class LaneState {
         offsetY = 0f
         if (shown == baseOf(list)) {
             order = null
+            LaneTrace.tap?.invoke("finish: back where it was, nothing is sent held=$id")
             return null
         }
+        LaneTrace.tap?.invoke("finish: sends before=${LaneRules.before(shown, id)} held=$id place=${shown.indexOf(id)} of ${shown.size}")
         return Drop(LaneRules.before(shown, id))
     }
 
     fun cancel() {
+        LaneTrace.tap?.invoke("cancel: the drag was lost held=$held")
         held = null
         offsetY = 0f
         order = null
@@ -415,7 +443,11 @@ internal fun MovingRow(
         val pin = LocalPinnableContainer.current
         DisposableEffect(held, pin) {
             val handle = if (held) pin?.pin() else null
-            onDispose { handle?.release() }
+            if (held) lane.note("pinned=${handle != null} (the item is composed)", listState, listId)
+            onDispose {
+                handle?.release()
+                if (held) lane.note("released, or the item left the composition", listState, listId)
+            }
         }
         // While it is held: it takes its place among the rows beside it, and the list scrolls by itself while it is near an edge of the window.
         LaunchedEffect(held) {
@@ -436,7 +468,9 @@ internal fun MovingRow(
                 val frames = if (last == 0L) 1f else (now - last) / FRAME_NANOS
                 last = now
                 val wanted = lane.scrollWanted(listState, edge, most) * frames
-                if (wanted != 0f && listState.scrollBy(wanted) == 0f) {
+                val used = if (wanted != 0f) listState.scrollBy(wanted) else 0f
+                lane.note("scroll wanted=$wanted used=$used", listState, listId)
+                if (wanted != 0f && used == 0f) {
                     // At the end of what is loaded: nothing to do until the finger moves or more rows come.
                     snapshotFlow { lane.offsetY to listState.layoutInfo.totalItemsCount }.drop(1).first()
                     last = 0L
@@ -453,7 +487,7 @@ internal fun MovingRow(
                 onDragStart = { lane.begin(currentList, id, listState) },
                 onDrag = { change, amount ->
                     change.consume()
-                    lane.drag(amount.y)
+                    lane.drag(amount.y, listState, listId)
                 },
                 onDragEnd = { lane.finish(currentList)?.let { currentDrop(it.before) } },
                 onDragCancel = { lane.cancel() },
