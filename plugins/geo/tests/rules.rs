@@ -210,6 +210,11 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LogCapture {
     }
 }
 
+/// One boot at a time in this binary. A test below reads the lines a boot logs on its own thread,
+/// and a boot running on another thread at the same moment, with nobody listening there, can
+/// leave one of those lines unheard.
+static ONE_BOOT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// Whether the log holds a line of `level` with `text` in it.
 fn logged(capture: &LogCapture, level: &str, text: &str) -> bool {
     capture
@@ -263,6 +268,7 @@ fn the_map_and_the_location_control_follow_the_rules() {
 // script, and the inline edit of a table cell.
 #[tokio::test]
 async fn a_point_outside_the_delivery_area_is_refused_in_the_form_and_in_the_table() {
+    let _one = ONE_BOOT.lock().await;
     let app = builder().build().await;
 
     // The form: Delhi is outside, and the refusal stands on the field.
@@ -338,6 +344,7 @@ async fn a_point_outside_the_delivery_area_is_refused_in_the_form_and_in_the_tab
 // yes; what it serves and answers is the same either way, but the tiles.
 #[tokio::test(flavor = "current_thread")]
 async fn geo_boots_in_test_app_and_asks_for_the_tile_host() {
+    let _one = ONE_BOOT.lock().await;
     let capture = LogCapture::default();
     let _guard = capture.install();
 
