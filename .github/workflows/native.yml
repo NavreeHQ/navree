@@ -426,12 +426,14 @@ jobs:
       CI: "true"
       WINAPP_VERSION: "0.8.0"
       # What the audit of the walks counts, added over every look of the three demos (nine files): the most it may count today. The
-      # job fails when a count goes above its number; a number is brought down when the count is. "no name" is the in-process
-      # audit's own count, which asks a control's own peer and so calls a list row nameless (the system's tool names it).
-      AUDIT_NO_NAME: "2258"
-      AUDIT_SMALL_TARGETS: "2625"
-      AUDIT_TEXTS_CUT: "273"
-      AUDIT_PAST_EDGE: "990"
+      # job fails when a count goes above its number; a number is brought down when the count is. The counts move a little from one run
+      # to the next (a popup open, a table that has realised a row or not), so each number is the most two runs counted, with five in
+      # a hundred added. "no name" is the in-process audit's own count, which asks a control's own peer and so calls a list row nameless
+      # (the system's tool names it).
+      AUDIT_NO_NAME: "2400"
+      AUDIT_SMALL_TARGETS: "2760"
+      AUDIT_TEXTS_CUT: "340"
+      AUDIT_PAST_EDGE: "1040"
       # What the press run proves: how many of its checks must pass.
       PRESS_PASSES: "7"
       # Checks that say FAIL today because the page does not do the thing yet (a popover opens as a dialog, a row has no menu, a card
@@ -785,7 +787,7 @@ jobs:
             "audit: $($names[$i]) $($sum[$i]) (at most $($limits[$i]))"
             if ($sum[$i] -gt $limits[$i]) { $failed += "the audit counts $($sum[$i]) $($names[$i]), more than the $($limits[$i]) written in this job" }
           }
-          foreach ($pattern in $known) {
+          foreach ($pattern in ($known | Where-Object { $_ -notmatch '^\[press' })) {
             if (-not ($stillFailing | Where-Object { $_ -match $pattern })) { "NOTE: '$pattern' no longer fails: take it off KNOWN_FAILS" }
           }
           if ($failed) { $failed | ForEach-Object { "FAILED: $_" }; throw "the walks found $($failed.Count) thing(s) wrong" }
@@ -961,6 +963,9 @@ jobs:
           "press: $passes passed, $($fails.Count) failed ($($fails.Count - $unknown.Count) of them named in KNOWN_FAILS; at least $env:PRESS_PASSES must pass)"
           $fails | ForEach-Object { "    $_" }
           $unknown | ForEach-Object { "FAILED: $_" }
+          foreach ($pattern in ($known | Where-Object { $_ -match '^\[press' })) {
+            if (-not ($fails | Where-Object { $_ -match $pattern })) { "NOTE: '$pattern' no longer fails: take it off KNOWN_FAILS" }
+          }
           if ($unknown.Count -gt 0 -or $passes -lt [int]$env:PRESS_PASSES -or $lines[-1] -notmatch ' done$') { throw "the press run did not pass" }
 
       - name: Keep what was pressed
