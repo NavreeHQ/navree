@@ -144,7 +144,7 @@ internal sealed class StickyCoordinator
     internal void Mirror()
     {
         double reach = Math.Max(0, scroll.ScrollableWidth);
-        (double min, double max) = rtl ? (-reach, 0) : (0, reach);
+        (double min, double max) = rtl ? (-reach, 0.0) : (0.0, reach);
         double position = rtl ? -scroll.HorizontalOffset : scroll.HorizontalOffset;
         foreach ((UIElement element, StickyRole role) in parts)
         {
