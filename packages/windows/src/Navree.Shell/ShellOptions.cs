@@ -1,4 +1,5 @@
 using Navree.Platform;
+using Navree.Runtime;
 
 namespace Navree.Shell;
 
@@ -22,6 +23,9 @@ public sealed record ShellOptions
 
     /// <summary>What answers the core's requests, when it is not the network: the demo's recorded answers.</summary>
     public IFetcher? Fetcher { get; init; }
+
+    /// <summary>What answers a request before the network does, when it has an answer to give and none when it has not: the demo's recorded sign-out.</summary>
+    public Func<FetchEffect, FetchResult?>? AnswerFirst { get; init; }
 
     /// <summary>What answers a request of a page in the web view for the app's own origin, when it is not the network: the demo's recorded pages.</summary>
     public Func<Uri, (byte[] Body, string ContentType)?>? RecordedPages { get; init; }

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Microsoft.UI.Dispatching;
 using Navree.Design;
 using Navree.Platform;
+using Navree.Protocol;
 using Navree.Runtime;
 
 namespace Navree.Shell;
@@ -43,7 +44,8 @@ public sealed partial class ShellHost : IDisposable
             network = new HttpFetcher(Origins, cookies);
         }
 
-        fetcher = options.Fetcher ?? network!;
+        IFetcher answering = options.Fetcher ?? network!;
+        fetcher = options.AnswerFirst is null ? answering : new FirstAnswer(options.AnswerFirst, answering);
         if (kept.Read("cookies") is string saved)
         {
             cookies.Import(saved);
@@ -76,6 +78,24 @@ public sealed partial class ShellHost : IDisposable
 
     /// <summary>Raised on the UI thread when the session ended and what was kept has been wiped.</summary>
     public event Action<WipeReport>? SessionEnded;
+
+    /// <summary>
+    /// Whether the client offers a way out of its own: somebody is signed in, the app has a sign-in, and the menu the server gave
+    /// that person has none.
+    /// </summary>
+    public bool OffersOwnSignOut =>
+        Options.Place.Scheme is not null && State.App?.User is Models.User user && !AccountRules.OffersSignOut(user.Menu);
+
+    /// <summary>
+    /// Signs the person out on this device: what could rebuild the session goes first (the cookies, what is kept, what the web view
+    /// keeps), then the core is told the client ended the session itself and starts again from the shell.
+    /// </summary>
+    /// <returns>When the wipe has finished and the core is told.</returns>
+    public async Task SignOutHereAsync()
+    {
+        await ForgetAsync();
+        client.Send(Events.SignedOut);
+    }
 
     /// <summary>Tells the core what happened.</summary>
     /// <param name="eventJson">An event, from <see cref="Events"/>.</param>
@@ -440,5 +460,12 @@ public sealed partial class ShellHost : IDisposable
 
         Place?.EndSession();
         SessionEnded?.Invoke(report);
+    }
+
+    // Asks what the app answers by itself first, and the fetcher behind it for the rest.
+    private sealed class FirstAnswer(Func<FetchEffect, FetchResult?> first, IFetcher behind) : IFetcher
+    {
+        public Task<FetchResult> FetchAsync(FetchEffect effect, CancellationToken cancel) =>
+            first(effect) is FetchResult answer ? Task.FromResult(answer) : behind.FetchAsync(effect, cancel);
     }
 }
