@@ -799,7 +799,10 @@ mod tests {
         env.add_function("clock", || "IST");
         assert_eq!(
             before.changes(&fingerprint(&env)),
-            ["replaces the function `clock`", "replaces the global `tags`"]
+            [
+                "replaces the function `clock`",
+                "replaces the global `tags`"
+            ]
         );
 
         // A safe string left alone is no change; the same text put back plain is a replacement.

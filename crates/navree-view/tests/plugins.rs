@@ -418,8 +418,12 @@ impl Module for AppCompany {
 #[tokio::test]
 async fn a_plugins_hook_putting_an_app_global_back_marked_safe_fails_the_boot() {
     // The same text, marked safe: equal to the plain one, but it prints as it is.
-    let put_back: fn(&mut Environment) =
-        |env| env.add_global("company", Value::from_safe_string("Sharma & Sons".to_owned()));
+    let put_back: fn(&mut Environment) = |env| {
+        env.add_global(
+            "company",
+            Value::from_safe_string("Sharma & Sons".to_owned()),
+        )
+    };
     let print_company = |app: &App| {
         let ctx = app.ctx().clone();
         async move {
