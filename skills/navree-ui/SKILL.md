@@ -319,8 +319,8 @@ pub struct ContactsModule;
 
 What each part does:
 
-- `TableQuery<ContactRow>` reads `q`, `sort`, `page`, `per` and the filters
-  from the address. `load_as` runs them on your scoped query, so the user
+- `TableQuery<ContactRow>` reads `search`, `sort`, `page`, `per_page` and the
+  filters (`filter[..]`) from the address. `load_as` runs them on your scoped query, so the user
   sees only the rows they may read. Back, forward, reload and a shared link
   restore the list, with JavaScript on or off.
 - `Submit<ContactInput>` refuses a body from another site (403), a body
