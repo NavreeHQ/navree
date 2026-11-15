@@ -723,3 +723,54 @@ fn what_an_early_op_brings_is_looked_through_by_every_op_after_it() {
         update.effects
     );
 }
+
+/// A page that carries ops is one answer: when its ops would be refused (their
+/// work passes the budget against the page's own screen), the page is not
+/// drawn either, the screen shows what a screen that could not be read shows
+/// and has its retry, and nothing is fetched again by itself.
+#[test]
+fn a_page_whose_ops_would_be_refused_is_not_drawn_and_is_not_fetched_again() {
+    let mut core = Core::new(Config::new(
+        "https://shop.example",
+        Client::new(Platform::Android, FormFactor::Phone),
+    ));
+    let shell = request_of(&core.send(Event::Start));
+    let first = request_of(&answer(
+        &mut core,
+        shell,
+        &json!({"navree": 1, "build": "b1", "name": "Charkha Supply Co.", "home": "/"}),
+    ));
+    // Five thousand rows, and a thousand ops that each look through them:
+    // five million visits, over the four million an answer may ask for.
+    let rows: Vec<Value> = (0..5_000)
+        .map(|number| json!({"t": "row", "id": format!("order-{number}"), "title": "CS"}))
+        .collect();
+    let page = json!({"navree": 1, "build": "b1", "vocab": 1,
+        "screen": {"title": "Orders", "body": {"t": "stack", "children": [
+            {"t": "field", "id": "note", "name": "note", "input": {"t": "text"}},
+            {"t": "list", "id": "orders", "children": rows}]}},
+        "ops": vec![json!({"op": "focus", "target": "note"}); 1_000]});
+    let (mut fetches, mut next) = (0, Some(first));
+    for _ in 0..10 {
+        let Some(request) = next.take() else { break };
+        fetches += 1;
+        let update = answer(&mut core, request, &page);
+        next = update.effects.iter().find_map(|effect| match effect {
+            Effect::Fetch(request) if request.url == "https://shop.example/" => {
+                Some(request.request)
+            }
+            _ => None,
+        });
+    }
+    assert!(fetches <= 2, "the page was asked for {fetches} times");
+    let screen = core.view().front.expect("a screen is in front");
+    let view = &core.view().screens[&screen];
+    assert!(
+        matches!(view.content, navree_native_core::Content::Blank),
+        "the page was drawn though its ops were refused"
+    );
+    assert_eq!(view.failure, Some(navree_native_core::Failure::Protocol));
+    // The person's retry asks again.
+    let retried = core.send(Event::Refresh { screen });
+    assert!(request_of(&retried) > 0);
+}

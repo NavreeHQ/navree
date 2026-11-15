@@ -1142,6 +1142,7 @@ impl Core {
         if !self.view.holds(id) {
             return;
         }
+        self.acted_on(id);
         self.inner.acting = from;
         self.perform(id, action, form, overlay, text, now);
         self.inner.acting = None;

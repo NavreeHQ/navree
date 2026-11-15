@@ -434,6 +434,21 @@ fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<
     if read.envelope.ops.len() > MAX_OPS || !nodes_within(&read.envelope, MAX_NODES) {
         return Err(Failure::Protocol);
     }
+    // A page that brings ops is read whole: its ops are held to the budgets
+    // against its own screen, and an answer whose ops would be refused is not
+    // read at all, so a page is never drawn with its ops dropped.
+    if let Some(screen) = &read.envelope.screen
+        && !read.envelope.ops.is_empty()
+    {
+        let brought: Vec<usize> = read.envelope.ops.iter().map(crate::weight::of_op).collect();
+        if !crate::weight::fit(
+            crate::weight::of_screen(screen),
+            &read.envelope.ops,
+            &brought,
+        ) {
+            return Err(Failure::Protocol);
+        }
+    }
     // What the core names things from is short, before anything is named.
     if !ids_within(&read.envelope) {
         return Err(Failure::Protocol);

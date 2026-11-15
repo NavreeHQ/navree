@@ -842,9 +842,10 @@ pub(crate) struct ScreenInner {
     /// what the tree holds, so it is counted afresh before anything is
     /// refused for it.
     pub weight: usize,
-    /// How many answers in a row were refused for their size: past two the
-    /// screen is not asked for again on their account, so a server that
-    /// answers so every time is not asked again and again.
+    /// How many answers were refused for their size since the person last
+    /// acted on the screen or an answer of ops was applied to it: after the
+    /// first the screen is not fetched again on their account, so a server
+    /// that answers so every time is not asked again and again.
     pub refused: u8,
     pub form_ids: BTreeSet<String>,
     pub field_ids: BTreeSet<String>,

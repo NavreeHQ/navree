@@ -35,6 +35,7 @@ use crate::tree::{
     fits, form_of, has_id, holds, main_list, opens, pager_has_id, rewrite_in, roots, roots_mut,
     slots, walk,
 };
+use crate::weight::looks_through;
 
 /// Opens or closes a sheet, a dialog or a disclosure. True when it changed;
 /// false also for a node that has no such state of its own.
@@ -95,27 +96,6 @@ fn searched(input: &navree_native::Input) -> bool {
     }
 }
 
-/// Whether an op finds its target by looking through the screen for it: every
-/// op that names a node, a form, a list or a region.
-fn looks_through(op: &Op) -> bool {
-    matches!(
-        op,
-        Op::Morph { .. }
-            | Op::Replace { .. }
-            | Op::Append { .. }
-            | Op::Prepend { .. }
-            | Op::Remove { .. }
-            | Op::Merge { .. }
-            | Op::Rows { .. }
-            | Op::Row { .. }
-            | Op::Errors { .. }
-            | Op::Open { .. }
-            | Op::Close { .. }
-            | Op::Focus { .. }
-            | Op::Invalidate { .. }
-    )
-}
-
 /// Takes the row `id` out of the first table that has it.
 fn remove_row(node: &mut Node, id: &str) -> bool {
     if let Node::Table(table) = node
@@ -152,22 +132,14 @@ impl Core {
         // none of the ops that change the screen is applied.
         let brought: Vec<usize> = ops.iter().map(crate::weight::of_op).collect();
         let any = ops.iter().any(looks_through) || brought.iter().any(|brought| *brought > 0);
-        if any
-            && !self.screen_fits(id, |held| {
-                let (mut size, mut work) = (held, 0_usize);
-                for (op, brought) in ops.iter().zip(&brought) {
-                    if looks_through(op) {
-                        work = work.saturating_add(size);
-                    }
-                    size = size.saturating_add(*brought);
-                    if size > MAX_SCREEN_NODES || work > MAX_WORK {
-                        return false;
-                    }
-                }
-                true
-            })
-        {
+        if any && !self.screen_fits(id, |held| crate::weight::fit(held, &ops, &brought)) {
             return self.answer_refused(id, ops);
+        }
+        // An answer of ops that is applied sets the refusals back.
+        if !ops.is_empty()
+            && let Some(inner) = self.inner.screens.get_mut(&id)
+        {
+            inner.refused = 0;
         }
         for op in ops {
             match op {
@@ -346,8 +318,8 @@ impl Core {
     /// An answer whose ops would take the screen past its largest size, or
     /// ask for more work than an answer may, changes nothing: the person gets
     /// the failure a screen that could not be read gets, and the screen is
-    /// out of date, so it is fetched again (unless that has failed twice
-    /// running). Of what the answer said, only a sign-out is carried out. True
+    /// out of date, so it is fetched again, once: the count of refusals
+    /// belongs to the screen, and the person acting on it sets it back. Of what the answer said, only a sign-out is carried out. True
     /// when that leads away from the screen.
     fn answer_refused(&mut self, id: ScreenId, ops: Vec<Op>) -> bool {
         self.refused_for_size(
@@ -358,7 +330,7 @@ impl Core {
         );
         if let Some(inner) = self.inner.screens.get_mut(&id) {
             inner.refused = inner.refused.saturating_add(1);
-            inner.stale = inner.refused < 3;
+            inner.stale = inner.refused < 2;
         }
         let mut left = false;
         let mut signed_out = false;
@@ -1133,5 +1105,97 @@ impl Core {
         for region in wants {
             self.fetch_region(id, &region, None);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Config, Core, Effect, Event, Response, Update};
+    use navree_native::{CONTENT_TYPE, Client, FormFactor, Op, Platform};
+
+    fn page(rows: usize) -> Response {
+        let rows: Vec<_> = (0..rows)
+            .map(|number| serde_json::json!({"t": "row", "id": format!("order-{number}"), "title": "CS"}))
+            .collect();
+        Response {
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: serde_json::json!({"navree": 1, "build": "b1", "vocab": 1, "screen": {"title": "Orders", "body": {"t": "list", "id": "orders", "children": rows}}})
+                .to_string(),
+            ..Response::default()
+        }
+    }
+
+    fn fetch_of(update: &Update) -> Option<u64> {
+        update.effects.iter().find_map(|effect| match effect {
+            Effect::Fetch(request) => Some(request.request),
+            _ => None,
+        })
+    }
+
+    fn core_with_a_screen() -> (Core, u64) {
+        let mut core = Core::new(Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        ));
+        let shell = fetch_of(&core.send(Event::Start)).expect("the shell is asked for");
+        let first = fetch_of(&core.send(Event::Response(Response {
+            request: shell,
+            status: 404,
+            ..Response::default()
+        })))
+        .expect("the first page is asked for");
+        core.send(Event::Response(Response {
+            request: first,
+            ..page(5_000)
+        }));
+        let screen = core.view().front.expect("a screen is in front");
+        (core, screen)
+    }
+
+    fn too_much() -> Vec<Op> {
+        serde_json::from_value(serde_json::Value::Array(vec![
+            serde_json::json!({"op": "focus", "target": "nowhere"});
+            1_000
+        ]))
+        .expect("ops")
+    }
+
+    /// An answer of ops alone that is refused has the screen fetched again at
+    /// most once: the count belongs to the screen, survives its page being
+    /// shown again, and is set back only by the person acting on it.
+    #[test]
+    fn a_refused_answer_of_ops_has_its_screen_fetched_again_once() {
+        let (mut core, screen) = core_with_a_screen();
+        core.apply_ops(screen, too_much(), false);
+        assert!(
+            core.inner.screens[&screen].stale,
+            "the first refusal asks for the screen again"
+        );
+        // Any event ends with the screen in front fetched, as it is out of
+        // date, and the page that answers is shown again.
+        let update = core.send(Event::Background);
+        let request = fetch_of(&update).expect("the screen is fetched again");
+        core.send(Event::Response(Response {
+            request,
+            ..page(5_000)
+        }));
+        assert!(!core.inner.screens[&screen].stale);
+        core.apply_ops(screen, too_much(), false);
+        assert!(
+            !core.inner.screens[&screen].stale,
+            "a second refusal does not ask again"
+        );
+        // The person pulls to refresh: the count is set back.
+        let request = fetch_of(&core.send(Event::Refresh { screen })).expect("the refresh");
+        core.send(Event::Response(Response {
+            request,
+            ..page(5_000)
+        }));
+        core.apply_ops(screen, too_much(), false);
+        assert!(
+            core.inner.screens[&screen].stale,
+            "after the person acted it asks once more"
+        );
     }
 }
