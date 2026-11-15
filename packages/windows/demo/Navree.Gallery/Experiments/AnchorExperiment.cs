@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Navree.Controls;
 using Navree.Design.Tables;
+using Geometry = Navree.Design.Tables.Geometry;
 using Windows.Foundation;
 
 namespace Navree.Gallery;
