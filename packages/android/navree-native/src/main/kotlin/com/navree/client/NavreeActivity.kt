@@ -157,6 +157,7 @@ open class NavreeActivity : ComponentActivity() {
     protected open fun config(): NavreeConfig = NavreeConfig.fromResources(this)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        StartMarks.enabled = StartMarks.loggedWith(applicationInfo.flags)
         StartMarks.mark("the activity is made")
         // The app draws behind the system bars; each screen pads itself by the insets.
         enableEdgeToEdge()
@@ -271,7 +272,15 @@ open class NavreeActivity : ComponentActivity() {
 
 /** When the parts of a start happened, in the log, counted from the start of the process: where the time of a start goes. */
 internal object StartMarks {
+    /** Whether the marks are logged: in a build that can be debugged, and not in one a person has (where they are a line of log nobody reads). */
+    @Volatile
+    var enabled = true
+
+    /** Whether an app with these `ApplicationInfo` flags logs its start marks. */
+    fun loggedWith(flags: Int): Boolean = flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+
     fun mark(what: String) {
+        if (!enabled) return
         android.util.Log.i("NavreeStart", "$what at ${android.os.SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime()} ms")
     }
 }
