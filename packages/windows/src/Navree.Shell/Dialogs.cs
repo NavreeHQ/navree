@@ -23,6 +23,17 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
     private TaskCompletionSource closing = new();
     private bool closedByUs;
     private bool pumping;
+    private bool hooked;
+
+    // Escape takes away a popover that is open, wherever the focus is: in the popover or still on the button that opened it.
+    private void CloseFlyoutOnEscape(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Escape && flyout is { IsOpen: true } open)
+        {
+            e.Handled = true;
+            open.Hide();
+        }
+    }
 
     /// <summary>What is over the window now: a question, a modal screen, or an overlay of the screen in front.</summary>
     internal void Update(ViewState state, RenderContext? context, bool modalInFront)
@@ -30,6 +41,12 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
         foreach ((long Screen, bool Pane) gone in modals.Keys.Where(key => !state.Screens.ContainsKey(key.Screen)).ToList())
         {
             _ = modals.Remove(gone);
+        }
+
+        if (!hooked)
+        {
+            hooked = true;
+            root.AddHandler(UIElement.KeyDownEvent, new Microsoft.UI.Xaml.Input.KeyEventHandler(CloseFlyoutOnEscape), true);
         }
 
         latest = Decide(state, context, modalInFront);
@@ -349,6 +366,18 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                         {
                             want.OnClosed(ContentDialogResult.None);
                             _ = anchor.Focus(FocusState.Programmatic);
+                        }
+                    };
+                    shown.Opened += (_, _) =>
+                    {
+                        // The focus goes into the popover, and Escape in it takes it away.
+                        if (shown.Content is FrameworkElement body)
+                        {
+                            body.KeyDown += CloseFlyoutOnEscape;
+                            if (Microsoft.UI.Xaml.Input.FocusManager.FindFirstFocusableElement(body) is Control first)
+                            {
+                                _ = first.Focus(FocusState.Programmatic);
+                            }
                         }
                     };
                     shown.ShowAt(anchor);
