@@ -5710,6 +5710,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-plugin-geo"
+version = "1.2.2"
+dependencies = [
+ "http",
+ "navree",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "navree-queue"
 version = "1.2.4"
 dependencies = [
