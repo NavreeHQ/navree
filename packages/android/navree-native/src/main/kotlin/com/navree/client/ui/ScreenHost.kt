@@ -845,7 +845,8 @@ private fun FilterBar(form: Navree.Form, place: Place, sends: Boolean) {
     val inForm = place.copy(form = form.id)
     val bar = remember(form) { FilterRules.bar(form) }
     val filters = remember(form) { bar?.fields ?: form.fields().filter(FilterRules::isFilter) }
-    val actions = bar?.actions.orEmpty()
+    // A table's query keeps its box of words in the app bar and has no links to draw here.
+    val actions = if (sends) bar?.actions.orEmpty() else emptyList()
     if (filters.isEmpty()) return
     val margin = ContentRules.marginDp(ui.window).dp
     // A form of filters on a page asks by itself with each choice; a table's query is asked by the core.
@@ -855,7 +856,7 @@ private fun FilterBar(form: Navree.Form, place: Place, sends: Boolean) {
     }
     Column(Modifier.fillMaxWidth()) {
         // The box of words the filters narrow by stands over them, in the screen's one column.
-        bar?.search?.let { words ->
+        bar?.search?.takeIf { sends }?.let { words ->
             Box(Modifier.readable(FormRules.FORM_MOST_DP).padding(horizontal = margin).padding(bottom = 8.dp)) { FieldView(words, inForm) }
         }
         LazyRow(
