@@ -148,6 +148,11 @@ if ($null -ne $hidden) {
     }
     $hidden.Refresh()
     Say ("after the second start: window handle " + $hidden.MainWindowHandle)
+    # Closing the window of an app that keeps running in the notification area only hides it.
+    [void]$hidden.CloseMainWindow()
+    Start-Sleep -Seconds 4
+    $hidden.Refresh()
+    Say ("after the window was closed: still running " + (-not $hidden.HasExited) + ", window handle " + $hidden.MainWindowHandle)
     Say ("the first copy then: " + (Wait-Demo $hidden 60))
 } else {
     Say "the hidden copy did not start"
