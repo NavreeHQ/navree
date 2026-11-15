@@ -153,6 +153,9 @@ pub use island::{Island, IslandScript};
 pub use localize::{Localizer, ReaderWords};
 pub use markdown::{CodeBlock, Markdown, MarkdownLabels, MarkdownTrust};
 pub use module::{UiModule, UiNeed, UiOnDemand};
+#[cfg(feature = "extension-files")]
+#[cfg_attr(docsrs, doc(cfg(feature = "extension-files")))]
+pub use navree_ui_ext_macros::{extension_script, extension_sheet};
 pub use navree_ui_macros::{FilterBar, Form, Options, TableRow, icon_file, icon_set};
 pub use navree_validation::Validate;
 pub use node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};

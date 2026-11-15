@@ -21,7 +21,7 @@ L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema  navree-navigator (tool)
 L1  navree-contracts  navree-config  navree-telemetry  navree-native-core (the native clients' runtime core)
-L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PDF reading, writing and text)  navree-glob (the glob matcher)  navree-markdown (Markdown reading)  navree-native (Navree Native's protocol)  navree-phone (phone numbers)  navree-template (the template engine)  navree-openapi (the OpenAPI document model and `ToSchema`)   navree-macros, navree-i18n-macros, navree-orm-macros, navree-ui-macros, navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (dev and deploy tools)   navree-template-peak (memory tests of the template engine)
+L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PDF reading, writing and text)  navree-glob (the glob matcher)  navree-markdown (Markdown reading)  navree-native (Navree Native's protocol)  navree-phone (phone numbers)  navree-template (the template engine)  navree-openapi (the OpenAPI document model and `ToSchema`)   navree-macros, navree-i18n-macros, navree-orm-macros, navree-ui-macros, navree-ui-ext-macros, navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (dev and deploy tools)   navree-template-peak (memory tests of the template engine)
 ```
 
 | Layer | Crate | What it provides |
@@ -40,6 +40,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | L0 | `navree-validation-macros` | `#[derive(Validate)]` and its `#[validate(...)]` field rules (re-exported by navree-validation) |
 | L0 | `navree-orm-macros` | `#[derive(Model)]`, `#[relations]`, `#[scopes]`, `#[accessors]` and `#[test]` (re-exported by navree-orm) |
 | L0 | `navree-ui-macros` | `#[derive(Form)]`, `#[derive(TableRow)]`, `#[derive(FilterBar)]` and `#[derive(Options)]` (re-exported by navree-ui) |
+| L0 | `navree-ui-ext-macros` | `extension_script!` and `extension_sheet!`: a UI extension's files read, its stylesheet scoped to its namespace on `cssparser`, and both hashed when a plugin compiles (through navree-ui's `extension-files`, the facade's `ui-extension-files`) |
 | L0 | `navree-template-peak` | Tests that measure the heap a navree-template render uses, with a counting allocator. Nothing depends on it |
 | L0 | `navree-dock` | [Dock](/docs/tools/dock/): `dock.toml`, local services through `docker compose` or `podman compose`, the app's `.env` settings |
 | L0 | `navree-harbor` | [Harbor](/docs/tools/harbor/): `harbor.toml`, server provisioning over SSH, zero-downtime releases with rollbacks, encrypted secrets, container images. It builds its files on navree-template |
@@ -112,7 +113,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 
 | Crate | May depend on |
 |---|---|
-| `navree-kernel`, `navree-bounded`, `navree-pdf`, `navree-glob`, `navree-markdown`, `navree-native`, `navree-phone`, `navree-template`, `navree-macros`, `navree-orm-macros`, `navree-i18n-macros`, `navree-ui-macros`, `navree-validation-macros`, `navree-dock` | No Navree crate |
+| `navree-kernel`, `navree-bounded`, `navree-pdf`, `navree-glob`, `navree-markdown`, `navree-native`, `navree-phone`, `navree-template`, `navree-macros`, `navree-orm-macros`, `navree-i18n-macros`, `navree-ui-macros`, `navree-ui-ext-macros`, `navree-validation-macros`, `navree-dock` | No Navree crate |
 | `navree-openapi` | macros |
 | `navree-harbor`, `navree-template-peak` | template |
 | `navree-native-core` | native |
@@ -140,7 +141,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | `navree-schedule` | kernel, contracts, config, telemetry, db, time |
 | `navree-access` | kernel, bounded, contracts, config, http, db, cache |
 | `navree-notify` | kernel, contracts, config, telemetry, http, db, mail, orm, crypto, http-client, validation, time, schedule, view, macros |
-| `navree-ui` | kernel, contracts, config, http, validation, ui-macros, markdown; orm and db (same-layer edges, behind the `orm` feature: the data table's backend and the sortable's unit of work), phone (feature `phone`: the phone input), storage (feature `storage`: received uploads), native (feature `native-preview`: a page answered to a native client as a tree of parts) |
+| `navree-ui` | kernel, contracts, config, http, validation, ui-macros, markdown; ui-ext-macros (feature `extension-files`: a plugin's file macros); orm and db (same-layer edges, behind the `orm` feature: the data table's backend and the sortable's unit of work), phone (feature `phone`: the phone input), storage (feature `storage`: received uploads), native (feature `native-preview`: a page answered to a native client as a tree of parts) |
 | `navree-orm` | openapi, kernel, contracts, config, telemetry, http, db, events, crypto, api, orm-macros; access, testing, validation and phone behind features |
 | `navree-browser` | kernel, contracts, config, http, testing, glob |
 | `navree-auth` | openapi, kernel, contracts, config, http, db, crypto, session, validation, cache, mail, access, http-client, orm; ui behind its `ui` feature (the sign-in pages) |
