@@ -1,14 +1,16 @@
 package com.navree.client
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.swipe
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.navree.client.core.Content
 import com.navree.client.core.Stage
@@ -69,12 +71,14 @@ class LaneScaleTest {
         val firstMs = (System.nanoTime() - began) / 1_000_000
         val drawnFirst = cardsDrawn()
         Shots.take("lane-$cards-first")
+        // The swipes are over the lane (on a wide window the lanes stand side by side, and the middle of the window is another lane's).
+        val laneX = compose.onAllNodes(hasText(LaneBoard.TITLE_END, substring = true)).onFirst().fetchSemanticsNode().boundsInRoot.center.x
         val before = cardNumbers()
         val stats = FrameStats(compose.activity.window)
         compose.runOnUiThread { stats.start() }
         val scrolled = System.nanoTime()
         repeat(10) {
-            compose.onRoot().performTouchInput { swipeUp(startY = bottom * 0.85f, endY = bottom * 0.2f, durationMillis = 200) }
+            compose.onRoot().performTouchInput { swipe(start = Offset(laneX, bottom * 0.85f), end = Offset(laneX, bottom * 0.2f), durationMillis = 200) }
             compose.waitForIdle()
         }
         val scrollMs = (System.nanoTime() - scrolled) / 1_000_000
