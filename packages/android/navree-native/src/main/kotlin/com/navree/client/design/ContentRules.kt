@@ -65,6 +65,17 @@ object ListRules {
      */
     fun oneLaneAtATime(parts: List<Navree.Node>, columns: Int): Boolean = columns == 1 && areLanes(parts)
 
+    /**
+     * The runs of a row that is itself a link, without the link a run makes to
+     * the same place: the row is one stop that goes there, and a second stop
+     * inside it, with no name of its own, is read by a screen reader as a
+     * control with no label.
+     */
+    fun withoutOwnLink(runs: List<Navree.Run>, action: Navree.Action?): List<Navree.Run> {
+        val own = (action as? Navree.Action.Navigate)?.href ?: return runs
+        return runs.map { if (it.href == own) it.copy(href = null) else it }
+    }
+
     /** Whether the page at `shown` is the one a row leading to `href` opens: the row is then marked as the one open. */
     fun shows(shown: String?, href: String): Boolean {
         if (shown.isNullOrEmpty() || href.isEmpty()) return false

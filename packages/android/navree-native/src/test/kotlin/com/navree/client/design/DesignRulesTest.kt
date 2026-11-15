@@ -870,3 +870,14 @@ class OpenRowTest {
         assertFalse("nothing shown", ListRules.shows(null, "/inbox/11"))
     }
 }
+
+class OwnLinkTest {
+    @Test
+    fun a_row_that_is_a_link_does_not_hold_a_second_link_to_the_same_place() {
+        val runs = listOf(Navree.Run(text = "Ravneet packed "), Navree.Run(text = "CH-1042", href = "/orders/1042"), Navree.Run(text = " and sent ", href = "/other"))
+        val kept = ListRules.withoutOwnLink(runs, Navree.Action.Navigate("/orders/1042"))
+        assertNull(kept[1].href)
+        assertEquals("a link to another place stays", "/other", kept[2].href)
+        assertEquals("a row that goes nowhere keeps its links", runs, ListRules.withoutOwnLink(runs, null))
+    }
+}

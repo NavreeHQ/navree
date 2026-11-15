@@ -951,7 +951,7 @@ internal fun FeedRowView(node: Navree.FeedRow, place: Place, modifier: Modifier 
     val action = node.action
     ListItem(
         headlineContent = {
-            NodeView(Navree.Rich(runs = node.runs), place)
+            NodeView(Navree.Rich(runs = ListRules.withoutOwnLink(node.runs, action)), place)
         },
         supportingContent = if (node.time != null || node.detail.isNotEmpty()) {
             {

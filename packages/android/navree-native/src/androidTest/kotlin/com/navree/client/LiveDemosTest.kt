@@ -232,7 +232,8 @@ class LiveDemosTest {
         assertTrue("and not only bugs", before.any { "Bug" !in labels(it) })
         // A filter is a chip that opens its choices, not a field with a box.
         compose.onNode(hasText("Label") and hasClickAction()).performClick()
-        Thread.sleep(500)
+        waitFor("the label choices") { compose.onAllNodes(hasText("Bug") and hasAnyAncestor(isPopup())).fetchSemanticsNodes().isNotEmpty() }
+        Thread.sleep(1500)
         Shots.take("board-filter-menu")
         compose.onAllNodes(hasText("Bug") and hasAnyAncestor(isPopup())).onFirst().performClick()
         // The cards that stay carry the label that was chosen (a card may carry another beside it).
@@ -270,7 +271,8 @@ class LiveDemosTest {
         // A card has no row of fields to move it by: its handle opens the moves.
         assertTrue("no Move row on a card", compose.onAllNodes(hasText("Move") and hasClickAction()).fetchSemanticsNodes().isEmpty())
         compose.onAllNodes(hasContentDescription("Move ${card.title}"), useUnmergedTree = true).onFirst().performClick()
-        Thread.sleep(500)
+        waitFor("the card's moves") { compose.onAllNodes(hasText("Move to $name") and hasAnyAncestor(isPopup())).fetchSemanticsNodes().isNotEmpty() }
+        Thread.sleep(1500)
         Shots.take("board-card-menu")
         compose.onAllNodes(hasText("Move to $name") and hasAnyAncestor(isPopup())).onFirst().performClick()
         waitFor("the card in $name") { lane(front(app)?.screen, target.id).any { it.title == card.title } }

@@ -214,6 +214,16 @@ object ClockRules {
         return minOf(wantSp * scale, fits) / scale
     }
 
+    /**
+     * How much to shrink the two lines in the middle of a dial (a total and its
+     * unit under it) so their height, `linesPx`, stands inside the hole, which
+     * is `holePx` across: both lines together may fill 62 % of its height, as
+     * the bars at the top and the foot of the hole are nearer than its sides.
+     * 1 when they already fit.
+     */
+    fun centreFit(linesPx: Float, holePx: Float): Float =
+        if (linesPx <= 0f) 1f else minOf(1f, holePx * 0.62f / linesPx)
+
     /** The width of one hour's bar at the dial's start, in dp: most of the gap between neighbours. */
     fun barDp(innerDp: Float): Float = (2f * Math.PI.toFloat() * innerDp / 24f) * 0.62f
 }

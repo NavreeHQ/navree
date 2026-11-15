@@ -569,10 +569,15 @@ internal fun DayClockView(node: Navree.DayClock, modifier: Modifier = Modifier) 
                 node.shown?.let { shown ->
                     // Two lines stand in the hole (the total, and its unit under it): each has the chord of the circle at its own height, narrower than the hole, so both are held to less of it.
                     val hole = 2f * (inner - width * 0.9f) / density * (if ((node.unit ?: node.label) != null) 0.74f else 1f)
-                    val value = measurer.measure(shown, valueStyle.copy(color = scheme.onSurface, fontSize = ClockRules.centreSp(hole, shown.length, valueStyle.fontSize.value, scale).sp))
-                    val unit = (node.unit ?: node.label)?.let {
-                        measurer.measure(it, unitStyle.copy(color = words, fontSize = ClockRules.centreSp(hole, it.length + 2, unitStyle.fontSize.value, scale).sp))
-                    }
+                    val valueSp = ClockRules.centreSp(hole, shown.length, valueStyle.fontSize.value, scale)
+                    val unitSp = (node.unit ?: node.label)?.let { ClockRules.centreSp(hole, it.length + 2, unitStyle.fontSize.value, scale) }
+                    fun lines(shrink: Float): Pair<androidx.compose.ui.text.TextLayoutResult, androidx.compose.ui.text.TextLayoutResult?> =
+                        measurer.measure(shown, valueStyle.copy(color = scheme.onSurface, fontSize = (valueSp * shrink).sp)) to
+                            (node.unit ?: node.label)?.let { measurer.measure(it, unitStyle.copy(color = words, fontSize = ((unitSp ?: 1f) * shrink).sp)) }
+                    // The two lines also stand inside the hole as tall as it is: at the largest text they are made smaller together.
+                    var (value, unit) = lines(1f)
+                    val shrink = ClockRules.centreFit((value.size.height + (unit?.size?.height ?: 0)).toFloat(), 2f * (inner - width * 0.9f))
+                    if (shrink < 1f) lines(shrink).let { value = it.first; unit = it.second }
                     val total = value.size.height + (unit?.size?.height ?: 0)
                     var top = c.y - total / 2f
                     drawText(value, topLeft = Offset(c.x - value.size.width / 2f, top))
