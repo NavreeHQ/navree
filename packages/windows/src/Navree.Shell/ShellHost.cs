@@ -489,7 +489,7 @@ public sealed partial class ShellHost : IDisposable
                     kept.Clear();
                     return Task.CompletedTask;
                 }),
-                new WipeStep("what the web view keeps", OnUiAsync(() => WebPage.ClearAllAsync(Options.WebFolder ?? WebData.DefaultFolder(Options.AppName)))),
+                new WipeStep("what the web view keeps", OnUiAsync(() => WebPage.ClearAllAsync(Options.WebFolder ?? WebData.DefaultFolder(Options.AppName), what => ReportProblem("web wipe " + what)))),
             }.Concat(moreWipeSteps)]).ConfigureAwait(false);
         if (!await OnDispatcherAsync().ConfigureAwait(false))
         {
