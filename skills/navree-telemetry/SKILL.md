@@ -1,6 +1,6 @@
 ---
 name: navree-telemetry
-description: "Telemetry events and tracing with navree-telemetry and navree-observe: the typed events every module emits (`RequestHandled`, `QueryExecuted`, `JobProcessed`, `JobFailed`, `ScheduledTaskRan`, `MailSent`, `NotificationSent`, `CacheEvent`, `HttpClientRequest`, `ExceptionReported`, `LogRecord`), sinks (`TelemetrySink`, `Interest`, `m.telemetry_sink::<S>()`), the zero-cost rule, `Telemetry::current().report_exception`, `TelemetryContext` (request and job context, `propagate` for spawned tasks), W3C `traceparent` in and out, the `observe.tracing` section, OTLP export behind the opt-in `otel` feature, `current_trace_id`, and `TelemetryRecorder` / `SpanRecorder` in tests. Use when receiving requests, queries, jobs, mail or log lines in your own code (metrics, audit, a monitoring tool), exporting traces to an OpenTelemetry backend, reporting a handled error, keeping a trace across `tokio::spawn`, asserting on emitted events or spans in tests, or debugging a missing event, span or trace id."
+description: "Telemetry events and tracing with navree-telemetry and navree-observe: the typed events every module emits (`RequestHandled`, `QueryExecuted`, `JobProcessed`, `JobFailed`, `ScheduledTaskRan`, `MailSent`, `NotificationSent`, `CacheEvent`, `HttpClientRequest`, `ExceptionReported`, `LogRecord`, `EventEmitted`, `AiCall`, `BroadcastSent`, `StorageOp`, `WebhookDelivery`, `SearchQueried`, `SignInEvent`, `UiOperation`), sinks (`TelemetrySink`, `Interest`, `m.telemetry_sink::<S>()`), the zero-cost rule, `Telemetry::current().report_exception`, `TelemetryContext` (request and job context, `propagate` for spawned tasks), W3C `traceparent` in and out, the `observe.tracing` section, OTLP export behind the opt-in `otel` feature, `current_trace_id`, and `TelemetryRecorder` / `SpanRecorder` in tests. Use when receiving requests, queries, jobs, mail or log lines in your own code (metrics, audit, a monitoring tool), exporting traces to an OpenTelemetry backend, reporting a handled error, keeping a trace across `tokio::spawn`, asserting on emitted events or spans in tests, or debugging a missing event, span or trace id."
 ---
 
 # Telemetry events and tracing
@@ -32,6 +32,17 @@ propagation, export, `SpanRecorder`).
 | `HttpClientRequest` | `HttpClientRequest` | navree-http-client | a call finished after retries (`url` without query or credentials, `status`, `attempts`, `error`, `span_id`) |
 | `ExceptionReported` | `ExceptionReported` | navree-http (500s, 5xx with a source, panics) or your code | `message`, `chain`, `location`, `panic`, `request` |
 | `Log(LogRecord)` | `Log` | navree-log | a line passed the level filter (`level`, `target`, `message`, redacted `fields`) |
+| `EventEmitted` | `EventEmitted` | navree-events | an app event was emitted or published and every listener ran or was queued (`name`, `payload`, `listeners`, `queued`, `failed`, `duration`) |
+| `AiCall` | `AiCall` | navree-ai | a call to a model provider finished (`provider`, `model`, `operation`, token counts, `cost_micros`, `duration`, `outcome`, `error`) |
+| `Broadcast(BroadcastSent)` | `Broadcast` | navree-realtime | an event was pushed to real-time channels (`channels`, `event`, `delivered`, `duration`, `outcome`, `error`) |
+| `StorageOp` | `StorageOp` | navree-storage | a file was read, written, deleted or listed (`disk`, `driver`, `operation`, `path`, `bytes`, `duration`, `outcome`, `error`) |
+| `WebhookDelivery` | `WebhookDelivery` | navree-webhooks | one delivery attempt finished (`endpoint`, `event`, `attempt`, `status`, `duration`, `outcome`, `error`) |
+| `Search(SearchQueried)` | `Search` | navree-search | a search finished (`engine`, `index`, `mode`, `term_length`, `hits`, `duration`, `outcome`, `error`) |
+| `SignIn(SignInEvent)` | `SignIn` | navree-auth | a sign-in worked, was refused or failed (`method`, `provider`, `outcome`, `user_id`, `reason`) |
+| `UiOperation` | `UiOperation` | navree-ui | the server answered an operation of the Navree UI runtime (`name`, `kind`, `ops`, `status`, `duration`) |
+
+There are nineteen kinds (`EventKind::ALL`). The last seven carry no payload:
+no prompt, message, file, search term, address or form value.
 
 A sink receives a `TelemetryRecord { at, context, event }`. `context` is an
 `EventContext` (`request_id`, `job_id`, `trace`, `user_id`, `workspace_id`)
