@@ -66,6 +66,7 @@ async fn surface(ctx: &AppContext) -> Result<(), BrowserError> {
     page.assert_count("@deal-card", 3).await?;
     page.assert_enabled("Save").await?;
     page.assert_no_console_errors().await?;
+    page.assert_no_policy_violations().await?;
 
     // Waits.
     page.wait_for("@chart").await?;

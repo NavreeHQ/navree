@@ -1480,6 +1480,37 @@ macro_rules! scope_api {
                 .await
             }
 
+            /// Fails when the page reported a content security policy violation
+            /// since it loaded, naming each blocked address and directive.
+            ///
+            /// ```no_run
+            /// # async fn run(page: navree_browser::Page) -> Result<(), navree_browser::BrowserError> {
+            /// page.assert_no_policy_violations().await?;
+            /// # Ok(())
+            /// # }
+            /// ```
+            pub async fn assert_no_policy_violations(&self) -> Result<(), BrowserError> {
+                let s = &self.scope;
+                // A round trip to the page first, as `assert_no_console_errors`
+                // makes: reports sent before its answer are in the log when it
+                // arrives.
+                let _ = tokio::time::timeout(PROBE_MIN, s.lib("location", json!({}))).await;
+                let violations = s.core.log().violations.clone();
+                s.step("assert_no_policy_violations()".to_owned(), false, async {
+                    if violations.is_empty() {
+                        Ok(())
+                    } else {
+                        Err(Fail::Now(format!(
+                            "{} content security policy violation{}: {}",
+                            violations.len(),
+                            if violations.len() == 1 { "" } else { "s" },
+                            violations.join("; ")
+                        )))
+                    }
+                })
+                .await
+            }
+
             // -- waits --------------------------------------------------------
 
             /// Waits until `target` is visible.
