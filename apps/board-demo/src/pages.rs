@@ -67,7 +67,7 @@ fn today() -> NaiveDate {
 }
 
 /// Who the board is shown as: the person the cookie names, or else a member.
-fn viewer_id(headers: &HeaderMap) -> Option<i64> {
+pub(crate) fn viewer_id(headers: &HeaderMap) -> Option<i64> {
     headers
         .get_all(http::header::COOKIE)
         .iter()

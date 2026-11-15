@@ -169,6 +169,21 @@ impl Person {
     }
 }
 
+/// The number of the person the board is shown as when the cookie names `id`: that person if
+/// the team has them, else the first member. It is the rule of `store::viewer`, which reads the
+/// team from the database; the team is written when the app starts and never changes, so the
+/// two cannot differ, and a request need not ask the database who it is.
+pub fn viewer_number(id: Option<i64>) -> i64 {
+    let team = PEOPLE.len() as i64;
+    match id {
+        Some(id) if (1..=team).contains(&id) => id,
+        _ => PEOPLE
+            .iter()
+            .position(|(_, _, _, role)| *role != "lead")
+            .map_or(1, |at| at as i64 + 1),
+    }
+}
+
 /// A column, as stored: one row, which a move locks on PostgreSQL and MySQL
 /// (`SELECT ... FOR UPDATE`) so that two moves into it run one after the other.
 /// Its title and limit are [`Column`]'s.

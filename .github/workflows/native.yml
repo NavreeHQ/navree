@@ -8,6 +8,9 @@ on:
       - "crates/navree-native-core/**"
       - "packages/android/**"
       - "packages/windows/**"
+      - "apps/store-demo/**"
+      - "apps/inbox-demo/**"
+      - "apps/board-demo/**"
       - ".github/workflows/native.yml"
   pull_request:
     paths:
@@ -15,6 +18,9 @@ on:
       - "crates/navree-native-core/**"
       - "packages/android/**"
       - "packages/windows/**"
+      - "apps/store-demo/**"
+      - "apps/inbox-demo/**"
+      - "apps/board-demo/**"
       - ".github/workflows/native.yml"
 
 permissions:
@@ -266,6 +272,10 @@ jobs:
             target/debug/inbox-demo
             target/debug/board-demo
           retention-days: 7
+
+      # After the demos are kept, so the ones the devices use are the ones built above and not a build made for tests.
+      - name: Test the demos' native answers
+        run: cargo test -p store-demo -p inbox-demo -p board-demo --features store-demo/native-preview,inbox-demo/native-preview,board-demo/native-preview --test native
 
   # The device tests on an emulator, on a phone and on a tablet: each screen in
   # four looks (light, dark, the largest text, right to left), photographed.

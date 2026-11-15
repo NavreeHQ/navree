@@ -31,6 +31,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use navree::db::{DatabaseModule, Db};
+use navree::http::Authenticator;
 use navree::kernel::Lifecycle;
 use navree::prelude::*;
 use navree::realtime::Live;
@@ -40,6 +41,7 @@ use navree::{BoxFuture, ProviderKey};
 pub mod data;
 pub mod live;
 pub mod pages;
+pub mod person;
 pub mod store;
 pub mod views;
 
@@ -124,6 +126,12 @@ impl Module for BoardModule {
             Ok(Arc::new(views::shell()))
         }))
         .exports::<Shell>();
+        // Every request is the team member's the visitor views the board as, so the framework
+        // has a person to keep a native client's place for.
+        m.factory(Factory::<dyn Authenticator>::new(|_| async {
+            Ok(Arc::new(person::Viewers) as Arc<dyn Authenticator>)
+        }))
+        .exports::<dyn Authenticator>();
         // The hub tells the pages through the app's live hub.
         m.factory(
             Factory::<Hub>::new(|r: Resolver| async move {
@@ -150,6 +158,12 @@ pub fn app(port: u16, database_url: String, settings: Settings) -> AppBuilder {
         ),
         (
             "APP_HTTP__SERVER__MAX_CONNECTIONS_PER_IP".to_owned(),
+            "10000".to_owned(),
+        ),
+        // Visitors who are one person share the framework's limit of live streams per person
+        // (16 by default); the streams of a visitor with no person are not counted at all.
+        (
+            "APP_REALTIME__STREAMS__PER_USER".to_owned(),
             "10000".to_owned(),
         ),
     ];

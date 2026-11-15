@@ -7,6 +7,14 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Fixed
+
+- A live list the server drew while what it shows was still changing, such as an assistant's
+  conversation drawn while the answer was being written, could stay as it was drawn when the list's
+  script arrived after the live stream had opened: the finished answer never showed until something
+  else changed. The live module now asks a list nobody has answered for yet again every 0.3 seconds
+  for about six seconds, so the list fetches what it missed as soon as its script is there.
+
 ## [1.2.3] - 2026-11-15
 
 ### Upgrading
