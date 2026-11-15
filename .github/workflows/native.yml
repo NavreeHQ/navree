@@ -413,6 +413,11 @@ jobs:
               sleep 3
               "$adb" shell settings put system font_scale "$scale"
               sleep 3
+              # The test's own language is one that runs right to left (a pseudo-locale, English words laid out
+              # from the right), so the windows a dialog, a menu or a picker opens run that way as the system's do.
+              "$adb" shell cmd locale set-app-locales com.navree.client.test --locales ar-XB || true
+            else
+              "$adb" shell cmd locale set-app-locales com.navree.client.test --locales "" || true
             fi
             "$adb" shell am instrument -w -e look "$look" -e device "$name" -e store http://10.0.2.2:8095 -e inbox http://10.0.2.2:8096 -e board http://10.0.2.2:8097 \
               com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/instrument-$name-$look.txt"
