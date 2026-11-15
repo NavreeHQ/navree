@@ -1348,8 +1348,9 @@ impl Core {
         match answer {
             Answer::Failed(failure) => {
                 // The server may have written before the answer failed or
-                // was too large to read: what is kept can't be trusted.
-                if write {
+                // was too large to read: what is kept can't be trusted. Not
+                // so when the request never left the device.
+                if write && !self.inner.never_left {
                     self.wrote(id);
                 }
                 self.failed(failure, Some(id));
