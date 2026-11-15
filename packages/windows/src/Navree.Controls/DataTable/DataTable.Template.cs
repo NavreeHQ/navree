@@ -98,7 +98,12 @@ public sealed partial class DataTable
             host.Clip = new RectangleGeometry { Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height) };
 
         header = new DataTableRow { Owner = this, IsHeader = true };
-        headerHost.Child = header;
+
+        // On a canvas the row is arranged at the width it asks for, so the slot it is given cuts none of it off
+        // when it is moved against the scroll; the host's own clip is what crops it to the viewport.
+        Canvas strip = new();
+        strip.Children.Add(header);
+        headerHost.Child = strip;
         sticky = new StickyCoordinator(scroll) { Mode = StickyWay };
         if (edgeStart is not null)
         {

@@ -19,6 +19,8 @@ internal sealed record Customer(string Id, string Name, string City, string Phon
 /// <summary>Makes rows for the tables of the gallery.</summary>
 internal static class DemoData
 {
+    private static readonly string LeftToRightMark = ((char)0x200E).ToString();
+
     private static readonly string[] First =
     [
         "Harpreet", "Gurpreet", "Rajesh", "Simran", "Amit", "Neha", "Karan", "Pooja", "Vikram", "Anjali",
@@ -62,7 +64,8 @@ internal static class DemoData
         string family = Last[(i * 3 + (i / 30)) % Last.Length];
         string name = given + " " + family;
         string email = (given + "." + family).ToLowerInvariant() + "@example.in";
-        string phone = string.Create(CultureInfo.InvariantCulture, $"+91 {98000 + ((i * 37) % 1000):00000} {10000 + ((i * 7919) % 90000):00000}");
+        // A mark that says the number reads left to right, so a right to left table does not reverse its groups.
+        string phone = LeftToRightMark + string.Create(CultureInfo.InvariantCulture, $"+91 {98000 + ((i * 37) % 1000):00000} {10000 + ((i * 7919) % 90000):00000}");
         long amount = 1000 + ((i * 7919L) % 500_000);
         int day = 1 + ((i * 5) % 28);
         string seen = string.Create(CultureInfo.InvariantCulture, $"{day:00} Nov, {(i * 3) % 24:00}:{(i * 11) % 60:00} IST");

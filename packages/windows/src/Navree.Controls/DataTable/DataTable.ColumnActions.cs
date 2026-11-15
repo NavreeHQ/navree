@@ -55,6 +55,7 @@ public sealed partial class DataTable
     {
         reordering = cell;
         dropAt = cell.GridColumn;
+        Diag.Say($"[drag] a heading was lifted: column {cell.GridColumn}");
         Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.SetIsTranslationEnabled(cell, true);
         cell.Opacity = 0.8;
         Canvas.SetZIndex(cell, 10);
@@ -82,11 +83,13 @@ public sealed partial class DataTable
             _ => (applied, shown.Count - endCount - 1),
         };
         dropAt = ColumnOrder.DropIndex(cell.GridColumn, centre, centres, from, Math.Max(from, to));
+        Diag.Say($"[drag] the heading moved {dx:0.#}: it would drop at {dropAt}");
     }
 
     /// <summary>The pointer let go of a lifted heading.</summary>
     internal void ReorderEnded(DataTableHeaderCell cell, bool keep)
     {
+        Diag.Say($"[drag] the heading was let go, kept: {keep}, from {cell.GridColumn} to {dropAt}");
         cell.Translation = System.Numerics.Vector3.Zero;
         cell.Opacity = 1;
         Canvas.SetZIndex(cell, 0);
@@ -152,6 +155,7 @@ public sealed partial class DataTable
     {
         resizingKey = KeyOf(cell);
         resizeStartWidth = widths.TryGetValue(resizingKey, out double known) ? known : 0;
+        Diag.Say($"[drag] a strip was taken hold of on {resizingKey}, now {resizeStartWidth:0} wide");
     }
 
     /// <summary>A pointer is widening a column.</summary>
@@ -164,6 +168,7 @@ public sealed partial class DataTable
 
         double delta = FlowDirection == FlowDirection.RightToLeft ? -dx : dx;
         widths[resizingKey] = ColumnSizing.Clamp(ColumnAt(cell.ColumnIndex).Kind, resizeStartWidth + delta);
+        Diag.Say($"[drag] the strip moved {dx:0.#}: {resizingKey} is {widths[resizingKey]:0} wide");
         RebuildColumns(remeasure: false);
     }
 
@@ -176,6 +181,7 @@ public sealed partial class DataTable
         }
 
         resizingKey = null;
+        Diag.Say($"[drag] the strip on {key} was let go, kept: {keep}");
         if (!keep)
         {
             widths[key] = resizeStartWidth;
