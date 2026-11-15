@@ -15,6 +15,14 @@ include = ["src/**", "README.md", "LICENSE-*"]
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
 
+# `SessionStoreKind` gained `Registered`, which names a driver a plugin
+# registers. The enum is `#[non_exhaustive]`, so a new variant is not a
+# breaking change (docs/prologue/versioning-and-support.mdx). What stops
+# compiling is a cast of a variant to a number (`SessionStoreKind::Redis as
+# u8`), which nothing documents.
+[package.metadata.cargo-semver-checks.lints]
+enum_discriminants_undefined_non_unit_variant = "allow"
+
 [lints]
 workspace = true
 
