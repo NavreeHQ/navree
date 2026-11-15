@@ -32,11 +32,11 @@ public static class RingRules
     /// <param name="diameter">The ring's width.</param>
     /// <returns>The arc's width.</returns>
     public static double Stroke(Models.Prominence prominence, double diameter) =>
-        prominence switch
+        Guard.Length(diameter) * prominence switch
         {
-            Models.Prominence.High => diameter * 0.115,
-            Models.Prominence.Low => diameter * 0.16,
-            _ => diameter * 0.12,
+            Models.Prominence.High => 0.115,
+            Models.Prominence.Low => 0.16,
+            _ => 0.12,
         };
 
     /// <summary>How much a ring grows with the person's text, at most: a small ring stands in a row of text and keeps its size.</summary>
@@ -165,7 +165,7 @@ public static class RingsRules
     {
         double n = Math.Min(Math.Max(count, 1), Most);
         double share = prominence == Models.Prominence.Low ? 0.82 : 0.5;
-        return diameter * share / 2 / (n + ((n - 1) * GapShare));
+        return Guard.Length(diameter) * share / 2 / (n + ((n - 1) * GapShare));
     }
 
     /// <summary>The diameter of a ring (0 the outside one), at the middle of its arc.</summary>
@@ -321,7 +321,8 @@ public static class ClockRules
     /// <returns>The words.</returns>
     public static string TimeLabel(double at, bool uses24, CultureInfo culture)
     {
-        int minutes = ((int)Math.Round((((at % 24) + 24) % 24) * 60, MidpointRounding.AwayFromZero)) % (24 * 60);
+        double wrapped = double.IsFinite(at) ? ((at % 24) + 24) % 24 : 0;
+        int minutes = ((int)Math.Round(wrapped * 60, MidpointRounding.AwayFromZero)) % (24 * 60);
         DateTime time = new(2000, 1, 1, minutes / 60, minutes % 60, 0, DateTimeKind.Unspecified);
         return uses24 ? time.ToString("HH:mm", culture) : time.ToString("h:mm tt", culture);
     }

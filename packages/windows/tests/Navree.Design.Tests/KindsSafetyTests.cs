@@ -590,4 +590,34 @@ public sealed class KindsSafetyTests
             }
         }
     }
+
+    [TestMethod]
+    public void The_arcs_of_rings_and_the_times_of_a_clock_are_numbers_for_any_size_and_any_hour()
+    {
+        foreach (double diameter in Hostile)
+        {
+            foreach (Models.Prominence prominence in Enum.GetValues<Models.Prominence>())
+            {
+                Sound(RingRules.Stroke(prominence, diameter), "ring stroke for " + diameter);
+                foreach (int count in new[] { -2, 0, 1, 3, 6, 40 })
+                {
+                    double stroke = RingsRules.Stroke(diameter, count, prominence);
+                    Sound(stroke, "rings stroke for " + diameter + " / " + count);
+                    for (int ring = 0; ring < Math.Max(Math.Min(count, RingsRules.Most), 1); ring++)
+                    {
+                        Assert.IsTrue(double.IsFinite(RingsRules.RingDiameter(Guard.Length(diameter), ring, stroke)));
+                    }
+                }
+            }
+        }
+
+        foreach (double hour in Hostile)
+        {
+            Assert.IsFalse(string.IsNullOrEmpty(ClockRules.TimeLabel(hour, true, System.Globalization.CultureInfo.InvariantCulture)), "24 hour clock at " + hour);
+            Assert.IsFalse(string.IsNullOrEmpty(ClockRules.TimeLabel(hour, false, System.Globalization.CultureInfo.InvariantCulture)), "12 hour clock at " + hour);
+        }
+
+        Assert.AreEqual("00:00", ClockRules.TimeLabel(double.NaN, true, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.AreEqual("23:00", ClockRules.TimeLabel(-1, true, System.Globalization.CultureInfo.InvariantCulture));
+    }
 }
