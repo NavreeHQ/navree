@@ -15,6 +15,7 @@ internal static class ContrastScenario
     private const string Head = """
         <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" TargetType="ContentControl">
           <Grid x:Name="PART_Root" Width="60" Height="60">
+            @RESOURCES@
             <Border x:Name="PART_Box" CornerRadius="9" BorderThickness="3" BORDER BACKGROUND />
             <FontIcon x:Name="PART_Glyph" FontFamily="{ThemeResource SymbolThemeFontFamily}" FontSize="36" Glyph="&#xE73E;" GLYPH Visibility="Collapsed" />
             <VisualStateManager.VisualStateGroups>
@@ -70,6 +71,17 @@ internal static class ContrastScenario
                             <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource DataTableCheckBoxBorderChecked}" />
         """;
 
+    // The dictionary of brushes is merged inside the template, where the lookups of the template find it.
+    private const string DictionaryResources = """
+        <Grid.Resources>
+              <ResourceDictionary>
+                <ResourceDictionary.MergedDictionaries>
+                  <ResourceDictionary Source="ms-appx:///Navree.Controls/Themes/DataTable.Resources.xaml" />
+                </ResourceDictionary.MergedDictionaries>
+              </ResourceDictionary>
+            </Grid.Resources>
+        """;
+
     internal static async Task RunAsync(MainWindow window, string way)
     {
         Report.Line("== contrast " + way);
@@ -84,8 +96,8 @@ internal static class ContrastScenario
         }
 
         string xaml = way == "dictionary"
-            ? Head.Replace("BORDER", DictionaryBorder).Replace("BACKGROUND", DictionaryBackground).Replace("GLYPH", DictionaryGlyph).Replace("CHECKED", DictionaryChecked).Replace("CONTRAST", string.Empty)
-            : Head.Replace("BORDER", StatesBorder).Replace("BACKGROUND", StatesBackground).Replace("GLYPH", StatesGlyph).Replace("CHECKED", StatesChecked).Replace("CONTRAST", StatesContrast);
+            ? Head.Replace("BORDER", DictionaryBorder).Replace("BACKGROUND", DictionaryBackground).Replace("GLYPH", DictionaryGlyph).Replace("CHECKED", DictionaryChecked).Replace("CONTRAST", string.Empty).Replace("@RESOURCES@", DictionaryResources)
+            : Head.Replace("BORDER", StatesBorder).Replace("BACKGROUND", StatesBackground).Replace("GLYPH", StatesGlyph).Replace("CHECKED", StatesChecked).Replace("CONTRAST", StatesContrast).Replace("@RESOURCES@", string.Empty);
 
         ElementTheme[] themes = contrast ? [ElementTheme.Default] : [ElementTheme.Light, ElementTheme.Dark];
         foreach (ElementTheme theme in themes)
@@ -98,11 +110,11 @@ internal static class ContrastScenario
                 if (way == "dictionary")
                 {
                     ResourceDictionary brushes = new() { Source = new Uri("ms-appx:///Navree.Controls/Themes/DataTable.Resources.xaml") };
-                    row.Resources.MergedDictionaries.Add(brushes);
                     Report.Line($"[contrast] {way}: the dictionary loaded, with {brushes.ThemeDictionaries.Count} theme dictionaries");
                 }
 
                 ControlTemplate template = (ControlTemplate)XamlReader.Load(xaml);
+                List<(ContentControl Box, string State, string Label)> boxes = [];
                 foreach ((string state, string label) in new[] { ("Unchecked", "not chosen"), ("Checked", "chosen"), ("Indeterminate", "some chosen") })
                 {
                     ContentControl box = new() { Template = template, IsTabStop = false };
@@ -110,16 +122,29 @@ internal static class ContrastScenario
                     one.Children.Add(box);
                     one.Children.Add(new TextBlock { Text = label, HorizontalAlignment = HorizontalAlignment.Center });
                     row.Children.Add(one);
-                    box.Loaded += (_, _) =>
-                    {
-                        bool a = VisualStateManager.GoToState(box, state, false);
-                        bool b = way == "dictionary" || VisualStateManager.GoToState(box, contrast && state != "Unchecked" ? "ContrastOn" : "ContrastOff", false);
-                        Report.Line($"[contrast] {way} {name}: {label}: state {state} {a}, contrast state {b}");
-                    };
+                    boxes.Add((box, state, label));
                 }
 
                 window.StageHost.Child = row;
-                await Task.Delay(1200);
+                await Task.Delay(800);
+
+                // The states are put on once the templates are on the stage; one that cannot be put on is said, with why.
+                foreach ((ContentControl box, string state, string label) in boxes)
+                {
+                    try
+                    {
+                        box.ApplyTemplate();
+                        bool a = VisualStateManager.GoToState(box, state, false);
+                        bool b = way == "dictionary" || VisualStateManager.GoToState(box, contrast && state != "Unchecked" ? "ContrastOn" : "ContrastOff", false);
+                        Report.Line($"[contrast] {way} {name}: {label}: state {state} {a}, contrast state {b}");
+                    }
+                    catch (Exception problem)
+                    {
+                        Report.Line($"[contrast] {way} {name}: {label}: the state could not be put on: {problem.Message}");
+                    }
+                }
+
+                await Task.Delay(800);
                 await Handshake.StepAsync($"contrast-{way}-{name}", $"the box that chooses a row, by {way}, {name}");
             }
             catch (Exception problem)

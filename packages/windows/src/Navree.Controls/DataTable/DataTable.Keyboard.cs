@@ -2,7 +2,9 @@ using System.Globalization;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Navree.Design.Tables;
 using VirtualKey = Windows.System.VirtualKey;
 
@@ -214,6 +216,16 @@ public sealed partial class DataTable
             return;
         }
 
+        // A control in a cell keeps its own keys: a text box all of them (the caret, select all, copy), a button Enter and Space.
+        if (cell is not null)
+        {
+            InnerControl inner = InnerControlOf(source);
+            if (inner == InnerControl.Edits || (inner == InnerControl.Presses && e.Key is VirtualKey.Space or VirtualKey.Enter))
+            {
+                return;
+            }
+        }
+
         lastInputWasKeyboard = true;
         bool ctrl = IsKeyDown(VirtualKey.Control);
         bool shift = IsKeyDown(VirtualKey.Shift);
@@ -313,6 +325,37 @@ public sealed partial class DataTable
         }
     }
 
+    /// <summary>What kind of control, inside a cell, a key came from.</summary>
+    private enum InnerControl
+    {
+        /// <summary>None: the cell itself.</summary>
+        None,
+
+        /// <summary>A control that edits (a text box, a combo box, a slider): every key is its own.</summary>
+        Edits,
+
+        /// <summary>A control that is pressed (a button, a box, a link): Enter and Space are its own.</summary>
+        Presses,
+    }
+
+    private static InnerControl InnerControlOf(DependencyObject? source)
+    {
+        for (DependencyObject? at = source; at is not null && at is not DataTableCell; at = VisualTreeHelper.GetParent(at))
+        {
+            switch (at)
+            {
+                case TextBox or PasswordBox or RichEditBox or ComboBox or NumberBox or AutoSuggestBox or CalendarDatePicker or Slider:
+                    return InnerControl.Edits;
+                case ButtonBase or ToggleSwitch:
+                    return InnerControl.Presses;
+                default:
+                    break;
+            }
+        }
+
+        return InnerControl.None;
+    }
+
     // Typing the start of a name moves to the next row whose name starts so; a pause of 800 ms starts again.
     private void OnCharacterReceivedCore(UIElement sender, CharacterReceivedRoutedEventArgs e)
     {
@@ -322,6 +365,11 @@ public sealed partial class DataTable
         }
 
         if (FindCell(e.OriginalSource as DependencyObject) is not { Role: CellRole.Data, Row.Index: >= 0 } cell)
+        {
+            return;
+        }
+
+        if (InnerControlOf(e.OriginalSource as DependencyObject) == InnerControl.Edits)
         {
             return;
         }

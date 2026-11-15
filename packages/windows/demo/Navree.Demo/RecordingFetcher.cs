@@ -28,14 +28,30 @@ internal sealed class RecordingFetcher(IFetcher inner) : IFetcher
     }
 
     /// <inheritdoc />
-    public Task<FetchResult> FetchAsync(FetchEffect effect, CancellationToken cancel)
+    public async Task<FetchResult> FetchAsync(FetchEffect effect, CancellationToken cancel)
     {
         lock (Kept)
         {
             Kept.Add(new SentRequest(DateTime.Now, effect.Method, effect.Url, BodyText(effect.Body)));
         }
 
-        return inner.FetchAsync(effect, cancel);
+        FetchResult answer = await inner.FetchAsync(effect, cancel);
+
+        // The peek of any order is answered with the one that was recorded, so that pressing an order number shows a peek.
+        if (answer.Status == 404 && effect.Method == "get" && RecordedPeek(effect.Url) is { } recorded)
+        {
+            return await inner.FetchAsync(effect with { Url = recorded }, cancel);
+        }
+
+        return answer;
+    }
+
+    private static string? RecordedPeek(string url)
+    {
+        Uri address = new(url);
+        string[] parts = address.AbsolutePath.Trim('/').Split('/');
+        bool peek = parts.Length == 3 && parts[0] == "orders" && parts[2] == "peek" && parts[1].All(char.IsAsciiDigit);
+        return peek && parts[1] != "1" ? new Uri(address, "/orders/1/peek").ToString() : null;
     }
 
     private static string BodyText(RequestBody? body) => body switch

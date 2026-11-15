@@ -84,7 +84,7 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
     {
         await ShowAsync(2);
         TextBox? quantity = Everything().OfType<TextBox>().FirstOrDefault(box => NameOf(box).StartsWith("Units of Chakla belan", StringComparison.Ordinal));
-        Button? restock = Everything().OfType<Button>().FirstOrDefault(button => NameOf(button) == "Restock");
+        Button? restock = quantity is null ? null : RestockBesides(quantity);
         if (quantity is null || restock is null)
         {
             Check("a row of Inventory has its quantity field and its Restock button", false, "field " + (quantity is not null) + ", button " + (restock is not null));
@@ -138,7 +138,38 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
         await ClickAsync(open);
         SentRequest? asked = await WaitAsync(from, request => Uri.UnescapeDataString(request.Url).Contains("filter[status][in]=open", StringComparison.Ordinal), 6000);
         Check("ticking Open sends the query with the filter", asked is { Method: "get" }, Describe(from));
+
+        // The screen is drawn again when the rows come; the flyout is there again, with the box still ticked, for the next box.
+        await Task.Delay(1500);
+        CheckBox? again = InPopups().OfType<CheckBox>().FirstOrDefault(box => box.Content is string text && text == "Open");
+        Check("the flyout is open again, with Open ticked, after the screen was drawn again", again is { IsChecked: true }, again is null ? "the flyout is gone" : "Open is " + again.IsChecked);
         await ShotAsync("press-filter-ticked", "Open ticked in the flyout");
+        CheckBox? packed = InPopups().OfType<CheckBox>().FirstOrDefault(box => box.Content is string text && text == "Packed");
+        if (packed is null)
+        {
+            return;
+        }
+
+        from = RecordingFetcher.Sent.Count;
+        await ClickAsync(packed);
+        asked = await WaitAsync(from, request => Uri.UnescapeDataString(request.Url).Contains("filter[fulfilment][in]=packed", StringComparison.Ordinal), 6000);
+        Check("ticking Packed too asks with both filters", asked is not null && Uri.UnescapeDataString(asked.Url).Contains("filter[status][in]=open", StringComparison.Ordinal), Describe(from));
+        await ShotAsync("press-filter-two", "Open and Packed ticked");
+    }
+
+    // The Restock button of the row the field is in: the first container above the field that holds one.
+    private static Button? RestockBesides(DependencyObject field)
+    {
+        for (DependencyObject? at = VisualTreeHelper.GetParent(field); at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            Button? found = Below(at).OfType<Button>().FirstOrDefault(button => NameOf(button) == "Restock");
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     private async Task ShowAsync(int destination)

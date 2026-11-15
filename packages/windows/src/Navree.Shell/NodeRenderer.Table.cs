@@ -19,6 +19,10 @@ internal sealed partial class NodeRenderer
     private const double TableHeight = 640;
     private const double TableLeastHeight = 320;
 
+    // The flyouts of Filter buttons that are open, by screen and form: a screen is drawn again when its table's rows arrive, which
+    // takes the flyout away with the button it was on, and a person ticking a second box would find it gone.
+    private static readonly HashSet<(long Screen, string Form)> FiltersOpen = [];
+
     private UIElement DrawTable(Models.Table table)
     {
         string? id = table.Id;
@@ -225,12 +229,30 @@ internal sealed partial class NodeRenderer
             StackPanel fields = InForm(form, () => (StackPanel)Column(others, 16));
             fields.Width = 320;
             fields.Padding = new Thickness(4);
-            Button filter = new()
+            Flyout flyout = new() { Content = new ScrollViewer { Content = fields, MaxHeight = 480 }, Placement = FlyoutPlacementMode.BottomEdgeAlignedRight };
+            Button filter = new() { Content = "Filter", VerticalAlignment = VerticalAlignment.Bottom, Flyout = flyout };
+            (long, string) key = (context.Screen.Id, form);
+            flyout.Opened += (_, _) => FiltersOpen.Add(key);
+
+            // Closed by the person, the button is still on the screen when the queue gets to this; closed by the screen being drawn again, it is not.
+            flyout.Closed += (_, _) => filter.DispatcherQueue.TryEnqueue(() =>
             {
-                Content = "Filter",
-                VerticalAlignment = VerticalAlignment.Bottom,
-                Flyout = new Flyout { Content = new ScrollViewer { Content = fields, MaxHeight = 480 }, Placement = FlyoutPlacementMode.BottomEdgeAlignedRight },
-            };
+                if (filter.XamlRoot is not null)
+                {
+                    FiltersOpen.Remove(key);
+                }
+            });
+            if (FiltersOpen.Contains(key))
+            {
+                RoutedEventHandler? reopen = null;
+                reopen = (_, _) =>
+                {
+                    filter.Loaded -= reopen;
+                    filter.DispatcherQueue.TryEnqueue(() => flyout.ShowAt(filter));
+                };
+                filter.Loaded += reopen;
+            }
+
             Grid.SetColumn(filter, 1);
             bar.Children.Add(filter);
         }
