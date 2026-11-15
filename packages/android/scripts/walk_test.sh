@@ -23,6 +23,11 @@ case "$*" in
     if [ -e "$WORK/dump-broken" ]; then printf '<hierarchy rotation=' > "$device"; fi
     ;;
   "pull /sdcard/window.xml "*) [ -e "$device" ] && cp "$device" "${3}" ;;
+  "shell am start -W -n "*) if [ -e "$WORK/start-output" ]; then cat "$WORK/start-output"; else printf 'Status: ok\nTotalTime: 500\n'; fi ;;
+  "shell pidof "*"; echo status="*) if [ -e "$WORK/adb-dead" ]; then exit 1; fi; if [ -e "$WORK/alive" ]; then echo 4242; echo status=0; else echo status=1; fi ;;
+  "shell ping "*"; echo status="*) if [ -e "$WORK/adb-dead" ]; then exit 1; fi; if [ -e "$WORK/reachable" ]; then echo status=0; else echo status=1; fi ;;
+  "shell dumpsys window") if [ -e "$WORK/adb-dead" ]; then exit 1; fi; echo "  mCurrentFocus=Window{1 u0 $(cat "$WORK/focus" 2>/dev/null)}" ;;
+  "shell pidof "*) [ -e "$WORK/alive" ] && echo 4242 ;;
   *) exit 0 ;;
 esac
 STAND_IN
@@ -58,8 +63,8 @@ refute() {
   if "$@"; then echo "FAIL $name"; problems=$((problems + 1)); else echo "ok   $name"; fi
 }
 
-SCREEN='<?xml version="1.0"?><hierarchy rotation="0"><node class="android.widget.TextView" text="Dashboard" content-desc="" bounds="[0,0][10,10]" /></hierarchy>'
-OLDER='<?xml version="1.0"?><hierarchy rotation="0"><node class="android.widget.TextView" text="Orders" content-desc="" bounds="[0,0][10,10]" /><node class="android.widget.Button" text="Back" content-desc="" bounds="[0,0][10,10]" /></hierarchy>'
+SCREEN='<?xml version="1.0"?><hierarchy rotation="0"><node package="com.navree.demo" class="android.widget.TextView" text="Dashboard" content-desc="" bounds="[0,0][10,10]" /></hierarchy>'
+OLDER='<?xml version="1.0"?><hierarchy rotation="0"><node package="com.navree.demo" class="android.widget.TextView" text="Orders" content-desc="" bounds="[0,0][10,10]" /><node class="android.widget.Button" text="Back" content-desc="" bounds="[0,0][10,10]" /></hierarchy>'
 
 echo "== the screen"
 echo "$SCREEN" > "$WORK/screen.xml"
@@ -79,7 +84,7 @@ fails=0
 check "something is absent" ui absent Back > /dev/null
 expect "a check that something is absent fails on no dump, not passes" test "$fails" -eq 1
 refute "a question of the older screen has no answer" ui has Orders
-refute "the screen can not be looked at" look "the test"
+refute "the screen can not be looked at" look "the test" > /dev/null
 expect "and that is counted a failure of its own" test "$fails" -eq 2
 
 echo "== a dump that is not a dump fails too"
@@ -94,6 +99,49 @@ expect "dump" dump
 expect "the screen is the new one" ui has Dashboard
 expect "what is not on it is absent" ui absent Back
 
+echo "== the starts that are timed"
+export SETTLE=0
+touch "$WORK/alive"
+starts() { ( FIRST_SCREEN=$1; timed_starts "a test build" > /dev/null ); }
+rm -f "$WORK/screen.xml" "$WORK/dump-works"
+expect "a start that is only timed to its first frame passes with no page ever shown" starts no
+expect "and says that it timed the first frame only" grep -q "the first frame only" "$OUT/walk.txt"
+printf 'Status: error\nError type 3\n' > "$WORK/start-output"
+refute "a start that did not begin fails" starts no
+expect "and says that it did not begin" grep -q "did not begin" "$OUT/walk.txt"
+rm -f "$WORK/start-output" "$WORK/alive"
+refute "an app that is not running after its first frame fails" starts no
+expect "and says so" grep -q "is not running after its first frame" "$OUT/walk.txt"
+touch "$WORK/alive"
+echo "$SCREEN" > "$WORK/screen.xml"
+touch "$WORK/dump-works"
+expect "a start timed to the first screen passes when the screen is shown" starts yes
+export -n SETTLE
+
+echo "== a check that something is not so is not passed by an adb that does not answer"
+PKG=com.navree.demo
+rm -f "$WORK/alive"
+expect "the app has no process, said by the device" app_is_gone
+touch "$WORK/alive"
+refute "the app has a process" app_is_gone
+rm -f "$WORK/alive"
+touch "$WORK/adb-dead"
+refute "an adb that does not answer is not a gone app" app_is_gone
+echo "com.android.launcher/.Launcher" > "$WORK/focus"
+rm -f "$WORK/adb-dead"
+expect "the focus is on another window" focus_is_not_the_app
+echo "com.navree.demo/com.navree.client.NavreeActivity" > "$WORK/focus"
+refute "the focus is on the app" focus_is_not_the_app
+touch "$WORK/adb-dead"
+refute "an adb that does not answer does not say the app is not in front" focus_is_not_the_app
+rm -f "$WORK/adb-dead"
+rm -f "$WORK/reachable"
+expect "a device that finds no one says status 1" test "$(device_status 'ping -c 1 10.0.2.2')" = 1
+touch "$WORK/reachable"
+expect "and one that finds the server says status 0" test "$(device_status 'ping -c 1 10.0.2.2')" = 0
+touch "$WORK/adb-dead"
+refute "an adb that does not answer says nothing, not status 1" device_status 'ping -c 1 10.0.2.2'
+rm -f "$WORK/adb-dead"
 echo "== what the demo's shell says"
 ok='HTTP/1.1 200 OK
 content-type: application/vnd.navree.native+json

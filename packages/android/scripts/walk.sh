@@ -24,7 +24,29 @@ check() {
   if "$@"; then say "PASS $name"; else say "FAIL $name"; fails=$((fails + 1)); fi
 }
 
-ui() { python3 -I "$HERE/ui.py" "$OUT/window.xml" "$@"; }
+ui() { UI_PACKAGE="$PKG" python3 -I "$HERE/ui.py" "$OUT/window.xml" "$@"; }
+
+# The exit status of a command run on the device, said by the device itself: fails when adb did not reach it
+# (nothing came back to say), so a check that something is not so (`ping` finds no one, `pidof` finds no
+# process) is never passed by a dead adb. Usage: device_status "<command>" prints the status.
+device_status() {
+  local out
+  out=$("$ADB" shell "$1; echo status=\$?" 2>/dev/null | tr -d '\r') || return 1
+  case "$out" in
+    *status=*) echo "${out##*status=}" ;;
+    *) return 1 ;;
+  esac
+}
+
+# The window that has the focus is not the app's: the answer names a focused window at all.
+focus_is_not_the_app() {
+  local line
+  line=$("$ADB" shell dumpsys window 2>/dev/null | tr -d '\r' | grep mCurrentFocus | head -1)
+  [ -n "$line" ] && ! printf '%s' "$line" | grep -q "$PKG"
+}
+
+# The app has no process: pidof says so itself (status 1), not for want of an answer.
+app_is_gone() { [ "$(device_status "pidof $PKG > /dev/null")" = 1 ]; }
 
 # What is on the screen, written to $OUT/window.xml; tried again when the device was not still. The
 # file on the device and the one here are removed before each try, so a dump that fails leaves
@@ -103,7 +125,10 @@ net() {
     "$ADB" shell svc wifi disable
     "$ADB" shell svc data disable
     sleep 3
-    ! "$ADB" shell ping -c 1 -W 2 10.0.2.2 > /dev/null 2>&1
+    # The device says that it found no one: ping's own status, not an adb that did not answer.
+    local ping_status
+    ping_status=$(device_status "ping -c 1 -W 2 10.0.2.2 > /dev/null 2>&1") || return 1
+    [ "$ping_status" != 0 ]
   else
     "$ADB" shell svc wifi enable
     "$ADB" shell svc data enable
@@ -149,25 +174,39 @@ $(curl -s -S --max-time 15 -D - -o /dev/null -c "$jar" -b "$jar" \
 # The first screen shown and nothing of the place the app was in before.
 first_screen_only() { ui contains 'Revenue today' && ui absent-part 'Fulfilment'; }
 
-# Cold starts, timed: what the system says it took to show the first frame and to show the page
-# (the app reports when it is fully drawn), and the app's own marks of where the time went. Fails
-# when a start did not show the first screen within 30 seconds: a time of a start that never got
-# there is not a time of a start.
+# Cold starts, timed: what the system says it took to show the first frame (`am start -W`) and, where the
+# build can reach its server, to show the page (the app reports when it is fully drawn), and the app's own
+# marks of where the time went. With FIRST_SCREEN=no only the first frame is timed: a build that cannot reach
+# its server (the release build is not allowed plain http to the demo's address) never shows a page, and
+# asking it for one would only fail. Fails when a start did not begin (`Status: ok` is missing), the app is
+# not running afterwards, or, with FIRST_SCREEN=yes, the first screen is not shown within 30 seconds.
 timed_starts() {
-  local n missing=0
-  say "== how long a cold start takes (${1:-this build})"
+  local n missing=0 started
+  say "== how long a cold start takes (${1:-this build}, $([ "${FIRST_SCREEN:-yes}" = yes ] && echo 'to the first screen' || echo 'the first frame only'))"
   for n in 1 2 3; do
     "$ADB" shell input keyevent KEYCODE_HOME
     stop_app
-    sleep 2
+    sleep "${SETTLE:-2}"
     "$ADB" logcat -c
-    "$ADB" shell am start -W -n "$PKG/$ACTIVITY" | grep -E 'ThisTime|TotalTime|WaitTime' | tr '\n' ' ' | tee -a "$OUT/walk.txt"
+    started=$("$ADB" shell am start -W -n "$PKG/$ACTIVITY")
+    printf '%s\n' "$started" | grep -E 'ThisTime|TotalTime|WaitTime' | tr '\n' ' ' | tee -a "$OUT/walk.txt"
     echo >> "$OUT/walk.txt"
-    if ! wait_for Dashboard 30 > /dev/null; then
-      say "start $n did not show the first screen within 30 seconds"
+    if ! printf '%s\n' "$started" | tr -d '\r' | grep -q '^Status: ok'; then
+      say "start $n did not begin: $(printf '%s' "$started" | tr -d '\r' | tr '\n' ' ' | cut -c1-200)"
       missing=$((missing + 1))
+    elif [ "${FIRST_SCREEN:-yes}" = yes ]; then
+      if ! wait_for Dashboard 30 > /dev/null; then
+        say "start $n did not show the first screen within 30 seconds"
+        missing=$((missing + 1))
+      fi
+    else
+      sleep "${SETTLE:-2}"
+      if ! alive; then
+        say "start $n: the app is not running after its first frame"
+        missing=$((missing + 1))
+      fi
     fi
-    sleep 2
+    sleep "${SETTLE:-2}"
     "$ADB" logcat -d | grep -E 'NavreeStart|Fully drawn' | sed 's/^.*\(NavreeStart\|ActivityTaskManager\)/\1/' | tee -a "$OUT/walk.txt"
   done
   [ "$missing" -eq 0 ]
@@ -309,7 +348,7 @@ check "back from another destination goes to the first one" wait_for_part "Reven
 sleep 4
 shot back-from-first
 say "focus after the last back: $("$ADB" shell dumpsys window | grep mCurrentFocus | head -1)"
-check "back from the first destination leaves the app" bash -c "! '$ADB' shell dumpsys window | grep mCurrentFocus | grep -q '$PKG'"
+check "back from the first destination leaves the app" focus_is_not_the_app
 
 say "== a link from outside"
 launch
@@ -353,7 +392,7 @@ check "Orders is the place it was in" wait_for Fulfilment 20
 sleep 3
 "$ADB" shell am kill "$PKG"
 sleep 1
-check "the app's process is gone" bash -c "! '$ADB' shell pidof $PKG | grep -q ."
+check "the app's process is gone" app_is_gone
 check "the network is off for the return" net off
 "$ADB" shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
 strip returned-offline 12

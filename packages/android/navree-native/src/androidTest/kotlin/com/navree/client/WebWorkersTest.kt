@@ -76,13 +76,23 @@ class WebWorkersTest {
         other.close()
     }
 
+    /** The `Content-Security-Policy` the app's server sends with its page and with its worker scripts, when a test names one. */
+    private var pagePolicy: String? = null
+    private var scriptPolicy: String? = null
+
     private fun page(body: String) = MockResponse.Builder()
         .code(200)
         .addHeader("Content-Type", "text/html; charset=utf-8")
+        .apply { pagePolicy?.let { addHeader("Content-Security-Policy", it) } }
         .body("<!doctype html><html><head><meta charset=\"utf-8\"></head><body>$body</body></html>")
         .build()
 
-    private fun script(body: String) = MockResponse.Builder().code(200).addHeader("Content-Type", "text/javascript").body(body).build()
+    private fun script(body: String) = MockResponse.Builder()
+        .code(200)
+        .addHeader("Content-Type", "text/javascript")
+        .apply { scriptPolicy?.let { addHeader("Content-Security-Policy", it) } }
+        .body(body)
+        .build()
 
     /**
      * The two servers. The app's answers `/` with [home] and a path of [files] with its script;
@@ -242,6 +252,64 @@ class WebWorkersTest {
         assertEquals("a worker reached the other origin: $otherAsked", emptyList<String>(), otherAsked.toList())
     }
 
+    // ------------------------------------------------------------------ what else a service worker does
+
+    // The service worker loads a script from another origin with importScripts and says what came of it to the
+    // app's own server (a worker has no page to tell).
+    private fun importingServiceWorker() =
+        "try { importScripts('$elsewhere/import.js'); fetch('/says?m=sw-import-reached') } catch (e) { fetch('/says?m=sw-import-blocked') }"
+
+    private val registersTheImporter = "<p>ours</p><script>navigator.serviceWorker.register('/sw.js')</script>"
+
+    @Test
+    fun aServiceWorkerNeverImportsAScriptFromAnotherOrigin() {
+        serve({ registersTheImporter }, { mapOf("/sw.js" to importingServiceWorker()) })
+        val origins = Origins(base, loopbackHttp = true)
+        var inForce = false
+        compose.runOnUiThread {
+            WorkerGuard.arm(origins)
+            inForce = WorkerGuard.ensure()
+        }
+        assertTrue("the rules for service workers are in force", inForce)
+        openedBy(origins)
+        waitForSaid()
+        settle("worker-import.txt", "importScripts of another origin's script inside a service worker, with the guard")
+        assertEquals("what the worker said", listOf("sw-import-blocked"), said.toList())
+        assertEquals("the other origin was asked: $otherAsked", emptyList<String>(), otherAsked.toList())
+    }
+
+    @Test
+    fun aServiceWorkerImportsAScriptFromAnotherOriginWhereNothingGuardsIt() {
+        serve({ registersTheImporter }, { mapOf("/sw.js" to importingServiceWorker()) })
+        compose.runOnUiThread {
+            ServiceWorkerController.getInstance().setServiceWorkerClient(object : ServiceWorkerClient() {
+                override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? = null
+            })
+        }
+        openedBy(Origins(base, loopbackHttp = true))
+        waitForSaid()
+        settle("worker-import-control.txt", "importScripts of another origin's script inside a service worker, no rules")
+        assertEquals("what the worker said", listOf("sw-import-reached"), said.toList())
+        assertTrue("the other origin was asked: $otherAsked", otherAsked.contains("GET /import.js"))
+    }
+
+    @Test
+    fun aServiceWorkerWhoseScriptIsOnAnotherOriginIsNotRegistered() {
+        serve({
+            "<p>ours</p><script>navigator.serviceWorker.register('$elsewhere/sw.js').then(function(){ new Image().src = '/says?m=registered' }, function(e){ new Image().src = '/says?m=' + encodeURIComponent('register-failed ' + e.name) })</script>"
+        })
+        val origins = Origins(base, loopbackHttp = true)
+        compose.runOnUiThread {
+            WorkerGuard.arm(origins)
+            WorkerGuard.ensure()
+        }
+        openedBy(origins)
+        waitForSaid()
+        settle("worker-register-elsewhere.txt", "a registration whose script is on another origin")
+        assertEquals("what the page was told", listOf("register-failed SecurityError"), said.toList())
+        assertEquals("the other origin was asked: $otherAsked", emptyList<String>(), otherAsked.toList())
+    }
+
     // ------------------------------------------------------------------ a worker the page starts from one of the app's addresses
 
     private fun reportsWhatItReaches() =
@@ -286,6 +354,8 @@ class WebWorkersTest {
             madeOrRefused("data", "new Worker('data:text/javascript,' + encodeURIComponent(\"${socketOfTheWorker()}\"))") +
             madeOrRefused("own", "new Worker('/own.js')") +
             madeOrRefused("constructor", "new (new Worker('/own.js').constructor)(URL.createObjectURL(new Blob([\"${socketOfTheWorker()}\"], {type: 'text/javascript'})))") +
+            // An address that answers one thing the first time it is turned into a string and a blob address the second.
+            madeOrRefused("toString", "var n = 0, b = URL.createObjectURL(new Blob([\"${socketOfTheWorker()}\"], {type: 'text/javascript'})); new Worker({toString: function(){ return n++ ? b : '/own.js' }})") +
             "</script>"
 
     @Test
@@ -293,11 +363,11 @@ class WebWorkersTest {
         documentChecks()
         serve({ workersOfTheirOwnAddress() }, { mapOf("/own.js" to "1;") })
         openedBy(Origins(base, loopbackHttp = true))
-        waitForSaid(4)
+        waitForSaid(5)
         settle("workers-from-addresses.txt", "with the check at the start of every document")
         assertEquals(
-            "a blob, a data and one made through another worker's constructor are refused; one of the app's own is made",
-            listOf("blob-refused", "data-refused", "own-made", "constructor-refused").sorted(),
+            "a blob, a data and one made through another worker's constructor are refused; one of the app's own is made, and so is the one whose address is turned into a string once",
+            listOf("blob-refused", "data-refused", "own-made", "constructor-refused", "toString-made").sorted(),
             said.sorted(),
         )
         assertEquals("nothing reached the other origin: $otherAsked", emptyList<String>(), otherAsked.toList())
@@ -307,7 +377,7 @@ class WebWorkersTest {
     fun aWorkerMadeFromABlobAddressRunsAndReachesAnotherOriginWhereNothingChecksTheDocument() {
         serve({ workersOfTheirOwnAddress() }, { mapOf("/own.js" to "1;") })
         openedBy(Origins(base, loopbackHttp = true), documents = false)
-        waitForSaid(4)
+        waitForSaid(5)
         assertTrue("the worker's socket reached the other origin: $otherAsked", waitFor(15) { otherAsked.any { it.startsWith("UPGRADE") } })
         settle("workers-from-addresses-control.txt", "without the check at the start of every document")
         assertTrue("a blob worker was made: $said", said.contains("blob-made"))
@@ -320,6 +390,8 @@ class WebWorkersTest {
             madeOrRefused("direct", "new WebSocket('ws://localhost:${other.port}/socket')") +
             madeOrRefused("constructor", "var s = new WebSocket('ws://localhost:${app.port}/own-socket'); new s.constructor('ws://localhost:${other.port}/socket')") +
             madeOrRefused("own", "var t = new WebSocket('ws://localhost:${app.port}/own-socket')") +
+            // An object that answers the app's own socket the first time it is turned into a string and the other server the second.
+            madeOrRefused("toString", "var n = 0; new WebSocket({toString: function(){ return n++ ? 'ws://localhost:${other.port}/socket' : 'ws://localhost:${app.port}/own-socket' }})") +
             "</script>"
 
     @Test
@@ -327,9 +399,9 @@ class WebWorkersTest {
         documentChecks()
         serve({ socketsOfThePage() })
         openedBy(Origins(base, loopbackHttp = true))
-        waitForSaid(3)
+        waitForSaid(4)
         settle("socket-asked.txt", "with the check at the start of every document")
-        assertEquals("what the page was told", listOf("direct-refused", "constructor-refused", "own-made").sorted(), said.sorted())
+        assertEquals("what the page was told", listOf("direct-refused", "constructor-refused", "own-made", "toString-made").sorted(), said.sorted())
         assertEquals("a socket reached another origin: $otherAsked", emptyList<String>(), otherAsked.toList())
         assertTrue("the page's own socket opens: $ownSockets", waitFor(5) { ownSockets.isNotEmpty() })
     }
@@ -338,7 +410,7 @@ class WebWorkersTest {
     fun aSocketReachesAnotherOriginWhereNothingChecksTheDocument() {
         serve({ socketsOfThePage() })
         openedBy(Origins(base, loopbackHttp = true), documents = false)
-        waitForSaid(3)
+        waitForSaid(4)
         assertTrue("the socket reached the other origin: $otherAsked", waitFor(10) { otherAsked.any { it.startsWith("UPGRADE") } })
         settle("socket-control.txt", "without the check at the start of every document")
     }
@@ -377,5 +449,49 @@ class WebWorkersTest {
         assertEquals("the worker's socket opened", listOf("socket opened"), said.toList())
         assertTrue("the socket reached the other origin: $otherAsked", otherAsked.any { it.startsWith("UPGRADE") })
         assertEquals("the client was not asked about the socket: $seen", emptyList<String>(), seen.filter { it.startsWith(elsewhere) })
+    }
+
+    // The page's own policy and a worker loaded from an address: per MDN ("Using web workers", the section on
+    // content security policy) a worker is governed by the policy sent with its own script, and only a worker
+    // from a blob: or data: address inherits the page's. So a page that says connect-src 'self' does not close a
+    // socket inside a worker whose script came without a header. The system's own client is used: nothing of the
+    // client's is in play, so the policies are all that is tested.
+    private fun pageWithASocketWorker() =
+        "<p>ours</p><script>var w = new Worker('/socket-worker.js'); w.onmessage = function(e){ new Image().src = '/says?m=' + encodeURIComponent(e.data) }</script>"
+
+    private fun socketWorker() =
+        "var s = new WebSocket('ws://localhost:${other.port}/socket'); s.onopen = function(){ postMessage('socket opened') }; s.onerror = function(){ postMessage('socket failed') }; s.onclose = function(){ postMessage('socket failed') }"
+
+    @Test
+    fun aPagePolicyDoesNotHoldASocketInsideAWorkerLoadedFromAnAddress() {
+        pagePolicy = "connect-src 'self'"
+        serve({ pageWithASocketWorker() }, { mapOf("/socket-worker.js" to socketWorker()) })
+        openedBy(Origins(base, loopbackHttp = true), documents = false, rules = false)
+        waitForSaid()
+        settle("socket-in-worker-page-policy.txt", "connect-src 'self' on the page, none on the worker's script")
+        assertEquals("the worker's socket opened in spite of the page's policy", listOf("socket opened"), said.toList())
+        assertTrue("the socket reached the other origin: $otherAsked", otherAsked.any { it.startsWith("UPGRADE") })
+    }
+
+    @Test
+    fun aPolicySentWithTheWorkersScriptHoldsItsSocket() {
+        pagePolicy = "connect-src 'self'"
+        scriptPolicy = "connect-src 'self'"
+        serve({ pageWithASocketWorker() }, { mapOf("/socket-worker.js" to socketWorker()) })
+        openedBy(Origins(base, loopbackHttp = true), documents = false, rules = false)
+        waitForSaid()
+        settle("socket-in-worker-script-policy.txt", "connect-src 'self' on the worker's script")
+        assertTrue("the socket was stopped: $said", said.isNotEmpty() && said.all { it == "socket failed" })
+        assertEquals("nothing reached the other origin: $otherAsked", emptyList<String>(), otherAsked.toList())
+    }
+
+    @Test
+    fun aWorkerSrcPolicyOnThePageStopsWorkersFromBlobAndDataAddresses() {
+        pagePolicy = "worker-src 'self'"
+        serve({ workersOfTheirOwnAddress() }, { mapOf("/own.js" to "1;") })
+        openedBy(Origins(base, loopbackHttp = true), documents = false, rules = false)
+        waitForSaid(5)
+        settle("workers-from-addresses-worker-src.txt", "worker-src 'self' on the page, with the system's own client and no document script")
+        assertEquals("a blob and a data worker did not run: $otherAsked", emptyList<String>(), otherAsked.toList())
     }
 }

@@ -13,8 +13,13 @@
 Exits 1 when it finds nothing, and 2 when there is no dump to read: the file is missing, does not
 parse or holds no node. A question about what is not on the screen is never answered from a dump
 that is not there: `absent` exits 2 then, and so does every other command.
+
+When the environment names the app (`UI_PACKAGE`), `absent` and `absent-part` also need at least one
+node of that app in the dump: the launcher, a crash dialog or another app is a dump that parsed, and
+nothing of the app being missing from it says nothing about the app.
 """
 
+import os
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -59,6 +64,9 @@ def run(path, command, argument):
         # Nothing to look for is not "anything": an empty text would match the first node of every dump.
         print("no text to look for", file=sys.stderr)
         return 1
+    package = os.environ.get("UI_PACKAGE")
+    if package and command in ("absent", "absent-part") and not any(node.get("package") == package for node in everything):
+        raise NoDump("no node of " + package + " in the dump: it is another window")
     if command == "parsed":
         found = True
     elif command == "has":

@@ -94,7 +94,7 @@ class WebRulesTest {
         assertTrue("a failure of the check empties the document too", script.endsWith("catch(e){stop()}})();"))
         assertTrue("a document with no origin of its own is judged by its address", script.contains("o!=='null'") && script.contains("location.href"))
         assertTrue("only a web address can pass", script.contains("if(s!=='http'&&s!=='https')return false"))
-        assertTrue("it is short: it holds up every load", script.length < 1_500)
+        assertTrue("it is short: it holds up every load", script.length < 1_600)
     }
 
     @Test
@@ -104,6 +104,18 @@ class WebRulesTest {
         assertTrue("a refusal says what it is", script.contains("SecurityError"))
         assertTrue("an address is judged as the page's loads are, so a blob: or data: address is refused", script.contains("if(!at(h))throw"))
         assertTrue("the original is not reached through the instance's constructor", script.contains("C.prototype.constructor=N"))
+    }
+
+    @Test
+    fun the_real_constructor_gets_the_string_that_was_checked_and_never_the_pages_own_object() {
+        val script = WebRules.documentScript(Origins("https://shop.example").documentOrigins())
+        assertTrue("the page's object is made a string once: $script", script.contains("var x=String(u)"))
+        assertTrue("and the string is what is checked", script.contains("new URL(x,document.baseURI)"))
+        assertTrue("and what the constructor gets", script.contains("new C(x)") && script.contains("new C(x,"))
+        assertFalse("the object itself never goes to the constructor", script.contains("new C(u"))
+        assertFalse("nor do the options as the page made them", script.contains("new C(x,q)"))
+        assertTrue("options are copied field by field", script.contains("{name:q.name,type:q.type,credentials:q.credentials}"))
+        assertTrue("and protocols into an array of strings", script.contains("Array.from(q,String)"))
     }
 
     @Test
@@ -124,5 +136,25 @@ class WebRulesTest {
         assertEquals(WebRequest.Send, WebRules.workerRequest(ours = true, webHost = false))
         assertEquals(WebRequest.Send, WebRules.workerRequest(ours = false, webHost = true))
         assertEquals(WebRequest.Refuse, WebRules.workerRequest(ours = false, webHost = false))
+    }
+
+    @Test
+    fun a_web_page_is_shown_only_with_both_guards_in_force() {
+        assertTrue(WebRules.guardsInForce(workers = true, documents = true))
+        assertFalse("no rules for a service worker's requests", WebRules.guardsInForce(workers = false, documents = true))
+        assertFalse("no script at the start of a document", WebRules.guardsInForce(workers = true, documents = false))
+        assertFalse("neither", WebRules.guardsInForce(workers = false, documents = false))
+    }
+
+    @Test
+    fun what_is_missing_is_named_for_the_log() {
+        assertEquals(emptyList<String>(), WebRules.missingGuards(workers = true, documents = true))
+        val workers = WebRules.missingGuards(workers = false, documents = true)
+        assertEquals(1, workers.size)
+        assertTrue(workers.single(), workers.single().contains("service worker"))
+        val documents = WebRules.missingGuards(workers = true, documents = false)
+        assertEquals(1, documents.size)
+        assertTrue(documents.single(), documents.single().contains("start of every document"))
+        assertEquals("both are named, in one answer", 2, WebRules.missingGuards(workers = false, documents = false).size)
     }
 }

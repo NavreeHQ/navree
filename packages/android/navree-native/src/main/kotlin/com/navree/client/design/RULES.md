@@ -329,5 +329,7 @@ With nothing opened, the list has the window.
 - A service worker a page registers is held to the origins the web view is:
   its requests to any other origin are answered 403. A page's own scripts open
   a socket or start a worker only for an address on the app's origins. What a
-  script does inside a worker is not covered (the page's content security
-  policy is what holds it).
+  script does inside a worker is not covered: a worker loaded from an address
+  follows the policy sent with its own script, not the page's, so the worker's
+  script carries its own `connect-src`, and the page's `worker-src 'self'` is
+  what stops workers from `blob:`, `data:` and other origins.
