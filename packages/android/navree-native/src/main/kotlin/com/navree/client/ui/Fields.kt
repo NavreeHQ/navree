@@ -76,6 +76,7 @@ import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -246,7 +247,7 @@ private fun TextFieldView(field: Navree.Field, input: Navree.TextInput, place: P
             },
         enabled = !field.disabled,
         // In a table's cell the column heading names the field; its own label is said to TalkBack only.
-        label = if (place.inCell) null else FormRules.label(field.label, field.required)?.let { label -> { Text(label) } },
+        label = if (place.inCell) null else FormRules.label(field.label, field.required)?.let { label -> { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
         placeholder = input.placeholder?.let { placeholder -> { Text(placeholder) } },
         prefix = input.prefix?.let { prefix -> { Text(prefix) } },
         suffix = input.suffix?.let { suffix -> { Text(suffix) } },
@@ -423,7 +424,7 @@ private fun ChoiceView(field: Navree.Field, input: Navree.ChoiceInput, place: Pl
                     onValueChange = {},
                     readOnly = true,
                     enabled = !field.disabled,
-                    label = FormRules.label(field.label, field.required)?.let { label -> { Text(label) } },
+                    label = FormRules.label(field.label, field.required)?.let { label -> { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
                     placeholder = input.placeholder?.let { placeholder -> { Text(placeholder) } },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
                     supportingText = support.text?.let { text -> { Text(text) } },
@@ -505,7 +506,7 @@ private fun PickerField(
             onValueChange = {},
             readOnly = true,
             enabled = !field.disabled,
-            label = FormRules.label(label, field.required)?.let { shown -> { Text(shown) } },
+            label = FormRules.label(label, field.required)?.let { shown -> { Text(shown, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
             placeholder = placeholder?.let { shown -> { Text(shown) } },
             trailingIcon = icon,
             supportingText = support.text?.let { shown -> { Text(shown) } },
@@ -551,7 +552,7 @@ private fun ChoicesView(field: Navree.Field, input: Navree.ChoicesInput, place: 
             if (open) {
                 AlertDialog(
                     onDismissRequest = { open = false },
-                    title = field.label?.let { label -> { Text(label) } },
+                    title = field.label?.let { label -> { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
                     text = {
                         LazyColumn {
                             items(input.options) { option ->
