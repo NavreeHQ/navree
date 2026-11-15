@@ -14,7 +14,7 @@ description: "Creates and runs a new Navree app: installing the navree CLI, `nav
 - Docker or Podman: `navree dock up` runs the app's database, TimescaleDB
   (not needed with `--database sqlite`).
 - Optional: `rustfmt` (generators format their output with it), Node.js
-  20.9+ for the `--ui next` front end.
+  22+ and pnpm for the `--ui next` front end.
 - No OpenSSL, CMake or installed database server: TLS is rustls, and Dock
   runs the database in a container.
 
