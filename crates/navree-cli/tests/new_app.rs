@@ -978,6 +978,7 @@ fn ui_navree_wires_the_screens_into_the_app() {
         "use navree::auth::{AuthModule, AuthPages};",
         "use navree::realtime::RealtimeModule;",
         "use navree::session::SessionModule;",
+        "use navree::time::TimeModule;",
         "use navree::ui::UiModule;",
         "use navree::workspace::WorkspaceModule;",
         "use crate::{abilities, modules, ui};",
@@ -986,6 +987,7 @@ fn ui_navree_wires_the_screens_into_the_app() {
         ".module(RealtimeModule::from_config())",
         ".module(AuthPages::new().app_name(\"Demo\"))",
         ".module(WorkspaceModule::from_config())",
+        ".module(TimeModule::from_config())",
         ".module(ui::UiAppModule)",
         ".module(modules::customers::CustomersModule)",
         ".module(modules::users::UsersModule)",
@@ -1009,7 +1011,13 @@ fn ui_navree_wires_the_screens_into_the_app() {
         "Cargo.toml",
     ] {
         let text = read(&plain, file);
-        for word in ["RealtimeModule", "customers", "pub mod ui", "futures-util"] {
+        for word in [
+            "RealtimeModule",
+            "TimeModule",
+            "customers",
+            "pub mod ui",
+            "futures-util",
+        ] {
             assert!(
                 !text.contains(word),
                 "{file} of the plain app mentions {word}"
@@ -1030,6 +1038,27 @@ fn ui_navree_wires_the_screens_into_the_app() {
     assert!(plain_app.contains("use navree::workspace::WorkspaceModule;"));
     assert!(plain_app.contains(".module(WorkspaceModule::from_config())"));
     assert!(read(&plain, "tests/app.rs").contains("a_new_app_has_workspaces_and_resolves_one"));
+}
+
+/// The form for a new customer starts on today in the app's time zone
+/// (`time.default_zone`, or a workspace's own), not on a fixed number of minutes
+/// ahead of UTC.
+#[test]
+fn ui_navree_counts_today_in_the_apps_time_zone() {
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let root = create_app(dir.path(), &app("demo", Ui::Navree), now()).unwrap();
+    let pages = read(&root, "src/modules/customers/pages.rs");
+    assert!(
+        pages.contains("async fn new_form(desk: Desk, zone: CurrentZone) -> AppPage"),
+        "{pages}"
+    );
+    assert!(pages.contains("zone.today().date()"), "{pages}");
+    for fixed in ["TimeDelta", "minutes(", "330"] {
+        assert!(!pages.contains(fixed), "a fixed offset: {fixed}\n{pages}");
+    }
 }
 
 /// With workspaces, `navree check` requires every model to be classified: a
@@ -1159,6 +1188,11 @@ fn ui_navree_configures_sessions_sign_in_and_the_documentation_check() {
         Some("IN")
     );
     assert_eq!(config["auth"]["registration"].as_bool(), Some(false));
+    // A day is counted in the app's zone, which is read from here.
+    assert_eq!(
+        config["time"]["default_zone"].as_str(),
+        Some("Asia/Kolkata")
+    );
     assert_eq!(
         config["auth"]["password_reset"]["url"].as_str(),
         Some("http://127.0.0.1:8080/reset-password"),
@@ -1200,7 +1234,7 @@ fn ui_navree_configures_sessions_sign_in_and_the_documentation_check() {
     let plain = create_app(dir.path(), &app("plain", Ui::None), now()).unwrap();
     let config: toml::Table = read(&plain, "config/app.toml").parse().unwrap();
     assert_eq!(config["auth"]["registration"].as_bool(), Some(true));
-    for table in ["ui", "validation"] {
+    for table in ["ui", "validation", "time"] {
         assert!(config.get(table).is_none(), "{table}");
     }
     assert_eq!(config["session"]["secure"].as_bool(), Some(false));
@@ -1425,8 +1459,10 @@ fn ui_navree_demo_data_is_indian() {
     let format = read(&root, "src/ui/format.rs");
     assert!(format.contains("assert_eq!(rupees(10_000_000), \"₹1,00,000\");"));
     assert!(format.contains("assert_eq!(grouped(1_234_567), \"12,34,567\");"));
-    // The form for a new customer starts on today's date in IST.
-    assert!(read(&root, "src/modules/customers/pages.rs").contains("TimeDelta::minutes(330)"));
+    // The form for a new customer starts on today's date in the app's time
+    // zone, which the app sets to India's.
+    assert!(read(&root, "src/modules/customers/pages.rs").contains("zone.today().date()"));
+    assert!(read(&root, "config/app.toml").contains("default_zone = \"Asia/Kolkata\""));
 }
 
 /// The shell file: the app's shell, and the extractor that fills in the person

@@ -942,14 +942,16 @@
       "types": [
         "Heading",
         "Text",
-        "TextVariant"
+        "TextVariant",
+        "Tone"
       ],
       "thumb": "typography/thumb",
       "anatomy": null,
       "examples": [
         "typography/thumb",
         "typography/headings",
-        "typography/text"
+        "typography/text",
+        "typography/tones"
       ]
     },
     {
@@ -15212,6 +15214,31 @@
         "Body",
         "Muted",
         "Code"
+      ],
+      "slots": []
+    },
+    {
+      "id": "typography/tones",
+      "component": "typography",
+      "slug": "tones",
+      "title": "Tones",
+      "kind": "gallery",
+      "code": "[\n    (\"Neutral\", Text::new(\"₹1,250.00 this month\")),\n    (\"Success\", Text::new(\"₹1,250.00 paid\").tone(Tone::Success)),\n    (\n        \"Warning\",\n        Text::new(\"₹1,250.00 due in 3 days\").tone(Tone::Warning),\n    ),\n    (\n        \"Danger\",\n        Text::new(\"₹1,250.00 over the limit\").tone(Tone::Danger),\n    ),\n]",
+      "src": "/ui-preview/typography/tones.html",
+      "height": 120,
+      "layout": "center",
+      "cells": "narrow",
+      "show": false,
+      "open": false,
+      "live": false,
+      "width": null,
+      "fit": true,
+      "scripts": [],
+      "captions": [
+        "Neutral",
+        "Success",
+        "Warning",
+        "Danger"
       ],
       "slots": []
     },

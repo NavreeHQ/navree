@@ -177,16 +177,27 @@ In code (seeders, commands, admin screens), with a unit of work:
 
 ```rust,ignore
 let uow = db.uow(None, None).await;
-access.create_role(&uow, "editor", Some("Publishes anyone's posts")).await?;
+// `create_role` refuses a name that exists (`AccessError::RoleExists`), so a
+// seeder that can run again asks first. `role` reads committed rows.
+if access.role("editor").await?.is_none() {
+    access.create_role(&uow, "editor", Some("Publishes anyone's posts")).await?;
+}
 access.grant(&uow, "editor", "posts.publish").await?;
 access.assign_role(&uow, user_id, "editor").await?;
 uow.commit().await?;
 ```
 
 Also `revoke`, `sync_role_permissions`, `remove_role`, `sync_user_roles`,
-`grant_to_user`, `roles_of`, `permissions_of`. The writes return `false`
-when nothing changed (seeders can rerun), bump the access version (every
-instance rebuilds abilities on the next request) and are audited. HTTP
+`grant_to_user`, `roles_of`, `permissions_of`. `grant`, `revoke`,
+`assign_role`, `remove_role`, `grant_to_user` and `revoke_from_user` return
+`false` when nothing changed, and the two `sync_` calls do nothing when the
+set is already right, so a seeder that uses them can rerun. `create_role` does
+not: it answers `AccessError::RoleExists` for a role that is there, and there
+is no call that creates a role unless it exists. Ask with `role(name)` first,
+as above (in a unit of work from `db.uow` it does not see a role that the same
+unit of work created and has not committed), or match on `RoleExists` and go on. A change bumps the access
+version (every instance rebuilds abilities on the next request) and is
+audited. HTTP
 routes under `/api/access` (permission `roles.manage`) manage roles; the
 audit log route needs `audit.read`. Rows changed directly in the database
 aren't seen until `AbilityFactory::clear_cache()` or a restart.
@@ -230,7 +241,9 @@ roles: it is the right client for the refused side; give real roles through
 - Listing with `Post::query()` without `Accessible`: users see rows they
   then can't open.
 - A `from = "id"` route on a subject not registered with `for_feature` (500).
-- Soft-deleted rows still load in record checks: check `deleted_at`.
+- Expecting a soft-deleted record to reach a `from = "id"` handler: it is a
+  404 before any rule is checked, whoever asks. Lists, and records whose
+  parent is soft-deleted, are yours to filter.
 - Integers above 2^53 - 1 in conditions: pass them as strings.
 - Making a route `#[public]` to fix a 403: grant the permission or add a rule.
 

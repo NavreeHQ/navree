@@ -196,7 +196,7 @@ broadcast channels. `to_broadcast` defaults to `to_database`. With
 `notify.queue = true` each channel becomes a `notify.send` job.
 
 Routes (signed in, own notifications only; set `notify.routes = false` in
-apps without an authenticator): `GET /api/notifications?unread=true`,
+apps without an authenticator): `GET /api/notifications?filter[unread]=true`,
 `GET /api/notifications/unread-count`, `POST /api/notifications/{id}/read`,
 `POST /api/notifications/read-all`. The broadcast channel
 `private-users.{id}` needs an authorizer (`m.channel("users.{id}", ..)`;

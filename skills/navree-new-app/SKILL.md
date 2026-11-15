@@ -14,7 +14,7 @@ description: "Creates and runs a new Navree app: installing the navree CLI, `nav
 - Docker or Podman: `navree dock up` runs the app's database, TimescaleDB
   (not needed with `--database sqlite`).
 - Optional: `rustfmt` (generators format their output with it), Node.js
-  20.9+ for the `--ui next` front end.
+  22+ and pnpm for the `--ui next` front end.
 - No OpenSSL, CMake or installed database server: TLS is rustls, and Dock
   runs the database in a container.
 
@@ -41,7 +41,7 @@ navree new blog --navree-path ~/code/navree      # depend on that checkout
 - The name uses lower-case letters and digits separated by single `-` or
   `_`, starts with a letter, and is not a Rust keyword, `std`, `test` or
   `navree`. The directory must not exist or must be empty.
-- The app depends on the published crate, `navree = "1.2.2"` (the CLI's own
+- The app depends on the published crate, `navree = "1.2.3"` (the CLI's own
   version). With `--navree-path`, or when the CLI was installed from a
   clone, it depends on that checkout by `path` instead.
 - `navree new` doesn't run Cargo. It runs `git init` (no commit) unless the
@@ -229,7 +229,7 @@ fn main() -> Result<(), BoxError> {
 
 ```sh
 cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test
-navree check                         # the module graph, without booting
+navree check                         # the module graph, then the conformity checks (boots once)
 ```
 
 For a kit, also:

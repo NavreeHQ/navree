@@ -1970,6 +1970,28 @@ impl Text {
         self
     }
 
+    /// Colours the words by what they mean: a balance at its limit in [`Tone::Danger`], a
+    /// paid one in [`Tone::Success`]. It is the `data-tone` a [`Badge`] reads, drawn as the
+    /// colour of the text and nothing else: no pill, no tint. It works on [`muted`](Self::muted)
+    /// and [`code`](Self::code) text and on [`inline`](Self::inline) text, and the tone's
+    /// colour wins over the colour of the look. A [`Tone::Named`] colour comes from the
+    /// stylesheet; [`Tone::Neutral`] writes nothing. The colour never carries the meaning
+    /// alone: say it in the words too.
+    ///
+    /// ```
+    /// use navree_ui::{Text, Tone, render};
+    ///
+    /// let balance = Text::new("₹1,250.00 over the limit").inline().tone(Tone::Danger);
+    /// assert_eq!(
+    ///     render(&balance.into()),
+    ///     r#"<span data-slot="text" data-tone="danger">₹1,250.00 over the limit</span>"#
+    /// );
+    /// ```
+    pub fn tone(mut self, tone: Tone) -> Self {
+        self.el = self.el.attr_opt("data-tone", tone.value());
+        self
+    }
+
     fn into_node(self) -> Node {
         self.el.into()
     }

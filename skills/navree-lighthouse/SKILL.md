@@ -9,9 +9,9 @@ description: "Application monitoring with navree-lighthouse: the `lighthouse` fa
 part of `full`) monitors the app from inside it. A telemetry sink receives
 every request, query, job attempt, scheduled run, mail, cache call, outgoing
 call and exception the framework emits; one background task groups each
-request's or job's events, decides what to keep and writes batches to five
+request's or job's events, decides what to keep and writes batches to seven
 tables (`lighthouse_issues`, `_occurrences`, `_samples`, `_aggregates`,
-`_alerts`). The dashboard at `/_lighthouse` and the JSON API under
+`_alerts`, `_releases`, `_settings`). The dashboard at `/_lighthouse` and the JSON API under
 `/_lighthouse/api` read them. The tables are navree-orm models (`navree::lighthouse::entity::issue::Model::query()` and so on); the store's errors are `LighthouseError::Db(DbError)` and `Orm(OrmError)`. Everything below is in the code: when in doubt
 read `crates/navree-lighthouse/src` and its tests in
 `crates/navree-lighthouse/tests/lighthouse/` and
@@ -251,7 +251,7 @@ the facade then turns on navree-lighthouse's own `mcp` feature) and
 app's MCP server at `/mcp`. Nothing to write:
 
 ```toml
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["mcp"] }
+navree = { version = "1", features = ["mcp"] }
 ```
 
 ```rust,ignore

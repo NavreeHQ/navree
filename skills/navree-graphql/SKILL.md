@@ -19,7 +19,7 @@ and its tests (`tests/graphql/`, `tests/docs_examples.rs`).
 
 ```toml
 [dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["graphql"] }
+navree = { version = "1", features = ["graphql"] }
 async-graphql = { version = "7.2", default-features = false, features = ["chrono", "uuid"] }
 ```
 
@@ -244,7 +244,7 @@ document that does not parse, breaks the schema or a limit (no `data`);
 ## Testing
 
 `temp_database()` is a SQLite file per test, so an app that runs on
-PostgreSQL needs `navree = { git = "...", features = ["sqlite"] }` in its
+PostgreSQL needs `navree = { version = "1", features = ["sqlite"] }` in its
 `[dev-dependencies]`; without it the test fails at boot asking for the feature.
 
 ```rust,ignore

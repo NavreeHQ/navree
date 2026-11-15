@@ -101,6 +101,8 @@ pub struct PhoneInput {
     only: Vec<Region>,
     labels: PhoneLabels,
     flags: Option<fn(Region) -> Node>,
+    /// The id of the list of countries, when its name does not make it.
+    list: Option<String>,
 }
 
 impl PhoneInput {
@@ -123,6 +125,7 @@ impl PhoneInput {
             only: Vec::new(),
             labels: PhoneLabels::default(),
             flags: None,
+            list: None,
         }
     }
 
@@ -231,6 +234,13 @@ impl PhoneInput {
         self
     }
 
+    /// Sets the id of the list of countries, which the button that opens it names, in place of
+    /// the one the field's name makes: a form whose ids carry a prefix gives it one of its own.
+    pub(crate) fn list_id(mut self, id: String) -> Self {
+        self.list = Some(id);
+        self
+    }
+
     /// Sets an attribute on the root element.
     pub fn attr(mut self, name: &'static str, value: impl Into<AttrValue>) -> Self {
         self.el = self.el.attr(name, value);
@@ -258,8 +268,10 @@ impl PhoneInput {
     fn into_node(self) -> Node {
         let (region, text, number) = self.resolve();
         let flag = self.flags.unwrap_or(text_flag);
-        let base = slug(&self.name);
-        let list_id = format!("{base}-countries");
+        let list_id = self
+            .list
+            .clone()
+            .unwrap_or_else(|| format!("{}-countries", slug(&self.name)));
         let placeholder = self.placeholder.clone().or_else(|| {
             region
                 .and_then(Region::placeholder_example)

@@ -20,7 +20,7 @@ Stripe and Paddle against a mock server).
    AccessModule because the routes check `billing.manage`):
 
 ```toml
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["billing"] }
+navree = { version = "1", features = ["billing"] }
 ```
 
 ```rust,ignore

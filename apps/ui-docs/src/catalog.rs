@@ -481,7 +481,7 @@ pub const COMPONENTS: &[Component] = &[
     component(
         "typography",
         "Heading and Text",
-        &["Heading", "Text", "TextVariant"],
+        &["Heading", "Text", "TextVariant", "Tone"],
         "thumb",
     ),
     component("kbd", "Kbd", &["Kbd"], "default").parts("default"),

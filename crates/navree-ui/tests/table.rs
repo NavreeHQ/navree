@@ -1508,3 +1508,247 @@ fn a_columns_alignment_is_for_its_cells_not_for_a_row_drawn_inside_one() {
     assert!(css.contains("& :is(th,td)[data-align=center]{text-align:center}"));
     assert!(css.contains("& :is(th,td)[data-align=end]{text-align:end}"));
 }
+
+/// The table of `query` and `rows` with `build` applied: what a table that leaves a control of
+/// its toolbar out draws.
+fn drawn_with(
+    query: &Q,
+    rows: &[Deal],
+    total: u64,
+    build: impl for<'a> FnOnce(DataTable<'a, Deal>) -> DataTable<'a, Deal>,
+) -> String {
+    let page = TablePage::new(rows.to_vec(), total);
+    render(&build(DataTable::new("deals", query, &page).caption("Deals")).into())
+}
+
+/// The names of the columns a drawn table has headings for, in order.
+fn heads(html: &str) -> Vec<&str> {
+    html.split(r#"<th scope="col" data-col=""#)
+        .skip(1)
+        .map(|rest| rest.split('"').next().unwrap())
+        .collect()
+}
+
+#[test]
+fn the_toolbar_draws_the_columns_picker_and_the_density_switch_unless_one_is_left_out() {
+    let html = draw(&q(""), &[deal(1)], 1);
+    assert!(
+        html.contains(r#"popovertarget="deals-columns" aria-haspopup="dialog" type="button""#),
+        "{html}"
+    );
+    assert!(
+        html.contains(r#"popovertarget="deals-view" aria-haspopup="dialog" type="button""#),
+        "{html}"
+    );
+    assert!(html.contains(r#"name="cols" value="stage""#), "{html}");
+    assert!(html.contains("Hide column"), "{html}");
+    assert!(html.contains("data-ui-col-drag"), "{html}");
+    assert!(
+        html.contains("Compact") && html.contains("Spacious"),
+        "{html}"
+    );
+}
+
+#[test]
+fn a_table_without_the_columns_picker_draws_its_columns_whatever_cols_says() {
+    let rows = [deal(1)];
+    let query = q("cols=title,owner&sort=title");
+    // With the picker the address decides.
+    assert_eq!(heads(&draw(&query, &rows, 1)), ["title", "owner"]);
+    let html = drawn_with(&query, &rows, 1, |table| table.without_columns_picker());
+    // The columns it starts with: the hidden one stays hidden.
+    assert_eq!(
+        heads(&html),
+        [
+            "title", "stage", "amount", "closed", "hot", "notes", "owner"
+        ],
+        "{html}"
+    );
+    for gone in [
+        "deals-columns",
+        r#"name="cols""#,
+        "cols=",
+        "Reset columns",
+        "Hide column",
+        "data-ui-col-drag",
+    ] {
+        assert!(!html.contains(gone), "{gone} in {html}");
+    }
+    // The density switch and the rest of the toolbar are as they were.
+    assert!(html.contains("deals-view"), "{html}");
+    assert!(html.contains(r#"name="search""#), "{html}");
+    assert!(
+        hrefs(&html).iter().any(|href| href.contains("sort=title")),
+        "the rest of the state is in the links: {html}"
+    );
+}
+
+#[test]
+fn a_column_taken_away_stays_away_from_a_table_without_the_picker() {
+    let query = q("cols=title,amount,company").without_columns(["amount", "company"]);
+    let html = drawn_with(&query, &[deal(1)], 1, |table| {
+        table.without_columns_picker()
+    });
+    assert_eq!(
+        heads(&html),
+        ["title", "stage", "closed", "hot", "notes", "owner"],
+        "{html}"
+    );
+}
+
+#[test]
+fn a_table_without_the_density_switch_keeps_the_default_density_whatever_density_says() {
+    let rows = [deal(1)];
+    let query = q("density=compact&cols=title,owner");
+    assert!(
+        draw(&query, &rows, 1).contains(r#"data-density="compact""#),
+        "with the switch the address decides"
+    );
+    let html = drawn_with(&query, &rows, 1, |table| table.without_density_switch());
+    assert!(!html.contains("ensity"), "{html}");
+    assert!(
+        !html.contains("Compact") && !html.contains("Spacious"),
+        "{html}"
+    );
+    // The columns picker is as it was, and its parameter still rides in the links.
+    assert!(html.contains("deals-columns"), "{html}");
+    assert_eq!(heads(&html), ["title", "owner"], "{html}");
+    assert!(
+        hrefs(&html)
+            .iter()
+            .any(|href| href.contains("cols=title%2Cowner")),
+        "{html}"
+    );
+}
+
+#[test]
+fn a_table_with_neither_control_has_its_search_and_nothing_to_arrange() {
+    let rows = [deal(1)];
+    let query = q("sort=title&cols=title,owner&density=spacious");
+    let html = drawn_with(&query, &rows, 1, |table| {
+        table.without_columns_picker().without_density_switch()
+    });
+    assert!(html.contains(r#"name="search""#), "{html}");
+    for gone in [
+        "deals-columns",
+        "deals-view",
+        r#"name="cols""#,
+        "ensity",
+        "Hide column",
+        "data-ui-col-drag",
+    ] {
+        assert!(!html.contains(gone), "{gone} in {html}");
+    }
+    // Widths are their own control: the handles are still there.
+    assert!(html.contains(r#"data-slot="col-resize""#), "{html}");
+    assert_eq!(heads(&html).len(), 7, "{html}");
+    // The order the two are left out in makes no difference.
+    let other = drawn_with(&query, &rows, 1, |table| {
+        table.without_density_switch().without_columns_picker()
+    });
+    assert_eq!(html, other);
+}
+
+#[test]
+fn no_link_or_form_of_such_a_table_names_cols_or_density() {
+    use navree_ui::table::SavedView;
+    let rows: Vec<Deal> = (1..=50).map(deal).collect();
+    let query = q("search=b&per_page=50&page=2&cols=title,owner&density=compact&filter[hot]=true");
+    let views = [SavedView {
+        id: "v1".to_owned(),
+        name: "Hot deals".to_owned(),
+        query: "filter[hot]=true".to_owned(),
+        is_default: false,
+    }];
+    // The page of rows says which page it is: `TablePage::new` is the first, and the table draws the
+    // page it was given, so the second is said here, as `TableQuery::load` says it.
+    let mut page = TablePage::new(rows, 500);
+    page.page = 2;
+    let html = render(
+        &DataTable::new("deals", &query, &page)
+            .caption("Deals")
+            .without_columns_picker()
+            .without_density_switch()
+            .export("/deals/export")
+            .bulk("/deals/bulk", [BulkAction::new("archive", "Archive")])
+            .views(&views, "/deals/views")
+            .filter_bar()
+            .detail(|row| navree_ui::el("p").child(row.title.clone()).into())
+            .into(),
+    );
+    assert!(!html.contains("cols="), "{html}");
+    assert!(!html.contains("ensity"), "{html}");
+    let links = hrefs(&html);
+    for want in [
+        // The page before and the page after the second, and the export, keep what the address
+        // held that the table keeps.
+        "/deals?filter%5Bhot%5D=true&search=b&per_page=50",
+        "/deals?filter%5Bhot%5D=true&search=b&page=3&per_page=50",
+        "/deals/export?filter%5Bhot%5D=true&search=b&per_page=50",
+        // A row's details open on the page it is on.
+        "/deals?filter%5Bhot%5D=true&search=b&page=2&per_page=50&open=1",
+        // The filter bar's own state is `fb`: it names the columns that have a filter (the hidden
+        // one too), not the columns shown, so it is not the picker's and stays.
+        "/deals?filter%5Bhot%5D=true&search=b&page=2&per_page=50&fb=stage%2Ctitle%2Camount%2Cclosed%2Chot%2Ccompany",
+    ] {
+        assert!(links.contains(&want.to_owned()), "{want} in {links:?}");
+    }
+    assert!(
+        links
+            .iter()
+            .all(|href| !href.contains("cols=") && !href.contains("density=")),
+        "{links:?}"
+    );
+    // The state the bulk form and the views' forms post back is the same.
+    let posted: Vec<String> = html
+        .split(r#"name="_q" value=""#)
+        .skip(1)
+        .map(|rest| rest.split('"').next().unwrap().replace("&amp;", "&"))
+        .collect();
+    assert!(posted.len() >= 2, "{html}");
+    for text in posted {
+        assert_eq!(text, "filter%5Bhot%5D=true&search=b&page=2&per_page=50");
+    }
+}
+
+/// A table that leaves both controls out.
+fn bare(table: DataTable<'_, Deal>) -> DataTable<'_, Deal> {
+    table.without_columns_picker().without_density_switch()
+}
+
+#[test]
+fn the_retry_and_clear_links_of_such_a_table_name_neither() {
+    let query = q("search=zz&cols=title,owner&density=compact");
+    // No row matches: the clear link.
+    let html = drawn_with(&query, &[], 0, bare);
+    assert!(html.contains("No results match"), "{html}");
+    assert!(
+        !html.contains("cols=") && !html.contains("ensity"),
+        "{html}"
+    );
+    // The rows did not load: the retry links.
+    let page = TablePage::new(vec![deal(1)], 1);
+    let failed = DataTable::new("deals", &query, &page).failed("Could not load");
+    let html = render(&bare(failed).into());
+    assert!(html.contains("Could not load"), "{html}");
+    assert!(
+        !html.contains("cols=") && !html.contains("ensity"),
+        "{html}"
+    );
+}
+
+#[test]
+fn the_query_of_such_a_table_still_says_what_the_address_said() {
+    // Leaving a control out is the table's: it draws from neither parameter, and the query it is
+    // given is not changed, so a handler that reads one still can.
+    let query = q("cols=title,owner&density=compact");
+    let page = TablePage::new(vec![deal(1)], 1);
+    let _ = render(
+        &DataTable::new("deals", &query, &page)
+            .without_columns_picker()
+            .without_density_switch()
+            .into(),
+    );
+    assert_eq!(shown(&query), ["title", "owner"]);
+    assert_eq!(query.density(), navree_ui::table::TableDensity::Compact);
+}

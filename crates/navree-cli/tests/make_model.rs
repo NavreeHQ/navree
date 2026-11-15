@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use navree_cli::clock::Timestamp;
-use navree_cli::make::{Companions, MakeKind, MakeOptions, make_item, make_model};
+use navree_cli::make::{Companions, MakeKind, MakeOptions, make_item, make_model, make_module};
 use navree_cli::names::{AppName, Name};
 use navree_cli::new_app::{Database, NavreeSource, NewApp, Ui, create_app};
 
@@ -472,6 +472,48 @@ fn a_model_is_not_generated_twice() {
     );
     assert_eq!(read(&root, "src/modules/users/mod.rs"), module_before);
     assert!(!path(&root, "src/modules/users/factories").exists());
+}
+
+/// `make:module` writes the migration that creates the module's table, and
+/// `make:model --migration` right after it, in the same second, names its
+/// own the same. The refusal has to come before the model and the companions
+/// ahead of the migration are written, as its text says.
+#[test]
+fn a_companion_file_that_exists_stops_the_model_before_anything_is_written() {
+    let (_dir, root) = project();
+    make_module(&root, "src/modules", &name("customers"), true, now()).unwrap();
+    let module_before = read(&root, "src/modules/customers/mod.rs");
+    let abilities_before = read(&root, "src/abilities.rs");
+    let error = make_model(
+        &root,
+        "src/modules",
+        &name("customers"),
+        &name("customer"),
+        Companions::all(),
+        now(),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(
+        error.contains("refusing to overwrite existing files (nothing was written)"),
+        "{error}"
+    );
+    assert!(
+        error.contains("m20261025_143005_create_customers_table.rs"),
+        "{error}"
+    );
+    for dir in ["models", "factories", "seeders", "policies", "controllers"] {
+        assert!(
+            !path(&root, &format!("src/modules/customers/{dir}")).exists(),
+            "{dir} was written"
+        );
+    }
+    assert_eq!(
+        read(&root, "src/modules/customers/mod.rs"),
+        module_before,
+        "the module was edited"
+    );
+    assert_eq!(read(&root, "src/abilities.rs"), abilities_before);
 }
 
 #[test]

@@ -240,7 +240,11 @@ use navree::access::AccessService;
 use navree::db::Db;
 
 let uow = db.uow(None, None).await;
-access.create_role(&uow, "editor", Some("Publishes anyone's posts")).await?;
+// `create_role` refuses a name that exists (`AccessError::RoleExists`), so a
+// seeder that can run again asks first. `role` reads committed rows.
+if access.role("editor").await?.is_none() {
+    access.create_role(&uow, "editor", Some("Publishes anyone's posts")).await?;
+}
 access.grant(&uow, "editor", "posts.publish").await?;
 access.grant(&uow, "editor", "posts.update").await?;
 access.assign_role(&uow, editor_id, "editor").await?;
@@ -258,7 +262,7 @@ uow.commit().await?;
 | `role(name)`, `roles()`, `roles_of(user)`, `permissions_of(user)` | Read roles and permissions (`RoleInfo` has `id`, `name`, `description`, `permissions`, `created_at`) |
 | `explain(user, action, subject, id)` | The rule that decides a check; see [Explaining a decision](#explaining-a-decision) |
 
-The `grant`, `revoke`, `assign` and `remove` methods return `false` when there was nothing to change, and do nothing else, so seeders can run again safely. The CRM's `crm-roles` seeder creates the missing roles and calls `sync_role_permissions` for each.
+The `grant`, `revoke`, `assign_role`, `remove_role`, `grant_to_user` and `revoke_from_user` methods return `false` when there was nothing to change, and do nothing else, and the two `sync_` methods do nothing when the set is already right, so a seeder that uses them can run again safely. `create_role` is the exception: it answers `AccessError::RoleExists` for a role that is already there, and no method creates a role only when it is missing. Ask with `role(name)` first, as in the example (in a unit of work from `db.uow` it does not see a role that the same unit of work created and has not committed), or match on `RoleExists` and go on. The CRM's `crm-roles` seeder creates the missing roles and calls `sync_role_permissions` for each.
 
 Each change that does something:
 
@@ -421,7 +425,7 @@ For a `from` route, the authorizer:
 
 1. runs the type-level check;
 2. loads the record by its primary key in the request's unit of work, with `SELECT ... FOR UPDATE` on PostgreSQL and MySQL (on SQLite the write transaction already serialises writers);
-3. answers 404 when there is no such record, or when the id can't be one (not a UUID for a UUID key, say);
+3. answers 404 when there is no such record, when it is soft-deleted, or when the id can't be one (not a UUID for a UUID key, say);
 4. checks the rules against the record, and answers 403 when they say no;
 5. keeps the record for the handler.
 
@@ -431,7 +435,7 @@ Conditions see the record as JSON with one member per column, named like the col
 
 <Callout type="warning" title="Soft-deleted records">
 
-The record loader doesn't know about soft deletes. A soft-deleted row still loads, so a user the rules refuse gets a 403 rather than a 404, which tells them the record existed. Check `deleted_at` in your handler or service.
+A soft-deleted record (its `deleted_at` is set) is a 404 before any rule is checked, so a user the rules refuse can't tell it was there. Lists, and records whose parent is soft-deleted, are the app's to filter.
 
 </Callout>
 

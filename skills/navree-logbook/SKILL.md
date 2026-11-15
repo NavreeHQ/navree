@@ -1,6 +1,6 @@
 ---
 name: navree-logbook
-description: "Debug a Navree app locally with navree-logbook: `LogbookModule` and the `logbook` config section, the UI at `/_logbook` (entry types in a sidebar, the list and the open entry in two panes, an address for each entry), watchers (requests with headers and bodies, queries, jobs, mail, events, cache, logs, exceptions, outgoing HTTP, notifications, data changes, scheduled tasks), the filter language (`user:`, `tag:`, `status:4xx`, `route:`, `type:`, `slow`, `failed`, `duration>200`, `batch:`, `trace:`), `Logbook::tag` and `Logbook::dump`, duplicate-query (N+1) detection, request replay as the same user, `logbook:clear`, and the test API (`last_request().queries()`, `duplicate_queries()`). Use when you need to see what a request, job or scheduled task did, find an N+1 query, assert the number of queries in a test, replay a failing request, or when `/_logbook` answers 404 or records nothing."
+description: "Debug a Navree app locally with navree-logbook: `LogbookModule` and the `logbook` config section, the UI at `/_logbook` (entry types in a sidebar, the list and the open entry in two panes, an address for each entry), watchers (requests with headers and bodies, queries, jobs, mail, events, cache, logs, exceptions, outgoing HTTP, notifications, data changes, scheduled tasks, model calls, broadcasts, file operations, webhook attempts, searches, sign-ins, Navree UI operations), the filter language (`user:`, `tag:`, `status:4xx`, `route:`, `type:`, `slow`, `failed`, `duration>200`, `batch:`, `trace:`), `Logbook::tag` and `Logbook::dump`, duplicate-query (N+1) detection, request replay as the same user, `logbook:clear`, and the test API (`last_request().queries()`, `duplicate_queries()`). Use when you need to see what a request, job or scheduled task did, find an N+1 query, assert the number of queries in a test, replay a failing request, or when `/_logbook` answers 404 or records nothing."
 ---
 
 # Logbook
@@ -121,7 +121,7 @@ and `curl(id)`. Outside an app, `Logbook::in_memory(options)`.
 | `logbook.replay` | `true` | |
 | `logbook.ignore.routes` | `["/health/*", "/metrics"]` | comma-separated from the environment |
 | `logbook.ignore.framework` | `true` | leaves out the toolkit's files and, outside any request, job or task, the outbox poll with its `BEGIN`/`COMMIT`/actor statements and statements on `micro_*`/`navree_*` tables; `false` shows them |
-| `logbook.watchers.<name>` | `true` | `requests`, `queries`, `jobs`, `mail`, `events`, `cache`, `logs`, `exceptions`, `http_client`, `notifications`, `models`, `schedule` |
+| `logbook.watchers.<name>` | `true` | `requests`, `queries`, `jobs`, `mail`, `events`, `cache`, `logs`, `exceptions`, `http_client`, `notifications`, `models`, `schedule`, `ai`, `broadcasts`, `storage`, `webhooks`, `search`, `sign_ins`, `ui` (nineteen) |
 
 Environment: `APP_LOGBOOK__STORE=memory`, `APP_LOGBOOK__WATCHERS__CACHE=false`.
 

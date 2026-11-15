@@ -28,6 +28,7 @@ pub fn all() -> Vec<Example> {
         single!("typography", "thumb", "Heading and text", typography_thumb).start(),
         single!("typography", "headings", "Headings", typography_headings).start(),
         gallery!("typography", "text", "Text", typography_text).wide(),
+        gallery!("typography", "tones", "Tones", typography_tones).narrow(),
         single!("kbd", "default", "Keys", kbd_default),
         single!("attachment", "default", "A file", attachment_default).start(),
         single!("attachment", "action", "With an action", attachment_action).start(),
@@ -200,6 +201,21 @@ fn typography_text() -> impl IntoIterator<Item = (&'static str, Text)> {
         ("Body", Text::new("Procurement asked for a two-year term.")),
         ("Muted", Text::muted("Updated 3 minutes ago")),
         ("Code", Text::code("deal.amount")),
+    ]
+}
+
+fn typography_tones() -> impl IntoIterator<Item = (&'static str, Text)> {
+    [
+        ("Neutral", Text::new("₹1,250.00 this month")),
+        ("Success", Text::new("₹1,250.00 paid").tone(Tone::Success)),
+        (
+            "Warning",
+            Text::new("₹1,250.00 due in 3 days").tone(Tone::Warning),
+        ),
+        (
+            "Danger",
+            Text::new("₹1,250.00 over the limit").tone(Tone::Danger),
+        ),
     ]
 }
 

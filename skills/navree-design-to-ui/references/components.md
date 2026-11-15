@@ -24,7 +24,8 @@ is dropped.
 | Sidebar group, link, nested link, count | `NavGroup::new(label)`, `NavGroup::plain()`, `NavItem::new(label, href).icon(..).count(..).sub(..)` | `NavItem::current(true)` when several links differ only in their query |
 | Product name, environment tag | `Shell::new(name)`, `.context("Production")` | the context is text, not a pill |
 | Search in the top bar | `Shell::search(node)` | a form with `Input::search`, or a command palette: `Node::list((Command::trigger(id, label), palette))` |
-| User at the foot of the sidebar | `UserMenu::new(name, email).link(..).action(..)` | `action` posts; the avatar is an icon, never initials |
+| User at the foot of the sidebar | `UserMenu::new(name, email).link(..).action(..)`; `AppShell::user_menu(menu)` for one request | `action` posts; the avatar is an icon, never initials |
+| A workspace switcher under the app's name | `Shell::header_slot(node)`; `AppShell::header_slot(node)` for one request | `navree_workspace::WorkspaceSwitcher` is the node |
 | Breadcrumbs | `AppPage::crumb(label, href)`; on a plain page `Breadcrumb::new().link(..).current(..)` | |
 | Page title and page buttons | `shell.page(title)`, `.actions(..)` | one primary action per page |
 | A page outside the shell (sign-in, receipt) | `View::new(title).body(..)` | |
@@ -103,9 +104,11 @@ is dropped.
 | Page links under a static list | `Pagination::new(page, pages, href_fn)` |
 | Icon | `icons::NAME` on a component (`.icon(..)`); `icon(icons::NAME)` as a node, hidden from screen readers |
 
-Icons are lucide's, a fixed set of 145 in `src/icons.rs` (`icons::PLUS`,
-`icons::HANDSHAKE`, ...). An icon the design uses that isn't in the set is
-a gap: the set grows in the toolkit, not in the app.
+Icons are lucide's, all 2,019 of them, in `src/icons/lucide.rs`
+(`icons::PLUS`, `icons::HANDSHAKE`, ...; `lucide!("mail-open")` takes a
+name as lucide.dev writes it). An icon the design uses that isn't lucide's is
+the app's own: `icon_file!` and `icon_set!` compile it from an SVG file
+(https://navree.com/docs/ui/icons/).
 
 ## Actions
 
@@ -335,16 +338,13 @@ waits.
 | Module | Covers in a design | Interim form, if the owner accepts one |
 |---|---|---|
 | Rich text | a formatted text editor | a textarea |
-| Islands | a client-side widget of the app's own | none |
+
+A client-side widget of the app's own (a map, an editor) is an `Island`:
+`Island::new(id, &SCRIPT).props(..).fallback(..)`, the script an
+`IslandScript` compiled into the app (https://navree.com/docs/ui/islands/).
 
 Also not there yet:
 
-- A workspace switcher in the shell's sidebar header:
-  `navree_workspace::WorkspaceSwitcher` goes beside the page heading
-  (`AppPage::actions`) or in the shell's search slot, and the workspace's name
-  goes under the app's with `Shell::context`. The signed-in person in the user
-  menu is drawn per request: see "Signing in, workspaces and the person in the
-  shell" in `navree-ui`.
 - Static files past the app's own stylesheet, fonts and pictures: the
   content security policy loads styles, scripts, fonts and images only from
   the app's own origin, and the toolkit serves an `AppSheet`, `AppFont` or

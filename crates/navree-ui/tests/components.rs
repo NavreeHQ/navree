@@ -137,6 +137,7 @@ fn all() -> Vec<(&'static str, Node)> {
     ));
     out.push(("heading", Heading::h2("T").into()));
     out.push(("text", Text::muted("T").into()));
+    out.push(("text", Text::new("₹1,250.00").tone(Tone::Danger).into()));
     out.push((
         "input",
         Input::email("e")

@@ -9,7 +9,7 @@ use serde::Serialize;
 use crate::clock::Timestamp;
 use crate::edit::{Edit, add_migration, declare_module, insert_above_marker};
 use crate::names::Name;
-use crate::scaffold::{FileSet, join};
+use crate::scaffold::{FileSet, ScaffoldError, join};
 use crate::templates::{TemplateError, render};
 
 /// `words` with an English indefinite article, by spelling (best effort):
@@ -758,6 +758,15 @@ fn has_name_field(src: &str) -> bool {
     })
 }
 
+/// The name of the file (without `.rs`) of a `kind` item `name`: a migration's
+/// starts with the time it was made.
+fn item_stem(kind: MakeKind, name: &Name, now: Timestamp) -> String {
+    match kind {
+        MakeKind::Migration => format!("{}_{}", now.migration_prefix(), name.snake()),
+        _ => name.snake().to_owned(),
+    }
+}
+
 /// Generates a `kind` item `name` in module `module` (under
 /// `root/modules_dir`), declares it, and registers it where the module has a
 /// `// navree:wire` marker (`src/abilities.rs`'s `// navree:policies` for
@@ -816,10 +825,7 @@ pub fn make_item(
         ctx.with_name_column = has_name_field(&src);
     }
     let dir = kind.dir();
-    let stem = match kind {
-        MakeKind::Migration => format!("{}_{}", now.migration_prefix(), name.snake()),
-        _ => name.snake().to_owned(),
-    };
+    let stem = item_stem(kind, name, now);
 
     let mut files = FileSet::new();
     files.add(
@@ -961,7 +967,8 @@ pub fn make_item(
 /// ability rules to the model (which makes it an access subject).
 /// Companions refer to each other: the controller checks abilities when
 /// the model has a policy, and the seeder uses the factory when there is
-/// one. Nothing is written when the model's file exists.
+/// one. Nothing is written when the file of the model, or of a companion
+/// asked for, exists: the command refuses before it writes the first file.
 pub fn make_model(
     root: &Path,
     modules_dir: &str,
@@ -988,15 +995,6 @@ pub fn make_model(
         model: Some(name.clone()),
         companions,
     };
-    let mut report = make_item(
-        root,
-        modules_dir,
-        MakeKind::Model,
-        module,
-        name,
-        &options,
-        now,
-    )?;
     let table = if companions.pivot {
         name.clone()
     } else {
@@ -1004,12 +1002,32 @@ pub fn make_model(
     };
     let migration = Name::parse("migration", &format!("create_{}_table", table.snake()))?;
     let items = [
+        (true, MakeKind::Model, name),
         (companions.migration, MakeKind::Migration, &migration),
         (companions.factory, MakeKind::Factory, name),
         (companions.seeder, MakeKind::Seeder, name),
         (companions.policy, MakeKind::Policy, name),
         (companions.controller, MakeKind::Controller, name),
     ];
+    // All or nothing. Each item is written on its own, with its registration
+    // in the module, so a file that exists for a later item would stop the
+    // command after the model and the items before it were written, while
+    // the error said that nothing was. A migration made in the same second,
+    // by `make:module` for one, has the same name. Look at every file first.
+    let module_dir = join(root, modules_dir).join(module.snake());
+    let taken: Vec<PathBuf> = items
+        .iter()
+        .filter(|(wanted, ..)| *wanted)
+        .map(|(_, kind, item)| {
+            let file = format!("{}.rs", item_stem(*kind, item, now));
+            module_dir.join(kind.dir()).join(file)
+        })
+        .filter(|path| path.exists())
+        .collect();
+    if !taken.is_empty() {
+        return Err(ScaffoldError::Exists(taken).into());
+    }
+    let mut report = MakeReport::default();
     for (wanted, kind, item) in items {
         if !wanted {
             continue;

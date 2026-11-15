@@ -319,8 +319,8 @@ pub struct ContactsModule;
 
 What each part does:
 
-- `TableQuery<ContactRow>` reads `q`, `sort`, `page`, `per` and the filters
-  from the address. `load_as` runs them on your scoped query, so the user
+- `TableQuery<ContactRow>` reads `search`, `sort`, `page`, `per_page` and the
+  filters (`filter[..]`) from the address. `load_as` runs them on your scoped query, so the user
   sees only the rows they may read. Back, forward, reload and a shared link
   restore the list, with JavaScript on or off.
 - `Submit<ContactInput>` refuses a body from another site (403), a body
@@ -480,7 +480,9 @@ picks the control:
 `autofocus`, `wide` and `skip` (never drawn, never read). `FormView` draws
 the form: `.post(url)`, `.submit(label)`, `.cancel(label, href)`,
 `.options(field, choices)`, `.choices(field, choices)`, `.search(field,
-url)`, `.one_column()`, `.csrf(token)`.
+url)`, `.one_column()`, `.csrf(token)` and `.id_prefix(prefix)`, which keeps
+two forms of one type on a page (two dialogs) from repeating their ids; call
+`Rejected::id_prefix` with the same prefix when you answer a refusal.
 
 A picker reads back as text, and the form does not know the value was one of
 the options. Check it on the server before you save:
@@ -504,6 +506,7 @@ checks bulk actions.
 |---|---|
 | Sort, several columns at once | `#[col(sortable)]`; the address holds `sort=-amount,title` |
 | Search box | `#[col(search)]` on the searched columns |
+| A toolbar of the search box only | `.without_columns_picker()` and `.without_density_switch()`: the table draws its starting columns and the default density, and ignores `cols` and `density` |
 | Filter per column | `#[col(filter = text \| range \| date \| select \| multi \| boolean \| relation)]`, choices from `options = LIST` or `.options(col, Vec<FilterOption>)` |
 | Filters under the headers or in a bar | `.filter_row()` or `.filter_bar()` |
 | Page size | `#[table(per = 25, per_pages(10, 25, 50, 100))]` |
@@ -680,7 +683,7 @@ phone width) belongs to `navree-browser-testing`.
 cargo fmt
 cargo clippy --all-targets -- -D warnings
 cargo test
-navree check          # the module graph
+navree check          # the module graph, then the conformity checks
 navree routes         # every route with its access rule
 navree dev            # then open the page, at 1440 and at 390 pixels wide
 ```
@@ -744,21 +747,17 @@ workspace per request: clone the registered `Shell`, set
 .link("Profile", "/profile").action("Sign out", "/sign-out"))`, and apply it
 with `shell.for_request(path, &headers)`. An app made by `navree new` does this
 in one extractor, `Desk` (`src/ui/shell.rs`): take `Desk` where this skill says
-`AppShell`.
+`AppShell`. On the `AppShell` itself, `user_menu(menu)` sets the person at the
+foot for this request, `header_slot(node)` puts a workspace switcher under
+the app's name (`Shell::header_slot` for every page) and `csrf(token)` gives
+the shell's own forms the session's token.
 
 ## What is not shipped
 
 Do not write code for these, and do not stand in for them with raw elements.
 Tell the owner they are coming.
 
-- **A workspace switcher in the shell's sidebar header.**
-  `navree_workspace::WorkspaceSwitcher` draws one; put it beside the page
-  heading (`AppPage::actions`) or in the shell's search slot, and show the
-  workspace's name under the app's with `Shell::context`.
-- **A user menu that follows the request.** `Shell::user` is the same for
-  every request: build the shell per request (see above).
-- **Rich text editing and islands** (a part of a page with its own
-  JavaScript component).
+- **Rich text editing.**
 - **Static files past the app's own stylesheet, fonts and pictures.** The
   content security policy loads styles, scripts, fonts and images only from
   the app's own origin: an `AppSheet`, `AppFont` or `AppImage` is compiled in
@@ -795,14 +794,16 @@ come from the component catalog of the docs
 | Sign-in pages | `AuthPages` (navree-auth): sign-in, sign-up, two-factor and password pages in the app's look, in an `AuthLayout` |
 | Assistant | `Conversation`, `ChatMessage`, `PromptInput`, `ToolCallCard` and `Reasoning`, `ApprovalCard`, `SurfaceFrame`, `Suggestions`, `Sources` and `Citation`, `ThreadList` (the parts of a page where people talk with an assistant; see https://navree.com/docs/ai/generative-ui/) |
 | Charts | the line chart, area chart and bar chart (`Chart::line`, `area`, `bar`), the donut chart (`Donut`, and a pie), `Funnel`, `Sparkline`, and Reports (`Report`, for a date window); radial: `Ring`, `Rings`, `Gauge`, the day clock (`DayClock`); linear: `Meter`, mini columns (`MiniColumns`), a colour strip (`ColorStrip`), a range scale (`RangeScale`); grids: the calendar heat map (`CalendarHeatmap`), the matrix heat map (`MatrixHeatmap`), the relation list (`RelationList`), the scatter chart (`Scatter`); in `navree::ui::charts`. Chart pictures (`ChartImage`, `Tile`, `Block`): a chart drawn as a PNG on the server; the `ui-image` feature, in `navree::ui::image` |
-| Foundations | Foundations (tokens, sizes), Themes, the Theme builder, Icons, Flags, Commands (`Cmd`, `Reply`, `Op`), Regions, Errors and states |
+| Foundations | Foundations (tokens, sizes), Themes, the Theme builder, Icons, Flags, Commands (`Cmd`, `Reply`, `Op`), Regions, Islands (`Island`, `IslandScript`), Errors and states |
 
 Notes on a few: `Tabs` panels can load on first show with `Tab::lazy(src)`;
 `Toast` has four tones, a title and one action; `Message` and `Bubble` draw
 a chat; `Empty` is the plain version of `EmptyState`; `Table` is the small
 static table and `DataTable` the paged, sorted, filtered one; `Pagination`
 puts page links under a static list; `Stat` shows a figure with its change
-and `Bars` a small bar chart drawn on the server. A real chart is a
+and `Bars` a small bar chart drawn on the server; `Text::tone(Tone::Danger)`
+(or `Success`, `Warning`, `Info`) colours a figure or a phrase, in a table
+cell too, where a `Badge` pill would say too much. A real chart is a
 `Chart` (line, area or bar, with series, stacks and a table of the same
 numbers), a `Donut`, a `Funnel` or a `Sparkline` under a `Stat`; a `Report`
 reads its window from the address and counts per period. `AvatarGroup`
@@ -829,7 +830,11 @@ an image (a home-screen widget, an email, a link preview): `ChartImage` draws
 a ring, rings, a gauge, a sparkline or a `Tile` of blocks as a PNG in the
 theme's colours and answers with an `ETag` and `Cache-Control: private,
 no-cache` (`.cache_control(..)` says another); it is the `ui-image` feature of
-`navree`, off by default (https://navree.com/docs/components/chart-image/). The
+`navree`, off by default (https://navree.com/docs/components/chart-image/). An
+`Island` is a part of a page that a script of your own draws in the browser (a
+map, an editor): the script is an `IslandScript` compiled into the app with a
+size ceiling the compiler checks, and the server writes the island's props
+and what shows before the script runs (https://navree.com/docs/ui/islands/). The
 marketing blocks draw a public site from the same app with no script, and
 `View::seo` writes its head
 ([`references/app-and-site-blocks.md`](references/app-and-site-blocks.md)).

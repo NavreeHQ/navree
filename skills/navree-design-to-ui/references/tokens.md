@@ -44,7 +44,7 @@ theme sets the same tokens to other values.
 | `info` | `#6cb6ff` | `#0b5cad` | information |
 | `violet`, `cyan`, `rose` | `#b79cff`, `#4fd6e6`, `#ff8aa8` | `#6b46c1`, `#0a6b78`, `#b3254f` | tones for labels |
 | `bar` | `#5b6862` | `#8a968f` | neutral chart bars |
-| `chart-1` to `chart-5` | `#3dff8f`, `#6cb6ff`, `#b79cff`, `#ffbf5e`, `#ff8aa8` | `#0b7a3e`, `#0b5cad`, `#6b46c1`, `#8a5a00`, `#b3254f` | chart series |
+| `chart-1` to `chart-8` | `#3987e5`, `#d95926`, `#199e70`, `#c98500`, `#d55181`, `#008300`, `#9085e9`, `#e66767` | `#2a78d6`, `#dc5a24`, `#029566`, `#b07702`, `#ca6089`, `#008300`, `#6250d6`, `#e34948` | chart series, in the order series take them |
 | `radius` | `4px` | `4px` | controls: buttons, inputs, badges |
 | `radius-lg` | `6px` | `6px` | surfaces: cards, dialogs, tables |
 | `sidebar-w` | `16rem` | `16rem` | the open sidebar |
@@ -98,7 +98,7 @@ Group the values by role, then give each role its Navree token:
 | error, destructive | `danger` |
 | information | `info` |
 | label colours | `violet`, `cyan`, `rose` |
-| chart series | `chart-1` to `chart-5` (neutral bars: `bar`) |
+| chart series | `chart-1` to `chart-8` (neutral bars: `bar`) |
 | control corners | `radius` (4 px) |
 | card and dialog corners | `radius-lg` (6 px) |
 | body and heading font | `font-sans` (Geist, or the theme's system stack) |
@@ -132,7 +132,7 @@ deviation:
    one screenshot, as for any token.
 2. **A theme of the app's own.** The theme builder
    (https://navree.com/docs/ui/theme-builder/) takes an accent, the greys,
-   the corners, the density and a font, or any of the 28 colour tokens in
+   the corners, the density and a font, or any of the 31 colour tokens in
    light and dark, shows real components in both palettes and a contrast
    report, and exports a Rust function returning a `Theme`. It refuses text
    that fails WCAG AA, so a design pair that fails stays a finding for the

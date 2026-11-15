@@ -22,7 +22,7 @@ Everything below is in the code; when in doubt read
 
 ```toml
 [dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["micro", "micro-nats", "postgres"] }
+navree = { version = "1", features = ["micro", "micro-nats", "postgres"] }
 # micro-kafka (Kafka 4.0+), micro-rabbitmq, micro-redis (Redis 6.2+), micro-mqtt (MQTT 5)
 # The outbox, inbox and dead letters are tables in the app's database: turn on its
 # driver (`postgres`, `mysql` or `sqlite`); `micro` turns `db` on but no driver.

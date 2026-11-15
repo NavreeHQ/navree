@@ -402,6 +402,10 @@ Public sign-up is off in this app (`auth.registration = false`), since the scree
 
 The app registers `WorkspaceModule`, and the demo account owns two workspaces, the Ludhiana desk and the Jalandhar desk, each with its own customers. The switcher beside every page heading changes the workspace, which the browser remembers; the customers table, the figures and the live updates are the workspace's own. The Ludhiana desk holds all forty customers and the Jalandhar desk those of two cities.
 
+### The day
+
+The form that adds a customer starts on today's date. Today is counted in the request's time zone: the workspace's own, else `time.default_zone` in `config/app.toml`, which is `Asia/Kolkata` here. `TimeModule` in `src/app.rs` reads it, and the page takes `CurrentZone`. Change the setting to count days somewhere else; see [Time zones](/docs/digging-deeper/time-zones/).
+
 ### Live updates
 
 The app's live hub (`RealtimeModule`) serves `GET /broadcasting/stream`. `CustomerService` nudges the workspace's `customers` topic once a change has committed, and every open table and figure of that workspace fetches itself again. Open two windows to see it. `src/ui/live.rs` names the topic and the stream, so the pages only name the stream.
@@ -438,7 +442,7 @@ There are two kinds of updates, and neither rewrites your code.
 ```toml title="Cargo.toml"
 [package.metadata.navree]
 kit = "saas"
-kit_version = "1.2.2"
+kit_version = "1.2.3"
 ```
 
 To adopt a later kit's changes, generate a fresh copy with the current CLI and compare the parts you care about:

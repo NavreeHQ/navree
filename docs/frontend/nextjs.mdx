@@ -7,7 +7,7 @@ description: "`@navree/next`: the backend-for-frontend as route handlers, `auth(
 
 <Callout type="note" title="Apps made by navree new">
 
-`navree new --ui next` and the SaaS starter kit create `web/` on `@navree/next`: `lib/navree.ts` is the `createNavree()` of the setup below, and the route handlers, the proxy and `auth()` come from it. The CRM's Next.js front end, `web/` of the [CRM repository](https://github.com/NavreeHQ/crm), runs on the package too.
+`navree new --ui next` and the SaaS starter kit create `web/` on `@navree/next`, with no `src/` folder: `web/lib/navree.ts` is the `createNavree()` of the setup below, and the route handlers, the proxy and `auth()` come from it. The paths below have `src/` in front, as in the CRM's front end; drop it for an app made by `navree new`. The CRM's Next.js front end, `web/` of the [CRM repository](https://github.com/NavreeHQ/crm), runs on the package too.
 
 </Callout>
 
@@ -232,9 +232,9 @@ import { RealtimeProvider } from "@navree/next/realtime";
 import { api } from "@/lib/api/client";
 
 const server = {
-  key: process.env.NEXT_PUBLIC_PUSHER_KEY!,
-  wsHost: process.env.NEXT_PUBLIC_WS_HOST!,
-  wsPort: Number(process.env.NEXT_PUBLIC_WS_PORT),
+  key: process.env.NEXT_PUBLIC_REALTIME_KEY!,
+  wsHost: process.env.NEXT_PUBLIC_REALTIME_HOST!,
+  wsPort: Number(process.env.NEXT_PUBLIC_REALTIME_PORT),
 };
 
 export function Live({ children }: { children: React.ReactNode }) {
@@ -312,7 +312,7 @@ onError: (error) => applyFieldErrors(error, form.setError, ["email", "name"]) ||
 | `NAVREE_TRUSTED_PROXY_HOPS` | server | `0` | Reverse proxies that append the client to `X-Forwarded-For`. |
 | `NAVREE_CLIENT_IP_HEADER` | server | none | A header the proxy sets to the bare client address (`x-real-ip`), read before `X-Forwarded-For`. |
 | `NAVREE_WORKSPACE_HEADER` | server | `X-Workspace` | The API's `workspace.header`. |
-| `NEXT_PUBLIC_PUSHER_KEY`, `NEXT_PUBLIC_WS_HOST`, `NEXT_PUBLIC_WS_PORT` | build | none | The API's real-time server, if you pass them to `RealtimeProvider`. |
+| `NEXT_PUBLIC_REALTIME_KEY`, `NEXT_PUBLIC_REALTIME_HOST`, `NEXT_PUBLIC_REALTIME_PORT` | build | none | The API's real-time server (`realtime.key` and `http.addr`), if you pass them to `RealtimeProvider`. The `saas` kit reads these names, and `navree config:check` compares the key and the port with the API's. |
 
 Options passed to `createNavree` win over the variables. Besides the ones the table covers, `pages` (`{signIn, twoFactor, verifyEmail}`: where social sign-in, the verification link and `redirectNavigations` end), `socialPaths` (`{start, callback}`: where the two social routes are mounted) and `redirectNavigations` (send a page request the API refuses with 401 to the sign-in page, for a tool mounted at `/admin`) are the [BFF's options](/docs/frontend/auth-and-bff/#options). `@navree/next/server` also exports `readCookie`.
 

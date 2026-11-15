@@ -138,15 +138,9 @@ When no component fits an element, the agent records a gap instead of improvisin
 
 | Coming | Covers in a design | Interim form, if you accept one |
 |---|---|---|
-| Themes and a theme builder | a light theme, brand colors, other radii or fonts, other sidebar layouts | Navree's dark theme and tokens |
-| Error and sign-in pages | HTML sign-in and error screens for page routes | none: a page route's 401, 403 and 404 come back as Navree's JSON errors |
-| Wizard and Stepper | multi-step forms with a step bar | one page per step, each a form |
-| Toolbar, TreeView and Slider | those | none |
-| ContextMenu, Menubar and NavigationMenu | those | none |
 | Rich text editing | a formatted text editor | a textarea |
-| Islands | a client-side widget of your own | none |
 
-Also not there yet: an app's own stylesheet or static files, and web fonts other than Geist and the system monospace stack.
+Also not there yet: static files past the app's own stylesheet, fonts and pictures (`AppSheet`, `AppFont` and `AppImage`, in [App styles](/docs/ui/app-styles/), are compiled in and served by the toolkit).
 
 ## Verification
 

@@ -30,7 +30,7 @@ navree dev                                              # handlers on NATS, heal
 cargo test --workspace                                  # every test; no broker needed
 cargo clippy --workspace --all-targets -- -D warnings   # must pass
 cargo fmt                                               # must leave nothing to change
-navree check                                            # validate the module graph without booting
+navree check                                            # the module graph, then the conformity checks (boots the app once)
 navree micro:patterns                                   # every message and event pattern with its access rule
 navree micro:send invoices.get '{"id":"..."}'           # send a message and print the reply
 navree micro:failed                                     # dead-lettered events (`micro:retry <id|all>`)

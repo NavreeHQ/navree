@@ -73,7 +73,7 @@ More: [/docs/getting-started/configuration/](/docs/getting-started/configuration
 | `env` | Environment |  | `APP_APP__ENV` | The environment the app runs in; none when not set. |
 | `key` | string | secret | `APP_APP__KEY` | The key that encrypts data and signs tokens (`base64:...`). |
 | `previous_keys` | list of string | secret | `APP_APP__PREVIOUS_KEYS` | Earlier keys that still decrypt, most recent first: a list, or one comma-separated string. |
-| `strict_config` | boolean | `false` | `APP_APP__STRICT_CONFIG` | Refuse to start when the configuration has a key nothing reads, or, in an environment that behaves like production, a setting the production profile fails (no `app.key`, a SQLite database, mail that goes to the log). Off by default: the boot only logs them. |
+| `strict_config` | boolean | `false` | `APP_APP__STRICT_CONFIG` | Refuse to start when the configuration has a key or section that nothing reads, a section that is set while its module was given its options in code (`for_root`), so the section is not read, or, in an environment that behaves like production, a setting the production profile fails (no `app.key`, a SQLite database, mail that goes to the log, a session cookie that also goes over plain HTTP). Off by default: the boot only logs them. |
 
 ## `audit`
 
@@ -576,7 +576,7 @@ More: [/docs/digging-deeper/http-client/](/docs/digging-deeper/http-client/).
 | `ssrf` | table |  | `APP_HTTP_CLIENT__SSRF` | Which destinations are refused (server-side request forgery guard). |
 | `ssrf.block_private` | boolean | `true` | `APP_HTTP_CLIENT__SSRF__BLOCK_PRIVATE` | Refuse private, loopback, link-local and other internal addresses (default `true`). |
 | `ssrf.allow_hosts` | list of string | `[]` | `APP_HTTP_CLIENT__SSRF__ALLOW_HOSTS` | Destinations that bypass the policy: host names (`api.internal`), host globs (`*.svc.cluster.local`), IP addresses (`127.0.0.1`) or CIDR networks (`10.20.0.0/16`). Host names match case-insensitively. |
-| `user_agent` | string | `"navree-http-client/1.2.2"` | `APP_HTTP_CLIENT__USER_AGENT` | The `User-Agent` header sent with every request (default `navree-http-client/<version>`). |
+| `user_agent` | string | `"navree-http-client/1.2.3"` | `APP_HTTP_CLIENT__USER_AGENT` | The `User-Agent` header sent with every request (default `navree-http-client/<version>`). |
 
 ## `i18n`
 

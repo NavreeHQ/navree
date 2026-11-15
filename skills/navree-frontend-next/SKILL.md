@@ -25,14 +25,19 @@ sources and tests are in `packages/js/` (`client`, `bff`, `next`, `theme`);
 
 ## Steps
 
-1. **Install** `@navree/next`, `@navree/client`, `@navree/theme` (from the
-   repository's `packages/js`: `pnpm install && pnpm build` there, then
-   `link:` dependencies), plus `@casl/ability @casl/react` for abilities,
-   `pusher-js` for real time, `@tanstack/react-query` for data fetching.
+1. **Install** `@navree/next`, `@navree/client`, `@navree/theme` from npm
+   (`pnpm add @navree/client @navree/next @navree/theme`; only to work on the
+   packages themselves, build `packages/js` of a checkout with `pnpm install
+   && pnpm build` and use `link:` dependencies), plus `@casl/ability
+   @casl/react` for abilities, `pusher-js` for real time,
+   `@tanstack/react-query` for data fetching.
 2. **Generate the schema:** `navree openapi:client` (writes
    `web/src/lib/api/openapi.json` and `schema.d.ts`; `--out DIR`,
    `--input FILE`). Re-run after changing routes or types.
-3. **Create the app's Navree** and mount it:
+3. **Create the app's Navree** and mount it. The paths below are for a
+   `src/` layout; an app made by `navree new` has no `src/` folder, so its
+   file is `web/lib/navree.ts`, with `app/` and `proxy.ts` at the root of
+   `web/`:
 
    ```ts
    // src/lib/navree.ts

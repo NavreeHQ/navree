@@ -7,6 +7,87 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-11-15
+
+### Upgrading
+
+- Navree Native (preview): a field whose `changed` sent its form to another address, made a
+  request, opened an address or went somewhere now does nothing and reports it: such a thing needs
+  a button the person presses. A change may still change what the screen shows and send its own
+  form.
+- Navree Native (preview): a native client puts a person back where they were after the system
+  ended the app only when the server names the person by id (`x-navree-person`, which the
+  framework's own sign-in sends). An app that signs people in its own way gives the framework its
+  principal for that. The repository's three demo apps do not yet, so they start at their first
+  screen.
+
+### Added
+
+- `Text::tone(Tone)` colours the words of a `Text` by what they mean: `Tone::Danger`,
+  `Tone::Success`, `Tone::Warning`, `Tone::Info` or a `Tone::named` colour. It writes the
+  `data-tone` a `Badge` reads, and the stylesheet draws it as the colour of the text and nothing
+  else, taken from the tone tokens, on `Text::muted`, `Text::code` and `.inline()` text too, and
+  winning over the colour of the look. `Tone::Neutral` writes nothing, and a `Text` with no tone
+  is drawn as before. `Text::tone` is a new inherent method: an app whose own extension trait
+  gives `Text` a method named `tone` calls it through the trait (`MyExt::tone(text, ..)`). The
+  stylesheet every page loads gains two rules.
+- `DataTable::without_columns_picker()` and `DataTable::without_density_switch()` leave the
+  Columns picker and the Density switch out of a table's toolbar, for a small table whose toolbar
+  is a search box. Without the picker the table draws the columns it starts with (every one not
+  marked `hidden` and not taken away), whatever `cols` the address names, and has no "Hide column"
+  item and no dragging a heading to a new place, since each writes `cols`; without the switch it
+  draws the default density whatever `density` says. Neither parameter is read, or written into a
+  sort, page, filter, detail, export or retry link, the bulk form's state or a saved view's, and
+  the `TableQuery` is not changed: `visible_columns` and `density` still say what the address
+  named. Both are new inherent methods: an app whose own extension trait gives `DataTable` a method
+  of either name calls it through the trait (`MyExt::without_density_switch(table)`). A table that
+  calls neither is drawn as before.
+- `FormView::id_prefix(prefix)` puts the prefix and a hyphen before every id a form writes and
+  every reference to one (the form's own id, each field's, a label's `for`, `aria-describedby`,
+  `aria-labelledby`, the ids of a field's help and error, and those of the pickers, date and time
+  pickers, phone fields, sliders and uploads it draws), so two forms of one
+  type on one page, such as the same entry form in two dialogs, share no id. What a form posts is
+  as it was, so the handler reads it as before; anything in the prefix but letters, digits, `-` and
+  `_` becomes `-`, and a prefix with nothing left is none. `FormView::form_id()` says the id of the
+  `<form>`, and `Rejected::id_prefix(prefix)` makes a refusal name the form with that prefix in the
+  errors it answers the runtime with, and draw it in that scope on the page with no script. A form
+  with no prefix is drawn as before. All three are new inherent methods: an app whose own extension
+  trait gives `FormView` a method named `id_prefix` or `form_id`, or `Rejected` one named
+  `id_prefix`, calls it through the trait (`MyExt::id_prefix(form, ..)`).
+
+### Fixed
+
+- `navree config:check --env <name>` reads `config/env/<name>.toml` in place of the file of the
+  environment the app would pick, as a boot in that environment would, so a setting made only in
+  `config/env/production.toml` is seen by `--env production` with no `APP_ENV` set.
+- `navree make:model` looks at every file it would write before it writes the first, so a companion
+  that already exists (the migration `make:module` made in the same second, for one) stops it
+  before the model and the files ahead of it are written; it used to leave them, and the changes to
+  the module, behind while saying that nothing was written.
+- The Navree UI starter (`navree new --ui navree`) counts the day a new customer joins in the app's
+  time zone (`time.default_zone`, set to `Asia/Kolkata` in `config/app.toml`, or the workspace's own)
+  instead of a fixed 330 minutes ahead of UTC; it registers `TimeModule`, and the page takes
+  `CurrentZone`.
+- Navree Native: a failure inside the native core stops it for good and drops what it had queued;
+  freeing the core during a call waits for the call.
+- Navree Native: an answer past `MAX_BODY` (8 MiB), `MAX_NODES` (100,000, counting rows, items and
+  points), `MAX_OPS` (1,000) or `MAX_ID` (256 bytes) fails as one that could not be read; an answer
+  whose ops would take a screen past `MAX_SCREEN_NODES` (400,000) or ask more than `MAX_WORK`
+  changes nothing, and what costs nothing in it (a toast, a move) is still carried out.
+- Navree Native: a field's change may only change what the screen shows and send its own form to
+  its own address; copying, another form, a request, a device call and going somewhere wait for a
+  tap. A field whose `changed` did one of those now does nothing and reports it: it needs a button.
+- Navree Native: mail, the dialler, messages and maps open only from a tap; a redirect or an op by
+  itself opens only a web page; a `tel:` or `sms:` address leaves without the spaces of its number.
+- Navree Native: nothing of a person is drawn or put back before this launch's shell names them: a
+  kept shell draws the app's name and top-level destinations only; when the shell's request does
+  not get through the bars stay and it is asked for again; a snapshot belongs to a person's id and
+  keeps typed words only of kinds that are safe to keep. Restoring a person's place after the
+  system ended the app needs the server to name the person by id (`x-navree-person`, which the
+  framework's own sign-in sends).
+- Navree Native: places, routes and covers are compared by origin and path; a share's and a
+  passkey's addresses are whole addresses on the app's origin or left out.
+
 ## [1.2.2] - 2026-11-14
 
 ### Upgrading
@@ -626,7 +707,8 @@ Most apps upgrade with no change. These are the changes that can ask something o
 
 First release. Read what it includes in the [release notes](https://navree.com/docs/prologue/release-notes/).
 
-[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.2.3...HEAD
+[1.2.3]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.3
 [1.2.2]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.2
 [1.2.1]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.1
 [1.2.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.0

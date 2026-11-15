@@ -1069,7 +1069,7 @@ Access tokens of `navree-auth` are signed and stateless: one a client already ho
 
 ## Limits
 
-- **Tokens, not sessions.** `navree-auth` issues tokens only. Cookie sessions with CSRF protection are a separate, optional module ([Sessions and CSRF](/docs/basics/sessions-and-csrf/)) that `navree-auth` doesn't use.
+- **Tokens for clients, sessions for browsers.** `navree-auth` issues tokens to a client that holds them. With `SessionModule` in the app (and the facade's `session` feature), `AuthModule` also signs a browser in on its session cookie, with the same policies, throttles and audit trail, and no token ([Sessions and CSRF](/docs/basics/sessions-and-csrf/#signing-in-with-a-session)).
 - **Access tokens can't be revoked** before they expire, and they are signed with HS256 only. Ending a [session](/docs/security/sessions/) stops its refresh tokens, not its access tokens.
 - **Refresh tokens are never pruned** from the database.
 

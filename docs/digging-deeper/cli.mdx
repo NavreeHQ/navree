@@ -53,7 +53,7 @@ Commands:
   make:table         Generate a data table in a module (tables/NAME.rs): a row with sortable, searchable and filterable columns, and its handler
   dev                Serve the app, rebuilding and restarting it when the code changes
   check              Check the app: its module graph, then the conformity checks (routes documented, entities classified, workspace isolation, translations, migrations)
-  gate               Run fmt, clippy, the tests, navree check and the front end's typecheck, tests and build, one gate at a time on this machine
+  gate               Run fmt, clippy, the tests, navree check, config:check and the front end's typecheck, tests and build, one gate at a time on this machine
   dock               Run the app's local services (dock.toml) with Docker or Podman
   dock:add           Add a service to dock.toml: postgres, redis, meilisearch, mailpit, minio or nats
   dock:remove        Stop a service and remove it from dock.toml
@@ -74,6 +74,8 @@ Commands:
   skills:install     Install the Navree agent skills into .claude/skills and .agents/skills
   browser:install    Download Chrome for Testing into Navree's cache, for navree-browser
   openapi:client     Export the OpenAPI document and generate the front end's typed client schema (schema.d.ts)
+  native:coverage    Ask each page route as a native client and print its grade (idiom, layout or web) and what is missing; --fail-on makes it a gate
+  native:doctor      Check what a native build needs, without changing anything: the native preview feature, the settings for links, passkeys, push and sign-in, the Android and Apple toolchains
   help               Print this message or the help of the given subcommand(s)
 
 Options:
@@ -133,7 +135,7 @@ storage/
 | `--kit <saas\|api\|micro>` | Creates the app from a [starter kit](/docs/getting-started/starter-kits/) instead of the minimal app. |
 | `--database <db>` | The database: `timescaledb` (the default; PostgreSQL with hypertables, run by `navree dock up`), `postgres` (plain PostgreSQL, also run by Dock), `mysql` ([MySQL or MariaDB](/docs/database/mysql/), a server of yours) or `sqlite` (a file in `storage/`). `timescale`, `postgresql` and `mariadb` are accepted as aliases. It sets `database.url`, the driver feature of the `navree` dependency (`postgres`, `mysql` or `sqlite`: only that driver is compiled into the app) and, for the first two, `dock.toml`. The tests run on SQLite, so `[dev-dependencies]` turns `sqlite` on in every app. The [starter kits](/docs/getting-started/starter-kits/) run on `timescaledb` or `postgres` and refuse the other two. |
 | `--ui <next\|navree\|none>` | The front end. `next` also creates `web/`, a Next.js front end that talks to the API through its own server and keeps the tokens in httpOnly cookies, like the [CRM's](/docs/example-app/crm-tour/#the-web-app); `navree dev` starts it. `navree` draws the screens on the server with [Navree UI](/docs/ui/overview/), in `src/`, with no `web/` folder and no Node: the shell, sign-in pages with two-factor authentication (`AuthPages`), two demo workspaces with a switcher, a customers table with search, filters and sort, a form, a page for each customer, a home page with live figures, forty demo customers and a demo account (`harpreet.singh@example.com`, development only), and a test that walks a visitor through all of it ([what it writes](/docs/getting-started/starter-kits/#the-navree-ui-app)). `src/ui/auth.rs` keeps `CurrentAccount` and the demo account. `navree` is the default for the minimal app; `none` is the API alone. With a kit, only `saas` has a front end (`--kit saas --ui next` is the same as `--kit saas`); the `api` and `micro` kits refuse `--ui next`, and every kit refuses `--ui navree`, which goes with the minimal app. |
-| `--navree-path <path>` | Depend on a local checkout (the repository or its `crates/navree`) instead of the published crate. Without it, the app gets a `path` dependency on the checkout the CLI was built from when it still exists (after `cargo install --path`, your clone), else `navree = "1.2.2"` (the CLI's own version). |
+| `--navree-path <path>` | Depend on a local checkout (the repository or its `crates/navree`) instead of the published crate. Without it, the app gets a `path` dependency on the checkout the CLI was built from when it still exists (after `cargo install --path`, your clone), else `navree = "1.2.3"` (the CLI's own version). |
 
 The name starts with a lower-case letter and uses lower-case letters and digits, with single `-` or `_` between words (`my-shop`). Rust keywords, Windows device names and `navree` itself are refused. `navree new` refuses a directory that exists and isn't empty, formats the generated code with `rustfmt` when it is installed, and runs `git init` (nothing is committed) unless the app is inside a repository already or Git is missing. For the starter kits, which ship a `harbor.toml`, it also writes `harbor.key` and keeps it out of Git. The app is its own Cargo workspace; remove the `[workspace]` table from its `Cargo.toml` to make it a member of an enclosing one. See [Your first app](/docs/getting-started/your-first-app/) for a walk through it.
 
