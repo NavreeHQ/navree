@@ -39,7 +39,7 @@ public partial class App : Application
             {
                 Origin = "https://charkha.example",
                 AppName = "Navree Demo",
-                Fetcher = answers is null ? null : new FixtureFetcher(answers),
+                Fetcher = answers is null ? null : new RecordingFetcher(new FixtureFetcher(answers)),
                 RecordedPages = answers is null ? null : address => FixtureFetcher.Page(answers, address),
                 KeptFolder = Path.Combine(Path.GetTempPath(), "navree-demo-kept-" + Environment.ProcessId),
             };
@@ -62,6 +62,10 @@ public partial class App : Application
         if (Option(arguments, "--walk") is string folder)
         {
             _ = new Walker(host, window, folder).RunAsync();
+        }
+        else if (Option(arguments, "--run") == "press" && Option(arguments, "--out") is string pressed)
+        {
+            _ = new Pressing(host, window, pressed).RunAsync();
         }
     }
 

@@ -1,7 +1,8 @@
 name: Windows table
 
 # The data table of the Windows client and its gallery: built and tested with the dotnet command
-# alone, then the gallery is started and pictured. It needs no Rust: the table does not call the core.
+# alone, then the gallery is started and pictured. The table job needs no Rust: the table does not call the core.
+# The second job builds the core as a DLL and presses buttons in the store demo, to see what the client sends.
 
 on:
   push:
@@ -112,6 +113,33 @@ jobs:
             powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -Off
           }
 
+      # The box that chooses a row, drawn on a page of its own in two ways, each in a process of its own so that a way
+      # that stops the app costs one page: in light and dark, then in the system's high contrast colours.
+      - name: Try the chosen box in light and dark
+        if: always()
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          foreach ($way in 'states', 'dictionary') {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\box-$way" -Run "contrast-$way" -Seconds 90
+          }
+
+      - name: Try the chosen box in high contrast
+        if: always()
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          try {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -On
+            foreach ($way in 'states', 'dictionary') {
+              powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\box-contrast-$way" -Run "contrast-$way" -Seconds 90
+            }
+          } finally {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -Off
+          }
+
       - name: Keep the larger text and high contrast pictures
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -122,6 +150,10 @@ jobs:
             ${{ runner.temp }}/gallery-text150
             ${{ runner.temp }}/gallery-text225
             ${{ runner.temp }}/gallery-contrast
+            ${{ runner.temp }}/box-states
+            ${{ runner.temp }}/box-dictionary
+            ${{ runner.temp }}/box-contrast-states
+            ${{ runner.temp }}/box-contrast-dictionary
           retention-days: 30
 
       - name: Keep the pictures and measurements
@@ -131,4 +163,73 @@ jobs:
           name: windows-gallery
           if-no-files-found: ignore
           path: ${{ runner.temp }}/gallery
+          retention-days: 30
+
+  # The store demo on the recorded answers, with the real pointer and keys: the order number is pressed, a quantity is typed
+  # and Restock is pressed, the Filter button is opened and a box ticked. The demo writes what the core was asked to send.
+  press:
+    name: Buttons pressed in the store demo
+    runs-on: windows-2025
+    timeout-minutes: 50
+    concurrency:
+      group: native-windows-press-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: windows-press
+
+      - name: The core as a DLL
+        shell: bash
+        run: |
+          cargo rustc -p navree-native-core --locked --release --target x86_64-pc-windows-msvc --crate-type cdylib
+          mkdir -p packages/windows/native/win-x64
+          cp target/x86_64-pc-windows-msvc/release/navree_native_core.dll packages/windows/native/win-x64/
+
+      - name: Build the demo
+        shell: pwsh
+        working-directory: packages/windows
+        run: |
+          dotnet restore demo/Navree.Demo/Navree.Demo.csproj
+          dotnet build demo/Navree.Demo/Navree.Demo.csproj -c Release --no-restore
+
+      - name: The winapp command
+        continue-on-error: true
+        uses: microsoft/setup-WinAppCli@9288bd0729bd3f71e2ed1b9eb247dc91470b824e # v0.3
+
+      - name: Press the buttons
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter Navree.Demo.exe | Select-Object -First 1
+          if (-not $exe) { throw "the demo was not built" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\press" -Run "press" -Seconds 300
+
+      - name: What was pressed, and what the core was asked to send
+        if: always()
+        shell: pwsh
+        run: |
+          foreach ($name in 'press.txt', 'script.txt') {
+            "---- $name"
+            if (Test-Path "$env:RUNNER_TEMP/press/$name") { Get-Content "$env:RUNNER_TEMP/press/$name" } else { "(not written)" }
+          }
+          $log = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter navree-demo.log | Select-Object -First 1
+          if ($log) { "---- navree-demo.log"; Get-Content $log.FullName }
+
+      - name: Keep what was pressed
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-pressing
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/press
           retention-days: 30

@@ -10,44 +10,58 @@ public readonly record struct ColInfo(string Key, ColumnKind Kind, ColumnRole Ro
 /// <summary>Which columns a table shows.</summary>
 public static class ColumnSet
 {
-    /// <summary>The width at which secondary columns are shown without being asked for.</summary>
-    public const double SecondaryFromWidth = 1008;
+    /// <summary>The width a name column is counted at when the room is shared out: it takes what is left, down to its least, so it is not counted whole.</summary>
+    public const double TitleComfort = 160;
 
     /// <summary>The most columns a table shows.</summary>
     public const int MostShown = 48;
 
-    /// <summary>The columns to show.</summary>
+    /// <summary>
+    /// The columns to show: all but the hidden ones and the subtitle, and when the room cannot hold them at the widths they ask for,
+    /// the secondary columns go first, the last one first, until the rest fit or no secondary column is left to go.
+    /// </summary>
     /// <param name="inPersonsOrder">All the columns, in the person's order.</param>
     /// <param name="hidden">The keys the person hid.</param>
-    /// <param name="forcedShown">The keys of secondary columns the person showed.</param>
-    /// <param name="width">The width of the table.</param>
+    /// <param name="forcedShown">The keys of secondary columns the person showed: these do not go.</param>
+    /// <param name="widths">The width each column asks for, in the same order.</param>
+    /// <param name="room">The width the columns share (the table's, less the gutter).</param>
     /// <param name="cap">The most columns to show.</param>
     /// <returns>The indices of the columns shown, in order.</returns>
     public static IReadOnlyList<int> Shown(
         IReadOnlyList<ColInfo> inPersonsOrder,
         IReadOnlySet<string> hidden,
         IReadOnlySet<string> forcedShown,
-        double width,
+        IReadOnlyList<double> widths,
+        double room,
         int cap = MostShown)
     {
         ArgumentNullException.ThrowIfNull(inPersonsOrder);
         ArgumentNullException.ThrowIfNull(hidden);
         ArgumentNullException.ThrowIfNull(forcedShown);
+        ArgumentNullException.ThrowIfNull(widths);
+        if (widths.Count != inPersonsOrder.Count)
+        {
+            throw new ArgumentException("Each column has a width.", nameof(widths));
+        }
+
         List<int> shown = [];
         for (int i = 0; i < inPersonsOrder.Count && shown.Count < cap; i++)
         {
             ColInfo column = inPersonsOrder[i];
-            if (column.Role == ColumnRole.Subtitle || hidden.Contains(column.Key))
+            if (column.Role != ColumnRole.Subtitle && !hidden.Contains(column.Key))
             {
-                continue;
+                shown.Add(i);
             }
+        }
 
-            if (column.Secondary && width < SecondaryFromWidth && !forcedShown.Contains(column.Key))
+        double Asked() => shown.Sum(i => inPersonsOrder[i].Kind == ColumnKind.Title ? Math.Min(widths[i], TitleComfort) : widths[i]);
+        for (int at = shown.Count - 1; at >= 0 && Asked() > room; at--)
+        {
+            ColInfo column = inPersonsOrder[shown[at]];
+            if (column.Secondary && !forcedShown.Contains(column.Key))
             {
-                continue;
+                shown.RemoveAt(at);
             }
-
-            shown.Add(i);
         }
 
         return shown;

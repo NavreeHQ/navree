@@ -36,6 +36,7 @@
             <SolidColorBrush x:Key="DataTableCheckBoxFill" Color="{StaticResource ControlAltFillColorSecondary}" />
             <SolidColorBrush x:Key="DataTableCheckBoxFillChecked" Color="{StaticResource AccentFillColorDefault}" />
             <SolidColorBrush x:Key="DataTableCheckBoxGlyph" Color="{StaticResource TextOnAccentFillColorPrimary}" />
+            <SolidColorBrush x:Key="DataTableCheckBoxBorderChecked" Color="{StaticResource AccentFillColorDefault}" />
             <SolidColorBrush x:Key="DataTableDetailBackground" Color="{StaticResource CardBackgroundFillColorSecondary}" />
             <SolidColorBrush x:Key="DataTableBulkBarBackground" Color="{StaticResource CardBackgroundFillColorDefault}" />
         </ResourceDictionary>
@@ -70,6 +71,7 @@
             <SolidColorBrush x:Key="DataTableCheckBoxFill" Color="{StaticResource ControlAltFillColorSecondary}" />
             <SolidColorBrush x:Key="DataTableCheckBoxFillChecked" Color="{StaticResource AccentFillColorDefault}" />
             <SolidColorBrush x:Key="DataTableCheckBoxGlyph" Color="{StaticResource TextOnAccentFillColorPrimary}" />
+            <SolidColorBrush x:Key="DataTableCheckBoxBorderChecked" Color="{StaticResource AccentFillColorDefault}" />
             <SolidColorBrush x:Key="DataTableDetailBackground" Color="{StaticResource CardBackgroundFillColorSecondary}" />
             <SolidColorBrush x:Key="DataTableBulkBarBackground" Color="{StaticResource CardBackgroundFillColorDefault}" />
         </ResourceDictionary>
@@ -102,8 +104,9 @@
             <SolidColorBrush x:Key="DataTableSelectionPill" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="DataTableCheckBoxBorder" Color="{ThemeResource SystemColorButtonTextColor}" />
             <SolidColorBrush x:Key="DataTableCheckBoxFill" Color="{ThemeResource SystemColorButtonFaceColor}" />
-            <SolidColorBrush x:Key="DataTableCheckBoxFillChecked" Color="{ThemeResource SystemColorWindowColor}" />
-            <SolidColorBrush x:Key="DataTableCheckBoxGlyph" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="DataTableCheckBoxFillChecked" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="DataTableCheckBoxGlyph" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="DataTableCheckBoxBorderChecked" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="DataTableDetailBackground" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="DataTableBulkBarBackground" Color="{ThemeResource SystemColorWindowColor}" />
         </ResourceDictionary>

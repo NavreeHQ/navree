@@ -139,8 +139,9 @@ internal sealed partial class NodeRenderer
             }
         };
 
+        // A caption that says what the screen's own title says is not drawn again: it stays the table's name for a screen reader.
         StackPanel panel = new() { Spacing = 8 };
-        if (table.Caption is not null)
+        if (table.Caption is not null && !SaysTheTitle(table.Caption))
         {
             panel.Children.Add(Look.Label(table.Caption, "BodyStrongTextBlockStyle"));
         }
@@ -153,6 +154,9 @@ internal sealed partial class NodeRenderer
         panel.Children.Add(view);
         return panel;
     }
+
+    private bool SaysTheTitle(string caption) =>
+        context.Screen.Screen?.Title is { } title && string.Equals(caption.Trim(), title.Trim(), StringComparison.CurrentCultureIgnoreCase);
 
     // The table takes the room the page has under it, so it is not a short box in a tall window and not taller than the window.
     private static void FitHeight(DataTable view)

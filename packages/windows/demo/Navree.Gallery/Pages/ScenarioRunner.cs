@@ -47,6 +47,12 @@ internal static class ScenarioRunner
             case "tabletext":
                 await TableScenarios.RunAsync(window, ["standard", "chosen", "narrow", "sorted", "rtl"], lightOnly: true);
                 break;
+            case "contrast-states":
+                await ContrastScenario.RunAsync(window, "states");
+                break;
+            case "contrast-dictionary":
+                await ContrastScenario.RunAsync(window, "dictionary");
+                break;
             case "rows100k":
                 await HugeScenario.RunAsync(window);
                 break;

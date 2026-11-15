@@ -168,23 +168,89 @@ public sealed class ColumnSetTests
 
     private static IReadOnlySet<string> Set(params string[] keys) => new HashSet<string>(keys);
 
+    private static readonly double[] Asks = [100, 100, 100, 100];
+
     [TestMethod]
-    public void Hidden_and_secondary_columns_are_left_out_unless_the_width_or_the_person_brings_them_back()
+    public void A_hidden_column_is_left_out_and_a_secondary_one_is_shown_while_the_room_holds_them_all()
     {
-        Same.Items([0, 2, 3], ColumnSet.Shown(Columns, Set("b"), Set(), 1200));
-        Same.Items([0, 3], ColumnSet.Shown(Columns, Set("b"), Set(), 900));
-        Same.Items([0, 2, 3], ColumnSet.Shown(Columns, Set("b"), Set("c"), 900));
+        Same.Items([0, 2, 3], ColumnSet.Shown(Columns, Set("b"), Set(), Asks, 300));
+        Same.Items([0, 1, 2, 3], ColumnSet.Shown(Columns, Set(), Set(), Asks, 400));
     }
 
     [TestMethod]
+    public void When_the_room_cannot_hold_them_all_the_secondary_column_goes_and_the_others_stay()
+    {
+        Same.Items([0, 1, 3], ColumnSet.Shown(Columns, Set(), Set(), Asks, 399));
+        Same.Items([0, 1, 3], ColumnSet.Shown(Columns, Set(), Set(), Asks, 300));
+        Same.Items([0, 1, 3], ColumnSet.Shown(Columns, Set(), Set(), Asks, 100));
+    }
+
+    [TestMethod]
+    public void The_last_secondary_column_goes_first_and_only_as_many_go_as_must()
+    {
+        ColInfo[] columns =
+        [
+            new("t", ColumnKind.Title, ColumnRole.Title, false),
+            new("s1", ColumnKind.Words, ColumnRole.None, true),
+            new("w", ColumnKind.Words, ColumnRole.None, false),
+            new("s2", ColumnKind.Words, ColumnRole.None, true),
+        ];
+        double[] asks = [240, 100, 100, 100];
+        Same.Items([0, 1, 2, 3], ColumnSet.Shown(columns, Set(), Set(), asks, 460));
+        Same.Items([0, 1, 2], ColumnSet.Shown(columns, Set(), Set(), asks, 459));
+        Same.Items([0, 2], ColumnSet.Shown(columns, Set(), Set(), asks, 359));
+        Same.Items([0, 2], ColumnSet.Shown(columns, Set(), Set(), asks, 50));
+    }
+
+    [TestMethod]
+    public void A_name_is_counted_at_its_comfort_and_not_at_what_it_asks_for()
+    {
+        ColInfo[] columns =
+        [
+            new("t", ColumnKind.Title, ColumnRole.Title, false),
+            new("s", ColumnKind.Words, ColumnRole.None, true),
+        ];
+        Same.Items([0, 1], ColumnSet.Shown(columns, Set(), Set(), [800, 100], ColumnSet.TitleComfort + 100));
+        Same.Items([0], ColumnSet.Shown(columns, Set(), Set(), [800, 100], ColumnSet.TitleComfort + 99));
+    }
+
+    [TestMethod]
+    public void A_secondary_column_the_person_showed_stays_when_the_room_is_short() =>
+        Same.Items([0, 1, 2, 3], ColumnSet.Shown(Columns, Set(), Set("c"), Asks, 100));
+
+    [TestMethod]
+    public void A_width_for_each_column_is_asked_for() =>
+        Assert.ThrowsExactly<ArgumentException>(() => ColumnSet.Shown(Columns, Set(), Set(), [100], 300));
+
+    [TestMethod]
     public void A_subtitle_column_is_not_a_table_column() =>
-        Same.Items([0], ColumnSet.Shown([new("a", ColumnKind.Title, ColumnRole.Title, false), new("s", ColumnKind.Words, ColumnRole.Subtitle, false)], Set(), Set(), 1200));
+        Same.Items([0], ColumnSet.Shown([new("a", ColumnKind.Title, ColumnRole.Title, false), new("s", ColumnKind.Words, ColumnRole.Subtitle, false)], Set(), Set(), [100, 100], 1200));
 
     [TestMethod]
     public void No_more_than_forty_eight_columns_are_shown()
     {
         ColInfo[] sixty = Enumerable.Range(0, 60).Select(i => new ColInfo("c" + i, ColumnKind.Words, ColumnRole.None, false)).ToArray();
-        Assert.AreEqual(48, ColumnSet.Shown(sixty, Set(), Set(), 1200).Count);
+        Assert.AreEqual(48, ColumnSet.Shown(sixty, Set(), Set(), new double[60], 1200).Count);
+    }
+
+    [TestMethod]
+    public void The_orders_of_the_store_demo_show_all_seven_columns_at_the_wide_table_and_drop_the_last_secondary_at_the_middle_one()
+    {
+        // Order (name), Status, Fulfilment, Payment (secondary), Total, Ships to (secondary), Placed: as the table measures them.
+        ColInfo[] orders =
+        [
+            new("number", ColumnKind.Title, ColumnRole.Title, false),
+            new("status", ColumnKind.Status, ColumnRole.Status, false),
+            new("fulfilment", ColumnKind.Status, ColumnRole.Status, false),
+            new("payment", ColumnKind.Status, ColumnRole.Status, true),
+            new("total", ColumnKind.Number, ColumnRole.None, false),
+            new("state", ColumnKind.Words, ColumnRole.None, true),
+            new("placed", ColumnKind.Words, ColumnRole.None, false),
+        ];
+        double[] asks = [240, 95, 120, 90, 85, 164, 139];
+        Same.Items([0, 1, 2, 3, 4, 5, 6], ColumnSet.Shown(orders, Set(), Set(), asks, 877));
+        Same.Items([0, 1, 2, 3, 4, 6], ColumnSet.Shown(orders, Set(), Set(), asks, 790));
+        Same.Items([0, 1, 2, 4, 6], ColumnSet.Shown(orders, Set(), Set(), asks, 650));
     }
 
     [TestMethod]

@@ -86,7 +86,14 @@ public sealed partial class DataTable
 
         List<int> personsOrder = ColumnOrder.Reconcile(columns.Select(c => c.Key).ToList(), columnOrder).Select(k => byKey[k]).ToList();
         List<ColInfo> infos = personsOrder.Select(i => new ColInfo(columns[i].Key, columns[i].Kind, columns[i].Role, columns[i].Secondary)).ToList();
-        IReadOnlyList<int> chosen = ColumnSet.Shown(infos, hiddenKeys, forcedShownKeys, viewport);
+
+        // Every column that is not hidden is measured, so that the room decides which of them are shown: the secondary ones go first.
+        MeasureWidths(model, presenter, columns, personsOrder.Where(i => !hiddenKeys.Contains(columns[i].Key) && columns[i].Role != ColumnRole.Subtitle).ToList(), remeasure);
+        hasCheckColumn = model.Choice.Available;
+        hasChevronColumn = AnyDetail(model);
+        double gutter = (hasCheckColumn ? FrozenGutter.CheckWidth : 0) + (hasChevronColumn ? FrozenGutter.ChevronWidth : 0);
+        double[] asked = personsOrder.Select(i => widths.TryGetValue(columns[i].Key, out double known) ? known : ColumnSizing.LeastWidth(columns[i].Kind)).ToArray();
+        IReadOnlyList<int> chosen = ColumnSet.Shown(infos, hiddenKeys, forcedShownKeys, asked, viewport - gutter);
         List<int> start = chosen.Select(i => personsOrder[i]).ToList();
         List<int> end = [];
         while (start.Count > 0 && end.Count < 2 && columns[start[^1]].Role == ColumnRole.Actions)
@@ -95,7 +102,6 @@ public sealed partial class DataTable
             start.RemoveAt(start.Count - 1);
         }
 
-        MeasureWidths(model, presenter, columns, [.. start, .. end], remeasure);
         ColumnSpec Spec(int index)
         {
             DataTableColumn c = columns[index];
@@ -103,9 +109,6 @@ public sealed partial class DataTable
             return new ColumnSpec(c.Key, c.Kind, width, c.Kind == ColumnKind.Title && !personWidths.Contains(c.Key));
         }
 
-        hasCheckColumn = model.Choice.Available;
-        hasChevronColumn = AnyDetail(model);
-        double gutter = (hasCheckColumn ? FrozenGutter.CheckWidth : 0) + (hasChevronColumn ? FrozenGutter.ChevronWidth : 0);
         List<ColInfo> startInfos = start.Select(i => new ColInfo(columns[i].Key, columns[i].Kind, columns[i].Role, columns[i].Secondary)).ToList();
         int wish = frozenWish ?? ColumnSet.DefaultFrozen(startInfos);
         ColumnLayout built = ColumnLayoutBuilder.Build(start.Select(Spec).ToList(), wish, end.Select(Spec).ToList(), gutter, viewport);
