@@ -1632,9 +1632,8 @@ fn only_first_party_packages_name_themselves_plugins_and_from_their_own_module_t
         rust_files(&src, &mut files);
         for file in files {
             let text = std::fs::read_to_string(&file).expect("a source file");
-            // A file's unit tests come last, and a test's stand-in plugin is not the package's.
-            let shipped = text.split("#[cfg(test)]").next().unwrap_or_default();
-            let names_a_plugin = shipped
+            // A test's stand-in plugin is not the package's.
+            let names_a_plugin = before_unit_tests(&text)
                 .lines()
                 .filter(|line| !line.trim_start().starts_with("//"))
                 .map(without_strings)
@@ -1660,6 +1659,44 @@ fn only_first_party_packages_name_themselves_plugins_and_from_their_own_module_t
         }
     }
     assert!(problems.is_empty(), "{problems:#?}");
+}
+
+/// A source file up to its unit tests: the text before the first `#[cfg(test)]` that marks a
+/// module. A `#[cfg(test)]` on a function, an import or a field ends nothing, so the code after
+/// it is still read.
+fn before_unit_tests(text: &str) -> &str {
+    const MARK: &str = "#[cfg(test)]";
+    let mut from = 0;
+    while let Some(found) = text[from..].find(MARK) {
+        let at = from + found;
+        let item = text[at + MARK.len()..]
+            .lines()
+            .map(str::trim_start)
+            .find(|line| !line.is_empty() && !line.starts_with("#[") && !line.starts_with("//"));
+        let is_module = item.is_some_and(|line| {
+            ["mod ", "pub mod ", "pub(crate) mod "]
+                .iter()
+                .any(|start| line.starts_with(start))
+        });
+        if is_module {
+            return &text[..at];
+        }
+        from = at + MARK.len();
+    }
+    text
+}
+
+#[test]
+fn only_a_test_module_ends_the_part_of_a_file_that_is_read() {
+    let file = "fn a() {}\n#[cfg(test)]\nuse std::fmt;\nfn b() {}\n\n#[cfg(test)]\nmod tests {\n    fn c() {}\n}\n";
+    let read = before_unit_tests(file);
+    assert!(read.contains("fn b()") && !read.contains("fn c()"), "{read}");
+    assert_eq!(before_unit_tests("fn a() {}\n"), "fn a() {}\n");
+    let one_line = "fn a() {}\n#[cfg(test)] mod tests { fn c() {} }\n";
+    assert_eq!(before_unit_tests(one_line), "fn a() {}\n");
+    // An attribute or a comment between the mark and the module hides neither.
+    let spaced = "fn a() {}\n#[cfg(test)]\n#[allow(dead_code)]\n// stand-ins\npub(crate) mod tests {}\n";
+    assert_eq!(before_unit_tests(spaced), "fn a() {}\n");
 }
 
 /// A line of source without the text inside its string literals, so a message that tells the
