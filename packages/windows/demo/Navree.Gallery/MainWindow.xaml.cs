@@ -40,7 +40,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            await ExperimentRunner.RunAsync(this, arguments);
+            await ScenarioRunner.RunAsync(this, arguments);
         }
         catch (Exception problem)
         {

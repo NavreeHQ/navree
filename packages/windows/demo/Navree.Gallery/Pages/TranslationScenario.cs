@@ -69,7 +69,7 @@ internal sealed class TranslationPage : Grid
 }
 
 /// <summary>Pictures of what a written translation and an animated one do to the same element.</summary>
-internal static class TranslationExperiment
+internal static class TranslationScenario
 {
     internal static async Task RunAsync(MainWindow window)
     {

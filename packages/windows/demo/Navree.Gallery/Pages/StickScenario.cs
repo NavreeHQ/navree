@@ -128,7 +128,7 @@ internal sealed class StickPage : Grid
 }
 
 /// <summary>Runs the pictures and measurements of the page that keeps parts in place.</summary>
-internal static class StickExperiment
+internal static class StickScenario
 {
     internal static async Task RunAsync(MainWindow window, StickyMode mode, bool rtl)
     {
@@ -239,7 +239,7 @@ internal static class StickExperiment
     }
 }
 
-/// <summary>Small waits the experiments share.</summary>
+/// <summary>Small waits the scenarios share.</summary>
 internal static class Waiting
 {
     internal static async Task LoadedAsync(FrameworkElement element)

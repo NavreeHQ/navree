@@ -3,7 +3,7 @@ using Navree.Controls;
 namespace Navree.Gallery;
 
 /// <summary>Runs the scenarios the command line asked for, one after the other.</summary>
-internal static class ExperimentRunner
+internal static class ScenarioRunner
 {
     internal static async Task RunAsync(MainWindow window, GalleryArguments arguments)
     {
@@ -29,7 +29,7 @@ internal static class ExperimentRunner
                 await PointerScenario.RunAsync(window);
                 break;
             case "mirror":
-                await MirrorExperiment.RunAsync(window);
+                await MirrorScenario.RunAsync(window);
                 break;
             case "parts":
                 await PartsScenario.RunAsync(window);
@@ -38,18 +38,18 @@ internal static class ExperimentRunner
                 await TableScenarios.RunAsync(window, TableScenarios.All);
                 break;
             case "translation":
-                await TranslationExperiment.RunAsync(window);
+                await TranslationScenario.RunAsync(window);
                 break;
             case "values":
-                await ValuesExperiment.RunAsync(window);
+                await ScrollNumbersScenario.RunAsync(window);
                 break;
             case "stick":
-                await StickExperiment.RunAsync(window, StickyMode.Compositor, rtl: false);
-                await StickExperiment.RunAsync(window, StickyMode.Compositor, rtl: true);
-                await StickExperiment.RunAsync(window, StickyMode.UiThread, rtl: false);
+                await StickScenario.RunAsync(window, StickyMode.Compositor, rtl: false);
+                await StickScenario.RunAsync(window, StickyMode.Compositor, rtl: true);
+                await StickScenario.RunAsync(window, StickyMode.UiThread, rtl: false);
                 break;
             case "anchor":
-                await AnchorExperiment.RunAsync(window);
+                await AnchorScenario.RunAsync(window);
                 break;
             default:
                 Report.Line("unknown scenario: " + name);

@@ -87,7 +87,7 @@ internal sealed class AnchorPage : Grid
 }
 
 /// <summary>Measures whether the view stays where it was when rows change above it.</summary>
-internal static class AnchorExperiment
+internal static class AnchorScenario
 {
     internal static async Task RunAsync(MainWindow window)
     {

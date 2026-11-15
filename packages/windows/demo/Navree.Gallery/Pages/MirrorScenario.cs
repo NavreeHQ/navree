@@ -13,7 +13,7 @@ namespace Navree.Gallery;
 /// one, and cut by a written and by an animated clip, so a picture shows whether translations and
 /// clips are counted from the start or from the left in that flow.
 /// </summary>
-internal static class MirrorExperiment
+internal static class MirrorScenario
 {
     internal static async Task RunAsync(MainWindow window)
     {

@@ -96,7 +96,7 @@ internal sealed class ValuesPage : Grid
 }
 
 /// <summary>Pictures of the numbers a scroll view gives to animations, at three scroll positions, in both flow directions.</summary>
-internal static class ValuesExperiment
+internal static class ScrollNumbersScenario
 {
     internal static async Task RunAsync(MainWindow window)
     {
