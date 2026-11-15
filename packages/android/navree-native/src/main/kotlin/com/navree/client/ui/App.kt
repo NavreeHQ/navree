@@ -382,6 +382,10 @@ private fun SideRail(
     val state = rememberWideNavigationRailState(if (expanded) WideNavigationRailValue.Expanded else WideNavigationRailValue.Collapsed)
     val scope = rememberCoroutineScope()
     val open = state.targetValue == WideNavigationRailValue.Expanded
+    // A collapsed rail's label stands under its icon in 80 dp: it grows with the text setting only as far as its longest word fits.
+    val window = LocalUi.current.window
+    val labels = destinations.map { it.label }
+    val railScale = if (open) window.fontScale else NavigationRules.labelScale(window.fontScale, NavigationRules.RAIL_ITEM_DP * labels.size.coerceAtLeast(1), labels)
     WideNavigationRail(
         state = state,
         header = {
@@ -407,8 +411,8 @@ private fun SideRail(
                 WideNavigationRailItem(
                     selected = index == selected,
                     onClick = { choose(index) },
-                    icon = { NavIcon(destination, index == selected, badged = !open) },
-                    label = { NavLabel(destination.label, plan, badge = if (open) destination.badge else null) },
+                    icon = { WithTextScale(railScale) { NavIcon(destination, index == selected, badged = !open) } },
+                    label = { WithTextScale(railScale) { NavLabel(destination.label, plan, badge = if (open) destination.badge else null) } },
                     railExpanded = open,
                 )
             }

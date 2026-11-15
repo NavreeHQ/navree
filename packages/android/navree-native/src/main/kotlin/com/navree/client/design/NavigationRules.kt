@@ -57,6 +57,9 @@ object NavigationRules {
     /** The width of an average glyph of a navigation label (12 sp at the default text size), in dp. */
     private const val LABEL_GLYPH_DP = 6.5f
 
+    /** The width of an item of the rail, collapsed, in dp: its label stands under its icon. */
+    const val RAIL_ITEM_DP = 80
+
     /** What an item of the bar keeps free at its sides, in dp. */
     private const val ITEM_SIDES_DP = 8f
 

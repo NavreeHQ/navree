@@ -602,6 +602,13 @@ class NavigationLabelTest {
     }
 
     @Test
+    fun a_collapsed_rails_labels_keep_to_the_size_their_longest_word_fits_in_80_dp() {
+        val labels = listOf("Dashboard", "Orders", "Inventory")
+        val scale = NavigationRules.labelScale(2.0f, NavigationRules.RAIL_ITEM_DP * labels.size, labels)
+        assertTrue("no word of these labels fits 80 dp at twice the size: $scale", scale < 1.3f && scale >= 1f)
+    }
+
+    @Test
     fun three_short_labels_follow_the_setting_all_the_way() {
         assertEquals(2.0f, NavigationRules.labelScale(2.0f, 412, listOf("Dashboard", "Orders", "Inventory")), 0.001f)
     }
