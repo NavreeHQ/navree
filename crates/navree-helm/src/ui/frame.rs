@@ -273,7 +273,9 @@ impl<'a> Frame<'a> {
             app = app.csrf(token.to_owned());
         }
         let title: String = title.into();
-        app.page(title)
+        // Staff act on every tenant here, and the panel draws no plugin component: its pages
+        // start from a clean document, in an app that has plugin code to keep off them.
+        app.page(title).fresh()
     }
 }
 

@@ -912,7 +912,7 @@ required-features = ["access", "db", "grpc", "http", "orm", "schema", "sqlite", 
 
 [[test]]
 name = "helm"
-required-features = ["access", "auth", "crypto", "db", "helm", "http", "orm", "schema", "sqlite", "testing", "validation", "view"]
+required-features = ["access", "auth", "crypto", "db", "helm", "http", "lighthouse", "orm", "schema", "sqlite", "testing", "validation", "view"]
 
 [[test]]
 name = "integrations_docs"

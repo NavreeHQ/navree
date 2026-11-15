@@ -367,7 +367,9 @@ impl LighthouseDashboardController {
             )
             .user(UserMenu::new(name, email).action("Sign out", SIGN_OUT_PATH));
         let app = shell.for_request(viewer.target.clone(), &viewer.headers);
-        let mut page = app.page(title);
+        // Staff act on every tenant here, and the dashboard draws no plugin component: its pages
+        // start from a clean document, in an app that has plugin code to keep off them.
+        let mut page = app.page(title).fresh();
         let dropped = self.lighthouse.dropped();
         if dropped > 0 {
             page = page.body(
