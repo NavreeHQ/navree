@@ -107,10 +107,18 @@ if ($null -ne $running) {
             Say "the app was started again from its entry in the Start menu"
         }
         Start-Sleep -Seconds 6
+        $registered = 'Registry::HKEY_CLASSES_ROOT\navree-demo'
+        Say ("the scheme is known to Windows: " + (Test-Path $registered))
+        if (Test-Path $registered) { Get-ChildItem $registered -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Say ("   " + $_.Name) } }
         try {
             Start-Process 'navree-demo://signed-in?code=abc&state=xyz' -ErrorAction Stop
             Say "an address on the scheme was opened"
         } catch { Say ("the address on the scheme did not open: " + $_.Exception.Message) }
+        Start-Sleep -Seconds 6
+        try {
+            Start-Process -FilePath 'explorer.exe' -ArgumentList 'navree-demo://signed-in?code=abc&state=xyz' -ErrorAction Stop
+            Say "an address on the scheme was opened through Explorer"
+        } catch { Say ("Explorer did not open the address: " + $_.Exception.Message) }
         Start-Sleep -Seconds 8
     } else {
         $second = Start-Demo @('--open=%2Forders') $false
