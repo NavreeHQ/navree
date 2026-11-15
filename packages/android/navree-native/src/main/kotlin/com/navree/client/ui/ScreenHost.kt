@@ -58,6 +58,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.ui.layout.layout
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -431,8 +432,20 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
                 block.form != null -> FormRules.FORM_MOST_DP
                 else -> column
             }
-            // Lanes side by side are each a lazy list: the board is as tall as the window, which is the height they scroll in.
-            val board = if (node is Navree.Grid && ListRules.areLanes(node.children)) Modifier.fillParentMaxHeight() else Modifier
+            // Lanes side by side are each a lazy list: the board is as tall as what is left of the window under its top, which is the height they scroll in.
+            val pageList = LocalPageList.current
+            val board = if (node is Navree.Grid && ListRules.areLanes(node.children)) {
+                Modifier.layout { measurable, constraints ->
+                    val info = pageList?.layoutInfo
+                    val top = info?.visibleItemsInfo?.firstOrNull { it.key == block.key }?.offset ?: 0
+                    val room = if (info == null) constraints.maxHeight else info.viewportEndOffset - maxOf(top, info.viewportStartOffset)
+                    val height = room.coerceIn(minOf(BOARD_LEAST_DP.dp.roundToPx(), constraints.maxHeight), constraints.maxHeight)
+                    val placeable = measurable.measure(constraints.copy(minHeight = height, maxHeight = height))
+                    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                }
+            } else {
+                Modifier
+            }
             Roomed(ContentRules.contentDp(pane, most, marginDp)) {
                 Box(Modifier.readable(most, column).padding(horizontal = margin, vertical = if (node is Navree.Field) 8.dp else 0.dp).then(board)) {
                     // A form's own button under its fields sits at the form's end, as wide as its words.
@@ -1007,3 +1020,6 @@ internal fun FilterBar(form: Navree.Form, place: Place, sends: Boolean, edge: Bo
         }
     }
 }
+
+/** The least height of a board of lanes side by side, in dp: a board is not made shorter than a few cards where the window has little room under its top. */
+private const val BOARD_LEAST_DP = 280
