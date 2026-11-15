@@ -3,9 +3,11 @@
 ## Leaflet
 
 `assets/map.js` holds Leaflet 1.9.4, <https://leafletjs.com>, bundled with this plugin's own
-script by `assets/build.mjs`. `assets/map.css` holds Leaflet's stylesheet from the same release,
-with the three rules that name pictures (`url(images/...)`) taken out, followed by this plugin's
-own rules. Leaflet is licensed under the BSD 2-Clause licence:
+script by `assets/build.mjs` from Leaflet's module build (`dist/leaflet-src.esm.js`), so the
+script writes no global. `assets/map.css` holds Leaflet's stylesheet from the same release, with
+the three rules that name pictures (`url(images/...)`) and the one rule for VML
+(`behavior: url(#default#VML)`) taken out, followed by this plugin's own rules. Leaflet is
+licensed under the BSD 2-Clause licence:
 
 ```
 BSD 2-Clause License
@@ -34,8 +36,9 @@ IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISI
 OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-**Changes.** None to Leaflet's code. The build leaves out the three stylesheet rules named above,
-since this plugin's map draws a circle for its pin and has no layers control, and the
+**Changes.** None to Leaflet's code. The build leaves out the four stylesheet rules named above:
+this plugin's map draws a circle for its pin and has no layers control, no browser of today reads
+the VML rule, and a plugin's stylesheet may name no address but a `data:` one. The
 `legalComments: "eof"` option of the bundler keeps Leaflet's own notice comments at the end of
 `map.js`.
 

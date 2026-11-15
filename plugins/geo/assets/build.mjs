@@ -1,7 +1,8 @@
 // Builds the map's browser files next to this script:
 //
 //   map.js   the glue in src/map.js bundled with Leaflet 1.9.4 into one module that imports nothing
-//   map.css  Leaflet's stylesheet without its three rules that name pictures, then src/own.css
+//   map.css  Leaflet's stylesheet without its three rules that name pictures and its one rule for
+//            VML, then src/own.css: a plugin's stylesheet names no address but a data: one
 //
 // The output is committed, so `cargo build` never needs Node: the crate reads both files when it
 // compiles, scopes the stylesheet to the plugin's components and checks both against their ceilings.
@@ -21,6 +22,8 @@ const TARGET = ["chrome135", "firefox144", "safari26"];
 const LEAFLET = "1.9.4";
 /** The rules of Leaflet's stylesheet that name a picture file: the layers control's and the default marker's. */
 const PICTURE_RULES = 3;
+/** Its rule for VML, a drawing format of browsers long gone. */
+const VML_RULES = 1;
 
 /** @param {string} message @returns {never} */
 function fail(message) {
@@ -90,19 +93,19 @@ function rulesOf(css) {
 }
 
 /**
- * `css` without each rule whose block names a picture of `images/`, counted in `found`. A group of
- * rules (`@media`) is looked into, so a rule inside it goes and the group stays.
- * @param {string} css @param {{count: number}} found @returns {string}
+ * `css` without each rule whose block holds `needle`, counted in `found`. A group of rules (`@media`)
+ * is looked into, so a rule inside it goes and the group stays.
+ * @param {string} css @param {string} needle @param {{count: number}} found @returns {string}
  */
-function withoutPictureRules(css, found) {
+function withoutRules(css, needle, found) {
   return rulesOf(css)
     .map((rule) => {
-      if (!rule.includes("url(images/")) return rule;
+      if (!rule.includes(needle)) return rule;
       const lead = /** @type {RegExpMatchArray} */ (rule.match(/^(?:\s|\/\*[\s\S]*?\*\/)*/))[0];
       const text = rule.slice(lead.length);
       if (/^@(media|supports|container|layer)\b/.test(text) && text.includes("{")) {
         const open = lead.length + text.indexOf("{"), close = rule.lastIndexOf("}");
-        return rule.slice(0, open + 1) + withoutPictureRules(rule.slice(open + 1, close), found) + rule.slice(close);
+        return rule.slice(0, open + 1) + withoutRules(rule.slice(open + 1, close), needle, found) + rule.slice(close);
       }
       found.count++;
       return "";
@@ -111,12 +114,17 @@ function withoutPictureRules(css, found) {
 }
 
 function css() {
-  const found = { count: 0 };
-  const leaflet = withoutPictureRules(readFileSync(join(leafletDir, "dist", "leaflet.css"), "utf8").replace(/\r\n/g, "\n"), found);
-  if (found.count !== PICTURE_RULES) fail(`expected ${PICTURE_RULES} rules that name a picture in leaflet.css and found ${found.count}: this map is written for leaflet ${LEAFLET}`);
-  if (leaflet.includes("url(images/")) fail("a picture of leaflet.css is still named after its rules were taken out");
+  const pictures = { count: 0 }, old = { count: 0 };
+  let leaflet = readFileSync(join(leafletDir, "dist", "leaflet.css"), "utf8").replace(/\r\n/g, "\n");
+  leaflet = withoutRules(leaflet, "url(images/", pictures);
+  if (pictures.count !== PICTURE_RULES) fail(`expected ${PICTURE_RULES} rules that name a picture in leaflet.css and found ${pictures.count}: this map is written for leaflet ${LEAFLET}`);
+  // The rule for a drawing format no browser of today has: its `behavior: url(#default#VML)` is the sheet's
+  // one other address, and a plugin's stylesheet may name none.
+  leaflet = withoutRules(leaflet, "url(#default#VML)", old);
+  if (old.count !== VML_RULES) fail(`expected ${VML_RULES} rule with behavior: url(#default#VML) in leaflet.css and found ${old.count}: this map is written for leaflet ${LEAFLET}`);
+  if (leaflet.includes("url(")) fail("leaflet.css still names an address after those rules were taken out: a plugin's stylesheet may name none");
   const own = readFileSync(join(here, "src", "own.css"), "utf8").replace(/\r\n/g, "\n");
-  console.log(`removed ${found.count} rules that name a picture`);
+  console.log(`removed ${pictures.count} rules that name a picture and ${old.count} that names a behaviour file`);
   return Buffer.from(`${leaflet.trim()}\n\n${own.trim()}\n`);
 }
 
