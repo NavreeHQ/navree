@@ -811,6 +811,7 @@ impl Core {
     }
 
     fn shell_failed(&mut self, failure: Failure) {
+        self.inner.shell_failure = Some(failure);
         // This launch's shell did not come while the one kept on the device is
         // drawn. If the request did not get through, the kept bars stay and the
         // shell is asked for again; an answer that is not a shell gives the
@@ -862,6 +863,7 @@ impl Core {
     pub(crate) fn shell_settled(&mut self) {
         self.inner.shell_wanted = false;
         self.inner.shell_pause = 0;
+        self.inner.shell_failure = None;
         if let Some(timer) = self.inner.shell_timer.take() {
             self.cancel_timer(timer);
         }
@@ -984,6 +986,23 @@ impl Core {
             self.shell_pictures(&mut shell);
             self.inner.cache.shell = Some(body.to_owned());
             self.install(shell, true);
+            // This launch's shell request may have failed before the kept
+            // shell was read (with no network it fails in milliseconds, the
+            // file takes longer): the end is the same as in the other order,
+            // the kept bars and the shell asked for again.
+            let asking = self
+                .inner
+                .pending
+                .values()
+                .any(|asked| asked.purpose == Pending::Shell);
+            if !asking
+                && matches!(
+                    self.inner.shell_failure,
+                    Some(Failure::Offline | Failure::Timeout | Failure::Server)
+                )
+            {
+                self.shell_unreached();
+            }
             return true;
         }
         false
@@ -1020,7 +1039,11 @@ impl Core {
     /// menu. A snapshot waits for this launch's shell.
     fn install(&mut self, shell: Shell, from_device: bool) {
         // Who it names: by the id its answer said, else by name and email.
-        self.shell_settled();
+        // The kept shell is no answer: a request that failed before it was
+        // read is not forgotten.
+        if !from_device {
+            self.shell_settled();
+        }
         let naming = self.inner.naming.take();
         let user = shell.user.as_ref().map(|user| Who {
             id: naming.clone(),
@@ -3422,6 +3445,75 @@ mod tests {
             pauses,
             [2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000, 60_000]
         );
+    }
+
+    /// Whichever comes first, the shell request's failure or the kept shell
+    /// being read, the end is the same: the kept bars, and the shell asked for
+    /// again. A request that fails with no network fails in milliseconds, long
+    /// before the file the kept shell is read from.
+    #[test]
+    fn a_shell_request_that_failed_before_the_kept_shell_was_read_is_asked_for_again() {
+        let kept = include_str!("../transcripts/fixtures/made/kept-boot-workspace.json");
+        let failures = [
+            (
+                "no network",
+                Response {
+                    error: Some(TransportError::Offline),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a 503",
+                Response {
+                    status: 503,
+                    content_type: Some("text/html".to_owned()),
+                    ..Response::default()
+                },
+            ),
+        ];
+        for (what, failure) in failures {
+            let mut config = Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            );
+            config.cache.persist = true;
+            let mut core = Core::new(config);
+            core.send(Event::Start);
+            core.send(Event::Response(Response {
+                request: 1,
+                ..failure
+            }));
+            let read = core.send(Event::Cache {
+                key: "boot".to_owned(),
+                value: Some(kept.to_owned()),
+            });
+            let view = core.view();
+            assert_eq!(view.stage, crate::Stage::Ready, "{what}");
+            assert_eq!(
+                view.app.as_ref().map(|app| app.name.as_str()),
+                Some("Charkha Supply Co."),
+                "{what}: the kept bars"
+            );
+            let timer = read
+                .effects
+                .iter()
+                .find_map(|effect| match effect {
+                    Effect::Timer { timer, ms: 2_000 } => Some(*timer),
+                    _ => None,
+                })
+                .unwrap_or_else(|| {
+                    panic!("{what}: no pause after the kept shell was read: {read:?}")
+                });
+            // The pause over, the shell is asked for again.
+            let again = core.send(Event::Timer { timer });
+            assert!(
+                again.effects.iter().any(|effect| matches!(
+                    effect,
+                    Effect::Fetch(request) if request.url.ends_with(SHELL_PATH)
+                )),
+                "{what}: {again:?}"
+            );
+        }
     }
 
     /// A snapshot asked for before this launch's shell has answered names
