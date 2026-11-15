@@ -65,6 +65,31 @@ object ListRules {
      */
     fun oneLaneAtATime(parts: List<Navree.Node>, columns: Int): Boolean = columns == 1 && areLanes(parts)
 
+    /** Whether the page at `shown` is the one a row leading to `href` opens: the row is then marked as the one open. */
+    fun shows(shown: String?, href: String): Boolean {
+        if (shown.isNullOrEmpty() || href.isEmpty()) return false
+        val path = shown.substringBefore('?').substringBefore('#')
+        val target = href.substringBefore('?').substringBefore('#')
+        return target.isNotEmpty() && (path == target || path.endsWith(target))
+    }
+
+    /** The most a lane of a board stands wide, in dp: lanes stay together in a wide window and do not stretch. */
+    const val LANE_MOST_DP = 360
+
+    /** The space between lanes, in dp: the cards of one lane do not touch those of the next. */
+    const val LANE_GAP_DP = 16
+
+    /**
+     * The width of each of `count` lanes in a room this wide: what fits them
+     * all, held between the least a card reads in and the most a lane stretches
+     * to. Where even the least does not fit them all, the row of lanes scrolls
+     * along and the next lane shows at the edge, so none waits under the others.
+     */
+    fun laneWidthDp(roomDp: Float, count: Int, gapDp: Int = LANE_GAP_DP): Float {
+        val fit = (roomDp - gapDp * (count - 1).coerceAtLeast(0)) / count.coerceAtLeast(1)
+        return fit.coerceIn(LANE_LEAST_DP.toFloat(), LANE_MOST_DP.toFloat())
+    }
+
     /** A button, and the form of its own it sends. */
     data class TitleButton(val form: Navree.Form, val button: Navree.Button)
 
@@ -85,10 +110,14 @@ object ListRules {
         return row.detail.firstNotNullOfOrNull(::find)
     }
 
-    /** The row with the form of its title button taken out of its detail. */
+    /**
+     * The row with the form of its title button taken out of its detail. The
+     * form is found by what it holds, not by being the same object: a row
+     * drawn from a newer answer holds an equal form that is another object.
+     */
     fun withoutTitleButton(row: Navree.Row, form: Navree.Form): Navree.Row {
         fun prune(node: Navree.Node): Navree.Node? = when {
-            node === form -> null
+            node == form -> null
             node is Navree.Stack -> node.children.mapNotNull(::prune).let { kept -> if (kept.isEmpty()) null else node.copy(children = kept) }
             else -> node
         }

@@ -190,7 +190,7 @@ internal fun RowView(
     val ui = LocalUi.current
     val window = ui.window
     // A button that only says the row's title is the row's own tap, not a second line under it.
-    val titled = remember(row) { if (row.action == null) ListRules.titleButton(row) else null }
+    val titled = if (row.action == null) ListRules.titleButton(row) else null
     val shown = if (titled != null) ListRules.withoutTitleButton(row, titled.form) else row
     val action = row.action
     val menu = row.menu
@@ -411,9 +411,8 @@ internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = M
 
 /** Whether a row leads to the screen shown beside the list. */
 private fun isSelected(action: Navree.Action?, place: Place): Boolean {
-    val shown = place.selectedUrl ?: return false
     val href = (action as? Navree.Action.Navigate)?.href ?: return false
-    return shown == href || shown.endsWith(href)
+    return ListRules.shows(place.selectedUrl, href)
 }
 
 /**
@@ -547,6 +546,9 @@ internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Pla
     )
 }
 
+/** The space after each column of a table: a figure at the end of its column does not touch the words that start the next. */
+private val TABLE_GUTTER = 16.dp
+
 /** A table where there is room for one: a header row, then rows of cells with a line between. */
 @Composable
 internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Modifier) {
@@ -597,7 +599,7 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
                                 Modifier
                             },
                         )
-                        .padding(end = 8.dp)
+                        .padding(end = TABLE_GUTTER)
                         .padding(vertical = 8.dp)
                         .semantics {
                             heading()
@@ -655,7 +657,7 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
                     val column = node.columns.getOrNull(index)
                     val weight = weights.getOrElse(index) { 1f }
                     if (weight == 0f) return@forEachIndexed
-                    Box(Modifier.weight(weight).padding(end = 8.dp), contentAlignment = if (end) Alignment.CenterEnd else Alignment.CenterStart) {
+                    Box(Modifier.weight(weight).padding(end = TABLE_GUTTER), contentAlignment = if (end) Alignment.CenterEnd else Alignment.CenterStart) {
                         when {
                             // The naming cell of a row that opens by itself is words, not a second control.
                             index == titleAt && action != null -> {

@@ -95,6 +95,7 @@ import com.navree.client.design.BarScroll
 import com.navree.client.design.ContentRules
 import com.navree.client.design.FabPlace
 import com.navree.client.design.FormRules
+import com.navree.client.design.ListRules
 import com.navree.client.design.NavigationIcon
 import com.navree.client.design.Presentation
 import com.navree.client.design.ScreenContext
@@ -262,7 +263,8 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     val (arranged, bars) = remember(screen, view.states, info.context) { arrange(screen, view, info.context) }
     val context = info.context.copy(toolbar = bars.isNotEmpty())
     val plan = remember(arranged, context, window) { ScreenRules.plan(arranged, context, window) }
-    val place = Place(view, selectedUrl = info.selectedUrl)
+    // The row that leads to the page shown beside the list is marked; a screen that holds its own list marks the row of its own page.
+    val place = Place(view, selectedUrl = info.selectedUrl ?: view.url.ifEmpty { null })
     val list = rememberLazyListState()
     var searching by rememberSaveable { mutableStateOf(false) }
     val pinned = TopAppBarDefaults.pinnedScrollBehavior()
@@ -391,6 +393,8 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
             val most = when {
                 // Two panes side by side need the pane's width: a list and what it opened.
                 node is Navree.Table || node is Navree.Split -> ContentRules.TABLE_MOST_DP
+                // Lanes of a board take the pane's width: each is a column of cards, and they stand side by side.
+                node is Navree.Grid && ListRules.areLanes(node.children) -> ContentRules.TABLE_MOST_DP
                 block.form != null -> FormRules.FORM_MOST_DP
                 else -> column
             }

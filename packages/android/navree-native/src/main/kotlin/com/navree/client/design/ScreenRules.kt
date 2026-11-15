@@ -172,6 +172,13 @@ data class ScreenPlan(
  *   scroll up.
  */
 object ScreenRules {
+    /**
+     * Whether a node is a heading that only says the screen's title, which the
+     * top app bar already says: it is not said a second time under the bar.
+     */
+    fun repeatsTitle(node: Navree.Node, title: String?): Boolean =
+        node is Navree.Text && node.heading != null && title != null && node.value.trim().equals(title.trim(), ignoreCase = true)
+
     fun plan(screen: Navree.Screen, context: ScreenContext, window: WindowInfo): ScreenPlan {
         val modal = context.presentation != Presentation.Stack
         val form = screen.body as? Navree.Form

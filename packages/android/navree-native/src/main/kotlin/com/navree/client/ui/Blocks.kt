@@ -6,6 +6,7 @@ import com.navree.client.design.ContentRules
 import com.navree.client.design.FilterRules
 import com.navree.client.design.ListRules
 import com.navree.client.design.PagerRules
+import com.navree.client.design.ScreenRules
 import com.navree.client.design.SelectionRules
 import com.navree.client.design.childNodes
 import com.navree.client.design.nodeId
@@ -91,6 +92,7 @@ internal fun inFlow(node: Navree.Node, screen: ScreenView): Boolean = when {
     screen.hidden(node.nodeId) -> false
     node is Navree.Sheet || node is Navree.Dialog || node is Navree.Popover -> false
     node is Navree.Toolbar -> false
+    ScreenRules.repeatsTitle(node, screen.screen?.title) -> false
     // A day pager that leads the screen stands in the app bar.
     node is Navree.DayPager && screen.screen?.let { PagerRules.inBar(it) } === node -> false
     // The buttons for chosen rows are the contextual app bar's.

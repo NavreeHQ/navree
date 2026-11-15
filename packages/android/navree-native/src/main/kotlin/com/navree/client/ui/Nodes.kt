@@ -62,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -570,6 +571,10 @@ private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthD
         OneLane(node.id, shown.filterIsInstance<Navree.Section>(), place, modifier)
         return
     }
+    if (ListRules.areLanes(shown)) {
+        Lanes(shown, place, modifier, widthDp)
+        return
+    }
     val cell = ContentRules.cardWidthDp(widthDp, columns, gap)
     val stretch = ListRules.stretchesLastLine(shown)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(gap.dp)) {
@@ -584,6 +589,37 @@ private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthD
                 }
                 // An unfinished last line keeps its columns the width of the others, unless its parts are whole things that stretch.
                 if (!stretch) repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+/**
+ * Lanes side by side: one row of them, each as wide as a card reads in. When
+ * they do not all fit, the row scrolls along (and runs to the window's edge,
+ * not to the margin) so the lanes that do not fit are beside the others and
+ * not a screenful further down.
+ */
+@Composable
+private fun Lanes(lanes: List<Navree.Node>, place: Place, modifier: Modifier, widthDp: Float) {
+    val margin = ContentRules.marginDp(LocalUi.current.window)
+    val laneDp = ListRules.laneWidthDp(widthDp, lanes.size)
+    val scroll = rememberScrollState()
+    Row(
+        modifier
+            .layout { measurable, constraints ->
+                // The row runs out to the edges of the column's box, past its margins.
+                val bleed = (margin * 2).dp.roundToPx()
+                val placeable = measurable.measure(constraints.copy(minWidth = 0, maxWidth = constraints.maxWidth + bleed))
+                layout(constraints.maxWidth, placeable.height) { placeable.placeRelative(-(bleed / 2), 0) }
+            }
+            .horizontalScroll(scroll)
+            .padding(horizontal = margin.dp),
+        horizontalArrangement = Arrangement.spacedBy(ListRules.LANE_GAP_DP.dp),
+    ) {
+        for (lane in lanes) {
+            Box(Modifier.width(laneDp.dp)) {
+                CompositionLocalProvider(LocalInLine provides false) { Roomed(laneDp) { NodeView(lane, place) } }
             }
         }
     }

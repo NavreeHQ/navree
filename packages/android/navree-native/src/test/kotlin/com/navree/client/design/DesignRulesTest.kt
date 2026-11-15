@@ -558,6 +558,13 @@ class BoardRulesTest {
     }
 
     @Test
+    fun lanes_stand_in_one_row_each_as_wide_as_what_fits_them_all_between_a_cards_least_and_a_lanes_most() {
+        assertEquals("five lanes of a tablet's pane do not fit at the least: the row scrolls", 240f, ListRules.laneWidthDp(1100f, 5), 0.001f)
+        assertEquals("three lanes share what is there", (1100f - 32f) / 3, ListRules.laneWidthDp(1100f, 3), 0.001f)
+        assertEquals("two lanes in a very wide room stay together", 360f, ListRules.laneWidthDp(1400f, 2), 0.001f)
+    }
+
+    @Test
     fun a_grid_of_fields_gives_up_columns_a_grid_of_figures_does_not() {
         assertEquals(2, ListRules.gridColumns(379, null, 8, most = 4, controls = true))
         assertEquals(4, ListRules.gridColumns(379, null, 8, most = 4, controls = false))
@@ -574,6 +581,12 @@ class BoardRulesTest {
         val pruned = ListRules.withoutTitleButton(row, found!!.form)
         assertEquals(listOf<Navree.Node>(Navree.Stack(children = listOf(badge))), pruned.detail)
         assertNull("a button that says something else", ListRules.titleButton(row.copy(title = "Another")))
+        // The same row in a newer answer holds an equal form that is another object: it is taken out too.
+        val again = Navree.Row(
+            title = "Offline order sheets",
+            detail = listOf(Navree.Stack(children = listOf(badge, Navree.Form(id = "peek", children = listOf(Navree.Button(action = Navree.Action.Submit(), label = "Offline order sheets")))))),
+        )
+        assertEquals(listOf<Navree.Node>(Navree.Stack(children = listOf(badge))), ListRules.withoutTitleButton(again, found.form).detail)
     }
 
     @Test
@@ -832,5 +845,28 @@ class LanesTest {
     fun a_grid_that_is_not_all_sections_is_not_lanes() {
         assertFalse(ListRules.areLanes(lanes + Navree.Text(value = "Note")))
         assertFalse("one section is no set of lanes", ListRules.areLanes(lanes.take(1)))
+    }
+}
+
+class RepeatedTitleTest {
+    @Test
+    fun a_heading_that_says_the_bars_title_is_not_said_again() {
+        val heading = Navree.Text(value = "All open", heading = 2, style = Navree.TextStyle.TITLE)
+        assertTrue(ScreenRules.repeatsTitle(heading, "All open"))
+        assertTrue("case and spaces do not matter", ScreenRules.repeatsTitle(heading, " all open "))
+        assertFalse("another title", ScreenRules.repeatsTitle(heading, "Closed"))
+        assertFalse("words that are no heading", ScreenRules.repeatsTitle(Navree.Text(value = "All open"), "All open"))
+        assertFalse("a screen with no title", ScreenRules.repeatsTitle(heading, null))
+    }
+}
+
+class OpenRowTest {
+    @Test
+    fun the_row_that_leads_to_the_page_shown_is_the_open_one() {
+        assertTrue(ListRules.shows("/inbox/11", "/inbox/11"))
+        assertTrue("a full address", ListRules.shows("http://10.0.2.2:8083/inbox/11?after=3", "/inbox/11"))
+        assertFalse("another page", ListRules.shows("/inbox/211", "/inbox/11"))
+        assertFalse("the list's own page", ListRules.shows("/inbox", "/inbox/11"))
+        assertFalse("nothing shown", ListRules.shows(null, "/inbox/11"))
     }
 }
