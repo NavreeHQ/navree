@@ -6,7 +6,10 @@
 // What it is given: the props the server wrote on the element, and `ui`, whose helpers reach only this
 // element's own parts, its own timers and listeners (they end when the element leaves) and the routes
 // the server named for it (`/geo/`). It never touches the page outside its element.
-import * as L from "leaflet";
+//
+// Leaflet is taken from its module build, named by its file: the package's own entry is the script
+// build, which also writes a global named `L`.
+import * as L from "leaflet/dist/leaflet-src.esm.js";
 
 export const contract = 1;
 

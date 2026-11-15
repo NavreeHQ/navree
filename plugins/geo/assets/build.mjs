@@ -32,7 +32,8 @@ const leafletDir = join(here, "node_modules", "leaflet");
 if (!existsSync(join(leafletDir, "package.json"))) fail("leaflet is not installed: run `npm install` in this folder first");
 const installed = JSON.parse(readFileSync(join(leafletDir, "package.json"), "utf8"));
 if (installed.version !== LEAFLET) fail(`leaflet ${installed.version} is installed, and this map is written for ${LEAFLET}: run \`npm install\``);
-if (typeof installed.module !== "string") console.warn("leaflet's package.json names no ES module: the bundle takes its script build instead, which also writes a global");
+// src/map.js imports this file by name: Leaflet's package entry is its script build, which writes a global.
+if (!existsSync(join(leafletDir, "dist", "leaflet-src.esm.js"))) fail("leaflet's module build, dist/leaflet-src.esm.js, is not in the installed package");
 
 async function js() {
   const out = await build({
@@ -41,7 +42,6 @@ async function js() {
     minify: true,
     format: "esm",
     target: TARGET,
-    mainFields: ["module", "main"],
     write: false,
     legalComments: "eof",
   });
