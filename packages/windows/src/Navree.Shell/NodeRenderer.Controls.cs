@@ -596,7 +596,88 @@ internal sealed partial class NodeRenderer
             case Models.ChoiceInput choice:
                 IReadOnlyList<Models.ChoiceOption> options = held?.Options ?? choice.Options;
                 string chosen = held?.Value is TextValue held2 ? held2.Text : choice.Value ?? string.Empty;
-                if (choice.Kind is Models.ChoiceKind.Radio or Models.ChoiceKind.Segmented)
+                if (choice.Search is { } search)
+                {
+                    // A choice that is searched on the server: the person types, the core is asked for the options that match (by the words,
+                    // and by cursor for more), and the options that come are the suggestions; a way to make a new one stands last.
+                    List<(string Label, string? Value, int Kind)> entries = [];
+                    AutoSuggestBox finder = new()
+                    {
+                        Header = header,
+                        PlaceholderText = choice.Placeholder ?? string.Empty,
+                        IsEnabled = !field.Disabled,
+                        Text = options.FirstOrDefault(option => option.Value == chosen)?.Label ?? string.Empty,
+                    };
+                    void Offer(IReadOnlyList<Models.ChoiceOption> found, bool more, string typed)
+                    {
+                        entries.Clear();
+                        foreach (Models.ChoiceOption option in found)
+                        {
+                            entries.Add((option.Label, option.Value, option.Disabled ? 3 : 0));
+                        }
+
+                        if (more)
+                        {
+                            entries.Add(("Show more", null, 1));
+                        }
+
+                        if (choice.Create is { } make && typed.Length > 0)
+                        {
+                            entries.Add((make.Label + ": " + typed, null, 2));
+                        }
+
+                        finder.ItemsSource = entries.Select(entry => entry.Label).ToList();
+                    }
+
+                    Offer(options, held?.More ?? choice.More is not null, finder.Text);
+                    string? searchOverlay = currentOverlay;
+                    finder.TextChanged += (box, e) =>
+                    {
+                        if (e.Reason == AutoSuggestionBoxTextChangeReason.UserInput && box.Text.Length >= search.Min)
+                        {
+                            context.Send(Events.Options(context.Screen.Id, currentFormOf(), id, box.Text));
+                        }
+                    };
+                    finder.QuerySubmitted += (box, e) =>
+                    {
+                        int at = e.ChosenSuggestion is string label ? entries.FindIndex(entry => entry.Label == label) : -1;
+                        if (at < 0)
+                        {
+                            return;
+                        }
+
+                        (string Label, string? Value, int Kind) entry = entries[at];
+                        switch (entry.Kind)
+                        {
+                            case 0 when entry.Value is not null:
+                                box.Text = entry.Label;
+                                send(new TextValue(entry.Value));
+                                break;
+                            case 1:
+                                context.Send(Events.Options(context.Screen.Id, currentFormOf(), id, box.Text, more: true));
+                                break;
+                            case 2 when choice.Create?.Href is string href:
+                                Act(new Models.ActionNavigate { Href = href }, null, id, currentFormOf(), searchOverlay);
+                                break;
+                            default:
+                                break;
+                        }
+                    };
+                    control = finder;
+                    show = view =>
+                    {
+                        finder.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
+                        if (view?.Options is { } latest)
+                        {
+                            Offer(latest, view.More, finder.Text);
+                            if (finder.FocusState != FocusState.Unfocused && latest.Count > 0)
+                            {
+                                finder.IsSuggestionListOpen = true;
+                            }
+                        }
+                    };
+                }
+                else if (choice.Kind is Models.ChoiceKind.Radio or Models.ChoiceKind.Segmented)
                 {
                     RadioButtons radios = new() { Header = header, IsEnabled = !field.Disabled };
                     foreach (Models.ChoiceOption option in options)
