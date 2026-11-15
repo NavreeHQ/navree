@@ -70,13 +70,16 @@ public static class AxisRules
             all.Add(zone.To);
         }
 
+        all = [.. all.Where(double.IsFinite)];
         double lowest = all.Count == 0 ? 0 : all.Min();
         double highest = all.Count == 0 ? 1 : all.Max();
         bool bars = chart.Kind == Models.ChartKind.Bar || chart.Kind == Models.ChartKind.Funnel;
-        double low = chart.Y?.Min ?? ((bars || (lowest >= 0 && lowest < highest * 0.5)) ? 0 : lowest - ((highest - lowest) * 0.15));
-        double high = chart.Y?.Max ?? (highest + ((highest - low) * 0.05));
+        double? yMin = Number(chart.Y?.Min);
+        double? yMax = Number(chart.Y?.Max);
+        double low = yMin ?? ((bars || (lowest >= 0 && lowest < highest * 0.5)) ? 0 : lowest - ((highest - lowest) * 0.15));
+        double high = yMax ?? (highest + ((highest - low) * 0.05));
         Bounds rounded = Nice(low, high > low ? high : low + 1);
-        return new Bounds(chart.Y?.Min ?? rounded.Low, chart.Y?.Max ?? rounded.High);
+        return Sound(new Bounds(yMin ?? rounded.Low, yMax ?? rounded.High));
     }
 
     /// <summary>Two ends rounded out to a step of 1, 2, 2.5 or 5 times a power of ten, about five steps apart.</summary>
@@ -85,6 +88,11 @@ public static class AxisRules
     /// <returns>The rounded ends.</returns>
     public static Bounds Nice(double low, double high)
     {
+        if (!double.IsFinite(low) || !double.IsFinite(high) || !double.IsFinite(high - low))
+        {
+            return new Bounds(0, 1);
+        }
+
         double span = high - low;
         if (span <= 0)
         {
@@ -95,11 +103,32 @@ public static class AxisRules
         return new Bounds(Math.Floor(low / step) * step, Math.Ceiling(high / step) * step);
     }
 
+    /// <summary>Ends that are numbers: a page that gives an end that is not one gets the axis from 0 to 1 instead.</summary>
+    /// <param name="bounds">The ends.</param>
+    /// <returns>Ends that are numbers.</returns>
+    public static Bounds Sound(Bounds bounds)
+    {
+        if (!double.IsFinite(bounds.Low) || !double.IsFinite(bounds.High))
+        {
+            return new Bounds(0, 1);
+        }
+
+        // A range given the wrong way round is the same range.
+        return bounds.Low > bounds.High ? new Bounds(bounds.High, bounds.Low) : bounds;
+    }
+
+    private static double? Number(double? value) => value is double found && double.IsFinite(found) ? found : null;
+
     /// <summary>A step a person reads: 1, 2, 2.5, 5 or 10 times a power of ten.</summary>
     /// <param name="raw">About the step wanted.</param>
     /// <returns>The step.</returns>
     public static double NiceStep(double raw)
     {
+        if (!double.IsFinite(raw) || raw <= 0)
+        {
+            return 1;
+        }
+
         double power = Math.Pow(10, Math.Floor(Math.Log10(raw)));
         double n = raw / power;
         double unit = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
@@ -113,9 +142,9 @@ public static class AxisRules
     public static IReadOnlyList<double> Marks(Bounds bounds, int wanted)
     {
         double span = bounds.High - bounds.Low;
-        if (span <= 0 || wanted < 1)
+        if (!double.IsFinite(span) || span <= 0 || wanted < 1)
         {
-            return [bounds.Low];
+            return [Guard.Finite(bounds.Low)];
         }
 
         double step = NiceStep(span / wanted);
@@ -141,7 +170,7 @@ public static class AxisRules
             double high = values.Count == 0 ? 1 : values.Max();
             double pad = high > low ? (high - low) * 0.08 : 1;
             Bounds rounded = Nice(low - pad, high + pad);
-            return new Bounds(measure?.Min ?? rounded.Low, measure?.Max ?? rounded.High);
+            return Sound(new Bounds(Number(measure?.Min) ?? rounded.Low, Number(measure?.Max) ?? rounded.High));
         }
 
         Bounds x = Padded([.. points.Select(point => point.X)], plot.X);
@@ -274,8 +303,17 @@ public static class AxisRules
     /// <param name="low">The lower end.</param>
     /// <param name="high">The upper end.</param>
     /// <returns>The place.</returns>
-    public static double Position(double value, double low, double high) =>
-        high > low ? Math.Clamp((value - low) / (high - low), 0, 1) : 0;
+    public static double Position(double value, double low, double high)
+    {
+        if (double.IsNaN(value) || !double.IsFinite(low) || !double.IsFinite(high) || !(high > low))
+        {
+            return 0;
+        }
+
+        // Written so that a span too big to hold (two huge numbers of opposite signs) still gives a place.
+        double span = high - low;
+        return double.IsFinite(span) ? Math.Clamp((value - low) / span, 0, 1) : Math.Clamp((value / 2 - low / 2) / (high / 2 - low / 2), 0, 1);
+    }
 }
 
 /// <summary>Smooth lines through points.</summary>

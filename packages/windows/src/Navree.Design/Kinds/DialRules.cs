@@ -73,22 +73,50 @@ public static class RingRules
     /// <returns>The sweep, or none.</returns>
     public static Sweep? SweepOf(double? value, double max)
     {
-        if (value is not double found)
+        if (value is not double found || double.IsNaN(found))
         {
             return null;
         }
 
-        if (max <= 0)
+        if (!(max > 0) || !double.IsFinite(max))
         {
             return new Sweep(0, found > 0 ? 1 : 0);
         }
 
-        double share = Math.Max(found / max, 0);
+        // However far past its goal a value goes, the laps stay a number a drawing can hold.
+        double share = Math.Clamp(found / max, 0, MostLaps);
         int laps = (int)Math.Floor(share);
         double part = share - laps;
 
         // Exactly at the goal is one whole lap, not a second one starting.
         return laps >= 1 && part == 0 ? new Sweep(laps - 1, 1) : new Sweep(laps, part);
+    }
+
+    /// <summary>The most laps a ring is drawn as going round; a value further past its goal is drawn as this many.</summary>
+    public const int MostLaps = 1000;
+
+    /// <summary>Whether a value is past its goal.</summary>
+    /// <param name="value">The value, or none.</param>
+    /// <param name="max">The goal.</param>
+    /// <returns>Whether it is above the goal.</returns>
+    public static bool PastGoal(double? value, double max) =>
+        value is double found && max > 0 && found > max;
+
+    /// <summary>
+    /// What a screen reader is told of a ring's value against its range: from nothing to the goal, and the value held inside it (a value
+    /// past the goal is said in words, <see cref="PastGoal"/>, and the range value stays at the goal). None when the ring has no value or no goal.
+    /// </summary>
+    /// <param name="value">The value, or none.</param>
+    /// <param name="max">The goal.</param>
+    /// <returns>The least, the most and the value, or none.</returns>
+    public static (double Min, double Max, double Value)? Range(double? value, double max)
+    {
+        if (value is not double found || !double.IsFinite(found) || !(max > 0) || !double.IsFinite(max))
+        {
+            return null;
+        }
+
+        return (0, max, Math.Clamp(found, 0, max));
     }
 
     /// <summary>What the middle of a ring says: its value without the unit, or a dash when it has none.</summary>
@@ -330,16 +358,21 @@ public static class ClockRules
     /// <returns>The radii.</returns>
     public static Dial DialOf(double half, double label, double mark)
     {
-        double labels = half - (label / 2);
-        double moments = labels - (label / 2) - 2 - (mark / 2);
-        double outer = moments - (mark / 2) - 3;
+        double labels = Guard.Length(half - (label / 2));
+        double moments = Guard.Length(labels - (label / 2) - 2 - (mark / 2));
+        double outer = Guard.Length(moments - (mark / 2) - 3);
         return new Dial(labels, moments, outer, outer * 0.46);
     }
+
+    /// <summary>Whether a dial has the room to be drawn: its hours' bars need a little length between the hole and the edge.</summary>
+    /// <param name="dial">The dial.</param>
+    /// <returns>Whether it is drawn.</returns>
+    public static bool Draws(Dial dial) => dial.Outer - dial.Inner >= 6;
 
     /// <summary>The width of an hour's bar at the start of the bars: most of the room between neighbours.</summary>
     /// <param name="inner">The inner radius.</param>
     /// <returns>The width.</returns>
-    public static double BarWidth(double inner) => 2 * Math.PI * inner / 24 * 0.6;
+    public static double BarWidth(double inner) => Guard.Length(2 * Math.PI * inner / 24 * 0.6);
 
     /// <summary>Whether a moment's name already says its time (an older page wrote it in).</summary>
     /// <param name="name">The name.</param>

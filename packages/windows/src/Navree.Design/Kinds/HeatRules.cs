@@ -110,7 +110,7 @@ public static class HeatRules
     public static DateOnly Start(DateOnly first, DayOfWeek firstWeekday)
     {
         int back = ((int)first.DayOfWeek - (int)firstWeekday + 7) % 7;
-        return first.AddDays(-back);
+        return DateOnly.FromDayNumber(Math.Max(first.DayNumber - back, DateOnly.MinValue.DayNumber));
     }
 
     /// <summary>The column (week) and row (day of the week) of a date.</summary>
@@ -132,6 +132,39 @@ public static class HeatRules
     public static int Weeks(DateOnly first, DateOnly last, DayOfWeek firstWeekday) =>
         Math.Max(Cell(last, Start(first, firstWeekday)).Week + 1, 1);
 
+    /// <summary>The most weeks a calendar draws: five years. A longer run shows its latest weeks.</summary>
+    public const int MostWeeks = 260;
+
+    /// <summary>The weeks a calendar draws: where the first one starts and how many there are, never more than <see cref="MostWeeks"/>; a run longer than that shows its last weeks.</summary>
+    /// <param name="first">The first day.</param>
+    /// <param name="last">The last day.</param>
+    /// <param name="firstWeekday">The first day of the week.</param>
+    /// <returns>The start of the first week and the number of weeks.</returns>
+    public static (DateOnly Start, int Weeks) Window(DateOnly first, DateOnly last, DayOfWeek firstWeekday)
+    {
+        DateOnly start = Start(first, firstWeekday);
+        int weeks = Weeks(first, last, firstWeekday);
+        if (weeks <= MostWeeks)
+        {
+            return (start, weeks);
+        }
+
+        return (DateOnly.FromDayNumber(Start(last, firstWeekday).DayNumber - (7 * (MostWeeks - 1))), MostWeeks);
+    }
+
+    /// <summary>The width of a week's column: the room divided among the weeks, at most 20 and at least one, so a calendar in a narrow place is small, never past its edge.</summary>
+    /// <param name="width">The surface's width.</param>
+    /// <param name="gutter">The room taken by the weekday names.</param>
+    /// <param name="weeks">How many weeks.</param>
+    /// <returns>The step.</returns>
+    public static double Step(double width, double gutter, int weeks) =>
+        Math.Clamp((Guard.Length(width) - Guard.Length(gutter)) / Math.Max(weeks, 1), 1, 20);
+
+    /// <summary>The side of a day's square for a step: two less than the step where the step is wide enough, else half of it.</summary>
+    /// <param name="step">The step.</param>
+    /// <returns>The side.</returns>
+    public static double Square(double step) => step >= 4 ? Math.Max(step - 2, 2) : Math.Max(step / 2, 0.5);
+
     /// <summary>The week each month's name stands over: the first week whose first day starts that month, where the name would not crowd the one before.</summary>
     /// <param name="first">The first day.</param>
     /// <param name="weeks">How many weeks.</param>
@@ -145,7 +178,7 @@ public static class HeatRules
         int last = -1;
         for (int week = 0; week < weeks; week++)
         {
-            DateOnly day = start.AddDays(week * 7);
+            DateOnly day = DateOnly.FromDayNumber((int)Math.Min((long)start.DayNumber + (week * 7L), DateOnly.MaxValue.DayNumber));
             bool starts = week == 0 || day.Day <= 7;
             if (day.Month != last && starts)
             {
@@ -180,6 +213,26 @@ public static class MatrixRules
     /// <param name="lower">Whether only the lower half is drawn.</param>
     /// <returns>Whether it is drawn.</returns>
     public static bool Drawn(int row, int column, bool lower) => lower ? column < row : row != column;
+
+    /// <summary>The room the measures' names take at the left: their widest, but never more than half of the surface.</summary>
+    /// <param name="widest">The widest name.</param>
+    /// <param name="width">The surface's width.</param>
+    /// <returns>The width of the left side.</returns>
+    public static double Left(double widest, double width) => Math.Min(Guard.Length(widest) + 8, Guard.Length(width) / 2);
+
+    /// <summary>The side of a cell: the room divided among the columns, at most <paramref name="most"/>, and at least six so a cell can still be pointed at.</summary>
+    /// <param name="width">The surface's width.</param>
+    /// <param name="left">The room at the left.</param>
+    /// <param name="columns">How many columns.</param>
+    /// <param name="most">The largest side.</param>
+    /// <returns>The side.</returns>
+    public static double Cell(double width, double left, int columns, double most) =>
+        Math.Clamp(((Guard.Length(width) - Guard.Length(left)) / Math.Max(columns, 1)) - 3, 6, Math.Max(Guard.Finite(most, 44), 6));
+
+    /// <summary>Whether a cell is big enough to hold its number.</summary>
+    /// <param name="cell">The cell's side.</param>
+    /// <returns>Whether the number is written in it.</returns>
+    public static bool HoldsNumber(double cell) => cell >= 20;
 
     /// <summary>How strong a relation is, 0 to 1 against the peak (1 when none is given); one that is not significant, or never tested, is none.</summary>
     /// <param name="relation">The relation, or none.</param>
