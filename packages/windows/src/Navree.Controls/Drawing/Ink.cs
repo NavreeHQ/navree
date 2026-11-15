@@ -344,6 +344,7 @@ internal static class Ink
             FontSize = size,
             Foreground = brush,
             TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
             IsHitTestVisible = false,
             TextReadingOrder = TextReadingOrder.DetectFromContent,
         };

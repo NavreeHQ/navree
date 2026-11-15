@@ -202,10 +202,20 @@ public static class Composed
     /// <returns>The grid.</returns>
     public static UIElement Grid(Models.Grid grid, Func<Models.Node, UIElement> render)
     {
-        FlowGrid flow = new() { Cols = grid.Cols, Min = grid.Min, Gap = grid.Gap == 0 ? 12 : grid.Gap * 4 };
+        bool cards = grid.Children.All(child => child is Models.Card);
+        FlowGrid flow = new() { Cols = grid.Cols, Min = grid.Min, Gap = ComposeRules.GridGap(grid.Gap, cards) };
         foreach (Models.Node child in grid.Children)
         {
-            flow.Children.Add(render(child));
+            UIElement part = render(child);
+
+            // A link or a button that is a cell fills the cell (and centres what it holds), instead of standing at the cell's edge.
+            if (part is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase button)
+            {
+                button.HorizontalAlignment = HorizontalAlignment.Stretch;
+                button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+            }
+
+            flow.Children.Add(part);
         }
 
         return flow;

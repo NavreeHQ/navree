@@ -57,6 +57,19 @@ public static class ComposeRules
         return Math.Max(1, Math.Min(count, Math.Max(parts, 1)));
     }
 
+    /// <summary>
+    /// The space between a grid's parts: its own steps, or 12 when it gives none; parts that are not cards (figures with a ring at their
+    /// end) stand further apart, so the ring at the end of one is not taken for the start of the next.
+    /// </summary>
+    /// <param name="steps">The page's steps of spacing, or none (0).</param>
+    /// <param name="cards">Whether every part is a card.</param>
+    /// <returns>The gap.</returns>
+    public static double GridGap(int steps, bool cards)
+    {
+        double gap = steps == 0 ? 12 : steps * 4;
+        return cards ? gap : Math.Max(gap, 24);
+    }
+
     /// <summary>The width of each column of a run of <paramref name="count"/> columns in a place this wide.</summary>
     /// <param name="width">The place's width.</param>
     /// <param name="count">How many columns.</param>

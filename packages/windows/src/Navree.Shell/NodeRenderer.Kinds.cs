@@ -26,6 +26,9 @@ internal sealed partial class NodeRenderer
     static NodeRenderer()
     {
         KindHooks.Icon = (icon, size, colour) => DrawIcon(icon, size, new SolidColorBrush(colour));
+
+        // What the client writes itself (a day, a time, a number) is in the locale it was started with.
+        ClientCulture.Chosen = ClientCulture.Named(ClientEnvironment.Locale);
     }
 
     // The words of the text drawn last, so a chart does not say its own title again just under the same words.
@@ -172,6 +175,7 @@ internal sealed partial class NodeRenderer
             if (ComposeRules.KeepsWhole(text.Value))
             {
                 block.TextWrapping = TextWrapping.NoWrap;
+                block.TextTrimming = TextTrimming.CharacterEllipsis;
             }
 
             if (text.Tabular)

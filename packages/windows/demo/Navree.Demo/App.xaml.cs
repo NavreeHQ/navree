@@ -15,6 +15,15 @@ public partial class App : Application
     {
         InitializeComponent();
         string[] arguments = Environment.GetCommandLineArgs();
+
+        // The demo is English, India unless it is asked for another locale: what the client writes itself (a day, a time) follows it.
+        int at = Array.IndexOf(arguments, "--locale");
+        System.Globalization.CultureInfo locale = Navree.Design.ClientCulture.Named(at >= 0 && at + 1 < arguments.Length ? arguments[at + 1] : "en-IN")
+            ?? System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = locale;
+        System.Globalization.CultureInfo.CurrentUICulture = locale;
+        System.Globalization.CultureInfo.DefaultThreadCurrentCulture = locale;
+        System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = locale;
         if (Array.IndexOf(arguments, "--dark") >= 0)
         {
             RequestedTheme = ApplicationTheme.Dark;

@@ -19,7 +19,7 @@ namespace Navree.Controls.Health;
 public sealed partial class DayClockView : KindControl
 {
     private readonly Models.DayClock clock;
-    private readonly CultureInfo culture = CultureInfo.CurrentCulture;
+    private readonly CultureInfo culture = ClientCulture.Current;
     private readonly double scale = TextScale.Capped(1.25);
 
     /// <summary>Draws a day clock.</summary>

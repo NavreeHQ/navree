@@ -54,7 +54,7 @@ public sealed partial class FigureView : KindControl
             head.Children.Add(HealthParts.Hidden(icon));
         }
 
-        TextBlock label = new() { Text = figure.Label, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = hue, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, MaxLines = 2 };
+        TextBlock label = new() { Text = figure.Label, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = hue, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis };
         head.Children.Add(HealthParts.Hidden(label));
         if (figure.Hint is not null && open is null)
         {
@@ -183,15 +183,19 @@ public sealed partial class DayPagerView : KindControl
         bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         bar.HorizontalAlignment = HorizontalAlignment.Left;
 
-        Button previous = Step(pager.Previous, "", pager.Words?.Previous ?? "Previous day");
+        UIElement previous = Step(pager.Previous, "", pager.Words?.Previous ?? "Previous day");
         bar.Children.Add(previous);
 
         Button day = Day();
         Grid.SetColumn(day, 1);
         bar.Children.Add(day);
 
-        Button next = Step(pager.Next, "", pager.Words?.Next ?? "Next day");
-        Grid.SetColumn(next, 2);
+        UIElement next = Step(pager.Next, "", pager.Words?.Next ?? "Next day");
+        if (next is FrameworkElement placed)
+        {
+            Grid.SetColumn(placed, 2);
+        }
+
         bar.Children.Add(next);
 
         if (pager.Today is string today)
@@ -205,25 +209,26 @@ public sealed partial class DayPagerView : KindControl
         return bar;
     }
 
-    private Button Step(string? href, string glyph, string words)
+    private UIElement Step(string? href, string glyph, string words)
     {
+        if (href is null)
+        {
+            // No day there: nothing is drawn (the place stays, so the day does not move), and no reader is told of it.
+            return HealthParts.Hidden(new Border { Width = 40, Height = 40, VerticalAlignment = VerticalAlignment.Center });
+        }
+
         Button button = new()
         {
             Content = new FontIcon { Glyph = glyph, FontFamily = HealthParts.Icons, FontSize = 14 },
             MinWidth = 40,
             MinHeight = 40,
-            IsEnabled = href is not null,
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             BorderThickness = new Thickness(0),
             VerticalAlignment = VerticalAlignment.Center,
         };
         AutomationProperties.SetName(button, words);
         ToolTipService.SetToolTip(button, words);
-        if (href is string address)
-        {
-            button.Click += (_, _) => step(address);
-        }
-
+        button.Click += (_, _) => step(href);
         return button;
     }
 

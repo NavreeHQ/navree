@@ -42,7 +42,7 @@ public static class PagerRules
     /// <param name="culture">The culture.</param>
     /// <returns>The words, or the text itself when it is not a day.</returns>
     public static string Words(string day, CultureInfo? culture = null) =>
-        Day(day) is DateOnly found ? found.ToString("D", culture ?? CultureInfo.CurrentCulture) : day;
+        Day(day) is DateOnly found ? found.ToString("D", culture ?? ClientCulture.Current) : day;
 
     /// <summary>What the pager says of its day to a screen reader: its name and its date.</summary>
     /// <param name="pager">The pager.</param>

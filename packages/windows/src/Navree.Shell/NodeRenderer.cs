@@ -720,11 +720,17 @@ internal sealed partial class NodeRenderer(RenderContext context)
 
     private UIElement DrawHint(Models.Hint hint)
     {
-        StackPanel line = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
+        Grid line = new() { ColumnSpacing = 6 };
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         FontIcon mark = Look.Glyph(hint.Mark == Models.HintMark.Question ? "" : "", 14);
         mark.Foreground = Look.Muted;
+        mark.VerticalAlignment = VerticalAlignment.Top;
+        mark.Margin = new Thickness(0, 2, 0, 0);
         line.Children.Add(mark);
-        line.Children.Add(Look.Label(hint.Text, "CaptionTextBlockStyle", muted: true));
+        TextBlock words = Look.Label(hint.Text, "CaptionTextBlockStyle", muted: true);
+        Grid.SetColumn(words, 1);
+        line.Children.Add(words);
         ToolTipService.SetToolTip(line, hint.About);
         AutomationProperties.SetHelpText(line, hint.About);
         return line;

@@ -13,7 +13,7 @@ public static class NumberWords
     /// <returns>The words.</returns>
     public static string Amount(double value, CultureInfo? culture = null)
     {
-        culture ??= CultureInfo.CurrentCulture;
+        culture ??= ClientCulture.Current;
         double rounded = Math.Round(value * 10, MidpointRounding.AwayFromZero) / 10;
         return rounded == Math.Round(rounded)
             ? ((long)rounded).ToString("N0", culture)

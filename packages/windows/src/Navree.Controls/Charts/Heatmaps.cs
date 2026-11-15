@@ -19,7 +19,7 @@ public sealed partial class CalendarHeatView : KindControl
 {
     private const double Label = 11;
     private readonly Models.CalendarHeatmap heatmap;
-    private readonly CultureInfo culture = CultureInfo.CurrentCulture;
+    private readonly CultureInfo culture = ClientCulture.Current;
 
     /// <summary>Draws a calendar.</summary>
     /// <param name="heatmap">The calendar.</param>
@@ -244,7 +244,7 @@ public sealed partial class MatrixHeatView : KindControl
                     Ink.Box(cell, cell, fill, 6, fill is null ? Palette.Mark(palette.Of(Models.Hue.Neutral), 0.35) : null, fill is null ? 1 : 0),
                     x,
                     y);
-                string words = relation?.Value is null ? "Not tested" : value.ToString("0.00", CultureInfo.CurrentCulture);
+                string words = relation?.Value is null ? "Not tested" : value.ToString("0.00", ClientCulture.Current);
                 if (relation?.Value is not null)
                 {
                     Brush ink = strength > 0.55 && relation.Significant ? Palette.Mark(Microsoft.UI.Colors.White) : palette.Primary;
