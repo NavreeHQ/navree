@@ -583,6 +583,8 @@ async fn a_driver_name_of_another_kind_is_an_unknown_channel() {
 async fn a_stored_preference_naming_a_channel_no_module_registers_keeps_the_others() {
     let app = support::app().await;
     let owner = PreferenceOwner::user(Uuid::now_v7());
+    // The times are set: a row's default is the first second of 1970, which MySQL does not store.
+    let now = chrono::Utc::now();
     let row = NotificationPreference {
         id: Uuid::now_v7(),
         owner_type: owner.owner_type.clone(),
@@ -591,7 +593,8 @@ async fn a_stored_preference_naming_a_channel_no_module_registers_keeps_the_othe
             "channels": {"mail": false, "kabutar_old": true},
             "categories": {"deals": {"channels": {"kabutar_old": false, "sms": false}}},
         }),
-        ..NotificationPreference::default()
+        created_at: now,
+        updated_at: now,
     };
     let db = app.get::<Db>().await;
     NotificationPreference::insert_or_ignore(&*db, [row])
