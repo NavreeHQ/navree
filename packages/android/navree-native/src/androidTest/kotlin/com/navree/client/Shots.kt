@@ -43,30 +43,51 @@ object Shots {
     private var demo = false
 
     /**
-     * Gives the whole system the language of the look, as a person's settings
-     * do: one that runs right to left (a pseudo-locale, English words laid out
-     * from the right) for the right to left look, English for the others. The
-     * system then lays out every window it opens, a dialog, a menu and a picker
-     * among them, by that language. Returns what the system holds afterwards.
+     * Gives the device the language of the look, as a person's settings do: one
+     * that runs right to left (a pseudo-locale, English words laid out from the
+     * right, and Arabic itself) for the right to left look, English for the
+     * others. The system then lays out every window an app opens, a dialog, a
+     * menu and a picker among them. Each way of asking is tried until the
+     * system holds the direction the look wants; what each answered is
+     * returned, and written beside the pictures.
      */
     fun language(): String {
-        val tags = if (look == "rtl") "ar-XB" else "en-US"
-        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        return try {
-            automation.adoptShellPermissionIdentity("android.permission.CHANGE_CONFIGURATION")
+        val rtl = look == "rtl"
+        val wanted = if (rtl) android.view.View.LAYOUT_DIRECTION_RTL else android.view.View.LAYOUT_DIRECTION_LTR
+        val report = StringBuilder()
+        fun direction() = android.content.res.Resources.getSystem().configuration.layoutDirection
+        fun appDirection() = InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration.layoutDirection
+        val tags = if (rtl) listOf("ar-XB", "ar") else listOf("en-US")
+        for (tag in tags) {
+            if (direction() == wanted && (!rtl || report.isNotEmpty())) break
+            val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
             try {
-                Class.forName("com.android.internal.app.LocalePicker")
-                    .getMethod("updateLocales", android.os.LocaleList::class.java)
-                    .invoke(null, android.os.LocaleList.forLanguageTags(tags))
-            } finally {
-                automation.dropShellPermissionIdentity()
+                automation.adoptShellPermissionIdentity("android.permission.CHANGE_CONFIGURATION")
+                try {
+                    Class.forName("com.android.internal.app.LocalePicker")
+                        .getMethod("updateLocales", android.os.LocaleList::class.java)
+                        .invoke(null, android.os.LocaleList.forLanguageTags(tag))
+                } finally {
+                    automation.dropShellPermissionIdentity()
+                }
+                Thread.sleep(3000)
+                report.append("the system asked for $tag: it holds ${android.content.res.Resources.getSystem().configuration.locales}, direction ${direction()}\n")
+            } catch (e: Throwable) {
+                report.append("the system asked for $tag: not given: $e, cause ${e.cause}\n")
             }
-            Thread.sleep(3000)
-            val configuration = android.content.res.Resources.getSystem().configuration
-            "asked for $tags; the system holds ${configuration.locales} and layout direction ${configuration.layoutDirection}"
-        } catch (e: Throwable) {
-            "asked for $tags; not given: $e"
+            if (direction() == wanted) break
         }
+        if (direction() != wanted) {
+            for (tag in tags) {
+                val said = shell("cmd locale set-app-locales com.navree.client.test --locales $tag").trim()
+                Thread.sleep(2000)
+                val held = shell("cmd locale get-app-locales com.navree.client.test").trim()
+                report.append("the app asked for $tag: $said | $held | the app's direction ${appDirection()}\n")
+                if (appDirection() == wanted) break
+            }
+        }
+        report.append("the system's direction ${direction()}, the app's ${appDirection()}, wanted $wanted\n")
+        return report.toString()
     }
 
     /**

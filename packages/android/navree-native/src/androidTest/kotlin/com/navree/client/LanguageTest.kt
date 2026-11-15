@@ -12,6 +12,6 @@ class LanguageTest {
     fun theSystemSpeaksTheLooksLanguage() {
         val said = Shots.language()
         Log.i("NavreeShots", said)
-        println("language: $said")
+        Shots.put("language-${Shots.device}-${Shots.look}.txt", said)
     }
 }
