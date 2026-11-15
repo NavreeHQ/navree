@@ -455,7 +455,7 @@ internal fun MatrixHeatmapView(node: Navree.MatrixHeatmap, modifier: Modifier = 
                             Box(Modifier.size(side).clip(RoundedCornerShape(4.dp)).background(colour), contentAlignment = Alignment.Center) {
                                 if (value != null && side >= 36.dp) {
                                     Text(
-                                        String.format(Locale.getDefault(), "%.2f", value),
+                                        com.navree.client.design.BidiRules.amount(String.format(Locale.getDefault(), "%.2f", value)),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = if (strength > 0.55f) onMark(colour) else scheme.onSurface,
                                         maxLines = 1,
