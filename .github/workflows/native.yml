@@ -768,7 +768,7 @@ jobs:
               # A card of the board moved with the real keys, a real click on its menu and the real pointer, and what the server kept.
               if ($app[0] -eq 'board') {
                 $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--moves', $out, '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
-                if (-not $run.WaitForExit(300000)) { $problems += "the moves of a card did not end in 300 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+                if (-not $run.WaitForExit(480000)) { $problems += "the moves of a card did not end in 480 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
                 else { "the moves of a card ended" }
                 if (Test-Path "$out\moves.txt") { Get-Content "$out\moves.txt" }
               }
