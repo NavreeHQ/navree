@@ -24,18 +24,21 @@
 // A region the server drew while what it shows was still changing (`data-ui-live-catch-up`)
 // can't hear what was said before its stream opened: it fetches once when the stream opens,
 // or at once when it joins one that is open. Any other region drawn with the page doesn't.
+// A region that nothing answers for yet (the script that draws it is still on its way) has
+// not been fetched, and is asked again every quiet time for a few seconds.
 import { cookies, every, fetchHere, hidden, on, sameOrigin } from "./dom.js";
 
 /**
  * Asks the core runtime to fetch a region again, as a tab shown for the first time does. The
- * answer is the fetch: it ends when the region has been drawn, or when it could not be.
+ * answer is the fetch: it ends when the region has been drawn, or when it could not be. Nothing
+ * is returned when nothing answered, which is no fetch: the script that draws the region has not run yet.
  * @param {Element} el
- * @returns {Promise<unknown>}
+ * @returns {Promise<unknown> | undefined}
  */
 function refresh(el) {
   const detail = /** @type {{done?: Promise<unknown>}} */ ({});
   el.dispatchEvent(new CustomEvent("ui:refresh", { bubbles: true, detail }));
-  return Promise.resolve(detail.done);
+  return detail.done === undefined ? undefined : Promise.resolve(detail.done);
 }
 
 /** Quiet time before a refresh, so a burst of events costs one fetch. */
@@ -48,6 +51,8 @@ const STEADY = 5000;
 const CATCH_WAIT = 2500;
 /** A region's fetch still out after this long is not waited for any more. More than the fetch's own limit. */
 const STALL = 20000;
+/** How many times a region that nothing answers for yet is asked again, a quiet time apart (about six seconds): enough for a script still on its way, and an end for one that never comes. */
+const ASKS = 20;
 /** How long the question to a stream that failed to open may take. */
 const PROBE_LIMIT = 10000;
 /** A stream is reopened for a changed session no more often than this: a server that sets a new token on every answer is no loop. */
@@ -62,7 +67,7 @@ const RESUMED = "ui:resumed";
 const FINAL = new Set([204, 401, 403]);
 
 /**
- * @typedef {{names: string[], key: string, timer: number, busy: boolean, dirty: boolean, since: number, run: number, owed: boolean}} Sub
+ * @typedef {{names: string[], key: string, timer: number, busy: boolean, dirty: boolean, since: number, run: number, owed: boolean, tries: number}} Sub
  * @typedef {{url: string, es: EventSource | null, subs: Map<Element, Sub>, failed: number, retry: number, steady: number, wait: number, listening: Set<string>, state: string, missed: boolean, opened: boolean, probed: boolean, stopped: boolean, token: string, changed: number, last: string, hub: boolean, resuming: boolean}} Stream
  */
 
@@ -105,7 +110,16 @@ function fire(s, el) {
   sub.busy = true;
   sub.dirty = false;
   const started = (sub.since = performance.now());
-  refresh(el)
+  const asked = refresh(el);
+  if (!asked) {
+    // Nothing answered, so nothing was fetched: the script that draws this region has not run yet. The region
+    // is not busy meanwhile, and is asked again after a quiet time (which also serves an event heard in between).
+    sub.busy = false;
+    if (sub.tries++ < ASKS) sub.timer = /** @type {any} */ (setTimeout(() => fire(s, el), QUIET));
+    return;
+  }
+  sub.tries = 0;
+  asked
     .catch(() => {})
     .finally(() => {
       if (sub.run !== mine) return;
@@ -338,7 +352,7 @@ function scanLive() {
     }
     if (!s.subs.has(el)) {
       const owed = el.hasAttribute("data-ui-live-catch-up");
-      s.subs.set(el, { names, key, timer: 0, busy: false, dirty: false, since: 0, run: 0, owed: owed && !s.opened });
+      s.subs.set(el, { names, key, timer: 0, busy: false, dirty: false, since: 0, run: 0, owed: owed && !s.opened, tries: 0 });
       if (owed && s.opened) fire(s, el);
     }
     el.setAttribute("data-live", hidden() ? "paused" : s.state);
