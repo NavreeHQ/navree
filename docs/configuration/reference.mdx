@@ -1383,6 +1383,17 @@ More: [/docs/ui/errors-and-states/](/docs/ui/errors-and-states/).
 | `sign_in_redirect` | boolean |  | `APP_UI__SIGN_IN_REDIRECT` | Send a guest who asks for a page straight to sign in, instead of showing the sign-in state (default off). |
 | `debug` | boolean |  | `APP_UI__DEBUG` | Add the status, code, message and cause to error pages, marked "Development only" (default: on in a build with debug assertions, off in a release build). Always off in `production` and `staging`. |
 
+## `ui.policy`
+
+The `ui.policy` section of the configuration: what the app allows its pages to load beyond their own origin. Nothing is allowed until it says so, and only four kinds of source can be allowed (see [`Directive`]): never a script, a style, a worker or a frame.
+
+More: [/docs/ui/page-policy/](/docs/ui/page-policy/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `wasm` | boolean | `false` | `APP_UI__POLICY__WASM` | WebAssembly on every page but the fresh ones, for every script ('wasm-unsafe-eval'). Off unless set. |
+| `allow` | table of PolicySources | `"{}"` | `APP_UI__POLICY__ALLOW` | The sources each plugin may load, by the plugin's namespace, or `app` for the app's own. |
+
 ## `validation`
 
 Message and attribute-name overrides, the default phone region and the HTML policy (section `validation`).
