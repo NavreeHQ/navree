@@ -315,11 +315,11 @@ private fun context(plan: NavigationPlan, user: Navree.User?, screen: ScreenView
 
 /** A destination's icon: the system's symbol when its name maps to one, filled when selected; a count beside it. */
 @Composable
-private fun NavIcon(destination: Destination, selected: Boolean) {
+private fun NavIcon(destination: Destination, selected: Boolean, badged: Boolean = true) {
     // A destination the page gave no icon still takes one: Material's navigation always shows an icon.
     val vector = rememberIcon(destination.icon, selected = selected)
         ?: androidx.compose.runtime.remember(destination.label, selected) { symbolVector(Symbols.forLabel(destination.label), selected) }
-    val badge = destination.badge
+    val badge = destination.badge?.takeIf { badged }
     BadgedBox(badge = { if (!badge.isNullOrEmpty()) Badge { Text(badge) } }) {
         if (vector != null) Icon(vector, contentDescription = null) else Spacer(Modifier.size(24.dp))
     }
@@ -334,9 +334,17 @@ private fun WithTextScale(scale: Float, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun NavLabel(text: String, plan: NavigationPlan) {
+private fun NavLabel(text: String, plan: NavigationPlan, badge: String? = null) {
     // A label is never cut: at the largest text it takes a second line.
-    Text(text, maxLines = plan.labelLines, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+    if (badge.isNullOrEmpty()) {
+        Text(text, maxLines = plan.labelLines, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+    } else {
+        // Beside its label, in an item that has the label at the icon's side: on the icon it would cover the label's first letters.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(text, maxLines = plan.labelLines, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Start, modifier = Modifier.weight(1f, fill = false))
+            Badge { Text(badge) }
+        }
+    }
 }
 
 @Composable
@@ -397,8 +405,8 @@ private fun SideRail(
                 WideNavigationRailItem(
                     selected = index == selected,
                     onClick = { choose(index) },
-                    icon = { NavIcon(destination, index == selected) },
-                    label = { NavLabel(destination.label, plan) },
+                    icon = { NavIcon(destination, index == selected, badged = !open) },
+                    label = { NavLabel(destination.label, plan, badge = if (open) destination.badge else null) },
                     railExpanded = open,
                 )
             }
@@ -425,8 +433,13 @@ private fun AllDestinations(destinations: List<Destination>, selected: Int, stat
             WideNavigationRailItem(
                 selected = index == selected,
                 onClick = { choose(index) },
-                icon = { NavIcon(destination, index == selected) },
-                label = { Text(destination.label, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                icon = { NavIcon(destination, index == selected, badged = false) },
+                label = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(destination.label, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        destination.badge?.takeIf { it.isNotEmpty() }?.let { Badge { Text(it) } }
+                    }
+                },
                 railExpanded = true,
             )
         }
