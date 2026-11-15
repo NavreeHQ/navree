@@ -161,6 +161,9 @@ if let Err(error) = Browser::find_chrome() {
   `no element matches` when it does not exist.
 - `assert_no_console_errors` does not wait and ignores failed network
   requests (only `console.error` and uncaught exceptions count).
+- `assert_no_policy_violations` does not wait either: it fails when the page
+  reported a content security policy violation since it loaded, and its
+  message names each blocked address and directive.
 - `Browser` contexts are per test; one Chrome is shared by the tests of a
   binary running at the same time and stops when the last `Browser` is
   dropped. A `Page` keeps its browser context alive.
