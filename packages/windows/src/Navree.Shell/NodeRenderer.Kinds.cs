@@ -221,6 +221,23 @@ internal sealed partial class NodeRenderer
 
         bar.Foreground = KindHooks.HueBrush(progress.Colour, ProgressRules.Hue(progress));
         AutomationProperties.SetName(bar, progress.Label ?? string.Empty);
+        if (fraction is null)
+        {
+            // A bar that is waiting has its track like one that has an amount (the system's own bar hides it while it waits).
+            Grid waiting = new();
+            waiting.Children.Add(new Microsoft.UI.Xaml.Controls.Border
+            {
+                Height = 3,
+                CornerRadius = new CornerRadius(1.5),
+                Background = Look.Resource("ControlStrongStrokeColorDefaultBrush"),
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = 0.55,
+            });
+            waiting.Children.Add(bar);
+            panel.Children.Add(waiting);
+            return panel;
+        }
+
         panel.Children.Add(bar);
         return panel;
     }

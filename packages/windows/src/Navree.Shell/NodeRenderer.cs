@@ -195,6 +195,27 @@ internal sealed partial class NodeRenderer(RenderContext context)
             return panel;
         }
 
+        // Across, where nothing grows to take what is left and the parts are not lanes: a row that goes on to a second line when its parts do not fit
+        // side by side, so a title keeps its line and its words wrap at the spaces (a word is broken only when it alone is wider than the line).
+        if (!stack.Children.Any(child => child is Models.Stack { Grow: true } or Models.Chart)
+            && !WindowRules.IsLanes(stack.Children)
+            && stack.Justify is not (Models.Justify.End or Models.Justify.Center))
+        {
+            Navree.Controls.Composition.FoldRow folding = new() { Spacing = gap, LineSpacing = Math.Min(gap, 8), Margin = pad, Between = stack.Justify == Models.Justify.Between };
+            foreach (Models.Node child in stack.Children)
+            {
+                UIElement element = Render(child);
+                if (element is FrameworkElement placed)
+                {
+                    placed.VerticalAlignment = stack.Align is null ? VerticalAlignment.Center : Down(stack.Align);
+                }
+
+                folding.Children.Add(element);
+            }
+
+            return folding;
+        }
+
         // Across: each child in a column of a grid, the ones that grow taking what is left.
         Grid row = new() { ColumnSpacing = gap, Padding = pad };
         int at = 0;

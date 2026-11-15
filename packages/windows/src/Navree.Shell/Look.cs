@@ -3,6 +3,7 @@ using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Navree.Design;
 using Navree.Protocol;
 
 namespace Navree.Shell;
@@ -78,7 +79,7 @@ internal static class Look
     /// <summary>A text, in a style of the type ramp.</summary>
     internal static TextBlock Label(string text, string? ramp = null, bool muted = false, Models.Tone? tone = null)
     {
-        TextBlock block = new() { Text = Directed(text), TextWrapping = TextWrapping.Wrap, TextReadingOrder = TextReadingOrder.DetectFromContent };
+        TextBlock block = new() { Text = Directed(TextRules.KeepEnd(text)), TextWrapping = TextWrapping.Wrap, TextReadingOrder = TextReadingOrder.DetectFromContent };
         if (ramp is not null)
         {
             Style? found = Ramp(ramp);
