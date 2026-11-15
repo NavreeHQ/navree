@@ -31,6 +31,8 @@ internal static class CareScenarios
             ("late-shape", LateShapeAsync),
             ("unloaded", UnloadedAsync),
             ("assistive", AssistiveAsync),
+            ("tap-in-field", TapInFieldAsync),
+            ("edge-drag", EdgeDragAsync),
         })
         {
             try
@@ -458,6 +460,66 @@ internal static class CareScenarios
                 Report.Line("[care-assistive] heard " + line);
             }
         }
+    }
+
+    // A tap in a field of a row while rows are chosen goes to the field: the row is not chosen or cleared.
+    private static async Task TapInFieldAsync(MainWindow window)
+    {
+        ListDataTableModel<Customer> model = FieldPresenter.Model();
+        model.Reset(DemoData.Make(0, 8));
+        DataTable table = await ShowAsync(window, model, new FieldPresenter(model));
+        Keys.Foreground(window);
+        table.ApplyChoice(["c00001"], false);
+        await Task.Delay(500);
+        List<string> events = [];
+        table.ChoiceRequested += (_, e) => events.Add($"choice keys={string.Join(',', e.Keys)} on={e.On}");
+        TextBox? box = (table.RowsRepeater?.TryGetElement(4) as DataTableRow)?.Cells.Select(c => c.Content).OfType<TextBox>().FirstOrDefault();
+        if (box is null)
+        {
+            Report.Line("[care-tap-in-field] row 4 has no field");
+            return;
+        }
+
+        (int X, int Y) at = Mouse.ScreenOf(window, box, new Windows.Foundation.Point(20, box.ActualHeight / 2));
+        await Mouse.MoveAsync(at);
+        await Mouse.ClickAsync();
+        await Task.Delay(500);
+        Report.Line($"[care-tap-in-field] a click in the field of row 4 with c00001 chosen: chosen {table.ChosenCount}, events {(events.Count == 0 ? "none" : string.Join(" / ", events))}, focus on {FocusName(table)}");
+        await Handshake.StepAsync("care-tap-in-field", "after a click in a field of a row while another row is chosen");
+    }
+
+    // A heading of the scrolling columns held near the edge of the view scrolls the view.
+    private static async Task EdgeDragAsync(MainWindow window)
+    {
+        ListDataTableModel<Customer> model = Rows(0, 100);
+        DataTable table = await ShowAsync(window, model, before: t =>
+        {
+            t.Width = 640;
+            t.HorizontalAlignment = HorizontalAlignment.Left;
+        });
+        Keys.Foreground(window);
+        foreach (string key in new[] { "city", "phone" })
+        {
+            table.ResizeTo(table.HeaderRow!.Headers.First(h => table.Model!.Columns[h.ColumnIndex].Key == key), 300);
+        }
+
+        await Task.Delay(900);
+        ScrollView? scroll = table.Scroller;
+        if (scroll is null || scroll.ScrollableWidth < 50)
+        {
+            Report.Line("[care-edge-drag] the view cannot scroll sideways here");
+            return;
+        }
+
+        DataTableHeaderCell plan = table.HeaderRow!.Headers.First(h => table.Model!.Columns[h.ColumnIndex].Key == "plan");
+        (int X, int Y) from = Mouse.ScreenOf(window, plan, new Windows.Foundation.Point(30, plan.ActualHeight / 2));
+        (int X, int Y) edge = Mouse.ScreenOf(window, scroll, new Windows.Foundation.Point(scroll.ViewportWidth - 6, 10));
+        string order() => string.Join(" ", table.Shown.Select(c => c.Column.Key));
+        Report.Line($"[care-edge-drag] the view is at {scroll.HorizontalOffset:0.#} of {scroll.ScrollableWidth:0.#}; columns {order()}; the Plan heading is at screen {from.X}, the edge at {edge.X}");
+        await Mouse.DragAndHoldAsync(from, edge, 900);
+        await Task.Delay(500);
+        Report.Line($"[care-edge-drag] after holding the Plan heading near the end edge: the view is at {scroll.HorizontalOffset:0.#} of {scroll.ScrollableWidth:0.#}; columns {order()}");
+        await Handshake.StepAsync("care-edge-drag", "after a heading was held near the end edge of the view");
     }
 
     // A new model: what is typed looks through the new model's names, not the old one's.

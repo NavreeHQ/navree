@@ -109,7 +109,89 @@ internal static class HugeScenario
             Report.Line($"[rows100k] half a second after Realize the row is {(table.RowsRepeater?.TryGetElement(50_000) is not null ? "made" : "not made")}");
         }
 
+        KeyCosts(table);
+        Report.Line($"[rows100k] the display's scale is {table.XamlRoot.RasterizationScale:0.##}; at this scale and a row of {table.RowHeight:0.##} the table holds at most {Navree.Design.Tables.RowGeometry.MaxHeldRows(table.RowHeight, table.XamlRoot.RasterizationScale):N0} rows");
         await Handshake.StepAsync("table-rows100k-light", "a table of a hundred thousand rows, at the last row");
+        await SidewaysAsync(window);
+    }
+
+    // What a key held down costs at a hundred thousand rows: Space chooses or clears one row, Shift and an arrow grows a range.
+    private static void KeyCosts(DataTable table)
+    {
+        table.ClearChoice();
+        List<double> space = [];
+        for (int i = 0; i < 200; i++)
+        {
+            Stopwatch watch = Stopwatch.StartNew();
+            table.ToggleChoice(50_000 + i);
+            space.Add(watch.Elapsed.TotalMilliseconds);
+        }
+
+        table.ClearChoice();
+        table.ToggleChoice(60_000);
+        List<double> range = [];
+        for (int i = 1; i <= 200; i++)
+        {
+            Stopwatch watch = Stopwatch.StartNew();
+            table.ChooseRangeTo(60_000 + i);
+            range.Add(watch.Elapsed.TotalMilliseconds);
+        }
+
+        Report.Line($"[rows100k] Space on one row, 200 times: {space.Average():0.###} ms on average, {space.Max():0.###} ms at most; {space.Count(t => t > 16.7)} took more than a frame");
+        Report.Line($"[rows100k] Shift and an arrow, a range grown to 200 rows: {range.Average():0.###} ms on average, {range.Max():0.###} ms at most; {range.Count(t => t > 16.7)} took more than a frame; chosen now {table.ChosenCount:N0}");
+        table.ClearChoice();
+    }
+
+    // Rows made again for other places while the view is scrolled sideways: the layers that stay in place, and the ones that scroll, still follow.
+    private static async Task SidewaysAsync(MainWindow window)
+    {
+        Report.Line("== rows100k sideways");
+        ListDataTableModel<Customer> model = DemoData.Model();
+        DataTable table = new() { Model = model, Presenter = new TextTablePresenter<Customer>(model), Culture = DemoData.Culture, Caption = "Customers", Margin = new Thickness(12), Width = 640, HorizontalAlignment = HorizontalAlignment.Left };
+        window.StageHost.Child = table;
+        await Waiting.LoadedAsync(table);
+        await Task.Delay(800);
+        model.Reset(DemoData.Make(0, Count));
+        await Task.Delay(1500);
+        foreach (string key in new[] { "city", "phone" })
+        {
+            table.ResizeTo(table.HeaderRow!.Headers.First(h => table.Model!.Columns[h.ColumnIndex].Key == key), 300);
+        }
+
+        await Task.Delay(1000);
+        ScrollView scroll = table.Scroller!;
+        Report.Line($"[rows100k-sideways] viewport {scroll.ViewportWidth:0.#} wide, extent {scroll.ExtentWidth:0.#}, so the view can go {scroll.ScrollableWidth:0.#} sideways");
+        double reach = Math.Min(200, scroll.ScrollableWidth);
+        foreach (double vertical in new[] { 0.0, 1_000_000.0, 2_345_678.0, 3_900_000.0 })
+        {
+            scroll.ScrollTo(reach, vertical, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
+            await Task.Delay(1200);
+            double offset = scroll.HorizontalOffset;
+            int made = 0;
+            int off = 0;
+            double worst = 0;
+            foreach ((int index, UIElement element) in table.RowsLayout.LastRealized)
+            {
+                if (element is not DataTableRow row || row.FrozenStart is null || row.ScrollCells is null)
+                {
+                    continue;
+                }
+
+                made++;
+                double frozen = row.FrozenStart.TransformToVisual(scroll).TransformPoint(new Windows.Foundation.Point(0, 0)).X;
+                double scrolling = row.ScrollCells.TransformToVisual(scroll).TransformPoint(new Windows.Foundation.Point(0, 0)).X;
+                double wrong = Math.Max(Math.Abs(frozen), Math.Abs(scrolling + offset));
+                worst = Math.Max(worst, wrong);
+                if (wrong > 1.5)
+                {
+                    off++;
+                }
+            }
+
+            Report.Line($"[rows100k-sideways] at {vertical:N0} down and {offset:0.#} across: {made} rows made, {off} with a layer off its place by more than 1.5 px, the worst {worst:0.##} px (frozen cells stand at 0, scrolling cells at minus the offset)");
+        }
+
+        await Handshake.StepAsync("table-rows100k-sideways", "a table of a hundred thousand rows, scrolled sideways and far down");
     }
 
     private static string FocusedWords(DataTable table) =>

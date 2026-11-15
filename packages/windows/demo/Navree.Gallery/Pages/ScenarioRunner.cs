@@ -45,7 +45,7 @@ internal static class ScenarioRunner
                 await PartsScenario.RunAsync(window);
                 break;
             case "tabletext":
-                await TableScenarios.RunAsync(window, ["standard", "chosen", "narrow", "sorted", "rtl"], lightOnly: true);
+                await TableScenarios.RunAsync(window, ["standard", "chosen", "narrow", "sorted", "rtl", "rowstates", "rowpressed"], lightOnly: true);
                 break;
             case "contrast-states":
                 await ContrastScenario.RunAsync(window, "states");
