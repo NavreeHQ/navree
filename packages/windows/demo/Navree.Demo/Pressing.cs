@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -99,6 +100,9 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
         FrameworkElement? page = window.CurrentPage;
         lastSeen = before;
         lastPage = page;
+        drawn = Private(Private(window, "front"), "shown") as ScreenView;
+        drawnWidth = Private(Private(window, "front"), "shownWidth");
+        Say("the page was drawn for width " + drawnWidth + "; the window's width is " + Private(window, "width") + "; the drawing's context is " + (Private(Private(window, "front"), "<Context>k__BackingField") is null ? "none" : "there"));
         host.StateChanged += OnState;
         await KeyAsync(CtrlKey, LetterA);
         await Task.Delay(300);
@@ -303,13 +307,24 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
 
     private ScreenView? lastSeen;
     private FrameworkElement? lastPage;
+    private ScreenView? drawn;
+    private object? drawnWidth;
     private int updates;
+
+    // A field of an object that is not ours to read, read for a diagnosis.
+    private static object? Private(object? target, string name) =>
+        target?.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(target);
 
     // Each update of the view state, and whether the window drew the page again for it (its own handler has run by now).
     private void OnState(ViewState state)
     {
         FrameworkElement? page = window.CurrentPage;
         Say("update " + (++updates).ToString(CultureInfo.InvariantCulture) + ": stage " + state.Nav.Stage + ", changed " + Differences(lastSeen, state.FrontScreen) + ", the page is " + (ReferenceEquals(page, lastPage) ? "the same" : "new"));
+        if (drawn is { } was && state.FrontScreen is { } now && updates == 1)
+        {
+            Say("  against what was drawn: same screen " + (was.Id == now.Id) + ", content " + ReferenceEquals(was.Content, now.Content) + ", states " + ReferenceEquals(was.States, now.States) + ", overlays " + ReferenceEquals(was.Overlays, now.Overlays) + ", regions " + ReferenceEquals(was.Regions, now.Regions) + ", lists " + ReferenceEquals(was.Lists, now.Lists) + ", loading " + (was.Loading == now.Loading) + ", refreshing " + (was.Refreshing == now.Refreshing) + ", failure " + Equals(was.Failure, now.Failure) + ", width " + Equals(drawnWidth, Private(window, "width")));
+        }
+
         lastSeen = state.FrontScreen;
         lastPage = page;
     }
