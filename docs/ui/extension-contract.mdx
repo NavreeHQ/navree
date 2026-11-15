@@ -62,6 +62,8 @@ The seal stays for the life of the body. A body stays sealed when its script fai
 
 The observer judges a change to an attribute by its name first, so the styles and classes a library moves on every frame cost a comparison each. It looks inside a node only when one was added.
 
+Measured on the toolkit's proof page, in Chromium and in Firefox on a shared test machine: two seconds of dragging a map called the observer about 185 times and cost it 3 ms in all, 1 ms at most for one call. 2,000 cells written in one go, each carrying a hook, were all scrubbed within 4 ms, before the task that wrote them gave way, so none was left when the next frame began.
+
 `ui.find`, `ui.findAll` and `ui.closest` search the owned bodies. Anywhere else they skip stored content.
 
 A script writes its own markup only into an owned body. Markup it writes into the server's other children lasts until the next morph removes it, and is not sealed.
