@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,6 +31,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -64,9 +66,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -276,8 +280,9 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     // What the screen showed at its first drawing comes in without motion; a part an op adds later may.
     val shown = remember(view.id) { Shown().apply { screen.body.walk().mapNotNull { it.nodeId }.forEach { ids.add(it) } } }
     LaunchedEffect(view.id) { shown.first = false }
+    val sink = remember { androidx.compose.ui.focus.FocusRequester() }
     Row(Modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalShown provides shown) {
+        CompositionLocalProvider(LocalShown provides shown, LocalFocusSink provides sink) {
         Scaffold(
             modifier = Modifier.weight(1f).nestedScroll(behaviour.nestedScrollConnection),
             topBar = { ScreenBar(view, arranged, plan, place, info, behaviour, searching) { searching = it } },
@@ -315,6 +320,8 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
                         },
                     ),
             ) {
+                // Where the focus goes when a field is done: out of sight, and not for a screen reader to stop at.
+                Box(Modifier.size(1.dp).focusRequester(sink).focusable().clearAndSetSemantics {})
                 val items = remember(screen.body, view, maxWidth, barSubmit, hoisted, window.fontScale) {
                     blocks(screen.body, view, maxWidth.value.toInt(), omit = barSubmit, hoisted = hoisted, fontScale = window.fontScale)
                 }
@@ -415,7 +422,7 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
             Text(block.text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.semantics { heading() })
             block.subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-        is Block.Filters -> FilterBar(block.form, place)
+        is Block.Filters -> FilterBar(block.form, place, block.sends)
         is Block.Waiting -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Waiting(Modifier.size(40.dp)) }
         is Block.Space -> Spacer(Modifier.height(block.dp.dp))
         is Block.More -> {
@@ -816,12 +823,19 @@ private fun SearchTopBar(
  * of its choices. Choosing tells the core, which asks for the rows again.
  */
 @Composable
-private fun FilterBar(form: Navree.Form, place: Place) {
+private fun FilterBar(form: Navree.Form, place: Place, sends: Boolean) {
     val ui = LocalUi.current
     val inForm = place.copy(form = form.id)
-    val filters = remember(form) { form.fields().filter(FilterRules::isFilter) }
+    val bar = remember(form) { FilterRules.bar(form) }
+    val filters = remember(form) { bar?.fields ?: form.fields().filter(FilterRules::isFilter) }
+    val actions = bar?.actions.orEmpty()
     if (filters.isEmpty()) return
     val margin = ContentRules.marginDp(ui.window).dp
+    // A form of filters on a page asks by itself with each choice; a table's query is asked by the core.
+    val change: (Navree.Field, FieldValue) -> Unit = { field, value ->
+        ui.change(inForm, field, value)
+        if (sends) ui.act(inForm, Navree.Action.Submit())
+    }
     LazyRow(
         contentPadding = PaddingValues(horizontal = margin),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -861,7 +875,7 @@ private fun FilterBar(form: Navree.Form, place: Place) {
                                     trailingIcon = option.detail?.let { detail -> { Text(detail, style = MaterialTheme.typography.labelMedium) } },
                                     onClick = {
                                         val next = if (on) chosen - option.value else chosen + option.value
-                                        ui.change(inForm, field, FieldValue.Many(input.options.map { it.value }.filter { it in next }))
+                                        change(field, FieldValue.Many(input.options.map { it.value }.filter { it in next }))
                                     },
                                     modifier = Modifier.semantics { selected = on },
                                 )
@@ -887,7 +901,7 @@ private fun FilterBar(form: Navree.Form, place: Place) {
                                     leadingIcon = { if (option.value == value) Icon(Glyphs.Check, contentDescription = null) else Spacer(Modifier.size(24.dp)) },
                                     onClick = {
                                         open = false
-                                        ui.change(inForm, field, FieldValue.Text(option.value))
+                                        change(field, FieldValue.Text(option.value))
                                     },
                                 )
                             }
@@ -898,11 +912,19 @@ private fun FilterBar(form: Navree.Form, place: Place) {
                     val on = (inForm.value(field) as? FieldValue.Flag)?.on ?: input.on
                     FilterChip(
                         selected = on,
-                        onClick = { ui.change(inForm, field, FieldValue.Flag(!on)) },
+                        onClick = { change(field, FieldValue.Flag(!on)) },
                         label = { Text(label) },
                         leadingIcon = if (on) ({ Icon(Glyphs.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }) else null,
                     )
                 }
+                else -> Unit
+            }
+        }
+        // What clears the filters stands after them.
+        items(actions.size, key = { "action-$it" }) { index ->
+            when (val action = actions[index]) {
+                is Navree.Button -> AssistChip(onClick = { ui.press(inForm, action) }, label = { Text(action.label) }, enabled = !action.disabled)
+                is Navree.Link -> AssistChip(onClick = { ui.act(inForm, action.action) }, label = { Text(action.label) })
                 else -> Unit
             }
         }

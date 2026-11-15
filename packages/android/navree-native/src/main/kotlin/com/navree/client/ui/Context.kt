@@ -130,6 +130,13 @@ internal val LocalInLine = compositionLocalOf { false }
 /** Whether the part being drawn stands in a card: tabs there are one choice of a few over the card's content, not a second bar. */
 internal val LocalInCard = compositionLocalOf { false }
 
+/**
+ * A place for the focus to go when a field is done with it, so that the
+ * system does not hand it to the first thing that can take it (a search box at
+ * the top of the screen, whose keyboard would then open). Null where none is drawn.
+ */
+internal val LocalFocusSink = staticCompositionLocalOf<androidx.compose.ui.focus.FocusRequester?> { null }
+
 /** The width of the pane a screen is drawn in, in dp; 0 outside a screen. */
 internal val LocalPane = compositionLocalOf { 0f }
 

@@ -3,6 +3,7 @@ package com.navree.client.ui
 import com.navree.client.core.ScreenView
 import com.navree.client.design.CompositionRules
 import com.navree.client.design.ContentRules
+import com.navree.client.design.FilterRules
 import com.navree.client.design.ListRules
 import com.navree.client.design.PagerRules
 import com.navree.client.design.SelectionRules
@@ -30,8 +31,12 @@ internal sealed interface Block {
     /** A table's row drawn as a list row. */
     data class TableItem(override val key: String, val table: Navree.Table, val row: Navree.TableRow, val form: String?) : Block
 
-    /** A table's filters, as a row of chips. `search` says its search box is drawn here too, not in the app bar. */
-    data class Filters(override val key: String, val form: Navree.Form, val search: Boolean) : Block
+    /**
+     * Filters, as a row of chips. `search` says a table's search box is drawn
+     * here too, not in the app bar. `sends` says each choice must send the form
+     * (a form of filters on a page; a table's query asks by itself).
+     */
+    data class Filters(override val key: String, val form: Navree.Form, val search: Boolean, val sends: Boolean = false) : Block
 
     data class Header(override val key: String, val text: String, val subtitle: String? = null) : Block
 
@@ -235,7 +240,11 @@ internal fun blocks(
                 }
                 node.footer.forEachIndexed { index, child -> add(child, "$path/footer/$index", form, region, top = false) }
             }
-            is Navree.Form -> node.children.forEachIndexed { index, child -> add(child, "$path/$index", node.id, region, top = false) }
+            is Navree.Form -> if (FilterRules.bar(node) != null) {
+                out += Block.Filters(key("$path/filters", node.id), node, search = false, sends = true)
+            } else {
+                node.children.forEachIndexed { index, child -> add(child, "$path/$index", node.id, region, top = false) }
+            }
             is Navree.Table -> {
                 val query = node.query
                 if (query != null) out += Block.Filters(key("$path/filters", null), query, search = query !== hoisted)

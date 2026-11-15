@@ -453,6 +453,51 @@ class FormRulesTest {
         assertTrue(FilterRules.isFilter(status))
     }
 
+    private fun choice(name: String) = Navree.Field(
+        id = name,
+        name = name,
+        label = name,
+        input = Navree.ChoiceInput(options = listOf(Navree.ChoiceOption(label = "One", value = "1"))),
+    )
+
+    @Test
+    fun a_form_of_choices_that_asks_with_a_read_is_a_row_of_filters() {
+        val clear = Navree.Link(label = "Clear filters", action = Navree.Action.Navigate("/"))
+        val form = Navree.Form(
+            id = "filters",
+            children = listOf(
+                Navree.Grid(
+                    children = listOf(
+                        choice("assignee"),
+                        choice("label"),
+                        Navree.Stack(axis = Navree.Axis.HORIZONTAL, children = listOf(clear)),
+                    ),
+                ),
+            ),
+        )
+        val bar = FilterRules.bar(form)!!
+        assertEquals(listOf("assignee", "label"), bar.fields.map { it.name })
+        assertEquals(listOf<Navree.Node>(clear), bar.actions)
+    }
+
+    @Test
+    fun a_form_that_posts_or_holds_other_content_stays_a_form() {
+        val choices = listOf<Navree.Node>(choice("assignee"))
+        assertNull("a post is a form to fill in", FilterRules.bar(Navree.Form(id = "f", method = Navree.Method.POST, children = choices)))
+        assertNull("no id, nothing to tell the core", FilterRules.bar(Navree.Form(children = choices)))
+        assertNull("a text field is not a filter", FilterRules.bar(Navree.Form(id = "f", children = choices + Navree.Field(name = "q", input = Navree.TextInput()))))
+        assertNull("words among them", FilterRules.bar(Navree.Form(id = "f", children = choices + Navree.Text(value = "Pick"))))
+        val switches = Navree.Form(id = "f", children = listOf(Navree.Field(name = "on", input = Navree.ToggleInput())))
+        assertNull("only switches are settings", FilterRules.bar(switches))
+    }
+
+    @Test
+    fun a_button_that_sends_the_form_is_not_one_of_its_filters_actions() {
+        val send = Navree.Button(label = "Apply", action = Navree.Action.Submit())
+        val form = Navree.Form(id = "f", children = listOf(choice("sort"), send))
+        assertEquals(emptyList<Navree.Node>(), FilterRules.bar(form)!!.actions)
+    }
+
     @Test
     fun a_bottom_sheet_rests_half_open_only_where_there_is_room() {
         assertTrue(OverlayRules.sheet(Navree.SheetSize.MEDIUM, WindowInfo.Phone).partial)

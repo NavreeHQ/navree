@@ -202,6 +202,9 @@ private fun isLast(field: Navree.Field, place: Place): Boolean {
 private fun TextFieldView(field: Navree.Field, input: Navree.TextInput, place: Place, modifier: Modifier) {
     val ui = LocalUi.current
     val focus = LocalFocusManager.current
+    val sink = LocalFocusSink.current
+    // The keyboard's own action ends the typing: the focus goes to the screen's sink, not to whatever the system finds first.
+    val finished: () -> Unit = { if (sink == null || runCatching { sink.requestFocus() }.isFailure) focus.clearFocus() }
     val current = (place.value(field) as? FieldValue.Text)?.text ?: input.value
     var shown by remember { mutableStateOf(TextFieldValue(current, TextRange(current.length))) }
     val echo = remember { Echo() }
@@ -289,11 +292,11 @@ private fun TextFieldView(field: Navree.Field, input: Navree.TextInput, place: P
         ),
         keyboardActions = KeyboardActions(
             onDone = {
-                focus.clearFocus()
+                finished()
                 place.form?.let { ui.act(place, Navree.Action.Submit()) }
             },
             onSearch = {
-                focus.clearFocus()
+                finished()
                 place.form?.let { ui.act(place, Navree.Action.Submit()) }
             },
         ),

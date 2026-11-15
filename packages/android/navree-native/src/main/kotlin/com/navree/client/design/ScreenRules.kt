@@ -387,6 +387,36 @@ object FilterRules {
         val name = field.name.lowercase()
         return !(name.contains("per_page") || name.contains("perpage") || name.contains("page_size") || name == "limit" || name.endsWith("[size]"))
     }
+
+    /** A row of filters: the filters of a form, and the links or buttons that go with them (clearing them). */
+    data class Bar(val fields: List<Navree.Field>, val actions: List<Navree.Node>)
+
+    /**
+     * Whether a form is only a set of filters on what is shown under it: it
+     * asks with a read, every field is a choice or a switch (at least one a
+     * choice), and nothing else stands in it but the links or buttons that go
+     * with them. Such a form is a row of chips that scrolls along, not a stack
+     * of text fields. A button that sends the form is left out: each choice
+     * asks by itself.
+     */
+    fun bar(form: Navree.Form): Bar? {
+        if (form.method != Navree.Method.GET || form.id == null) return null
+        val fields = form.fields()
+        if (fields.isEmpty() || !fields.all(::isFilter) || fields.all { it.input is Navree.ToggleInput }) return null
+        val actions = ArrayList<Navree.Node>()
+        var other = false
+        fun visit(node: Navree.Node) {
+            when (node) {
+                is Navree.Field -> Unit
+                is Navree.Button -> if (node.action !is Navree.Action.Submit) actions += node
+                is Navree.Link -> actions += node
+                is Navree.Grid, is Navree.Stack -> node.childNodes().forEach(::visit)
+                else -> other = true
+            }
+        }
+        form.children.forEach(::visit)
+        return if (other) null else Bar(fields, actions)
+    }
 }
 
 /**
