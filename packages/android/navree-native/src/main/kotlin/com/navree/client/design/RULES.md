@@ -49,7 +49,12 @@ times and above, the app bar gives up an action so the title can still be read.
   rail, and Android's own adaptive scaffold never picks a drawer by itself.
 - On a medium or wider window that is short (a phone on its side), the bar's
   items sit side by side with their icons, in the middle of the bar.
-- A destination's count is a badge on its icon.
+- A destination's count is a badge on its icon. In the expanded rail, where
+  the label stands beside the icon, the count stands beside the label: on the
+  icon it would cover the label's first letters.
+- A bar's labels grow with the text setting only as far as the longest word of
+  any label still fits in an item's share of the width (never below the
+  default size), so no word is broken in the middle at the largest text.
 - Choosing the destination in front goes back to its first screen. Each
   destination keeps its own stack. Back from any other destination returns to
   the first one before it leaves the app.
@@ -142,6 +147,10 @@ times and above, the app bar gives up an action so the title can still be read.
 - An address the shell presents (`sheet` or `full`) is a task of its own. On a
   compact or short window it is a full-screen dialog; on a wider one a basic
   dialog, at most 560 dp wide. `full` is full screen at any size.
+- A task sheet's bar holds an X, the title and at most one affirming action
+  (the form's own submit, or the one primary action). Every other action
+  stands at the end of the content, in a line that wraps, the destructive
+  ones last; actions that took the bar would leave the title no room.
 - A sheet that is part of a screen's tree is a modal bottom sheet. `medium`
   may rest half open (not in a short window); `large` opens fully; `full`
   fills the height.
@@ -196,7 +205,14 @@ With nothing opened, the list has the window.
   when it says nothing and the naming cell holds one control, the whole row
   takes that control's action. From 600 dp it is rows of cells under a header
   row; a sortable heading takes the table's region to its other address. A table with more columns than fit at
-  112 dp each is a list at any width.
+  112 dp each (more at larger text sizes) is a list at any width. A column of
+  words takes the room its longest cell needs, between a short status and a
+  long place, so a place is not broken in the middle.
+- The lines under a row's title keep runs of badges (a status, a priority, who
+  has it) in one line that wraps; one under the other they would make a row
+  four lines taller.
+- Facts stand in two columns only where the room they are drawn in holds two
+  columns of 300 dp.
 - A list asks for its next page when its end is drawn, never before.
 
 ### Fields
@@ -286,3 +302,12 @@ With nothing opened, the list has the window.
 - Names every control for TalkBack from the tree: an icon button by its label,
   a heading as a heading, a switch as a switch with its state, a field with
   its error, a banner as a live region.
+- A screen of days (one that leads with a day pager) turns to the day before
+  or after when it is swiped along: a swipe toward the end shows the day
+  before, as the page moves with the finger; where the line runs right to
+  left, the other way round. The chevrons and the date picker do the same.
+- A chart says its marks to a finger as well as to TalkBack: a finger held on
+  a bar or a line draws a rule down the mark and a small card with its label
+  and values. A drag that scrolls the page is the page's.
+- A service worker a page registers is held to the origins the web view is:
+  its requests to any other origin are answered 403.
