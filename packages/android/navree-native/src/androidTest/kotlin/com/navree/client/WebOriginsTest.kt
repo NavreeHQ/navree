@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.webkit.WebViewFeature
 import com.navree.client.platform.OriginWebClient
 import com.navree.client.platform.Origins
 import com.navree.client.platform.guardDocuments
@@ -18,6 +19,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -125,16 +127,21 @@ class WebOriginsTest {
         }
     }
 
-    @Test
-    fun aPageThatTriesToLeaveTheAppsOriginNeverShowsAnother() {
+    private val links = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val left = AtomicBoolean(false)
+    private val finished = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private var web: WebView? = null
+    private lateinit var base: String
+    private lateinit var origins: Origins
+
+    /**
+     * A web view with the client's checks, with or without the check at the start of every
+     * document (the control); says whether that check was added.
+     */
+    private fun webView(documents: Boolean, namedHost: Boolean = false): Boolean {
         serve()
-        val base = app.url("/").toString().trimEnd('/')
-        val namedHost = "localhost:" + named.port
-        val origins = Origins(base, loopbackHttp = true, webHosts = listOf(namedHost))
-        val links = java.util.concurrent.CopyOnWriteArrayList<String>()
-        val left = AtomicBoolean(false)
-        val finished = java.util.concurrent.CopyOnWriteArrayList<String>()
-        var web: WebView? = null
+        base = app.url("/").toString().trimEnd('/')
+        origins = Origins(base, loopbackHttp = true, webHosts = if (namedHost) listOf("localhost:" + named.port) else emptyList())
         var guarded = false
         compose.setContent {
             AndroidView(
@@ -152,30 +159,39 @@ class WebOriginsTest {
                                 url?.let { finished += it }
                             }
                         }
-                        guarded = guardDocuments(this, origins)
+                        if (documents) guarded = guardDocuments(this, origins)
                         web = this
                     }
                 },
             )
         }
         compose.waitUntil(10_000) { web != null }
-        android.util.Log.i("WebOriginsTest", "the document check is on this web view: $guarded")
+        return guarded
+    }
 
-        fun open(path: String) {
-            left.set(false)
-            compose.runOnUiThread { web!!.loadUrl("$base$path") }
-            compose.waitUntil(15_000) { appAsked.any { it.endsWith(" $path") } }
-            // Time for the page to load its frame, post its form or run its script.
-            Thread.sleep(3_000)
-            compose.waitForIdle()
-        }
+    private fun open(path: String) {
+        left.set(false)
+        compose.runOnUiThread { web!!.loadUrl("$base$path") }
+        compose.waitUntil(15_000) { appAsked.any { it.endsWith(" $path") } }
+        // Time for the page to load its frame, post its form or run its script.
+        Thread.sleep(3_000)
+        compose.waitForIdle()
+    }
 
-        fun shown(): String? {
-            var url: String? = null
-            compose.runOnUiThread { url = web!!.url }
-            return url
-        }
+    private fun shown(): String? {
+        var url: String? = null
+        compose.runOnUiThread { url = web!!.url }
+        return url
+    }
 
+    private fun documentChecks() = assumeTrue(
+        "this system's web view has no script at the start of a document",
+        WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT),
+    )
+
+    @Test
+    fun aPageThatTriesToLeaveTheAppsOriginNeverShowsAnother() {
+        webView(documents = true, namedHost = true)
         // The web view's own checks: the other origin is never even asked.
         for (path in listOf("/", "/frame", "/post", "/redirect", "/script")) {
             open(path)
@@ -186,22 +202,34 @@ class WebOriginsTest {
         assertTrue("a first load redirected elsewhere ends as a failed screen", run { open("/redirect"); left.get() })
         assertTrue("the app's own page loaded", finished.any { it.startsWith(base) })
 
-        // A frame the app's own server redirects elsewhere: the engine follows the redirect, and
-        // the document check empties what arrives before any of it runs.
+        // A frame of a host the app names for the web view loads, and runs.
+        open("/named-frame")
+        compose.waitUntil(10_000) { namedAsked.any { it.endsWith(" /ran") } }
+        assertTrue(namedAsked.contains("GET /frame"))
+        android.util.Log.i("WebOriginsTest", "handed to the core: ${links.size}")
+    }
+
+    // A frame or a form the app's own server sends elsewhere by a redirect is not seen by the client's callbacks:
+    // the engine follows it, and only the check at the start of every document stops what arrives.
+
+    @Test
+    fun aFrameOrAFormRedirectedElsewhereIsEmptiedBeforeAnythingInItRuns() {
+        documentChecks()
+        assertTrue("the check at the start of every document was added", webView(documents = true))
         open("/frame-redirect")
         android.util.Log.i("WebOriginsTest", "asked of the other origin through a frame's redirect: $otherAsked")
-        if (guarded) assertFalse("the redirected frame ran", appAsked.any { it.endsWith(" /ran") })
+        assertFalse("the redirected frame ran", appAsked.any { it.endsWith(" /ran") })
         open("/frame-redirect-slow")
         Thread.sleep(2_000)
         android.util.Log.i("WebOriginsTest", "asked of the other origin through a frame's slow redirect: $otherAsked")
-        if (guarded) assertFalse("the redirected frame answered slowly ran", appAsked.any { it.endsWith(" /ran") })
+        assertFalse("the redirected frame answered slowly ran", appAsked.any { it.endsWith(" /ran") })
 
-        // A form the app's own server answers 307 to elsewhere: the engine posts it there (no callback
-        // sees it first); what comes back is never shown, and the screen is told the page left.
+        // A form the app's own server answers 307 to elsewhere: the engine posts it there; what comes back
+        // is never shown, and the screen is told the page left.
         otherAsked.clear()
         open("/post-redirect")
         android.util.Log.i("WebOriginsTest", "asked of the other origin through a posted form's 307: $otherAsked")
-        if (guarded) assertFalse("the page the form was posted to ran", appAsked.any { it.endsWith(" /ran") })
+        assertFalse("the page the form was posted to ran", appAsked.any { it.endsWith(" /ran") })
         assertTrue("the screen was told the page left", left.get() || origins.ours(shown() ?: base))
 
         // A sandboxed frame has no origin of its own: the check goes by its address. One on the app's
@@ -211,15 +239,15 @@ class WebOriginsTest {
         otherAsked.clear()
         open("/sandboxed-out")
         Thread.sleep(1_000)
-        val ranElsewhere = appAsked.any { it.endsWith(" /ran") }
-        android.util.Log.i("WebOriginsTest", "a sandboxed frame redirected elsewhere: asked of the other origin $otherAsked, its page ran: $ranElsewhere")
-        if (guarded) assertFalse("the sandboxed frame redirected elsewhere ran", ranElsewhere)
+        android.util.Log.i("WebOriginsTest", "a sandboxed frame redirected elsewhere: asked of the other origin $otherAsked")
+        assertFalse("the sandboxed frame redirected elsewhere ran", appAsked.any { it.endsWith(" /ran") })
+    }
 
-        // A frame of a host the app names for the web view loads, and runs.
-        open("/named-frame")
-        compose.waitUntil(10_000) { namedAsked.any { it.endsWith(" /ran") } }
-        assertTrue(namedAsked.contains("GET /frame"))
-
-        android.util.Log.i("WebOriginsTest", "handed to the core: ${links.size}")
+    @Test
+    fun aFrameRedirectedElsewhereRunsWhereNothingChecksTheDocument() {
+        webView(documents = false)
+        open("/frame-redirect")
+        assertTrue("the page of the other origin, in the frame, ran: $appAsked", appAsked.any { it.endsWith(" /ran") })
+        assertTrue("the other origin was asked for it: $otherAsked", otherAsked.contains("GET /through-a-redirect"))
     }
 }
