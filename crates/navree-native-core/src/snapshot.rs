@@ -228,29 +228,39 @@ fn may_keep(input: &Input, value: &FieldValue) -> bool {
     safe && !matches!(value, FieldValue::Files { .. })
 }
 
+/// Calls `each` for every field of the screen that holds what the person put
+/// in it: what it holds is not what the page came with.
+fn each_typed(view: &ScreenView, each: &mut dyn FnMut(&str, &Input, &FieldValue)) {
+    let Some(screen) = view.screen() else {
+        return;
+    };
+    let held: BTreeMap<&String, &FieldValue> = view
+        .forms
+        .values()
+        .flat_map(|form| form.fields.iter().map(|(id, field)| (id, &field.value)))
+        .collect();
+    for root in roots(screen) {
+        walk(root, &mut |node| {
+            if let Node::Field(field) = node
+                && let Some(id) = &field.id
+                && let Some(value) = held.get(id)
+                && **value != value_of(&field.input)
+            {
+                each(id, &field.input, value);
+            }
+        });
+    }
+}
+
 /// What a screen holds that only the person knew.
 fn kept(view: &ScreenView) -> KeptScreen {
     let mut fields = BTreeMap::new();
-    if let Some(screen) = view.screen() {
-        let held: BTreeMap<&String, &FieldValue> = view
-            .forms
-            .values()
-            .flat_map(|form| form.fields.iter().map(|(id, field)| (id, &field.value)))
-            .collect();
-        for root in roots(screen) {
-            walk(root, &mut |node| {
-                if let Node::Field(field) = node
-                    && let Some(id) = &field.id
-                    && let Some(value) = held.get(id)
-                    // What the page itself came with is fetched again with it.
-                    && **value != value_of(&field.input)
-                    && may_keep(&field.input, value)
-                {
-                    fields.insert(id.clone(), (*value).clone());
-                }
-            });
+    // What the page itself came with is fetched again with it.
+    each_typed(view, &mut |id, input, value| {
+        if may_keep(input, value) {
+            fields.insert(id.to_owned(), value.clone());
         }
-    }
+    });
     KeptScreen {
         url: view.url.clone(),
         title: view.title.clone(),
@@ -362,6 +372,22 @@ impl Core {
         self.start();
     }
 
+    /// Whether the person began something on a screen held: words typed into
+    /// it that differ from what the page gave, or a send from it on its way
+    /// or waiting.
+    fn begun_on_a_screen(&self) -> bool {
+        self.view.screens.iter().any(|(id, view)| {
+            let mut typed = false;
+            each_typed(view, &mut |_, _, _| typed = true);
+            typed
+                || self
+                    .inner
+                    .screens
+                    .get(id)
+                    .is_some_and(|inner| !inner.sending.is_empty() || !inner.waiting.is_empty())
+        })
+    }
+
     /// The shell is here: the stacks of the snapshot are put back, when it
     /// was taken for the person the shell names. True when they were.
     pub(crate) fn restore_stacks(&mut self) -> bool {
@@ -385,7 +411,9 @@ impl Core {
         }
         // Only onto a core where the person has not moved on: with no screen,
         // or with only the first page of the first destination, which was
-        // asked for while the shell could not be fetched, and which gives way.
+        // asked for while the shell could not be fetched, and which gives way
+        // unless they began something on it: words typed that differ from
+        // what the page gave, or a send on its way or waiting.
         if !self.view.screens.is_empty() {
             let untouched = self.view.modals.is_empty()
                 && self.view.selected == 0
@@ -393,7 +421,8 @@ impl Core {
                     .view
                     .destinations
                     .iter()
-                    .all(|destination| destination.stack.len() <= 1);
+                    .all(|destination| destination.stack.len() <= 1)
+                && !self.begun_on_a_screen();
             if !untouched {
                 self.report(
                     "snapshot",

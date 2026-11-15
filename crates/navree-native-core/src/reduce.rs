@@ -3751,6 +3751,113 @@ mod tests {
         );
     }
 
+    /// A place is not put back over what the person began: the first page,
+    /// asked for while the shell could not be reached, stays when words were
+    /// typed into it that differ from what it gave, or a send from it is on
+    /// its way or waiting; the snapshot is dropped, with a report. A page
+    /// they have only looked at gives way to the place as before.
+    #[test]
+    fn a_snapshot_is_not_put_back_over_what_the_person_began() {
+        let snapshot = serde_json::json!({
+            "version": 1,
+            "origin": "https://shop.example",
+            "person": "1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e",
+            "selected": "/",
+            "destinations": [{"href": "/", "stack": [{"url": "/"}, {"url": "/orders/1/pay"}]}],
+        });
+        let answered = |body: &str, request: u64| Response {
+            request,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            headers: vec![(
+                "x-navree-person".to_owned(),
+                "0193a4b2-0000-7000-8000-00000000ra01".to_owned(),
+            )],
+            body: body.to_owned(),
+            ..Response::default()
+        };
+        let submit = || Event::Act {
+            screen: Some(1),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("an action"),
+            form: Some("memo".to_owned()),
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        };
+        let typed = |text: &str| Event::Field {
+            screen: 1,
+            form: Some("memo".to_owned()),
+            field: "memo-text".to_owned(),
+            value: crate::FieldValue::Text {
+                text: text.to_owned(),
+            },
+        };
+        let cases: Vec<(&str, Vec<Event>, bool)> = vec![
+            ("looked at", Vec::new(), true),
+            ("typed", vec![typed("Call the courier")], false),
+            (
+                "typed and then taken back to what the page gave",
+                vec![typed("Call the courier"), typed("")],
+                true,
+            ),
+            ("a send on its way", vec![submit()], false),
+            (
+                "a send on its way, and one waiting",
+                vec![submit(), typed("Again"), submit()],
+                false,
+            ),
+        ];
+        for (what, begun, gives_way) in cases {
+            let mut config = Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            );
+            config.cache.persist = true;
+            let mut core = Core::new(config);
+            core.send(Event::Restore {
+                snapshot: snapshot.clone(),
+            });
+            core.send(Event::Cache {
+                key: "boot".to_owned(),
+                value: Some(include_str!("../transcripts/fixtures/made/kept-boot.json").to_owned()),
+            });
+            core.send(Event::Response(Response {
+                request: 1,
+                error: Some(TransportError::Offline),
+                ..Response::default()
+            }));
+            core.send(Event::Response(answered(
+                include_str!("../transcripts/fixtures/made/home-memo.json"),
+                2,
+            )));
+            for event in begun {
+                core.send(event);
+            }
+            let update = core.send(Event::Response(answered(
+                include_str!("../transcripts/fixtures/store/shell.json"),
+                3,
+            )));
+            let reported = update
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Report { what, .. } if what == "snapshot"));
+            let stack = &core.view.destinations[0].stack;
+            if gives_way {
+                assert!(
+                    stack.len() == 2 && !reported,
+                    "{what}: the place is put back: {stack:?} {update:?}"
+                );
+            } else {
+                assert!(
+                    stack == &[1] && reported,
+                    "{what}: the first page stays and the snapshot is dropped: {stack:?} {update:?}"
+                );
+            }
+        }
+    }
+
     /// A snapshot asked for before this launch's shell has answered names
     /// nobody the server has not named in this launch, and is not a
     /// visitor's: the client must not store it over a person's.
