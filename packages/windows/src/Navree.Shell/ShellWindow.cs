@@ -171,6 +171,17 @@ public sealed partial class ShellWindow : Window
 
         widthKnown = true;
         width = now;
+
+        // The navigation follows the window's width by our own rule, at the breakpoints the system's own pane has: open at the
+        // side when wide, icons when in between, a button that opens it over the content when narrow. (Left to the pane's own
+        // automatic mode, a window made larger at the start could be left with a wide pane that showed icons only.)
+        navigation.PaneDisplayMode = now switch
+        {
+            WidthClass.Compact => NavigationViewPaneDisplayMode.LeftMinimal,
+            WidthClass.Medium => NavigationViewPaneDisplayMode.LeftCompact,
+            _ => NavigationViewPaneDisplayMode.Left,
+        };
+        navigation.IsPaneOpen = now == WidthClass.Expanded;
         host.Send(Events.Window(now switch
         {
             WidthClass.Compact => Runtime.Width.Compact,

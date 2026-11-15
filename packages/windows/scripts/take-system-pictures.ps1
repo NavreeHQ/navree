@@ -153,6 +153,8 @@ if ($null -ne $hidden) {
     Say "the hidden copy did not start"
 }
 
+$activation = Join-Path $env:TEMP 'navree-activation.log'
+if (Test-Path $activation) { Copy-Item $activation (Join-Path $OutDir 'navree-activation-log.txt') }
 $log = if ($Packaged) { $null } else { Join-Path (Split-Path -Parent $Exe) 'navree-demo.log' }
 if ($log -and (Test-Path $log)) { Copy-Item $log (Join-Path $OutDir 'navree-demo-log.txt') }
 

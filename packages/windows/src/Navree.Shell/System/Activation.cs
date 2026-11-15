@@ -50,6 +50,7 @@ public static class Activation
 
         AppActivationArguments args = AppInstance.GetCurrent().GetActivatedEventArgs();
         LaunchRequest request = Read(args, own: true);
+        Note("started by " + Describe(args));
         if (!single)
         {
             Initial = request;
@@ -57,9 +58,14 @@ public static class Activation
         }
 
         AppInstance instance = AppInstance.FindOrRegisterForKey(key);
+        Note(instance.IsCurrent ? "this is the app's one instance" : "the app is already running (process " + instance.ProcessId + ")");
         if (instance.IsCurrent)
         {
-            instance.Activated += (_, redirected) => Deliver(Read(redirected, own: false), Describe(redirected));
+            instance.Activated += (_, redirected) =>
+            {
+                Note("handed " + Describe(redirected));
+                Deliver(Read(redirected, own: false), Describe(redirected));
+            };
             Initial = request;
             return true;
         }
@@ -139,6 +145,21 @@ public static class Activation
         return new LaunchRequest(href, null, false, false);
     }
 
+    /// <summary>A line about how the app was started or handed something, kept beside the app's other temporary files for whoever looks into it; never an address.</summary>
+    internal static void Note(string line)
+    {
+        try
+        {
+            File.AppendAllText(
+                Path.Combine(Path.GetTempPath(), "navree-activation.log"),
+                DateTime.Now.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture) + " " + Environment.ProcessId + " " + line + Environment.NewLine);
+        }
+        catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+        {
+            // A log that cannot be written is no reason to stop the app.
+        }
+    }
+
     // How an activation came, for the log: its kind and the kind of what it carries, never an address (which can hold a code).
     private static string Describe(AppActivationArguments args) =>
         "activation " + args.Kind + " carrying " + (args.Data?.GetType().Name ?? "nothing");
@@ -174,7 +195,21 @@ public static class Activation
     // The second start hands its activation to the first and waits for that to be done, on a wait that lets the thread answer calls sent to it.
     private static void Redirect(AppActivationArguments args, AppInstance instance)
     {
-        PumpingWait.For(Task.Run(() => instance.RedirectActivationToAsync(args).AsTask().Wait()));
+        Exception?[] failure = [null];
+        PumpingWait.For(Task.Run(() =>
+        {
+            try
+            {
+                instance.RedirectActivationToAsync(args).AsTask().Wait();
+            }
+            catch (Exception problem)
+            {
+                failure[0] = problem.GetBaseException();
+            }
+        }));
+        Note(failure[0] is Exception failed
+            ? "handing " + args.Kind + " over failed: " + failed.GetType().Name + ": " + failed.Message
+            : "handed " + args.Kind + " over");
         try
         {
             using Process running = Process.GetProcessById((int)instance.ProcessId);
