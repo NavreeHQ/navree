@@ -402,34 +402,36 @@ jobs:
             esac
             "$adb" shell cmd uimode night "$night"
             "$adb" shell settings put system font_scale "$scale"
-            # Right to left as the developer option sets it: the system property, the setting, and a
-            # change of configuration so the system and every app lay themselves out again.
+            # Right to left as a person's phone has it: the system's language is one that runs right to left
+            # (a pseudo-locale, English words laid out from the right), so every window an app opens,
+            # a dialog, a menu or a picker among them, is laid out that way by the system itself.
             if [ "$rtl" = 1 ]; then
               for _ in 1 2 3; do "$adb" root && break; sleep 5; done
               "$adb" wait-for-device
-              "$adb" shell setprop debug.force_rtl true
-              "$adb" shell settings put global debug.force_rtl 1
-              "$adb" shell settings put system font_scale 1.05
-              sleep 3
-              "$adb" shell settings put system font_scale "$scale"
-              sleep 3
-              # The test's own language is one that runs right to left (a pseudo-locale, English words laid out
-              # from the right), so the windows a dialog, a menu or a picker opens run that way as the system's do.
-              "$adb" shell cmd locale set-app-locales com.navree.client.test --locales ar-XB || true
-            else
-              "$adb" shell cmd locale set-app-locales com.navree.client.test --locales "" || true
+              "$adb" shell setprop persist.sys.locale ar-XB
+              "$adb" shell setprop ctl.restart zygote
+              sleep 15
+              for _ in $(seq 1 60); do
+                if [ "$("$adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then break; fi
+                sleep 3
+              done
+              sleep 10
+              echo "system language: $("$adb" shell getprop persist.sys.locale)"
+              "$adb" shell cmd locale get-app-locales com.navree.client.test || true
             fi
             "$adb" shell am instrument -w -e look "$look" -e device "$name" -e store http://10.0.2.2:8095 -e inbox http://10.0.2.2:8096 -e board http://10.0.2.2:8097 \
               com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/instrument-$name-$look.txt"
             if ! grep -q '^OK (' "$RUNNER_TEMP/instrument-$name-$look.txt"; then status=1; fi
           done
           # The next way up starts from left to right.
-          "$adb" shell setprop debug.force_rtl false || true
-          "$adb" shell settings put global debug.force_rtl 0
-          "$adb" shell settings put system font_scale 1.05
-          sleep 3
-          "$adb" shell settings put system font_scale 1.0
-          sleep 3
+          "$adb" shell setprop persist.sys.locale en-US
+          "$adb" shell setprop ctl.restart zygote
+          sleep 15
+          for _ in $(seq 1 60); do
+            if [ "$("$adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then break; fi
+            sleep 3
+          done
+          sleep 10
           done
           "$adb" shell wm size reset
           mkdir -p "$RUNNER_TEMP/screens"
