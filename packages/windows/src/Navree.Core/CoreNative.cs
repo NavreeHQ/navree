@@ -1,6 +1,9 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
+// The core's library is looked for beside this assembly and nowhere else.
+[assembly: DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory)]
+
 namespace Navree.Core;
 
 /// <summary>Bytes the core owns: <c>Length</c> bytes of UTF-8 JSON at <c>Pointer</c>.</summary>
@@ -19,7 +22,6 @@ internal unsafe struct NavreeBytes
 /// give UTF-8 JSON as a pointer and a length. Nothing outside this file calls
 /// them; <see cref="NavreeCore"/> is the way in.
 /// </summary>
-[DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory)]
 internal static unsafe partial class CoreNative
 {
     private const string Library = "navree_native_core";
