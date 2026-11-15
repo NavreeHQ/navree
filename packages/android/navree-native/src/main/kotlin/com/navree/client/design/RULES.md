@@ -313,7 +313,11 @@ With nothing opened, the list has the window.
   drag that scrolls the page is the page's. A slide along a chart, past the
   touch slop, is the chart's: it reads each mark it passes and does not also
   turn the day of a screen of days; a day is turned by a swipe that starts
-  off a chart, or by the pager's arrows.
+  off a chart, or by the pager's arrows. A chart takes a slide along it
+  wherever it stands, so a part that scrolls along (a row of lanes, a carousel)
+  is not swiped from a chart in it but from beside it; a finger held still for
+  a moment reads the mark under it, and a scroll that starts after that takes
+  the card away again.
 - Everything the client opens over a screen (a menu, a question, a picker, a
   sheet) has the layout direction of the screen under it. The app declares
   `android:supportsRtl="true"` (a window of its own resolves its direction only
