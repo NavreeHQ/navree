@@ -51,19 +51,19 @@ internal sealed class PageKeeper
         string? column = null;
         for (DependencyObject? up = focused; up is not null && !ReferenceEquals(up, page); up = VisualTreeHelper.GetParent(up))
         {
-            if (up is DataTable table && table.ActiveCell is { } cell)
+            if (up is DataTable table && table.ActiveCell is { } cell && AutomationProperties.GetAutomationId(table) is { Length: > 0 } tableId)
             {
+                // A table's active cell is carried by the table's id, with the row and column it was on.
+                id = tableId;
                 row = cell.RowKey;
                 column = cell.ColumnKey;
+                break;
             }
 
-            if (up is FrameworkElement element && AutomationProperties.GetAutomationId(element) is { Length: > 0 } found)
+            if (id is null && up is FrameworkElement element && AutomationProperties.GetAutomationId(element) is { Length: > 0 } found)
             {
+                // The nearest part with an id is the one the focus is in.
                 id = found;
-                if (row is not null)
-                {
-                    break;
-                }
             }
         }
 

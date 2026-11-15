@@ -62,7 +62,7 @@ internal sealed partial class NodeRenderer
 
         lane.DragOver += (_, e) =>
         {
-            if (!e.DataView.Properties.ContainsKey(RowKey))
+            if (CardDrag.Row is null)
             {
                 return;
             }
@@ -76,8 +76,7 @@ internal sealed partial class NodeRenderer
         lane.Drop += (_, e) =>
         {
             lane.Children.Remove(indicator);
-            if (e.DataView.Properties.TryGetValue(RowKey, out object? item) && e.DataView.Properties.TryGetValue(FromKey, out object? from)
-                && item is string itemId && from is string fromId)
+            if (CardDrag.Row is string itemId && CardDrag.From is string fromId)
             {
                 string? before = Before(e.GetPosition(lane).Y);
                 if (before != itemId)
@@ -151,6 +150,15 @@ internal sealed partial class NodeRenderer
             e.Data.SetText(row.Title);
             e.Data.Properties[RowKey] = rowId;
             e.Data.Properties[FromKey] = listId;
+
+            // The drag is inside this app, so what is dragged is held here as well: the data package carries a card between windows only as text.
+            CardDrag.Row = rowId;
+            CardDrag.From = listId;
+        };
+        card.DropCompleted += (_, _) =>
+        {
+            CardDrag.Row = null;
+            CardDrag.From = null;
         };
         return card;
     }
@@ -207,6 +215,7 @@ internal sealed partial class NodeRenderer
         AutomationProperties.SetName(handle, "Move " + row.Title);
         AutomationProperties.SetHelpText(handle, "Alt, Shift and an arrow key moves the card; Enter opens a menu of where it can go.");
         int index = rows.ToList().FindIndex(other => (other.Id ?? other.Key ?? other.Title) == rowId);
+        PageKeeper.Mark(handle, "move:" + rowId);
         List<Models.List> lanes = Lanes(list);
         MenuFlyout menu = MoveMenu(row, rowId, list, rows, index, lanes);
         handle.Flyout = menu;
@@ -325,6 +334,16 @@ internal sealed partial class NodeRenderer
         List<string> there = [.. lanes[at].Children.OfType<Models.Row>().Select(RowOf)];
         return (lanes[at].Id!, CardMoves.Across(there, index).Before);
     }
+}
+
+/// <summary>The card being dragged and the list it was dragged from, while a drag of a card is on.</summary>
+internal static class CardDrag
+{
+    /// <summary>The row's id, or none.</summary>
+    internal static string? Row { get; set; }
+
+    /// <summary>The id of the list the card is in, or none.</summary>
+    internal static string? From { get; set; }
 }
 
 /// <summary>The card that was just moved, so the screen drawn again for the move gives its handle the focus back.</summary>

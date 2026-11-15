@@ -119,7 +119,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                 bool large = overlay.Node is Models.Sheet { Size: Models.SheetSize.Large };
 
                 // A popover opens at the control that opened it, where that control is found again on the screen.
-                FrameworkElement? anchor = overlay.Node is Models.Popover && Triggers.Last is string key && context.Triggers.TryGetValue(key, out FrameworkElement? found) && found.XamlRoot is not null ? found : null;
+                FrameworkElement? anchor = overlay.Node is Models.Popover && Triggers.Last is string key && context.Triggers.TryGetValue(key, out FrameworkElement? found) ? found : null;
                 if (anchor is not null)
                 {
                     return new Wanted(
@@ -244,6 +244,19 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                         // The page was drawn again (an answer changed it): what a sheet, dialog or popover of the page holds is drawn from the new
                         // tree, so a server's error stands at its field and a button that is busy says so; where the person was in it is put back.
                         BringUpToDate(want);
+                        if (flyout is not null && want.Anchor is { XamlRoot: not null } moved && !ReferenceEquals(moved, showing.Anchor))
+                        {
+                            // The control it opened at was drawn again: it stays beside the new one.
+                            try
+                            {
+                                flyout.ShowAt(moved);
+                            }
+                            catch (Exception problem)
+                            {
+                                System.Diagnostics.Debug.WriteLine("a popover could not be moved: " + problem.Message);
+                            }
+                        }
+
                         showing = want;
                     }
 
@@ -279,6 +292,20 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                     return;
                 }
 
+                if (want.Flyout is not null && want.Anchor is { XamlRoot: null } notYet)
+                {
+                    // The control that opened it was drawn a moment ago and is not in the window yet: it is waited for, and the wish may change meanwhile.
+                    for (int waited = 0; waited < 20 && notYet.XamlRoot is null && ReferenceEquals(latest, want); waited++)
+                    {
+                        await Task.Delay(50);
+                    }
+
+                    if (!ReferenceEquals(latest, want))
+                    {
+                        continue;
+                    }
+                }
+
                 if (want.Flyout is not null && want.Anchor is { XamlRoot: not null } anchor)
                 {
                     // Light dismiss (a click away, Escape) closes it and tells the core; the focus goes back to the control that opened it.
@@ -300,7 +327,15 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                             showing = null;
                         }
 
-                        if (!byUs)
+                        if (!byUs && anchor.XamlRoot is null)
+                        {
+                            // It went with the control it was open at, which the page drawing again took away: it is shown again at the new one.
+                            if (!pumping)
+                            {
+                                _ = PumpAsync();
+                            }
+                        }
+                        else if (!byUs)
                         {
                             want.OnClosed(ContentDialogResult.None);
                             _ = anchor.Focus(FocusState.Programmatic);
