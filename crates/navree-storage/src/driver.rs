@@ -173,8 +173,11 @@ pub trait DiskDriver: Send + Sync + 'static {
     /// Writes `contents` to `path`, replacing any file there; readers see
     /// the old file or the new one, never part of one. The path is already
     /// normalised; do the whole operation; do not retry.
-    fn put<'a>(&'a self, path: &'a str, contents: Bytes)
-    -> BoxFuture<'a, Result<(), DiskDriverError>>;
+    fn put<'a>(
+        &'a self,
+        path: &'a str,
+        contents: Bytes,
+    ) -> BoxFuture<'a, Result<(), DiskDriverError>>;
 
     /// Starts writing a file chunk by chunk. The file appears at `path`
     /// only when the upload is [finished](DiskUpload::finish), and not at
@@ -288,7 +291,10 @@ pub struct OpenedFile {
 
 impl OpenedFile {
     /// A file of `size` bytes whose contents are `stream`.
-    pub fn new(size: u64, stream: BoxStream<'static, Result<Bytes, DiskDriverError>>) -> OpenedFile {
+    pub fn new(
+        size: u64,
+        stream: BoxStream<'static, Result<Bytes, DiskDriverError>>,
+    ) -> OpenedFile {
         OpenedFile { size, stream }
     }
 }

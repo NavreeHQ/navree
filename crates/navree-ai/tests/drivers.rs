@@ -148,7 +148,11 @@ async fn a_registered_ai_driver_answers_streams_and_embeds() {
         ("smart", "vaani")
     );
     assert_eq!(answer.usage, Usage::new(3, 1));
-    assert_eq!(ai.tokens_used_today(harpreet).await, 4, "the budget counts it");
+    assert_eq!(
+        ai.tokens_used_today(harpreet).await,
+        4,
+        "the budget counts it"
+    );
 
     let stream = ai.stream("Namaste").await.unwrap();
     assert_eq!(
@@ -277,18 +281,17 @@ impl AiDriver for Scripted {
         _request: &'a AiDriverRequest,
     ) -> BoxFuture<'a, Result<AiDriverStream, AiError>> {
         Box::pin(async move {
-            let chunks: Vec<Result<AiDriverChunk, AiError>> =
-                match self.script.call(&self.table) {
-                    Outcome::Answer => vec![
-                        Ok(AiDriverChunk::Text(format!("{} answered", self.table))),
-                        Ok(AiDriverChunk::Done {
-                            usage: Usage::new(2, 2),
-                            finish: Finish::Stop,
-                        }),
-                    ],
-                    Outcome::Error(error) => return Err(error),
-                    Outcome::FirstChunk(error) => vec![Err(error)],
-                };
+            let chunks: Vec<Result<AiDriverChunk, AiError>> = match self.script.call(&self.table) {
+                Outcome::Answer => vec![
+                    Ok(AiDriverChunk::Text(format!("{} answered", self.table))),
+                    Ok(AiDriverChunk::Done {
+                        usage: Usage::new(2, 2),
+                        finish: Finish::Stop,
+                    }),
+                ],
+                Outcome::Error(error) => return Err(error),
+                Outcome::FirstChunk(error) => vec![Err(error)],
+            };
             Ok(Box::pin(futures_util::stream::iter(chunks)) as AiDriverStream)
         })
     }
@@ -355,7 +358,10 @@ async fn a_registered_ai_drivers_errors_keep_their_failover_class() {
 
     // Rate limited: retried, and `smart` answers.
     script.set(&[
-        ("vaani", Plan::FailOnce(AiError::rate_limited("vaani", None))),
+        (
+            "vaani",
+            Plan::FailOnce(AiError::rate_limited("vaani", None)),
+        ),
         backup(),
     ]);
     let answer = ai.text("Namaste").await.unwrap();
@@ -367,13 +373,22 @@ async fn a_registered_ai_drivers_errors_keep_their_failover_class() {
             "vaani".to_owned()
         )
     );
-    assert_eq!((script.calls("vaani"), script.calls("vaani_backup")), (2, 0));
+    assert_eq!(
+        (script.calls("vaani"), script.calls("vaani_backup")),
+        (2, 0)
+    );
 
     // Unavailable every time: retried, then `backup` answers.
-    script.set(&[("vaani", Plan::Fail(AiError::unavailable("vaani"))), backup()]);
+    script.set(&[
+        ("vaani", Plan::Fail(AiError::unavailable("vaani"))),
+        backup(),
+    ]);
     let answer = ai.text("Namaste").await.unwrap();
     assert_eq!(who(&answer), by_backup());
-    assert_eq!((script.calls("vaani"), script.calls("vaani_backup")), (2, 1));
+    assert_eq!(
+        (script.calls("vaani"), script.calls("vaani_backup")),
+        (2, 1)
+    );
 
     // Unsupported: the model is skipped at once.
     let unsupported = AiError::Unsupported {
@@ -382,7 +397,10 @@ async fn a_registered_ai_drivers_errors_keep_their_failover_class() {
     script.set(&[("vaani", Plan::Fail(unsupported)), backup()]);
     let answer = ai.text("Namaste").await.unwrap();
     assert_eq!(who(&answer), by_backup());
-    assert_eq!((script.calls("vaani"), script.calls("vaani_backup")), (1, 1));
+    assert_eq!(
+        (script.calls("vaani"), script.calls("vaani_backup")),
+        (1, 1)
+    );
 
     // A rejected request fails at once; `backup` is never called.
     script.set(&[
@@ -394,7 +412,10 @@ async fn a_registered_ai_drivers_errors_keep_their_failover_class() {
         error.to_string(),
         "the AI provider vaani rejected the request: too long"
     );
-    assert_eq!((script.calls("vaani"), script.calls("vaani_backup")), (1, 0));
+    assert_eq!(
+        (script.calls("vaani"), script.calls("vaani_backup")),
+        (1, 0)
+    );
 
     // A configuration error fails at once too, naming the provider.
     script.set(&[("vaani", Plan::Fail(AiError::config("no key"))), backup()]);
@@ -403,14 +424,14 @@ async fn a_registered_ai_drivers_errors_keep_their_failover_class() {
         error.to_string(),
         "AI configuration error: provider `vaani`: no key"
     );
-    assert_eq!((script.calls("vaani"), script.calls("vaani_backup")), (1, 0));
+    assert_eq!(
+        (script.calls("vaani"), script.calls("vaani_backup")),
+        (1, 0)
+    );
 
     // A stream whose first chunk is an error falls over as `chat` does.
     script.set(&[
-        (
-            "vaani",
-            Plan::FailFirstChunk(AiError::unavailable("vaani")),
-        ),
+        ("vaani", Plan::FailFirstChunk(AiError::unavailable("vaani"))),
         backup(),
     ]);
     let stream = ai.stream("Namaste").await.unwrap();
@@ -418,5 +439,8 @@ async fn a_registered_ai_drivers_errors_keep_their_failover_class() {
         read(stream).await,
         ("vaani_backup answered".to_owned(), "backup".to_owned())
     );
-    assert_eq!((script.calls("vaani"), script.calls("vaani_backup")), (2, 1));
+    assert_eq!(
+        (script.calls("vaani"), script.calls("vaani_backup")),
+        (2, 1)
+    );
 }

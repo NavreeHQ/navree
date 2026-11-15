@@ -699,7 +699,8 @@ mod tests {
 
         let every = TelemetryRecorder::new();
         let logs = TelemetryRecorder::only([EventKind::Log]);
-        let telemetry = Telemetry::with_sinks(vec![Arc::new(every.clone()), Arc::new(logs.clone())]);
+        let telemetry =
+            Telemetry::with_sinks(vec![Arc::new(every.clone()), Arc::new(logs.clone())]);
         telemetry.emit(TelemetryEvent::Custom(event.clone()));
         assert_eq!(every.events(), [TelemetryEvent::Custom(event)]);
         assert_eq!(every.of_kind(EventKind::Custom).len(), 1);
@@ -708,11 +709,7 @@ mod tests {
 
     #[test]
     fn custom_event_names_are_dotted_lower_case_words() {
-        for good in [
-            "announcements.published",
-            "crm.deal.won",
-            "notice_board.v2",
-        ] {
+        for good in ["announcements.published", "crm.deal.won", "notice_board.v2"] {
             assert!(is_event_name(good), "{good}");
         }
         for bad in [

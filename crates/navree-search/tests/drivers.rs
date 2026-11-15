@@ -202,8 +202,5 @@ async fn config_check_reads_the_search_engine_as_the_boot_does() {
     let error = boot_error(" Kosh ").await;
     assert!(error.contains(unregistered), "{error}");
     let text = check_text(sources(), |app| app.module(SearchModule::from_config())).await;
-    assert!(
-        text.contains(&format!("error    {unregistered}")),
-        "{text}"
-    );
+    assert!(text.contains(&format!("error    {unregistered}")), "{text}");
 }

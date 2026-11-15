@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use navree_config::ModuleBuilderConfigExt;
 use navree_config::__private::contribute_slot;
+use navree_config::ModuleBuilderConfigExt;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{

@@ -761,7 +761,9 @@ mod tests {
             registered.settings::<Port>().unwrap_err().to_string(),
         ] {
             assert!(
-                error.starts_with("invalid storage options: the settings of a `sanduk` disk do not read: "),
+                error.starts_with(
+                    "invalid storage options: the settings of a `sanduk` disk do not read: "
+                ),
                 "{error}"
             );
             for value in ["files.ludhiana.example", "s3cret-₹"] {
@@ -856,8 +858,10 @@ mod tests {
             })
         );
         assert_eq!(
-            read(serde_json::json!({"driver": "azure", "account": "amritsar", "bucket": "archive"}))
-                .unwrap(),
+            read(
+                serde_json::json!({"driver": "azure", "account": "amritsar", "bucket": "archive"})
+            )
+            .unwrap(),
             DiskConfig::Azure(AzureConfig::new("amritsar", "archive"))
         );
 

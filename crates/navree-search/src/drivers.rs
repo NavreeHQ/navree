@@ -79,19 +79,13 @@ impl ModuleBuilderSearchExt for ModuleBuilder {
         F: Fn(DriverContext) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<E, BoxError>> + Send + 'static,
     {
-        register_driver::<dyn SearchEngine, _, _>(
-            self,
-            &SLOT,
-            Some("search"),
-            name,
-            move |ctx| {
-                let built = factory(ctx);
-                async move {
-                    built
-                        .await
-                        .map(|engine| Arc::new(engine) as Arc<dyn SearchEngine>)
-                }
-            },
-        )
+        register_driver::<dyn SearchEngine, _, _>(self, &SLOT, Some("search"), name, move |ctx| {
+            let built = factory(ctx);
+            async move {
+                built
+                    .await
+                    .map(|engine| Arc::new(engine) as Arc<dyn SearchEngine>)
+            }
+        })
     }
 }

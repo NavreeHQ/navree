@@ -3115,6 +3115,7 @@ dependencies = [
  "navree-telemetry",
  "percent-encoding",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",
@@ -3130,6 +3131,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

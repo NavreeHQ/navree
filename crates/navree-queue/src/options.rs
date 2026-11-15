@@ -436,9 +436,21 @@ mod tests {
     #[test]
     fn queue_driver_written_as_a_one_key_table_reads_as_before() {
         for (table, driver, text) in [
-            (serde_json::json!({"redis": {}}), QueueDriver::Redis, "redis"),
-            (serde_json::json!({"memory": null}), QueueDriver::Memory, "memory"),
-            (serde_json::json!({"database": {"pool": 4}}), QueueDriver::Database, "database"),
+            (
+                serde_json::json!({"redis": {}}),
+                QueueDriver::Redis,
+                "redis",
+            ),
+            (
+                serde_json::json!({"memory": null}),
+                QueueDriver::Memory,
+                "memory",
+            ),
+            (
+                serde_json::json!({"database": {"pool": 4}}),
+                QueueDriver::Database,
+                "database",
+            ),
         ] {
             let read = serde_json::from_value::<QueueDriver>(table).unwrap();
             assert_eq!(read, driver);
@@ -455,7 +467,10 @@ mod tests {
         let refused = "the driver must be `database`, `memory`, `redis` or the name of a queue store registered with m.queue_store (a lower-case letter, then lower-case letters, digits or _)";
         for (table, name) in [
             (serde_json::json!({"dak": {}}), "dak"),
-            (serde_json::json!({"jalandhar_queue": {"depot": 4}}), "jalandhar_queue"),
+            (
+                serde_json::json!({"jalandhar_queue": {"depot": 4}}),
+                "jalandhar_queue",
+            ),
         ] {
             let error = serde_json::from_value::<QueueDriver>(table)
                 .unwrap_err()

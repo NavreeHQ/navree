@@ -221,9 +221,16 @@ fn a_made_up_transport_name_from_a_request_is_refused_and_not_kept() {
         let error = serde_json::from_value::<TransportConfig>(body.clone())
             .expect_err(&body.to_string())
             .to_string();
-        assert!(error.contains("unknown mail transport (expected"), "{error}");
+        assert!(
+            error.contains("unknown mail transport (expected"),
+            "{error}"
+        );
     }
-    assert_eq!(DriverName::lookup("patra_post"), None, "reading adds no name");
+    assert_eq!(
+        DriverName::lookup("patra_post"),
+        None,
+        "reading adds no name"
+    );
 
     // A name the process knows reads as that transport; outside MailModule
     // it does not build, so a tenant's transport cannot be one.
@@ -276,7 +283,10 @@ fn mail_config_of_today_reads_as_before() {
     // bare built-in type that is not a short form.
     for bare in ["kabutar_dak", "smtp", "ses", "failover"] {
         let error = read(json!(bare)).unwrap_err().to_string();
-        assert!(error.contains("unknown mail transport (expected"), "{error}");
+        assert!(
+            error.contains("unknown mail transport (expected"),
+            "{error}"
+        );
     }
 }
 
@@ -296,7 +306,7 @@ async fn an_unregistered_or_doubly_registered_mail_transport_fails_the_boot_nami
 
     let sources = || mail(json!({"transport": "log"}));
 
-    let twice ="mail transport `dakghar` is registered by both `DakgharModule` and `SecondDakgharModule`; register it once";
+    let twice = "mail transport `dakghar` is registered by both `DakgharModule` and `SecondDakgharModule`; register it once";
     let add = |app: AppBuilder| {
         app.module(views())
             .module(MailModule::from_config())
@@ -304,7 +314,10 @@ async fn an_unregistered_or_doubly_registered_mail_transport_fails_the_boot_nami
             .module(SecondDakgharModule)
     };
     let text = boot(sources(), add).await;
-    assert!(text.contains(twice), "checked although log is selected: {text}");
+    assert!(
+        text.contains(twice),
+        "checked although log is selected: {text}"
+    );
     let text = check_text(sources(), add).await;
     assert!(text.contains(&format!("error    {twice}")), "{text}");
 
