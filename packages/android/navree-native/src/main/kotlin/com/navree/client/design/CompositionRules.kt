@@ -70,6 +70,16 @@ object CompositionRules {
     fun columnAlign(stack: Navree.Stack): Navree.Align? =
         if (stack.wide != null && stack.wide != stack.axis) Navree.Align.START else stack.align
 
+    /**
+     * Whether a part of a stack that turns, laid as a column, stands in the
+     * middle of the column: a dial (a ring or a gauge) of a stack that says its
+     * parts are centred. Words of such a stack start at the start (see
+     * [columnAlign]); a dial with a fixed size does not stand at the start of
+     * the card with half its width empty beside it.
+     */
+    fun centresInColumn(stack: Navree.Stack, part: Navree.Node): Boolean =
+        stack.wide != null && stack.wide != stack.axis && stack.align == Navree.Align.CENTER && (part is Navree.Ring || part is Navree.Gauge)
+
     /** The room a ring's legend needs beside its dial, and the space between the two, in dp. */
     private const val LEGEND_DP = 96f
     private const val LEGEND_GAP_DP = 24f
