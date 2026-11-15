@@ -355,9 +355,13 @@ impl DriverContext {
 
     /// The app, to resolve what the driver needs. The factory runs while
     /// its kind's service is being built (`Storage` for a disk driver,
-    /// `Cache` for a cache store): asking for that service, or for anything
-    /// built on it, fails the boot with the cycle, naming the driver. A
-    /// driver that needs it keeps this handle and asks once the app runs.
+    /// `Cache` for a cache store): asking this handle for that service, or
+    /// for anything built on it, fails the boot with the cycle, naming the
+    /// driver, also from a task the factory starts that asks before the
+    /// boot ends. A driver that needs the service later keeps
+    /// `ctx.app().downgrade()` and upgrades it once the app runs: the weak
+    /// handle does not keep the app alive, and the handle it upgrades to
+    /// asks as any other does.
     pub fn app(&self) -> &AppContext {
         &self.app
     }
