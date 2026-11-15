@@ -37,6 +37,10 @@ class UiTest(unittest.TestCase):
         done = subprocess.run([sys.executable, "-I", UI, path, *words], capture_output=True, text=True)
         return done.returncode, done.stdout.strip()
 
+    def ask_in(self, package, path, *words):
+        done = subprocess.run([sys.executable, "-I", UI, path, *words], capture_output=True, text=True, env={**os.environ, "UI_PACKAGE": package})
+        return done.returncode, done.stdout.strip()
+
     def test_a_node_is_found_by_what_it_says(self):
         path = self.dump(SCREEN)
         self.assertEqual(0, self.ask(path, "has", "Dashboard")[0])
@@ -66,6 +70,18 @@ class UiTest(unittest.TestCase):
 
     def test_a_dump_that_parsed_is_said_to_have(self):
         self.assertEqual(0, self.ask(self.dump(SCREEN), "parsed")[0])
+
+    def test_what_is_absent_from_the_app_needs_a_node_of_the_app(self):
+        path = self.dump(SCREEN)
+        other = self.dump(SCREEN.replace('<node class="android.widget.FrameLayout"', '<node package="com.other" class="android.widget.FrameLayout"'))
+        for command in ("absent", "absent-part"):
+            self.assertEqual(2, self.ask_in("com.navree.demo", other, command, "Back")[0], "the launcher is not the app")
+            self.assertEqual(2, self.ask_in("com.navree.demo", path, command, "Back")[0], "nor is a dump that names no package")
+            self.assertEqual(0, self.ask(path, command, "Back")[0], "with no app named it is as before")
+        mine = self.dump(SCREEN.replace("<node ", '<node package="com.navree.demo" '))
+        self.assertEqual(0, self.ask_in("com.navree.demo", mine, "absent", "Back")[0])
+        self.assertEqual(1, self.ask_in("com.navree.demo", mine, "absent", "Dashboard")[0])
+        self.assertEqual(0, self.ask_in("com.navree.demo", mine, "has", "Dashboard")[0], "what is there is found in any dump")
 
     def test_nothing_to_look_for_is_not_anything(self):
         path = self.dump(SCREEN)
