@@ -55,3 +55,33 @@ jobs:
           if-no-files-found: ignore
           path: ${{ runner.temp }}/trx
           retention-days: 14
+
+      # The gallery is started with the scenarios to run; each time it is ready a picture of its window is taken.
+      - name: The winapp command
+        continue-on-error: true
+        uses: microsoft/setup-WinAppCli@9288bd0729bd3f71e2ed1b9eb247dc91470b824e # v0.3
+
+      - name: Run the gallery and take pictures
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          if (-not $exe) { throw "the gallery was not built" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\gallery" -Run "stick,anchor"
+
+      - name: What the gallery measured
+        if: always()
+        shell: pwsh
+        run: |
+          foreach ($name in 'script.txt', 'results.txt', 'analysis.txt') {
+            "---- $name"
+            if (Test-Path "$env:RUNNER_TEMP/gallery/$name") { Get-Content "$env:RUNNER_TEMP/gallery/$name" } else { "(not written)" }
+          }
+
+      - name: Keep the pictures and measurements
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-gallery
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/gallery
+          retention-days: 30
