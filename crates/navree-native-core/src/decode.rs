@@ -11,8 +11,8 @@ use navree_native::action::Command;
 use navree_native::device::{Alt, Call, Feature};
 use navree_native::node::{Button, Node, Stack, TableRow};
 use navree_native::{
-    Action, CONTENT_TYPE, Envelope, Input, MAJOR, MAX_BODY, MAX_NESTING, MAX_NODES, MAX_OPS, Op,
-    Screen,
+    Action, CONTENT_TYPE, Envelope, Input, MAJOR, MAX_BODY, MAX_ID, MAX_NESTING, MAX_NODES,
+    MAX_OPS, Op, Screen,
 };
 use serde_json::Value;
 
@@ -434,6 +434,10 @@ fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<
     if read.envelope.ops.len() > MAX_OPS || !nodes_within(&read.envelope, MAX_NODES) {
         return Err(Failure::Protocol);
     }
+    // What the core names things from is short, before anything is named.
+    if !ids_within(&read.envelope) {
+        return Err(Failure::Protocol);
+    }
     // Icons the answer keeps in one place go back to where they are drawn, so
     // a screen stands on its own. Each icon that names a shape takes a copy of
     // it, so the shapes are added up first, and nothing is copied when they
@@ -465,6 +469,83 @@ fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<
     read.missing.sort();
     read.missing.dedup();
     Ok(read)
+}
+
+/// Whether every id and name `envelope` gives that the core builds handles and
+/// keys from is at most [`MAX_ID`] bytes: the ids of nodes, a table's rows and
+/// its query form, a field's name, a row's key, the id of a screen's content
+/// and the target of an op.
+fn ids_within(envelope: &Envelope) -> bool {
+    fn short(text: Option<&str>) -> bool {
+        text.is_none_or(|text| text.len() <= MAX_ID)
+    }
+    fn row_short(row: &TableRow) -> bool {
+        short(row.id.as_deref())
+    }
+    let mut stack: Vec<&Node> = Vec::new();
+    if let Some(screen) = &envelope.screen {
+        if !short(screen.id.as_deref()) {
+            return false;
+        }
+        stack.extend(crate::tree::roots(screen));
+    }
+    for op in &envelope.ops {
+        let target = match op {
+            Op::Morph { target, node } | Op::Replace { target, node } => {
+                stack.push(node);
+                Some(target)
+            }
+            Op::Append { target, nodes, .. }
+            | Op::Prepend { target, nodes, .. }
+            | Op::Merge { target, nodes, .. } => {
+                stack.extend(nodes);
+                Some(target)
+            }
+            Op::Rows { target, rows, .. } => {
+                if !rows.iter().all(row_short) {
+                    return false;
+                }
+                stack.extend(rows.iter().flat_map(TableRow::nodes));
+                Some(target)
+            }
+            Op::Row { target, row } => {
+                if !row_short(row) {
+                    return false;
+                }
+                stack.extend(row.nodes());
+                Some(target)
+            }
+            Op::Remove { target }
+            | Op::Open { target }
+            | Op::Close { target }
+            | Op::Focus { target }
+            | Op::Invalidate { target } => Some(target),
+            Op::Errors { form, .. } => Some(form),
+            _ => None,
+        };
+        if !short(target.map(String::as_str)) {
+            return false;
+        }
+    }
+    while let Some(node) = stack.pop() {
+        if !short(node.id()) {
+            return false;
+        }
+        let kept = match node {
+            Node::Field(field) => short(Some(&field.name)),
+            Node::Row(row) => short(row.key.as_deref()),
+            Node::Table(table) => {
+                table.rows.iter().all(row_short)
+                    && short(table.query.as_ref().and_then(|form| form.id.as_deref()))
+            }
+            _ => true,
+        };
+        if !kept {
+            return false;
+        }
+        stack.extend(node.children());
+    }
+    true
 }
 
 /// Whether `envelope` holds at most `cap` nodes, counted across its screen,
@@ -753,6 +834,91 @@ mod tests {
             r#"{{"navree":1,"build":"b1","vocab":0,"ops":[{{"op":"rows","target":"ledger","rows":[{rows}]}}]}}"#
         );
         assert_eq!(envelope(&ops, &config()).err(), Some(Failure::Protocol));
+    }
+
+    /// A handle, a field's id and a key are built from the ids and names an
+    /// answer gives: one of them is copied into every field of its form, so
+    /// they are short.
+    #[test]
+    fn an_id_or_a_name_longer_than_the_protocol_allows_fails_as_one_that_could_not_be_read() {
+        use navree_native::MAX_ID;
+        // A form whose id is a mebibyte, and a hundred fields that would each carry it.
+        let fields = vec![r#"{"t":"field","name":"city","input":{"t":"text"}}"#; 200].join(",");
+        let long = "a".repeat(1 << 20);
+        let form = body(&format!(
+            r#"{{"t":"form","id":"{long}","method":"post","action":"/x","children":[{fields}]}}"#
+        ));
+        assert!(form.len() < 2 << 20);
+        assert_eq!(envelope(&form, &config()).err(), Some(Failure::Protocol));
+
+        // Every place an answer names something the core keys by, at the
+        // longest and one byte past.
+        type Place = fn(&str) -> String;
+        let places: [(&str, Place); 9] = [
+            ("a node's id", |id| {
+                format!(r#"{{"t":"stack","id":"{id}"}}"#)
+            }),
+            ("a region's id", |id| {
+                format!(r#"{{"t":"region","id":"{id}","src":"/a"}}"#)
+            }),
+            ("a form's id", |id| {
+                format!(r#"{{"t":"form","id":"{id}","children":[]}}"#)
+            }),
+            ("a field's id", |id| {
+                format!(r#"{{"t":"field","id":"{id}","name":"n","input":{{"t":"text"}}}}"#)
+            }),
+            ("a field's name", |name| {
+                format!(r#"{{"t":"field","name":"{name}","input":{{"t":"text"}}}}"#)
+            }),
+            ("a row's key", |key| {
+                format!(r#"{{"t":"row","key":"{key}","title":"t"}}"#)
+            }),
+            ("a table row's id", |id| {
+                format!(r#"{{"t":"table","rows":[{{"id":"{id}"}}]}}"#)
+            }),
+            ("a table query's id", |id| {
+                format!(r#"{{"t":"table","query":{{"id":"{id}"}}}}"#)
+            }),
+            ("a list's id", |id| {
+                format!(r#"{{"t":"list","id":"{id}","children":[]}}"#)
+            }),
+        ];
+        for (place, node) in places {
+            let fits = body(&node(&"a".repeat(MAX_ID)));
+            assert!(
+                envelope(&fits, &config()).is_ok(),
+                "{place}: {MAX_ID} bytes"
+            );
+            let past = body(&node(&"a".repeat(MAX_ID + 1)));
+            assert_eq!(
+                envelope(&past, &config()).err(),
+                Some(Failure::Protocol),
+                "{place}: {} bytes",
+                MAX_ID + 1
+            );
+        }
+        // The target of an op.
+        let op = |target: &str| {
+            format!(
+                r#"{{"navree":1,"build":"b1","vocab":0,"ops":[{{"op":"focus","target":"{target}"}}]}}"#
+            )
+        };
+        assert!(envelope(&op(&"a".repeat(MAX_ID)), &config()).is_ok());
+        assert_eq!(
+            envelope(&op(&"a".repeat(MAX_ID + 1)), &config()).err(),
+            Some(Failure::Protocol)
+        );
+        // The id of a screen's content, and a node deep inside an op's rows.
+        let screen = format!(
+            r#"{{"navree":1,"build":"b1","vocab":0,"screen":{{"title":"t","id":"{}","body":{{"t":"stack"}}}}}}"#,
+            "a".repeat(MAX_ID + 1)
+        );
+        assert_eq!(envelope(&screen, &config()).err(), Some(Failure::Protocol));
+        let rows = format!(
+            r#"{{"navree":1,"build":"b1","vocab":0,"ops":[{{"op":"rows","target":"t","rows":[{{"id":"{}"}}]}}]}}"#,
+            "a".repeat(MAX_ID + 1)
+        );
+        assert_eq!(envelope(&rows, &config()).err(), Some(Failure::Protocol));
     }
 
     #[test]

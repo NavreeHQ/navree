@@ -117,6 +117,15 @@ pub const MAX_NODES: usize = 100_000;
 /// kept up to date stops asking for what changed until something tells it to.
 pub const MAX_SCREEN_NODES: usize = 4 * MAX_NODES;
 
+/// The longest an id or a name an answer gives may be, in bytes: 256. A node's
+/// `id` (a form's, a region's, a list's, a table row's), a field's `name`, a
+/// row's `key` and the `target` of an op are what a client keys the screen by,
+/// and a form's handle and its fields' ids are built from them, so a long one
+/// would be copied into every field of its form. A client fails an answer that
+/// holds a longer one as one it could not read, before anything is named from
+/// it. The longest id in the recorded answers is 36 bytes (a UUID).
+pub const MAX_ID: usize = 256;
+
 /// The most ops one answer may hold: 1,000. A client fails an answer with
 /// more as one it could not read. The most recorded so far is 13 (a board
 /// moving its cards). The cap does not bound the work of the ops: each op that
