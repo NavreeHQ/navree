@@ -210,7 +210,8 @@ public sealed class DataTableHeaderCell : Control
             return;
         }
 
-        double moved = e.GetCurrentPoint(null).Position.X - dragStartX;
+        double pointerX = e.GetCurrentPoint(null).Position.X;
+        double moved = pointerX - dragStartX;
         if (!dragging && Math.Abs(moved) > 4 && CapturePointer(e.Pointer))
         {
             dragging = true;
@@ -219,7 +220,7 @@ public sealed class DataTableHeaderCell : Control
 
         if (dragging)
         {
-            Row?.Owner?.ReorderMoved(this, moved);
+            Row?.Owner?.ReorderMoved(this, moved, pointerX);
             e.Handled = true;
         }
     }

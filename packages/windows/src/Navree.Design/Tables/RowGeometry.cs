@@ -250,3 +250,37 @@ public sealed class Geometry
         return at >= 0 ? at : ~at;
     }
 }
+
+/// <summary>Which rows a pass of the rows layout makes: those the viewport touches and the rows kept made wherever they stand.</summary>
+public static class RealizationPlan
+{
+    /// <summary>The places of the rows to make, in order.</summary>
+    /// <param name="geometry">Where each row stands.</param>
+    /// <param name="top">The top of the realization rectangle.</param>
+    /// <param name="height">The height of the realization rectangle; of no end or no number it still makes no more than <see cref="Geometry.MostRealized"/> rows.</param>
+    /// <param name="count">How many rows the table holds.</param>
+    /// <param name="pinned">The places of the rows kept made wherever they stand.</param>
+    /// <param name="margin">How many rows to add each side of the viewport.</param>
+    /// <returns>The rows the viewport touches, then the pinned rows that exist and are not among them, each once.</returns>
+    public static IReadOnlyList<int> Indices(Geometry geometry, double top, double height, int count, IReadOnlyList<int> pinned, int margin = 1)
+    {
+        ArgumentNullException.ThrowIfNull(geometry);
+        ArgumentNullException.ThrowIfNull(pinned);
+        List<int> made = [];
+        (int first, int last) = geometry.RealizedRange(top, height, count, margin);
+        for (int index = first; index <= last; index++)
+        {
+            made.Add(index);
+        }
+
+        foreach (int place in pinned)
+        {
+            if (place >= 0 && place < count && (place < first || place > last) && !made.Contains(place))
+            {
+                made.Add(place);
+            }
+        }
+
+        return made;
+    }
+}

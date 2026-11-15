@@ -51,18 +51,9 @@ internal sealed class DataTableRowsLayout : VirtualizingLayout
 
         Geometry geometry = Geometry;
         Rect rect = context.RealizationRect;
-        (int first, int last) = geometry.RealizedRange(rect.Y, rect.Height, count);
-        for (int index = first; index <= last; index++)
+        foreach (int index in RealizationPlan.Indices(geometry, rect.Y, rect.Height, count, Pinned))
         {
             Realize(context, geometry, index, width);
-        }
-
-        foreach (int pinned in Pinned)
-        {
-            if (pinned >= 0 && pinned < count && (pinned < first || pinned > last))
-            {
-                Realize(context, geometry, pinned, width);
-            }
         }
 
         return new Size(width, geometry.Extent(count));

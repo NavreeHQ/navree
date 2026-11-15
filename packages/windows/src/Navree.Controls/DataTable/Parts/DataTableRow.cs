@@ -66,6 +66,18 @@ public sealed class DataTableRow : Control
     /// <summary>The card that holds the detail, which stays at the start edge.</summary>
     internal FrameworkElement? DetailLayer => detailCard;
 
+    /// <summary>The layers the table moves against the scroll for this row.</summary>
+    internal IEnumerable<UIElement> StickyLayers()
+    {
+        foreach (UIElement? layer in new UIElement?[] { chrome, frozenStart, frozenEnd, scrollCells, detailCard })
+        {
+            if (layer is not null)
+            {
+                yield return layer;
+            }
+        }
+    }
+
     /// <summary>The cells of the row's columns, in display order.</summary>
     internal IReadOnlyList<DataTableCell> Cells => cells;
 

@@ -19,6 +19,7 @@ public sealed partial class DataTable
     private RowShape shape = RowShape.OneLine;
     private bool sortAsked;
     private readonly ModelLink modelLink = new();
+    private readonly KeylessKeys keyless = new();
     private ModelStamp modelStamp;
     private readonly CursorWatch cursorWatch = new();
     private readonly DetailSeeds detailSeeds = new();
@@ -68,6 +69,7 @@ public sealed partial class DataTable
         activeColumn = 0;
         activeSet = false;
         nameCache.Clear();
+        tally.Invalidate();
         openKeys.Clear();
         detailSeeds.Forget();
         shapeWatch.Forget();
@@ -112,6 +114,7 @@ public sealed partial class DataTable
         if (e.Kind is DataTableChangeKind.Reset or DataTableChangeKind.Insert or DataTableChangeKind.Remove or DataTableChangeKind.Replace)
         {
             nameCache.Clear();
+            tally.Invalidate();
         }
 
         switch (e.Kind)
@@ -199,7 +202,7 @@ public sealed partial class DataTable
         for (int i = first; i < first + count; i++)
         {
             DataTableRecord record = model.GetRow(i);
-            handles.Add(new RowHandle(record.Key ?? ("\u0001" + i.ToString(Culture))));
+            handles.Add(new RowHandle(record.Key ?? keyless.Next()));
             if (detailSeeds.Arrive(record.Key, record.HasDetail, record.DetailOpen))
             {
                 openKeys.Add(record.Key!);
@@ -420,7 +423,8 @@ public sealed partial class DataTable
 
         for (int i = index; i < index + count && i < model.RowCount; i++)
         {
-            string key = model.GetRow(i).Key ?? ("\u0001" + i.ToString(Culture));
+            // A row with no key keeps the handle it was given; a row with a key that is not the key held there is a new row.
+            string key = model.GetRow(i).Key ?? rows.At(i).Key;
             if (rows.PlaceOf(key) != i)
             {
                 rows.Replace(i, new RowHandle(key));
@@ -642,6 +646,13 @@ public sealed partial class DataTable
         }
 
         DataTableCell? cell = FindCell(e.OriginalSource as DependencyObject);
+        if (cell is { Role: CellRole.Data } && InnerControlOf(e.OriginalSource as DependencyObject) != InnerControl.None && FindGlyph(e.OriginalSource as DependencyObject) is null)
+        {
+            // A tap in a field or on a button in a cell is the control's own: it makes the cell the active one and does not choose or open the row.
+            SetActive(new Cell(row.Index, Math.Max(cell.GridColumn, 0)), focus: false);
+            return;
+        }
+
         if (FindGlyph(e.OriginalSource as DependencyObject) is { } glyph)
         {
             if (cell is not null)

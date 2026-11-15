@@ -6,6 +6,7 @@ public sealed partial class DataTable
 {
     private ChoiceState choice = new(new HashSet<string>(StringComparer.Ordinal), false);
     private string? anchorKey;
+    private readonly ChoiceTally tally = new();
 
     /// <summary>Whether a row is chosen.</summary>
     /// <param name="key">The row's key.</param>
@@ -13,7 +14,7 @@ public sealed partial class DataTable
     internal bool IsChosen(string key, Choosable choosable) =>
         choosable == Choosable.Yes && (choice.Across || choice.Keys.Contains(key));
 
-    // How many held rows can be chosen, and how many of those are.
+    // How many held rows can be chosen, and how many of those are. Counted over the rows once, and kept in step by what each change did.
     private (int Held, int Chosen) CountChoice()
     {
         if (Model is not { } model)
@@ -21,25 +22,32 @@ public sealed partial class DataTable
             return (0, 0);
         }
 
-        int held = 0;
-        int chosen = 0;
-        for (int i = 0; i < model.RowCount; i++)
+        (int held, int chosenKeys) = tally.Get(() =>
         {
-            DataTableRecord record = model.GetRow(i);
-            if (record.Choosable != Choosable.Yes || record.Key is null)
+            int heldRows = 0;
+            int chosenRows = 0;
+            for (int i = 0; i < model.RowCount; i++)
             {
-                continue;
+                DataTableRecord record = model.GetRow(i);
+                if (record.Choosable != Choosable.Yes || record.Key is null)
+                {
+                    continue;
+                }
+
+                heldRows++;
+                if (choice.Keys.Contains(record.Key))
+                {
+                    chosenRows++;
+                }
             }
 
-            held++;
-            if (choice.Across || choice.Keys.Contains(record.Key))
-            {
-                chosen++;
-            }
-        }
-
-        return (held, chosen);
+            return (heldRows, chosenRows);
+        });
+        return (held, choice.Across ? held : chosenKeys);
     }
+
+    // The set of chosen keys, which the table made and keeps to itself: it is changed in place, not copied for each key.
+    private HashSet<string> OwnKeys() => choice.Keys as HashSet<string> ?? new HashSet<string>(choice.Keys, StringComparer.Ordinal);
 
     private int ChoosableHeld() => CountChoice().Held;
 
@@ -79,18 +87,22 @@ public sealed partial class DataTable
         bool on = !IsChosen(key, record.Choosable);
         if (on)
         {
-            HashSet<string> keys = new(choice.Keys, StringComparer.Ordinal) { key };
+            HashSet<string> keys = OwnKeys();
+            keys.Add(key);
             choice = new ChoiceState(keys, false);
+            tally.Changed(1);
         }
         else if (choice.Across)
         {
             choice = Choosing.AfterClear(choice, key, ChoosableHeldKeys());
+            tally.Invalidate();
         }
         else
         {
-            HashSet<string> keys = new(choice.Keys, StringComparer.Ordinal);
+            HashSet<string> keys = OwnKeys();
             keys.Remove(key);
             choice = new ChoiceState(keys, false);
+            tally.Changed(-1);
         }
 
         anchorKey = key;
@@ -118,12 +130,11 @@ public sealed partial class DataTable
         DataTableRecord anchorRow = model.GetRow(anchor);
         bool on = anchorRow.Key is { } anchored && IsChosen(anchored, anchorRow.Choosable);
 
-        List<Choosable> all = new(model.RowCount);
-        for (int i = 0; i < model.RowCount; i++)
+        RowChoosables all = new(model.RowCount, i =>
         {
             DataTableRecord record = model.GetRow(i);
-            all.Add(record.Key is null ? Choosable.None : record.Choosable);
-        }
+            return record.Key is null ? Choosable.None : record.Choosable;
+        });
 
         IReadOnlyList<int> range = Choosing.Range(all, anchor, target);
         if (range.Count == 0)
@@ -131,7 +142,8 @@ public sealed partial class DataTable
             return;
         }
 
-        HashSet<string> keys = choice.Across ? new HashSet<string>(ChoosableHeldKeys(), StringComparer.Ordinal) : new HashSet<string>(choice.Keys, StringComparer.Ordinal);
+        bool wasAcross = choice.Across;
+        HashSet<string> keys = wasAcross ? new HashSet<string>(ChoosableHeldKeys(), StringComparer.Ordinal) : OwnKeys();
         List<string> changed = [];
         foreach (int i in range)
         {
@@ -143,6 +155,15 @@ public sealed partial class DataTable
         }
 
         choice = new ChoiceState(keys, false);
+        if (wasAcross)
+        {
+            tally.Invalidate();
+        }
+        else
+        {
+            tally.Changed(on ? changed.Count : -changed.Count);
+        }
+
         ChoiceChanged(announce: true);
         RaiseChoiceRequested(changed, on, false, false);
     }
@@ -151,6 +172,7 @@ public sealed partial class DataTable
     internal void ChooseAllHeld()
     {
         choice = new ChoiceState(new HashSet<string>(ChoosableHeldKeys(), StringComparer.Ordinal), false);
+        tally.Invalidate();
         ChoiceChanged(announce: true, wholeSet: true);
         RaiseChoiceRequested([], true, true, false);
     }
@@ -164,6 +186,7 @@ public sealed partial class DataTable
         }
 
         choice = new ChoiceState(new HashSet<string>(StringComparer.Ordinal), false);
+        tally.NoneChosen();
         anchorKey = null;
         ChoiceChanged(announce: true, wholeSet: true);
         RaiseChoiceRequested([], false, true, false);
@@ -173,6 +196,7 @@ public sealed partial class DataTable
     internal void ChooseAcross()
     {
         choice = new ChoiceState(new HashSet<string>(StringComparer.Ordinal), true);
+        tally.Invalidate();
         ChoiceChanged(announce: true, wholeSet: true);
         RaiseChoiceRequested([], true, false, true);
     }
@@ -190,7 +214,7 @@ public sealed partial class DataTable
         }
     }
 
-    // Rows left the held rows: the choice forgets any that are gone.
+    // Rows left the held rows: the choice forgets any that are gone, and the host is told they are no longer chosen.
     private void RemovedFromChoice()
     {
         if (choice.Across || choice.Keys.Count == 0 || Model is not { } model)
@@ -199,11 +223,12 @@ public sealed partial class DataTable
             return;
         }
 
-        HashSet<string> keys = new(choice.Keys.Where(k => model.IndexOfKey(k) >= 0), StringComparer.Ordinal);
-        if (keys.Count != choice.Keys.Count)
+        IReadOnlyList<string> gone = Choosing.Prune(OwnKeys(), key => model.IndexOfKey(key) >= 0);
+        if (gone.Count > 0)
         {
-            choice = new ChoiceState(keys, false);
+            tally.Invalidate();
             ChoiceChanged(announce: false);
+            RaiseChoiceRequested(gone, false, false, false);
         }
     }
 

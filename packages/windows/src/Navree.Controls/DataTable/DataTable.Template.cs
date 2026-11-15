@@ -9,17 +9,27 @@ namespace Navree.Controls;
 /// <summary>Makes the rows the repeater asks for and keeps the ones it gives back.</summary>
 internal sealed partial class RowFactory : IElementFactory
 {
-    private readonly Stack<DataTableRow> pool = [];
+    /// <summary>The most rows kept for the next ones: more than a view and its cache hold, so scrolling takes from the pool and does not make rows.</summary>
+    internal const int MostKept = 96;
+
+    private readonly ElementPool<DataTableRow> pool;
+
+    /// <summary>Makes a factory.</summary>
+    /// <param name="dropped">Told of a row that is let go for good: it is not kept for the next ones.</param>
+    internal RowFactory(Action<DataTableRow> dropped)
+    {
+        pool = new ElementPool<DataTableRow>(MostKept, dropped);
+    }
 
     /// <inheritdoc />
-    public UIElement GetElement(ElementFactoryGetArgs args) => pool.Count > 0 ? pool.Pop() : new DataTableRow();
+    public UIElement GetElement(ElementFactoryGetArgs args) => pool.Take() ?? new DataTableRow();
 
     /// <inheritdoc />
     public void RecycleElement(ElementFactoryRecycleArgs args)
     {
         if (args.Element is DataTableRow row)
         {
-            pool.Push(row);
+            pool.Give(row);
         }
     }
 }
@@ -28,7 +38,7 @@ public sealed partial class DataTable
 {
     private readonly RowsSource rows = new();
     private readonly DataTableRowsLayout rowsLayout = new();
-    private readonly RowFactory factory = new();
+    private readonly RowFactory factory;
     private readonly TextMeasurer measurer = new();
     private Border? headerHost;
     private DataTableRow? header;
@@ -40,6 +50,8 @@ public sealed partial class DataTable
     private bool loaded;
     private bool templateWired;
     private bool stickyAttached;
+    private readonly MetricsWatch metricsWatch = new();
+    private XamlRoot? watchedRoot;
 
     /// <summary>The scroll view the rows are in; null before the template is made.</summary>
     internal ScrollView? Scroller => scroll;
@@ -121,6 +133,20 @@ public sealed partial class DataTable
         ModelAttached();
     }
 
+    // A row let go for good keeps nothing the coordinator holds: its layers are no longer moved against the scroll.
+    private void RowDropped(DataTableRow row)
+    {
+        if (sticky is null)
+        {
+            return;
+        }
+
+        foreach (UIElement layer in row.StickyLayers())
+        {
+            sticky.Unregister(layer);
+        }
+    }
+
     /// <summary>Called by a row when it has its layers: they are given to the coordinator once.</summary>
     /// <param name="row">The row.</param>
     internal void RowPartsMade(DataTableRow row)
@@ -145,6 +171,7 @@ public sealed partial class DataTable
     {
         loaded = true;
         modelLink.Attach(Model, OnModelEvent);
+        WatchMetrics();
         AttachSticky();
         RecomputeMetrics();
         RebuildColumns(remeasure: true);
@@ -159,8 +186,64 @@ public sealed partial class DataTable
     {
         loaded = false;
         modelLink.Detach();
+        UnwatchMetrics();
         StopTimers();
         SaveLayoutNow();
+    }
+
+    // The widths of columns and the height of a row follow the text size and the display's scale while the table is in the tree.
+    private void WatchMetrics()
+    {
+        metricsWatch.Changed(CurrentTextScale(), XamlRoot?.RasterizationScale ?? 1.0);
+        try
+        {
+            if (uiSettings is not null)
+            {
+                uiSettings.TextScaleFactorChanged -= OnTextScaleChanged;
+                uiSettings.TextScaleFactorChanged += OnTextScaleChanged;
+            }
+        }
+        catch (Exception)
+        {
+            // The setting cannot be watched here; the metrics are read again at the next reset.
+        }
+
+        if (XamlRoot is { } root)
+        {
+            root.Changed -= OnXamlRootChanged;
+            root.Changed += OnXamlRootChanged;
+            watchedRoot = root;
+        }
+    }
+
+    private void UnwatchMetrics()
+    {
+        if (uiSettings is not null)
+        {
+            uiSettings.TextScaleFactorChanged -= OnTextScaleChanged;
+        }
+
+        if (watchedRoot is not null)
+        {
+            watchedRoot.Changed -= OnXamlRootChanged;
+            watchedRoot = null;
+        }
+    }
+
+    // The text scale changes on a thread of the system's own.
+    private void OnTextScaleChanged(Windows.UI.ViewManagement.UISettings sender, object args) =>
+        DispatcherQueue.TryEnqueue(MetricsMayHaveChanged);
+
+    private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => MetricsMayHaveChanged();
+
+    private void MetricsMayHaveChanged()
+    {
+        if (loaded && templateWired && metricsWatch.Changed(CurrentTextScale(), XamlRoot?.RasterizationScale ?? 1.0))
+        {
+            RecomputeMetrics();
+            RebuildColumns(remeasure: true);
+            RefreshAllRows(numbersOnly: false);
+        }
     }
 
     // Every timer the table started stops, and what they would have said or let go of is dropped or done now.
@@ -169,6 +252,7 @@ public sealed partial class DataTable
         choiceTimer?.Stop();
         addedTimer?.Stop();
         structureTimer?.Stop();
+        edgeTimer?.Stop();
         anchorPinTimer?.Stop();
         assistivePinTimer?.Stop();
         addedLater = 0;

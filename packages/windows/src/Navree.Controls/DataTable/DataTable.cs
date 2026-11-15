@@ -59,6 +59,7 @@ public sealed partial class DataTable : Control
     public DataTable()
     {
         DefaultStyleKey = typeof(DataTable);
+        factory = new RowFactory(RowDropped);
         Loaded += (_, _) => OnLoaded();
         Unloaded += (_, _) => OnUnloaded();
         SizeChanged += (_, _) => OnSizeChanged();

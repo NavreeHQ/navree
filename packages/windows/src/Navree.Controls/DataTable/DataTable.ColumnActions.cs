@@ -51,30 +51,54 @@ public sealed partial class DataTable
 
     private DataTableHeaderCell? reordering;
     private int dropAt;
+    private double reorderStartOffset;
+    private double reorderDx;
+    private double reorderPointerX;
+    private DispatcherQueueTimer? edgeTimer;
+    private System.Diagnostics.Stopwatch edgeClock = new();
 
     /// <summary>A pointer lifted a heading to move its column.</summary>
     internal void ReorderStarted(DataTableHeaderCell cell)
     {
         reordering = cell;
         dropAt = cell.GridColumn;
+        reorderStartOffset = scroll?.HorizontalOffset ?? 0;
+        reorderDx = 0;
+        edgeClock = System.Diagnostics.Stopwatch.StartNew();
         Note($"[drag] a heading was lifted: column {cell.GridColumn}");
         Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.SetIsTranslationEnabled(cell, true);
         cell.Opacity = 0.8;
         Canvas.SetZIndex(cell, 10);
+        edgeTimer ??= DispatcherQueue.CreateTimer();
+        edgeTimer.Interval = TimeSpan.FromMilliseconds(16);
+        edgeTimer.IsRepeating = true;
+        edgeTimer.Tick -= OnEdgeTick;
+        edgeTimer.Tick += OnEdgeTick;
+        edgeTimer.Start();
     }
 
     /// <summary>The pointer moved with a lifted heading, by this much since it began, in the window's coordinates.</summary>
-    internal void ReorderMoved(DataTableHeaderCell cell, double dx)
+    internal void ReorderMoved(DataTableHeaderCell cell, double dx, double pointerX)
     {
         if (reordering is null || cell.GridColumn < 0 || cell.GridColumn >= shown.Count)
         {
             return;
         }
 
-        double logical = FlowDirection == FlowDirection.RightToLeft ? -dx : dx;
-        cell.Translation = new System.Numerics.Vector3((float)logical, 0, 0);
+        reorderDx = dx;
+        reorderPointerX = pointerX;
+        FollowPointer(cell);
+    }
+
+    // The lifted heading stands under the pointer, and the place it would drop at is where its centre is among the others'. A heading
+    // of the scrolling columns moves with the content as the view is scrolled, so the distance scrolled since it was lifted is added.
+    private void FollowPointer(DataTableHeaderCell cell)
+    {
         ShownColumn dragged = shown[cell.GridColumn];
-        double centre = dragged.Placed.X + (dragged.Placed.Width / 2) + logical;
+        double logical = FlowDirection == FlowDirection.RightToLeft ? -reorderDx : reorderDx;
+        double scrolled = dragged.Placed.Group == ColumnGroup.Scroll ? (scroll?.HorizontalOffset ?? 0) - reorderStartOffset : 0;
+        cell.Translation = new System.Numerics.Vector3((float)(logical + scrolled), 0, 0);
+        double centre = dragged.Placed.X + (dragged.Placed.Width / 2) + logical + scrolled;
         List<double> centres = shown.Select(s => s.Placed.X + (s.Placed.Width / 2)).ToList();
         int applied = layout?.FrozenStartApplied ?? 0;
         int endCount = shown.Count(s => s.Placed.Group == ColumnGroup.FrozenEnd);
@@ -85,13 +109,37 @@ public sealed partial class DataTable
             _ => (applied, shown.Count - endCount - 1),
         };
         dropAt = ColumnOrder.DropIndex(cell.GridColumn, centre, centres, from, Math.Max(from, to));
-        Note($"[drag] the heading moved {dx:0.#}: it would drop at {dropAt}");
+        Note($"[drag] the heading moved {reorderDx:0.#}, view scrolled {scrolled:0.#}: it would drop at {dropAt}");
+    }
+
+    // While a heading of the scrolling columns is held near an edge of the view the view scrolls, faster the nearer the edge.
+    private void OnEdgeTick(DispatcherQueueTimer sender, object args)
+    {
+        double seconds = edgeClock.Elapsed.TotalSeconds;
+        edgeClock.Restart();
+        if (reordering is not { } cell || scroll is null || cell.GridColumn < 0 || cell.GridColumn >= shown.Count || shown[cell.GridColumn].Placed.Group != ColumnGroup.Scroll)
+        {
+            return;
+        }
+
+        double left = scroll.TransformToVisual(null).TransformPoint(new Point(0, 0)).X;
+        double velocity = AutoScroll.Velocity(reorderPointerX - left, scroll.ViewportWidth);
+        if (velocity == 0)
+        {
+            return;
+        }
+
+        // The velocity is in the window's directions: toward the physical left is negative. In a right to left flow the end of the rows is on the left.
+        double delta = (FlowDirection == FlowDirection.RightToLeft ? -velocity : velocity) * Math.Min(seconds, 0.1);
+        scroll.ScrollBy(delta, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
+        FollowPointer(cell);
     }
 
     /// <summary>The pointer let go of a lifted heading.</summary>
     internal void ReorderEnded(DataTableHeaderCell cell, bool keep)
     {
         Note($"[drag] the heading was let go, kept: {keep}, from {cell.GridColumn} to {dropAt}");
+        edgeTimer?.Stop();
         cell.Translation = System.Numerics.Vector3.Zero;
         cell.Opacity = 1;
         Canvas.SetZIndex(cell, 0);

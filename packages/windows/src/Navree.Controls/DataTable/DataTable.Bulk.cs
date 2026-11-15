@@ -53,11 +53,13 @@ public sealed partial class DataTable
         SyncBulkActions();
         (int held, int chosen) = CountChoice();
         long? total = model.Choice.AcrossTotal;
+
+        // The bar counts the keys chosen, which are what the host is told of, so it never says none while it shows.
         string countWords = choice.Across
             ? total is { } all
                 ? DataTableStrings.Get("DataTable_Chosen_All", Choosing.FormatCount(all, Culture))
                 : DataTableStrings.Get("DataTable_Chosen_AllUnknown")
-            : DataTableStrings.Get("DataTable_Chosen_Count", Choosing.FormatCount(chosen, Culture));
+            : DataTableStrings.Get("DataTable_Chosen_Count", Choosing.FormatCount(choice.Keys.Count, Culture));
         string? offer = null;
         if (Choosing.OfferAcross(model.Choice.AcrossAvailable, choice.Across, held, chosen))
         {
@@ -100,9 +102,8 @@ public sealed partial class DataTable
 
     private void OnChoiceTimer(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
-        (_, int chosen) = CountChoice();
         long? total = Model?.Choice.AcrossTotal;
-        Say(Announcements.Chosen(chosen, total, choice.Across));
+        Say(Announcements.Chosen(choice.Keys.Count, total, choice.Across));
     }
 
     // Rows that join while focus is in the table are said once, a second after the last.

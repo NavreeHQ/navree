@@ -14,6 +14,22 @@ public sealed partial class DataTable
     private TextBlock? sortText;
     private double textScale = 1.0;
 
+    private Windows.UI.ViewManagement.UISettings? uiSettings;
+
+    // The text scale factor the person set; one for none.
+    private double CurrentTextScale()
+    {
+        try
+        {
+            uiSettings ??= new Windows.UI.ViewManagement.UISettings();
+            return uiSettings.TextScaleFactor;
+        }
+        catch (Exception)
+        {
+            return 1.0;
+        }
+    }
+
     /// <summary>Whether the table is drawn as a list.</summary>
     internal bool IsList => Mode == DataTableMode.List;
 
@@ -42,14 +58,7 @@ public sealed partial class DataTable
     // Decides whether the table is a table or a list, by the rule every client shares; true when that changed.
     private bool UpdateMode(IReadOnlyList<DataTableColumn> columns, List<int> order, double gutter)
     {
-        try
-        {
-            textScale = new Windows.UI.ViewManagement.UISettings().TextScaleFactor;
-        }
-        catch (Exception)
-        {
-            textScale = 1.0;
-        }
+        textScale = CurrentTextScale();
 
         double least = order.Sum(i => ColumnSizing.LeastWidth(columns[i].Kind));
         bool list = RowFolding.FoldsToList(ActualWidth, order.Count, least, gutter, textScale);

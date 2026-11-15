@@ -39,7 +39,7 @@ internal enum StickyRole
 internal sealed partial class StickyCoordinator
 {
     private readonly ScrollView scroll;
-    private readonly Dictionary<UIElement, StickyRole> parts = [];
+    private readonly StickyParts<UIElement> parts = new();
     private Compositor? compositor;
     private CompositionPropertySet? layoutProperties;
     private ExpressionAnimation? startAnimation;
@@ -84,7 +84,7 @@ internal sealed partial class StickyCoordinator
         scroll.ViewChanged += (_, _) => Mirror();
         scroll.ExtentChanged += (_, _) => OnExtentChanged();
         scroll.SizeChanged += (_, _) => OnExtentChanged();
-        foreach ((UIElement element, StickyRole role) in parts)
+        foreach ((UIElement element, StickyRole role) in parts.All)
         {
             EnableTranslation(element, role);
             PrepareClip(element, role);
@@ -114,7 +114,7 @@ internal sealed partial class StickyCoordinator
     /// <param name="role">What it is.</param>
     internal void Register(UIElement element, StickyRole role)
     {
-        parts[element] = role;
+        parts.Add(element, role);
         if (attached)
         {
             EnableTranslation(element, role);
@@ -147,7 +147,7 @@ internal sealed partial class StickyCoordinator
         double reach = Math.Max(0, scroll.ScrollableWidth);
         (double min, double max) = rtl ? (-reach, 0.0) : (0.0, reach);
         double position = rtl ? -scroll.HorizontalOffset : scroll.HorizontalOffset;
-        foreach ((UIElement element, StickyRole role) in parts)
+        foreach ((UIElement element, StickyRole role) in parts.All)
         {
             switch (role)
             {
@@ -211,7 +211,7 @@ internal sealed partial class StickyCoordinator
         }
 
         built = true;
-        foreach ((UIElement element, StickyRole role) in parts)
+        foreach ((UIElement element, StickyRole role) in parts.All)
         {
             Begin(element, role);
         }

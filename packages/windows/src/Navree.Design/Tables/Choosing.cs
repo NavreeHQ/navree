@@ -116,6 +116,23 @@ public static class Choosing
         return new ChoiceState(keys, false);
     }
 
+    /// <summary>Takes out of the chosen keys those whose row is not held any more.</summary>
+    /// <param name="keys">The chosen keys; changed.</param>
+    /// <param name="isHeld">Whether a row is held.</param>
+    /// <returns>The keys taken out, which the host is to be told are no longer chosen.</returns>
+    public static IReadOnlyList<string> Prune(HashSet<string> keys, Func<string, bool> isHeld)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        ArgumentNullException.ThrowIfNull(isHeld);
+        List<string> gone = [.. keys.Where(key => !isHeld(key))];
+        foreach (string key in gone)
+        {
+            keys.Remove(key);
+        }
+
+        return gone;
+    }
+
     /// <summary>What a click on a row means.</summary>
     /// <param name="anyChosen">Whether any row is chosen.</param>
     /// <param name="ctrl">Whether Control is held.</param>
