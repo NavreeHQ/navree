@@ -121,6 +121,19 @@ class ReorderRulesTest {
     }
 
     @Test
+    fun the_form_that_moves_a_card_by_its_fields_gives_way_to_the_handle() {
+        val moveForm = Navree.Form(id = "move", action = "/cards/move", method = Navree.Method.POST, children = listOf(Navree.Button(label = "Move", action = Navree.Action.Submit())))
+        val badges = Navree.Stack(children = listOf(Navree.Badge(text = "Bug")))
+        val row = Navree.Row(id = "c-7", title = "Card c-7", detail = listOf(badges, Navree.Disclosure(label = "Move", children = listOf(moveForm))))
+        val todo = list("todo", "board", null).copy(children = listOf(row))
+        assertEquals(listOf<Navree.Node>(badges), ReorderRules.withoutMoveForm(todo, row).detail)
+        val other = Navree.Disclosure(label = "Details", children = listOf(Navree.Text(value = "More")))
+        val kept = row.copy(detail = listOf(badges, other))
+        assertEquals("a disclosure of something else stays", kept, ReorderRules.withoutMoveForm(todo, kept))
+        assertEquals("a list that takes no moves has no handle", row, ReorderRules.withoutMoveForm(todo.copy(reorder = null), row))
+    }
+
+    @Test
     fun the_lists_a_row_may_go_to_are_named_by_their_sections() {
         val todo = list("todo", "board", null, "c-7")
         val done = list("done", "board", null, "c-2")

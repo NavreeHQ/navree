@@ -13,6 +13,19 @@ object ReorderRules {
     /** A row can be moved when its list takes moves and both have ids. */
     fun draggable(list: Navree.List, row: Navree.Row): Boolean = list.reorder != null && list.id != null && row.id != null
 
+    /**
+     * The row without the form that moves it by its fields (a list, a position
+     * and a button, in a disclosure), which a page with no handle falls back
+     * to: where a row has a handle, the handle is the one way to move it.
+     */
+    fun withoutMoveForm(list: Navree.List, row: Navree.Row): Navree.Row {
+        val href = list.reorder?.href?.substringBefore('?') ?: return row
+        val kept = row.detail.filterNot { part ->
+            part is Navree.Disclosure && part.walk().any { it is Navree.Form && it.action.substringBefore('?') == href }
+        }
+        return if (kept.size == row.detail.size) row else row.copy(detail = kept)
+    }
+
     /** How many rows a drag of `offsetPx` crossed, for rows `rowPx` tall: half a row counts as one. */
     fun steps(offsetPx: Float, rowPx: Int): Int = if (rowPx <= 0) 0 else (offsetPx / rowPx).roundToInt()
 

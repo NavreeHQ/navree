@@ -78,6 +78,7 @@
     <string name="navree_today">Today</string>
     <string name="navree_now">Now</string>
     <string name="navree_drag_handle">Reorder</string>
+    <string name="navree_move_card">Move %1$s</string>
     <string name="navree_move_up">Move up</string>
     <string name="navree_move_down">Move down</string>
     <string name="navree_move_to">Move to %1$s</string>

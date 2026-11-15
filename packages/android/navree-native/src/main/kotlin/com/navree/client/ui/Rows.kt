@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -58,9 +60,13 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
@@ -291,7 +297,8 @@ internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = M
     var dragging by remember { mutableStateOf<String?>(null) }
     var offset by remember { mutableFloatStateOf(0f) }
     var rowPx by remember { mutableIntStateOf(1) }
-    val lifted = with(LocalDensity.current) { 6.dp.toPx() }
+    // A row and the space after it: what one place of a drag measures.
+    val spacing = with(LocalDensity.current) { 8.dp.roundToPx() }
     val upWords = stringResource(R.string.navree_move_up)
     val downWords = stringResource(R.string.navree_move_down)
     val toWords = targets.map { (_, name) -> stringResource(R.string.navree_move_to, name) }
@@ -307,7 +314,11 @@ internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = M
         move(item, node, landing.before)
     }
 
-    Column(modifier) {
+    // Each card is one item of the lane, which is one group of them.
+    Column(
+        modifier.semantics { collectionInfo = CollectionInfo(rowCount = ids.size, columnCount = 1) },
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         for (child in node.children) {
             if (child !is Navree.Row || !ReorderRules.draggable(node, child)) {
                 if (child is Navree.Row) RowView(child, place, Group.None) else NodeView(child, place)
@@ -323,64 +334,76 @@ internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = M
                 targets.forEachIndexed { at, (list, _) -> add(CustomAccessibilityAction(toWords[at]) { move(id, list, null); true }) }
             }
             val held = dragging == id
+            val handleName = stringResource(R.string.navree_move_card, child.title)
             Box(
                 Modifier
                     .zIndex(if (held) 1f else 0f)
-                    .onSizeChanged { rowPx = it.height }
+                    .onSizeChanged { rowPx = it.height + spacing }
                     .graphicsLayer {
                         translationY = if (held) offset else 0f
-                        shadowElevation = if (held) lifted else 0f
-                    },
+                    }
+                    .semantics { collectionItemInfo = CollectionItemInfo(index, 1, 0, 1) },
             ) {
-                RowView(
-                    child,
-                    place,
-                    Group.None,
-                    modifier = if (held) Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh) else Modifier,
-                    moves = moves,
-                    handle = {
-                        var open by remember { mutableStateOf(false) }
-                        Box {
-                            Icon(
-                                Glyphs.DragHandle,
-                                contentDescription = stringResource(R.string.navree_drag_handle),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .pointerInput(id, ids) {
-                                        detectDragGestures(
-                                            onDragStart = {
-                                                dragging = id
-                                                offset = 0f
-                                            },
-                                            onDrag = { change, amount ->
-                                                change.consume()
-                                                offset += amount.y
-                                            },
-                                            onDragEnd = {
-                                                step(id, ReorderRules.steps(offset, rowPx))
-                                                dragging = null
-                                                offset = 0f
-                                            },
-                                            onDragCancel = {
-                                                dragging = null
-                                                offset = 0f
-                                            },
-                                        )
+                // The card is the row container: a tonal step above the surface, lifted while it is dragged.
+                Card(
+                    Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = if (held) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow),
+                    elevation = CardDefaults.cardElevation(defaultElevation = if (held) 6.dp else 0.dp),
+                ) {
+                    RowView(
+                        // The form that moves a card by its fields is for a page with no handle: here the handle is the one way.
+                        ReorderRules.withoutMoveForm(node, child),
+                        place,
+                        Group.None,
+                        handle = {
+                            var open by remember { mutableStateOf(false) }
+                            Box {
+                                Icon(
+                                    Glyphs.DragHandle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .pointerInput(id, ids) {
+                                            detectDragGestures(
+                                                onDragStart = {
+                                                    dragging = id
+                                                    offset = 0f
+                                                },
+                                                onDrag = { change, amount ->
+                                                    change.consume()
+                                                    offset += amount.y
+                                                },
+                                                onDragEnd = {
+                                                    step(id, ReorderRules.steps(offset, rowPx))
+                                                    dragging = null
+                                                    offset = 0f
+                                                },
+                                                onDragCancel = {
+                                                    dragging = null
+                                                    offset = 0f
+                                                },
+                                            )
+                                        }
+                                        // One stop for a screen reader: the handle, named for its card, with the moves as its actions.
+                                        .semantics {
+                                            contentDescription = handleName
+                                            customActions = moves
+                                        }
+                                        .clickable(role = Role.Button) { open = true }
+                                        .padding(12.dp),
+                                )
+                                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                                    if (up) DropdownMenuItem(text = { Text(upWords) }, onClick = { open = false; step(id, -1) })
+                                    if (down) DropdownMenuItem(text = { Text(downWords) }, onClick = { open = false; step(id, 1) })
+                                    targets.forEachIndexed { at, (list, _) ->
+                                        DropdownMenuItem(text = { Text(toWords[at]) }, onClick = { open = false; move(id, list, null) })
                                     }
-                                    .clickable(role = Role.Button) { open = true }
-                                    .padding(12.dp),
-                            )
-                            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                                if (up) DropdownMenuItem(text = { Text(upWords) }, onClick = { open = false; step(id, -1) })
-                                if (down) DropdownMenuItem(text = { Text(downWords) }, onClick = { open = false; step(id, 1) })
-                                targets.forEachIndexed { at, (list, _) ->
-                                    DropdownMenuItem(text = { Text(toWords[at]) }, onClick = { open = false; move(id, list, null) })
                                 }
                             }
-                        }
-                    },
-                )
+                        },
+                    )
+                }
             }
         }
     }
