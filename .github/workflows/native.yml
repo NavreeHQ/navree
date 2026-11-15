@@ -453,6 +453,24 @@ jobs:
           $exports
           if (@($exports).Count -ne 5) { throw "expected five exported functions, found $(@($exports).Count)" }
 
+      # The C# models are written by the program that writes the Kotlin and Swift ones, from the
+      # same schema; its own tests run, and what it writes is what the build then reads.
+      - name: The generator's tests, and the C# models written
+        shell: bash
+        run: |
+          cargo test --locked -p xtask --lib native_models
+          cargo run --locked -q -p xtask -- native-models
+          ls -l packages/windows/src/Navree.Protocol/Models.cs
+
+      - name: Keep the written models
+        if: matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-models
+          if-no-files-found: error
+          path: packages/windows/src/Navree.Protocol/Models.cs
+          retention-days: 14
+
       - name: What the runner has
         shell: pwsh
         working-directory: packages/windows
@@ -566,3 +584,12 @@ jobs:
           if-no-files-found: error
           path: packages/windows/native/win-x64/navree_native_core.dll
           retention-days: 30
+
+      # What the generator wrote is what is committed: a stale model fails the run, after the rest has run.
+      - name: The written models are the committed ones
+        if: always()
+        shell: bash
+        run: |
+          status="$(git status --porcelain -- packages xtask)"
+          echo "$status"
+          test -z "$status"
