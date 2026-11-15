@@ -4,7 +4,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
 using Navree.Design.Tables;
 using VirtualKey = Windows.System.VirtualKey;
 
@@ -340,7 +339,7 @@ public sealed partial class DataTable
 
     private static InnerControl InnerControlOf(DependencyObject? source)
     {
-        for (DependencyObject? at = source; at is not null && at is not DataTableCell; at = VisualTreeHelper.GetParent(at))
+        for (DependencyObject? at = source; at is not null && at is not DataTableCell; at = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(at))
         {
             switch (at)
             {
