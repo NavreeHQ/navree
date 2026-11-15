@@ -25,6 +25,7 @@ import com.navree.client.core.Failure
 import com.navree.client.platform.OriginWebClient
 import com.navree.client.platform.Origins
 import com.navree.client.platform.WebRules
+import com.navree.client.platform.WorkerGuard
 import com.navree.client.platform.guardDocuments
 import com.navree.client.webViewToken
 
@@ -78,6 +79,8 @@ internal fun WebPage(
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { context ->
+                        // A page must not register a worker before the guard on workers is in force.
+                        WorkerGuard.ensure()
                         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
                         WebView(context).apply {
                             settings.javaScriptEnabled = true

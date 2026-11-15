@@ -198,6 +198,41 @@ fun guardWorkers(origins: Origins): Boolean = try {
 }
 
 /**
+ * The guard on service workers, made when it is needed, not at the start: it
+ * starts the web view's engine, which takes a while, and an app whose first
+ * screen is native does not need it before that screen is drawn. It is made
+ * once, on the main thread, when the main thread is idle after the first
+ * screen is drawn, and in any case before a web view is made (a page cannot
+ * register a worker before it is in a web view).
+ */
+object WorkerGuard {
+    private var origins: Origins? = null
+    private var made = false
+
+    /** Says which origins the guard is for. Call on the main thread. */
+    fun arm(origins: Origins) {
+        this.origins = origins
+        made = false
+    }
+
+    /** Makes the guard the next time the main thread has nothing to do. Call on the main thread. */
+    fun whenIdle() {
+        android.os.Looper.myQueue().addIdleHandler {
+            ensure()
+            false
+        }
+    }
+
+    /** Makes the guard now if it is not made yet. Call on the main thread. */
+    fun ensure() {
+        val wanted = origins ?: return
+        if (made) return
+        made = true
+        guardWorkers(wanted)
+    }
+}
+
+/**
  * The web view's client for a page of the app: every navigation and every
  * request of every frame is checked against the app's [origins] ([WebRules]).
  * What the web view reports that is not a request lands in the callbacks, on

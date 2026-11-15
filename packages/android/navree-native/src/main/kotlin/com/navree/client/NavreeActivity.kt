@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -26,6 +27,8 @@ import com.navree.client.core.CoreJson
 import com.navree.client.core.Driver
 import com.navree.client.core.Engine
 import com.navree.client.core.Events
+import com.navree.client.core.Content
+import com.navree.client.core.Stage
 import com.navree.client.core.Width
 import com.navree.client.platform.AndroidEffects
 import com.navree.client.platform.MOST_PICTURE_BYTES
@@ -36,6 +39,7 @@ import com.navree.client.ui.NavreeApp
 import com.navree.client.ui.rememberWindow
 import com.navree.core.Core
 import okhttp3.HttpUrl
+import kotlinx.coroutines.flow.first
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
@@ -69,7 +73,7 @@ class NavreeSession(
         driver.effects = effects
         // Said once, at start: an entry of the configuration that does not read is left out.
         for (entry in effects.origins.refused) android.util.Log.w("Navree", "left out of the configuration, it does not read: $entry")
-        com.navree.client.platform.guardWorkers(effects.origins)
+        com.navree.client.platform.WorkerGuard.arm(effects.origins)
         val device = Device.of(application)
         environment = Triple(device.dark, device.textPercent, device.locale)
         engine.core = Core(coreConfig(config, device, effects.caps, application.packageName).toString().encodeToByteArray())
@@ -153,6 +157,7 @@ open class NavreeActivity : ComponentActivity() {
     protected open fun config(): NavreeConfig = NavreeConfig.fromResources(this)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        StartMarks.mark("the activity is made")
         // The app draws behind the system bars; each screen pads itself by the insets.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -166,8 +171,23 @@ open class NavreeActivity : ComponentActivity() {
         val session = ViewModelProvider(this, NavreeSession.Factory(application, config, origin, restoring = savedInstanceState != null))[NavreeSession::class.java]
         this.session = session
         session.effects.activity = this
+        StartMarks.mark("the session is ready")
         if (savedInstanceState == null) opened(intent)
-        setContent { Host(session) }
+        window.decorView.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                window.decorView.viewTreeObserver.removeOnPreDrawListener(this)
+                StartMarks.mark("the first frame is drawn")
+                return true
+            }
+        })
+        setContent {
+            Host(session, onShell = { StartMarks.mark("the shell is answered") }) {
+                // The system measures the start to here; what waited for a quiet moment is done now.
+                StartMarks.mark("the first page is drawn")
+                reportFullyDrawn()
+                com.navree.client.platform.WorkerGuard.whenIdle()
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -245,8 +265,19 @@ open class NavreeActivity : ComponentActivity() {
     }
 }
 
+/** When the parts of a start happened, in the log, counted from the start of the process: where the time of a start goes. */
+internal object StartMarks {
+    fun mark(what: String) {
+        android.util.Log.i("NavreeStart", "$what at ${android.os.SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime()} ms")
+    }
+}
+
+/**
+ * The app. `onShell` is called once the core has the app's shell (its
+ * navigation); `onPage` once the first screen has something to show.
+ */
 @Composable
-internal fun Host(session: NavreeSession) {
+internal fun Host(session: NavreeSession, onShell: () -> Unit = {}, onPage: () -> Unit = {}) {
     val window = rememberWindow()
     val configuration = LocalConfiguration.current
     val driver = session.driver
@@ -269,6 +300,12 @@ internal fun Host(session: NavreeSession) {
             session.environment = now
             driver.send(Events.environment(dark = now.first, textPercent = now.second, locale = now.third))
         }
+    }
+    LaunchedEffect(driver) {
+        snapshotFlow { driver.nav.stage == Stage.Ready }.first { it }
+        onShell()
+        snapshotFlow { driver.nav.front?.let { driver.screens[it] }?.let { it.content !is Content.Blank } == true }.first { it }
+        onPage()
     }
     NavreeApp(driver, session.config, image = session::image)
 }
