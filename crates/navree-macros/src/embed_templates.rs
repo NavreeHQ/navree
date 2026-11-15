@@ -342,6 +342,10 @@ mod tests {
     fn junction(link: &Path, target: &Path) {
         // `mklink` reads a `/` as the start of an option: pass `\` only.
         let backslashed = |path: &Path| path.to_string_lossy().replace('/', "\\");
+        // Test code beside the code it tests (the rules exempt tests in `tests/`): `mklink` is
+        // a builtin of `cmd`, so there is no program to start in its place, the command is
+        // fixed, and each path is an argument of its own.
+        // nosemgrep: navree-shell-command-string, navree-process-outside-tooling
         let output = std::process::Command::new("cmd")
             .args(["/C", "mklink", "/J"])
             .arg(backslashed(link))
