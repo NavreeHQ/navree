@@ -841,6 +841,65 @@ async fn a_booted_app_logs_each_extension_once_with_the_size_of_its_files() {
     app.shutdown().await.unwrap();
 }
 
+/// A plugin's extension whose script may call routes outside the plugin's namespace, and one of
+/// the app's own with routes of the app's.
+static WIDE: UiExtension = UiExtension::new("geo", "wide")
+    .script(ExtensionFile::__new(
+        b"export const contract = 1;",
+        "ffffffffffff",
+        None,
+    ))
+    .contract(1)
+    .routes(&["/geo/", "/api/"]);
+static OWN: UiExtension = UiExtension::new("app", "own")
+    .script(ExtensionFile::__new(
+        b"export const contract = 1;",
+        "abababababab",
+        None,
+    ))
+    .contract(1)
+    .routes(&["/deliveries/"]);
+
+plugin_module!(WideModule, WIDE);
+app_module!(OwnModule, OWN);
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_route_prefix_without_the_namespace_is_warned_about() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    // The map's routes are under `/geo/`; the app's own extension is the app's to route.
+    let app = builder()
+        .module(UiModule)
+        .module(GeoModule)
+        .module(WideModule)
+        .module(OwnModule)
+        .build()
+        .await;
+    let said = said_about_extensions(&capture);
+    let warned: Vec<&String> = said.iter().filter(|line| line.contains("WARN")).collect();
+    assert_eq!(warned.len(), 1, "{said:?}");
+    assert!(
+        warned[0].contains(
+            "UI extension `geo.wide` may call routes under `/api/`, which has no segment named `geo`: keep a plugin's routes under its own namespace, such as .routes(&[\"/geo/\"])"
+        ),
+        "{said:?}"
+    );
+    app.shutdown().await.unwrap();
+}
+
+#[test]
+fn an_extension_prints_its_names_and_hashes_and_never_its_files() {
+    let printed = format!("{MAP:?}");
+    for part in ["geo", "map", "1a2b3c4d5e6f", "0f9e8d7c6b5a"] {
+        assert!(printed.contains(part), "`{part}` in {printed}");
+    }
+    assert!(!printed.contains("export"), "{printed}");
+    assert!(!printed.contains("data-slot"), "{printed}");
+    let file = format!("{:?}", MAP.script_file().expect("a script"));
+    assert!(file.contains("1a2b3c4d5e6f") && file.contains("53"), "{file}");
+    assert!(!file.contains("mount"), "{file}");
+}
+
 /// What `kit::problems` says of raw markup under a part of a plugin's.
 fn raw_problem(path: &str) -> String {
     format!(

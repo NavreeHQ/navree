@@ -265,6 +265,17 @@ impl ExtensionFile {
     }
 }
 
+/// The hash, the length and the namespace, never the bytes.
+impl std::fmt::Debug for ExtensionFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExtensionFile")
+            .field("hash", &self.hash)
+            .field("len", &self.bytes.len())
+            .field("namespace", &self.namespace)
+            .finish()
+    }
+}
+
 /// The namespace `file` was scoped for, when it is a stylesheet.
 pub(crate) const fn file_namespace(file: &ExtensionFile) -> Option<&'static str> {
     file.namespace
@@ -348,6 +359,19 @@ pub struct UiExtension {
     routes: &'static [&'static str],
     script_url: Address,
     sheet_url: Address,
+}
+
+/// The namespace, the name and each file's hash and length, never a file's bytes.
+impl std::fmt::Debug for UiExtension {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UiExtension")
+            .field("namespace", &self.namespace)
+            .field("name", &self.name)
+            .field("script", &self.script)
+            .field("sheet", &self.sheet)
+            .field("contract", &self.contract)
+            .finish_non_exhaustive()
+    }
 }
 
 impl UiExtension {
@@ -705,6 +729,8 @@ struct First {
     module: &'static str,
     /// What the log calls who contributed it: the plugin, or the module when it names none.
     who: String,
+    /// Whether a plugin's module contributed it.
+    of_plugin: bool,
 }
 
 /// The extensions the app's modules contributed, checked and ready to serve. Fails with every
@@ -785,6 +811,7 @@ pub(crate) fn checked(ctx: &AppContext) -> Result<Extensions, String> {
             extension,
             module: module.name,
             who,
+            of_plugin: plugin.is_some(),
         });
 
         if extension.script_file().is_none() && extension.sheet_file().is_none() {
@@ -822,9 +849,24 @@ pub(crate) fn checked(ctx: &AppContext) -> Result<Extensions, String> {
         stem,
         extension,
         who,
+        of_plugin,
         ..
     } in &firsts
     {
+        // A plugin's script may call the routes its extension names. One outside the plugin's
+        // namespace is said once, so the app's owner sees how far the script reaches.
+        let namespace = extension.namespace();
+        if *of_plugin
+            && let Some(prefix) = extension
+                .routes
+                .iter()
+                .find(|prefix| !prefix.split('/').any(|segment| segment == namespace))
+        {
+            tracing::warn!(
+                target: "navree::ui",
+                "UI extension `{stem}` may call routes under `{prefix}`, which has no segment named `{namespace}`: keep a plugin's routes under its own namespace, such as .routes(&[\"/{namespace}/\"])"
+            );
+        }
         let mut said = Vec::new();
         if let Some(file) = extension.script_file() {
             said.push(format!("script {} KB", file.bytes().len().div_ceil(1024)));
