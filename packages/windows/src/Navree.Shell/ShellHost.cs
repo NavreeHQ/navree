@@ -144,24 +144,33 @@ public sealed partial class ShellHost : IDisposable
         });
 
     // On the core's thread: the state is handed to the UI thread, and then each effect, in order.
+    // A window that cannot show the state, or an effect that fails, does not cost the rest of the update.
     private void OnUpdate(Update update)
     {
         dispatcher.TryEnqueue(() =>
+            Delivery.Deliver(
+                update,
+                state => StateChanged?.Invoke(state),
+                effect => Run(effect, update.State),
+                what => Problem?.Invoke(what)));
+    }
+
+    // Completes on the dispatcher the host was given, whatever thread the caller finished on: the host's own state changes only there.
+    // False when the queue is gone, which is the end of the app.
+    private Task<bool> OnDispatcherAsync()
+    {
+        if (dispatcher.HasThreadAccess)
         {
-            StateChanged?.Invoke(update.State);
-            foreach (Effect effect in update.Effects)
-            {
-                try
-                {
-                    Run(effect, update.State);
-                }
-                catch (Exception problem)
-                {
-                    // One effect that fails, in any way, is reported by its kind alone and the rest go on.
-                    Problem?.Invoke("an effect failed: " + effect.GetType().Name + ": " + problem.GetType().Name);
-                }
-            }
-        });
+            return Task.FromResult(true);
+        }
+
+        TaskCompletionSource<bool> arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!dispatcher.TryEnqueue(() => arrived.SetResult(true)))
+        {
+            arrived.SetResult(false);
+        }
+
+        return arrived.Task;
     }
 
     private void Run(Effect effect, ViewState state)
@@ -277,18 +286,24 @@ public sealed partial class ShellHost : IDisposable
     {
         CancellationTokenSource work = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token);
         running[fetch.Request] = work;
-        FetchResult result;
+        FetchResult? result = null;
         try
         {
-            result = await Task.Run(() => fetcher.FetchAsync(fetch, work.Token)).ConfigureAwait(true);
+            result = await Task.Run(() => Delivery.FetchAsync(fetcher, fetch, work.Token)).ConfigureAwait(false);
         }
-        finally
+        catch (OperationCanceledException)
         {
-            running.Remove(fetch.Request);
-            work.Dispose();
+            // The core no longer wants the answer, or the app is ending.
         }
 
-        if (stopped.IsCancellationRequested)
+        if (!await OnDispatcherAsync().ConfigureAwait(false))
+        {
+            return;
+        }
+
+        running.Remove(fetch.Request);
+        work.Dispose();
+        if (result is null || stopped.IsCancellationRequested)
         {
             return;
         }
@@ -315,7 +330,7 @@ public sealed partial class ShellHost : IDisposable
     {
         CancellationTokenSource work = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token);
         streams[open.Stream] = work;
-        int status;
+        int status = 0;
         try
         {
             status = await Task.Run(() => network!.StreamAsync(
@@ -331,12 +346,23 @@ public sealed partial class ShellHost : IDisposable
                     client.Send(Events.StreamEvent(open.Stream, name));
                     return Task.CompletedTask;
                 },
-                work.Token)).ConfigureAwait(true);
+                work.Token)).ConfigureAwait(false);
         }
-        finally
+        catch (OperationCanceledException)
         {
-            work.Dispose();
+            // The core closed it, or the app is ending.
         }
+        catch (Exception)
+        {
+            // A stream that broke ends as one that could not be kept open.
+        }
+
+        if (!await OnDispatcherAsync().ConfigureAwait(false))
+        {
+            return;
+        }
+
+        work.Dispose();
 
         // The core closed it itself (it is no longer listed) or the app is ending: nobody is told it ended.
         if (streams.Remove(open.Stream) && !stopped.IsCancellationRequested)
@@ -360,19 +386,27 @@ public sealed partial class ShellHost : IDisposable
     {
         CancellationTokenSource wait = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token);
         timers[timer.Timer] = wait;
+        bool ran = false;
         try
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(Math.Max(0, timer.Ms)), wait.Token).ConfigureAwait(true);
-            timers.Remove(timer.Timer);
-            client.Send(Events.Timer(timer.Timer));
+            await Task.Delay(TimeSpan.FromMilliseconds(Math.Max(0, timer.Ms)), wait.Token).ConfigureAwait(false);
+            ran = true;
         }
         catch (OperationCanceledException)
         {
             // The core no longer wants it.
         }
-        finally
+
+        if (!await OnDispatcherAsync().ConfigureAwait(false))
         {
-            wait.Dispose();
+            return;
+        }
+
+        wait.Dispose();
+        if (ran)
+        {
+            timers.Remove(timer.Timer);
+            client.Send(Events.Timer(timer.Timer));
         }
     }
 
