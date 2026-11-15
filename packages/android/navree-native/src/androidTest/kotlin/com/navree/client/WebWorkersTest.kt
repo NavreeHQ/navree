@@ -252,6 +252,64 @@ class WebWorkersTest {
         assertEquals("a worker reached the other origin: $otherAsked", emptyList<String>(), otherAsked.toList())
     }
 
+    // ------------------------------------------------------------------ what else a service worker does
+
+    // The service worker loads a script from another origin with importScripts and says what came of it to the
+    // app's own server (a worker has no page to tell).
+    private fun importingServiceWorker() =
+        "try { importScripts('$elsewhere/import.js'); fetch('/says?m=sw-import-reached') } catch (e) { fetch('/says?m=sw-import-blocked') }"
+
+    private val registersTheImporter = "<p>ours</p><script>navigator.serviceWorker.register('/sw.js')</script>"
+
+    @Test
+    fun aServiceWorkerNeverImportsAScriptFromAnotherOrigin() {
+        serve({ registersTheImporter }, { mapOf("/sw.js" to importingServiceWorker()) })
+        val origins = Origins(base, loopbackHttp = true)
+        var inForce = false
+        compose.runOnUiThread {
+            WorkerGuard.arm(origins)
+            inForce = WorkerGuard.ensure()
+        }
+        assertTrue("the rules for service workers are in force", inForce)
+        openedBy(origins)
+        waitForSaid()
+        settle("worker-import.txt", "importScripts of another origin's script inside a service worker, with the guard")
+        assertEquals("what the worker said", listOf("sw-import-blocked"), said.toList())
+        assertEquals("the other origin was asked: $otherAsked", emptyList<String>(), otherAsked.toList())
+    }
+
+    @Test
+    fun aServiceWorkerImportsAScriptFromAnotherOriginWhereNothingGuardsIt() {
+        serve({ registersTheImporter }, { mapOf("/sw.js" to importingServiceWorker()) })
+        compose.runOnUiThread {
+            ServiceWorkerController.getInstance().setServiceWorkerClient(object : ServiceWorkerClient() {
+                override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? = null
+            })
+        }
+        openedBy(Origins(base, loopbackHttp = true))
+        waitForSaid()
+        settle("worker-import-control.txt", "importScripts of another origin's script inside a service worker, no rules")
+        assertEquals("what the worker said", listOf("sw-import-reached"), said.toList())
+        assertTrue("the other origin was asked: $otherAsked", otherAsked.contains("GET /import.js"))
+    }
+
+    @Test
+    fun aServiceWorkerWhoseScriptIsOnAnotherOriginIsNotRegistered() {
+        serve({
+            "<p>ours</p><script>navigator.serviceWorker.register('$elsewhere/sw.js').then(function(){ new Image().src = '/says?m=registered' }, function(e){ new Image().src = '/says?m=' + encodeURIComponent('register-failed ' + e.name) })</script>"
+        })
+        val origins = Origins(base, loopbackHttp = true)
+        compose.runOnUiThread {
+            WorkerGuard.arm(origins)
+            WorkerGuard.ensure()
+        }
+        openedBy(origins)
+        waitForSaid()
+        settle("worker-register-elsewhere.txt", "a registration whose script is on another origin")
+        assertEquals("what the page was told", listOf("register-failed SecurityError"), said.toList())
+        assertEquals("the other origin was asked: $otherAsked", emptyList<String>(), otherAsked.toList())
+    }
+
     // ------------------------------------------------------------------ a worker the page starts from one of the app's addresses
 
     private fun reportsWhatItReaches() =
