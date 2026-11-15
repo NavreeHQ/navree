@@ -72,7 +72,12 @@ impl Graph {
     ///    plugin of its type's crate; else, for a generic module that only
     ///    modules acting for plugins import, one of their plugins, one that is
     ///    not first-party before one that is), recorded for `acts_for` and
-    ///    `plugins`.
+    ///    `plugins`;
+    /// 10. a configured instance (`for_root`, `from_config`) imported by a
+    ///     module that acts for a plugin that is not first-party, of a module
+    ///     whose type does not name the plugin's crate:
+    ///     `PluginConfiguresModule` (a second configured instance of a module
+    ///     reads the same way, see `configured_twice`).
     pub(crate) fn check_plugins(&mut self, errors: &mut Vec<KernelError>) {
         let version = env!("CARGO_PKG_VERSION");
         // Each plugin's modules, plugins in first-seen order.
@@ -252,10 +257,35 @@ impl Graph {
         }
 
         // Step 9.
-        let acts_for = self.attribution(&groups);
-
+        self.acts_for = self.attribution(&groups);
         self.first_party.extend(first_party);
-        self.acts_for = acts_for;
+
+        // Step 10.
+        for m in self.import_order() {
+            let module = &self.modules[m];
+            let Some(importer) = module.configured_by else {
+                continue;
+            };
+            let Some(info) = self.community_plugin(importer) else {
+                continue;
+            };
+            if !names_crate(module.id.type_name(), info.crate_name) {
+                errors.push(KernelError::PluginConfiguresModule {
+                    plugin: info.name,
+                    module: module.name,
+                    importer: self.modules[importer].name,
+                });
+            }
+        }
+    }
+
+    /// The plugin module `m` acts for (step 9 of
+    /// [`check_plugins`](Graph::check_plugins)), when the kernel does not find
+    /// it first-party.
+    pub(crate) fn community_plugin(&self, m: usize) -> Option<&PluginInfo> {
+        let first = self.acts_for.get(m).copied().flatten()?;
+        let info = self.modules[first].plugin.as_ref()?;
+        (!self.first_party.contains(info.name)).then_some(info)
     }
 
     /// Which plugin each module acts for, by module index: the `first` of its

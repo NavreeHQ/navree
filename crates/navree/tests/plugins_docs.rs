@@ -699,3 +699,68 @@ fn the_plugin_prelude_brings_the_link_card_and_permission_methods() {
         TypeId::of::<navree::contracts::Permission>()
     );
 }
+
+// What a plugin's module may not register.
+
+/// The roster plugin: its crate is this module, so the app's modules at the top of the file are
+/// in no crate it names.
+mod navree_plugin_roster {
+    use navree::plugin::PluginInfo;
+    use navree::prelude::*;
+
+    /// The plugin's info.
+    const ROSTER: PluginInfo =
+        PluginInfo::new("navree-plugin-roster", module_path!(), "roster", "1.0.0");
+
+    /// The plugin's module: it names the plugin, then registers what its function adds.
+    pub struct RosterModule(pub fn(&mut ModuleBuilder));
+
+    impl Module for RosterModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(ROSTER);
+            (self.0)(m);
+        }
+    }
+}
+
+/// The refusal of the roster plugin's module configuring `module`.
+fn roster_configures(module: &str) -> String {
+    format!(
+        "plugin `navree-plugin-roster` configures the module `{module}` in `RosterModule` (for_root or from_config); only the app configures a module of another crate: import it by type in the plugin, and configure it in the app"
+    )
+}
+
+#[test]
+fn a_plugin_that_configures_access_or_workspaces_fails_the_boot() {
+    use navree_plugin_roster::RosterModule;
+    // Every user may manage everything, set through the app's access module.
+    let access = Navree::app()
+        .module(AccessModule)
+        .module(RosterModule(|m| {
+            m.import(AccessModule::for_root(AccessOptions {
+                abilities: |_, rules| {
+                    rules.can(MANAGE, ALL);
+                },
+                super_admin_role: None,
+            }));
+        }))
+        .validate()
+        .expect_err("the plugin configures access")
+        .to_string();
+    assert!(
+        access
+            .lines()
+            .any(|line| line == roster_configures("AccessModule")),
+        "{access}"
+    );
+    // The app configures workspaces too: the plugin's refusal, alone.
+    let workspaces = Navree::app()
+        .module(WorkspaceModule::from_config())
+        .module(RosterModule(|m| {
+            m.import(WorkspaceModule::from_config());
+        }))
+        .validate()
+        .expect_err("the plugin configures workspaces")
+        .to_string();
+    assert_eq!(workspaces, roster_configures("WorkspaceModule"));
+}

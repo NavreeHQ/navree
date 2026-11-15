@@ -240,6 +240,19 @@ pub enum KernelError {
         /// The file's path, as the plugin gives it.
         path: String,
     },
+    /// A module that acts for a plugin that is not first-party imports a
+    /// configured instance of a module whose type does not name the plugin's crate.
+    #[error(
+        "plugin `{plugin}` configures the module `{module}` in `{importer}` (for_root or from_config); only the app configures a module of another crate: import it by type in the plugin, and configure it in the app"
+    )]
+    PluginConfiguresModule {
+        /// The plugin's name.
+        plugin: &'static str,
+        /// The configured module.
+        module: &'static str,
+        /// The module that imports the configured instance.
+        importer: &'static str,
+    },
 }
 
 /// Every error found while booting or validating an app.

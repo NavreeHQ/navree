@@ -1364,6 +1364,7 @@ fn is_plugin_error(error: &KernelError) -> bool {
             | KernelError::NamespaceReserved { .. }
             | KernelError::PluginOfAnotherCrate { .. }
             | KernelError::PluginInfoDiffers { .. }
+            | KernelError::PluginConfiguresModule { .. }
     )
 }
 

@@ -41,6 +41,10 @@ pub trait Module: Send + Sync + 'static {
 /// section of the app's configuration" (a plain `M` registers with `None`
 /// too).
 ///
+/// A module of a plugin that is not one of the framework's own packages may
+/// configure only modules whose type names the plugin's crate; it imports any
+/// other module by type, and the app configures it.
+///
 /// ```
 /// use navree_kernel::{ConfiguredModule, Module, ModuleBuilder, Navree};
 ///

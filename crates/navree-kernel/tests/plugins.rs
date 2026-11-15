@@ -574,10 +574,40 @@ async fn the_plugins_command_prints_the_report_and_yields_to_a_module_command() 
     assert_eq!(*seen.lock().unwrap(), ["--json"]);
 }
 
-/// Ledger is imported by Billing, which Shop imports.
+/// Ledger is imported by Billing, which Shop imports. It is the app's ledger: a plugin's module
+/// may import it by type but not configure it. Each of its forms contributes a `LedgerForm`.
 struct Ledger;
+impl Ledger {
+    /// The ledger configured in code.
+    fn for_root(options: LedgerOptions) -> impl Module {
+        ConfiguredModule::<Ledger, LedgerOptions>::for_root(options, register_ledger)
+    }
+
+    /// The ledger configured from the app's configuration.
+    fn from_config() -> impl Module {
+        ConfiguredModule::<Ledger, LedgerOptions>::from_config(register_ledger)
+    }
+}
 impl Module for Ledger {
-    fn register(&self, _: &mut ModuleBuilder) {}
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(LedgerForm("plain"));
+    }
+}
+
+/// The options of the app's ledger: the city its books are kept in.
+#[derive(Clone)]
+struct LedgerOptions {
+    city: &'static str,
+}
+
+/// Which form of `Ledger` registered it: `plain`, `from_config`, or the city `for_root` gave.
+struct LedgerForm(&'static str);
+
+/// What a configured `Ledger` registers.
+fn register_ledger(m: &mut ModuleBuilder, options: Option<LedgerOptions>) {
+    m.contribute(LedgerForm(
+        options.map_or("from_config", |options| options.city),
+    ));
 }
 struct Billing;
 impl Module for Billing {
@@ -1088,4 +1118,111 @@ async fn a_generic_module_only_plugins_import_is_never_the_apps() {
         .await
         .expect("boots");
     assert_eq!(acting_for(&app, own), None);
+}
+
+// A plugin that configures a module of another crate.
+
+/// The forecast plugin: its crate is this module.
+mod navree_plugin_forecast {
+    use navree_kernel::{ConfiguredModule, Module, ModuleBuilder, PluginInfo};
+
+    /// The plugin's info.
+    const FORECAST: PluginInfo =
+        PluginInfo::new("navree-plugin-forecast", module_path!(), "forecast", "1.0.0");
+
+    /// The plugin's module: it names the plugin, then registers what its function adds.
+    pub struct ForecastModule(pub fn(&mut ModuleBuilder));
+
+    impl Module for ForecastModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(FORECAST);
+            (self.0)(m);
+        }
+    }
+
+    /// The options of the plugin's own store.
+    #[derive(Clone)]
+    pub struct StoreOptions;
+
+    /// The plugin's own store.
+    pub struct ForecastStore;
+
+    impl ForecastStore {
+        /// The store configured from the app's configuration.
+        pub fn from_config() -> impl Module {
+            ConfiguredModule::<ForecastStore, StoreOptions>::from_config(|_, _| {})
+        }
+    }
+}
+
+/// The refusal of the forecast plugin's module configuring the app's `Ledger`.
+const FORECAST_CONFIGURES_LEDGER: &str = "plugin `navree-plugin-forecast` configures the module `Ledger` in `ForecastModule` (for_root or from_config); only the app configures a module of another crate: import it by type in the plugin, and configure it in the app";
+
+#[test]
+fn a_plugin_that_configures_another_crates_module_fails_the_boot() {
+    use navree_plugin_forecast::ForecastModule;
+    let ludhiana = || LedgerOptions { city: "Ludhiana" };
+    for app in [
+        // Only the plugin imports the module, configured in code or from the configuration.
+        Navree::app().module(ForecastModule(|m| {
+            m.import(Ledger::for_root(LedgerOptions { city: "Ludhiana" }));
+        })),
+        Navree::app().module(ForecastModule(|m| {
+            m.import(Ledger::from_config());
+        })),
+        // The app imports it by type.
+        Navree::app().module(Ledger).module(ForecastModule(|m| {
+            m.import(Ledger::for_root(LedgerOptions { city: "Ludhiana" }));
+        })),
+        // The app configures it too, in either order: the plugin's refusal, alone.
+        Navree::app()
+            .module(Ledger::for_root(ludhiana()))
+            .module(ForecastModule(|m| {
+                m.import(Ledger::from_config());
+            })),
+        Navree::app()
+            .module(ForecastModule(|m| {
+                m.import(Ledger::from_config());
+            }))
+            .module(Ledger::for_root(ludhiana())),
+    ] {
+        let text = errors(app);
+        assert_eq!(text, FORECAST_CONFIGURES_LEDGER);
+        assert!(!text.contains("is configured more than once"));
+    }
+}
+
+#[test]
+fn a_plugin_configures_a_module_its_types_name() {
+    use navree_plugin_forecast::{ForecastModule, ForecastStore, StoreOptions};
+    Navree::app()
+        .module(ForecastModule(|m| {
+            m.import(ForecastStore::from_config())
+                .import(ConfiguredModule::<Holder<StoreOptions>, StoreOptions>::for_root(
+                    StoreOptions,
+                    |_, _| {},
+                ));
+        }))
+        .validate()
+        .expect("its own store, and a module whose generic arguments name its crate");
+}
+
+#[tokio::test]
+async fn the_app_configures_a_module_a_plugin_imports_by_type() {
+    use navree_plugin_forecast::ForecastModule;
+    let app = Navree::app()
+        .module(Ledger::for_root(LedgerOptions { city: "Pune" }))
+        .module(ForecastModule(|m| {
+            m.import(Ledger);
+        }))
+        .boot()
+        .await
+        .expect("the app configures its ledger");
+    let forms: Vec<&str> = app
+        .ctx()
+        .contributions::<LedgerForm>()
+        .iter()
+        .map(|form| form.value.0)
+        .collect();
+    assert_eq!(forms, ["Pune"]);
 }

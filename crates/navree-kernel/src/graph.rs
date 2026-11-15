@@ -7,6 +7,7 @@ use std::fmt;
 
 use crate::builder::{Contribution, Passed, ProviderDef};
 use crate::lifecycle::LifecycleDef;
+use crate::plugin::names_crate;
 use crate::{
     BootErrors, CommandSpec, KernelError, Module, ModuleBuilder, ModuleId, PluginInfo, ProviderKey,
     Scope,
@@ -171,6 +172,9 @@ pub(crate) struct ModuleNode {
     /// passed already boxed): the module's own type, which its id need not
     /// name. The plugin checks read it (see [`Graph::check_plugins`]).
     pub(crate) type_name: &'static str,
+    /// For a configured instance (`for_root`, `from_config`), the module that
+    /// imported it (the root for a module the app passed).
+    pub(crate) configured_by: Option<usize>,
 }
 
 /// A registered provider and the module that owns it.
@@ -276,7 +280,16 @@ impl Graph {
     ) -> Result<Graph, BootErrors> {
         let walked = walk(roots)?;
         let mut errors = Vec::new();
-        let mut graph = assemble(walked, &mut errors);
+        let mut graph = assemble(walked.registered, &mut errors);
+        if !walked.twice.is_empty() {
+            // The plugin checks run only to learn which plugin each module
+            // acts for; as before, the second configured instances are the
+            // only errors reported.
+            if graph.find_module_cycle().is_none() {
+                graph.check_plugins(&mut Vec::new());
+            }
+            return Err(BootErrors(graph.configured_twice(&walked.twice)));
+        }
         graph.apply_overrides(overrides);
         if let Some(cycle) = graph.find_module_cycle() {
             errors.push(cycle);
@@ -303,6 +316,38 @@ impl Graph {
         }
         graph.located = graph.locator_map();
         Ok(graph)
+    }
+
+    /// The errors of the configured instances the walk dropped (`twice`, in
+    /// its order), once [`check_plugins`](Graph::check_plugins) has recorded
+    /// which plugin each module acts for. Each is `PluginConfiguresModule`
+    /// when the module that imported the dropped instance, else the one that
+    /// imported the instance kept, acts for a plugin that is not first-party
+    /// and whose crate the module's type does not name; otherwise
+    /// `ConfiguredTwice`, as in an app with no such plugin.
+    fn configured_twice(&self, twice: &[Twice]) -> Vec<KernelError> {
+        twice
+            .iter()
+            .map(|twice| {
+                let kept = self
+                    .module_of(twice.module)
+                    .and_then(|m| self.modules[m].configured_by);
+                [self.module_of(twice.importer), kept]
+                    .into_iter()
+                    .flatten()
+                    .find_map(|importer| {
+                        let info = self.community_plugin(importer)?;
+                        (!names_crate(twice.module.type_name(), info.crate_name)).then(|| {
+                            KernelError::PluginConfiguresModule {
+                                plugin: info.name,
+                                module: twice.name,
+                                importer: self.modules[importer].name,
+                            }
+                        })
+                    })
+                    .unwrap_or(KernelError::ConfiguredTwice { module: twice.name })
+            })
+            .collect()
     }
 
     /// The service locator's answers, decided once: every key with exactly
@@ -866,7 +911,27 @@ struct Registered {
     builder: ModuleBuilder,
     /// The type the registered module value was passed as.
     type_name: &'static str,
+    /// For a configured instance, the module that imported it.
+    configured_by: Option<ModuleId>,
     import_ids: Vec<ModuleId>,
+}
+
+/// A configured instance the walk dropped, because another configured
+/// instance of its module came first.
+struct Twice {
+    /// The module's id.
+    module: ModuleId,
+    /// The module's name.
+    name: &'static str,
+    /// The module that imported the dropped instance (the root's id for a
+    /// module the app passed).
+    importer: ModuleId,
+}
+
+/// What a walk registered, and the configured instances it dropped.
+struct Walked {
+    registered: Vec<Registered>,
+    twice: Vec<Twice>,
 }
 
 /// A module value to register: a root module borrowed from the app builder or
@@ -898,13 +963,13 @@ impl Source<'_> {
 struct Restart(ModuleId, &'static str);
 
 /// Calls `register` once per module id, starting from the implicit root.
-/// Configured (`for_root`) instances win over plain imports of the same id.
-fn walk(roots: &[(&dyn Module, &'static str)]) -> Result<Vec<Registered>, BootErrors> {
+/// Configured (`for_root`) instances win over plain imports of the same id; a
+/// second configured instance of an id is dropped and recorded.
+fn walk(roots: &[(&dyn Module, &'static str)]) -> Result<Walked, BootErrors> {
     let mut deferred = HashSet::new();
     loop {
         match Walker::new(&deferred).run(roots) {
-            Ok(Ok(registered)) => return Ok(registered),
-            Ok(Err(errors)) => return Err(BootErrors(errors)),
+            Ok(walked) => return Ok(walked),
             Err(Restart(id, name)) => {
                 if !deferred.insert(id) {
                     // Only the plain instance's own imports lead to the configured
@@ -923,10 +988,13 @@ struct Walker<'a, 'd> {
     deferred: &'d HashSet<ModuleId>,
     registered: HashSet<ModuleId>,
     configured: HashSet<ModuleId>,
+    /// The module that imported the first configured instance of each id.
+    configured_by: HashMap<ModuleId, ModuleId>,
     configured_queue: VecDeque<Source<'a>>,
     plain: Vec<(ModuleId, Source<'a>)>,
     out: Vec<Registered>,
-    errors: Vec<KernelError>,
+    /// The configured instances dropped because one of their id came first.
+    twice: Vec<Twice>,
 }
 
 impl<'a, 'd> Walker<'a, 'd> {
@@ -935,17 +1003,15 @@ impl<'a, 'd> Walker<'a, 'd> {
             deferred,
             registered: HashSet::new(),
             configured: HashSet::new(),
+            configured_by: HashMap::new(),
             configured_queue: VecDeque::new(),
             plain: Vec::new(),
             out: Vec::new(),
-            errors: Vec::new(),
+            twice: Vec::new(),
         }
     }
 
-    fn run(
-        mut self,
-        roots: &[(&'a dyn Module, &'static str)],
-    ) -> Result<Result<Vec<Registered>, Vec<KernelError>>, Restart> {
+    fn run(mut self, roots: &[(&'a dyn Module, &'static str)]) -> Result<Walked, Restart> {
         let root_id = ModuleId::named::<AppRoot>("App");
         let mut root = ModuleBuilder::new(root_id, root_id.name());
         root.global = true;
@@ -953,10 +1019,11 @@ impl<'a, 'd> Walker<'a, 'd> {
         self.out.push(Registered {
             builder: root,
             type_name: std::any::type_name::<AppRoot>(),
+            configured_by: None,
             import_ids: roots.iter().map(|(m, _)| m.id()).collect(),
         });
         for &(module, type_name) in roots {
-            self.enqueue(Source::Root(module, type_name))?;
+            self.enqueue(Source::Root(module, type_name), root_id)?;
         }
         loop {
             if let Some(source) = self.configured_queue.pop_front() {
@@ -967,23 +1034,27 @@ impl<'a, 'd> Walker<'a, 'd> {
                 break;
             }
         }
-        Ok(if self.errors.is_empty() {
-            Ok(self.out)
-        } else {
-            Err(self.errors)
+        Ok(Walked {
+            registered: self.out,
+            twice: self.twice,
         })
     }
 
-    fn enqueue(&mut self, source: Source<'a>) -> Result<(), Restart> {
+    /// Queues `source`, which `importer` imports (the root's id for a module
+    /// the app passed).
+    fn enqueue(&mut self, source: Source<'a>, importer: ModuleId) -> Result<(), Restart> {
         let module = source.module();
         let id = module.id();
         if module.is_configured() {
             if !self.configured.insert(id) {
-                self.errors.push(KernelError::ConfiguredTwice {
-                    module: module.name(),
+                self.twice.push(Twice {
+                    module: id,
+                    name: module.name(),
+                    importer,
                 });
                 return Ok(());
             }
+            self.configured_by.insert(id, importer);
             if self.registered.contains(&id) {
                 return Err(Restart(id, module.name()));
             }
@@ -1017,13 +1088,19 @@ impl<'a, 'd> Walker<'a, 'd> {
         module.register(&mut builder);
         let imports = std::mem::take(&mut builder.imports);
         self.registered.insert(id);
+        let configured_by = if module.is_configured() {
+            self.configured_by.get(&id).copied()
+        } else {
+            None
+        };
         self.out.push(Registered {
             builder,
             type_name: source.type_name(),
+            configured_by,
             import_ids: imports.iter().map(|import| import.module.id()).collect(),
         });
         for import in imports {
-            self.enqueue(Source::Import(import))?;
+            self.enqueue(Source::Import(import), id)?;
         }
         Ok(())
     }
@@ -1076,6 +1153,9 @@ fn assemble(walked: Vec<Registered>, errors: &mut Vec<KernelError>) -> Graph {
             plugin: builder.plugin,
             plugin_twice: builder.plugin_twice,
             type_name: registered.type_name,
+            configured_by: registered
+                .configured_by
+                .and_then(|importer| module_index.get(&importer).copied()),
         });
     }
     Graph {
