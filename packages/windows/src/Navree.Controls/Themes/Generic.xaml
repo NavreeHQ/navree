@@ -3,10 +3,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Navree.Controls">
 
-    <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="ms-appx:///Navree.Controls/Themes/DataTable.Resources.xaml" />
-    </ResourceDictionary.MergedDictionaries>
-
     <!-- The box that chooses a row. -->
     <Style TargetType="local:DataTableCheck">
         <Setter Property="IsTabStop" Value="False" />
@@ -18,29 +14,29 @@
                         <Border x:Name="PART_Box"
                                 CornerRadius="3"
                                 BorderThickness="1"
-                                BorderBrush="{ThemeResource DataTableCheckBoxBorder}"
-                                Background="{ThemeResource DataTableCheckBoxFill}" />
+                                BorderBrush="{ThemeResource ControlStrongStrokeColorDefaultBrush}"
+                                Background="{ThemeResource ControlAltFillColorSecondaryBrush}" />
                         <FontIcon x:Name="PART_Glyph"
                                   FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                   FontSize="12"
                                   Glyph="&#xE73E;"
                                   IsTextScaleFactorEnabled="False"
-                                  Foreground="{ThemeResource DataTableCheckBoxGlyph}"
+                                  Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                   Visibility="Collapsed" />
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CheckStates">
                                 <VisualState x:Name="Unchecked" />
                                 <VisualState x:Name="Checked">
                                     <VisualState.Setters>
-                                        <Setter Target="PART_Box.Background" Value="{ThemeResource DataTableCheckBoxFillChecked}" />
-                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource DataTableCheckBoxFillChecked}" />
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
                                         <Setter Target="PART_Glyph.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Indeterminate">
                                     <VisualState.Setters>
-                                        <Setter Target="PART_Box.Background" Value="{ThemeResource DataTableCheckBoxFillChecked}" />
-                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource DataTableCheckBoxFillChecked}" />
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
                                         <Setter Target="PART_Glyph.Glyph" Value="&#xE738;" />
                                         <Setter Target="PART_Glyph.Visibility" Value="Visible" />
                                     </VisualState.Setters>
@@ -75,18 +71,18 @@
                                   IsTextScaleFactorEnabled="False"
                                   HorizontalAlignment="Center"
                                   VerticalAlignment="Center"
-                                  Foreground="{ThemeResource DataTableSecondaryForeground}" />
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
                                 <VisualState x:Name="PointerOver">
                                     <VisualState.Setters>
-                                        <Setter Target="PART_Root.Background" Value="{ThemeResource DataTableRowBackgroundPointerOver}" />
+                                        <Setter Target="PART_Root.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
                                     <VisualState.Setters>
-                                        <Setter Target="PART_Root.Background" Value="{ThemeResource DataTableRowBackgroundPressed}" />
+                                        <Setter Target="PART_Root.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
@@ -136,17 +132,17 @@
                             <TextBlock x:Name="PART_Headline" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                             <TextBlock x:Name="PART_Line1"
                                        Style="{ThemeResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource DataTableSecondaryForeground}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextTrimming="CharacterEllipsis"
                                        TextWrapping="NoWrap" />
                             <TextBlock x:Name="PART_Line2"
                                        Style="{ThemeResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource DataTableSecondaryForeground}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextTrimming="CharacterEllipsis"
                                        TextWrapping="NoWrap" />
                             <TextBlock x:Name="PART_States"
                                        Style="{ThemeResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource DataTableSecondaryForeground}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextTrimming="CharacterEllipsis"
                                        TextWrapping="NoWrap" />
                         </StackPanel>
@@ -169,7 +165,7 @@
                                 Width="1"
                                 HorizontalAlignment="Right"
                                 Opacity="0"
-                                Background="{ThemeResource DataTableResizeLine}" />
+                                Background="{ThemeResource ControlStrongStrokeColorDefaultBrush}" />
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
@@ -210,7 +206,7 @@
                                        TextTrimming="CharacterEllipsis"
                                        TextWrapping="NoWrap"
                                        VerticalAlignment="Center"
-                                       Foreground="{ThemeResource DataTableHeaderForeground}" />
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <FontIcon x:Name="PART_SortGlyph"
                                       Grid.Column="1"
                                       FontFamily="{ThemeResource SymbolThemeFontFamily}"
@@ -218,7 +214,7 @@
                                       IsTextScaleFactorEnabled="False"
                                       VerticalAlignment="Center"
                                       Visibility="Collapsed"
-                                      Foreground="{ThemeResource DataTableHeaderForeground}" />
+                                      Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <FontIcon x:Name="PART_Options"
                                       Grid.Column="2"
                                       FontFamily="{ThemeResource SymbolThemeFontFamily}"
@@ -227,7 +223,7 @@
                                       IsTextScaleFactorEnabled="False"
                                       VerticalAlignment="Center"
                                       Opacity="0"
-                                      Foreground="{ThemeResource DataTableHeaderForeground}" />
+                                      Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                         </Grid>
                         <local:ResizeGrip x:Name="PART_Grip" Width="8" HorizontalAlignment="Right" />
                         <VisualStateManager.VisualStateGroups>
@@ -235,13 +231,13 @@
                                 <VisualState x:Name="Normal" />
                                 <VisualState x:Name="PointerOver">
                                     <VisualState.Setters>
-                                        <Setter Target="PART_Root.Background" Value="{ThemeResource DataTableHeaderBackgroundPointerOver}" />
+                                        <Setter Target="PART_Root.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
                                         <Setter Target="PART_Options.Opacity" Value="1" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
                                     <VisualState.Setters>
-                                        <Setter Target="PART_Root.Background" Value="{ThemeResource DataTableHeaderBackgroundPressed}" />
+                                        <Setter Target="PART_Root.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
                                         <Setter Target="PART_Options.Opacity" Value="1" />
                                     </VisualState.Setters>
                                 </VisualState>
@@ -257,7 +253,7 @@
     <Style TargetType="local:DataTableRow">
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="HorizontalAlignment" Value="Left" />
-        <Setter Property="Foreground" Value="{ThemeResource DataTableRowForeground}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:DataTableRow">
@@ -268,8 +264,8 @@
                         </Grid.RowDefinitions>
                         <Grid x:Name="PART_Chrome" HorizontalAlignment="Left" IsHitTestVisible="False">
                             <Border x:Name="PART_Fill"
-                                    Background="{ThemeResource DataTableRowBackground}"
-                                    BorderBrush="{ThemeResource DataTableDivider}"
+                                    Background="{ThemeResource SubtleFillColorTransparentBrush}"
+                                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                                     BorderThickness="0,0,0,1" />
                             <Border x:Name="PART_Pill"
                                     Width="3"
@@ -278,7 +274,7 @@
                                     Margin="4,0,0,0"
                                     HorizontalAlignment="Left"
                                     VerticalAlignment="Center"
-                                    Background="{ThemeResource DataTableSelectionPill}"
+                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
                                     Visibility="Collapsed" />
                         </Grid>
                         <Canvas x:Name="PART_ScrollCells" />
@@ -290,36 +286,36 @@
                                 CornerRadius="4"
                                 Padding="12"
                                 Margin="16,4,16,8"
-                                Background="{ThemeResource DataTableDetailBackground}"
+                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                                 Visibility="Collapsed" />
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
                                 <VisualState x:Name="PointerOver">
                                     <VisualState.Setters>
-                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource DataTableRowBackgroundPointerOver}" />
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
                                     <VisualState.Setters>
-                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource DataTableRowBackgroundPressed}" />
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Chosen">
                                     <VisualState.Setters>
-                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource DataTableRowBackgroundSelected}" />
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
                                         <Setter Target="PART_Pill.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="ChosenPointerOver">
                                     <VisualState.Setters>
-                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource DataTableRowBackgroundSelectedPointerOver}" />
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
                                         <Setter Target="PART_Pill.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="ChosenPressed">
                                     <VisualState.Setters>
-                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource DataTableRowBackgroundSelectedPressed}" />
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
                                         <Setter Target="PART_Pill.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>
@@ -339,7 +335,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="local:DataTable">
                     <Border x:Name="PART_Border"
-                            BorderBrush="{ThemeResource DataTableBorder}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="4">
                         <Grid x:Name="PART_Root">
@@ -357,7 +353,7 @@
 
                             <Border x:Name="PART_HeaderHost"
                                     Grid.Row="1"
-                                    Background="{ThemeResource DataTableHeaderBackground}"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                     CornerRadius="3,3,0,0"
                                     Height="40" />
 
@@ -366,7 +362,7 @@
                                   Height="40"
                                   Padding="8,0,8,0"
                                   Visibility="Collapsed"
-                                  Background="{ThemeResource DataTableHeaderBackground}">
+                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                                 <Button x:Name="PART_SortButton" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="8,4,8,4">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
@@ -404,13 +400,13 @@
                                         HorizontalAlignment="Left"
                                         IsHitTestVisible="False"
                                         Opacity="0"
-                                        Background="{ThemeResource DataTableFrozenEdge}" />
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                 <Border x:Name="PART_EdgeEnd"
                                         Width="1"
                                         HorizontalAlignment="Right"
                                         IsHitTestVisible="False"
                                         Opacity="0"
-                                        Background="{ThemeResource DataTableFrozenEdge}" />
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                 <Grid x:Name="PART_State" Visibility="Collapsed">
                                     <StackPanel x:Name="PART_Empty"
                                                 Spacing="8"
@@ -422,7 +418,7 @@
                                                   Glyph="&#xE721;"
                                                   IsTextScaleFactorEnabled="False"
                                                   HorizontalAlignment="Center"
-                                                  Foreground="{ThemeResource DataTableSecondaryForeground}" />
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         <TextBlock x:Name="PART_EmptyText"
                                                    FontWeight="SemiBold"
                                                    HorizontalAlignment="Center" />
@@ -449,7 +445,7 @@
                             <Grid x:Name="PART_Footer" Grid.Row="3" MinHeight="32" Padding="12,0,12,0" Visibility="Collapsed">
                                 <TextBlock x:Name="PART_Summary"
                                            Style="{ThemeResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource DataTableSecondaryForeground}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            VerticalAlignment="Center"
                                            HorizontalAlignment="Left" />
                                 <StackPanel Orientation="Horizontal"
@@ -459,7 +455,7 @@
                                     <ProgressRing x:Name="PART_FooterRing" Width="16" Height="16" IsActive="True" Visibility="Collapsed" />
                                     <TextBlock x:Name="PART_FooterStatus"
                                                Style="{ThemeResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource DataTableSecondaryForeground}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                VerticalAlignment="Center" />
                                     <HyperlinkButton x:Name="PART_FooterRetry" Padding="4,0,4,0" Visibility="Collapsed" />
                                 </StackPanel>
@@ -479,8 +475,8 @@
                 <ControlTemplate TargetType="local:DataTableBulkBar">
                     <Border x:Name="PART_Root"
                             MinHeight="48"
-                            Background="{ThemeResource DataTableBulkBarBackground}"
-                            BorderBrush="{ThemeResource DataTableDivider}"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                             BorderThickness="0,0,0,1">
                         <Grid Padding="8,0,8,0" ColumnSpacing="8">
                             <Grid.ColumnDefinitions>

@@ -25,6 +25,9 @@ internal static class ExperimentRunner
     {
         switch (name)
         {
+            case "parts":
+                await PartsScenario.RunAsync(window);
+                break;
             case "table":
                 await TableScenarios.RunAsync(window, TableScenarios.All);
                 break;
