@@ -940,8 +940,17 @@ class OpenRowTest {
     fun the_addresses_of_a_screens_rows_are_those_of_its_rows_and_its_tables_rows() {
         val list = Navree.List(children = listOf(Navree.Row(title = "A", action = Navree.Action.Navigate("/a")), Navree.Row(title = "B")))
         val table = Navree.Table(columns = listOf(Navree.Column(label = "Order")), rows = listOf(Navree.TableRow(action = Navree.Action.Navigate("/orders/1"), cells = listOf(Navree.Text(value = "1")))))
-        assertEquals(listOf("/a", "/orders/1"), ListRules.rowAddresses(Navree.Stack(children = listOf(list, table))))
-        assertEquals(emptyList<String>(), ListRules.rowAddresses(null))
+        assertEquals(listOf("/a", "/orders/1"), ListRules.rowAddresses(Navree.Stack(children = listOf(list, table))).map { it.href })
+        assertEquals(emptyList<ListRules.RowAddress>(), ListRules.rowAddresses(null))
+    }
+
+    @Test
+    fun of_two_rows_with_one_address_the_first_is_the_open_one() {
+        val rows = listOf(ListRules.RowAddress("a", "/inbox/7"), ListRules.RowAddress("b", "/inbox/7"), ListRules.RowAddress("c", "/inbox/8"))
+        assertEquals("a", ListRules.openRow("/inbox/7", rows)?.id)
+        assertEquals("c", ListRules.openRow("http://10.0.2.2:8083/inbox/8?after=3", rows)?.id)
+        assertNull(ListRules.openRow("/inbox/9", rows))
+        assertNull(ListRules.openRow(null, rows))
     }
 }
 

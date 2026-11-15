@@ -64,11 +64,11 @@ object ListRules {
     fun stacksAreOneColumn(parts: List<Navree.Node>, least: Int?, widthDp: Int): Boolean =
         least == null && parts.size > 1 && parts.all { it is Navree.Stack } && widthDp < EXPANDED_FROM_DP
 
-    /** Whether a grid's parts are lanes: several sections side by side, each a group of its own. */
     /** The most the row of lanes may measure to: the room it has and the margins it runs out into; no limit stays none (the room of a part that scrolls along). */
     fun bledWidthPx(roomPx: Int, bleedPx: Int, noLimit: Int = Int.MAX_VALUE): Int =
         if (roomPx >= noLimit) noLimit else (roomPx.toLong() + bleedPx).coerceAtMost((noLimit - 1).toLong()).toInt()
 
+    /** Whether a grid's parts are lanes: several sections side by side, each a group of its own. */
     fun areLanes(parts: List<Navree.Node>): Boolean = parts.size > 1 && parts.all { it is Navree.Section }
 
     /**
@@ -89,11 +89,16 @@ object ListRules {
         return runs.map { if (it.href == own) it.copy(href = null) else it }
     }
 
-    private val schemeAndHost = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://[^/]*")
-
-    /** The path of an address, whole: no scheme and host, no query, no fragment, no closing slash. */
+    /** The path of an address, whole: no scheme and host, no query, no fragment, no closing slash. Found by looking for the characters, not by a pattern per call. */
     private fun pathOf(address: String): String {
-        val path = address.substringBefore('#').substringBefore('?').replaceFirst(schemeAndHost, "").trimEnd('/')
+        val noQuery = address.substringBefore('#').substringBefore('?')
+        val scheme = noQuery.indexOf("://")
+        val path = if (scheme > 0 && noQuery.substring(0, scheme).all { it.isLetterOrDigit() || it == '+' || it == '.' || it == '-' }) {
+            val slash = noQuery.indexOf('/', scheme + 3)
+            if (slash < 0) "" else noQuery.substring(slash)
+        } else {
+            noQuery
+        }.trimEnd('/')
         return path.ifEmpty { "/" }
     }
 
@@ -108,6 +113,13 @@ object ListRules {
         address.substringBefore('#').substringAfter('?', "").split('&').filter { it.isNotEmpty() }
             .map { decoded(it.substringBefore('=')) to decoded(it.substringAfter('=', "")) }
 
+    /** An address as it is compared: its path and its query pairs, made once. */
+    private class Parsed(val path: String, val pairs: List<Pair<String, String>>)
+
+    private fun parsed(address: String) = Parsed(pathOf(address), pairsOf(address))
+
+    private fun matches(shown: Parsed, row: Parsed): Boolean = shown.path == row.path && row.pairs.all { it in shown.pairs }
+
     /**
      * Whether the page at `shown` is the one a row leading to `href` opens: the
      * paths are equal, segment by segment (`/x/inbox/11` is not `/inbox/11`),
@@ -116,27 +128,45 @@ object ListRules {
      */
     fun shows(shown: String?, href: String): Boolean {
         if (shown.isNullOrEmpty() || href.isEmpty()) return false
-        if (pathOf(shown) != pathOf(href)) return false
-        val have = pairsOf(shown)
-        return pairsOf(href).all { it in have }
+        return matches(parsed(shown), parsed(href))
     }
 
-    /**
-     * The address, among the addresses of a screen's rows, whose row is the open
-     * one: of those that match the shown page the one that says most of it (most
-     * query pairs), the first of equals. Null when none matches.
-     */
-    fun openAddress(shown: String?, addresses: List<String>): String? =
-        addresses.filter { shows(shown, it) }.maxByOrNull { pairsOf(it).size }
+    /** A row of a screen that leads to a page: its id (when it has one) and the address. */
+    data class RowAddress(val id: String?, val href: String)
 
-    /** The addresses the rows of a screen lead to, each row's tap that goes to a page. */
-    fun rowAddresses(body: Navree.Node?): List<String> {
+    /**
+     * The row, among the rows of a screen that lead to pages, that is the open
+     * one: of those that match the shown page the one that says most of it (most
+     * query pairs), the first of equals. The shown address is read once, and each
+     * row's once. Null when none matches.
+     */
+    fun openRow(shown: String?, rows: List<RowAddress>): RowAddress? {
+        if (shown.isNullOrEmpty() || rows.isEmpty()) return null
+        val have = parsed(shown)
+        var best: RowAddress? = null
+        var most = -1
+        for (row in rows) {
+            if (row.href.isEmpty()) continue
+            val there = parsed(row.href)
+            if (matches(have, there) && there.pairs.size > most) {
+                best = row
+                most = there.pairs.size
+            }
+        }
+        return best
+    }
+
+    /** The same for addresses alone. */
+    fun openAddress(shown: String?, addresses: List<String>): String? = openRow(shown, addresses.map { RowAddress(null, it) })?.href
+
+    /** The rows of a screen that lead to a page, each row's tap that goes to a page, in the order they stand. */
+    fun rowAddresses(body: Navree.Node?): List<RowAddress> {
         if (body == null) return emptyList()
-        val out = ArrayList<String>()
+        val out = ArrayList<RowAddress>()
         for (node in body.walk()) {
             when (node) {
-                is Navree.Row -> (node.action as? Navree.Action.Navigate)?.href?.let { out += it }
-                is Navree.Table -> node.rows.forEach { row -> (row.action as? Navree.Action.Navigate)?.href?.let { out += it } }
+                is Navree.Row -> (node.action as? Navree.Action.Navigate)?.href?.let { out += RowAddress(node.id, it) }
+                is Navree.Table -> node.rows.forEach { row -> (row.action as? Navree.Action.Navigate)?.href?.let { out += RowAddress(row.id, it) } }
                 else -> Unit
             }
         }

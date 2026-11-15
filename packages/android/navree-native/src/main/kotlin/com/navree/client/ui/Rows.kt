@@ -200,7 +200,7 @@ internal fun RowView(
     var menuOpen by remember { mutableStateOf(false) }
     val badge = row.badge
     val below = ListRules.trailingBelow(window)
-    val selected = isSelected(row.action, place) || place.screen.has(row.id, Navree.State.SELECTED)
+    val selected = isSelected(row.action, row.id, place) || place.screen.has(row.id, Navree.State.SELECTED)
     val state = row.state
     val extra = (if (swipe != null) listOf(CustomAccessibilityAction(swipe.label) { ui.press(place, swipe); true }) else emptyList()) + rowActions(menu, place) + moves
     val under = row.subtitle != null || shown.detail.isNotEmpty() || (below && (badge != null || row.trailing != null))
@@ -415,10 +415,11 @@ internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = M
     }
 }
 
-/** Whether a row leads to the screen shown beside the list. */
-private fun isSelected(action: Navree.Action?, place: Place): Boolean {
+/** Whether a row is the open one beside the list: the first that leads to the page shown (the one `place` found), by its id where it has one. */
+private fun isSelected(action: Navree.Action?, rowId: String?, place: Place): Boolean {
     val href = (action as? Navree.Action.Navigate)?.href ?: return false
-    return place.openAddress != null && href == place.openAddress
+    val open = place.openRow ?: return false
+    return if (open.id != null && rowId != null) open.id == rowId else href == open.href
 }
 
 /**
@@ -471,7 +472,7 @@ internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Pla
     val below = ListRules.trailingBelow(ui.window)
     var menuOpen by remember { mutableStateOf(false) }
     val extra = rowActions(folded.menu, place)
-    val selected = isSelected(action, place)
+    val selected = isSelected(action, row.id, place)
     val choosing = Choosing.of(table, place)
     val choosable = SelectionRules.choosable(table, row)
     val ticked = SelectionRules.ticked(table, row, choosing.across)

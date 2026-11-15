@@ -67,8 +67,8 @@ internal data class Place(
     val overlay: String? = null,
     /** A dialog's own buttons are the confirmation; they are not asked about again. */
     val inDialog: Boolean = false,
-    /** The address of the row that is the open one: the one that leads to the page shown beside the list, or to the screen's own. */
-    val openAddress: String? = null,
+    /** The row that is the open one: the first that leads to the page shown beside the list, or to the screen's own. */
+    val openRow: com.navree.client.design.ListRules.RowAddress? = null,
     /** A node that is drawn elsewhere: a form's button that the app bar or a dialog's foot holds. */
     val omit: Navree.Node? = null,
     /** Drawn in a cell of a wide table, whose column heading already names what is in it. */
