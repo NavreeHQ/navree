@@ -1432,7 +1432,11 @@ mod tests {
             "a configured name is not a registration"
         );
         assert_eq!(names.lookup_in("vault.kind", "jalandhar_made_up"), None);
-        assert_eq!(names.lookup("jalandhar_made_up"), None, "a miss adds nothing");
+        assert_eq!(
+            names.lookup("jalandhar_made_up"),
+            None,
+            "a miss adds nothing"
+        );
 
         let chest = register_in("vault.kind", "amritsar_chest").unwrap();
         assert_eq!(lookup_in("vault.kind", "amritsar_chest"), Some(chest));

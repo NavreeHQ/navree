@@ -11,9 +11,9 @@ use navree_kernel::{AppContext, BoxError, ModuleBuilder, Resolver};
 use serde_json::{Map, Value as Json};
 
 use crate::options::DRIVERS;
-use crate::{AiOptions, ProviderConfig};
 use crate::provider::Driver;
 use crate::provider::public::{AiDriver, PublicDriver};
+use crate::{AiOptions, ProviderConfig};
 
 /// The selector of every provider table, `ai.providers.{name}.driver`
 /// (the table's own name when it has none), its built-in drivers and the

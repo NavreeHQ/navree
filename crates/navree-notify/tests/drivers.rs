@@ -14,8 +14,8 @@ mod database;
 
 use std::sync::{Arc, Mutex};
 
-use navree_config::DriverName;
 use navree_config::__private::register_in;
+use navree_config::DriverName;
 use navree_contracts::Dispatcher;
 use navree_db::{DatabaseModule, Db};
 use navree_kernel::{

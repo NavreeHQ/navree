@@ -245,10 +245,7 @@ impl<'de> Deserialize<'de> for Channel {
             None if DriverName::is_valid(&name) => Err(de::Error::custom(format!(
                 "unknown notification channel `{name}`"
             ))),
-            None => Err(de::Error::custom(selector_error(
-                "channel",
-                &CHANNEL_SLOT,
-            ))),
+            None => Err(de::Error::custom(selector_error("channel", &CHANNEL_SLOT))),
         }
     }
 }

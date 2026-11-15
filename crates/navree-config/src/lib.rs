@@ -141,8 +141,8 @@ pub mod __private {
     // The machinery the driver kinds of Navree share (see `DriverSlot`).
     pub use crate::commands::check_report;
     pub use crate::driver::{
-        DriverFactory, DriverRecord, build_driver, check_registrations, contribute_slot,
-        lookup_in, read_settings, register_driver, register_in, registration_problems,
-        selector_error, selector_name,
+        DriverFactory, DriverRecord, build_driver, check_registrations, contribute_slot, lookup_in,
+        read_settings, register_driver, register_in, registration_problems, selector_error,
+        selector_name,
     };
 }
