@@ -354,7 +354,7 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
 
         await SettleAsync();
         string steps = report is null ? "no report came" : "done: " + string.Join(", ", report.Done) + "; failed: " + string.Join(", ", report.Failed.Select(f => f.Key + " (" + f.Value + ")"));
-        Check("signing out wipes the session: the wipe came and every step of it finished", report is { Complete: true, Done.Count: 3 }, steps);
+        Check("signing out wipes the session: the wipe came and every step of it finished", report is { Complete: true, Done.Count: >= 3 }, steps);
         string? webFolder = host.Options.WebFolder;
         Check("signing out leaves no web view data on the device", webFolder is null || !Directory.Exists(webFolder) || Directory.GetFiles(webFolder, "*", SearchOption.AllDirectories).Length == 0, webFolder is null ? "no folder of its own to read" : Directory.Exists(webFolder) ? "the folder is there" : "the folder is gone");
     }

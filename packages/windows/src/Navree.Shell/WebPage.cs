@@ -106,8 +106,8 @@ internal sealed class WebPage : Grid
         }
     }
 
-    /// <summary>Closes the page's web view when its screen has left for good, so the page is no longer kept for the wipe and its process goes.</summary>
-    internal void Close()
+    /// <summary>Closes the page's web view when its screen has left for good, so the page is no longer kept for the wipe and the process behind it goes.</summary>
+    internal void Release()
     {
         Live.Remove(this);
         try

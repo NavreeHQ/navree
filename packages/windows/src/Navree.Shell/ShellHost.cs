@@ -27,6 +27,7 @@ public sealed partial class ShellHost : IDisposable
     private readonly CancellationTokenSource stopped = new();
     private readonly EnvironmentWatcher environment;
     private readonly ForegroundTracker foreground = new();
+    private readonly List<WipeStep> moreWipeSteps = [];
     private string lastCookies = string.Empty;
 
     /// <summary>Makes the host and its core. Nothing is sent to the core until <see cref="Start"/>.</summary>
@@ -124,6 +125,14 @@ public sealed partial class ShellHost : IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Adds a step to the wipe at sign-out, after the host's own: something else the shell keeps of the person (the pictures of the pages
+    /// it drew). Each step has the wipe's limit, and a step that fails is reported with the rest.
+    /// </summary>
+    /// <param name="name">What it takes away, for the report.</param>
+    /// <param name="run">Takes it away.</param>
+    public void AddWipeStep(string name, Func<Task> run) => moreWipeSteps.Add(new WipeStep(name, run));
 
     /// <summary>Tells the core what happened.</summary>
     /// <param name="eventJson">An event, from <see cref="Events"/>.</param>
@@ -467,7 +476,8 @@ public sealed partial class ShellHost : IDisposable
     private async Task ForgetAsync()
     {
         WipeReport report = await Wipe.RunAsync(
-            [
+            [.. new[]
+            {
                 new WipeStep("the cookies", () =>
                 {
                     cookies.Clear();
@@ -480,7 +490,7 @@ public sealed partial class ShellHost : IDisposable
                     return Task.CompletedTask;
                 }),
                 new WipeStep("what the web view keeps", OnUiAsync(() => WebPage.ClearAllAsync(Options.WebFolder ?? WebData.DefaultFolder(Options.AppName)))),
-            ]).ConfigureAwait(false);
+            }.Concat(moreWipeSteps)]).ConfigureAwait(false);
         if (!await OnDispatcherAsync().ConfigureAwait(false))
         {
             return;

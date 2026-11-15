@@ -87,7 +87,7 @@ internal sealed class WipeCheck(ShellHost host, ShellWindow window, string folde
         host.SessionEnded += ended => report = ended;
         host.Send(Events.Act(host.State.Nav.Front ?? 0, new Models.ActionRequest { Href = "/sign-out", Method = Models.Method.Post }));
         bool ended = await Until(() => report is not null);
-        Check("the wipe ran and every step of it finished", ended && report!.Complete && report.Done.Count == 3, ended ? "done: " + string.Join(", ", report!.Done) + "; failed: " + string.Join(", ", report.Failed.Select(f => f.Key + " (" + f.Value + ")")) : "no report came");
+        Check("the wipe ran and every step of it finished", ended && report!.Complete && report.Done.Count >= 3, ended ? "done: " + string.Join(", ", report!.Done) + "; failed: " + string.Join(", ", report.Failed.Select(f => f.Key + " (" + f.Value + ")")) : "no report came");
         Say("web folder after: " + Describe());
 
         // The app starts again and shows its web page: it finds nothing of the session.
