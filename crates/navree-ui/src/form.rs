@@ -1325,7 +1325,7 @@ impl<T: Form> FormView<T> {
     /// Puts `prefix` and a hyphen before every id the form writes, and before every reference
     /// to one: the form's own, each field's (a label's `for`, `aria-describedby`,
     /// `aria-labelledby`), the ids of its help and its error, and those of the pickers,
-    /// uploads and sliders it draws. Two forms of one type on one page,
+    /// uploads, sliders and controls of your own it draws. Two forms of one type on one page,
     /// such as the same small entry form in two dialogs, then share no id. What the form posts
     /// is as it was, so the handler reads it as before.
     ///
@@ -1650,7 +1650,7 @@ impl<T: Form> FormView<T> {
                 upload.into()
             }
             Widget::Control(control) => {
-                let id = format!("{}-{}", self.shape.id, field.name);
+                let id = self.field_id(field);
                 let label_id = format!("{id}-label");
                 // The ids `Field` gives the help and the error it draws below the control.
                 let described = match (field.help.is_some(), invalid) {

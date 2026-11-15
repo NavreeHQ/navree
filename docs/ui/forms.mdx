@@ -87,7 +87,7 @@ Fields sit in two columns where there is room, and a `wide` field takes both; `F
 
 ## Two forms of one type on a page
 
-Every id a form writes is made of its type's id and the field's name (`new-deal-title`), so the same form drawn twice, as in two dialogs, repeats them: a label would find the wrong field, and an `aria-describedby` the wrong help. `FormView::id_prefix` puts a prefix and a hyphen before every id the form writes and every reference to one: the form's own id, each field's, the ids of its help and its error, and those of the pickers, uploads and sliders it draws.
+Every id a form writes is made of its type's id and the field's name (`new-deal-title`), so the same form drawn twice, as in two dialogs, repeats them: a label would find the wrong field, and an `aria-describedby` the wrong help. `FormView::id_prefix` puts a prefix and a hyphen before every id the form writes and every reference to one: the form's own id, each field's, the ids of its help and its error, and those of the pickers, uploads, sliders and controls of your own it draws.
 
 ```rust
 FormView::<NewDeal>::new().post("/deals").id_prefix("add")
