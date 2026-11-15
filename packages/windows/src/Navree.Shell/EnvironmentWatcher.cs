@@ -36,9 +36,23 @@ internal sealed class EnvironmentWatcher : IDisposable
         followsSystemTheme = startedDark == SystemIsDark();
         startedLocale = told.Locale;
         startedLanguage = SystemLanguage();
-        ui.ColorValuesChanged += OnSystemChanged;
-        ui.TextScaleFactorChanged += OnSystemChanged;
-        accessibility.HighContrastChanged += OnSystemChanged;
+        Watch(() => ui.ColorValuesChanged += OnSystemChanged);
+        Watch(() => ui.TextScaleFactorChanged += OnSystemChanged);
+        Watch(() => accessibility.HighContrastChanged += OnSystemChanged);
+    }
+
+    // A system setting that cannot be watched here (the runner of a server edition answers "element not found" to one of them) is one
+    // that is not watched: the others are, and everything is read again when the app comes back to the front.
+    private static void Watch(Action subscribe)
+    {
+        try
+        {
+            subscribe();
+        }
+        catch (Exception)
+        {
+            // Not watched.
+        }
     }
 
     /// <summary>Reads the settings again and passes on what differs from what the core was last told.</summary>
@@ -68,9 +82,9 @@ internal sealed class EnvironmentWatcher : IDisposable
     public void Dispose()
     {
         disposed = true;
-        ui.ColorValuesChanged -= OnSystemChanged;
-        ui.TextScaleFactorChanged -= OnSystemChanged;
-        accessibility.HighContrastChanged -= OnSystemChanged;
+        Watch(() => ui.ColorValuesChanged -= OnSystemChanged);
+        Watch(() => ui.TextScaleFactorChanged -= OnSystemChanged);
+        Watch(() => accessibility.HighContrastChanged -= OnSystemChanged);
     }
 
     private void OnSystemChanged(object? sender, object? args) => dispatcher.TryEnqueue(Check);
@@ -78,8 +92,15 @@ internal sealed class EnvironmentWatcher : IDisposable
     // The system's own theme, from the colour it draws a window's background with.
     private bool SystemIsDark()
     {
-        Windows.UI.Color background = ui.GetColorValue(UIColorType.Background);
-        return (0.299 * background.R) + (0.587 * background.G) + (0.114 * background.B) < 128;
+        try
+        {
+            Windows.UI.Color background = ui.GetColorValue(UIColorType.Background);
+            return (0.299 * background.R) + (0.587 * background.G) + (0.114 * background.B) < 128;
+        }
+        catch (Exception)
+        {
+            return startedDark;
+        }
     }
 
     private static string? SystemLanguage()
