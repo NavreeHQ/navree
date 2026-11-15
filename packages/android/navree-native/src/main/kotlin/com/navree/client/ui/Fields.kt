@@ -70,6 +70,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.error
@@ -502,8 +503,10 @@ private fun PickerField(
     label: String? = field.label,
     description: String? = null,
 ) {
-    // The field and the layer that takes the touch are one stop for a screen reader, not a named field and an unnamed button.
-    Box(modifier.semantics(mergeDescendants = true) {}) {
+    // The field is what is seen; the layer over it takes the touch and is the one stop for a screen reader, named by the
+    // field's label and what it holds (a field and a button side by side would be two stops, one of them unnamed).
+    val said = listOfNotNull(FormRules.label(label, field.required), text.ifEmpty { placeholder }).filter { it.isNotBlank() }.joinToString(", ")
+    Box(modifier) {
         OutlinedTextField(
             value = text,
             onValueChange = {},
@@ -515,10 +518,18 @@ private fun PickerField(
             supportingText = support.text?.let { shown -> { Text(shown) } },
             isError = support.isError,
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().clearAndSetSemantics {},
         )
         // The field itself would open the keyboard; this takes the touch and opens the picker.
-        Box(Modifier.matchParentSize().clickable(enabled = !field.disabled, role = Role.Button, onClickLabel = description, onClick = onOpen))
+        Box(
+            Modifier
+                .matchParentSize()
+                .semantics {
+                    contentDescription = said
+                    if (support.isError) error(support.text ?: "")
+                }
+                .clickable(enabled = !field.disabled, role = Role.Button, onClickLabel = description, onClick = onOpen),
+        )
     }
 }
 

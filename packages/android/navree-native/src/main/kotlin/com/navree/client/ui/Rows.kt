@@ -496,7 +496,13 @@ internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Pla
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         // A box that cannot be ticked (its row cannot be chosen) has no touch slot of its own: it keeps the room of the others, so every row starts alike.
                         Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp), contentAlignment = Alignment.Center) {
-                            Checkbox(checked = ticked, onCheckedChange = if (choosable) tick else null, enabled = choosable)
+                            Checkbox(
+                                checked = ticked,
+                                onCheckedChange = if (choosable) tick else null,
+                                enabled = choosable,
+                                // The box says whose it is: the row's words are another stop.
+                                modifier = Modifier.semantics { folded.headline?.let { contentDescription = it } },
+                            )
                         }
                         folded.leading?.let { leading -> Leading(leading, place) }
                     }
@@ -639,6 +645,7 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
                             checked = ticked,
                             onCheckedChange = if (canTick) ({ on: Boolean -> choosing.tick(ui, place, row, on) }) else null,
                             enabled = canTick,
+                            modifier = Modifier.semantics { ListRules.asListRow(node.columns, row).headline?.let { contentDescription = it } },
                         )
                     }
                 }

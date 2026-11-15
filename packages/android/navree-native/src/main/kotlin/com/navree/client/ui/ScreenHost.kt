@@ -479,6 +479,8 @@ private fun Fab(button: Navree.Button, place: Place, extended: Boolean, expanded
             icon = { androidx.compose.material3.Icon(vector, contentDescription = null) },
             onClick = { ui.press(place, button) },
             expanded = expanded,
+            // Folded to its icon while the list is scrolled, it is still named.
+            modifier = Modifier.semantics { contentDescription = button.label },
         )
     } else {
         FloatingActionButton(onClick = { ui.press(place, button) }) { androidx.compose.material3.Icon(vector, contentDescription = button.label) }
