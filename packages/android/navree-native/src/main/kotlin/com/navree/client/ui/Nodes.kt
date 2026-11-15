@@ -586,7 +586,7 @@ private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthD
             // The parts of a line are as tall as the tallest of them, where they can say how tall that is.
             val even = line.all(::measuresAhead)
             // Parts that cannot say how tall they are are made as tall as the tallest once they are laid out.
-            val tallest = rememberTallest(line)
+            val tallest = rememberTallest(line, widthDp)
             Row(if (even) Modifier.height(IntrinsicSize.Min) else Modifier, horizontalArrangement = Arrangement.spacedBy(gap.dp)) {
                 for (child in line) {
                     Box(if (even) Modifier.weight(1f).fillMaxHeight() else Modifier.weight(1f).sameHeightAs(tallest), propagateMinConstraints = !even) {

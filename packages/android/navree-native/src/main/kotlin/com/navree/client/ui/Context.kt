@@ -145,9 +145,16 @@ internal class Tallest {
     var px by mutableIntStateOf(0)
 }
 
-/** A line's record of its tallest card, kept while the line's parts are the same. */
+/**
+ * A line's record of its tallest card, kept while the line's parts, the width
+ * they are laid in and the text size are the same: a turned device or a smaller
+ * text makes the cards shorter, and the line must not stay as tall as it was.
+ */
 @Composable
-internal fun rememberTallest(key: Any?): Tallest = remember(key) { Tallest() }
+internal fun rememberTallest(key: Any?, widthDp: Float): Tallest {
+    val fontScale = LocalDensity.current.fontScale
+    return remember(key, widthDp, fontScale) { Tallest() }
+}
 
 /**
  * Makes a card as tall as the tallest of the cards in its line, for parts

@@ -482,7 +482,7 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
             val content = ContentRules.contentDp(pane, column, marginDp)
             // Where the room is known, the cards of a line are as tall as the tallest of them.
             val even = content > 0f && block.nodes.all(::measuresAhead)
-            val tallest = rememberTallest(block.nodes)
+            val tallest = rememberTallest(block.nodes, content)
             Row(
                 Modifier.readable(column).padding(horizontal = margin).then(if (even) Modifier.height(IntrinsicSize.Min) else Modifier),
                 horizontalArrangement = Arrangement.spacedBy(ContentRules.CARD_GAP_DP.dp),
