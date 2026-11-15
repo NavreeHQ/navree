@@ -174,7 +174,15 @@ impl DriverName {
     /// assert_eq!(TWO_TIER.as_str(), "two_tier");
     /// ```
     ///
-    /// ```compile_fail
+    /// The same two lines with a good name compile, so the example after
+    /// them fails to build for its name alone:
+    ///
+    /// ```
+    /// const GOOD: navree_config::DriverName = navree_config::DriverName::from_static("two_tier");
+    /// let _ = GOOD;
+    /// ```
+    ///
+    /// ```compile_fail,E0080
     /// // a_bad_static_name_fails_in_a_const
     /// const BAD: navree_config::DriverName = navree_config::DriverName::from_static("Two-Tier");
     /// let _ = BAD;
