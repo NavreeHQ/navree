@@ -94,7 +94,7 @@ every `@navree/*` package carries the same version.
   a name equal to a key of that section (`cache.prefix`, `notify.push`) fail the boot, naming the
   registration method and the module, whichever driver is selected. A setting that names a driver
   no module registers fails the boot too, listing the names that are known (a bare
-  `mail.transport` name that the process does not know as a driver name keeps
+  `mail.transport` name that no module registers as a mail transport keeps
   `unknown mail transport (expected ..)`, and so does a bare built-in type such as `smtp`); a
   notification that lists a channel no module adds fails that delivery, which is recorded as
   failed. `config:check` reports the same registrations and settings in the same words without
@@ -194,12 +194,12 @@ every `@navree/*` package carries the same version.
   `x-navree-register`, and `ConfigSection::schema()` reports them as `FieldType::Driver`, where it
   reported `Choice`.
 - `mail.transport`, the transports of a failover and `mail.transports` take the bare name of a
-  registered transport. A bare name reads as one only when the process already knows it as a
-  driver name, and the boot then fails, naming `m.mail_transport`, unless a module registered it
-  as a mail transport; any other bare name keeps `unknown mail transport (expected ..)`, and so
-  does a bare built-in type such as `smtp`. A tenant's mail transport, from a request or a stored
-  row, reads a registered name but cannot name a registered transport: saving or checking it
-  fails, and `TransportConfig::build` refuses it. Reading a name never adds one.
+  registered transport. A bare name reads as one only when a module registered a mail transport
+  under it; any other bare name, the name of another kind's driver included, keeps
+  `unknown mail transport (expected ..)`, and so does a bare built-in type such as `smtp`. A
+  tenant's mail transport, from a request or a stored row, reads a registered name but cannot
+  name a registered transport: saving or checking it fails, and `TransportConfig::build` refuses
+  it. Reading a name never adds one.
 - `CacheStoreKind`, `QueueDriver`, `SessionStoreKind`, `BackplaneKind`, `TransportConfig`,
   `DiskConfig`, `SmsDriverKind`, `WhatsAppDriverKind`, `Channel`, `Engine`, `EventKind`,
   `TelemetryEvent`, `Delivery`, `FieldType` and `ConfigError` gain a variant (they are
@@ -210,12 +210,13 @@ every `@navree/*` package carries the same version.
   also implements another trait with a method of that name in scope must call it through that
   trait.
 - `Channel`'s error for a name it does not know is now ``unknown notification channel `{name}` ``,
-  where it said `unknown variant`. The notification preference routes answer it as they answer
-  any other bad value, with status 400 and the code `validation_failed`, the text under
-  `errors.preferences`. A stored preference that names a channel no module adds keeps its other
-  choices (the unknown one is skipped with a warning), and a held delivery of such a channel is
-  dropped with a warning. A queued `notify.send` job that names a channel the worker's process
-  does not know does not read: it fails with `not the name of a registered driver`.
+  where it said `unknown variant`. A name is a channel only when a module adds a channel under it,
+  so the name of another kind's driver gets the same error. The notification preference routes
+  answer it as they answer any other bad value, with status 400 and the code `validation_failed`,
+  the text under `errors.preferences`. A stored preference that names a channel no module adds
+  keeps its other choices (the unknown one is skipped with a warning), and a held delivery of such
+  a channel is dropped with a warning. A queued `notify.send` job that names a channel the
+  worker's process does not know does not read: it fails with the same error.
   `notify.preferences.channels` and `notify.deferred.channels` name a channel a module adds only
   when written as a list: the comma-separated form of an environment variable reads the built-in
   channels only.

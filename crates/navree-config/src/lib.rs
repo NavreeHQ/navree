@@ -142,6 +142,7 @@ pub mod __private {
     pub use crate::commands::check_report;
     pub use crate::driver::{
         DriverFactory, DriverRecord, build_driver, check_registrations, contribute_slot,
-        read_settings, register_driver, registration_problems, selector_error, selector_name,
+        lookup_in, read_settings, register_driver, register_in, registration_problems,
+        selector_error, selector_name,
     };
 }

@@ -3,7 +3,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use navree_config::__private::selector_name;
+use navree_config::__private::{lookup_in, selector_name};
 use navree_config::DriverName;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize, Serializer};
@@ -136,12 +136,13 @@ impl Channel {
 
     /// The channel called `name`, read from outside the code (a request, a
     /// stored row, a queued payload): a built-in channel, else a name the
-    /// process already knows as a channel a module adds; `None` otherwise.
-    /// It never adds a name, so made-up names cannot pile up.
+    /// process already knows as a channel a module adds; `None` otherwise,
+    /// also for the name of a driver of another kind (a cache store, a mail
+    /// transport). It never adds a name, so made-up names cannot pile up.
     pub fn from_name(name: &str) -> Option<Channel> {
         match built_in(name) {
             Some(channel) => Some(channel),
-            None => DriverName::lookup(name).map(Channel::Registered),
+            None => lookup_in(CHANNEL_SLOT.key(), name).map(Channel::Registered),
         }
     }
 
@@ -244,6 +245,8 @@ impl<'de> Deserialize<'de> for Channel {
 
 #[cfg(test)]
 mod tests {
+    use navree_config::__private::register_in;
+
     use super::*;
 
     #[test]
@@ -278,7 +281,7 @@ mod tests {
 
     #[test]
     fn channels_round_trip_and_from_str_stays_strict() {
-        let doot = DriverName::register("doot").unwrap();
+        let doot = register_in(CHANNEL_SLOT.key(), "doot").unwrap();
         for (channel, name) in [
             (Channel::MicrosoftTeams, "teams"),
             (Channel::WhatsApp, "whatsapp"),
@@ -316,6 +319,18 @@ mod tests {
         assert_eq!(DriverName::lookup("kabutar_9a"), None);
         assert_eq!(Channel::EVERY.len(), 9);
 
+        // A driver of another kind is no channel: its name reads as one
+        // nobody registered, with the same text.
+        register_in("cache.store", "sanduk_cache").unwrap();
+        DriverName::register("memory").unwrap();
+        for name in ["sanduk_cache", "memory"] {
+            assert_eq!(Channel::from_name(name), None, "{name}");
+            let error = serde_json::from_value::<Channel>(serde_json::json!(name))
+                .unwrap_err()
+                .to_string();
+            assert_eq!(error, format!("unknown notification channel `{name}`"));
+        }
+
         // A built-in channel's name is that channel, however it is written.
         for &channel in Channel::EVERY {
             let name = channel.as_str();
@@ -341,7 +356,7 @@ mod tests {
 
     #[test]
     fn a_channel_written_as_a_one_key_table_reads_as_before() {
-        DriverName::register("doot").unwrap();
+        register_in(CHANNEL_SLOT.key(), "doot").unwrap();
         assert_eq!(
             serde_json::from_value::<Channel>(serde_json::json!({"teams": null})).unwrap(),
             Channel::MicrosoftTeams

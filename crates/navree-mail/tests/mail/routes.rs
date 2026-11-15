@@ -6,6 +6,8 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use chrono::{DateTime, Utc};
 use http::Method;
+use navree_config::DriverName;
+use navree_config::__private::register_in;
 use navree_contracts::{Clock, FixedClock};
 use navree_db::PageQuery;
 use navree_http_client::{FakeResponse, FakeServer, HttpClient};
@@ -782,6 +784,59 @@ async fn transport_settings_are_checked_before_a_tenant_saves_them() {
         .send()
         .await
         .assert_error_code(422, "mail_transport_unusable");
+}
+
+#[tokio::test]
+async fn a_made_up_transport_name_from_a_request_is_refused_and_not_kept() {
+    let (mail, user) = admin().await;
+    let client = mail.app.client().acting_as(principal(user));
+    // A cache store a module of the process registered, and a name nobody
+    // registered, both twelve letters long: a tenant gets the same answer
+    // for each, so it cannot tell which driver names the app has.
+    register_in("cache.store", "sanduk_cache").unwrap();
+    let mut answers = Vec::new();
+    for body in [
+        json!("sanduk_cache"),
+        json!("pune_kabutar"),
+        json!({"type": "failover", "transports": ["pune_kabutar"]}),
+        json!({"type": "failover", "transports": "log,pune_kabutar"}),
+    ] {
+        let refused = client
+            .post("/api/mail/transports/usable")
+            .json(&body)
+            .send()
+            .await
+            .assert_status(400)
+            .json_value();
+        let message = refused["message"].as_str().unwrap_or_default().to_owned();
+        assert!(
+            message.contains("unknown mail transport (expected"),
+            "{body}: {message}"
+        );
+        answers.push(message);
+    }
+    assert_eq!(answers[0], answers[1]);
+    assert_eq!(
+        DriverName::lookup("pune_kabutar"),
+        None,
+        "reading adds no name"
+    );
+
+    // A name registered as a mail transport reads as that transport;
+    // outside MailModule it does not build, so a tenant's transport cannot
+    // be one.
+    register_in("mail.transport", "pune_dakghar").unwrap();
+    let refused = client
+        .post("/api/mail/transports/usable")
+        .json(&json!("pune_dakghar"))
+        .send()
+        .await
+        .assert_status(400)
+        .json_value();
+    assert_eq!(
+        refused["message"],
+        "invalid mail configuration: mail transport `pune_dakghar` is registered by a module; MailModule builds it at boot"
+    );
 }
 
 #[tokio::test]

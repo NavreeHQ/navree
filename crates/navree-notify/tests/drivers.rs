@@ -15,6 +15,7 @@ mod database;
 use std::sync::{Arc, Mutex};
 
 use navree_config::DriverName;
+use navree_config::__private::register_in;
 use navree_contracts::Dispatcher;
 use navree_db::{DatabaseModule, Db};
 use navree_kernel::{
@@ -532,6 +533,52 @@ async fn made_up_channel_names_from_requests_leave_registered_channels_readable(
     assert_eq!(read.delivery.channel(), Channel::named("doot"));
     assert!(serde_json::from_value::<SendNotificationJob>(job("made_up_job")).is_err());
     assert_eq!(DriverName::lookup("made_up_job"), None);
+}
+
+#[tokio::test]
+async fn a_driver_name_of_another_kind_is_an_unknown_channel() {
+    // A cache store a module of the process registered, a built-in name of
+    // another kind, and a name nobody registered: a request gets the same
+    // text for each.
+    register_in("cache.store", "sanduk_cache").unwrap();
+    DriverName::register("memory").unwrap();
+    let options = NotifyOptions {
+        preferences: PreferenceOptions {
+            channels: vec![Channel::Mail, Channel::named("doot")],
+            ..PreferenceOptions::default()
+        },
+        ..NotifyOptions::default()
+    };
+    let app = support::builder(options)
+        .module(DootModule::default())
+        .build()
+        .await;
+    let as_user = app.acting_as(principal(Uuid::now_v7()));
+    for name in ["sanduk_cache", "memory", "pune_kabutar"] {
+        let mut channels = Map::new();
+        channels.insert(name.to_owned(), json!(false));
+        let refused = as_user
+            .patch("/api/notifications/preferences")
+            .json(&json!({ "channels": channels }))
+            .send()
+            .await
+            .assert_status(400)
+            .json_value();
+        assert_eq!(
+            refused["errors"]["preferences"][0],
+            format!("unknown notification channel `{name}`"),
+            "{refused}"
+        );
+        assert_eq!(Channel::from_name(name), None, "{name}");
+    }
+
+    // A channel a module adds is still found, and switched.
+    as_user
+        .patch("/api/notifications/preferences")
+        .json(&json!({ "channels": {"doot": false} }))
+        .send()
+        .await
+        .assert_status(200);
 }
 
 #[tokio::test]
