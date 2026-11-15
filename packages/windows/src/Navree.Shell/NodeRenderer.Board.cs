@@ -222,6 +222,7 @@ internal sealed partial class NodeRenderer
         MenuFlyout menu = new();
         menu.Opening += (_, _) => FillMoveMenu(menu, rowId, listId);
         handle.Flyout = menu;
+        handle.KeyUp += (_, e) => PageReports.Note("a key on a card's handle: released " + e.Key);
         handle.KeyDown += (_, e) =>
         {
             bool alt = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);

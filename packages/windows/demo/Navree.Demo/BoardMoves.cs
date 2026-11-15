@@ -28,6 +28,7 @@ internal sealed partial class BoardMoves(ShellHost host, ShellWindow window, str
     private const byte AltKey = 0x12;
     private const byte ShiftKey = 0x10;
     private const byte Down = 0x28;
+    private const byte UpArrow = 0x26;
     private const byte Right = 0x27;
 
     private readonly List<string> log = [];
@@ -44,6 +45,15 @@ internal sealed partial class BoardMoves(ShellHost host, ShellWindow window, str
 
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int key);
+
+    [DllImport("user32.dll")]
+    private static extern int GetKeyboardLayoutList(int count, IntPtr[]? list);
+
+    [DllImport("user32.dll")]
+    private static extern uint MapVirtualKey(uint code, uint type);
 
     [DllImport("user32.dll")]
     private static extern bool ClientToScreen(IntPtr window, ref Spot spot);
@@ -107,6 +117,15 @@ internal sealed partial class BoardMoves(ShellHost host, ShellWindow window, str
         Foreground();
         _ = handle.Focus(FocusState.Keyboard);
         await Task.Delay(500);
+        bool takenBySystem = await ChordStudyAsync();
+        _ = handle.Focus(FocusState.Keyboard);
+        await Task.Delay(500);
+        if (takenBySystem)
+        {
+            Say("NOTE the two chord lines below are not checked here: the keys cannot reach the handle as a chord on this machine, which is a property of its keyboard settings (the move by the menu is checked in its own lines)");
+            return;
+        }
+
         await ChordAsync(Down);
         (string Lane, int Index)? now = await WaitAsync(first.Id, first.Lane, 1);
         Say("after Down the focus is on " + Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(window.Surface.XamlRoot)?.GetType().Name + " '" + (Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(window.Surface.XamlRoot) is DependencyObject focused ? AutomationProperties.GetName(focused) : string.Empty) + "'");
@@ -386,6 +405,71 @@ internal sealed partial class BoardMoves(ShellHost host, ShellWindow window, str
         await Task.Delay(80);
         mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
         await Task.Delay(500);
+    }
+
+    // Why Alt, Shift and an arrow may not reach the handle as a chord on one machine and do on another: what the machine says about its keyboards, and what the handle
+    // sees (and what the system says is down) for each way of sending the keys. The arrow is Up on the first card, which has nowhere to go, so nothing is moved.
+    private async Task<bool> ChordStudyAsync()
+    {
+        Say("== how Alt, Shift and an arrow reach the handle");
+        int layouts = GetKeyboardLayoutList(0, null);
+        Say("this machine has " + layouts + " keyboard layouts installed");
+        try
+        {
+            using Microsoft.Win32.RegistryKey? toggle = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Keyboard Layout\Toggle");
+            Say("the layout switch keys (1 is Alt and Shift, 2 is Control and Shift, 3 is none) read from the person's settings: " + string.Join(", ", (toggle?.GetValueNames() ?? []).Select(name => name + "=" + toggle!.GetValue(name))));
+        }
+        catch (Exception problem)
+        {
+            Say("the layout switch keys could not be read: " + problem.Message);
+        }
+
+        (string Name, Func<Task> Send)[] ways =
+        [
+            ("Alt, then Shift, 60 ms, the arrow", () => SendAsync([AltKey, ShiftKey], UpArrow, 60, false)),
+            ("Shift, then Alt, 60 ms, the arrow", () => SendAsync([ShiftKey, AltKey], UpArrow, 60, false)),
+            ("Alt, then Shift, 500 ms, the arrow", () => SendAsync([AltKey, ShiftKey], UpArrow, 500, false)),
+            ("Alt, then Shift, with the scan codes, 300 ms, the arrow", () => SendAsync([AltKey, ShiftKey], UpArrow, 300, true)),
+        ];
+        bool taken = false;
+        foreach ((string name, Func<Task> send) in ways)
+        {
+            int before = Navree.Shell.PageReports.Notes.Count;
+            await send();
+            await Task.Delay(300);
+            List<string> notes = [.. Navree.Shell.PageReports.Notes.Skip(before).Where(note => note.StartsWith("a key on a card's handle", StringComparison.Ordinal)).Select(note => note["a key on a card's handle: ".Length..])];
+            Say(name + ": the handle saw: " + string.Join("; ", notes));
+
+            // The arrow came with Alt down and Shift up though the keys were sent with both down: something between the keys and the handle let Shift go.
+            taken |= notes.Any(note => note.StartsWith("Up, alt True, shift False", StringComparison.Ordinal)) && notes.Any(note => note == "released Shift");
+        }
+
+        if (taken)
+        {
+            Say("on this machine the system takes Shift away when Alt and Shift are down together (" + layouts + " keyboard layouts are installed, and Alt with Shift is the key that switches between them): the handle is sent Shift released before the arrow comes");
+        }
+
+        return taken;
+    }
+
+    private async Task SendAsync(byte[] modifiers, byte arrow, int gap, bool scanCodes)
+    {
+        Foreground();
+        foreach (byte modifier in modifiers)
+        {
+            keybd_event(modifier, scanCodes ? (byte)MapVirtualKey(modifier, 0) : (byte)0, 0, UIntPtr.Zero);
+        }
+
+        await Task.Delay(gap);
+        Say("    with the modifiers down the system says: shift " + ((GetAsyncKeyState(ShiftKey) & 0x8000) != 0) + ", alt " + ((GetAsyncKeyState(AltKey) & 0x8000) != 0) + ", left shift " + ((GetAsyncKeyState(0xA0) & 0x8000) != 0) + ", left alt " + ((GetAsyncKeyState(0xA4) & 0x8000) != 0));
+        keybd_event(arrow, scanCodes ? (byte)MapVirtualKey(arrow, 0) : (byte)0, 0, UIntPtr.Zero);
+        await Task.Delay(60);
+        keybd_event(arrow, 0, KeyUp, UIntPtr.Zero);
+        await Task.Delay(60);
+        foreach (byte modifier in modifiers.Reverse())
+        {
+            keybd_event(modifier, 0, KeyUp, UIntPtr.Zero);
+        }
     }
 
     private static async Task ChordAsync(byte arrow)
