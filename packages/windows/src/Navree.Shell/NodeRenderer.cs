@@ -26,9 +26,15 @@ internal sealed partial class NodeRenderer(RenderContext context)
     {
         UIElement element = Draw(node);
         string? id = Tree.IdOf(node);
-        if (id is not null && element is FrameworkElement shown && context.Screen.Has(id, Models.State.Hidden))
+        if (id is not null && element is FrameworkElement shown)
         {
-            shown.Visibility = Visibility.Collapsed;
+            // Every drawn node with an id carries it, so what the person has on it (the focus, a caret, a table's active cell) can be found
+            // again in the page that is drawn after the next answer, and the core's request to move the focus has a place to go.
+            PageKeeper.Mark(shown, id);
+            if (context.Screen.Has(id, Models.State.Hidden))
+            {
+                shown.Visibility = Visibility.Collapsed;
+            }
         }
 
         return element;

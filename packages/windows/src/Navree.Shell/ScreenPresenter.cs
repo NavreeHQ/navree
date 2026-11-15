@@ -17,12 +17,16 @@ internal sealed class ScreenPresenter : Grid
     private readonly ShellHost host;
     private readonly ScrollViewer scroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private readonly Dictionary<long, WebPage> webs = [];
+    private readonly Dictionary<long, double> offsets = [];
+    private readonly PageKeeper keeper = new();
+    private readonly TableLayouts layouts;
     private ScreenView? shown;
     private WidthClass shownWidth;
 
     internal ScreenPresenter(ShellHost host)
     {
         this.host = host;
+        layouts = new TableLayouts(host);
         Children.Add(scroller);
         scroller.SizeChanged += (_, _) => FitPage();
     }
@@ -102,10 +106,27 @@ internal sealed class ScreenPresenter : Grid
             }
 
             shown = screen;
+            if (scroller.Content is FrameworkElement kept)
+            {
+                keeper.Serve(kept, screen, host.Send);
+            }
+
             return;
         }
 
-        double offset = shown is not null && shown.Id == screen.Id ? scroller.VerticalOffset : 0;
+        // Where the person was on this page, before it is replaced: the focus and what it holds, and the place of each screen's scroll.
+        PageKeeper.Held? held = shown is not null && shown.Id == screen.Id ? PageKeeper.Capture(scroller.Content as FrameworkElement) : null;
+        if (shown is not null)
+        {
+            offsets[shown.Id] = scroller.VerticalOffset;
+        }
+
+        foreach (long gone in offsets.Keys.Where(id => !host.State.Screens.ContainsKey(id)).ToList())
+        {
+            _ = offsets.Remove(gone);
+        }
+
+        double offset = offsets.TryGetValue(screen.Id, out double kept1) ? kept1 : 0;
         shown = screen;
         shownWidth = width;
         RenderContext context = new()
@@ -114,15 +135,25 @@ internal sealed class ScreenPresenter : Grid
             Send = host.Send,
             Width = width,
             Pictures = host.LoadPictureAsync,
+            Layouts = layouts,
         };
         Context = context;
-        scroller.Content = Page(context);
+        UIElement drawn = Page(context);
+        FrameworkElement built = (FrameworkElement)drawn;
+        scroller.Content = drawn;
         FitPage();
         if (offset > 0)
         {
             scroller.UpdateLayout();
             scroller.ChangeView(null, offset, null, disableAnimation: true);
         }
+
+        if (held is not null)
+        {
+            PageKeeper.Restore(built, held);
+        }
+
+        keeper.Serve(built, screen, host.Send);
     }
 
     // One thing fills the area: the screen's scrolling page, or a web view.

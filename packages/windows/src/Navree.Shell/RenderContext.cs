@@ -34,6 +34,9 @@ internal sealed class RenderContext
     /// <summary>The fields drawn, by form and field id, so their state can be shown again without drawing the screen again.</summary>
     internal Dictionary<(string Form, string Field), FieldHandle> Fields { get; } = [];
 
+    /// <summary>Where a person's widths of a table's columns are kept, or none.</summary>
+    internal TableLayouts? Layouts { get; init; }
+
     /// <summary>The element that raises assistive technology's notices.</summary>
     internal FrameworkElement? Announcer { get; init; }
 }

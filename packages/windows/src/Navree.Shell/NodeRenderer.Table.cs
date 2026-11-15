@@ -48,6 +48,14 @@ internal sealed partial class NodeRenderer
             VerticalAlignment = VerticalAlignment.Top,
         };
 
+        if (id is not null && context.Layouts is { } layouts)
+        {
+            // A person's widths and order of the columns are kept for each table of each screen, from one launch to the next.
+            string address = context.Screen.Url.Split('?', 2)[0];
+            view.LayoutKey = address + "#" + id;
+            view.LayoutStore = layouts;
+        }
+
         if (table.Empty is not null)
         {
             view.EmptyContent = Render(table.Empty);

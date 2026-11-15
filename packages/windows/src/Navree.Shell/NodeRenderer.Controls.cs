@@ -479,10 +479,12 @@ internal sealed partial class NodeRenderer
                         box.MaxLength = (int)most;
                     }
 
+                    // Every change the person makes is sent: the client holds no copy of the text to compare with (the page it was drawn from
+                    // is not the core's state any more), and the core ignores a value it already holds. What the core itself sets in the box is not sent back.
+                    bool applying = false;
                     box.TextChanged += (_, _) =>
                     {
-                        FieldView? latest = context.Screen.FieldOf(form, id);
-                        if (latest?.Value is not TextValue { } same || same.Text != box.Text)
+                        if (!applying)
                         {
                             send(new TextValue(box.Text));
                         }
@@ -492,7 +494,15 @@ internal sealed partial class NodeRenderer
                     {
                         if (view?.Value is TextValue echoed && echoed.Text != box.Text && box.FocusState == FocusState.Unfocused)
                         {
-                            box.Text = echoed.Text;
+                            applying = true;
+                            try
+                            {
+                                box.Text = echoed.Text;
+                            }
+                            finally
+                            {
+                                applying = false;
+                            }
                         }
                     };
                 }
