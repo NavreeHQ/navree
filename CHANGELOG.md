@@ -250,6 +250,11 @@ every `@navree/*` package carries the same version.
   or postcard, so a value 1.2 wrote in such a format does not read back in 1.3. JSON, TOML and the
   configuration read as before.
 
+### Fixed
+
+- Helm reports the real error when the app's templates cannot be built. It used to stop the boot
+  saying the app needs `ViewModule`, although the app had it.
+
 ## [1.2.2] - 2026-11-14
 
 ### Upgrading

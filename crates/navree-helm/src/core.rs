@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_kernel::{AppContext, BoxError, ModuleId, PluginReport};
+use navree_kernel::{AppContext, BoxError, KernelError, ModuleId, PluginReport};
 use navree_validation::Messages;
 use navree_view::Views;
 
@@ -37,7 +37,13 @@ impl Core {
     /// first problem in a resource, a page, a link or a card.
     pub(crate) async fn new(app: AppContext, options: Arc<HelmOptions>) -> Result<Core, BoxError> {
         let registry = Registry::build(&app, options.clone()).await?;
-        let app_views = app.try_get::<Views>().await;
+        // The app's templates, when it has ViewModule. Templates that could not be built are
+        // the boot's error as it is, not a missing ViewModule.
+        let app_views = match app.get::<Views>().await {
+            Ok(views) => Some(views),
+            Err(KernelError::MissingProvider { .. }) => None,
+            Err(error) => return Err(error.into()),
+        };
         if app_views.is_none() {
             let view_field = registry.resources().iter().find_map(|r| {
                 r.info()
