@@ -42,7 +42,9 @@ pub struct RoleInfo {
 /// in the same transaction, so cached abilities are rebuilt everywhere once
 /// it commits, and writes an [`AuditKind::Access`] entry after the commit
 /// when an `AuditSink` is registered. Writes that change nothing (granting
-/// a permission the role already has) do neither and return `false`.
+/// a permission the role already has) do neither and return `false`;
+/// [`create_role`](AccessService::create_role) is the exception, it refuses a
+/// name that exists with [`AccessError::RoleExists`].
 ///
 /// Reads use the connection pool (committed data), or, inside a unit of
 /// work whose transaction is open, that transaction (`Db::reader`): a
