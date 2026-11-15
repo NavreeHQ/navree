@@ -281,7 +281,7 @@ public sealed partial class DataTable
         double line = measurer.LineHeight(TextStyle.Body);
         double second = measurer.LineHeight(TextStyle.Caption);
         bool controls = Model?.Columns.Any(column => column.Kind == ColumnKind.Controls) ?? false;
-        rowHeight = RowGeometry.RowHeight(density, shape, controls, line, second, scale);
+        rowHeight = IsList ? ListHeight(line, second, scale) : RowGeometry.RowHeight(density, shape, controls, line, second, scale);
         headerHeight = RowGeometry.HeaderHeight(density, controls, line, scale);
         if (headerHost is not null)
         {

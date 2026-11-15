@@ -130,7 +130,7 @@ public sealed class DataTableRow : Control
         {
             foreach (DataTableCell cell in cells)
             {
-                if (cell.Content is UIElement content)
+                if (cell.ColumnIndex >= 0 && cell.Content is UIElement content)
                 {
                     presenter.ClearCell(content);
                 }
@@ -179,7 +179,11 @@ public sealed class DataTableRow : Control
             for (int i = 0; i < cells.Count; i++)
             {
                 DataTableCell cell = cells[i];
-                if (cell.Content is UIElement content)
+                if (cell.ColumnIndex == DataTable.ListColumn)
+                {
+                    table.BindList(cell, Record);
+                }
+                else if (cell.Content is UIElement content)
                 {
                     presenter.BindCell(content, Record, cell.ColumnIndex);
                 }
@@ -235,7 +239,7 @@ public sealed class DataTableRow : Control
 
         double height = IsHeader ? table.HeaderHeight : table.RowHeight;
         root.RowDefinitions[0].Height = new GridLength(height);
-        root.Width = layout.RowWidth;
+        root.Width = table.IsList ? layout.Viewport : layout.RowWidth;
         if (chrome is not null)
         {
             chrome.Width = Math.Max(layout.Viewport, 0);
@@ -250,6 +254,15 @@ public sealed class DataTableRow : Control
         double cellHeight = Math.Max(0, height - 1);
         foreach (DataTableCell cell in cells)
         {
+            if (cell.ColumnIndex == DataTable.ListColumn)
+            {
+                double gutter = table.HasCheckColumn ? FrozenGutter.CheckWidth : 0;
+                cell.Width = Math.Max(0, layout.Viewport - gutter);
+                cell.Height = cellHeight;
+                Canvas.SetLeft(cell, gutter);
+                continue;
+            }
+
             Place(cell, cell.ColumnIndex, layout, table, cellHeight);
         }
 
@@ -428,6 +441,22 @@ public sealed class DataTableRow : Control
             chevron = new DataTableGlyph { Glyph = Glyphs.ChevronDown, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Width = 28, Height = 28 };
             chevronCell = new DataTableCell { Role = CellRole.Chevron, Row = this, GridColumn = -1, Padding = new Thickness(0), Content = chevron };
             frozenStart?.Children.Add(chevronCell);
+        }
+
+        if (table.IsList)
+        {
+            DataTableCell listCell = new()
+            {
+                Role = CellRole.Data,
+                Row = this,
+                ColumnIndex = DataTable.ListColumn,
+                GridColumn = 0,
+                Padding = new Thickness(0),
+                Content = new DataTableListContent(),
+            };
+            cells.Add(listCell);
+            scrollCells?.Children.Add(listCell);
+            return;
         }
 
         foreach (ShownColumn shown in table.Shown)

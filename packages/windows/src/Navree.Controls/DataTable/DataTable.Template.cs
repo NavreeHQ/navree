@@ -70,6 +70,7 @@ public sealed partial class DataTable
         edgeEnd = GetTemplateChild("PART_EdgeEnd") as Border;
         WireStateParts();
         WireBulkBar();
+        WireListParts();
         if (scroll is null || repeater is null || headerHost is null || templateWired)
         {
             return;

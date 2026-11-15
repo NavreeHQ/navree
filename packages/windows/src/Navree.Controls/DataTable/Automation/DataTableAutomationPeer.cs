@@ -165,6 +165,7 @@ public sealed partial class DataTableAutomationPeer : FrameworkElementAutomation
         {
             case PatternInterface.Grid:
             case PatternInterface.Table:
+                return table.IsList ? null : this;
             case PatternInterface.ItemContainer:
                 return this;
             case PatternInterface.Selection when table.Model?.Choice.Available == true:
@@ -194,7 +195,7 @@ public sealed partial class DataTableAutomationPeer : FrameworkElementAutomation
     }
 
     /// <inheritdoc />
-    protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.DataGrid;
+    protected override AutomationControlType GetAutomationControlTypeCore() => table.IsList ? AutomationControlType.List : AutomationControlType.DataGrid;
 
     /// <inheritdoc />
     protected override string GetClassNameCore() => nameof(DataTable);
@@ -397,7 +398,8 @@ public sealed partial class DataTableRowAutomationPeer : FrameworkElementAutomat
     }
 
     /// <inheritdoc />
-    protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.DataItem;
+    protected override AutomationControlType GetAutomationControlTypeCore() =>
+        Table?.IsList == true ? AutomationControlType.ListItem : AutomationControlType.DataItem;
 
     /// <inheritdoc />
     protected override string GetClassNameCore() => nameof(DataTableRow);
@@ -411,8 +413,13 @@ public sealed partial class DataTableRowAutomationPeer : FrameworkElementAutomat
             return row.Key ?? string.Empty;
         }
 
+        if (table.IsList)
+        {
+            return table.ListWords(row.Record);
+        }
+
         List<string> words = [presenter.RowName(row.Record)];
-        foreach (DataTableCell cell in row.Cells)
+        foreach (DataTableCell cell in row.Cells.Where(c => c.ColumnIndex >= 0))
         {
             string text = presenter.CellText(row.Record, cell.ColumnIndex);
             if (text.Length > 0 && !words.Contains(text))
@@ -496,7 +503,7 @@ public sealed partial class DataTableCellAutomationPeer : FrameworkElementAutoma
     /// <inheritdoc />
     protected override string GetNameCore() =>
         Table?.Presenter is { } presenter && cell.Row is { } row && cell.Role == CellRole.Data
-            ? presenter.CellText(row.Record, cell.ColumnIndex)
+            ? (cell.ColumnIndex >= 0 ? presenter.CellText(row.Record, cell.ColumnIndex) : Table.ListWords(row.Record))
             : string.Empty;
 
     /// <inheritdoc />

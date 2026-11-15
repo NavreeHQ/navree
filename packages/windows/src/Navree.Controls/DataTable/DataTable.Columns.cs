@@ -121,25 +121,33 @@ public sealed partial class DataTable
         }
 
         string signature = string.Join('|', order.Select(i => columns[i].Key)) + (hasCheckColumn ? "+c" : string.Empty) + (hasChevronColumn ? "+d" : string.Empty);
-        bool versionChanged = signature != shownSignature;
+        bool modeChanged = UpdateMode(columns, order, gutter);
+        bool versionChanged = signature != shownSignature || modeChanged;
         if (versionChanged)
         {
             shownSignature = signature;
             LayoutVersion++;
         }
 
+        if (modeChanged)
+        {
+            RecomputeMetrics();
+        }
+
         shown = list;
         layout = built;
-        rowsLayout.RowWidth = built.RowWidth;
-        sticky?.SetFrozenWidths(built.Fs, built.Fe);
+        double fs = IsList ? 0 : built.Fs;
+        double fe = IsList ? 0 : built.Fe;
+        rowsLayout.RowWidth = IsList ? viewport : built.RowWidth;
+        sticky?.SetFrozenWidths(fs, fe);
         if (edgeStart is not null)
         {
-            edgeStart.Margin = new Thickness(built.Fs, 0, 0, 0);
+            edgeStart.Margin = new Thickness(fs, 0, 0, 0);
         }
 
         if (edgeEnd is not null)
         {
-            edgeEnd.Margin = new Thickness(0, 0, built.Fe, 0);
+            edgeEnd.Margin = new Thickness(0, 0, fe, 0);
         }
 
         RefreshAllRows(numbersOnly: !versionChanged);

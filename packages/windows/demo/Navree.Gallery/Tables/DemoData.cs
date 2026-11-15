@@ -51,7 +51,7 @@ internal static class DemoData
     /// <param name="count">How many.</param>
     /// <returns>The customers.</returns>
     internal static List<Customer> Make(int first, int count) =>
-        Enumerable.Range(first, count).Select(Make).ToList();
+        Enumerable.Range(first, count).Select(i => Make(i)).ToList();
 
     /// <summary>Makes one customer.</summary>
     /// <param name="i">Its number.</param>

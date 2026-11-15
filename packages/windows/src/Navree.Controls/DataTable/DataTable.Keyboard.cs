@@ -166,7 +166,7 @@ public sealed partial class DataTable
     // A cell that scrolls is brought clear of the frozen columns; a frozen one is always in view.
     private void RevealColumn(int gridColumn)
     {
-        if (scroll is null || gridColumn < 0 || gridColumn >= shown.Count || layout is null)
+        if (scroll is null || IsList || gridColumn < 0 || gridColumn >= shown.Count || layout is null)
         {
             return;
         }
@@ -328,7 +328,7 @@ public sealed partial class DataTable
                 anchorKey = at.Key;
             }
 
-            Cell? stepped = GridNavigation.Move(current, nav, NavMods.None, model.RowCount, shown.Count, true, page, rtl);
+            Cell? stepped = GridNavigation.Move(current, nav, NavMods.None, model.RowCount, GridColumnCount, !IsList, page, rtl);
             if (stepped is { } to && to.Row >= 0)
             {
                 SetActive(to, focus: true);
@@ -338,7 +338,7 @@ public sealed partial class DataTable
             return;
         }
 
-        Cell? next = GridNavigation.Move(current, nav, mods, model.RowCount, shown.Count, true, page, rtl);
+        Cell? next = GridNavigation.Move(current, nav, mods, model.RowCount, GridColumnCount, !IsList, page, rtl);
         if (next is { } target)
         {
             SetActive(target, focus: true);
@@ -360,8 +360,8 @@ public sealed partial class DataTable
 
         DataTableRecord record = model.GetRow(row);
         IDataTablePresenter? presenter = Presenter;
-        int controls = presenter is null || column >= shown.Count ? 0 : presenter.ControlCount(record, shown[column].ModelIndex);
-        bool nameCell = column < shown.Count && shown[column].Column.Role == ColumnRole.Title;
+        int controls = presenter is null || IsList || column >= shown.Count ? 0 : presenter.ControlCount(record, shown[column].ModelIndex);
+        bool nameCell = IsList || (column < shown.Count && shown[column].Column.Role == ColumnRole.Title);
         switch (GridNavigation.Activation(controls, nameCell && record.HasAction, record.HasAction, record.HasDetail))
         {
             case ActivationTarget.RowAction when record.Key is { } key:
@@ -383,13 +383,17 @@ public sealed partial class DataTable
 
     private void CopyActive(int row, int column)
     {
-        if (Model is not { } model || Presenter is not { } presenter || row >= model.RowCount || column >= shown.Count)
+        if (Model is not { } model || Presenter is not { } presenter || row >= model.RowCount || (!IsList && column >= shown.Count))
         {
             return;
         }
 
         string text;
-        if (ChosenCount > 0)
+        if (IsList)
+        {
+            text = ClipboardText.ForCell(ListWords(model.GetRow(row)));
+        }
+        else if (ChosenCount > 0)
         {
             List<string> headers = shown.Select(s => s.Column.Header).ToList();
             List<IReadOnlyList<string>> lines = [];

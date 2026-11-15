@@ -12,7 +12,7 @@ namespace Navree.Gallery;
 internal static class TableScenarios
 {
     private static readonly string[] Standard =
-        ["standard", "chosen", "sorted", "loading", "empty", "failed", "scrolled", "detail", "cursor", "menu", "rowmenu", "layout", "keys"];
+        ["standard", "chosen", "sorted", "loading", "empty", "failed", "scrolled", "detail", "cursor", "menu", "rowmenu", "layout", "narrow", "keys"];
 
     /// <summary>The scenarios a run of "table" covers.</summary>
     internal static IReadOnlyList<string> All => Standard;
@@ -101,6 +101,12 @@ internal static class TableScenarios
         }
 
         DataTable table = new() { Model = model, Presenter = presenter, Culture = DemoData.Culture, Caption = "Customers" };
+        if (name == "narrow")
+        {
+            table.Width = 520;
+            table.HorizontalAlignment = HorizontalAlignment.Left;
+        }
+
         if (name == "layout")
         {
             table.LayoutKey = "gallery/customers";
@@ -140,6 +146,9 @@ internal static class TableScenarios
         {
             case "chosen":
                 table.ApplyChoice(["c00002", "c00003", "c00006"], false);
+                break;
+            case "narrow":
+                table.ApplyChoice(["c00001"], false);
                 break;
             case "scrolled":
                 table.Scroller?.ScrollTo(420, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
