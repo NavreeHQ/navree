@@ -304,4 +304,12 @@ class BidiRulesTest {
     fun an_amount_with_its_unit_is_one_run_left_to_right() {
         assertEquals("\u2066540/600 kcal\u2069", BidiRules.amount("540/600 kcal"))
     }
+
+    @Test
+    fun a_phone_number_and_an_address_are_read_left_to_right_and_other_words_are_left_alone() {
+        assertEquals("\u2066+91 98140 12345\u2069", BidiRules.codes("+91 98140 12345"))
+        assertEquals("\u2066harpreet.sandhu@example.com\u2069", BidiRules.codes("harpreet.sandhu@example.com"))
+        assertEquals("7 orders since Mar 2024", BidiRules.codes("7 orders since Mar 2024"))
+        assertEquals("CH-1042", BidiRules.codes("CH-1042"))
+    }
 }

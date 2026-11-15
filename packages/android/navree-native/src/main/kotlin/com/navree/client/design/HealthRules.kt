@@ -270,6 +270,16 @@ object BidiRules {
      * otherwise read "kcal 540/600" in a right to left line.
      */
     fun amount(text: String): String = "$ISOLATE_LTR$text$POP_ISOLATE"
+
+    private val PHONE = Regex("""^\+?\d[\d\s().-]{5,}\d$""")
+    private val EMAIL = Regex("""^[^\s@]+@[^\s@]+\.[^\s@]+$""")
+
+    /**
+     * A phone number or an e-mail address, which Android's right to left
+     * guidance has read left to right whatever the language around it (a number
+     * read right to left has its groups reversed); any other text as it is.
+     */
+    fun codes(text: String): String = if (PHONE.matches(text) || EMAIL.matches(text)) amount(text) else text
 }
 
 /** Parts of a whole: a meter's segments, a column's parts, a strip's cells. */

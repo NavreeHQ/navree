@@ -156,7 +156,7 @@ private fun TextView(node: Navree.Text, modifier: Modifier) {
     val shaped = (if (align != null) modifier.fillMaxWidth() else modifier).then(if (heading) Modifier.semantics { heading() } else Modifier)
     val draw: @Composable (String) -> Unit = { words ->
         Text(
-            text = words,
+            text = com.navree.client.design.BidiRules.codes(words),
             modifier = shaped,
             style = style,
             color = colour,
@@ -478,7 +478,7 @@ private fun FactsView(node: Navree.Facts, place: Place, modifier: Modifier) {
                             Text(fact.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             for (value in fact.value) NodeView(value, place)
                             for (detail in fact.details) {
-                                Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(com.navree.client.design.BidiRules.codes(detail), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
