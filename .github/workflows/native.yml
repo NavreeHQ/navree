@@ -527,6 +527,19 @@ jobs:
         working-directory: packages/windows
         run: dotnet build Navree.Native.sln -c Release --no-restore
 
+      # The demo and the gallery start from their built folders with nothing registered, so the folders are kept:
+      # either can be started on another Windows machine.
+      - name: Keep the built demo and gallery
+        if: matrix.variant == 'plain'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-demo
+          if-no-files-found: error
+          path: |
+            packages/windows/demo/Navree.Demo/bin/Release
+            packages/windows/demo/Navree.Gallery/bin/Release
+          retention-days: 14
+
       - name: Unit tests
         shell: pwsh
         working-directory: packages/windows
