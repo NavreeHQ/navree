@@ -92,6 +92,9 @@ internal sealed partial class PlotSurface : UserControl
     private readonly List<Probe> probes = [];
     private int current = -1;
     private double paintedWidth = -1;
+    private double paintedHeight = -1;
+    private Palette? palette;
+    private bool paintQueued;
 
     /// <summary>Starts a surface.</summary>
     internal PlotSurface()
@@ -110,7 +113,7 @@ internal sealed partial class PlotSurface : UserControl
             // What is drawn never shows past the surface's edge, whatever room its parts were laid out for.
             shapes.Clip = new RectangleGeometry { Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height) };
             labels.Clip = new RectangleGeometry { Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height) };
-            Paint();
+            PaintSoon();
         };
         ActualThemeChanged += (_, _) => Paint(force: true);
         Loaded += (_, _) => Paint(force: true);
@@ -210,6 +213,26 @@ internal sealed partial class PlotSurface : UserControl
     /// <inheritdoc />
     protected override AutomationPeer OnCreateAutomationPeer() => new PlotPeer(this);
 
+    // A change of size is painted once, when the layout that caused it is done, however many steps a resize takes in a frame.
+    private void PaintSoon()
+    {
+        if (paintQueued)
+        {
+            return;
+        }
+
+        paintQueued = true;
+        if (!DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, () =>
+        {
+            paintQueued = false;
+            Paint();
+        }))
+        {
+            paintQueued = false;
+            Paint();
+        }
+    }
+
     private void Paint(bool force = false)
     {
         double width = ActualWidth;
@@ -234,25 +257,27 @@ internal sealed partial class PlotSurface : UserControl
             return;
         }
 
-        if (!force && Math.Abs(width - paintedWidth) < 0.5 && shapes.Children.Count > 0)
+        if (!PlotRules.Repaints(paintedWidth, paintedHeight, width, height, shapes.Children.Count > 0, force))
         {
             return;
         }
 
         paintedWidth = width;
+        paintedHeight = height;
         shapes.Children.Clear();
         labels.Children.Clear();
         guide.Children.Clear();
         probes.Clear();
         bool mirror = MirrorInRtl && FlowDirection == FlowDirection.RightToLeft;
         shapes.RenderTransform = mirror ? new ScaleTransform { ScaleX = -1 } : null;
+        palette = new Palette(this);
         PlotCanvas plot = new()
         {
             Shapes = shapes,
             Labels = labels,
             Width = width,
             Height = height,
-            Palette = new Palette(this),
+            Palette = palette,
             Mirror = mirror,
         };
         try
@@ -377,7 +402,7 @@ internal sealed partial class PlotSurface : UserControl
     private void Show(Probe probe)
     {
         guide.Children.Clear();
-        Palette palette = new(this);
+        Palette palette = this.palette ?? new Palette(this);
         double width = ActualWidth;
         double height = ActualHeight;
         if (probe.Guide)

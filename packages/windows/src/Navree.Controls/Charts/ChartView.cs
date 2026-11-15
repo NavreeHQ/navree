@@ -217,6 +217,20 @@ public sealed partial class ChartView : KindControl
         return chart.Stacking == Models.Stacking.Shares ? NumberWords.Amount(value) : ValueWords.Text(value, style);
     }
 
+    // The widest of the page's labels: it does not depend on the size of the drawing, so it is worked out once for the size of the person's text.
+    private (int Version, double Width) widestLabel = (-1, 0);
+
+    private double WidestLabel()
+    {
+        int version = ThemeState.Version;
+        if (widestLabel.Version != version)
+        {
+            widestLabel = (version, chart.Labels.Select(label => Ink.Measure(label, LabelSize).Width).DefaultIfEmpty(0).Max());
+        }
+
+        return widestLabel.Width;
+    }
+
     private string LabelAt(int at) => at < chart.Labels.Count ? chart.Labels[at] : (at + 1).ToString(CultureInfo.InvariantCulture);
 
     private Windows.UI.Color SeriesColour(Palette palette, int at) =>
@@ -285,7 +299,7 @@ public sealed partial class ChartView : KindControl
 
         if (!horizontal && axis)
         {
-            double widest = marks.Select(mark => Ink.Measured(canvas.Caption(MarkWords(mark, style))).Width).DefaultIfEmpty(0).Max();
+            double widest = marks.Select(mark => Ink.Measure(MarkWords(mark, style), LabelSize).Width).DefaultIfEmpty(0).Max();
             left = widest + 10;
         }
 
@@ -294,7 +308,7 @@ public sealed partial class ChartView : KindControl
             double widest = 0;
             for (int at = 0; at < count; at++)
             {
-                widest = Math.Max(widest, Ink.Measured(canvas.Caption(LabelAt(at))).Width);
+                widest = Math.Max(widest, Ink.Measure(LabelAt(at), LabelSize).Width);
             }
 
             left = Math.Min(widest + 10, canvas.Width * 0.4);
@@ -391,7 +405,7 @@ public sealed partial class ChartView : KindControl
             return;
         }
 
-        double widest = chart.Labels.Select(label => Ink.Measured(canvas.Caption(label)).Width).DefaultIfEmpty(0).Max();
+        double widest = WidestLabel();
         IReadOnlyList<int> ticks = AxisRules.Ticks(frame.Count, small ? 3 : AxisRules.Most(frame.X1 - frame.X0, widest));
         foreach (int at in ticks)
         {
@@ -741,7 +755,7 @@ public sealed partial class ChartView : KindControl
             canvas.Text(name, 4, Lane(level) + (laneHeight / 2), Across.Start, Down.Middle);
         }
 
-        double widest = chart.Labels.Select(label => Ink.Measured(canvas.Caption(label)).Width).DefaultIfEmpty(0).Max();
+        double widest = WidestLabel();
         foreach (int at in AxisRules.Ticks(count, AxisRules.Most(x1 - x0, widest)))
         {
             if (at < chart.Labels.Count)

@@ -206,7 +206,7 @@ public sealed partial class MatrixHeatView : KindControl
     private List<int> Columns => matrix.Lower ? [.. Enumerable.Range(0, Math.Max(matrix.Measures.Count - 1, 0))] : [.. Enumerable.Range(0, matrix.Measures.Count)];
 
     private double LeftWidth(double width) =>
-        MatrixRules.Left(matrix.Measures.Select(name => Ink.Measured(Ink.Words(name, 12, new SolidColorBrush())).Width).DefaultIfEmpty(0).Max(), width);
+        MatrixRules.Left(matrix.Measures.Select(name => Ink.Measure(name, 12).Width).DefaultIfEmpty(0).Max(), width);
 
     private double CellFor(double width) => MatrixRules.Cell(width, LeftWidth(width), Columns.Count, 44 * TextScale.Capped(1.4));
 
@@ -386,7 +386,7 @@ public sealed partial class ScatterView : KindControl
         IReadOnlyList<double> yMarks = AxisRules.Marks(y, 4);
         string xName = AxisWords(scatter.X);
         string yName = AxisWords(scatter.Y);
-        double widest = yMarks.Select(mark => Ink.Measured(canvas.Caption(NumberWords.Amount(mark))).Width).DefaultIfEmpty(0).Max();
+        double widest = yMarks.Select(mark => Ink.Measure(NumberWords.Amount(mark), 11).Width).DefaultIfEmpty(0).Max();
         double x0 = widest + 10;
         double x1 = canvas.Width - 10;
         double y0 = yName.Length > 0 ? 18 : 6;

@@ -505,4 +505,18 @@ public sealed class KindsSafetyTests
         Assert.IsTrue(ThinRules.Places(50, 0).SequenceEqual([0, 49]));
         Assert.IsTrue(ThinRules.Places(50, double.NaN).SequenceEqual([0, 49]));
     }
+    // ---- when a drawing is made again ---------------------------------------------------------------------------
+
+    [TestMethod]
+    public void A_drawing_is_made_again_when_its_height_changes_as_well_as_when_its_width_does()
+    {
+        Assert.IsTrue(PlotRules.Repaints(400, 180, 400, 260, painted: true, forced: false), "taller, same width");
+        Assert.IsTrue(PlotRules.Repaints(400, 180, 520, 180, painted: true, forced: false), "wider, same height");
+        Assert.IsFalse(PlotRules.Repaints(400, 180, 400.3, 180.2, painted: true, forced: false), "a change nobody can see");
+        Assert.IsFalse(PlotRules.Repaints(400, 180, 400, 180, painted: true, forced: false));
+        Assert.IsTrue(PlotRules.Repaints(400, 180, 400, 180, painted: true, forced: true), "asked for");
+        Assert.IsTrue(PlotRules.Repaints(400, 180, 400, 180, painted: false, forced: false), "nothing painted yet");
+        Assert.IsTrue(PlotRules.Repaints(-1, -1, 400, 180, painted: false, forced: false));
+        Assert.IsTrue(PlotRules.Repaints(400, 180, 400, double.NaN, painted: true, forced: false), "a size that is not a number is painted again, not skipped");
+    }
 }

@@ -413,12 +413,42 @@ internal static class Ink
         return block;
     }
 
-    /// <summary>How big a text comes out.</summary>
-    internal static Size Measured(TextBlock block)
+    private static readonly Dictionary<(string Text, double Size, int Weight, double MostWide), (int Version, Size Size)> Measures = [];
+    private static TextBlock? ruler;
+
+    /// <summary>
+    /// How big a text comes out at a size. A text that has been measured at that size is not measured again (a drawing made again for a
+    /// new width would otherwise measure every label of its axes at every step of a resize); what was measured is forgotten when the
+    /// person's text size or settings change.
+    /// </summary>
+    internal static Size Measure(string text, double size, bool strong = false, double mostWide = double.PositiveInfinity)
     {
-        block.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        return block.DesiredSize;
+        int version = ThemeState.Version;
+        (string, double, int, double) key = (text, size, strong ? 1 : 0, mostWide);
+        if (Measures.TryGetValue(key, out (int Version, Size Size) known) && known.Version == version)
+        {
+            return known.Size;
+        }
+
+        if (Measures.Count > 4000)
+        {
+            Measures.Clear();
+        }
+
+        ruler ??= new TextBlock { TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.CharacterEllipsis };
+        ruler.Text = text;
+        ruler.FontSize = Math.Max(Guard.Finite(size, 12), 1);
+        ruler.FontWeight = strong ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
+        ruler.MaxWidth = double.IsNaN(mostWide) || mostWide <= 0 ? double.PositiveInfinity : mostWide;
+        ruler.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        Size measured = ruler.DesiredSize;
+        Measures[key] = (version, measured);
+        return measured;
     }
+
+    /// <summary>How big a text comes out.</summary>
+    internal static Size Measured(TextBlock block) =>
+        Measure(block.Text, block.FontSize, block.FontWeight.Weight >= Microsoft.UI.Text.FontWeights.SemiBold.Weight, block.MaxWidth);
 
     /// <summary>Puts a text on a canvas against a point.</summary>
     internal static TextBlock Say(this Canvas canvas, TextBlock block, double x, double y, Across across = Across.Start, Down down = Down.Top)

@@ -15,6 +15,10 @@ internal static class ThemeState
     private static UISettings? settings;
     private static bool started;
     private static int version;
+    private static int accentAt = -1;
+    private static Windows.UI.Color accent;
+    private static int scaleAt = -1;
+    private static double scale = 1;
 
     /// <summary>Raised, on a thread of the system's own, when the contrast theme, the accent or the text size changed.</summary>
     internal static event Action? Changed;
@@ -39,23 +43,44 @@ internal static class ThemeState
         }
     }
 
-    /// <summary>The accent colour the person chose.</summary>
-    internal static Windows.UI.Color Accent => Colour(UIColorType.Accent);
+    /// <summary>The accent colour the person chose; asked of the system once for each change of its settings.</summary>
+    internal static Windows.UI.Color Accent
+    {
+        get
+        {
+            int now = Version;
+            if (accentAt != now)
+            {
+                accent = Colour(UIColorType.Accent);
+                accentAt = now;
+            }
 
-    /// <summary>The scale of the person's text against the default, 1 where it cannot be read.</summary>
+            return accent;
+        }
+    }
+
+    /// <summary>The scale of the person's text against the default, 1 where it cannot be read; asked of the system once for each change of its settings.</summary>
     internal static double TextScaleFactor
     {
         get
         {
             Start();
-            try
+            int now = Version;
+            if (scaleAt != now)
             {
-                return settings?.TextScaleFactor ?? 1;
+                try
+                {
+                    scale = settings?.TextScaleFactor ?? 1;
+                }
+                catch (Exception)
+                {
+                    scale = 1;
+                }
+
+                scaleAt = now;
             }
-            catch (Exception)
-            {
-                return 1;
-            }
+
+            return scale;
         }
     }
 
