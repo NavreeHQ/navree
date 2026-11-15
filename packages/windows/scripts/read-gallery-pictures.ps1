@@ -170,3 +170,24 @@ foreach ($pic in (Get-ChildItem $OutDir -Filter 'values-*.png' | Sort-Object Nam
     }
     Note ($pic.Name + ': ' + ($parts -join '; '))
 }
+
+# The pictures of bars moved by a written number, an animation, or both: each bar starts at x = 100,
+# so where it is says how far it was moved.
+$bars = @(
+    @('A written 50', 255, 0, 0),
+    @('B written 50 then animated to 80', 0, 200, 0),
+    @('C animated to 80 then written 50', 0, 0, 255),
+    @('D animated to 80, written 50, animation stopped', 255, 128, 0),
+    @('E written 50, animated to 80, animation stopped', 0, 255, 255),
+    @('F animated to 80', 255, 0, 255)
+)
+foreach ($pic in (Get-ChildItem $OutDir -Filter 'trans-*.png' | Sort-Object Name)) {
+    $size = [PictureReader]::Size($pic.FullName)
+    $parts = @()
+    foreach ($m in $bars) {
+        $b = [PictureReader]::Bounds($pic.FullName, $m[1], $m[2], $m[3], 0, $size[0], 0, $size[1])
+        if ($b[0] -eq 0) { $parts += ($m[0] + ': not seen'); continue }
+        $parts += ('{0}: moved {1}' -f $m[0], ($b[1] - 1 - 100))
+    }
+    Note ($pic.Name + ': ' + ($parts -join '; '))
+}

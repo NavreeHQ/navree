@@ -12,6 +12,9 @@ internal static class ExperimentRunner
         {
             switch (name)
             {
+                case "translation":
+                    await TranslationExperiment.RunAsync(window);
+                    break;
                 case "values":
                     await ValuesExperiment.RunAsync(window);
                     break;
