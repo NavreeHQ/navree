@@ -22,10 +22,11 @@ the shell and the tests ("The reference app" below).
 
 ## Steps
 
-1. **Install** `@navree/nuxt`, `@navree/client`, `@navree/theme` (from the
-   repository's `packages/js`: `pnpm install && pnpm build`, then `link:`
-   dependencies), plus `@casl/ability @casl/vue` for abilities and
-   `pusher-js` for real time.
+1. **Install** `@navree/nuxt`, `@navree/client`, `@navree/theme` from npm
+   (`pnpm add @navree/client @navree/nuxt @navree/theme`; only to work on the
+   packages themselves, build `packages/js` of a checkout with `pnpm install
+   && pnpm build` and use `link:` dependencies), plus `@casl/ability
+   @casl/vue` for abilities and `pusher-js` for real time.
 2. **Add the module:**
 
    ```ts
