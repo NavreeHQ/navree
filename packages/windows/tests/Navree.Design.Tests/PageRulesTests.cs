@@ -279,6 +279,17 @@ public sealed class PageRulesTests
         Assert.IsFalse(PageRules.SameButFieldValues(one, relabelled), "a label that changed is not a value");
     }
 
+    [TestMethod]
+    public void A_button_that_sends_a_form_has_the_form_being_sent_around_it()
+    {
+        Models.Node send = Read("""{"t":"button","id":"go","label":"Send","action":{"t":"submit"}}""");
+        Models.Node plain = Read("""{"t":"button","id":"more","label":"More"}""");
+        Facts busy = new() { Busy = { "order" } };
+        Assert.IsFalse(PageRules.SameAround(send, new Facts(), busy, "order"));
+        Assert.IsTrue(PageRules.SameAround(send, new Facts(), busy, "another"));
+        Assert.IsTrue(PageRules.SameAround(plain, new Facts(), busy, "order"));
+    }
+
     // ---- helpers -----------------------------------------------------------------------------------------
 
     private static IReadOnlyList<Models.Node> Texts(params string[] ids) =>
@@ -384,5 +395,9 @@ public sealed class PageRulesTests
         public string FieldOf(string form, string field) => Fields.GetValueOrDefault((form, field), string.Empty);
 
         public bool IsOpen(string id) => Open.Contains(id);
+
+        internal HashSet<string> Busy { get; } = [];
+
+        public bool FormBusy(string form) => Busy.Contains(form);
     }
 }

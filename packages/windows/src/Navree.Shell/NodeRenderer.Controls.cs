@@ -17,24 +17,32 @@ internal sealed partial class NodeRenderer
     private UIElement DrawButton(Models.Button button)
     {
         StackPanel content = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
-        if (button.Pending)
+
+        // What stands in the button: a ring while it waits for the core, else its symbol, then its words.
+        void Fill(Models.Button now, bool busy)
         {
-            content.Children.Add(new ProgressRing { IsActive = true, Width = 16, Height = 16 });
-        }
-        else if (button.Icon is not null)
-        {
-            content.Children.Add(DrawIcon(button.Icon, 16, null));
-        }
-        else if (button.Standard is Models.Standard standard)
-        {
-            content.Children.Add(Look.Glyph(SystemGlyphs.Of(standard)));
+            content.Children.Clear();
+            if (busy)
+            {
+                content.Children.Add(new ProgressRing { IsActive = true, Width = 16, Height = 16 });
+            }
+            else if (now.Icon is not null)
+            {
+                content.Children.Add(DrawIcon(now.Icon, 16, null));
+            }
+            else if (now.Standard is Models.Standard standard)
+            {
+                content.Children.Add(Look.Glyph(SystemGlyphs.Of(standard)));
+            }
+
+            if (!now.IconOnly)
+            {
+                content.Children.Add(new TextBlock { Text = now.Label, VerticalAlignment = VerticalAlignment.Center });
+            }
         }
 
-        if (!button.IconOnly)
-        {
-            content.Children.Add(new TextBlock { Text = button.Label, VerticalAlignment = VerticalAlignment.Center });
-        }
-
+        string? sendsIn = currentForm;
+        Fill(button, Busy(button, sendsIn));
         Button control = new() { Content = content };
         bool prominent = button.Prominence == Models.Prominence.High || button.Role is Models.Role.Primary or Models.Role.Create or Models.Role.Confirm;
         string? ramp = prominent ? "AccentButtonStyle" : button.Prominence == Models.Prominence.Low ? "TextBlockButtonStyle" : null;
@@ -48,7 +56,7 @@ internal sealed partial class NodeRenderer
             control.Foreground = Look.ToneBrush(Models.Tone.Danger);
         }
 
-        control.IsEnabled = !(button.Disabled || button.Pending || context.Screen.Has(button.Id, Models.State.Disabled));
+        control.IsEnabled = !(button.Disabled || Busy(button, sendsIn) || context.Screen.Has(button.Id, Models.State.Disabled));
         AutomationProperties.SetName(control, button.Label);
         if (button.Reason is not null)
         {
@@ -67,6 +75,31 @@ internal sealed partial class NodeRenderer
         string trigger = TriggerKey(button);
         if (current is not null)
         {
+            // A button that waits for the core (it was pressed) or is turned off by it is the same button while nothing else about it changed: the ring and
+            // whether it takes presses are set on the one that is there, so a press that has the focus keeps it.
+            Drawn me = current;
+            me.Update = node =>
+            {
+                if (node is not Models.Button next || me.Node is not Models.Button previous)
+                {
+                    return false;
+                }
+
+                static Models.Button Bare(Models.Button b) => b with { Pending = false, Disabled = false };
+                if (!PageRules.Same(Bare(previous), Bare(next)))
+                {
+                    return false;
+                }
+
+                bool busy = Busy(next, sendsIn);
+                if (busy != Busy(previous, sendsIn, drawnFrom: me.Screen))
+                {
+                    Fill(next, busy);
+                }
+
+                control.IsEnabled = !(next.Disabled || busy || context.Screen.Has(next.Id, Models.State.Disabled));
+                return true;
+            };
             current.Triggers.Add((trigger, control));
         }
         else
@@ -82,6 +115,10 @@ internal sealed partial class NodeRenderer
         };
         return control;
     }
+
+    // A button waits for the core when the tree says so, and a button that sends a form waits while the core holds that form as being sent.
+    private bool Busy(Models.Button button, string? form, ScreenView? drawnFrom = null) =>
+        button.Pending || (button.Action is Models.ActionSubmit && form is not null && (drawnFrom ?? context.Screen).Forms.TryGetValue(form, out FormView? held) && held.Pending);
 
     private static string TriggerKey(Models.Button button) => button.Id ?? "label:" + button.Label;
 

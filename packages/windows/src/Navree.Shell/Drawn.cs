@@ -390,6 +390,9 @@ internal sealed class ScreenFacts(ScreenView screen, bool fields = true) : IScre
 
     /// <inheritdoc />
     public bool IsOpen(string id) => screen.IsOpen(id);
+
+    /// <inheritdoc />
+    public bool FormBusy(string form) => screen.Forms.TryGetValue(form, out FormView? held) && held.Pending;
 }
 
 /// <summary>What one answer did to a page: how many parts were drawn again, how many stood, how many were brought up to date.</summary>

@@ -132,7 +132,7 @@ internal sealed partial class NodeRenderer
             return Replace(old, now);
         }
 
-        if (PageRules.Same(old.Node, now) && PageRules.SameAround(now, new ScreenFacts(old.Screen, fields: false), new ScreenFacts(screen, fields: false)))
+        if (PageRules.Same(old.Node, now) && PageRules.SameAround(now, new ScreenFacts(old.Screen, fields: false), new ScreenFacts(screen, fields: false), old.Form ?? string.Empty))
         {
             Stood++;
             return old;

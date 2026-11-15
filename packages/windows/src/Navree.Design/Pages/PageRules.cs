@@ -37,6 +37,11 @@ public interface IScreenFacts
     /// <param name="id">The overlay's id.</param>
     /// <returns>Whether it is.</returns>
     bool IsOpen(string id);
+
+    /// <summary>Whether a form is being sent: the button that sends it says so.</summary>
+    /// <param name="form">The form's id, or an empty text.</param>
+    /// <returns>Whether it is.</returns>
+    bool FormBusy(string form);
 }
 
 /// <summary>How the children of a container were matched with the children it had.</summary>
@@ -213,13 +218,21 @@ public static class PageRules
     /// <param name="before">The screen as the node was drawn from it.</param>
     /// <param name="after">The screen now.</param>
     /// <returns>True when none of it changed.</returns>
-    public static bool SameAround(Models.Node node, IScreenFacts before, IScreenFacts after)
+    public static bool SameAround(Models.Node node, IScreenFacts before, IScreenFacts after) => SameAround(node, before, after, string.Empty);
+
+    /// <summary>Like the other, for a node that stands in a form: the form being sent is part of what is held around a button that sends it.</summary>
+    /// <param name="node">The node.</param>
+    /// <param name="before">The screen as the node was drawn from it.</param>
+    /// <param name="after">The screen now.</param>
+    /// <param name="startForm">The id of the form the node stands in, or an empty text.</param>
+    /// <returns>True when none of it changed.</returns>
+    public static bool SameAround(Models.Node node, IScreenFacts before, IScreenFacts after, string startForm)
     {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(before);
         ArgumentNullException.ThrowIfNull(after);
         Stack<(Models.Node Node, string Form)> pending = new();
-        pending.Push((node, string.Empty));
+        pending.Push((node, startForm ?? string.Empty));
         while (pending.Count > 0)
         {
             (Models.Node current, string form) = pending.Pop();
@@ -232,6 +245,11 @@ public static class PageRules
                 {
                     return false;
                 }
+            }
+
+            if (current is Models.Button { Action: Models.ActionSubmit } && before.FormBusy(form) != after.FormBusy(form))
+            {
+                return false;
             }
 
             if (current is Models.Field field)
