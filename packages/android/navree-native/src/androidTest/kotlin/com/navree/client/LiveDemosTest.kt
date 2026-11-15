@@ -235,9 +235,17 @@ class LiveDemosTest {
         Thread.sleep(500)
         Shots.take("board-filter-menu")
         compose.onAllNodes(hasText("Bug") and hasAnyAncestor(isPopup())).onFirst().performClick()
-        waitFor("a board of bugs only") {
+        // The cards that stay carry the label that was chosen (a card may carry another beside it).
+        Thread.sleep(2500)
+        Shots.take("board-filter-chosen")
+        try {
+            waitFor("a board of bugs only") {
+                val now = cards(front(app)?.screen)
+                now.isNotEmpty() && now.all { "Bug" in labels(it) }
+            }
+        } catch (e: AssertionError) {
             val now = cards(front(app)?.screen)
-            now.isNotEmpty() && now.all { labels(it) == listOf("Bug") }
+            throw AssertionError("${e.message}: ${now.size} cards, the first labelled ${now.take(6).map { labels(it) }}, the screen at ${front(app)?.url}", e)
         }
         Thread.sleep(800)
         Shots.take("board-filtered")
