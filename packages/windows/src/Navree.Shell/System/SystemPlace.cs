@@ -529,7 +529,8 @@ public sealed class SystemPlace : IDisposable
     {
         TrayIcon icon = new();
         icon.Selected += (_, _) => dispatcher.TryEnqueue(ToggleSmallWindow);
-        icon.ContextRequested += (x, y) => dispatcher.TryEnqueue(() => ShowMenu(x, y));
+        // A right click opens the same small window as a click does: it is drawn by the app, so it follows the light and dark looks, which the system's own menu of the icon does not.
+        icon.ContextRequested += (_, _) => dispatcher.TryEnqueue(ToggleSmallWindow);
         return icon;
     }
 
@@ -571,40 +572,6 @@ public sealed class SystemPlace : IDisposable
         int right = area.X + area.Width;
         int bottom = area.Y + area.Height;
         return new Box(right - 48, bottom - 48, right - 16, bottom - 16);
-    }
-
-    private void ShowMenu(int x, int y)
-    {
-        if (tray is null)
-        {
-            return;
-        }
-
-        small?.HideNow();
-        IReadOnlyList<TrayEntry> entries = TrayRules.Menu(Places(), host.Options.AppName);
-        TrayEntry? chosen = tray.ShowMenu(entries, x, y, main.IsRightToLeft);
-        if (chosen is null)
-        {
-            return;
-        }
-
-        switch (chosen.Command)
-        {
-            case TrayCommand.OpenWindow:
-                OpenMainWindow();
-                break;
-            case TrayCommand.Destination:
-                OpenDestination(chosen.Index);
-                break;
-            case TrayCommand.Settings:
-                OpenSettings();
-                break;
-            case TrayCommand.Quit:
-                Quit();
-                break;
-            default:
-                break;
-        }
     }
 
     // ---- what the core holds that the system shows ---------------------------------------------------------

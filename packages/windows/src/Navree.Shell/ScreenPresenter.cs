@@ -27,8 +27,8 @@ internal sealed class ScreenPresenter : Grid
         scroller.SizeChanged += (_, _) => FitPage();
     }
 
-    // The page is as wide as the room the window gives it, up to its widest, and stands at the start: left to be centred by the layout alone, a wide
-    // window (full screen) was seen to place it right of the middle and run it off the edge.
+    // The page is as wide as the room the window gives it, up to its widest, and is placed in the middle by margins of our own: left to be centred by the
+    // layout alone, a wide window (full screen) was seen to place it right of the middle and run it off the edge.
     private void FitPage()
     {
         if (scroller.Content is StackPanel page)
@@ -37,6 +37,10 @@ internal sealed class ScreenPresenter : Grid
             if (room > 0)
             {
                 page.Width = Math.Min(page.MaxWidth, room);
+
+                // What the window has beyond the page's widest is left evenly at both sides, so a wide window shows the page in the middle.
+                double side = Math.Max(0, Math.Floor((room - page.Width) / 2));
+                page.Margin = new Thickness(side, 0, side, 0);
             }
         }
     }

@@ -706,7 +706,7 @@ internal sealed class ProtocolTablePresenter(
         {
             Models.Node node = row.Cells[index];
             DataTableAlign align = index < table.Columns.Count ? AlignOf(table.Columns[index]) : DataTableAlign.Start;
-            element = node is Models.Badge { Dot: true } badge ? Mark(badge, render(badge)) : render(node);
+            element = render(node);
             Settle(element, align);
             drawn[(row, index)] = element;
         }
@@ -721,17 +721,6 @@ internal sealed class ProtocolTablePresenter(
         Models.Align.Start => DataTableAlign.Start,
         _ => definition.Numeric ? DataTableAlign.End : DataTableAlign.Start,
     };
-
-    // A state that is a coloured dot says its words beside it: a colour alone says nothing to a person who cannot tell it apart.
-    private static StackPanel Mark(Models.Badge badge, UIElement dot)
-    {
-        TextBlock words = new() { Text = badge.Text, TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap, VerticalAlignment = VerticalAlignment.Center };
-        words.IsTextTrimmedChanged += (sender, _) => ToolTipService.SetToolTip(sender, sender.IsTextTrimmed ? sender.Text : null);
-        StackPanel panel = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
-        panel.Children.Add(dot);
-        panel.Children.Add(words);
-        return panel;
-    }
 
     // What the shell draws for a page is made fit for a cell: fields lose their label (it is their name), a text button
     // stands flush with the words above and under it, and what stacks in an end column ends at its edge.
