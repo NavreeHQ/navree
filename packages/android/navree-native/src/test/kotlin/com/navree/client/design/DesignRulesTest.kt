@@ -827,6 +827,7 @@ class GridOfStacksTest {
     @Test
     fun the_stacks_of_a_grid_are_one_column_in_a_narrow_window_and_stay_columns_in_a_wide_one() {
         assertTrue(ListRules.stacksAreOneColumn(stacks, null, 412))
+        assertTrue("a medium window puts the side column under the main one", ListRules.stacksAreOneColumn(stacks, null, 700))
         assertFalse(ListRules.stacksAreOneColumn(stacks, null, 900))
         assertFalse("a grid that says its own least width", ListRules.stacksAreOneColumn(stacks, 160, 412))
         assertFalse("cards stay as many across as fit", ListRules.stacksAreOneColumn(listOf(Navree.Card(), Navree.Card()), null, 412))
@@ -880,5 +881,73 @@ class OwnLinkTest {
         assertNull(kept[1].href)
         assertEquals("a link to another place stays", "/other", kept[2].href)
         assertEquals("a row that goes nowhere keeps its links", runs, ListRules.withoutOwnLink(runs, null))
+    }
+}
+
+class WideListStatesTest {
+    private val columns = listOf(
+        Navree.Column(label = "Order", role = Navree.ColumnRole.TITLE),
+        Navree.Column(label = "Status", role = Navree.ColumnRole.STATUS),
+        Navree.Column(label = "Payment", secondary = true),
+        Navree.Column(label = "Ships to", secondary = true),
+    )
+    private val row = Navree.TableRow(cells = listOf(Navree.Text(value = "CS-1"), Navree.Badge(text = "Open"), Navree.Badge(text = "Paid"), Navree.Text(value = "Ludhiana")))
+
+    @Test
+    fun a_list_on_a_phone_leaves_out_the_columns_a_narrow_screen_may_leave_out() {
+        val folded = ListRules.asListRow(columns, row)
+        assertEquals(listOf<Navree.Node>(Navree.Badge(text = "Open")), folded.statuses)
+    }
+
+    @Test
+    fun a_wide_list_keeps_every_column_that_says_a_state_and_still_leaves_out_the_other_words() {
+        val folded = ListRules.asListRow(columns, row, wide = true)
+        assertEquals(listOf<Navree.Node>(Navree.Badge(text = "Open"), Navree.Badge(text = "Paid")), folded.statuses)
+        assertFalse(folded.lines.any { (it as? Navree.Text)?.value == "Ludhiana" })
+    }
+}
+
+class ShortLineTest {
+    @Test
+    fun a_line_with_a_dial_that_leaves_most_of_the_card_empty_is_put_in_the_middle() {
+        assertTrue(CompositionRules.holdsDial(listOf(Navree.Ring(value = 83.0), Navree.Text(value = "words"))))
+        assertFalse(CompositionRules.holdsDial(listOf(Navree.Text(value = "words"))))
+        assertTrue(CompositionRules.centresShortLine(usedPx = 550, roomPx = 1265))
+        assertFalse("a line that fills most of its card stays at the start", CompositionRules.centresShortLine(usedPx = 900, roomPx = 1265))
+        assertFalse("no room known", CompositionRules.centresShortLine(usedPx = 100, roomPx = 0))
+    }
+
+    @Test
+    fun the_cards_of_a_line_take_the_tallest_height_seen_and_never_less() {
+        assertEquals(300, CompositionRules.tallest(0, 300))
+        assertEquals(300, CompositionRules.tallest(300, 180))
+        assertEquals(420, CompositionRules.tallest(300, 420))
+    }
+
+    @Test
+    fun a_block_at_the_end_of_a_table_column_has_its_lines_end_where_the_widest_ends() {
+        val block = Navree.Stack(children = listOf(Navree.Text(value = "0"), Navree.Text(value = "Reorder at 14")))
+        assertEquals(Navree.Align.END, CompositionRules.columnAlignIn(block, endAligned = true))
+        assertNull(CompositionRules.columnAlignIn(block, endAligned = false))
+    }
+}
+
+class ActionsInALineTest {
+    @Test
+    fun a_form_of_only_buttons_is_a_group_of_actions_that_flows_with_the_line() {
+        val close = Navree.Form(id = "close", children = listOf(Navree.Button(action = Navree.Action.Submit(), label = "Close")))
+        assertTrue(FormRules.onlyButtons(close))
+        assertFalse(FormRules.onlyButtons(Navree.Form(children = listOf(Navree.Field(name = "note", input = Navree.TextInput()), Navree.Button(action = Navree.Action.Submit(), label = "Save")))))
+        assertFalse("an empty form", FormRules.onlyButtons(Navree.Form()))
+    }
+
+    @Test
+    fun a_menu_that_says_its_value_shows_it_beside_its_icon_and_a_more_icon_stays_alone() {
+        assertTrue(MenuRules.showsLabel("circle-dot", "Open"))
+        assertTrue(MenuRules.showsLabel("signal-high", "High"))
+        assertFalse(MenuRules.showsLabel("more-vertical", "More"))
+        assertFalse(MenuRules.showsLabel("ellipsis", "Actions"))
+        assertFalse("no icon: a labelled button already", MenuRules.showsLabel(null, "Sort"))
+        assertFalse(MenuRules.showsLabel("circle-dot", " "))
     }
 }

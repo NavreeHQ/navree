@@ -456,7 +456,9 @@ private fun Swipeable(action: Navree.Button, place: Place, content: @Composable 
 @Composable
 internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Place) {
     val ui = LocalUi.current
-    val folded = remember(table.columns, row) { ListRules.asListRow(table.columns, row) }
+    // A list with the width of a wide window shows every state column a row has, not only the ones a phone keeps.
+    val wide = LocalPane.current >= ListRules.TABLE_FROM_DP
+    val folded = remember(table.columns, row, wide) { ListRules.asListRow(table.columns, row, wide) }
     val action = folded.action
     val words = folded.lines.filterIsInstance<Navree.Text>().map { it.value }.filter { it.isNotBlank() }
     val parts = folded.lines.filter { it !is Navree.Text }
@@ -716,7 +718,7 @@ private fun TableCell(cell: Navree.Node, end: Boolean, place: Place) {
             overflow = TextOverflow.Ellipsis,
         )
         is Navree.Badge -> StatusView(cell)
-        else -> NodeView(cell, place.copy(inCell = true))
+        else -> CompositionLocalProvider(LocalEndAligned provides end) { NodeView(cell, place.copy(inCell = true)) }
     }
 }
 

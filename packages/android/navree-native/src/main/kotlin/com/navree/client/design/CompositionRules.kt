@@ -80,6 +80,34 @@ object CompositionRules {
     fun centresInColumn(stack: Navree.Stack, part: Navree.Node): Boolean =
         stack.wide != null && stack.wide != stack.axis && stack.align == Navree.Align.CENTER && (part is Navree.Ring || part is Navree.Gauge)
 
+    /** Whether a line of parts holds a dial: a ring, a ring set or a gauge. */
+    fun holdsDial(parts: List<Navree.Node>): Boolean = parts.any { it is Navree.Ring || it is Navree.Rings || it is Navree.Gauge }
+
+    /** The share of a card's width a line of parts may fill and still be put in the middle of the card, not at its start. */
+    const val SHORT_LINE = 0.6f
+
+    /**
+     * Whether a line of parts that fills `usedPx` of a room `roomPx` wide is
+     * put in the middle: a line with a dial in it that leaves most of a wide
+     * card empty beside it is a group in the card's middle, not a start with
+     * a void after it.
+     */
+    fun centresShortLine(usedPx: Int, roomPx: Int): Boolean = roomPx > 0 && usedPx < roomPx * SHORT_LINE
+
+    /**
+     * How tall the cards of one line are: the tallest height any of them has
+     * been seen to have (a card never shrinks under a line's other cards).
+     */
+    fun tallest(seenPx: Int, reportedPx: Int): Int = maxOf(seenPx, reportedPx)
+
+    /**
+     * How a stack laid as a column places its parts across, in a cell at the
+     * end of a table's column: the lines of a block at the end end where the
+     * widest line ends, so a short line stands under the others' end.
+     */
+    fun columnAlignIn(stack: Navree.Stack, endAligned: Boolean): Navree.Align? =
+        columnAlign(stack) ?: if (endAligned) Navree.Align.END else null
+
     /** The room a ring's legend needs beside its dial, and the space between the two, in dp. */
     private const val LEGEND_DP = 96f
     private const val LEGEND_GAP_DP = 24f

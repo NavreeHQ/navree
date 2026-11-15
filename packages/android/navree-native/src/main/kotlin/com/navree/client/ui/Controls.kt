@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.navree.client.ui
 
 import androidx.compose.foundation.Image
@@ -8,7 +10,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,6 +68,8 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.platform.LocalDensity
 import com.navree.client.design.TooltipRules
 import com.navree.client.design.FilterRules
+import com.navree.client.design.FormRules
+import com.navree.client.design.MenuRules
 import com.navree.client.design.ScreenRules
 import com.navree.protocol.Navree
 
@@ -204,14 +212,23 @@ internal fun LinkView(node: Navree.Link, place: Place, modifier: Modifier = Modi
 
 /** A menu in the content: a button that opens its items under it. */
 @Composable
-internal fun MenuButtonView(node: Navree.Menu, place: Place, modifier: Modifier = Modifier) {
+internal fun MenuButtonView(node: Navree.Menu, place: Place, modifier: Modifier = Modifier, labelled: Boolean = true) {
     var open by remember { mutableStateOf(false) }
     val vector = rememberIcon(node.icon)
     Box(modifier) {
-        if (vector == null) {
-            OutlinedButton(onClick = { open = true }) { Text(node.label) }
-        } else {
-            TipIconButton(node.label, vector, { open = true })
+        when {
+            vector == null -> OutlinedButton(onClick = { open = true }) { Text(node.label) }
+            // A menu in the content that says its value (a status, a priority) shows it beside its icon, as a picker does.
+            labelled && MenuRules.showsLabel(node.icon?.name, node.label) -> OutlinedButton(
+                onClick = { open = true },
+                contentPadding = PaddingValues(start = 12.dp, end = 16.dp),
+                modifier = Modifier.semantics { role = Role.DropdownList },
+            ) {
+                Icon(vector, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(node.label)
+            }
+            else -> TipIconButton(node.label, vector, { open = true })
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             MenuItems(node.items, place) { open = false }
@@ -309,6 +326,13 @@ internal fun FormView(node: Navree.Form, place: Place, modifier: Modifier = Modi
         return
     }
     val inner = place.copy(form = node.id)
+    // A form that is only buttons, among the parts of a line, is part of the line: its buttons flow with the others.
+    if (LocalInLine.current && FormRules.onlyButtons(node)) {
+        FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (child in node.children) NodeView(child, inner)
+        }
+        return
+    }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for (child in node.children) NodeView(child, inner)
     }

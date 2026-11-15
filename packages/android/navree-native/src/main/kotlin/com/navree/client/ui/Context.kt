@@ -1,16 +1,23 @@
 package com.navree.client.ui
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
@@ -23,6 +30,7 @@ import com.navree.client.core.FieldValue
 import com.navree.client.core.Notice
 import com.navree.client.core.ScreenView
 import com.navree.client.design.ConfirmRules
+import com.navree.client.design.CompositionRules
 import com.navree.client.design.ContentRules
 import com.navree.client.design.WindowInfo
 import com.navree.protocol.Navree
@@ -126,6 +134,43 @@ internal val LocalRoom = compositionLocalOf { 0f }
 
 /** Whether the part being drawn is one of the parts of a line across, where it must not take the whole width. */
 internal val LocalInLine = compositionLocalOf { false }
+
+/** Whether the part being drawn stands in a cell at the end of a table's column: a block of lines there ends where its widest line ends. */
+internal val LocalEndAligned = compositionLocalOf { false }
+
+/** The tallest height the cards of one line have been seen to have. */
+internal class Tallest {
+    var px by mutableIntStateOf(0)
+}
+
+/** A line's record of its tallest card, kept while the line's parts are the same. */
+@Composable
+internal fun rememberTallest(key: Any?): Tallest = remember(key) { Tallest() }
+
+/**
+ * Makes a card as tall as the tallest of the cards in its line, for parts
+ * that cannot say how tall they are before they are laid out (so the line
+ * cannot be measured ahead): each reports its height, and each is at least as
+ * tall as the tallest reported. The line settles in a frame.
+ */
+@Composable
+internal fun Modifier.sameHeightAs(line: Tallest): Modifier {
+    val least = with(LocalDensity.current) { line.px.toDp() }
+    return heightIn(min = least).onSizeChanged { line.px = CompositionRules.tallest(line.px, it.height) }
+}
+
+/**
+ * A line of parts that fills little of the room it is given stands in the
+ * middle of it; one that fills most of it starts at the start. The room is
+ * the width the line is given, taken whole.
+ */
+internal fun Modifier.centredWhenShort(): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(minWidth = 0))
+    val room = constraints.maxWidth
+    val width = if (constraints.hasBoundedWidth) room else placeable.width
+    val x = if (CompositionRules.centresShortLine(placeable.width, width)) (width - placeable.width) / 2 else 0
+    layout(width, placeable.height) { placeable.placeRelative(x, 0) }
+}
 
 /** Whether the part being drawn stands in a card: tabs there are one choice of a few over the card's content, not a second bar. */
 internal val LocalInCard = compositionLocalOf { false }

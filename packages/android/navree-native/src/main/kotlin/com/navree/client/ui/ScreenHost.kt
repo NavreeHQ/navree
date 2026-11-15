@@ -461,13 +461,19 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
             val content = ContentRules.contentDp(pane, column, marginDp)
             // Where the room is known, the cards of a line are as tall as the tallest of them.
             val even = content > 0f && block.nodes.all(::measuresAhead)
+            val tallest = rememberTallest(block.nodes)
             Row(
                 Modifier.readable(column).padding(horizontal = margin).then(if (even) Modifier.height(IntrinsicSize.Min) else Modifier),
                 horizontalArrangement = Arrangement.spacedBy(ContentRules.CARD_GAP_DP.dp),
             ) {
                 val inner = place.copy(form = block.form ?: place.form)
                 val width = if (content > 0f) ContentRules.cardWidthDp(content, block.columns) else 0f
-                for (node in block.nodes) Box(Modifier.weight(1f).fillMaxHeight()) { Roomed(width) { NodeView(node, inner, Modifier.fillMaxHeight()) } }
+                for (node in block.nodes) {
+                    // Cards that cannot say how tall they are are made as tall as the tallest once they are laid out.
+                    Box(if (even) Modifier.weight(1f).fillMaxHeight() else Modifier.weight(1f).sameHeightAs(tallest), propagateMinConstraints = !even) {
+                        Roomed(width) { NodeView(node, inner, Modifier.fillMaxHeight()) }
+                    }
+                }
                 repeat(block.columns - block.nodes.size) { Spacer(Modifier.weight(1f)) }
             }
         }
@@ -678,7 +684,7 @@ private fun RowScope.BarActions(screen: Navree.Screen, plan: ScreenPlan, place: 
             } else {
                 TipIconButton(node.label, rememberIcon(node.icon, node.standard) ?: Glyphs.More, { ui.press(place, node) }, enabled = usable(node, place))
             }
-            is Navree.Menu -> MenuButtonView(node, place)
+            is Navree.Menu -> MenuButtonView(node, place, labelled = false)
             else -> Unit
         }
     }
@@ -811,7 +817,7 @@ private fun SearchTopBar(
                         for (action in plan.barActions) {
                             when (val node = screen.actions.getOrNull(action.index)) {
                                 is Navree.Button -> TipIconButton(node.label, rememberIcon(node.icon, node.standard) ?: Glyphs.More, { ui.press(place, node) }, enabled = usable(node, place))
-                                is Navree.Menu -> MenuButtonView(node, place)
+                                is Navree.Menu -> MenuButtonView(node, place, labelled = false)
                                 else -> Unit
                             }
                         }

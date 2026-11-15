@@ -32,6 +32,15 @@ object ListRules {
     /** The least width, in dp, at which a table is drawn as a table. */
     const val TABLE_FROM_DP = 600
 
+    /**
+     * The width, in dp, from which parts that are columns of a page's own
+     * layout (a main column and a column beside it) stand side by side. The
+     * guidance for a supporting pane gives equal halves on a medium window,
+     * which leaves the shorter column's half empty below it; below this width
+     * the side column goes under the main one, as it does on a compact window.
+     */
+    const val EXPANDED_FROM_DP = 840
+
     /** The least a column gets, in dp. A table with more columns than fit is a list at any width. */
     const val COLUMN_LEAST_DP = 128
 
@@ -53,7 +62,7 @@ object ListRules {
      * A grid with a least width of its own keeps what it says.
      */
     fun stacksAreOneColumn(parts: List<Navree.Node>, least: Int?, widthDp: Int): Boolean =
-        least == null && parts.size > 1 && parts.all { it is Navree.Stack } && widthDp < TABLE_FROM_DP
+        least == null && parts.size > 1 && parts.all { it is Navree.Stack } && widthDp < EXPANDED_FROM_DP
 
     /** Whether a grid's parts are lanes: several sections side by side, each a group of its own. */
     fun areLanes(parts: List<Navree.Node>): Boolean = parts.size > 1 && parts.all { it is Navree.Section }
@@ -175,13 +184,16 @@ object ListRules {
      *   `status` goes on a line of its own (and so does a badge whose column
      *   says nothing); `trailing` (or else the first numeric column) goes to
      *   the row's end; `actions` and the row's own actions are its menu.
-     * - A column a narrow screen may leave out (`secondary`) is left out.
+     * - A column a narrow screen may leave out (`secondary`) is left out, except, in a wide list, one that says a state.
      */
-    fun asListRow(columns: List<Navree.Column>, row: Navree.TableRow): TableRowAsListRow {
+    fun asListRow(columns: List<Navree.Column>, row: Navree.TableRow, wide: Boolean = false): TableRowAsListRow {
         val cells = row.cells
         fun role(index: Int) = columns.getOrNull(index)?.role
         val titleAt = columns.indexOfFirst { it.role == Navree.ColumnRole.TITLE }.takeIf { it >= 0 && it < cells.size } ?: 0
-        val kept = cells.indices.filter { it != titleAt && columns.getOrNull(it)?.secondary != true }
+        // A column a narrow screen may leave out is left out there; where the list has the room (a table that became a list
+        // for its many columns, not for a narrow window) the columns that say a state are kept: a row says all of its states.
+        fun state(index: Int) = role(index) == Navree.ColumnRole.STATUS || (role(index) == null && cells[index] is Navree.Badge)
+        val kept = cells.indices.filter { it != titleAt && (columns.getOrNull(it)?.secondary != true || (wide && state(it))) }
         val leadingAt = kept.firstOrNull { role(it) == Navree.ColumnRole.LEADING }
         val actionsAt = kept.filter { role(it) == Navree.ColumnRole.ACTIONS }
         val trailingAt = kept.firstOrNull { role(it) == Navree.ColumnRole.TRAILING }
@@ -376,6 +388,9 @@ data class KeyboardPlan(
  */
 object FormRules {
     const val FORM_MOST_DP = 560
+
+    /** Whether a form holds nothing but buttons: it is a group of actions, and among the parts of a line its buttons flow with the others. */
+    fun onlyButtons(form: Navree.Form): Boolean = form.children.isNotEmpty() && form.children.all { it is Navree.Button }
 
     fun choice(kind: Navree.ChoiceKind, options: Int, window: WindowInfo): ChoiceWidget = when (kind) {
         Navree.ChoiceKind.SEGMENTED -> {
@@ -622,4 +637,18 @@ object ContentRules {
      * chip's label.
      */
     fun statusAsText(inRow: Boolean): Boolean = inRow
+}
+
+/** How a menu in the content is drawn. */
+object MenuRules {
+    private val overflow = listOf("more", "ellipsis", "kebab", "menu")
+
+    /**
+     * Whether a menu with an icon says its label beside the icon. A menu whose
+     * label is what it is set to (a status, a priority) says it, as a picker
+     * does; the icon that stands for "more" (three dots) stays alone, with its
+     * name as a tooltip and for a screen reader.
+     */
+    fun showsLabel(icon: String?, label: String): Boolean =
+        label.isNotBlank() && icon != null && overflow.none { icon.lowercase().contains(it) }
 }

@@ -581,9 +581,11 @@ private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthD
         for (line in shown.chunked(columns)) {
             // The parts of a line are as tall as the tallest of them, where they can say how tall that is.
             val even = line.all(::measuresAhead)
+            // Parts that cannot say how tall they are are made as tall as the tallest once they are laid out.
+            val tallest = rememberTallest(line)
             Row(if (even) Modifier.height(IntrinsicSize.Min) else Modifier, horizontalArrangement = Arrangement.spacedBy(gap.dp)) {
                 for (child in line) {
-                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                    Box(if (even) Modifier.weight(1f).fillMaxHeight() else Modifier.weight(1f).sameHeightAs(tallest), propagateMinConstraints = !even) {
                         CompositionLocalProvider(LocalInLine provides false) { Roomed(cell) { NodeView(child, place, Modifier.fillMaxHeight()) } }
                     }
                 }
@@ -714,7 +716,13 @@ private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.
                 CompositionLocalProvider(LocalInLine provides true) { Roomed(room) { for (child in shown) NodeView(child, place) } }
             }
         } else {
-            Row(modifier = if (wide) modifier.fillMaxWidth() else modifier, horizontalArrangement = across, verticalAlignment = upright) {
+            // A line with a dial in it that fills little of its card stands in the card's middle (the card's own parts keep their size).
+            val lined = when {
+                wide -> modifier.fillMaxWidth()
+                LocalInCard.current && node.justify == null && CompositionRules.holdsDial(shown) -> modifier.fillMaxWidth().centredWhenShort()
+                else -> modifier
+            }
+            Row(modifier = lined, horizontalArrangement = across, verticalAlignment = upright) {
                 for (child in shown) {
                     val grows = CompositionRules.grows(child)
                     // A part that grows has what is left of the line; one that keeps its size has that size.
@@ -735,7 +743,7 @@ private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.
         Column(
             modifier = if (fills) modifier.fillMaxWidth() else modifier,
             verticalArrangement = Arrangement.spacedBy(gap),
-            horizontalAlignment = when (CompositionRules.columnAlign(node)) {
+            horizontalAlignment = when (CompositionRules.columnAlignIn(node, LocalEndAligned.current)) {
                 Navree.Align.CENTER -> Alignment.CenterHorizontally
                 Navree.Align.END -> Alignment.End
                 else -> Alignment.Start
