@@ -107,6 +107,7 @@ pub mod icons;
 #[cfg(feature = "image")]
 pub mod image;
 pub mod island;
+pub mod kit;
 pub mod localize;
 pub mod markdown;
 pub mod marketing;
@@ -187,3 +188,9 @@ pub use test_view::TestView;
 pub use upload::{ChunkStart, ChunkTicket, Received, Refused, UploadCode, UploadError, Uploads};
 pub use upload::{Upload, UploadLabels, UploadLimits, UploadedFile};
 pub use view::{PAGE_CSP, View};
+
+/// Not public API: what the toolkit's exported macros call.
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::components::layout::span_name;
+}

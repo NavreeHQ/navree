@@ -13,8 +13,9 @@ use navree_kernel::{
 use navree_testing::{TestApp, TestAppBuilder};
 use navree_ui::table::NoFilter;
 use navree_ui::{
-    Button, DataTable, ExtensionFile, Input, Markdown, Node, Reply, SafeHtml, TableQuery,
-    TableRow, TestView, UiExtension, UiModule, Uses, View, assets, el,
+    Button, DataTable, ExtensionFile, Flag, Input, Markdown, Node, Reply, SafeHtml, TableQuery,
+    TableRow, TestView, UiExtension, UiModule, Uses, View, assets, country_flags, el, icon, icons,
+    kit,
 };
 
 /// Captures formatted tracing output written while the guard is alive (on this thread: use a
@@ -831,4 +832,466 @@ async fn a_booted_app_logs_each_extension_once_with_the_size_of_its_files() {
         "{said:?}"
     );
     app.shutdown().await.unwrap();
+}
+
+/// What `kit::problems` says of raw markup under a part of a plugin's.
+fn raw_problem(path: &str) -> String {
+    format!(
+        "raw markup at {path}: only an icon's shapes, cleaned stored HTML, or a toolkit part's own text is written as it is"
+    )
+}
+
+/// What `kit::problems` says of an extension's root with the wrong slot.
+fn slot_problem(path: &str, slot: &str, namespace: &str) -> String {
+    format!(
+        "the extension root at {path} has data-slot=\"{slot}\", which is not {namespace}:<word>"
+    )
+}
+
+/// What `kit::problems` says of an address that is no served file.
+fn served_problem(path: &str, value: &str, attribute: &str) -> String {
+    format!("{path} names {value} in {attribute}, which is not a served extension file")
+}
+
+fn raw() -> Node {
+    Node::Raw(SafeHtml::trusted("<b>Ludhiana</b>"))
+}
+
+#[test]
+fn kit_problems_finds_raw_markup_outside_icons_stored_html_and_toolkit_parts() {
+    assert_eq!(
+        kit::problems(&el("div").slot("geo:card").child(raw()).into()),
+        [raw_problem("div[geo:card]")]
+    );
+    // The paths run from the node given down, each element by its tag and its slot.
+    assert_eq!(
+        kit::problems(
+            &el("div")
+                .slot("geo:card")
+                .child(el("div").slot("geo:card-body").child(raw()))
+                .into()
+        ),
+        [raw_problem("div[geo:card] > div[geo:card-body]")]
+    );
+    assert_eq!(kit::problems(&raw()), [raw_problem("the top of the node")]);
+
+    // An icon's shapes, raw directly inside stored content, and text under a toolkit part.
+    let taken: [Node; 3] = [
+        el("div")
+            .slot("geo:card")
+            .child(icon(icons::MEGAPHONE))
+            .into(),
+        el("div")
+            .slot("geo:card")
+            .child(el("div").flag("data-ui-stored", true).child(raw()))
+            .into(),
+        el("div")
+            .slot("geo:card")
+            .child(el("p").slot("card-text").child(raw()))
+            .into(),
+    ];
+    for node in &taken {
+        assert_eq!(kit::problems(node), Vec::<String>::new());
+    }
+
+    // The root of an extension has a slot of its namespace, a colon and a word.
+    assert_eq!(
+        kit::problems(&el("div").slot("map").extension(&MAP).into()),
+        [slot_problem("div[map]", "map", "geo")]
+    );
+    assert_eq!(
+        kit::problems(&el("div").slot("other:map").extension(&MAP).into()),
+        [slot_problem("div[other:map]", "other:map", "geo")]
+    );
+    assert_eq!(
+        kit::problems(&el("div").slot("geo:").extension(&MAP).into()),
+        [slot_problem("div[geo:]", "geo:", "geo")]
+    );
+    assert_eq!(
+        kit::problems(&el("div").extension(&MAP).into()),
+        ["the extension root at div has no data-slot"]
+    );
+    for root in [
+        el("div").slot("geo:map").extension(&MAP),
+        el("div").slot("geo:map-body").extension(&MAP),
+        el("span").slot("geo:badge").extension(&BADGE),
+        el("div")
+            .slot("geo:map")
+            .extension_with(&MAP, &serde_json::json!({ "zoom": 15, "city": "Ludhiana" }))
+            .extension_call("/deliveries/42/drop"),
+    ] {
+        assert_eq!(kit::problems(&root.into()), Vec::<String>::new());
+    }
+
+    // An address that is no served file, in an attribute and in raw text inside the root.
+    assert_eq!(
+        kit::problems(
+            &el("div")
+                .slot("geo:map")
+                .attr("data-ui-ext", "https://cdn.example/x.js")
+                .into()
+        ),
+        [served_problem(
+            "div[geo:map]",
+            "https://cdn.example/x.js",
+            "data-ui-ext"
+        )]
+    );
+    assert_eq!(
+        kit::problems(
+            &el("div")
+                .slot("geo:map")
+                .attr("data-ui-ext-sheet", "/_navree/ui/ext/../app/x.css")
+                .into()
+        ),
+        [served_problem(
+            "div[geo:map]",
+            "/_navree/ui/ext/../app/x.css",
+            "data-ui-ext-sheet"
+        )]
+    );
+    assert_eq!(
+        kit::problems(
+            &el("div")
+                .slot("geo:map")
+                .extension(&MAP)
+                .child(Node::Raw(SafeHtml::trusted(
+                    r#"<b data-ui-ext="https://cdn.example/x.js"></b>"#
+                )))
+                .into()
+        ),
+        [
+            raw_problem("div[geo:map]"),
+            served_problem("div[geo:map]", "https://cdn.example/x.js", "data-ui-ext")
+        ]
+    );
+
+    // Props are JSON of at most 64 KB.
+    assert_eq!(
+        kit::problems(
+            &el("div")
+                .slot("geo:map")
+                .extension(&MAP)
+                .attr("data-ui-props", "{")
+                .into()
+        ),
+        ["div[geo:map]: data-ui-props is not JSON"]
+    );
+    let big = format!("\"{}\"", "x".repeat(70 * 1024 - 2));
+    assert_eq!(
+        kit::problems(
+            &el("div")
+                .slot("geo:map")
+                .extension(&MAP)
+                .attr("data-ui-props", big)
+                .into()
+        ),
+        ["div[geo:map]: data-ui-props is 70 KB; keep props under 64 KB and fetch the rest from a route"]
+    );
+
+    // An island's script is its own: it is not an extension too.
+    assert_eq!(
+        kit::problems(
+            &el("div")
+                .slot("geo:map")
+                .attr("data-ui-island", "/_navree/ui/island/clock-0123456789ab.js")
+                .attr("data-ui-ext", MAP.script_url().expect("a script").to_owned())
+                .into()
+        ),
+        ["div[geo:map] is both an island and an extension"]
+    );
+}
+
+#[test]
+fn kit_problems_accepts_a_data_tables_rows_and_a_flag() {
+    let rows = drivers();
+    let panel: Node = el("div")
+        .slot("geo:panel")
+        .child((
+            DataTable::new("drivers", &query(""), &rows),
+            Flag::new(country_flags::IN),
+        ))
+        .into();
+    assert_eq!(kit::problems(&panel), Vec::<String>::new());
+    kit::assert_component(&panel);
+}
+
+#[test]
+#[should_panic(expected = "raw markup at div[geo:card]")]
+fn assert_component_fails_with_the_problems() {
+    kit::assert_component(&el("div").slot("geo:card").child(raw()).into());
+}
+
+#[test]
+fn stored_twin_wraps_the_node_in_a_stored_element() {
+    let node: Node = el("p").child("Meera Sharma").into();
+    assert_eq!(
+        navree_ui::render(&kit::stored_twin(&node)),
+        "<div data-ui-stored><p>Meera Sharma</p></div>"
+    );
+}
+
+/// A component of this crate's own, built with the toolkit's two macros as the toolkit's are.
+/// The macros give it every method a built-in has, and a test uses some of them.
+#[allow(dead_code)]
+mod rating {
+    use navree_ui::{Element, Node, el};
+
+    pub struct Rating {
+        el: Element,
+        stars: u8,
+    }
+
+    navree_ui::component_methods!(Rating);
+    navree_ui::component_node!(Rating);
+
+    impl Rating {
+        pub fn new(stars: u8) -> Self {
+            Self {
+                el: el("div").slot("app:rating"),
+                stars,
+            }
+        }
+
+        fn into_node(self) -> Node {
+            self.el.child(i64::from(self.stars)).into()
+        }
+    }
+}
+
+use rating::Rating;
+
+#[test]
+fn the_exported_macros_build_a_peer_of_a_built_in_from_another_crate() {
+    let node = Node::from(
+        Rating::new(4)
+            .id("delivery-rating")
+            .attr("data-size", "sm")
+            .hotkey("r")
+            .span(2),
+    );
+    let html = navree_ui::render(&node);
+    for part in [
+        r#"id="delivery-rating""#,
+        r#"data-size="sm""#,
+        r#"data-ui-hotkey="r""#,
+        r#"data-span="2""#,
+    ] {
+        assert!(html.contains(part), "{part} in {html}");
+    }
+    assert_eq!(kit::problems(&node), Vec::<String>::new());
+    // A page takes it wherever it takes a node.
+    assert!(
+        View::new("Ratings")
+            .body(Rating::new(5))
+            .to_html()
+            .contains("data-slot=\"app:rating\"")
+    );
+}
+
+/// Every file of `folder` (a folder of this crate, with the folders below it) that ends in
+/// `.extension`, each with its path from the crate and its text.
+fn files(folder: &str, extension: &str) -> Vec<(String, String)> {
+    fn collect(folder: &std::path::Path, extension: &str, out: &mut Vec<std::path::PathBuf>) {
+        let mut entries: Vec<_> = std::fs::read_dir(folder)
+            .expect("a folder of the crate")
+            .map(|entry| entry.expect("an entry").path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                collect(&path, extension, out);
+            } else if path.extension().and_then(|found| found.to_str()) == Some(extension) {
+                out.push(path);
+            }
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut paths = Vec::new();
+    collect(&root.join(folder), extension, &mut paths);
+    paths
+        .into_iter()
+        .map(|path| {
+            let name = path
+                .strip_prefix(root)
+                .expect("under the crate")
+                .to_string_lossy()
+                .replace('\\', "/");
+            let text = std::fs::read_to_string(&path).expect("a text file");
+            (name, text)
+        })
+        .collect()
+}
+
+/// What a source file of the toolkit says outside its comments and its test module: the names
+/// its code gives to what a page and a stylesheet use. A comment, a doc test and a test's
+/// fixtures write a plugin's slot as an example, on purpose.
+fn toolkit_code(source: &str) -> String {
+    let mut kept = String::new();
+    let mut lines = source.lines().peekable();
+    while let Some(line) = lines.next() {
+        let trimmed = line.trim_start();
+        let starts_tests = trimmed == "#[cfg(test)]"
+            && lines
+                .peek()
+                .is_some_and(|next| next.trim_start().starts_with("mod "));
+        if starts_tests {
+            break;
+        }
+        if !trimmed.starts_with("//") {
+            kept.push_str(line);
+            kept.push('\n');
+        }
+    }
+    kept
+}
+
+/// The value of every `.slot("…")` call and `data-slot="…"` written in Rust code.
+fn slots_in_rust(code: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for needle in [".slot(\"", "data-slot=\""] {
+        let mut rest = code;
+        while let Some(at) = rest.find(needle) {
+            rest = &rest[at + needle.len()..];
+            if let Some(end) = rest.find('"') {
+                found.push(rest[..end].to_owned());
+            }
+        }
+    }
+    found
+}
+
+/// The value of every `data-slot=…` selector in a stylesheet, quoted or not.
+fn slots_in_css(css: &str) -> Vec<String> {
+    let needle = "data-slot=";
+    let mut found = Vec::new();
+    let mut rest = css;
+    while let Some(at) = rest.find(needle) {
+        rest = &rest[at + needle.len()..];
+        let value: String = match rest.chars().next() {
+            Some(quote @ ('"' | '\'')) => rest[1..].chars().take_while(|c| *c != quote).collect(),
+            _ => rest
+                .chars()
+                .take_while(|c| !matches!(c, ']' | ' ' | '{' | ','))
+                .collect(),
+        };
+        found.push(value);
+    }
+    found
+}
+
+/// The name of every custom property written in `text` (`--` and a name), without the `--`.
+fn custom_properties(text: &str) -> Vec<&str> {
+    let bytes = text.as_bytes();
+    let in_name = |byte: u8| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-');
+    let mut found = Vec::new();
+    let mut at = 0;
+    while at + 2 < bytes.len() {
+        let starts = bytes[at] == b'-'
+            && bytes[at + 1] == b'-'
+            && bytes[at + 2].is_ascii_alphabetic()
+            && (at == 0 || !in_name(bytes[at - 1]));
+        if starts {
+            let mut end = at + 2;
+            while end < bytes.len() && in_name(bytes[end]) {
+                end += 1;
+            }
+            found.push(&text[at + 2..end]);
+            at = end;
+        } else {
+            at += 1;
+        }
+    }
+    found
+}
+
+/// The name of every `@keyframes` in `text`.
+fn keyframe_names(text: &str) -> Vec<&str> {
+    let mut found = Vec::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("@keyframes") {
+        rest = &rest[at + "@keyframes".len()..];
+        let name = rest
+            .trim_start()
+            .split(|c: char| c.is_whitespace() || c == '{')
+            .next()
+            .unwrap_or_default();
+        found.push(name);
+    }
+    found
+}
+
+#[test]
+fn no_built_in_name_uses_the_extension_separators() {
+    let sources = files("src", "rs");
+    let sheets = files("styles", "css");
+    // The scan reads what it should: the toolkit's code and every one of its stylesheets.
+    assert!(sources.len() > 100 && sheets.len() > 20);
+
+    let mut clashes: Vec<String> = Vec::new();
+    for (path, source) in &sources {
+        let code = toolkit_code(source);
+        for slot in slots_in_rust(&code).iter().filter(|slot| slot.contains(':')) {
+            clashes.push(format!("{path}: the slot `{slot}` holds a colon"));
+        }
+        for name in custom_properties(&code).iter().filter(|name| name.contains("--")) {
+            clashes.push(format!("{path}: the custom property `--{name}` holds `--`"));
+        }
+        for name in keyframe_names(&code).iter().filter(|name| name.contains("--")) {
+            clashes.push(format!("{path}: the keyframes `{name}` hold `--`"));
+        }
+    }
+    for (path, css) in &sheets {
+        for slot in slots_in_css(css).iter().filter(|slot| slot.contains(':')) {
+            clashes.push(format!("{path}: the slot `{slot}` holds a colon"));
+        }
+        for name in custom_properties(css).iter().filter(|name| name.contains("--")) {
+            clashes.push(format!("{path}: the custom property `--{name}` holds `--`"));
+        }
+        for name in keyframe_names(css).iter().filter(|name| name.contains("--")) {
+            clashes.push(format!("{path}: the keyframes `{name}` hold `--`"));
+        }
+    }
+    assert!(
+        clashes.is_empty(),
+        "a plugin's names are a namespace and `:` or `--`, which no built-in uses: {clashes:#?}"
+    );
+}
+
+#[test]
+fn no_built_in_selector_or_query_matches_a_slot_by_prefix_or_substring() {
+    let mut sources = files("styles", "css");
+    sources.extend(
+        files("src", "rs")
+            .into_iter()
+            .map(|(path, source)| (path, toolkit_code(&source))),
+    );
+    sources.extend(files("runtime/src", "js"));
+    assert!(sources.len() > 150);
+
+    // The one exception: a picker's clear button is found inside its own root.
+    let exception = ("runtime/src/select.js", "data-slot$=-clear");
+    let mut matched: Vec<String> = Vec::new();
+    for (path, text) in &sources {
+        let mut rest = text.as_str();
+        while let Some(at) = rest.find("data-slot") {
+            rest = &rest[at + "data-slot".len()..];
+            let operator: String = rest.trim_start().chars().take(2).collect();
+            if !matches!(operator.as_str(), "^=" | "*=" | "|=" | "~=" | "$=") {
+                continue;
+            }
+            let tail: String = rest
+                .chars()
+                .take_while(|c| !matches!(c, ']' | '"' | '\'' | '\n' | ',' | ')'))
+                .collect();
+            let selector = format!("data-slot{tail}");
+            if (path.as_str(), selector.as_str()) != exception {
+                matched.push(format!("{path}: {selector}"));
+            }
+        }
+    }
+    assert!(
+        matched.is_empty(),
+        "a selector that matches a slot by prefix or substring could reach a plugin's part: {matched:#?}"
+    );
 }
