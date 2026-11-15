@@ -627,6 +627,19 @@ class ColumnShareTest {
     }
 
     @Test
+    fun a_column_with_a_box_to_type_in_takes_room_for_the_box_and_the_button() {
+        val columns = listOf(column("Product", Navree.ColumnRole.TITLE), column("Restock"))
+        val typing = Navree.TableRow(
+            cells = listOf(
+                Navree.Text(value = "Brass lota"),
+                Navree.Form(id = "r", children = listOf(Navree.Field(name = "units", input = Navree.TextInput()), Navree.Button(label = "Restock"))),
+            ),
+        )
+        assertEquals(ListRules.TYPING_COLUMN_WEIGHT, ListRules.columnWeights(columns, listOf(typing))[1], 0.001f)
+        assertEquals("a column of words keeps its share", 1f, ListRules.columnWeights(columns, listOf(row("Brass lota", "Open")))[1], 0.001f)
+    }
+
+    @Test
     fun at_the_largest_text_a_table_with_seven_columns_is_a_list_even_in_a_wide_pane() {
         assertFalse(ListRules.tableAsList(1000, 7, 1f))
         assertTrue(ListRules.tableAsList(1000, 7, 2f))

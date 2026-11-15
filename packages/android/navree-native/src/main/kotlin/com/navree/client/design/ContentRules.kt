@@ -225,12 +225,19 @@ object ListRules {
      * place, so a place such as "Maharashtra" is not broken in the middle;
      * the title, the numbers, the actions and the subtitle keep their shares.
      */
+    /** The share of a column with a box to type in: a box and a button side by side. */
+    const val TYPING_COLUMN_WEIGHT = 2.4f
+
     fun columnWeights(columns: List<Navree.Column>, rows: List<Navree.TableRow>): List<Float> =
         columns.mapIndexed { index, column ->
             val base = columnWeight(column)
             val fixed = base == 0f || column.role == Navree.ColumnRole.TITLE || column.role == Navree.ColumnRole.ACTIONS ||
                 column.role == Navree.ColumnRole.TRAILING || column.numeric
-            if (fixed) {
+            // A column that holds a box to type in (a restock: units and a button) needs room for both.
+            val typesIn = column.role != Navree.ColumnRole.TITLE && rows.any { row -> row.cells.getOrNull(index)?.walk()?.any { it is Navree.Field } == true }
+            if (typesIn) {
+                TYPING_COLUMN_WEIGHT
+            } else if (fixed) {
                 base
             } else {
                 val longest = rows.maxOfOrNull { row -> row.cells.getOrNull(index)?.walk()?.filterIsInstance<Navree.Text>()?.sumOf { it.value.length } ?: 0 } ?: 0
