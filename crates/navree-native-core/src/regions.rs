@@ -596,11 +596,15 @@ impl Core {
             return;
         };
         // A record is never in a table twice.
-        page.rows.retain(|row| {
-            row.id
-                .as_ref()
-                .is_none_or(|id| !table.rows.iter().any(|held| held.id.as_ref() == Some(id)))
-        });
+        {
+            let held: std::collections::BTreeSet<&str> = table
+                .rows
+                .iter()
+                .filter_map(|row| row.id.as_deref())
+                .collect();
+            page.rows
+                .retain(|row| row.id.as_deref().is_none_or(|id| !held.contains(id)));
+        }
         // While every record that matches is chosen, so is one that just came.
         let across = lists
             .get(table.id.as_deref().unwrap_or(list))

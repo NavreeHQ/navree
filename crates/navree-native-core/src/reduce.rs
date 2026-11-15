@@ -1950,6 +1950,7 @@ impl Core {
                 .is_none_or(|route| route.chrome);
         }
         view.title = Some(screen.title.clone()).filter(|title| !title.is_empty());
+        inner.weight = crate::weight::of_screen(&screen);
         view.content = Content::Native {
             screen: Box::new(screen),
         };

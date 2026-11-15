@@ -16,10 +16,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use navree_native::Op;
 use navree_native::action::{Present, State};
 use navree_native::node::Node;
 use navree_native::op::Toast;
+use navree_native::{MAX_WORK, Op};
 
 use crate::Core;
 use crate::effect::{Change, Effect};
@@ -27,8 +27,8 @@ use crate::forms::field_view;
 use crate::origin::Target;
 use crate::reduce::By;
 use crate::state::{
-    Content, Focus, FormMeta, FormView, Message, MessageInner, Notice, RegionMeta, ScreenId,
-    ScreenView,
+    Content, Failure, Focus, FormMeta, FormView, Message, MessageInner, Notice, RegionMeta,
+    ScreenId, ScreenView,
 };
 use crate::tree::{
     MAX_DEPTH, Names, Slot, Survey, depth, depth_of, fields_of, find_in, find_in_mut, find_mut,
@@ -95,6 +95,27 @@ fn searched(input: &navree_native::Input) -> bool {
     }
 }
 
+/// Whether an op finds its target by looking through the screen for it: every
+/// op that names a node, a form, a list or a region.
+fn looks_through(op: &Op) -> bool {
+    matches!(
+        op,
+        Op::Morph { .. }
+            | Op::Replace { .. }
+            | Op::Append { .. }
+            | Op::Prepend { .. }
+            | Op::Remove { .. }
+            | Op::Merge { .. }
+            | Op::Rows { .. }
+            | Op::Row { .. }
+            | Op::Errors { .. }
+            | Op::Open { .. }
+            | Op::Close { .. }
+            | Op::Focus { .. }
+            | Op::Invalidate { .. }
+    )
+}
+
 /// Takes the row `id` out of the first table that has it.
 fn remove_row(node: &mut Node, id: &str) -> bool {
     if let Node::Table(table) = node
@@ -123,7 +144,23 @@ impl Core {
         let mut left = false;
         let mut signed_out = false;
         let focuses = ops.iter().any(|op| matches!(op, Op::Focus { .. }));
+        // What the ops that look through the screen ask for together is
+        // bounded: past the bound none of them is applied, and the rest are.
+        let looking = ops.iter().filter(|op| looks_through(op)).count();
+        let too_much =
+            looking > 0 && !self.screen_fits(id, |held| held.saturating_mul(looking) <= MAX_WORK);
+        if too_much {
+            self.refused_for_size(
+                id,
+                format!(
+                    "{looking} ops that look through the screen were not applied: an answer may ask for at most {MAX_WORK} visits to a node"
+                ),
+            );
+        }
         for op in ops {
+            if too_much && looks_through(&op) {
+                continue;
+            }
             match op {
                 Op::Morph { target, node } => self.put(current, &target, node, true),
                 Op::Replace { target, node } => self.put(current, &target, node, false),
@@ -244,6 +281,34 @@ impl Core {
             }
         }
         left
+    }
+
+    /// Whether the weight of the screen `id` is small enough for `ok`. What
+    /// is kept beside the screen is never less than the truth, so when it is
+    /// small enough nothing is counted; when it is not, the screen is counted
+    /// again, and that is what decides.
+    pub(crate) fn screen_fits(&mut self, id: ScreenId, ok: impl Fn(usize) -> bool) -> bool {
+        let Some(held) = self.inner.screens.get(&id).map(|inner| inner.weight) else {
+            return true;
+        };
+        if ok(held) {
+            return true;
+        }
+        let Some(screen) = self.view.screens.get(&id).and_then(ScreenView::screen) else {
+            return true;
+        };
+        let counted = crate::weight::of_screen(screen);
+        if let Some(inner) = self.inner.screens.get_mut(&id) {
+            inner.weight = counted;
+        }
+        ok(counted)
+    }
+
+    /// Says that something an answer brought was not applied for its size: a
+    /// report for the developer, and the passing notice that it failed.
+    pub(crate) fn refused_for_size(&mut self, id: ScreenId, detail: String) {
+        self.report("size", detail);
+        self.failed(Failure::Protocol, Some(id));
     }
 
     pub(crate) fn too_deep(&mut self, target: &str) {
