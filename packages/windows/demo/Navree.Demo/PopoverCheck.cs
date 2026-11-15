@@ -117,8 +117,8 @@ internal sealed class PopoverCheck(ShellHost host, ShellWindow window, string fo
         keybd_event(Escape, 0, 0, UIntPtr.Zero);
         keybd_event(Escape, 0, KeyUp, UIntPtr.Zero);
         await Task.Delay(900);
-        bool closed = !VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Any(popup => popup.Child is not null && Below(popup.Child).OfType<FlyoutPresenter>().Any());
-        Check("Escape takes " + label + " away", closed, closed ? "no flyout is open" : "still open");
+        bool closed = !VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Any(popup => popup.Child is not null && Below(popup.Child).Any(part => part is FlyoutPresenter or ContentDialog));
+        Check("Escape takes " + label + " away", closed, closed ? "no flyout and no dialog is open" : "a flyout or a dialog is still open");
         Check("the core was told it is closed", !(host.State.FrontScreen?.Overlays.Count > 0), "overlays now: " + string.Join(",", host.State.FrontScreen?.Overlays ?? []));
         object? focused = FocusManager.GetFocusedElement(window.Surface.XamlRoot);
         Check("the focus is back on the button", ReferenceEquals(focused, button) || (focused is FrameworkElement element && AutomationProperties.GetName(element) == label), "focus is on " + (focused?.GetType().Name ?? "nothing"));
