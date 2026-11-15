@@ -73,3 +73,14 @@ data class WindowInfo(
         val Desktop = WindowInfo(1680, 1000)
     }
 }
+
+/** Where a tooltip may stand across the window. */
+object TooltipRules {
+    /**
+     * The start of a tooltip that would stand at `wanted` (its own measure from
+     * the window's left edge, the anchor's middle less half its width, say), kept
+     * `margin` inside both edges of a window `window` wide. A tooltip wider than
+     * the window less its margins starts at the margin.
+     */
+    fun inset(wanted: Int, width: Int, window: Int, margin: Int): Int = wanted.coerceIn(margin, maxOf(margin, window - width - margin))
+}

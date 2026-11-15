@@ -53,7 +53,14 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.platform.LocalDensity
+import com.navree.client.design.TooltipRules
 import com.navree.client.design.ScreenRules
 import com.navree.protocol.Navree
 
@@ -80,6 +87,24 @@ private fun RowScope.ButtonContent(node: Navree.Button, place: Place) {
     Text(node.label)
 }
 
+/**
+ * Keeps a tooltip a margin inside the window's edges: the system's position
+ * provider leaves one against the edge, where it reads as cut off (and, in
+ * right to left, the same at the other edge).
+ */
+internal class InsetTooltipPosition(private val base: PopupPositionProvider, private val marginPx: Int) : PopupPositionProvider {
+    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+        val at = base.calculatePosition(anchorBounds, windowSize, layoutDirection, popupContentSize)
+        return IntOffset(TooltipRules.inset(at.x, popupContentSize.width, windowSize.width, marginPx), at.y)
+    }
+}
+
+@Composable
+internal fun insetTooltip(base: PopupPositionProvider): PopupPositionProvider {
+    val margin = with(LocalDensity.current) { 16.dp.roundToPx() }
+    return remember(base, margin) { InsetTooltipPosition(base, margin) }
+}
+
 /** An icon button with its name as a tooltip on a long press or a hover, as Material asks of icon-only buttons. */
 @Composable
 internal fun TipIconButton(
@@ -91,7 +116,7 @@ internal fun TipIconButton(
     tint: Color = Color.Unspecified,
 ) {
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        positionProvider = insetTooltip(TooltipDefaults.rememberPlainTooltipPositionProvider()),
         tooltip = { PlainTooltip { Text(label) } },
         state = rememberTooltipState(),
     ) {

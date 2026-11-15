@@ -198,7 +198,7 @@ internal fun HintMark(hint: Navree.Hint, modifier: Modifier = Modifier) {
     val state = rememberTooltipState(isPersistent = true)
     val scope = rememberCoroutineScope()
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        positionProvider = insetTooltip(TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above)),
         tooltip = {
             RichTooltip(title = hint.title?.let { title -> { Text(title) } }) { Text(hint.text) }
         },
