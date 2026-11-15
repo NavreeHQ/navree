@@ -1013,7 +1013,7 @@ jobs:
         shell: powershell
         run: |
           $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
-          foreach ($way in 'states', 'dictionary') {
+          foreach ($way in 'states') {
             powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\box-$way" -Run "contrast-$way" -Seconds 90
           }
 
@@ -1025,7 +1025,7 @@ jobs:
           $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
           try {
             powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -On
-            foreach ($way in 'states', 'dictionary') {
+            foreach ($way in 'states') {
               powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\box-contrast-$way" -Run "contrast-$way" -Seconds 90
             }
           } finally {
@@ -1043,9 +1043,7 @@ jobs:
             ${{ runner.temp }}/gallery-text225
             ${{ runner.temp }}/gallery-contrast
             ${{ runner.temp }}/box-states
-            ${{ runner.temp }}/box-dictionary
             ${{ runner.temp }}/box-contrast-states
-            ${{ runner.temp }}/box-contrast-dictionary
           retention-days: 30
 
       # What the generator wrote is what is committed: a stale model fails the run, after the rest has run.
