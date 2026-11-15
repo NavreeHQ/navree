@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use futures_util::StreamExt;
 use navree_ai::{
     Ai, AiCapabilities, AiDriver, AiDriverAnswer, AiDriverChunk, AiDriverRequest, AiDriverStream,
-    AiEmbedAnswer, AiEmbedRequest, AiError, AiModule, Embeddings, Finish,
+    AiEmbedAnswer, AiEmbedRequest, AiError, AiModule, AiOptions, Embeddings, Finish, ModelConfig,
     ModuleBuilderAiProviderExt, Part, ProviderConfig, StreamEvent, TextStream, Usage,
 };
 use navree_kernel::{BoxError, BoxFuture, Module, ModuleBuilder};
@@ -185,6 +185,61 @@ async fn a_registered_ai_driver_answers_streams_and_embeds() {
         message.contains("ai.providers.backup.driver is `sarvagya`, but no module registers an AI provider driver under that name with m.ai_provider (known: anthropic, openai, gemini, mistral, ollama, bedrock, vaani)"),
         "{message}"
     );
+}
+
+/// Registers the provider driver `vaani`, and records the URL and the key
+/// its factory read.
+#[derive(Default)]
+struct KeyedVaaniModule {
+    /// Each table's URL and key, as the factory read them.
+    seen: Seen,
+}
+
+impl Module for KeyedVaaniModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let seen = self.seen.clone();
+        m.ai_provider("vaani", move |ctx| {
+            let seen = seen.clone();
+            async move {
+                let table: ProviderConfig = ctx.settings()?;
+                let key = table.api_key.as_ref().map(|key| key.expose().clone());
+                seen.lock().unwrap().push((table.url, key));
+                Ok::<_, BoxError>(Vaani)
+            }
+        });
+    }
+}
+
+#[tokio::test]
+async fn a_provider_table_given_in_code_hands_its_driver_its_settings() {
+    let module = KeyedVaaniModule::default();
+    let seen = module.seen.clone();
+    // The app's configuration has no `ai` section: the table is the one
+    // given in code.
+    let options = AiOptions {
+        default: "smart".to_owned(),
+        providers: [(
+            "vaani".to_owned(),
+            ProviderConfig::openai("sk-ludhiana-0042").url("https://ai.ludhiana.example"),
+        )]
+        .into(),
+        models: [("smart".to_owned(), ModelConfig::new("vaani", "vaani-large"))].into(),
+        ..AiOptions::default()
+    };
+    let app = TestApp::builder()
+        .module(AiModule::for_root(options))
+        .module(module)
+        .build()
+        .await;
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [(
+            Some("https://ai.ludhiana.example".to_owned()),
+            Some("sk-ludhiana-0042".to_owned())
+        )]
+    );
+    let answer = app.get::<Ai>().await.text("Namaste").await.unwrap();
+    assert_eq!(answer.text, "Namaste from vaani-large");
 }
 
 /// What a provider table does when it is called.

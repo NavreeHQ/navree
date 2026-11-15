@@ -79,6 +79,9 @@ impl Module for AiModule {
 fn register(m: &mut ModuleBuilder, options: Option<AiOptions>) {
     m.global();
     contribute_slot(m, SLOT);
+    // Given in code, a provider table is what its registered driver reads;
+    // from the configuration, the driver reads the table as written.
+    let in_code = options.is_some();
     match options {
         Some(options) => m.factory(Factory::<AiOptions>::new(move |_| {
             let options = options.clone();
@@ -98,10 +101,10 @@ fn register(m: &mut ModuleBuilder, options: Option<AiOptions>) {
             // Every registration of a provider driver is checked, whichever
             // tables select one; each table of a registered driver gets the
             // driver its registration builds.
-            Factory::<Ai>::new(|r: Resolver| async move {
+            Factory::<Ai>::new(move |r: Resolver| async move {
                 let options = r.get::<AiOptions>().await?;
                 let app = r.app();
-                let registered = registered_drivers(&app, &options).await?;
+                let registered = registered_drivers(&app, &options, in_code).await?;
                 Ok(Arc::new(Ai::build_with(
                     (*options).clone(),
                     Some(app.downgrade()),

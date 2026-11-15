@@ -144,6 +144,7 @@ fn register(m: &mut ModuleBuilder, options: Option<QueueOptions>) {
                             name,
                             format!("queue.{name}"),
                             None,
+                            None,
                         )
                         .await?,
                     ),

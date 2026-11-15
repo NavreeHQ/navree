@@ -138,6 +138,7 @@ impl Search {
                     *name,
                     format!("search.{name}"),
                     None,
+                    None,
                 )
                 .await?
             }

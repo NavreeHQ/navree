@@ -85,6 +85,7 @@ impl Module for ReportModule {
                 name,
                 settings_key.to_owned(),
                 None,
+                None,
             )
             .await?;
             Ok(Arc::new(ChestReport(built)))
@@ -249,6 +250,7 @@ fn register_vault(m: &mut ModuleBuilder, options: Option<VaultOptions>) {
                         "vault.kind",
                         name,
                         format!("vault.{name}"),
+                        None,
                         None,
                     )
                     .await?,

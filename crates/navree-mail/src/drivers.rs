@@ -152,6 +152,7 @@ pub(crate) fn build_transport<'a>(
                     *name,
                     format!("mail.{name}"),
                     None,
+                    None,
                 )
                 .await
             }

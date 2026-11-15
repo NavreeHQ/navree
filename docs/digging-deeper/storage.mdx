@@ -700,7 +700,7 @@ impl Module for SandukModule {
 }
 ```
 
-The disk's table is the driver's settings: `DriverContext::settings` reads `storage.disks.<disk>`, `driver` included, so a settings type ignores the keys it does not know, and `ctx.instance()` is the disk's name. The factory runs once per disk at boot:
+The disk's table is the driver's settings: `DriverContext::settings` reads the table of `storage.disks.<disk>` without `driver`, as the configuration gives it or as `StorageModule::for_root` was given it in code, with the configuration's conversions (`"2222"` from the environment fills a `u16`), and `ctx.instance()` is the disk's name. The factory runs once per disk at boot:
 
 ```toml title="config/app.toml"
 [storage]

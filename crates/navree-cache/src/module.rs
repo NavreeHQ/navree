@@ -225,6 +225,7 @@ fn register(m: &mut ModuleBuilder, options: Option<CacheOptions>) {
                         name,
                         format!("cache.{name}"),
                         None,
+                        None,
                     )
                     .await?,
                 ),

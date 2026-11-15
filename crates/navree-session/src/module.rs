@@ -126,6 +126,7 @@ fn register(m: &mut ModuleBuilder, options: Option<SessionOptions>) {
                             name,
                             format!("session.{name}"),
                             None,
+                            None,
                         )
                         .await?
                     }

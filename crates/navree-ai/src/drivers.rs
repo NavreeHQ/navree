@@ -8,9 +8,10 @@ use std::sync::Arc;
 use navree_config::__private::{build_driver, check_registrations, register_driver};
 use navree_config::{DriverContext, DriverName, DriverSlot};
 use navree_kernel::{AppContext, BoxError, ModuleBuilder};
+use serde_json::{Map, Value as Json};
 
-use crate::AiOptions;
 use crate::options::DRIVERS;
+use crate::{AiOptions, ProviderConfig};
 use crate::provider::Driver;
 use crate::provider::public::{AiDriver, PublicDriver};
 
@@ -99,7 +100,8 @@ pub trait ModuleBuilderAiProviderExt {
     /// per such table from its [`DriverContext`]: its settings are the
     /// table (`ai.providers.{table}`, which `ctx.settings()` reads as a
     /// `ProviderConfig` or a type of the driver's own) and its `instance()`
-    /// the table's name.
+    /// the table's name. Given to `AiModule::for_root` in code, the table
+    /// is the `ProviderConfig` given, its keys included.
     ///
     /// A name that is not such a word, a built-in driver's name
     /// (`anthropic`, `openai`, `gemini`, `mistral`, `ollama`, `bedrock`) and
@@ -138,9 +140,13 @@ impl ModuleBuilderAiProviderExt for ModuleBuilder {
 /// of each provider table of `options` whose driver is not built in, from
 /// the registration of that name, keyed by the table's name. A table
 /// naming a driver no module registers is the boot error naming its key.
+/// With `in_code` (options given to `AiModule::for_root`), each driver
+/// reads the table it was given; otherwise the table as the configuration
+/// writes it.
 pub(crate) async fn registered_drivers(
     app: &AppContext,
     options: &AiOptions,
+    in_code: bool,
 ) -> Result<BTreeMap<String, Arc<dyn Driver>>, BoxError> {
     check_registrations(app, &SLOT, None)?;
     let mut drivers: BTreeMap<String, Arc<dyn Driver>> = BTreeMap::new();
@@ -159,6 +165,7 @@ pub(crate) async fn registered_drivers(
             name,
             format!("ai.providers.{table}"),
             Some(table.clone()),
+            in_code.then(|| provider_table(config)),
         )
         .await?;
         drivers.insert(
@@ -167,4 +174,26 @@ pub(crate) async fn registered_drivers(
         );
     }
     Ok(drivers)
+}
+
+/// A provider table given in code, as the settings its driver reads: every
+/// field that is set, its keys included (a `ProviderConfig` never
+/// serializes them).
+fn provider_table(config: &ProviderConfig) -> Json {
+    let mut table = match serde_json::to_value(config) {
+        Ok(Json::Object(table)) => table,
+        _ => Map::new(),
+    };
+    table.retain(|_, value| !value.is_null());
+    let secrets = [
+        ("api_key", &config.api_key),
+        ("secret_access_key", &config.secret_access_key),
+        ("session_token", &config.session_token),
+    ];
+    for (key, secret) in secrets {
+        if let Some(secret) = secret {
+            table.insert(key.to_owned(), Json::String(secret.expose().clone()));
+        }
+    }
+    Json::Object(table)
 }
