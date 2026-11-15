@@ -89,6 +89,21 @@ object WebRules {
     /** Whether a service worker's own request is sent: only to the app's origins and the hosts it names for the web view. */
     fun workerRequest(ours: Boolean, webHost: Boolean): WebRequest = if (ours || webHost) WebRequest.Send else WebRequest.Refuse
 
+    /**
+     * What a web page is missing before it may be shown: the rules for a service
+     * worker's requests, and the script at the start of every document. A page
+     * is shown only when nothing is missing ([guardsInForce]); where the system's
+     * web view is too old to take either, a web region is not shown at all and
+     * the rest of the app works. Each name says what is not there, for the log.
+     */
+    fun missingGuards(workers: Boolean, documents: Boolean): List<String> = buildList {
+        if (!workers) add("the rules for a service worker's requests are not in force")
+        if (!documents) add("the script at the start of every document is not in place")
+    }
+
+    /** Whether a web page may be shown: both guards are in force. */
+    fun guardsInForce(workers: Boolean, documents: Boolean): Boolean = missingGuards(workers, documents).isEmpty()
+
     /** Whether a page that has started loading in the main frame may be shown: only one of the app's origins. */
     fun shown(ours: Boolean, url: String?): Boolean = ours || url == null || url == "about:blank"
 
@@ -179,10 +194,9 @@ object WebRules {
  * by a redirect the web view's callbacks are never told of (a frame's, a
  * posted form's). Call before the first load. Where the system's web view
  * lacks the feature (`WebViewFeature.DOCUMENT_START_SCRIPT`), nothing is
- * added: the request checks of [OriginWebClient] are what holds, and neither
- * the check of a frame reached by a redirect nor the one on sockets and
- * workers exists. That is said once in the log. Answers whether the script
- * was added.
+ * added, and a web page is not shown without it ([WebRules.guardsInForce]).
+ * That is said once here in the log, and every time by the page. Answers
+ * whether the script was added.
  */
 fun guardDocuments(view: WebView, origins: Origins): Boolean = guardDocuments(view, origins, ClientLog.told)
 
@@ -190,7 +204,7 @@ internal fun guardDocuments(view: WebView, origins: Origins, told: Told): Boolea
     if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
         told.once(
             "documents",
-            "this system's web view cannot run a script at the start of a document: a frame reached by a redirect, a socket and a worker are not checked; the checks of each request hold",
+            "this system's web view cannot run a script at the start of a document: a web page is not shown",
         )
         return false
     }
@@ -198,7 +212,7 @@ internal fun guardDocuments(view: WebView, origins: Origins, told: Told): Boolea
         WebViewCompat.addDocumentStartJavaScript(view, WebRules.documentScript(origins.documentOrigins()), setOf("*"))
         true
     } catch (e: Exception) {
-        told.once("documents", "the script at the start of a document could not be added ($e): a frame reached by a redirect, a socket and a worker are not checked")
+        told.once("documents", "the script at the start of a document could not be added ($e): a web page is not shown")
         false
     }
 }
@@ -248,13 +262,19 @@ internal class Told(private val log: (String) -> Unit) {
 }
 
 internal object ClientLog {
-    val told = Told { android.util.Log.w("Navree", it) }
+    val told = Told { say(it) }
+
+    /** A line in the log, every time it is asked for. */
+    fun say(text: String) {
+        android.util.Log.w("Navree", text)
+    }
 }
 
 /**
  * The guard on service workers, as a state that can be tested: [make] sets the
  * rules, and the guard counts as made only when it did. Every call of [ensure]
- * until then tries again; a failure is told once.
+ * until then tries again; a failure is told once, and so is a call before the
+ * guard was armed. A web page is not shown while it is not in force.
  */
 internal class WorkerRules(private val make: (Origins) -> Unit, private val told: Told) {
     private var origins: Origins? = null
@@ -267,15 +287,31 @@ internal class WorkerRules(private val make: (Origins) -> Unit, private val told
         told.again("workers")
     }
 
+    /**
+     * Makes the guard when the main thread has nothing to do: [register] is the
+     * way to ask for that (a handler the main thread's queue calls when idle); the
+     * handler answers false, so it is not called again.
+     */
+    fun whenIdle(register: (() -> Boolean) -> Unit) {
+        register {
+            ensure()
+            false
+        }
+    }
+
     /** Whether the rules are in force: made now if they are not yet. False when nothing was armed or the system's web view cannot take them. */
     fun ensure(): Boolean {
-        val wanted = origins ?: return false
+        val wanted = origins
+        if (wanted == null) {
+            told.once("workers-unarmed", "the guard on service workers was asked for before it was told which origins it is for: it is not in force")
+            return false
+        }
         if (made) return true
         try {
             make(wanted)
             made = true
         } catch (e: Throwable) {
-            told.once("workers", "the rules for a service worker's requests could not be set ($e): a page may register a worker whose requests are not checked; every web page made tries again")
+            told.once("workers", "the rules for a service worker's requests could not be set ($e): a web page is not shown; every web page made tries again")
         }
         return made
     }
@@ -300,10 +336,7 @@ object WorkerGuard {
 
     /** Makes the guard the next time the main thread has nothing to do. Call on the main thread. */
     fun whenIdle() {
-        android.os.Looper.myQueue().addIdleHandler {
-            rules.ensure()
-            false
-        }
+        rules.whenIdle { handler -> android.os.Looper.myQueue().addIdleHandler { handler() } }
     }
 
     /** Makes the guard now if it is not made yet, and says whether it is in force. Call on the main thread. */

@@ -137,4 +137,24 @@ class WebRulesTest {
         assertEquals(WebRequest.Send, WebRules.workerRequest(ours = false, webHost = true))
         assertEquals(WebRequest.Refuse, WebRules.workerRequest(ours = false, webHost = false))
     }
+
+    @Test
+    fun a_web_page_is_shown_only_with_both_guards_in_force() {
+        assertTrue(WebRules.guardsInForce(workers = true, documents = true))
+        assertFalse("no rules for a service worker's requests", WebRules.guardsInForce(workers = false, documents = true))
+        assertFalse("no script at the start of a document", WebRules.guardsInForce(workers = true, documents = false))
+        assertFalse("neither", WebRules.guardsInForce(workers = false, documents = false))
+    }
+
+    @Test
+    fun what_is_missing_is_named_for_the_log() {
+        assertEquals(emptyList<String>(), WebRules.missingGuards(workers = true, documents = true))
+        val workers = WebRules.missingGuards(workers = false, documents = true)
+        assertEquals(1, workers.size)
+        assertTrue(workers.single(), workers.single().contains("service worker"))
+        val documents = WebRules.missingGuards(workers = true, documents = false)
+        assertEquals(1, documents.size)
+        assertTrue(documents.single(), documents.single().contains("start of every document"))
+        assertEquals("both are named, in one answer", 2, WebRules.missingGuards(workers = false, documents = false).size)
+    }
 }

@@ -29,7 +29,10 @@ class WorkerRulesTest {
         val rules = WorkerRules(maker::make, told)
         assertFalse(rules.ensure())
         assertEquals(emptyList<Origins>(), maker.made)
-        assertEquals("nothing failed, so nothing is told", emptyList<String>(), said)
+        assertEquals("not being told is said, once, in the log: $said", 1, said.size)
+        assertTrue(said.single(), said.single().contains("not in force"))
+        assertFalse(rules.ensure())
+        assertEquals("and not again for the next page", 1, said.size)
     }
 
     @Test
@@ -104,5 +107,42 @@ class WorkerRulesTest {
         told.again("workers")
         told.once("workers", "third")
         assertEquals(listOf("first", "other", "third"), said)
+    }
+
+    @Test
+    fun the_guard_is_made_when_the_main_thread_is_idle_and_the_handler_is_not_kept() {
+        val maker = Maker(0)
+        val rules = WorkerRules(maker::make, told)
+        rules.arm(shop)
+        var handler: (() -> Boolean)? = null
+        rules.whenIdle { handler = it }
+        assertEquals("nothing is made until the main thread is idle", emptyList<Origins>(), maker.made)
+        assertEquals("the handler answers that it is not wanted again", false, handler!!())
+        assertEquals(listOf(shop), maker.made)
+        assertTrue("a web page made after it finds the guard in force", rules.ensure())
+        assertEquals("and does not make it again", listOf(shop), maker.made)
+    }
+
+    @Test
+    fun a_guard_that_the_idle_handler_could_not_make_is_tried_again_by_the_next_page() {
+        val maker = Maker(failures = 1)
+        val rules = WorkerRules(maker::make, told)
+        rules.arm(shop)
+        var handler: (() -> Boolean)? = null
+        rules.whenIdle { handler = it }
+        assertEquals(false, handler!!())
+        assertEquals("one failure, told once", 1, said.size)
+        assertTrue(rules.ensure())
+        assertEquals(listOf(shop, shop), maker.made)
+    }
+
+    @Test
+    fun an_idle_handler_before_the_guard_is_armed_makes_nothing_and_does_not_fail() {
+        val maker = Maker(0)
+        val rules = WorkerRules(maker::make, told)
+        var handler: (() -> Boolean)? = null
+        rules.whenIdle { handler = it }
+        assertEquals(false, handler!!())
+        assertEquals(emptyList<Origins>(), maker.made)
     }
 }

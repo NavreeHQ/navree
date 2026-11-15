@@ -22,6 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.navree.client.BuildConfig
 import com.navree.client.core.Failure
+import androidx.compose.runtime.LaunchedEffect
+import com.navree.client.platform.ClientLog
 import com.navree.client.platform.OriginWebClient
 import com.navree.client.platform.Origins
 import com.navree.client.platform.WebRules
@@ -47,6 +49,9 @@ import com.navree.client.webViewToken
  * ends, the page is loaded again once in a new web view, and after that the
  * screen says it failed, with "try again".
  */
+/** The tag of a web view whose script at the start of every document could not be added: it loads nothing. */
+private const val NOT_GUARDED = "not guarded"
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 internal fun WebPage(
@@ -64,9 +69,18 @@ internal fun WebPage(
     var attempt by remember { mutableIntStateOf(0) }
     var gone by remember { mutableIntStateOf(0) }
     var failed by remember(url, serial) { mutableStateOf(!origins.ours(url)) }
+    // A page is not shown without its guards. The rules for a service worker's requests are asked for again
+    // every time a page is made (and by "try again"); the script at the start of every document is added to
+    // the web view itself, so its answer comes from the web view made for this attempt.
+    val workers = remember(url, serial, attempt) { WorkerGuard.ensure() }
+    var documents by remember(url, serial, attempt) { mutableStateOf(true) }
+    val missing = WebRules.missingGuards(workers, documents)
+    LaunchedEffect(url, serial, attempt, missing) {
+        if (missing.isNotEmpty()) ClientLog.say("a web page was not shown: " + missing.joinToString("; "))
+    }
 
     Box(modifier.fillMaxSize()) {
-        if (failed) {
+        if (failed || missing.isNotEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 FailureState(Failure.Protocol) {
                     gone = 0
@@ -79,8 +93,6 @@ internal fun WebPage(
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { context ->
-                        // A page must not register a worker before the guard on workers is in force.
-                        WorkerGuard.ensure()
                         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
                         WebView(context).apply {
                             settings.javaScriptEnabled = true
@@ -96,8 +108,9 @@ internal fun WebPage(
                             CookieManager.getInstance().setAcceptCookie(true)
                             // Cookies of a frame from another site are refused (the system's default, said here).
                             CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
-                            // Before the first load, so it runs in every document of every frame.
-                            guardDocuments(this, origins)
+                            // Before the first load, so it runs in every document of every frame. Without it
+                            // the page is not loaded: `update` below does not load a web view that has this tag.
+                            if (!guardDocuments(this, origins)) tag = NOT_GUARDED
                             webViewClient = OriginWebClient(
                                 origins,
                                 onLink = { link(it) },
@@ -121,7 +134,9 @@ internal fun WebPage(
                     },
                     update = { web ->
                         val wanted = "$serial $url"
-                        if (web.tag != wanted && origins.ours(url)) {
+                        if (web.tag === NOT_GUARDED) {
+                            documents = false
+                        } else if (web.tag != wanted && origins.ours(url)) {
                             web.tag = wanted
                             web.loadUrl(url)
                         }
