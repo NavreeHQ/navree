@@ -26,6 +26,7 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
     private const byte CtrlKey = 0x11;
     private const byte LetterA = 0x41;
     private const byte Digit0 = 0x30;
+    private const byte Escape = 0x1B;
 
     private readonly List<string> log = [];
 
@@ -96,6 +97,9 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
         Foreground();
         ScreenView? before = host.State.FrontScreen;
         FrameworkElement? page = window.CurrentPage;
+        lastSeen = before;
+        lastPage = page;
+        host.StateChanged += OnState;
         await KeyAsync(CtrlKey, LetterA);
         await Task.Delay(300);
         await KeyAsync(0, (byte)(Digit0 + 6));
@@ -106,6 +110,7 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
         Say("the field is " + (ReferenceEquals(again, quantity) ? "the same element" : "a new element") + " and holds '" + again?.Text + "'");
         await KeyAsync(0, Digit0);
         await Task.Delay(700);
+        host.StateChanged -= OnState;
         again = Everything().OfType<TextBox>().FirstOrDefault(box => NameOf(box).StartsWith("Units of Chakla belan", StringComparison.Ordinal));
         Check("the quantity typed is in the field", again?.Text == "60", "the field holds '" + again?.Text + "'; focus is on " + FocusedWords());
         await ShotAsync("press-restock-typed", "60 typed into the quantity of the first row");
@@ -217,6 +222,19 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
         }
 
         await Task.Delay(1200);
+        for (int waited = 0; waited < 9000 && VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Count > 0; waited += 100)
+        {
+            await Task.Delay(100);
+        }
+
+        if (VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Count > 0)
+        {
+            Foreground();
+            await KeyAsync(0, Escape);
+            await Task.Delay(400);
+        }
+
+        Say("popups open when the screen is ready: " + VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Count);
         Foreground();
     }
 
@@ -229,12 +247,14 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
         };
 
     // What of a screen's state is another object after something was done: the parts a screen is drawn again for.
-    private void Compare(ScreenView? before, ScreenView? after)
+    private void Compare(ScreenView? before, ScreenView? after) =>
+        Say("what the screen is drawn again for, changed by the typing: " + Differences(before, after));
+
+    private static string Differences(ScreenView? before, ScreenView? after)
     {
         if (before is null || after is null)
         {
-            Say("the screen: none to compare");
-            return;
+            return before is null && after is null ? "no screen" : "a screen came or went";
         }
 
         List<string> changed = [];
@@ -273,7 +293,25 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
             changed.Add("loading");
         }
 
-        Say("what the screen is drawn again for, changed by the typing: " + (changed.Count == 0 ? "nothing" : string.Join(", ", changed)));
+        if (before.Id != after.Id)
+        {
+            changed.Add("which screen");
+        }
+
+        return changed.Count == 0 ? "nothing" : string.Join(", ", changed);
+    }
+
+    private ScreenView? lastSeen;
+    private FrameworkElement? lastPage;
+    private int updates;
+
+    // Each update of the view state, and whether the window drew the page again for it (its own handler has run by now).
+    private void OnState(ViewState state)
+    {
+        FrameworkElement? page = window.CurrentPage;
+        Say("update " + (++updates).ToString(CultureInfo.InvariantCulture) + ": stage " + state.Nav.Stage + ", changed " + Differences(lastSeen, state.FrontScreen) + ", the page is " + (ReferenceEquals(page, lastPage) ? "the same" : "new"));
+        lastSeen = state.FrontScreen;
+        lastPage = page;
     }
 
     // ---- what is on the screen -------------------------------------------------------------------------
