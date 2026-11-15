@@ -98,34 +98,8 @@ internal sealed class WipeCheck(ShellHost host, ShellWindow window, string folde
 
     private string Describe() =>
         Directory.Exists(webFolder)
-            ? Directory.GetFiles(webFolder, "*", SearchOption.AllDirectories).Length.ToString(CultureInfo.InvariantCulture) + " files, " + NamingTheProbe().ToString(CultureInfo.InvariantCulture) + " of them holding the probe's name"
+            ? Directory.GetFiles(webFolder, "*", SearchOption.AllDirectories).Length.ToString(CultureInfo.InvariantCulture) + " files"
             : "not there";
-
-    // How many files of the folder hold the name the probe stores under: read as bytes, whatever the web view has them open for.
-    private int NamingTheProbe()
-    {
-        byte[] name = System.Text.Encoding.ASCII.GetBytes("navree_probe");
-        int found = 0;
-        foreach (string file in Directory.GetFiles(webFolder, "*", SearchOption.AllDirectories))
-        {
-            try
-            {
-                using FileStream stream = new(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                byte[] bytes = new byte[stream.Length];
-                int read = stream.Read(bytes, 0, bytes.Length);
-                if (bytes.AsSpan(0, read).IndexOf(name) >= 0 || System.Text.Encoding.Unicode.GetString(bytes, 0, read - (read % 2)).Contains("navree_probe", StringComparison.Ordinal))
-                {
-                    found++;
-                }
-            }
-            catch (Exception)
-            {
-                // A file that cannot be read says nothing.
-            }
-        }
-
-        return found;
-    }
 
     private static async Task<bool> Until(Func<bool> condition)
     {
