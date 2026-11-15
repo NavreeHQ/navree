@@ -57,6 +57,14 @@ internal sealed class WipeCheck(ShellHost host, ShellWindow window, string folde
         (string cookie, string stored) = again ? WipeProbe.Said(1) : (string.Empty, string.Empty);
         Check("loaded again it finds its cookie and its stored value", again && cookie.Contains("navree_probe=1", StringComparison.Ordinal) && stored == "1", again ? "cookies '" + cookie + "', stored '" + stored + "'" : "no second report came");
 
+        // The control: the core is told the client ended the session, which starts the app again but does not empty the web view (the client's
+        // wipe does). The web page then finds what it kept, so the empty finding after the real wipe below is the wipe's doing.
+        host.Send(Events.SignedOut);
+        bool restarted = await Until(() => WipeProbe.Reports >= 3);
+        (string kept, string keptStored) = restarted ? WipeProbe.Said(2) : (string.Empty, string.Empty);
+        Check("the control: a restart without the wipe leaves what the web page kept", restarted && kept.Contains("navree_probe=1", StringComparison.Ordinal) && keptStored == "1", restarted ? "cookies '" + kept + "', stored '" + keptStored + "'" : "no report came after the restart");
+        await Settle();
+
         // The web page is left for a screen that is not a web page, shown again, and left once more: the person signs out from a native screen.
         for (int visit = 0; visit < 2; visit++)
         {
