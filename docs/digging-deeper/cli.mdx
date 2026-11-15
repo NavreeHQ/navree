@@ -53,7 +53,7 @@ Commands:
   make:table         Generate a data table in a module (tables/NAME.rs): a row with sortable, searchable and filterable columns, and its handler
   dev                Serve the app, rebuilding and restarting it when the code changes
   check              Check the app: its module graph, then the conformity checks (routes documented, entities classified, workspace isolation, translations, migrations)
-  gate               Run fmt, clippy, the tests, navree check and the front end's typecheck, tests and build, one gate at a time on this machine
+  gate               Run fmt, clippy, the tests, navree check, config:check and the front end's typecheck, tests and build, one gate at a time on this machine
   dock               Run the app's local services (dock.toml) with Docker or Podman
   dock:add           Add a service to dock.toml: postgres, redis, meilisearch, mailpit, minio or nats
   dock:remove        Stop a service and remove it from dock.toml
@@ -74,6 +74,8 @@ Commands:
   skills:install     Install the Navree agent skills into .claude/skills and .agents/skills
   browser:install    Download Chrome for Testing into Navree's cache, for navree-browser
   openapi:client     Export the OpenAPI document and generate the front end's typed client schema (schema.d.ts)
+  native:coverage    Ask each page route as a native client and print its grade (idiom, layout or web) and what is missing; --fail-on makes it a gate
+  native:doctor      Check what a native build needs, without changing anything: the native preview feature, the settings for links, passkeys, push and sign-in, the Android and Apple toolchains
   help               Print this message or the help of the given subcommand(s)
 
 Options:
