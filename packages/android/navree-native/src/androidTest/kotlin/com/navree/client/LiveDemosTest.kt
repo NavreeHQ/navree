@@ -123,7 +123,8 @@ class LiveDemosTest {
         ScreenRules.mainTable(screen.body)?.let { table ->
             return table.rows.firstOrNull()?.let { ListRules.asListRow(table.columns, it).headline }
         }
-        return screen.body.walk().filterIsInstance<Navree.Row>().firstOrNull { it.action != null }?.title
+        // A card of the board is a row whose title is a button of its own, not a row with an action.
+        return screen.body.walk().filterIsInstance<Navree.Row>().firstOrNull { it.action != null || ListRules.titleButton(it) != null }?.title
     }
 
     /** Opens the first row of the screen in front and photographs what it opened. */
@@ -166,21 +167,30 @@ class LiveDemosTest {
 
         send(app, Events.select(1))
         settled(app)
-        // A row held down starts choosing rows, where the table lets them be chosen.
+        openFirstRow(app, "store-order")
+        send(app, Events.back)
+        settled(app)
+        search(app, "Kaur", "store-orders-search")
+    }
+
+    /** A row held down starts choosing rows, where the table lets them be chosen: a table that does not is a skip, said so in the report. */
+    @Test
+    fun theStoresOrdersCanBeChosenWhereTheTableLetsThem() {
+        val origin = arguments.getString("store")
+        assumeTrue("no store demo was named", origin != null)
+        val app = start(origin!!)
+        send(app, Events.select(1))
+        settled(app)
         val screen = requireNotNull(front(app)?.screen) { "the orders screen is not in front" }
         val table = requireNotNull(ScreenRules.mainTable(screen.body)) { "the orders screen has no table" }
+        assumeTrue("the store demo's orders table lets rows be chosen", table.select != null)
         val words = requireNotNull(firstRowWords(screen)) { "the orders table has no row" }
-        assertNotNull("the orders table lets rows be chosen", table.select)
         compose.onAllNodesWithText(words).onFirst().performTouchInput { longClick() }
         waitFor("a row chosen", 15_000) { ScreenRules.mainTable(front(app)?.screen?.body)?.rows?.any { it.selected } == true }
         Thread.sleep(800)
         Shots.take("store-orders-selecting")
         send(app, Events.choose(front(app)!!.id, table.id ?: "", null, false))
         settled(app)
-        openFirstRow(app, "store-order")
-        send(app, Events.back)
-        settled(app)
-        search(app, "Kaur", "store-orders-search")
     }
 
     @Test

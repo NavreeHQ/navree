@@ -80,9 +80,14 @@ class ScreensTest {
 
     /** Waits for the screen in front to show a tree titled `title`, then for drawing to settle. */
     private fun front(session: NavreeSession, title: String) {
-        waitFor("the screen \"$title\"") {
+        try {
+            waitFor("the screen \"$title\"") {
+                val front = session.driver.nav.front?.let { session.driver.screens[it] }
+                (front?.content as? Content.Native)?.screen?.title == title && !front.loading
+            }
+        } catch (e: AssertionError) {
             val front = session.driver.nav.front?.let { session.driver.screens[it] }
-            (front?.content as? Content.Native)?.screen?.title == title && !front.loading
+            throw AssertionError("${e.message}; in front: ${front?.content?.let { it::class.simpleName }} titled ${(front?.content as? Content.Native)?.screen?.title}, loading ${front?.loading}, stage ${session.driver.nav.stage}", e)
         }
         Thread.sleep(600)
         compose.waitForIdle()

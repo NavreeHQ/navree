@@ -86,7 +86,10 @@ object Audit {
         }
         if (clickable && !config.contains(SemanticsProperties.Disabled)) {
             if (named.isEmpty()) faults += "UNNAMED control ${widthDp.toInt()}x${heightDp.toInt()}dp at ${node.boundsInRoot}"
-            if (whole && minOf(touchWidthDp, touchHeightDp) < TARGET_DP - 0.5f && widthDp > 0f) {
+            // Small is what no component widened: a control the component widened to 48 dp and the edge of a scrolling part then cut is not small, it is cut.
+            val smallWide = touchWidthDp < TARGET_DP - 0.5f && touch.width <= node.size.width + 1f
+            val smallTall = touchHeightDp < TARGET_DP - 0.5f && touch.height <= node.size.height + 1f
+            if (whole && (smallWide || smallTall) && widthDp > 0f) {
                 faults += "SMALL ${touchWidthDp.toInt()}x${touchHeightDp.toInt()}dp \"$named\""
             }
         }
