@@ -96,4 +96,11 @@ class WebRulesTest {
         assertTrue("only a web address can pass", script.contains("if(s!=='http'&&s!=='https')return false"))
         assertTrue("it is short: it holds up every load", script.length < 1_500)
     }
+
+    @Test
+    fun a_service_workers_request_goes_only_where_a_pages_loads_do() {
+        assertEquals(WebRequest.Send, WebRules.workerRequest(ours = true, webHost = false))
+        assertEquals(WebRequest.Send, WebRules.workerRequest(ours = false, webHost = true))
+        assertEquals(WebRequest.Refuse, WebRules.workerRequest(ours = false, webHost = false))
+    }
 }

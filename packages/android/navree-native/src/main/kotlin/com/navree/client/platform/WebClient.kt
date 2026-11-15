@@ -1,6 +1,8 @@
 package com.navree.client.platform
 
 import android.graphics.Bitmap
+import android.webkit.ServiceWorkerClient
+import android.webkit.ServiceWorkerController
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -84,6 +86,9 @@ object WebRules {
         else -> WebRequest.Refuse
     }
 
+    /** Whether a service worker's own request is sent: only to the app's origins and the hosts it names for the web view. */
+    fun workerRequest(ours: Boolean, webHost: Boolean): WebRequest = if (ours || webHost) WebRequest.Send else WebRequest.Refuse
+
     /** Whether a page that has started loading in the main frame may be shown: only one of the app's origins. */
     fun shown(ours: Boolean, url: String?): Boolean = ours || url == null || url == "about:blank"
 
@@ -162,6 +167,30 @@ fun guardDocuments(view: WebView, origins: Origins): Boolean {
     } catch (_: Exception) {
         false
     }
+}
+
+/**
+ * Puts the origin rules on the requests of service workers too: a page of the
+ * app may register one, and its requests do not pass through the web view's
+ * client. A worker's request to any origin but the app's (and its named web
+ * hosts) is answered 403. The setting is the process's, made once at start.
+ * Answers whether it was made.
+ */
+fun guardWorkers(origins: Origins): Boolean = try {
+    ServiceWorkerController.getInstance().setServiceWorkerClient(
+        object : ServiceWorkerClient() {
+            override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
+                val url = request.url.toString()
+                return when (WebRules.workerRequest(origins.ours(url), origins.webHost(url))) {
+                    WebRequest.Send -> null
+                    else -> WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                }
+            }
+        },
+    )
+    true
+} catch (_: Throwable) {
+    false
 }
 
 /**
