@@ -25,8 +25,8 @@ use std::sync::{Mutex, PoisonError};
 use bytes::Bytes;
 use http::{HeaderMap, StatusCode};
 use navree_http::response::{IntoResponse, Response};
-use navree_kernel::AppContext;
 use navree_kernel::__private::is_community_plugin;
+use navree_kernel::AppContext;
 
 use crate::assets;
 use crate::node::{AttrValue, Node, Uses};
@@ -510,15 +510,13 @@ fn read_file_name(file: &str) -> Option<FileName<'_>> {
     };
     let (stem, hash) = rest.rsplit_once('-')?;
     let (namespace, name) = stem.split_once('.')?;
-    (is_hash(hash)
-        && navree_kernel::__private::is_namespace(namespace)
-        && is_extension_name(name))
-    .then_some(FileName {
-        namespace,
-        name,
-        hash,
-        ext,
-    })
+    (is_hash(hash) && navree_kernel::__private::is_namespace(namespace) && is_extension_name(name))
+        .then_some(FileName {
+            namespace,
+            name,
+            hash,
+            ext,
+        })
 }
 
 /// Whether `value` is the address of a served extension script: `/_navree/ui/ext/` and a file
@@ -833,7 +831,10 @@ pub(crate) fn checked(ctx: &AppContext) -> Result<Extensions, String> {
             served.push(Served::new(stem, "js", file));
         }
         if let Some(file) = extension.sheet_file() {
-            said.push(format!("stylesheet {} KB", file.bytes().len().div_ceil(1024)));
+            said.push(format!(
+                "stylesheet {} KB",
+                file.bytes().len().div_ceil(1024)
+            ));
             served.push(Served::new(stem, "css", file));
         }
         if let Some(contract) = extension.declared_contract() {
@@ -885,7 +886,12 @@ pub(crate) fn respond(file: &str, request: &HeaderMap, extensions: &Extensions) 
         );
     }
     let known = extensions.served.iter().any(|served| served.stem == stem);
-    if !known && extensions.watched.iter().any(|name| name == asked.namespace) {
+    if !known
+        && extensions
+            .watched
+            .iter()
+            .any(|name| name == asked.namespace)
+    {
         let mut warned = extensions
             .warned
             .lock()
@@ -952,8 +958,14 @@ mod tests {
         assert_eq!(MAP.namespace(), "geo");
         assert_eq!(MAP.name(), "map");
         assert_eq!(MAP.stem(), "geo.map");
-        assert_eq!(MAP.script_file().map(|file| file.hash()), Some("1a2b3c4d5e6f"));
-        assert_eq!(MAP.sheet_file().map(|file| file.bytes()), Some(SHEET.bytes()));
+        assert_eq!(
+            MAP.script_file().map(|file| file.hash()),
+            Some("1a2b3c4d5e6f")
+        );
+        assert_eq!(
+            MAP.sheet_file().map(|file| file.bytes()),
+            Some(SHEET.bytes())
+        );
 
         // A sheet-only extension has no script address, and no contract it was told.
         assert_eq!(BADGE.script_url(), None);
@@ -1202,8 +1214,8 @@ mod tests {
         // A table's rows are one raw string inside an element that carries the bits.
         let table: Node = el("div").uses(Uses::EXTENSION_SHEETS).child(row()).into();
         let found = named(&table);
-        assert_eq!(found.scripts, [map_script.clone()]);
-        assert_eq!(found.sheets, [badge_sheet.clone()]);
+        assert_eq!(found.scripts, std::slice::from_ref(&map_script));
+        assert_eq!(found.sheets, std::slice::from_ref(&badge_sheet));
 
         // The same text outside an element with the bits, or under stored content, names nothing.
         for tree in [
@@ -1213,11 +1225,9 @@ mod tests {
                     .uses(Uses::EXTENSIONS)
                     .child(el("div").flag("data-ui-stored", true).child(row())),
             ),
-            Node::from(
-                el("div")
-                    .uses(Uses::EXTENSIONS)
-                    .child(Node::Static(r#"<b data-ui-ext="/_navree/ui/ext/geo.map-1a2b3c4d5e6f.js"></b>"#)),
-            ),
+            Node::from(el("div").uses(Uses::EXTENSIONS).child(Node::Static(
+                r#"<b data-ui-ext="/_navree/ui/ext/geo.map-1a2b3c4d5e6f.js"></b>"#,
+            ))),
         ] {
             let found = named(&tree);
             assert!(found.scripts.is_empty() && found.sheets.is_empty());
@@ -1231,9 +1241,10 @@ mod tests {
                 el("div").extension(&MAP),
                 el("span").extension(&BADGE),
                 el("p").attr("data-ui-ext", map_script.clone()),
-                el("p")
-                    .uses(Uses::EXTENSIONS)
-                    .attr("data-ui-ext", "https://cdn.example/_navree/ui/ext/geo.map-1a2b3c4d5e6f.js"),
+                el("p").uses(Uses::EXTENSIONS).attr(
+                    "data-ui-ext",
+                    "https://cdn.example/_navree/ui/ext/geo.map-1a2b3c4d5e6f.js",
+                ),
                 el("p")
                     .uses(Uses::EXTENSION_SHEETS)
                     .attr("data-ui-ext-sheet", format!("{badge_sheet}?v=2")),
@@ -1308,7 +1319,13 @@ mod tests {
 
     #[test]
     fn a_file_hash_that_is_not_twelve_hex_digits_fails_the_build() {
-        for bad in ["", "1a2b3c4d5e6", "1a2b3c4d5e6f0", "1A2B3C4D5E6F", "1a2b3c4d5e6g"] {
+        for bad in [
+            "",
+            "1a2b3c4d5e6",
+            "1a2b3c4d5e6f0",
+            "1A2B3C4D5E6F",
+            "1a2b3c4d5e6g",
+        ] {
             assert_eq!(
                 refusal(move || {
                     let _ = ExtensionFile::__new(b"x", bad, None);
