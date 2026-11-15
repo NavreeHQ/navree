@@ -24,6 +24,8 @@ export const body = (doc = document) => gBody.call(doc);
 export const head = (doc = document) => gHead.call(doc);
 /** @param {Document} [doc] @returns {HTMLElement} */
 export const root = (doc = document) => gRoot.call(doc);
+/** Whether a document is a fresh page's: one that starts clean and keeps the toolkit's policy. @param {Document} [doc] */
+export const fresh = (doc) => attr(root(doc), "data-ui-fresh") !== null;
 /** The element that scrolls the page. @returns {HTMLElement} */
 export const scrolling = () => accessor(D, "scrollingElement", "get").call(document) || gRoot.call(document);
 /** A deep copy of `node`, made a node of this document. @param {Node} node @returns {any} */
