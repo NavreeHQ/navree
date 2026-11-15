@@ -144,23 +144,25 @@ impl Core {
         let mut left = false;
         let mut signed_out = false;
         let focuses = ops.iter().any(|op| matches!(op, Op::Focus { .. }));
-        // What the ops that look through the screen ask for together is
-        // bounded: past the bound none of them is applied, and the rest are.
+        // An answer's changes are applied whole or not at all. What its ops
+        // bring is bounded by the screen's largest size, and what the ops
+        // that look through the screen ask for together by `MAX_WORK`: when
+        // either would be passed, none of the ops that change the screen is
+        // applied.
+        let brings = ops
+            .iter()
+            .map(crate::weight::of_op)
+            .fold(0_usize, usize::saturating_add);
         let looking = ops.iter().filter(|op| looks_through(op)).count();
-        let too_much =
-            looking > 0 && !self.screen_fits(id, |held| held.saturating_mul(looking) <= MAX_WORK);
-        if too_much {
-            self.refused_for_size(
-                id,
-                format!(
-                    "{looking} ops that look through the screen were not applied: an answer may ask for at most {MAX_WORK} visits to a node"
-                ),
-            );
+        if (brings > 0 || looking > 0)
+            && !self.screen_fits(id, |held| {
+                held.saturating_add(brings) <= MAX_SCREEN_NODES
+                    && held.saturating_mul(looking) <= MAX_WORK
+            })
+        {
+            return self.answer_refused(id, ops);
         }
         for op in ops {
-            if too_much && looks_through(&op) {
-                continue;
-            }
             match op {
                 Op::Morph { target, node } => self.put(current, &target, node, true),
                 Op::Replace { target, node } => self.put(current, &target, node, false),
@@ -332,6 +334,43 @@ impl Core {
             ),
         );
         false
+    }
+
+    /// An answer whose ops would take the screen past its largest size, or
+    /// ask for more work than an answer may, changes nothing: the person gets
+    /// the failure a screen that could not be read gets, and the screen is
+    /// out of date, so it is fetched again (unless that has failed twice
+    /// running). Of what the answer said, only a sign-out is carried out. True
+    /// when that leads away from the screen.
+    fn answer_refused(&mut self, id: ScreenId, ops: Vec<Op>) -> bool {
+        self.refused_for_size(
+            id,
+            format!(
+                "an answer's ops were not applied: they would take the screen past {MAX_SCREEN_NODES} nodes or ask for more than {MAX_WORK} visits to a node"
+            ),
+        );
+        if let Some(inner) = self.inner.screens.get_mut(&id) {
+            inner.refused = inner.refused.saturating_add(1);
+            inner.stale = inner.refused < 3;
+        }
+        let mut left = false;
+        let mut signed_out = false;
+        for op in ops {
+            match op {
+                Op::SignedOut => {
+                    left = true;
+                    signed_out = true;
+                    self.signed_out_on_purpose();
+                }
+                Op::Navigate { href, .. } if signed_out => {
+                    if let Target::Inside(url) = self.inner.origin.resolve(&href, "/") {
+                        self.inner.land = Some(url);
+                    }
+                }
+                _ => {}
+            }
+        }
+        left
     }
 
     pub(crate) fn too_deep(&mut self, target: &str) {

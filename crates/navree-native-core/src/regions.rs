@@ -549,6 +549,19 @@ impl Core {
                 }
             }
         }
+        // A page the screen had no room for is not the end of the list: it
+        // shows its failed state, with its retry, and keeps where its rows are.
+        if self.inner.size_said {
+            if let Some(state) = self
+                .view
+                .screens
+                .get_mut(&id)
+                .and_then(|view| view.lists.get_mut(list))
+            {
+                state.failed = true;
+            }
+            return self.list_changed(id, list);
+        }
         // An answer that left `more` as it was has no page after it.
         let same = self
             .view

@@ -567,6 +567,18 @@ impl Core {
         } else {
             return;
         }
+        // Rows the screen had no room for are not the start of the list.
+        if self.inner.size_said {
+            if let Some(state) = self
+                .view
+                .screens
+                .get_mut(&id)
+                .and_then(|view| view.lists.get_mut(list))
+            {
+                state.failed_before = true;
+            }
+            return self.list_changed(id, list);
+        }
         // An answer that left `before` as it was has nothing before it.
         let same = self.view.screens.get(&id).and_then(now).as_deref() == Some(was);
         if same {

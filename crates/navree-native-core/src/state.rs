@@ -842,6 +842,10 @@ pub(crate) struct ScreenInner {
     /// what the tree holds, so it is counted afresh before anything is
     /// refused for it.
     pub weight: usize,
+    /// How many answers in a row were refused for their size: past two the
+    /// screen is not asked for again on their account, so a server that
+    /// answers so every time is not asked again and again.
+    pub refused: u8,
     pub form_ids: BTreeSet<String>,
     pub field_ids: BTreeSet<String>,
     /// The id the server gave each form, by the form's id here.

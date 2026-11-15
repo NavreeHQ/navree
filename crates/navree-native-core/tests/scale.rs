@@ -436,13 +436,18 @@ fn a_screen_has_a_largest_size_and_a_live_list_stops_asking_there() {
             &json!({"navree": 1, "build": "b1", "vocab": 0, "ops": [
                 {"op": "merge", "target": "orders", "since": answers.to_string(), "at": "end", "more": true, "nodes": nodes}]}),
         );
+        // What the list asks for is what changed in it.
         asked = update.effects.iter().find_map(|effect| match effect {
-            Effect::Fetch(request) => Some(request.request),
+            Effect::Fetch(request) if request.url.contains("/orders/changes") => {
+                Some(request.request)
+            }
             _ => None,
         });
         if answers == 5 {
             // The fifth would take the screen to nearly five times what one
-            // answer may hold: it is not applied, it is said, and nothing more is asked.
+            // answer may hold: it is not applied, it is said, and no more
+            // changes are asked for (the screen itself is fetched again, as
+            // an answer that failed leaves it out of date).
             assert_eq!(asked, None, "{:?}", update.effects);
             assert!(
                 update
@@ -509,4 +514,131 @@ fn naming_what_an_answer_repeats_costs_what_it_repeats() {
     assert_eq!(core.view().screens[&screen].forms.len(), 30_000);
     println!("30,000 forms of one id: {took:?}");
     assert!(took.as_secs() < 20, "naming the forms took {took:?}");
+}
+
+/// A screen of the largest size: ninety-nine thousand nine hundred and ninety
+/// rows, and three more answers of as many. The list may say where more rows
+/// are.
+fn full_screen(more: Option<&str>) -> (Core, u64) {
+    let (mut core, screen) = screen_of(99_990);
+    if let Some(more) = more {
+        // The list names its next page.
+        let asked = request_of(&core.send(Event::Refresh { screen }));
+        answer(
+            &mut core,
+            asked,
+            &json!({"navree": 1, "build": "b1", "vocab": 1, "screen": {"title": "Orders", "body": {
+                "t": "stack", "children": [
+                    {"t": "field", "id": "note", "name": "note", "input": {"t": "text"}},
+                    {"t": "list", "id": "orders", "more": more, "children": (0..99_990)
+                        .map(|number| json!({"t": "row", "id": format!("order-{number}"), "title": "CS"}))
+                        .collect::<Vec<Value>>()}]}}}),
+        );
+    }
+    for round in 0..3 {
+        let rows: Vec<Value> = (0..99_990)
+            .map(
+                |number| json!({"t": "row", "id": format!("more-{round}-{number}"), "title": "CS"}),
+            )
+            .collect();
+        ops_answer(
+            &mut core,
+            screen,
+            json!([{"op": "append", "target": "orders", "nodes": rows, "more": more}]),
+        );
+    }
+    (core, screen)
+}
+
+fn list_rows(core: &Core, screen: u64) -> Vec<Value> {
+    let content = serde_json::to_value(&core.view().screens[&screen].content).unwrap();
+    content["screen"]["body"]["children"][1]["children"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// An answer's changes are applied whole or not at all: one that would take
+/// the screen past its largest size leaves it as it was, marks it out of date
+/// (it is fetched again), and says so.
+#[test]
+fn an_answer_that_would_pass_the_largest_screen_changes_nothing() {
+    let (mut core, screen) = full_screen(None);
+    let before = list_rows(&core, screen).len();
+    assert_eq!(before, 4 * 99_990);
+    let rows: Vec<Value> = (0..50)
+        .map(|number| json!({"t": "row", "id": format!("late-{number}"), "title": "CS"}))
+        .collect();
+    let update = ops_answer(
+        &mut core,
+        screen,
+        json!([
+            {"op": "remove", "target": "order-5"},
+            {"op": "append", "target": "orders", "nodes": rows},
+            {"op": "toast", "text": "Saved"}
+        ]),
+    );
+    let after = list_rows(&core, screen);
+    assert_eq!(
+        after.len(),
+        before,
+        "the remove was applied without the append"
+    );
+    assert!(after.iter().any(|row| row["id"] == "order-5"));
+    assert!(
+        update
+            .effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::Report { what, .. } if what == "size")),
+        "{:?}",
+        update.effects
+    );
+    // The screen is out of date: it is asked for again.
+    assert!(
+        update.effects.iter().any(
+            |effect| matches!(effect, Effect::Fetch(request) if request.url == "https://shop.example/")
+        ),
+        "{:?}",
+        update.effects
+    );
+    // And the toast of an answer that failed is not shown beside its failure.
+    assert!(
+        !update.effects.iter().any(
+            |effect| matches!(effect, Effect::Message(message) if message.text.as_deref() == Some("Saved"))
+        ),
+        "{:?}",
+        update.effects
+    );
+}
+
+/// A list that asked for more rows and was refused is not at its end: it
+/// shows its failed state, with its retry, and keeps where the rows are.
+#[test]
+fn a_page_the_screen_has_no_room_for_leaves_the_list_failed_and_not_finished() {
+    let (mut core, screen) = full_screen(Some("/orders?cursor=1"));
+    let asked = request_of(&core.send(Event::More {
+        screen,
+        id: "orders".to_owned(),
+        before: false,
+    }));
+    let rows: Vec<Value> = (0..99_999)
+        .map(|number| json!({"t": "row", "id": format!("next-{number}"), "title": "CS"}))
+        .collect();
+    answer(
+        &mut core,
+        asked,
+        &json!({"navree": 1, "build": "b1", "vocab": 1, "ops": [
+            {"op": "append", "target": "orders", "nodes": rows, "more": "/orders?cursor=2"}]}),
+    );
+    let view = core.view();
+    assert!(
+        view.screens[&screen].lists["orders"].failed,
+        "the list shows its failure"
+    );
+    let content = serde_json::to_value(&view.screens[&screen].content).unwrap();
+    assert_eq!(
+        content["screen"]["body"]["children"][1]["more"], "/orders?cursor=1",
+        "the list keeps where its rows are"
+    );
+    assert_eq!(list_rows(&core, screen).len(), 4 * 99_990);
 }

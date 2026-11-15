@@ -103,6 +103,13 @@ pub(crate) fn of_rows<'a>(rows: impl IntoIterator<Item = &'a TableRow>) -> usize
     tally.total
 }
 
+/// What an op brings.
+pub(crate) fn of_op(op: &Op) -> usize {
+    let mut tally = Tally::new(usize::MAX);
+    tally.op(op);
+    tally.total
+}
+
 /// What a whole screen takes.
 pub(crate) fn of_screen(screen: &Screen) -> usize {
     let mut tally = Tally::new(usize::MAX);
