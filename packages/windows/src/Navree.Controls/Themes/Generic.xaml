@@ -355,7 +355,6 @@
                             <Border x:Name="PART_HeaderHost"
                                     Grid.Row="1"
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                    CornerRadius="3,3,0,0"
                                     Height="40" />
 
                             <Grid x:Name="PART_ListBand"

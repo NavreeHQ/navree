@@ -2,11 +2,11 @@
 # says it is ready (a file named <id>.ready in the output folder), answers with <id>.taken, and
 # reads the pictures of the scenarios that mark their parts with colours.
 #
-#   powershell -File run-gallery.ps1 -Exe <Navree.Gallery.exe> -OutDir <folder> [-Run table,mirror,stick,anchor]
+#   powershell -File run-gallery.ps1 -Exe <Navree.Gallery.exe> -OutDir <folder> [-Run table,pointer,stick,anchor]
 param(
     [Parameter(Mandatory = $true)][string]$Exe,
     [Parameter(Mandatory = $true)][string]$OutDir,
-    [string]$Run = 'table,mirror,stick,anchor',
+    [string]$Run = 'table,pointer,stick,anchor',
     [int]$Seconds = 420
 )
 

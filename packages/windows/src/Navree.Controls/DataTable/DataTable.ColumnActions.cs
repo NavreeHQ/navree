@@ -47,6 +47,62 @@ public sealed partial class DataTable
     /// <summary>The width a resize strip has for the pointer last seen.</summary>
     internal double GripWidth => gripWidth;
 
+    private DataTableHeaderCell? reordering;
+    private int dropAt;
+
+    /// <summary>A pointer lifted a heading to move its column.</summary>
+    internal void ReorderStarted(DataTableHeaderCell cell)
+    {
+        reordering = cell;
+        dropAt = cell.GridColumn;
+        Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.SetIsTranslationEnabled(cell, true);
+        cell.Opacity = 0.8;
+        Canvas.SetZIndex(cell, 10);
+    }
+
+    /// <summary>The pointer moved with a lifted heading, by this much since it began, in the window's coordinates.</summary>
+    internal void ReorderMoved(DataTableHeaderCell cell, double dx)
+    {
+        if (reordering is null || cell.GridColumn < 0 || cell.GridColumn >= shown.Count)
+        {
+            return;
+        }
+
+        double logical = FlowDirection == FlowDirection.RightToLeft ? -dx : dx;
+        cell.Translation = new System.Numerics.Vector3((float)logical, 0, 0);
+        ShownColumn dragged = shown[cell.GridColumn];
+        double centre = dragged.Placed.X + (dragged.Placed.Width / 2) + logical;
+        List<double> centres = shown.Select(s => s.Placed.X + (s.Placed.Width / 2)).ToList();
+        int applied = layout?.FrozenStartApplied ?? 0;
+        int endCount = shown.Count(s => s.Placed.Group == ColumnGroup.FrozenEnd);
+        (int from, int to) = dragged.Placed.Group switch
+        {
+            ColumnGroup.FrozenStart => (0, applied - 1),
+            ColumnGroup.FrozenEnd => (shown.Count - endCount, shown.Count - 1),
+            _ => (applied, shown.Count - endCount - 1),
+        };
+        dropAt = ColumnOrder.DropIndex(cell.GridColumn, centre, centres, from, Math.Max(from, to));
+    }
+
+    /// <summary>The pointer let go of a lifted heading.</summary>
+    internal void ReorderEnded(DataTableHeaderCell cell, bool keep)
+    {
+        cell.Translation = System.Numerics.Vector3.Zero;
+        cell.Opacity = 1;
+        Canvas.SetZIndex(cell, 0);
+        reordering = null;
+        if (!keep || cell.GridColumn < 0 || dropAt == cell.GridColumn || dropAt < 0 || dropAt >= shown.Count)
+        {
+            return;
+        }
+
+        DataTableColumn column = ColumnAt(cell.ColumnIndex);
+        List<string> all = FullOrder();
+        string target = shown[dropAt].Column.Key;
+        columnOrder = [.. ColumnOrder.Move(all, all.IndexOf(column.Key), all.IndexOf(target))];
+        ColumnsChangedByPerson(Announcements.ColumnMoved(column.Header, dropAt + 1, shown.Count));
+    }
+
     private string KeyOf(DataTableHeaderCell cell) => ColumnAt(cell.ColumnIndex).Key;
 
     // The keys that work on a heading: widen and narrow, move, fit, the menu.

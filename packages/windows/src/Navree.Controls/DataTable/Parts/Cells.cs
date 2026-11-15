@@ -76,6 +76,9 @@ public sealed class DataTableHeaderCell : Control
     private bool over;
     private bool pressed;
     private bool menuAvailable;
+    private bool pressedForDrag;
+    private bool dragging;
+    private double dragStartX;
     private bool resizable;
     private ResizeGrip? grip;
     private UIElement? options;
@@ -182,6 +185,35 @@ public sealed class DataTableHeaderCell : Control
         pressed = true;
         UpdateState();
         Row?.Owner?.HeaderPressed(this, e);
+        Microsoft.UI.Input.PointerPoint point = e.GetCurrentPoint(null);
+        if (e.Pointer.PointerDeviceType != Microsoft.UI.Input.PointerDeviceType.Touch && point.Properties.IsLeftButtonPressed)
+        {
+            pressedForDrag = true;
+            dragStartX = point.Position.X;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerMoved(PointerRoutedEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        if (!pressedForDrag)
+        {
+            return;
+        }
+
+        double moved = e.GetCurrentPoint(null).Position.X - dragStartX;
+        if (!dragging && Math.Abs(moved) > 4 && CapturePointer(e.Pointer))
+        {
+            dragging = true;
+            Row?.Owner?.ReorderStarted(this);
+        }
+
+        if (dragging)
+        {
+            Row?.Owner?.ReorderMoved(this, moved);
+            e.Handled = true;
+        }
     }
 
     /// <inheritdoc />
@@ -190,6 +222,26 @@ public sealed class DataTableHeaderCell : Control
         base.OnPointerReleased(e);
         pressed = false;
         UpdateState();
+        pressedForDrag = false;
+        if (dragging)
+        {
+            dragging = false;
+            ReleasePointerCapture(e.Pointer);
+            Row?.Owner?.ReorderEnded(this, keep: true);
+            e.Handled = true;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerCaptureLost(PointerRoutedEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        pressedForDrag = false;
+        if (dragging)
+        {
+            dragging = false;
+            Row?.Owner?.ReorderEnded(this, keep: false);
+        }
     }
 
     /// <inheritdoc />
