@@ -254,6 +254,25 @@ every `@navree/*` package carries the same version.
 
 - Helm reports the real error when the app's templates cannot be built. It used to stop the boot
   saying the app needs `ViewModule`, although the app had it.
+- Navree Native: a failure inside the native core stops it for good and drops what it had queued;
+  freeing the core during a call waits for the call.
+- Navree Native: an answer past `MAX_BODY` (8 MiB), `MAX_NODES` (100,000, counting rows, items and
+  points), `MAX_OPS` (1,000) or `MAX_ID` (256 bytes) fails as one that could not be read; an answer
+  whose ops would take a screen past `MAX_SCREEN_NODES` (400,000) or ask more than `MAX_WORK`
+  changes nothing, and what costs nothing in it (a toast, a move) is still carried out.
+- Navree Native: a field's change may only change what the screen shows and send its own form to
+  its own address; copying, another form, a request, a device call and going somewhere wait for a
+  tap. A field whose `changed` did one of those now does nothing and reports it: it needs a button.
+- Navree Native: mail, the dialler, messages and maps open only from a tap; a redirect or an op by
+  itself opens only a web page; a `tel:` or `sms:` address leaves without the spaces of its number.
+- Navree Native: nothing of a person is drawn or put back before this launch's shell names them: a
+  kept shell draws the app's name and top-level destinations only; when the shell's request does
+  not get through the bars stay and it is asked for again; a snapshot belongs to a person's id and
+  keeps typed words only of kinds that are safe to keep. Restoring a person's place after the
+  system ended the app needs the server to name the person by id (`x-navree-person`, which the
+  framework's own sign-in sends).
+- Navree Native: places, routes and covers are compared by origin and path; a share's and a
+  passkey's addresses are whole addresses on the app's origin or left out.
 
 ## [1.2.2] - 2026-11-14
 
