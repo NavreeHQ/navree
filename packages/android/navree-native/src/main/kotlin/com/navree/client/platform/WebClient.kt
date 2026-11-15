@@ -124,7 +124,8 @@ object WebRules {
      * `Worker` and `SharedWorker`, which are not requests the web view's client
      * is asked about: one is made only for an address on the origins (so never
      * from a `blob:` or `data:` address). It holds for the scripts of the
-     * document and of its frames. It does not reach into a worker: a script
+     * document and of its frames that are given a document, not the empty first
+     * document of a frame the page makes and has not navigated. It does not reach into a worker: a script
      * that already runs in a worker from one of the app's addresses opens what
      * it likes, and so does a service worker.
      */
