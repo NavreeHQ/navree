@@ -43,7 +43,7 @@ pub fn themed_shell() -> Shell {
   call `Theme::custom`, which refuses text that fails WCAG AA.
 - Store a choice with `Appearance::to_value()` and read it back with
   `Appearance::parse`. Charts and status read the tokens `--chart-1` to
-  `--chart-5`, `--success`, `--amber`, `--danger` and `--info`; see
+  `--chart-8`, `--success`, `--amber`, `--danger` and `--info`; see
   [Foundations](https://navree.com/docs/ui/foundations/) and
   `references/tokens.md` of `navree-design-to-ui`.
 

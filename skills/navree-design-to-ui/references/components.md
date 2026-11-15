@@ -104,9 +104,11 @@ is dropped.
 | Page links under a static list | `Pagination::new(page, pages, href_fn)` |
 | Icon | `icons::NAME` on a component (`.icon(..)`); `icon(icons::NAME)` as a node, hidden from screen readers |
 
-Icons are lucide's, a fixed set of 145 in `src/icons.rs` (`icons::PLUS`,
-`icons::HANDSHAKE`, ...). An icon the design uses that isn't in the set is
-a gap: the set grows in the toolkit, not in the app.
+Icons are lucide's, all 2,019 of them, in `src/icons/lucide.rs`
+(`icons::PLUS`, `icons::HANDSHAKE`, ...; `lucide!("mail-open")` takes a
+name as lucide.dev writes it). An icon the design uses that isn't lucide's is
+the app's own: `icon_file!` and `icon_set!` compile it from an SVG file
+(https://navree.com/docs/ui/icons/).
 
 ## Actions
 
