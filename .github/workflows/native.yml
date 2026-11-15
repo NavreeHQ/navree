@@ -491,8 +491,8 @@ jobs:
               } catch { "not hidden: $folder ($($_.Exception.Message))" }
             } else { "not there: $folder" }
           }
-          # Visual Studio's installer leaves a machine-wide NuGet source that points into its own folder.
-          $offline = Get-ChildItem "${env:ProgramFiles(x86)}\NuGet\Config" -Filter '*Offline*' -ErrorAction SilentlyContinue
+          # Visual Studio's installer leaves machine-wide NuGet settings (a source and a fallback folder) that point into its own folders.
+          $offline = Get-ChildItem "${env:ProgramFiles(x86)}\NuGet\Config" -Filter 'Microsoft.VisualStudio.*.config' -ErrorAction SilentlyContinue
           foreach ($config in $offline) {
             Rename-Item -LiteralPath $config.FullName -NewName ($config.Name + '.hidden')
             "hidden: $($config.FullName)"
