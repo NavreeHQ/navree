@@ -161,20 +161,4 @@ internal static class ContrastColours
             }
         }
     }
-
-    /// <summary>The settings, to hear of a change.</summary>
-    internal static Windows.UI.ViewManagement.AccessibilitySettings? Settings
-    {
-        get
-        {
-            try
-            {
-                return access ??= new Windows.UI.ViewManagement.AccessibilitySettings();
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-        }
-    }
 }

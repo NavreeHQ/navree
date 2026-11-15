@@ -52,6 +52,7 @@ public sealed partial class DataTable
     private bool stickyAttached;
     private readonly MetricsWatch metricsWatch = new();
     private XamlRoot? watchedRoot;
+    private Microsoft.UI.System.ThemeSettings? themeSettings;
 
     /// <summary>The scroll view the rows are in; null before the template is made.</summary>
     internal ScrollView? Scroller => scroll;
@@ -208,10 +209,12 @@ public sealed partial class DataTable
             // The setting cannot be watched here; the metrics are read again at the next reset.
         }
 
-        if (ContrastColours.Settings is { } colours)
+        // The contrast colours are heard of through the settings of the window: the event of the settings class that needs a core window
+        // is not raised for a desktop window.
+        if (themeSettings is null && XamlRoot?.ContentIslandEnvironment is { } environment)
         {
-            colours.HighContrastChanged -= OnHighContrastChanged;
-            colours.HighContrastChanged += OnHighContrastChanged;
+            themeSettings = Microsoft.UI.System.ThemeSettings.CreateForWindowId(environment.AppWindowId);
+            themeSettings.Changed += OnHighContrastChanged;
         }
 
         if (XamlRoot is { } root)
@@ -229,9 +232,10 @@ public sealed partial class DataTable
             uiSettings.TextScaleFactorChanged -= OnTextScaleChanged;
         }
 
-        if (ContrastColours.Settings is { } colours)
+        if (themeSettings is not null)
         {
-            colours.HighContrastChanged -= OnHighContrastChanged;
+            themeSettings.Changed -= OnHighContrastChanged;
+            themeSettings = null;
         }
 
         if (watchedRoot is not null)
@@ -246,7 +250,7 @@ public sealed partial class DataTable
         DispatcherQueue.TryEnqueue(MetricsMayHaveChanged);
 
     // The contrast colours were turned on or off while the table is in the tree: every part is drawn in the state it is in again.
-    private void OnHighContrastChanged(Windows.UI.ViewManagement.AccessibilitySettings sender, object args) =>
+    private void OnHighContrastChanged(Microsoft.UI.System.ThemeSettings sender, object args) =>
         DispatcherQueue.TryEnqueue(() =>
         {
             if (loaded && templateWired)
