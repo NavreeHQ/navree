@@ -2393,6 +2393,7 @@ impl Core {
     fn settle(&mut self) -> Update {
         self.fail_unsent();
         self.inner.refusal_said = false;
+        self.inner.size_said = false;
         self.ensure_front();
         let front = self.front();
         let stacked = self.view.front_stack().len() > 1;

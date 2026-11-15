@@ -1016,6 +1016,9 @@ pub(crate) struct Inner {
     pub synthetic: bool,
     /// An address an answer gave did not read, and that was said, in this event.
     pub refusal_said: bool,
+    /// Something an answer brought was refused for its size, and that was
+    /// said, in this event.
+    pub size_said: bool,
     /// The kinds of thing a field's change asked for and was refused, each
     /// said once.
     pub change_refused: BTreeSet<&'static str>,

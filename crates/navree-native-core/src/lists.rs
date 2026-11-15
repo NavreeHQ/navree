@@ -183,6 +183,9 @@ impl Core {
         at: Edge,
         more: bool,
     ) {
+        if !self.room(id, crate::weight::of_nodes(&nodes)) {
+            return;
+        }
         let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&id),
             self.inner.screens.get_mut(&id),
@@ -661,6 +664,9 @@ impl Core {
             };
             return self.add_rows(id, target, page);
         }
+        if !self.room(id, crate::weight::of_rows(&rows)) {
+            return;
+        }
         let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&id),
             self.inner.screens.get_mut(&id),
@@ -716,6 +722,9 @@ impl Core {
     /// Puts `row` in place of the table row `target`. Whether the person
     /// chose the row, and whether they opened what is under it, stay as they were.
     pub(crate) fn table_row(&mut self, id: ScreenId, target: &str, mut row: TableRow) {
+        if !self.room(id, crate::weight::of_rows([&row])) {
+            return;
+        }
         let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&id),
             self.inner.screens.get_mut(&id),

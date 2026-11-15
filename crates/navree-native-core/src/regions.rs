@@ -581,6 +581,9 @@ impl Core {
 
     /// Adds the rows of the next page to a table, and takes the page's `more`.
     pub(crate) fn add_rows(&mut self, id: ScreenId, list: &str, mut page: Table) {
+        if !self.room(id, crate::weight::of_rows(&page.rows)) {
+            return;
+        }
         let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&id),
             self.inner.screens.get_mut(&id),

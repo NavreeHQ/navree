@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use navree_native::action::{Present, State};
 use navree_native::node::Node;
 use navree_native::op::Toast;
-use navree_native::{MAX_WORK, Op};
+use navree_native::{MAX_SCREEN_NODES, MAX_WORK, Op};
 
 use crate::Core;
 use crate::effect::{Change, Effect};
@@ -305,10 +305,33 @@ impl Core {
     }
 
     /// Says that something an answer brought was not applied for its size: a
-    /// report for the developer, and the passing notice that it failed.
+    /// report for the developer, and the passing notice that it failed. Once
+    /// for an event, whatever the answer brought.
     pub(crate) fn refused_for_size(&mut self, id: ScreenId, detail: String) {
-        self.report("size", detail);
-        self.failed(Failure::Protocol, Some(id));
+        if !std::mem::replace(&mut self.inner.size_said, true) {
+            self.report("size", detail);
+            self.failed(Failure::Protocol, Some(id));
+        }
+    }
+
+    /// Makes room on the screen `id` for what weighs `incoming`: true, and
+    /// the screen's weight grows by it. When the screen would pass
+    /// [`MAX_SCREEN_NODES`] it is false, and said, and what was to come is not
+    /// applied.
+    pub(crate) fn room(&mut self, id: ScreenId, incoming: usize) -> bool {
+        if self.screen_fits(id, |held| held.saturating_add(incoming) <= MAX_SCREEN_NODES) {
+            if let Some(inner) = self.inner.screens.get_mut(&id) {
+                inner.weight = inner.weight.saturating_add(incoming);
+            }
+            return true;
+        }
+        self.refused_for_size(
+            id,
+            format!(
+                "what an answer brought was not applied: the screen would hold more than {MAX_SCREEN_NODES} nodes"
+            ),
+        );
+        false
     }
 
     pub(crate) fn too_deep(&mut self, target: &str) {
@@ -320,6 +343,9 @@ impl Core {
 
     /// Puts `node` in place of the node `target`.
     fn put(&mut self, id: ScreenId, target: &str, node: Node, morph: bool) {
+        if !self.room(id, crate::weight::of_nodes([&node])) {
+            return;
+        }
         let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&id),
             self.inner.screens.get_mut(&id),
@@ -446,6 +472,9 @@ impl Core {
         at_end: bool,
         more: Option<Option<String>>,
     ) {
+        if !self.room(id, crate::weight::of_nodes(&nodes)) {
+            return;
+        }
         let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&id),
             self.inner.screens.get_mut(&id),

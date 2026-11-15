@@ -87,6 +87,22 @@ pub(crate) fn own(node: &Node) -> usize {
     1 + parts(node)
 }
 
+/// What `nodes` and the nodes under them take.
+pub(crate) fn of_nodes<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> usize {
+    let mut tally = Tally::new(usize::MAX);
+    tally.nodes(nodes);
+    tally.total
+}
+
+/// What `rows` take: each, and the nodes in it.
+pub(crate) fn of_rows<'a>(rows: impl IntoIterator<Item = &'a TableRow>) -> usize {
+    let mut tally = Tally::new(usize::MAX);
+    for row in rows {
+        tally.row(row);
+    }
+    tally.total
+}
+
 /// What a whole screen takes.
 pub(crate) fn of_screen(screen: &Screen) -> usize {
     let mut tally = Tally::new(usize::MAX);
