@@ -19,16 +19,18 @@ public static class KindHooks
     /// <param name="colour">The page's colour.</param>
     /// <param name="fallback">The hue to take when there is none.</param>
     /// <param name="opacity">How strong the brush is.</param>
+    /// <param name="owner">The element the brush is for, whose theme it follows; the application's theme when none is given.</param>
     /// <returns>The brush.</returns>
-    public static Brush HueBrush(Models.Colour? colour, Models.Hue fallback, double opacity = 1) =>
-        new Palette(new Microsoft.UI.Xaml.Controls.Border()).Fill(colour, fallback, opacity);
+    public static Brush HueBrush(Models.Colour? colour, Models.Hue fallback, double opacity = 1, FrameworkElement? owner = null) =>
+        new Palette(owner ?? new Microsoft.UI.Xaml.Controls.Border()).Fill(colour, fallback, opacity);
 
     /// <summary>A brush for words in a part's colour, as dark as they need to be to read on a light ground.</summary>
     /// <param name="colour">The page's colour.</param>
     /// <param name="fallback">The hue to take when there is none.</param>
+    /// <param name="owner">The element the brush is for, whose theme it follows; the application's theme when none is given.</param>
     /// <returns>The brush.</returns>
-    public static Brush HueWords(Models.Colour? colour, Models.Hue fallback) =>
-        new Palette(new Microsoft.UI.Xaml.Controls.Border()).Words(colour, fallback);
+    public static Brush HueWords(Models.Colour? colour, Models.Hue fallback, FrameworkElement? owner = null) =>
+        new Palette(owner ?? new Microsoft.UI.Xaml.Controls.Border()).Words(colour, fallback);
 
     internal static UIElement DrawIcon(Models.Icon icon, double size, Windows.UI.Color colour) =>
         Icon?.Invoke(icon, size, colour)
@@ -44,7 +46,7 @@ public static class KindHooks
 /// <summary>Arcs the rings and gauges share.</summary>
 internal static class RingArcs
 {
-    /// <summary>One arc of a ring in the manner of the system's activity rings: its track all round in the hue made faint, the value from twelve o'clock clockwise with round ends, and past the goal a second lap over the first.</summary>
+    /// <summary>One arc of a ring: its track all round in the hue made faint, the value from twelve o'clock clockwise with round ends, and past the goal a second lap over the first.</summary>
     internal static void Draw(PlotCanvas canvas, double cx, double cy, double radius, double stroke, RingRules.Sweep? sweep, Windows.UI.Color start, Windows.UI.Color end)
     {
         canvas.Shapes.Put(Ink.Stroked(Ink.Arc(cx, cy, radius, -90, 359.9), canvas.Palette.Track(start), stroke), 0, 0);
@@ -63,7 +65,7 @@ internal static class RingArcs
             }
 
             Navree.Design.Pt tip = Ink.Polar(cx, cy, radius, -90 + (360 * sweep.Part));
-            Microsoft.UI.Xaml.Shapes.Ellipse head = Ink.Disc(stroke, Palette.Mark(end), Palette.Mark(Microsoft.UI.Colors.Black, 0.35), 1);
+            Microsoft.UI.Xaml.Shapes.Ellipse head = Ink.Disc(stroke, Palette.Mark(end), canvas.Palette.Card, 1);
             canvas.Shapes.Put(head, tip.X - (stroke / 2), tip.Y - (stroke / 2));
         }
         else if (sweep.Part > 0)
@@ -99,15 +101,15 @@ public sealed partial class RingView : KindControl
         double ideal = RingRules.Diameter(Prominence) * TextScale.Capped(RingRules.Growth(Prominence));
         StackPanel stack = new() { Spacing = Prominence == Models.Prominence.High ? 10 : 6 };
         string name = ring.Label ?? string.Empty;
-        string value = SpeechRules.Value(ring.Summary ?? (ring.Value is null ? "Not measured" : RingRules.Centre(ring)), ring.Label);
+        string value = RingRules.Said(SpeechRules.Value(ring.Summary ?? (ring.Value is null ? KindStrings.NotMeasured : RingRules.Centre(ring)), ring.Label), ring.Value, ring.Max);
         PlotSurface plot = new()
         {
             Height = ideal,
             MaxWidth = ideal,
             Ideal = ideal,
             AccessName = string.IsNullOrEmpty(name) ? value : SpeechRules.Fact(name, value),
-            AccessType = "ring",
-            Range = ring.Value is double current ? (0, ring.Max, current) : null,
+            AccessType = KindStrings.TypeRing,
+            Range = RingRules.Range(ring.Value, ring.Max),
         };
         plot.Painter = Paint;
         stack.Children.Add(plot);
@@ -147,13 +149,13 @@ public sealed partial class RingView : KindControl
         TextBlock value = Ink.Words(RingRules.Centre(ring), size, canvas.Palette.Primary, strong: true);
         TextBlock? unit = ring.Value is not null && ring.Unit is not null ? Ink.Words(ring.Unit, size * 0.42, canvas.Palette.Secondary, strong: true) : null;
         double wide = Ink.Measured(value).Width + (unit is null ? 0 : Ink.Measured(unit).Width + 2);
-        if (wide > room)
+        double shrink = TextFit.Shrink(room, wide, 0.4);
+        if (shrink < 1)
         {
-            double shrink = Math.Max(room / wide, 0.4);
-            value.FontSize = size * shrink;
+            value.FontSize = Math.Max(size * shrink, 1);
             if (unit is not null)
             {
-                unit.FontSize = size * 0.42 * shrink;
+                unit.FontSize = Math.Max(size * 0.42 * shrink, 1);
             }
         }
 
@@ -218,7 +220,7 @@ public sealed partial class RingView : KindControl
     }
 }
 
-/// <summary>Concentric rings, the first outside, drawn as the system's activity rings, with the values over their goals beside them in each ring's colour.</summary>
+/// <summary>Concentric rings, the first outside, with the values over their goals beside them in each ring's colour.</summary>
 public sealed partial class RingsView : KindControl
 {
     private readonly Models.Rings rings;
@@ -244,7 +246,7 @@ public sealed partial class RingsView : KindControl
             Width = diameter,
             Height = diameter,
             AccessName = string.IsNullOrEmpty(title) ? said : SpeechRules.Fact(title, said),
-            AccessType = "rings",
+            AccessType = KindStrings.TypeRings,
             HorizontalAlignment = HorizontalAlignment.Left,
         };
         dial.Painter = Paint;
@@ -297,14 +299,14 @@ public sealed partial class RingsView : KindControl
                 radius,
                 stroke,
                 RingRules.SweepOf(item.Value, item.Max),
-                canvas.Palette.Of(item.Colour, HueRules.SeriesHue(at)),
-                canvas.Palette.End(item.Colour, HueRules.SeriesHue(at)));
+                canvas.Palette.Series(item.Colour, at),
+                canvas.Palette.Contrast ? canvas.Palette.Series(item.Colour, at) : canvas.Palette.End(item.Colour, HueRules.SeriesHue(at)));
         }
 
         if (rings.Centre == Models.RingsCentre.Icon && rings.Icon is not null)
         {
             double side = diameter * 0.16;
-            canvas.Labels.Put(KindHooks.DrawIcon(rings.Icon, side, Microsoft.UI.Colors.Gray), cx - (side / 2), cy - (side / 2));
+            canvas.Labels.Put(KindHooks.DrawIcon(rings.Icon, side, canvas.Palette.ColourOf("TextFillColorSecondaryBrush")), cx - (side / 2), cy - (side / 2));
         }
     }
 }

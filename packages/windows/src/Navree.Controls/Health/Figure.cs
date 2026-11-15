@@ -13,7 +13,7 @@ using Navree.Protocol;
 namespace Navree.Controls.Health;
 
 /// <summary>
-/// A figure: one number that matters, as the Health app's summary shows one. Its label with its icon in the measure's colour, the number
+/// A figure: one number that matters: its label with its icon in the measure's colour, the number
 /// large with its unit beside it, how it stands and which way it is going under it, the page's line after that, a small ring or gauge
 /// at its end and a small chart under it. When it opens something, a tap on it does.
 /// </summary>
@@ -185,14 +185,14 @@ public sealed partial class DayPagerView : KindControl
         bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         bar.HorizontalAlignment = HorizontalAlignment.Left;
 
-        UIElement previous = Step(pager.Previous, "", pager.Words?.Previous ?? "Previous day");
+        UIElement previous = Step(pager.Previous, "", pager.Words?.Previous ?? KindStrings.PreviousDay);
         bar.Children.Add(previous);
 
         Button day = Day();
         Grid.SetColumn(day, 1);
         bar.Children.Add(day);
 
-        UIElement next = Step(pager.Next, "", pager.Words?.Next ?? "Next day");
+        UIElement next = Step(pager.Next, "", pager.Words?.Next ?? KindStrings.NextDay);
         if (next is FrameworkElement placed)
         {
             Grid.SetColumn(placed, 2);
@@ -202,7 +202,7 @@ public sealed partial class DayPagerView : KindControl
 
         if (pager.Today is string today)
         {
-            Button now = new() { Content = "Today", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+            Button now = new() { Content = KindStrings.Today, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
             now.Click += (_, _) => step(today);
             Grid.SetColumn(now, 3);
             bar.Children.Add(now);
@@ -271,17 +271,17 @@ public sealed partial class DayPagerView : KindControl
         CalendarView calendar = new() { SelectionMode = CalendarViewSelectionMode.Single };
         if (PagerRules.Day(pager.First) is DateOnly low)
         {
-            calendar.MinDate = new DateTimeOffset(low.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            calendar.MinDate = PagerRules.Midnight(low, TimeZoneInfo.Local);
         }
 
         if (PagerRules.Day(pager.Last) is DateOnly high)
         {
-            calendar.MaxDate = new DateTimeOffset(high.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            calendar.MaxDate = PagerRules.Midnight(high, TimeZoneInfo.Local);
         }
 
         if (PagerRules.Day(pager.Date) is DateOnly shown)
         {
-            DateTimeOffset at = new(shown.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            DateTimeOffset at = PagerRules.Midnight(shown, TimeZoneInfo.Local);
             calendar.SetDisplayDate(at);
             calendar.SelectedDates.Add(at);
         }
@@ -294,7 +294,7 @@ public sealed partial class DayPagerView : KindControl
                 return;
             }
 
-            DateOnly chosen = DateOnly.FromDateTime(args.AddedDates[0].Date);
+            DateOnly chosen = PagerRules.DayOf(args.AddedDates[0], TimeZoneInfo.Local);
             string text = PagerRules.Text(chosen);
 
             // The day already shown is selected when the calendar opens: choosing it again is not a change.

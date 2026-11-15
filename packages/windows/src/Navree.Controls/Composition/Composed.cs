@@ -18,20 +18,7 @@ namespace Navree.Controls.Composition;
 public static class Arrivals
 {
     /// <summary>Whether the person asked for less motion (Settings, Accessibility, Visual effects, Animation effects).</summary>
-    public static bool ReduceMotion
-    {
-        get
-        {
-            try
-            {
-                return !new UISettings().AnimationsEnabled;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
-    }
+    public static bool ReduceMotion => ThemeState.AnimationsOff;
 
     /// <summary>Plays the arrival of a part once it is on the screen; nothing for a part that says nothing.</summary>
     /// <param name="element">The part.</param>
@@ -82,7 +69,7 @@ public static class Arrivals
 /// <summary>The parts of the composition kinds that need no more than layout: a plain shape, parts laid over each other.</summary>
 public static class Composed
 {
-    private static double Scaled(int? size, bool scaled) => size is int value ? value * (scaled ? TextScale.Full : 1) : double.NaN;
+    private static double Scaled(int? size, bool scaled) => ComposeRules.Extent(size, scaled, TextScale.Full);
 
     /// <summary>A plain shape, filled or outlined in a colour by name: the ground behind a symbol, a dot in a key, a bar at the edge of a card.</summary>
     /// <param name="shape">The shape.</param>
@@ -176,7 +163,7 @@ public static class Composed
         {
             Width = Scaled(layers.Size?.Width, scaled),
             Height = Scaled(layers.Size?.Height, scaled),
-            Padding = new Thickness(layers.Pad * 4),
+            Padding = new Thickness(ComposeRules.Steps(layers.Pad)),
         };
         (HorizontalAlignment across, VerticalAlignment down) = Placed(layers.Place);
         foreach (Models.Node child in layers.Children)
@@ -204,7 +191,7 @@ public static class Composed
     {
         // Figures stand with no surface of their own: they stand further apart and a hairline runs between their columns. Links, cards and the rest are left bare.
         bool figures = grid.Children.Count > 0 && grid.Children.All(child => child is Models.Figure);
-        FlowGrid flow = new() { Cols = grid.Cols, Min = grid.Min, Gap = ComposeRules.GridGap(grid.Gap, cards: !figures), RuleBrush = figures ? Palette.Resource("DividerStrokeColorDefaultBrush") : null };
+        FlowGrid flow = new() { Cols = grid.Cols, Min = grid.Min, Gap = ComposeRules.GridGap(grid.Gap, cards: !figures), Hairlines = figures };
         foreach (Models.Node child in grid.Children)
         {
             UIElement part = render(child);
@@ -228,7 +215,7 @@ public static class Composed
     /// <returns>The run.</returns>
     public static UIElement Carousel(Models.Carousel carousel, Func<Models.Node, UIElement> render)
     {
-        double gap = carousel.Gap * 4;
+        double gap = ComposeRules.Steps(carousel.Gap);
         StackPanel run = new() { Orientation = Orientation.Horizontal, Spacing = gap };
         List<FrameworkElement> parts = [];
         foreach (Models.Node child in carousel.Children)
@@ -273,7 +260,7 @@ public static class Composed
                     Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
                     BorderThickness = new Thickness(0),
                 };
-                AutomationProperties.SetName(mark, "Page " + (page + 1) + " of " + parts.Count);
+                AutomationProperties.SetName(mark, KindStrings.PageOf(page + 1, parts.Count));
                 mark.Click += (_, _) => scroller.ChangeView(page * (scroller.ViewportWidth + gap), null, null);
                 marks.Add(mark);
                 row.Children.Add(mark);
@@ -282,9 +269,13 @@ public static class Composed
             host.Children.Add(row);
         }
 
+        int shown = 0;
+
+        // The marks are in the colour of the theme the carousel stands in: coloured again when it is put in the tree and when its theme changes.
         void Mark(int current)
         {
-            Windows.UI.Color chosen = Palette.Resource("TextFillColorPrimaryBrush") is SolidColorBrush primary ? primary.Color : Microsoft.UI.Colors.Gray;
+            shown = current;
+            Windows.UI.Color chosen = new Palette(host).ColourOf("TextFillColorPrimaryBrush");
             for (int at = 0; at < marks.Count; at++)
             {
                 ((Microsoft.UI.Xaml.Shapes.Ellipse)marks[at].Content).Fill = new SolidColorBrush(chosen) { Opacity = at == current ? 1 : 0.3 };
@@ -292,6 +283,8 @@ public static class Composed
         }
 
         Mark(0);
+        host.Loaded += (_, _) => Mark(shown);
+        host.ActualThemeChanged += (_, _) => Mark(shown);
 
         void Fit(double room)
         {

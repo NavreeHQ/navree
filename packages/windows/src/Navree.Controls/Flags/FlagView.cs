@@ -27,7 +27,7 @@ public sealed partial class FlagView : KindControl
     public FlagView(string country, double height = 16)
     {
         this.country = country.ToUpperInvariant();
-        this.height = height;
+        this.height = FlagRules.Stand(height);
         Start();
     }
 

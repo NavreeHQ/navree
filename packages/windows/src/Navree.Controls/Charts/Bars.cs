@@ -14,28 +14,8 @@ namespace Navree.Controls.Charts;
 internal static class BarSlots
 {
     /// <summary>The start and size of each part along a bar this long, by its share, with a hair between parts.</summary>
-    internal static IReadOnlyList<(int Index, double Start, double Size)> Of(double length, IReadOnlyList<double> shares, double hair)
-    {
-        List<int> drawn = [.. Enumerable.Range(0, shares.Count).Where(index => shares[index] > 0)];
-        double room = Math.Max(length - (hair * Math.Max(drawn.Count - 1, 0)), 1);
-        List<(int Index, double Start, double Size)> slots = [];
-        double at = 0;
-        foreach (int index in drawn)
-        {
-            double size = Math.Max(room * shares[index], 1);
-            slots.Add((index, at, size));
-            at += size + hair;
-        }
-
-        return slots;
-    }
-
-    /// <summary>White or black words, whichever reads on a colour.</summary>
-    internal static Windows.UI.Color Words(Windows.UI.Color ground)
-    {
-        Rgb rgb = new(ground.R / 255.0, ground.G / 255.0, ground.B / 255.0);
-        return ContrastRules.Contrast(rgb, new Rgb(1, 1, 1)) >= 3 ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
-    }
+    internal static IReadOnlyList<(int Index, double Start, double Size)> Of(double length, IReadOnlyList<double> shares, double hair) =>
+        BarRules.Slots(length, shares, hair);
 }
 
 /// <summary>A meter: one bar of segments that add up to the whole, each in its colour with a hair between them and its share written inside where it fits; under it, each segment's amount in the page's words and what the page says of it.</summary>
@@ -54,7 +34,7 @@ public sealed partial class MeterView : KindControl
     private string Sentence() =>
         string.Join(", ", meter.Segments.Select(segment => string.Join(" ", new[] { segment.Name, segment.Shown, segment.Detail }.Where(part => !string.IsNullOrEmpty(part)))));
 
-    private Windows.UI.Color Colour(Palette palette, int at) => palette.Of(meter.Segments[at].Colour, HueRules.SeriesHue(at));
+    private Windows.UI.Color Colour(Palette palette, int at) => palette.Series(meter.Segments[at].Colour, at);
 
     internal override UIElement Build(Palette palette)
     {
@@ -72,7 +52,7 @@ public sealed partial class MeterView : KindControl
             Reads = true,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(meter.Title) ? said : SpeechRules.Fact(meter.Title, said),
-            AccessType = "meter",
+            AccessType = KindStrings.TypeMeter,
         };
         bar.Painter = Paint;
         stack.Children.Add(bar);
@@ -85,7 +65,7 @@ public sealed partial class MeterView : KindControl
         {
             Models.Segment segment = meter.Segments[at];
             rows.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Microsoft.UI.Xaml.Shapes.Ellipse dot = new() { Width = 9, Height = 9, Fill = Palette.Mark(Colour(palette, at)), VerticalAlignment = VerticalAlignment.Center };
+            FrameworkElement dot = HealthParts.Dot(palette, Colour(palette, at), at, 9);
             Grid.SetRow(dot, at);
             rows.Children.Add(dot);
             StackPanel names = new();
@@ -125,7 +105,11 @@ public sealed partial class MeterView : KindControl
             0,
             canvas.Width,
             canvas.Height,
-            [.. shares.Select((share, at) => (share, (Brush)Palette.Mark(Colour(palette, at))))],
+            [.. shares.Select((share, at) =>
+            {
+                (Brush fill, Brush? edge, double _) = palette.Surface(meter.Segments[at].Colour, HueRules.SeriesHue(at), at);
+                return (share, fill, edge);
+            })],
             hair,
             6);
 
@@ -133,7 +117,7 @@ public sealed partial class MeterView : KindControl
         {
             Models.Segment segment = meter.Segments[index];
             string words = ShareRules.Percent(shares[index]).ToString(CultureInfo.InvariantCulture) + "%";
-            TextBlock inside = Ink.Words(words, 12, Palette.Mark(BarSlots.Words(Colour(palette, index))), strong: true);
+            TextBlock inside = Ink.Words(words, 12, palette.OnSurface(Colour(palette, index), index), strong: true);
             if (ShareRules.SaysInside(shares[index], canvas.Width, Ink.Measured(inside).Width))
             {
                 canvas.Text(inside, start + (size / 2), canvas.Height / 2, Across.Middle, Down.Middle);
@@ -171,7 +155,7 @@ public sealed partial class ColumnsView : KindControl
     }
 
     private Windows.UI.Color Colour(Palette palette, int part) =>
-        palette.Of(part < columns.Parts.Count ? columns.Parts[part].Colour : null, HueRules.SeriesHue(part));
+        palette.Series(part < columns.Parts.Count ? columns.Parts[part].Colour : null, part);
 
     private string Sentence() =>
         string.Join(
@@ -198,7 +182,7 @@ public sealed partial class ColumnsView : KindControl
             Reads = true,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(columns.Title) ? said : SpeechRules.Fact(columns.Title, said),
-            AccessType = "chart",
+            AccessType = KindStrings.TypeChart,
         };
         plot.Painter = Paint;
         stack.Children.Add(plot);
@@ -215,10 +199,9 @@ public sealed partial class ColumnsView : KindControl
             return;
         }
 
-        const double gap = 10;
         const double top = 18;
         const double foot = 20;
-        double width = (canvas.Width - (gap * (count - 1))) / count;
+        (double width, double gap) = BarRules.Columns(canvas.Width, count, 10);
         double height = Math.Max(canvas.Height - top - foot, 10);
         for (int at = 0; at < count; at++)
         {
@@ -233,7 +216,11 @@ public sealed partial class ColumnsView : KindControl
                 top,
                 width,
                 height,
-                [.. shares.Select((share, part) => (share, (Brush)Palette.Mark(Colour(palette, part), quiet ? 0.4 : 1)))],
+                [.. shares.Select((share, part) =>
+                {
+                    (Brush fill, Brush? edge, double _) = palette.Surface(part < columns.Parts.Count ? columns.Parts[part].Colour : null, HueRules.SeriesHue(part), part, quiet ? 0.4 : 1);
+                    return (share, fill, edge);
+                })],
                 1.5,
                 5);
             if (column.Shown is not null)
@@ -282,7 +269,7 @@ public sealed partial class StripView : KindControl
     private int? KindOf(Models.StripCell cell) =>
         cell.Category is long category && category >= 0 && category < strip.Key.Count ? (int)category : null;
 
-    private Windows.UI.Color Colour(Palette palette, int kind) => palette.Of(strip.Key[kind].Colour, HueRules.SeriesHue(kind));
+    private Windows.UI.Color Colour(Palette palette, int kind) => palette.Series(strip.Key[kind].Colour, kind);
 
     internal override UIElement Build(Palette palette)
     {
@@ -308,7 +295,7 @@ public sealed partial class StripView : KindControl
             Reads = true,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(strip.Title) ? said : SpeechRules.Fact(strip.Title, said),
-            AccessType = "strip",
+            AccessType = KindStrings.TypeStrip,
         };
         bar.Painter = Paint;
         stack.Children.Add(bar);
@@ -371,20 +358,34 @@ public sealed partial class StripView : KindControl
             0,
             canvas.Width,
             canvas.Height,
-            [.. runs.Select(run => ((double)run.Cells / count, (Brush)(run.Kind is int kind ? Palette.Mark(Colour(palette, kind)) : Palette.Mark(quiet, 0.15))))],
+            [.. runs.Select(run =>
+            {
+                if (run.Kind is not int kind)
+                {
+                    // A cell with no reading is quiet: faint on the light and dark themes, an empty outline in a contrast theme.
+                    return ((double)run.Cells / count, (Brush)(palette.Contrast ? Palette.Mark(palette.Ground) : Palette.Mark(quiet, 0.15)), palette.Contrast ? (Brush?)palette.Track(quiet) : null);
+                }
+
+                (Brush fill, Brush? edge, double _) = palette.Surface(strip.Key[kind].Colour, HueRules.SeriesHue(kind), kind);
+                return ((double)run.Cells / count, fill, edge);
+            })],
             0,
             6);
 
         double width = canvas.Width / count;
-        for (int at = 0; at < count; at++)
+
+        // Past the most places that can be read out, a place stands for a run of cells, the words of its first.
+        int run = Math.Max((int)Math.Ceiling(count / (double)ThinRules.MostMarks), 1);
+        for (int at = 0; at < count; at += run)
         {
             Models.StripCell cell = strip.Cells[at];
             int? kind = KindOf(cell);
-            string words = kind is int found ? KeyRules.Entry(strip.Key[found].Name, strip.Key[found].Detail) : "No reading";
+            string words = kind is int found ? KeyRules.Entry(strip.Key[found].Name, strip.Key[found].Detail) : KindStrings.NoReading;
+            double across = Math.Min(run, count - at) * width;
             canvas.Probes.Add(new Probe(
-                canvas.Mx((at + 0.5) * width),
+                canvas.Mx((at * width) + (across / 2)),
                 0,
-                canvas.Mrect(at * width, 0, width, canvas.Height),
+                canvas.Mrect(at * width, 0, across, canvas.Height),
                 cell.Label,
                 [new ProbeLine(kind is int shown ? Colour(palette, shown) : null, words)],
                 cell.Label + ", " + words));

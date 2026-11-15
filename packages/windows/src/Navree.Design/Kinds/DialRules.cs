@@ -32,11 +32,11 @@ public static class RingRules
     /// <param name="diameter">The ring's width.</param>
     /// <returns>The arc's width.</returns>
     public static double Stroke(Models.Prominence prominence, double diameter) =>
-        prominence switch
+        Guard.Length(diameter) * prominence switch
         {
-            Models.Prominence.High => diameter * 0.115,
-            Models.Prominence.Low => diameter * 0.16,
-            _ => diameter * 0.12,
+            Models.Prominence.High => 0.115,
+            Models.Prominence.Low => 0.16,
+            _ => 0.12,
         };
 
     /// <summary>How much a ring grows with the person's text, at most: a small ring stands in a row of text and keeps its size.</summary>
@@ -73,23 +73,59 @@ public static class RingRules
     /// <returns>The sweep, or none.</returns>
     public static Sweep? SweepOf(double? value, double max)
     {
-        if (value is not double found)
+        if (value is not double found || double.IsNaN(found))
         {
             return null;
         }
 
-        if (max <= 0)
+        if (!(max > 0) || !double.IsFinite(max))
         {
             return new Sweep(0, found > 0 ? 1 : 0);
         }
 
-        double share = Math.Max(found / max, 0);
+        // However far past its goal a value goes, the laps stay a number a drawing can hold.
+        double share = Math.Clamp(found / max, 0, MostLaps);
         int laps = (int)Math.Floor(share);
         double part = share - laps;
 
         // Exactly at the goal is one whole lap, not a second one starting.
         return laps >= 1 && part == 0 ? new Sweep(laps - 1, 1) : new Sweep(laps, part);
     }
+
+    /// <summary>The most laps a ring is drawn as going round; a value further past its goal is drawn as this many.</summary>
+    public const int MostLaps = 1000;
+
+    /// <summary>Whether a value is past its goal.</summary>
+    /// <param name="value">The value, or none.</param>
+    /// <param name="max">The goal.</param>
+    /// <returns>Whether it is above the goal.</returns>
+    public static bool PastGoal(double? value, double max) =>
+        value is double found && max > 0 && found > max;
+
+    /// <summary>
+    /// What a screen reader is told of a ring's value against its range: from nothing to the goal, and the value held inside it (a value
+    /// past the goal is said in words, <see cref="PastGoal"/>, and the range value stays at the goal). None when the ring has no value or no goal.
+    /// </summary>
+    /// <param name="value">The value, or none.</param>
+    /// <param name="max">The goal.</param>
+    /// <returns>The least, the most and the value, or none.</returns>
+    public static (double Min, double Max, double Value)? Range(double? value, double max)
+    {
+        if (value is not double found || !double.IsFinite(found) || !(max > 0) || !double.IsFinite(max))
+        {
+            return null;
+        }
+
+        return (0, max, Math.Clamp(found, 0, max));
+    }
+
+    /// <summary>What a ring says to a screen reader: its words, and when its value is past its goal, that it is, in words (its range value stays inside its range).</summary>
+    /// <param name="words">The ring's words (the page's summary or its value).</param>
+    /// <param name="value">The value, or none.</param>
+    /// <param name="max">The goal.</param>
+    /// <returns>The words.</returns>
+    public static string Said(string words, double? value, double max) =>
+        PastGoal(value, max) ? words + ", " + KindStrings.PastGoal : words;
 
     /// <summary>What the middle of a ring says: its value without the unit, or a dash when it has none.</summary>
     /// <param name="ring">The ring.</param>
@@ -99,7 +135,7 @@ public static class RingRules
         ring.Value is double value ? ring.Shown ?? NumberWords.Amount(value, culture) : "\u2013";
 }
 
-/// <summary>Concentric rings, the first outside, as the system's activity rings.</summary>
+/// <summary>Concentric rings, the first outside.</summary>
 public static class RingsRules
 {
     /// <summary>At most six are drawn, as the protocol says.</summary>
@@ -129,7 +165,7 @@ public static class RingsRules
     {
         double n = Math.Min(Math.Max(count, 1), Most);
         double share = prominence == Models.Prominence.Low ? 0.82 : 0.5;
-        return diameter * share / 2 / (n + ((n - 1) * GapShare));
+        return Guard.Length(diameter) * share / 2 / (n + ((n - 1) * GapShare));
     }
 
     /// <summary>The diameter of a ring (0 the outside one), at the middle of its arc.</summary>
@@ -166,7 +202,7 @@ public static class RingsRules
 /// <summary>A gauge: a value on an open arc.</summary>
 public static class GaugeRules
 {
-    /// <summary>The arc runs through this many degrees, open at the foot, as the system's circular gauge is.</summary>
+    /// <summary>The arc runs through this many degrees, open at the foot.</summary>
     public const double Sweep = 240;
 
     /// <summary>The angle of the arc's start, in degrees from three o'clock going clockwise: the lower left.</summary>
@@ -285,7 +321,8 @@ public static class ClockRules
     /// <returns>The words.</returns>
     public static string TimeLabel(double at, bool uses24, CultureInfo culture)
     {
-        int minutes = ((int)Math.Round((((at % 24) + 24) % 24) * 60, MidpointRounding.AwayFromZero)) % (24 * 60);
+        double wrapped = double.IsFinite(at) ? ((at % 24) + 24) % 24 : 0;
+        int minutes = ((int)Math.Round(wrapped * 60, MidpointRounding.AwayFromZero)) % (24 * 60);
         DateTime time = new(2000, 1, 1, minutes / 60, minutes % 60, 0, DateTimeKind.Unspecified);
         return uses24 ? time.ToString("HH:mm", culture) : time.ToString("h:mm tt", culture);
     }
@@ -330,16 +367,21 @@ public static class ClockRules
     /// <returns>The radii.</returns>
     public static Dial DialOf(double half, double label, double mark)
     {
-        double labels = half - (label / 2);
-        double moments = labels - (label / 2) - 2 - (mark / 2);
-        double outer = moments - (mark / 2) - 3;
+        double labels = Guard.Length(half - (label / 2));
+        double moments = Guard.Length(labels - (label / 2) - 2 - (mark / 2));
+        double outer = Guard.Length(moments - (mark / 2) - 3);
         return new Dial(labels, moments, outer, outer * 0.46);
     }
+
+    /// <summary>Whether a dial has the room to be drawn: its hours' bars need a little length between the hole and the edge.</summary>
+    /// <param name="dial">The dial.</param>
+    /// <returns>Whether it is drawn.</returns>
+    public static bool Draws(Dial dial) => dial.Outer - dial.Inner >= 6;
 
     /// <summary>The width of an hour's bar at the start of the bars: most of the room between neighbours.</summary>
     /// <param name="inner">The inner radius.</param>
     /// <returns>The width.</returns>
-    public static double BarWidth(double inner) => 2 * Math.PI * inner / 24 * 0.6;
+    public static double BarWidth(double inner) => Guard.Length(2 * Math.PI * inner / 24 * 0.6);
 
     /// <summary>Whether a moment's name already says its time (an older page wrote it in).</summary>
     /// <param name="name">The name.</param>

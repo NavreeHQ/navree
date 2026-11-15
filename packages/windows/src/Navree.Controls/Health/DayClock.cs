@@ -64,7 +64,7 @@ public sealed partial class DayClockView : KindControl
             Ideal = side,
             Reads = true,
             AccessName = string.IsNullOrEmpty(name) ? said : SpeechRules.Fact(name, said),
-            AccessType = "day clock",
+            AccessType = KindStrings.TypeDayClock,
         };
         dial.Painter = Paint;
         stack.Children.Add(dial);
@@ -72,7 +72,7 @@ public sealed partial class DayClockView : KindControl
         StackPanel under = new() { Spacing = 10 };
         if (clock.Key.Count > 0)
         {
-            under.Children.Add(HealthParts.Key(palette, clock.Key.Select((entry, at) => (palette.Of(entry.Colour, HueRules.SeriesHue(at)), entry.Name, entry.Detail))));
+            under.Children.Add(HealthParts.Key(palette, clock.Key.Select((entry, at) => (palette.Series(entry.Colour, at), entry.Name, entry.Detail))));
         }
 
         foreach (Models.ClockMoment moment in clock.Moments)
@@ -122,20 +122,25 @@ public sealed partial class DayClockView : KindControl
         ClockRules.Dial dial = ClockRules.DialOf(half, label, mark);
         double? most = ClockRules.Most(clock);
         double width = ClockRules.BarWidth(dial.Inner);
-        double length = dial.Outer - dial.Inner - width;
+        if (!ClockRules.Draws(dial))
+        {
+            return;
+        }
+
+        double length = Math.Max(dial.Outer - dial.Inner - width, 0);
         const double stub = 0.06;
 
         // The dial's face: a faint band from the hole to the rim the moments stand on.
         double rim = dial.Moments + (mark / 2) + 3;
         double middle = (dial.Inner + rim) / 2;
-        canvas.Shapes.Put(Ink.Stroked(Ink.Arc(cx, cy, middle, -90, 359.9), Palette.Mark(palette.Of(Models.Hue.Neutral), palette.Dark ? 0.14 : 0.08), rim - dial.Inner), 0, 0);
+        canvas.Shapes.Put(Ink.Stroked(Ink.Arc(cx, cy, middle, -90, 359.9), palette.Contrast ? palette.Track(palette.Of(Models.Hue.Neutral)) : Palette.Mark(palette.Of(Models.Hue.Neutral), palette.Dark ? 0.14 : 0.08), rim - dial.Inner), 0, 0);
 
         Windows.UI.Color fallback = palette.Of(clock.Colour, Models.Hue.Accent);
         for (int at = 0; at < Math.Min(clock.Hours.Count, 24); at++)
         {
             Models.Hour hour = clock.Hours[at];
             Windows.UI.Color colour = hour.Category is long kind && kind >= 0 && kind < clock.Key.Count
-                ? palette.Of(clock.Key[(int)kind].Colour, HueRules.SeriesHue((int)kind))
+                ? palette.Series(clock.Key[(int)kind].Colour, (int)kind)
                 : fallback;
             double? reach = ClockRules.Reach(hour, most);
             double startRadius = dial.Inner + (width / 2);
@@ -145,15 +150,16 @@ public sealed partial class DayClockView : KindControl
             Pt far = Ink.Polar(cx, cy, endRadius, angle);
             bool faint = reach is null || reach < stub;
             double opacity = faint ? (reach is null ? 0.18 : 0.4) : 1;
+            Windows.UI.Color barColour = faint && palette.Contrast ? palette.Track(colour).Color : colour;
             if (clock.Now == at)
             {
                 canvas.Shapes.Put(Ink.Stroked(Ink.Lines([near, far]), palette.Primary, width + 5, PenLineCap.Round), 0, 0);
             }
 
-            canvas.Shapes.Put(Ink.Stroked(Ink.Lines([near, far]), Palette.Mark(colour, clock.Now == at ? 1 : opacity), width, PenLineCap.Round), 0, 0);
+            canvas.Shapes.Put(Ink.Stroked(Ink.Lines([near, far]), palette.Fade(barColour, clock.Now == at ? 1 : opacity), width, PenLineCap.Round), 0, 0);
 
             string name = clock.Key.Count > 0 && hour.Category is long found && found >= 0 && found < clock.Key.Count ? clock.Key[(int)found].Name : string.Empty;
-            string words = (reach is null ? "No reading" : hour.Value is double value ? NumberWords.Amount(value, culture) : NumberWords.Amount((reach ?? 0) * 100, culture) + "%")
+            string words = (reach is null ? KindStrings.NoReading : hour.Value is double value ? NumberWords.Amount(value, culture) : NumberWords.Amount((reach ?? 0) * 100, culture) + "%")
                 + (name.Length > 0 ? ", " + name : string.Empty);
             string time = ClockRules.TimeLabel(at, Uses24, culture);
             canvas.Probes.Add(new Probe(far.X, far.Y, default, time, [new ProbeLine(reach is null ? null : colour, words)], time + ", " + words, Marks: [(new Windows.Foundation.Point(far.X, far.Y), colour)]));
@@ -177,7 +183,7 @@ public sealed partial class DayClockView : KindControl
             if (moment.Icon is not null)
             {
                 double inner = mark * 0.5;
-                canvas.Labels.Put(KindHooks.DrawIcon(moment.Icon, inner, Microsoft.UI.Colors.White), spot.X - (inner / 2), spot.Y - (inner / 2));
+                canvas.Labels.Put(KindHooks.DrawIcon(moment.Icon, inner, palette.InkOn(colour)), spot.X - (inner / 2), spot.Y - (inner / 2));
             }
         }
 
@@ -191,11 +197,7 @@ public sealed partial class DayClockView : KindControl
         if (clock.Shown is not null)
         {
             TextBlock total = Ink.Words(clock.Shown, 30 * scale, palette.Primary, strong: true);
-            double room = dial.Inner * 1.5;
-            if (Ink.Measured(total).Width > room)
-            {
-                total.FontSize *= Math.Max(room / Ink.Measured(total).Width, 0.5);
-            }
+            total.FontSize *= TextFit.Shrink(dial.Inner * 1.5, Ink.Measured(total).Width, 0.5);
 
             lines.Add(total);
         }
@@ -267,7 +269,7 @@ public sealed partial class TimelineView : KindControl
             }
             else if (moment.State is Models.RowState state)
             {
-                badge.Children.Add(StateMark(state, colour, mark * 0.4));
+                badge.Children.Add(StateMark(palette, state, colour, mark * 0.4));
             }
 
             line.Children.Add(HealthParts.Hidden(badge));
@@ -306,7 +308,7 @@ public sealed partial class TimelineView : KindControl
     }
 
     // Done is a disc with a tick, current a ring with a dot, upcoming an empty ring.
-    private static UIElement StateMark(Models.RowState state, Windows.UI.Color colour, double size)
+    private static UIElement StateMark(Palette palette, Models.RowState state, Windows.UI.Color colour, double size)
     {
         Brush ink = Palette.Mark(colour);
         Grid mark = new() { Width = size, Height = size, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
@@ -314,7 +316,7 @@ public sealed partial class TimelineView : KindControl
         {
             case Models.RowState.Done:
                 mark.Children.Add(Ink.Disc(size, ink));
-                mark.Children.Add(new FontIcon { Glyph = "", FontFamily = HealthParts.Icons, FontSize = size * 0.7, Foreground = Palette.Mark(Microsoft.UI.Colors.White), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+                mark.Children.Add(new FontIcon { Glyph = "", FontFamily = HealthParts.Icons, FontSize = size * 0.7, Foreground = palette.OnMark(colour), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
                 break;
             case Models.RowState.Current:
                 mark.Children.Add(Ink.Disc(size, null, ink, 2));

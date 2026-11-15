@@ -65,6 +65,11 @@ public static class FlagRules
     /// <summary>The countries that have a flag of their own.</summary>
     public static IReadOnlyCollection<string> Known => Flags.Keys;
 
+    /// <summary>How high a flag stands: what is asked for, held to a size that can be drawn.</summary>
+    /// <param name="height">The height asked for.</param>
+    /// <returns>A height of at least one and at most 512.</returns>
+    public static double Stand(double height) => Math.Clamp(Guard.Finite(height, 16), 1, 512);
+
     /// <summary>The shapes of a country's flag, back to front.</summary>
     /// <param name="country">The two-letter country code, in any case.</param>
     /// <returns>The shapes, or none when this build has no flag for the country (the neutral flag is drawn then).</returns>

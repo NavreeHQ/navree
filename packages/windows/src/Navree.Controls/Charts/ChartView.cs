@@ -101,7 +101,7 @@ public sealed partial class ChartView : KindControl
             Reads = !Spark,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(chart.Title) ? chart.Summary ?? Sentence() : SpeechRules.Fact(chart.Title, SpeechRules.Value(chart.Summary ?? Sentence(), chart.Title)),
-            AccessType = "chart",
+            AccessType = KindStrings.TypeChart,
         };
         plot.Painter = Paint;
         stack.Children.Add(plot);
@@ -112,7 +112,7 @@ public sealed partial class ChartView : KindControl
         }
         else if (chart.Series.Count > 1 && !Lanes)
         {
-            stack.Children.Add(HealthParts.Key(palette, chart.Series.Select((series, at) => (palette.Of(series.Colour, HueRules.SeriesHue(at)), series.Label, (string?)null))));
+            stack.Children.Add(HealthParts.Key(palette, chart.Series.Select((series, at) => (palette.Series(series.Colour, at), series.Label, (string?)null))));
         }
 
         UIElement? notes = Notes(palette);
@@ -138,7 +138,9 @@ public sealed partial class ChartView : KindControl
         foreach (Models.Zone zone in bands)
         {
             StackPanel entry = new() { Orientation = Orientation.Horizontal, Spacing = 5 };
-            entry.Children.Add(Ink.Box(12, 10, palette.Fill(zone.Colour, Models.Hue.Neutral, 0.3), 2));
+            entry.Children.Add(palette.Contrast
+                ? Ink.Box(12, 10, null, 2, palette.Secondary, 1)
+                : Ink.Box(12, 10, palette.Fill(zone.Colour, Models.Hue.Neutral, 0.3), 2));
             entry.Children.Add(Ink.Words(zone.Label ?? string.Empty, 12, palette.Secondary));
             flow.Children.Add(entry);
         }
@@ -163,7 +165,7 @@ public sealed partial class ChartView : KindControl
         for (int at = 0; at < parts.Count; at++)
         {
             string detail = total > 0 ? ShareRules.Percent(parts[at].Value / total).ToString(CultureInfo.InvariantCulture) + "%" : string.Empty;
-            yield return (palette.Of(HueRules.SeriesHue(at)), parts[at].Label, detail);
+            yield return (palette.Series(null, at), parts[at].Label, detail);
         }
     }
 
@@ -215,10 +217,24 @@ public sealed partial class ChartView : KindControl
         return chart.Stacking == Models.Stacking.Shares ? NumberWords.Amount(value) : ValueWords.Text(value, style);
     }
 
+    // The widest of the page's labels: it does not depend on the size of the drawing, so it is worked out once for the size of the person's text.
+    private (int Version, double Width) widestLabel = (-1, 0);
+
+    private double WidestLabel()
+    {
+        int version = ThemeState.Version;
+        if (widestLabel.Version != version)
+        {
+            widestLabel = (version, chart.Labels.Select(label => Ink.Measure(label, LabelSize).Width).DefaultIfEmpty(0).Max());
+        }
+
+        return widestLabel.Width;
+    }
+
     private string LabelAt(int at) => at < chart.Labels.Count ? chart.Labels[at] : (at + 1).ToString(CultureInfo.InvariantCulture);
 
     private Windows.UI.Color SeriesColour(Palette palette, int at) =>
-        palette.Of(at < chart.Series.Count ? chart.Series[at].Colour : null, HueRules.SeriesHue(at));
+        palette.Series(at < chart.Series.Count ? chart.Series[at].Colour : null, at);
 
     // ---- painting ----------------------------------------------------------------------------------------
 
@@ -265,7 +281,7 @@ public sealed partial class ChartView : KindControl
             double b = Along(Math.Max(begin, to));
             double low = Math.Min(a, b);
             double length = Math.Abs(a - b);
-            return Horizontal ? new Rect(low, bandStart, length, bandSize) : new Rect(bandStart, low, bandSize, length);
+            return Horizontal ? Ink.Area(low, bandStart, length, bandSize) : Ink.Area(bandStart, low, bandSize, length);
         }
 
         // A stretch of the whole plot between two values.
@@ -283,7 +299,7 @@ public sealed partial class ChartView : KindControl
 
         if (!horizontal && axis)
         {
-            double widest = marks.Select(mark => Ink.Measured(canvas.Caption(MarkWords(mark, style))).Width).DefaultIfEmpty(0).Max();
+            double widest = marks.Select(mark => Ink.Measure(MarkWords(mark, style), LabelSize).Width).DefaultIfEmpty(0).Max();
             left = widest + 10;
         }
 
@@ -292,7 +308,7 @@ public sealed partial class ChartView : KindControl
             double widest = 0;
             for (int at = 0; at < count; at++)
             {
-                widest = Math.Max(widest, Ink.Measured(canvas.Caption(LabelAt(at))).Width);
+                widest = Math.Max(widest, Ink.Measure(LabelAt(at), LabelSize).Width);
             }
 
             left = Math.Min(widest + 10, canvas.Width * 0.4);
@@ -316,6 +332,20 @@ public sealed partial class ChartView : KindControl
         foreach (Models.Zone zone in chart.Zones)
         {
             Rect area = frame.Span(zone.From, zone.To);
+            if (palette.Contrast)
+            {
+                // No tint in a contrast theme: the zone is the stretch between two dashed lines.
+                foreach (double edge in frame.Horizontal ? new[] { area.X, area.X + area.Width } : new[] { area.Y, area.Y + area.Height })
+                {
+                    canvas.Shapes.Put(
+                        frame.Horizontal ? Ink.Rule(edge, frame.Y0, edge, frame.Y1, palette.Secondary, 1, [2, 3]) : Ink.Rule(frame.X0, edge, frame.X1, edge, palette.Secondary, 1, [2, 3]),
+                        0,
+                        0);
+                }
+
+                continue;
+            }
+
             canvas.Shapes.Put(Ink.Box(area.Width, area.Height, palette.Fill(zone.Colour, Models.Hue.Neutral, 0.14)), area.X, area.Y);
         }
 
@@ -364,7 +394,7 @@ public sealed partial class ChartView : KindControl
 
         if (frame.Horizontal)
         {
-            for (int at = 0; at < frame.Count; at++)
+            foreach (int at in ThinRules.Places(frame.Count, canvas.Height / 14))
             {
                 TextBlock words = canvas.Caption(LabelAt(at));
                 words.MaxWidth = Math.Max(frame.X0 - 10, 20);
@@ -375,7 +405,7 @@ public sealed partial class ChartView : KindControl
             return;
         }
 
-        double widest = chart.Labels.Select(label => Ink.Measured(canvas.Caption(label)).Width).DefaultIfEmpty(0).Max();
+        double widest = WidestLabel();
         IReadOnlyList<int> ticks = AxisRules.Ticks(frame.Count, small ? 3 : AxisRules.Most(frame.X1 - frame.X0, widest));
         foreach (int at in ticks)
         {
@@ -414,7 +444,9 @@ public sealed partial class ChartView : KindControl
         double[] tops = new double[count];
         Array.Fill(tops, double.MaxValue);
 
-        for (int place = 0; place < count; place++)
+        // A chart of very many places draws and reads out a spread of them (see ThinRules).
+        IReadOnlyList<int> kept = ThinRules.Places(count, frame.Horizontal ? canvas.Height : canvas.Width);
+        foreach (int place in kept)
         {
             double sum = stacked && shares ? chart.Series.Sum(series => place < series.Values.Count ? Math.Max(series.Values[place] ?? 0, 0) : 0) : 1;
             double running = 0;
@@ -446,15 +478,15 @@ public sealed partial class ChartView : KindControl
 
                 Rect cell = frame.Cell(start, bar, begin, to);
                 double thin = Math.Max(Math.Min(cell.Width, cell.Height), 0);
-                Brush fill = palette.Fill(series.Colour, HueRules.SeriesHue(at));
-                canvas.Shapes.Put(Ink.Box(Math.Max(cell.Width, frame.Horizontal ? 1 : 0), Math.Max(cell.Height, frame.Horizontal ? 0 : 1), fill, Math.Min(3, thin / 2)), cell.X, cell.Y);
+                (Brush fill, Brush? edge, double edgeWidth) = palette.Surface(series.Colour, HueRules.SeriesHue(at), at);
+                canvas.Shapes.Put(Ink.Box(Math.Max(cell.Width, frame.Horizontal ? 1 : 0), Math.Max(cell.Height, frame.Horizontal ? 0 : 1), fill, Math.Min(3, thin / 2), edge, edgeWidth), cell.X, cell.Y);
                 tops[place] = Math.Min(tops[place], cell.Y);
             }
         }
 
         PaintPlaces(canvas, frame);
 
-        for (int place = 0; place < count; place++)
+        foreach (int place in kept)
         {
             List<ProbeLine> lines = [];
             List<string> spoken = [];
@@ -496,36 +528,48 @@ public sealed partial class ChartView : KindControl
         PaintGuides(canvas, frame, marks, style);
         Palette palette = canvas.Palette;
         bool area = chart.Kind == Models.ChartKind.Area;
+        IReadOnlyList<int> kept = ThinRules.Places(count, canvas.Width);
+        HashSet<int>? keeps = kept.Count == count ? null : [.. kept];
 
         for (int at = 0; at < chart.Series.Count; at++)
         {
             Models.Series series = chart.Series[at];
             Windows.UI.Color colour = SeriesColour(palette, at);
             IReadOnlyList<int> runs = AxisRules.Runs(series.Values);
-            foreach (IGrouping<int, int> run in Enumerable.Range(0, series.Values.Count).Where(place => series.Values[place].HasValue).GroupBy(place => runs[place]))
+            foreach (IGrouping<int, int> run in Enumerable.Range(0, series.Values.Count).Where(place => series.Values[place].HasValue && (keeps is null || keeps.Contains(place))).GroupBy(place => runs[place]))
             {
                 List<Pt> points = [.. run.Select(place => new Pt(frame.Centre(place), frame.Along(series.Values[place]!.Value)))];
+                SeriesLook? look = palette.Look(at);
                 if (points.Count == 1)
                 {
-                    canvas.Shapes.Put(Ink.Disc(7, Palette.Mark(colour)), points[0].X - 3.5, points[0].Y - 3.5);
+                    PutMark(canvas, palette, look, colour, points[0]);
                     continue;
                 }
 
                 IReadOnlyList<Pt> drawn = chart.Curve == Models.Curve.Step ? Curves.StepsCentred(points) : points;
                 PathGeometry line = chart.Curve == Models.Curve.Smooth ? Ink.Smooth(points) : Ink.Lines(drawn);
-                if (area)
+                if (area && !palette.Contrast)
                 {
                     PathGeometry under = chart.Curve == Models.Curve.Smooth ? Ink.Smooth(points, frame.Y1) : Ink.Lines(drawn, fillTo: frame.Y1);
                     canvas.Shapes.Put(Ink.Filled(under, Fade(colour, 0.32, 0.04)), 0, 0);
                 }
 
-                canvas.Shapes.Put(Ink.Stroked(line, Palette.Mark(colour), 2, PenLineCap.Round), 0, 0);
+                canvas.Shapes.Put(Ink.Stroked(line, Palette.Mark(colour), 2, look is null ? PenLineCap.Round : PenLineCap.Flat, look?.Dash.Count > 0 ? [.. look.Value.Dash] : null), 0, 0);
+                if (look is not null)
+                {
+                    // A mark at some of the places, so the series is known by its shape as well as its colour and its dashes.
+                    int every = Math.Max(1, (int)Math.Ceiling(points.Count / 24.0));
+                    for (int mark = 0; mark < points.Count; mark += every)
+                    {
+                        PutMark(canvas, palette, look, colour, points[mark]);
+                    }
+                }
             }
         }
 
         PaintPlaces(canvas, frame);
 
-        for (int place = 0; place < count; place++)
+        foreach (int place in kept)
         {
             List<ProbeLine> lines = [];
             List<(Point At, Windows.UI.Color Colour)> marksAt = [];
@@ -557,6 +601,18 @@ public sealed partial class ChartView : KindControl
         }
     }
 
+    // A mark on a series' place: in a contrast theme the shape of its look, else a disc.
+    private static void PutMark(PlotCanvas canvas, Palette palette, SeriesLook? look, Windows.UI.Color colour, Pt at)
+    {
+        if (look is SeriesLook found)
+        {
+            canvas.Shapes.Put(Ink.Marker(found.Shape, 10, Palette.Mark(palette.InkOf(found))), at.X - 5, at.Y - 5);
+            return;
+        }
+
+        canvas.Shapes.Put(Ink.Disc(7, Palette.Mark(colour)), at.X - 3.5, at.Y - 3.5);
+    }
+
     private static LinearGradientBrush Fade(Windows.UI.Color colour, double begin, double to)
     {
         LinearGradientBrush brush = new() { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
@@ -571,7 +627,7 @@ public sealed partial class ChartView : KindControl
         List<(int Place, double Value)> found = [];
         if (chart.Series.Count > 0)
         {
-            for (int at = 0; at < chart.Series[0].Values.Count; at++)
+            foreach (int at in ThinRules.Places(chart.Series[0].Values.Count, canvas.Width))
             {
                 if (chart.Series[0].Values[at] is double value)
                 {
@@ -605,7 +661,11 @@ public sealed partial class ChartView : KindControl
                 continue;
             }
 
-            canvas.Shapes.Put(Ink.Filled(Ink.Smooth(points, y1), Fade(colour, 0.25, 0)), 0, 0);
+            if (!canvas.Palette.Contrast)
+            {
+                canvas.Shapes.Put(Ink.Filled(Ink.Smooth(points, y1), Fade(colour, 0.25, 0)), 0, 0);
+            }
+
             canvas.Shapes.Put(Ink.Stroked(Ink.Smooth(points), Palette.Mark(colour), 1.75, PenLineCap.Round), 0, 0);
         }
 
@@ -628,23 +688,47 @@ public sealed partial class ChartView : KindControl
             return;
         }
 
-        double outer = Math.Min(canvas.Width, canvas.Height) / 2 - 2;
-        double inner = outer * 0.62;
-        double middle = (outer + inner) / 2;
-        double width = outer - inner;
-        double cx = canvas.Width / 2;
-        double cy = canvas.Height / 2;
-        double angle = -90;
-        double gap = parts.Count > 1 ? 1.5 : 0;
+        DonutRules.Ring ring = DonutRules.Of(canvas.Width, canvas.Height);
+        if (!ring.Draws)
+        {
+            return;
+        }
+
+        double middle = ring.Middle;
+        double width = ring.Width;
+        double cx = ring.Cx;
+        double cy = ring.Cy;
+        Palette palette = canvas.Palette;
+        double gap = parts.Count > 1 ? (palette.Contrast ? 3 : 1.5) : 0;
+        double[] values = [.. parts.Select(part => part.Value)];
+        IReadOnlyList<DonutRules.Slice> slices = DonutRules.Slices(values);
         for (int at = 0; at < parts.Count; at++)
         {
-            double sweep = 360 * parts[at].Value / total;
-            Windows.UI.Color colour = canvas.Palette.Of(HueRules.SeriesHue(at));
-            canvas.Shapes.Put(Ink.Stroked(Ink.Arc(cx, cy, middle, angle + (gap / 2), Math.Max(sweep - gap, 0.5)), Palette.Mark(colour), width), 0, 0);
-            Pt mid = Ink.Polar(cx, cy, middle, angle + (sweep / 2));
+            DonutRules.Slice slice = slices[at];
+            Windows.UI.Color colour = palette.Series(null, at);
+            (Brush fill, Brush? edge, double _) = palette.Surface(null, HueRules.SeriesHue(at), at);
+            double sweep = Math.Max(slice.Sweep - gap, 0.5);
+            canvas.Shapes.Put(Ink.Stroked(Ink.Arc(cx, cy, middle, slice.Start + (gap / 2), sweep), edge ?? fill, width), 0, 0);
+            if (edge is not null && fill is SolidColorBrush ground && ground.Color != ((SolidColorBrush)edge).Color)
+            {
+                // An outline in a contrast theme: the ground inside the edge, which is two pixels each side.
+                canvas.Shapes.Put(Ink.Stroked(Ink.Arc(cx, cy, middle, slice.Start + (gap / 2), sweep), fill, Math.Max(width - 4, 0)), 0, 0);
+            }
+
+            Pt mid = Ink.Polar(cx, cy, middle, slice.Start + (slice.Sweep / 2));
             string words = NumberWords.Amount(parts[at].Value) + " (" + ShareRules.Percent(parts[at].Value / total).ToString(CultureInfo.InvariantCulture) + "%)";
-            canvas.Probes.Add(new Probe(canvas.Mx(mid.X), mid.Y, default, parts[at].Label, [new ProbeLine(colour, words)], parts[at].Label + ", " + words));
-            angle += sweep;
+            int slot = at;
+            bool mirrored = canvas.Mirror;
+
+            // The pointer reads a slice out wherever it is on the slice's arc, by the angle it is at from the middle.
+            canvas.Probes.Add(new Probe(
+                canvas.Mx(mid.X),
+                mid.Y,
+                default,
+                parts[at].Label,
+                [new ProbeLine(colour, words)],
+                parts[at].Label + ", " + words,
+                Covers: point => DonutRules.SliceAt(values, ring, point.X, point.Y, 6, mirrored) == slot));
         }
     }
 
@@ -653,7 +737,7 @@ public sealed partial class ChartView : KindControl
     {
         int levels = chart.Levels.Count;
         int count = Math.Max(AxisRules.Count(chart), 1);
-        double laneHeight = (canvas.Height - 24) / levels;
+        double laneHeight = Guard.Length(canvas.Height - 24) / levels;
         double x0 = 0;
         double x1 = canvas.Width;
         double X(double place) => x0 + ((x1 - x0) * place / count);
@@ -671,13 +755,13 @@ public sealed partial class ChartView : KindControl
             (int level, int first, int to) = stretches[at];
             double opacity = 0.45 + (0.55 * (1 - (level / Math.Max(levels - 1.0, 1))));
             double top = Lane(Math.Clamp(level, 0, levels - 1)) + (laneHeight * 0.22);
-            canvas.Shapes.Put(Ink.Box(Math.Max(X(to + 1) - X(first), 1), laneHeight * 0.56, Palette.Mark(colour, opacity), 3), X(first), top);
+            canvas.Shapes.Put(Ink.Box(Math.Max(X(to + 1) - X(first), 1), laneHeight * 0.56, palette.Fade(colour, opacity), 3), X(first), top);
             if (at + 1 < stretches.Count && stretches[at + 1].From == to + 1)
             {
                 (int nextLevel, int nextFrom, _) = stretches[at + 1];
                 double a = Lane(Math.Clamp(Math.Min(level, nextLevel), 0, levels - 1)) + (laneHeight * 0.22);
                 double b = Lane(Math.Clamp(Math.Max(level, nextLevel), 0, levels - 1)) + (laneHeight * 0.78);
-                canvas.Shapes.Put(Ink.Rule(X(nextFrom), Math.Min(a, b), X(nextFrom), Math.Max(a, b), Palette.Mark(colour, 0.5)), 0, 0);
+                canvas.Shapes.Put(Ink.Rule(X(nextFrom), Math.Min(a, b), X(nextFrom), Math.Max(a, b), palette.Fade(colour, 0.5)), 0, 0);
             }
         }
 
@@ -687,7 +771,7 @@ public sealed partial class ChartView : KindControl
             canvas.Text(name, 4, Lane(level) + (laneHeight / 2), Across.Start, Down.Middle);
         }
 
-        double widest = chart.Labels.Select(label => Ink.Measured(canvas.Caption(label)).Width).DefaultIfEmpty(0).Max();
+        double widest = WidestLabel();
         foreach (int at in AxisRules.Ticks(count, AxisRules.Most(x1 - x0, widest)))
         {
             if (at < chart.Labels.Count)

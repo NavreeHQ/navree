@@ -26,6 +26,7 @@ internal sealed record ProbeLine(Windows.UI.Color? Colour, string Text);
 /// <param name="Spoken">What a screen reader is told when the place is reached.</param>
 /// <param name="Guide">Whether a line is drawn down through the place.</param>
 /// <param name="Marks">Discs to draw on the place: where, and in what colour.</param>
+/// <param name="Covers">Whether a point of the drawing is on the place, for a place that is not a rectangle (a slice of a ring); the pointer reads it out wherever it is on the place.</param>
 internal sealed record Probe(
     double X,
     double Y,
@@ -34,7 +35,8 @@ internal sealed record Probe(
     IReadOnlyList<ProbeLine> Lines,
     string Spoken,
     bool Guide = false,
-    IReadOnlyList<(Point At, Windows.UI.Color Colour)>? Marks = null);
+    IReadOnlyList<(Point At, Windows.UI.Color Colour)>? Marks = null,
+    Func<Point, bool>? Covers = null);
 
 /// <summary>What a drawing is painted on: two layers (shapes, which flip across in right to left, and texts), and the places it can be read out.</summary>
 internal sealed class PlotCanvas
@@ -65,7 +67,7 @@ internal sealed class PlotCanvas
 
     /// <summary>A rectangle across as it is drawn.</summary>
     internal Rect Mrect(double x, double y, double width, double height) =>
-        new(Mirror ? Width - x - width : x, y, width, height);
+        Ink.Area(Mirror ? Width - x - Guard.Length(width) : x, y, width, height);
 
     /// <summary>Puts a text where shapes would be put if they were not flipped.</summary>
     internal TextBlock Text(TextBlock block, double x, double y, Across across = Across.Start, Down down = Down.Top)
@@ -92,6 +94,9 @@ internal sealed partial class PlotSurface : UserControl
     private readonly List<Probe> probes = [];
     private int current = -1;
     private double paintedWidth = -1;
+    private double paintedHeight = -1;
+    private Palette? palette;
+    private bool paintQueued;
 
     /// <summary>Starts a surface.</summary>
     internal PlotSurface()
@@ -105,7 +110,13 @@ internal sealed partial class PlotSurface : UserControl
         shapes.RenderTransformOrigin = new Point(0.5, 0.5);
         HorizontalAlignment = HorizontalAlignment.Stretch;
         IsTabStop = false;
-        SizeChanged += (_, _) => Paint();
+        SizeChanged += (_, e) =>
+        {
+            // What is drawn never shows past the surface's edge, whatever room its parts were laid out for.
+            shapes.Clip = new RectangleGeometry { Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height) };
+            labels.Clip = new RectangleGeometry { Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height) };
+            PaintSoon();
+        };
         ActualThemeChanged += (_, _) => Paint(force: true);
         Loaded += (_, _) => Paint(force: true);
         PointerMoved += OnPointerMoved;
@@ -151,7 +162,7 @@ internal sealed partial class PlotSurface : UserControl
     internal string AccessHelp { get; set; } = string.Empty;
 
     /// <summary>What kind of thing a screen reader says this is.</summary>
-    internal string AccessType { get; set; } = "chart";
+    internal string AccessType { get; set; } = KindStrings.TypeChart;
 
     /// <summary>A value the part holds against a range, for screen readers that ask for it.</summary>
     internal (double Min, double Max, double Value)? Range { get; set; }
@@ -180,7 +191,7 @@ internal sealed partial class PlotSurface : UserControl
             return;
         }
 
-        current = Math.Clamp(index, 0, probes.Count - 1);
+        current = Guard.Place(index, probes.Count);
         Show(probes[current]);
         if (speak)
         {
@@ -203,6 +214,26 @@ internal sealed partial class PlotSurface : UserControl
 
     /// <inheritdoc />
     protected override AutomationPeer OnCreateAutomationPeer() => new PlotPeer(this);
+
+    // A change of size is painted once, when the layout that caused it is done, however many steps a resize takes in a frame.
+    private void PaintSoon()
+    {
+        if (paintQueued)
+        {
+            return;
+        }
+
+        paintQueued = true;
+        if (!DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, () =>
+        {
+            paintQueued = false;
+            Paint();
+        }))
+        {
+            paintQueued = false;
+            Paint();
+        }
+    }
 
     private void Paint(bool force = false)
     {
@@ -228,28 +259,42 @@ internal sealed partial class PlotSurface : UserControl
             return;
         }
 
-        if (!force && Math.Abs(width - paintedWidth) < 0.5 && shapes.Children.Count > 0)
+        if (!PlotRules.Repaints(paintedWidth, paintedHeight, width, height, shapes.Children.Count > 0, force))
         {
             return;
         }
 
         paintedWidth = width;
+        paintedHeight = height;
         shapes.Children.Clear();
         labels.Children.Clear();
         guide.Children.Clear();
         probes.Clear();
         bool mirror = MirrorInRtl && FlowDirection == FlowDirection.RightToLeft;
         shapes.RenderTransform = mirror ? new ScaleTransform { ScaleX = -1 } : null;
+        palette = new Palette(this);
         PlotCanvas plot = new()
         {
             Shapes = shapes,
             Labels = labels,
             Width = width,
             Height = height,
-            Palette = new Palette(this),
+            Palette = palette,
             Mirror = mirror,
         };
-        Painter(plot);
+        try
+        {
+            Painter(plot);
+        }
+        catch (Exception)
+        {
+            // A drawing is the picture of what the part says, and the part's name still says it to a screen reader: a drawing that cannot
+            // be made for the data or the size it was given is left empty, and never faults the window it stands in.
+            shapes.Children.Clear();
+            labels.Children.Clear();
+            plot.Probes.Clear();
+        }
+
         probes.AddRange(plot.Probes);
         if (current >= probes.Count)
         {
@@ -294,7 +339,11 @@ internal sealed partial class PlotSurface : UserControl
         {
             Probe probe = probes[index];
             double distance;
-            if (probe.Hit.Width > 0 && probe.Hit.Height > 0)
+            if (probe.Covers is not null)
+            {
+                distance = probe.Covers(at) ? 0 : double.MaxValue;
+            }
+            else if (probe.Hit.Width > 0 && probe.Hit.Height > 0)
             {
                 // A place with an area of its own is read out while the pointer is inside it.
                 bool inside = at.X >= probe.Hit.X && at.X <= probe.Hit.X + probe.Hit.Width && at.Y >= probe.Hit.Y && at.Y <= probe.Hit.Y + probe.Hit.Height;
@@ -359,7 +408,7 @@ internal sealed partial class PlotSurface : UserControl
     private void Show(Probe probe)
     {
         guide.Children.Clear();
-        Palette palette = new(this);
+        Palette palette = this.palette ?? new Palette(this);
         double width = ActualWidth;
         double height = ActualHeight;
         if (probe.Guide)

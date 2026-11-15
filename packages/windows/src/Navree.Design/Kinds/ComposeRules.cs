@@ -66,9 +66,28 @@ public static class ComposeRules
     /// <returns>The gap.</returns>
     public static double GridGap(int steps, bool cards)
     {
-        double gap = steps == 0 ? 12 : steps * 4;
+        double gap = steps <= 0 ? 12 : Steps(steps);
         return cards ? gap : Math.Max(gap, 24);
     }
+
+    /// <summary>The most steps of spacing a page can ask for.</summary>
+    public const int MostSteps = 64;
+
+    /// <summary>A number of the page's steps of spacing in effective pixels: four each, never below none and never more than <see cref="MostSteps"/>.</summary>
+    /// <param name="steps">The page's steps.</param>
+    /// <returns>The space.</returns>
+    public static double Steps(int steps) => Math.Clamp(steps, 0, MostSteps) * 4.0;
+
+    /// <summary>The most a shape or a box of the page is made wide or high.</summary>
+    public const double MostExtent = 4096;
+
+    /// <summary>A size the page gives: none stays none (the part sizes itself), else it is held between nothing and <see cref="MostExtent"/> and grows with the person's text where it is scaled.</summary>
+    /// <param name="size">The page's size, or none.</param>
+    /// <param name="scaled">Whether it grows with the person's text.</param>
+    /// <param name="textScale">How much larger the person's text is.</param>
+    /// <returns>The size, or NaN for none (the value XAML takes for automatic).</returns>
+    public static double Extent(int? size, bool scaled, double textScale) =>
+        size is int value ? Math.Clamp(value * (scaled ? Math.Clamp(Guard.Finite(textScale, 1), 1, 4) : 1), 0, MostExtent) : double.NaN;
 
     /// <summary>The width of each column of a run of <paramref name="count"/> columns in a place this wide.</summary>
     /// <param name="width">The place's width.</param>
@@ -78,7 +97,7 @@ public static class ComposeRules
     public static double ColumnWidth(double width, int count, double gap)
     {
         int n = Math.Max(count, 1);
-        return Math.Max((width - (gap * (n - 1))) / n, 0);
+        return Math.Max((Guard.Length(width) - (Guard.Length(gap) * (n - 1))) / n, 0);
     }
 
     /// <summary>

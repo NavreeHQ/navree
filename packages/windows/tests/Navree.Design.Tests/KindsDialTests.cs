@@ -419,4 +419,24 @@ public sealed class KindsDialTests
         Assert.AreEqual(5.0, star[0].Y, 1e-9);
         Assert.IsTrue(star[1].Y > star[0].Y);
     }
+
+    [TestMethod]
+    public void The_days_of_a_calendar_are_in_date_order_whatever_order_the_page_sent_them_in()
+    {
+        IReadOnlyList<(DateOnly Date, double? Value)> sorted = HeatRules.InOrder(
+        [
+            ("2026-11-13", 3),
+            ("2026-11-11", 1),
+            ("not a date", 9),
+            ("2026-11-12", null),
+            ("2026-11-11", 2),
+            ("2026-02-30", 5),
+        ]);
+        Assert.AreEqual(4, sorted.Count);
+        Assert.IsTrue(sorted.Select(day => day.Date).SequenceEqual([new DateOnly(2026, 11, 11), new DateOnly(2026, 11, 11), new DateOnly(2026, 11, 12), new DateOnly(2026, 11, 13)]));
+        Assert.AreEqual(1.0, sorted[0].Value, "days of one date keep the order they came in");
+        Assert.AreEqual(2.0, sorted[1].Value);
+        Assert.IsNull(sorted[2].Value);
+        Assert.AreEqual(0, HeatRules.InOrder([]).Count);
+    }
 }

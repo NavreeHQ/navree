@@ -10,6 +10,34 @@ using Windows.Foundation;
 
 namespace Navree.Controls.Charts;
 
+/// <summary>How a shade is drawn where there are no blends of a colour: an outline with a part of its area filled, the more the deeper.</summary>
+internal static class Shades
+{
+    /// <summary>A shade in a contrast theme: the cell's outline, and inside it a square that covers a share of the cell's area.</summary>
+    internal static void Put(Canvas canvas, Windows.UI.Color ink, double x, double y, double cell, double share, double radius)
+    {
+        canvas.Put(Ink.Box(cell, cell, null, radius, Palette.Mark(ink), 1), x, y);
+        double inner = Math.Max((cell - 2) * Math.Sqrt(Guard.Fraction(share)), 0);
+        if (inner >= 1)
+        {
+            canvas.Put(Ink.Box(inner, inner, Palette.Mark(ink), Math.Min(radius, inner / 2)), x + ((cell - inner) / 2), y + ((cell - inner) / 2));
+        }
+    }
+
+    /// <summary>The same as a small swatch of a key.</summary>
+    internal static UIElement Swatch(Palette palette, Windows.UI.Color colour, double share, int shade)
+    {
+        if (!palette.Contrast)
+        {
+            return Ink.Box(11, 11, Palette.Mark(colour, HeatRules.Opacities[shade]), 2.5);
+        }
+
+        Canvas swatch = new() { Width = 11, Height = 11 };
+        Put(swatch, colour, 0, 0, 11, share, 2);
+        return swatch;
+    }
+}
+
 /// <summary>
 /// The calendar of days: a week a column and a weekday a row, from the person's own first weekday, the months named along the top in the
 /// person's language, four shades of one colour from the page's steps, and no shade at all for a day with no reading (no data is not a
@@ -31,25 +59,28 @@ public sealed partial class CalendarHeatView : KindControl
 
     private DayOfWeek FirstDay => culture.DateTimeFormat.FirstDayOfWeek;
 
-    private List<(DateOnly Date, double? Value)> Days =>
-        [.. heatmap.Days.Select(day => (Date: PagerRules.Day(day.Date), day.Value)).Where(day => day.Date.HasValue).Select(day => (day.Date!.Value, day.Value))];
+    // The days in date order, read once: they are asked for at every size and every read-out.
+    private IReadOnlyList<(DateOnly Date, double? Value)>? days;
+
+    private IReadOnlyList<(DateOnly Date, double? Value)> Days => days ??= HeatRules.InOrder(heatmap.Days.Select(day => (day.Date, day.Value)));
 
     private (DateOnly First, DateOnly Last) Span()
     {
-        List<(DateOnly Date, double? Value)> days = Days;
+        IReadOnlyList<(DateOnly Date, double? Value)> days = Days;
         DateOnly today = DateOnly.FromDateTime(DateTime.Today);
-        DateOnly first = PagerRules.Day(heatmap.First) ?? (days.Count > 0 ? days.Min(day => day.Date) : today);
-        DateOnly last = PagerRules.Day(heatmap.Last) ?? (days.Count > 0 ? days.Max(day => day.Date) : first);
+        DateOnly first = PagerRules.Day(heatmap.First) ?? (days.Count > 0 ? days[0].Date : today);
+        DateOnly last = PagerRules.Day(heatmap.Last) ?? (days.Count > 0 ? days[^1].Date : first);
         return (first, last);
     }
 
-    private double Highest => Days.Where(day => day.Value.HasValue).Select(day => day.Value!.Value).DefaultIfEmpty(1).Max();
+    private double? highest;
+
+    private double Highest => highest ??= Days.Where(day => day.Value.HasValue && double.IsFinite(day.Value.Value)).Select(day => day.Value!.Value).DefaultIfEmpty(1).Max();
 
     private double Step(double width)
     {
         (DateOnly first, DateOnly last) = Span();
-        int weeks = HeatRules.Weeks(first, last, FirstDay);
-        return Math.Min((width - (Label * 1.6)) / weeks, 20);
+        return HeatRules.Step(width, Label * 1.6, HeatRules.Window(first, last, FirstDay).Weeks);
     }
 
     internal override UIElement Build(Palette palette)
@@ -67,8 +98,8 @@ public sealed partial class CalendarHeatView : KindControl
             Reads = true,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(heatmap.Title) ? said : SpeechRules.Fact(heatmap.Title, said),
-            AccessType = "calendar",
-            HeightFor = width => Label + 6 + (Math.Max(Step(width), 4) * 7),
+            AccessType = KindStrings.TypeCalendar,
+            HeightFor = width => Label + 6 + (Step(width) * 7),
         };
         plot.Painter = Paint;
         stack.Children.Add(plot);
@@ -90,7 +121,7 @@ public sealed partial class CalendarHeatView : KindControl
         for (int shade = 0; shade < 4; shade++)
         {
             StackPanel entry = new() { Orientation = Orientation.Horizontal, Spacing = 4 };
-            entry.Children.Add(Ink.Box(11, 11, Palette.Mark(colour, HeatRules.Opacities[shade]), 2.5));
+            entry.Children.Add(Shades.Swatch(palette, colour, (shade + 1) / 4.0, shade));
             entry.Children.Add(Ink.Words(shade == 3 ? words[shade] + "+" : words[shade], 12, palette.Secondary));
             flow.Children.Add(entry);
         }
@@ -102,16 +133,15 @@ public sealed partial class CalendarHeatView : KindControl
     {
         Palette palette = canvas.Palette;
         (DateOnly first, DateOnly last) = Span();
-        int weeks = HeatRules.Weeks(first, last, FirstDay);
+        (DateOnly start, int weeks) = HeatRules.Window(first, last, FirstDay);
         double gutter = Label * 1.6;
-        double step = Math.Max(Math.Min((canvas.Width - gutter) / weeks, 20), 4);
-        double cell = Math.Max(step - 2, 2);
+        double step = HeatRules.Step(canvas.Width, gutter, weeks);
+        double cell = HeatRules.Square(step);
         double top = Label + 6;
-        DateOnly start = HeatRules.Start(first, FirstDay);
         double highest = Highest;
         Windows.UI.Color colour = palette.Of(heatmap.Colour, Models.Hue.Accent);
 
-        foreach ((int week, int month) in HeatRules.Months(first, weeks, FirstDay))
+        foreach ((int week, int month) in HeatRules.Months(start, weeks, FirstDay))
         {
             canvas.Text(canvas.Caption(culture.DateTimeFormat.AbbreviatedMonthNames[month - 1]), gutter + (week * step), 0, Across.Start, Down.Top);
         }
@@ -133,16 +163,21 @@ public sealed partial class CalendarHeatView : KindControl
             double x = gutter + (week * step);
             double y = top + (day * step);
             int? shade = HeatRules.Shade(value, heatmap.Steps, highest);
-            if (shade is int deep)
+            if (shade is int deep && palette.Contrast)
             {
-                canvas.Shapes.Put(Ink.Box(cell, cell, Palette.Mark(colour, HeatRules.Opacities[deep]), cell * 0.22), x, y);
+                Shades.Put(canvas.Shapes, colour, x, y, cell, (deep + 1) / 4.0, cell * 0.22);
+            }
+            else if (shade is int shown)
+            {
+                canvas.Shapes.Put(Ink.Box(cell, cell, Palette.Mark(colour, HeatRules.Opacities[shown]), cell * 0.22), x, y);
             }
             else
             {
-                canvas.Shapes.Put(Ink.Box(cell, cell, null, cell * 0.22, Palette.Mark(palette.Of(Models.Hue.Neutral), 0.35), 1), x, y);
+                // No reading is an empty outline, in the colour the system gives what is not in use in a contrast theme.
+                canvas.Shapes.Put(Ink.Box(cell, cell, null, cell * 0.22, palette.Contrast ? palette.Track(colour) : Palette.Mark(palette.Of(Models.Hue.Neutral), 0.35), 1), x, y);
             }
 
-            string words = value is double found ? NumberWords.WithUnit(NumberWords.Amount(found, culture), heatmap.Unit) : "No reading";
+            string words = value is double found ? NumberWords.WithUnit(NumberWords.Amount(found, culture), heatmap.Unit) : KindStrings.NoReading;
             canvas.Probes.Add(new Probe(
                 canvas.Mx(x + (cell / 2)),
                 y,
@@ -174,9 +209,10 @@ public sealed partial class MatrixHeatView : KindControl
 
     private List<int> Columns => matrix.Lower ? [.. Enumerable.Range(0, Math.Max(matrix.Measures.Count - 1, 0))] : [.. Enumerable.Range(0, matrix.Measures.Count)];
 
-    private double LeftWidth() => matrix.Measures.Select(name => Ink.Measured(Ink.Words(name, 12, Palette.Resource("TextFillColorSecondaryBrush"))).Width).DefaultIfEmpty(0).Max() + 8;
+    private double LeftWidth(double width) =>
+        MatrixRules.Left(matrix.Measures.Select(name => Ink.Measure(name, 12).Width).DefaultIfEmpty(0).Max(), width);
 
-    private double CellFor(double width) => Math.Max(Math.Min(44 * TextScale.Capped(1.4), (width - LeftWidth()) / Math.Max(Columns.Count, 1) - 3), 16);
+    private double CellFor(double width) => MatrixRules.Cell(width, LeftWidth(width), Columns.Count, 44 * TextScale.Capped(1.4));
 
     internal override UIElement Build(Palette palette)
     {
@@ -193,7 +229,7 @@ public sealed partial class MatrixHeatView : KindControl
             Reads = true,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(matrix.Title) ? said : SpeechRules.Fact(matrix.Title, said),
-            AccessType = "matrix",
+            AccessType = KindStrings.TypeMatrix,
             HeightFor = width => (Rows.Count * (CellFor(width) + 3)) + 22,
         };
         plot.Painter = Paint;
@@ -206,13 +242,15 @@ public sealed partial class MatrixHeatView : KindControl
         Palette palette = canvas.Palette;
         List<int> rows = Rows;
         List<int> columns = Columns;
-        double left = LeftWidth();
+        double left = LeftWidth(canvas.Width);
         double cell = CellFor(canvas.Width);
         double gap = 3;
         for (int row = 0; row < rows.Count; row++)
         {
             double y = row * (cell + gap);
-            canvas.Text(Ink.Words(matrix.Measures[rows[row]], 12, palette.Secondary), left - 8, y + (cell / 2), Across.End, Down.Middle);
+            TextBlock rowName = Ink.Words(matrix.Measures[rows[row]], 12, palette.Secondary);
+            rowName.MaxWidth = Math.Max(left - 8, 1);
+            canvas.Text(rowName, left - 8, y + (cell / 2), Across.End, Down.Middle);
             for (int column = 0; column < columns.Count; column++)
             {
                 int a = rows[row];
@@ -227,35 +265,54 @@ public sealed partial class MatrixHeatView : KindControl
                 double strength = MatrixRules.Strength(relation, matrix.Peak);
                 double value = relation?.Value ?? 0;
                 Brush? fill;
+                Windows.UI.Color markColour = default;
+                double opacity = 1;
+                bool significant = relation?.Value is not null && relation.Significant;
                 if (relation?.Value is null)
                 {
                     fill = null;
                 }
                 else if (!relation.Significant)
                 {
-                    fill = Palette.Mark(palette.Of(Models.Hue.Neutral), 0.25);
+                    markColour = palette.Of(Models.Hue.Neutral);
+                    opacity = 0.25;
+                    fill = Palette.Mark(markColour, opacity);
                 }
                 else
                 {
-                    fill = Palette.Mark(palette.Of(value >= 0 ? matrix.Positive : matrix.Negative, value >= 0 ? Models.Hue.Blue : Models.Hue.Orange), 0.15 + (0.85 * strength));
+                    markColour = palette.Of(value >= 0 ? matrix.Positive : matrix.Negative, value >= 0 ? Models.Hue.Blue : Models.Hue.Orange);
+                    opacity = 0.15 + (0.85 * strength);
+                    fill = Palette.Mark(markColour, opacity);
                 }
 
-                canvas.Shapes.Put(
-                    Ink.Box(cell, cell, fill, 6, fill is null ? Palette.Mark(palette.Of(Models.Hue.Neutral), 0.35) : null, fill is null ? 1 : 0),
-                    x,
-                    y);
-                string words = relation?.Value is null ? "Not tested" : value.ToString("0.00", ClientCulture.Current);
-                if (relation?.Value is not null)
+                if (palette.Contrast)
                 {
-                    Brush ink = strength > 0.55 && relation.Significant ? Palette.Mark(Microsoft.UI.Colors.White) : palette.Primary;
+                    // Outlined cells: empty for a pair never tested, a little filled for one that may be chance, filled by how strong the relation is.
+                    Windows.UI.Color grey = palette.Track(markColour).Color;
+                    Shades.Put(canvas.Shapes, relation?.Value is null ? grey : significant ? markColour : grey, x, y, cell, relation?.Value is null ? 0 : significant ? 0.15 + (0.85 * strength) : 0.2, 6);
+                }
+                else
+                {
+                    canvas.Shapes.Put(
+                        Ink.Box(cell, cell, fill, 6, fill is null ? Palette.Mark(palette.Of(Models.Hue.Neutral), 0.35) : null, fill is null ? 1 : 0),
+                        x,
+                        y);
+                }
+                string words = relation?.Value is null ? KindStrings.NotTested : value.ToString("0.00", ClientCulture.Current);
+                if (relation?.Value is not null && MatrixRules.HoldsNumber(cell))
+                {
+                    // The words are in the ink that reads on what is under them: on a deep cell, the ink of its colour; else the page's text colour.
+                    Brush ink = !significant ? palette.Primary
+                        : palette.Contrast ? (strength > 0.55 ? palette.OnMark(markColour) : palette.Primary)
+                        : palette.OnMark(markColour, opacity);
                     canvas.Text(Ink.Words(words, 11, ink, strong: true), x + (cell / 2), y + (cell / 2), Across.Middle, Down.Middle);
                 }
 
-                string pair = matrix.Measures[a] + " and " + matrix.Measures[b];
+                string pair = KindStrings.Pair(matrix.Measures[a], matrix.Measures[b]);
                 List<ProbeLine> lines = [new ProbeLine(null, words)];
                 if (relation is not null && !relation.Significant)
                 {
-                    lines.Add(new ProbeLine(null, "May be chance"));
+                    lines.Add(new ProbeLine(null, KindStrings.MayBeChance));
                 }
 
                 if (relation?.Note is string note)
@@ -312,14 +369,14 @@ public sealed partial class ScatterView : KindControl
             Reads = true,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(scatter.Title) ? said : SpeechRules.Fact(scatter.Title, said),
-            AccessType = "scatter chart",
+            AccessType = KindStrings.TypeScatter,
             HeightFor = width => Math.Max(scatter.EqualAxes ? Math.Min(width, 380) : Math.Min(width / 1.4, 320), 160),
         };
         plot.Painter = Paint;
         stack.Children.Add(plot);
         if (scatter.Series.Count > 1)
         {
-            stack.Children.Add(HealthParts.Key(palette, scatter.Series.Select((series, at) => (palette.Of(series.Colour, HueRules.SeriesHue(at)), series.Name, (string?)null))));
+            stack.Children.Add(HealthParts.Key(palette, scatter.Series.Select((series, at) => (palette.Series(series.Colour, at), series.Name, (string?)null))));
         }
 
         return stack;
@@ -333,7 +390,7 @@ public sealed partial class ScatterView : KindControl
         IReadOnlyList<double> yMarks = AxisRules.Marks(y, 4);
         string xName = AxisWords(scatter.X);
         string yName = AxisWords(scatter.Y);
-        double widest = yMarks.Select(mark => Ink.Measured(canvas.Caption(NumberWords.Amount(mark))).Width).DefaultIfEmpty(0).Max();
+        double widest = yMarks.Select(mark => Ink.Measure(NumberWords.Amount(mark), 11).Width).DefaultIfEmpty(0).Max();
         double x0 = widest + 10;
         double x1 = canvas.Width - 10;
         double y0 = yName.Length > 0 ? 18 : 6;
@@ -379,13 +436,24 @@ public sealed partial class ScatterView : KindControl
         for (int at = 0; at < scatter.Series.Count; at++)
         {
             Models.PointSeries series = scatter.Series[at];
-            Windows.UI.Color colour = palette.Of(series.Colour, HueRules.SeriesHue(at));
-            foreach (Models.Point point in series.Points)
+            Windows.UI.Color colour = palette.Series(series.Colour, at);
+            SeriesLook? look = palette.Look(at);
+
+            // Thousands of points are drawn and read out as a spread of them (see ThinRules): each is an element and a place.
+            foreach (Models.Point point in ThinRules.Spread(series.Points.Count, Math.Max(ThinRules.MostMarks / Math.Max(scatter.Series.Count, 1), 2)).Select(place => series.Points[place]))
             {
                 double px = X(point.X);
                 double py = Y(point.Y);
-                canvas.Shapes.Put(Ink.Disc(8, Palette.Mark(colour, 0.6)), px - 4, py - 4);
-                string words = (scatter.X?.Name ?? "x") + " " + NumberWords.Amount(point.X) + ", " + (scatter.Y?.Name ?? "y") + " " + NumberWords.Amount(point.Y);
+                if (look is SeriesLook found)
+                {
+                    canvas.Shapes.Put(Ink.Marker(found.Shape, 9, Palette.Mark(colour)), px - 4.5, py - 4.5);
+                }
+                else
+                {
+                    canvas.Shapes.Put(Ink.Disc(8, Palette.Mark(colour, 0.6)), px - 4, py - 4);
+                }
+
+                string words = (scatter.X?.Name ?? KindStrings.AxisAcross) + " " + NumberWords.Amount(point.X) + ", " + (scatter.Y?.Name ?? KindStrings.AxisDown) + " " + NumberWords.Amount(point.Y);
                 canvas.Probes.Add(new Probe(
                     canvas.Mx(px),
                     py,

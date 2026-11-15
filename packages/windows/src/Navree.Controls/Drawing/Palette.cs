@@ -7,13 +7,15 @@ using Windows.UI.ViewManagement;
 namespace Navree.Controls.Drawing;
 
 /// <summary>
-/// The colours a drawn kind uses, for the theme it stands in. Words, lines and surfaces are the system's own brushes for the running
-/// theme; the marks take the hue the page names (the system has names for the accent and for status only). In a contrast theme every
-/// mark is drawn in the system's colours and never in ours.
+/// The colours a drawn kind uses, for the theme the element it stands in is in (not the application's: an element can have a theme of
+/// its own). Words, lines and surfaces are the theme's own brushes; the marks take the hue the page names (the system has names for the
+/// accent and for status only). In a contrast theme every colour is one of the person's own contrast colours and never ours, and the
+/// series of a chart differ in more than colour (<see cref="Look"/>).
 /// </summary>
 internal sealed class Palette
 {
-    private readonly bool contrast;
+    private readonly string theme;
+    private readonly Dictionary<string, Brush> brushes = [];
 
     /// <summary>Reads the theme an element stands in.</summary>
     internal Palette(FrameworkElement owner)
@@ -25,14 +27,19 @@ internal sealed class Palette
             ElementTheme.Light => false,
             _ => Application.Current.RequestedTheme == ApplicationTheme.Dark,
         };
-        contrast = IsContrast();
+        Contrast = ThemeState.HighContrast;
+        theme = Dark ? "Dark" : "Light";
+        Signature = string.Join('|', Dark, Contrast, ThemeState.Accent, ThemeState.TextScaleFactor);
     }
 
     /// <summary>Whether the ground is dark.</summary>
     internal bool Dark { get; }
 
     /// <summary>Whether a contrast theme is on.</summary>
-    internal bool Contrast => contrast;
+    internal bool Contrast { get; }
+
+    /// <summary>What this palette was made from: the theme, whether it is a contrast theme, the accent and the size of the text. A drawing made from another signature is made again.</summary>
+    internal string Signature { get; }
 
     /// <summary>Words.</summary>
     internal Brush Primary => Resource("TextFillColorPrimaryBrush");
@@ -44,13 +51,13 @@ internal sealed class Palette
     internal Brush Divider => Resource("DividerStrokeColorDefaultBrush");
 
     /// <summary>A faint wash of the text colour, to lay over what is being read out.</summary>
-    internal Brush Wash =>
-        Application.Current.Resources.TryGetValue("TextFillColorPrimaryBrush", out object? value) && value is SolidColorBrush found
-            ? new SolidColorBrush(found.Color) { Opacity = 0.06 }
-            : new SolidColorBrush(Microsoft.UI.Colors.Gray) { Opacity = 0.06 };
+    internal Brush Wash => new SolidColorBrush(ColourOf("TextFillColorPrimaryBrush")) { Opacity = Contrast ? 0.14 : 0.06 };
 
     /// <summary>The surface of a card.</summary>
     internal Brush Card => Resource("CardBackgroundFillColorDefaultBrush");
+
+    /// <summary>The colour of a card's surface.</summary>
+    internal Windows.UI.Color CardColour => ColourOf("CardBackgroundFillColorDefaultBrush");
 
     /// <summary>The edge of a card.</summary>
     internal Brush CardEdge => Resource("CardStrokeColorDefaultBrush");
@@ -61,18 +68,29 @@ internal sealed class Palette
     /// <summary>The edge of a small floating note.</summary>
     internal Brush FlyoutEdge => Resource("SurfaceStrokeColorFlyoutBrush");
 
-    /// <summary>The system's brush of that name, or a plain grey where it has none.</summary>
-    internal static Brush Resource(string key) =>
-        Application.Current.Resources.TryGetValue(key, out object? value) && value is Brush found
-            ? found
-            : new SolidColorBrush(Microsoft.UI.Colors.Gray);
+    /// <summary>The theme's brush of that name, or a plain grey where it has none. In a contrast theme, the person's contrast colour that stands for it.</summary>
+    internal Brush Resource(string key)
+    {
+        if (!brushes.TryGetValue(key, out Brush? brush))
+        {
+            brush = Contrast
+                ? new SolidColorBrush(ContrastColour(key))
+                : ThemeLookup.Brush(key, theme) ?? new SolidColorBrush(Microsoft.UI.Colors.Gray);
+            brushes[key] = brush;
+        }
+
+        return brush;
+    }
+
+    /// <summary>The colour of a brush of the theme.</summary>
+    internal Windows.UI.Color ColourOf(string key) => Resource(key) is SolidColorBrush solid ? solid.Color : Microsoft.UI.Colors.Gray;
 
     /// <summary>The colour a hue is drawn in.</summary>
     internal Windows.UI.Color Of(Models.Hue hue)
     {
-        if (contrast)
+        if (Contrast)
         {
-            return Ink.Colour(Rgb.Of(ContrastMark(hue)));
+            return Highlighted(hue) ? ThemeState.System(UIElementType.Highlight) : ThemeState.System(UIElementType.WindowText);
         }
 
         Swatch swatch = HueRules.Of(hue);
@@ -87,7 +105,7 @@ internal sealed class Palette
     /// <summary>The colour of a part's own colour, or of a fallback hue when the page names none.</summary>
     internal Windows.UI.Color Of(Models.Colour? colour, Models.Hue fallback)
     {
-        if (colour is not null && !contrast && HueRules.Fallback(colour, Dark) is Rgb future)
+        if (colour is not null && !Contrast && HueRules.Fallback(colour, Dark) is Rgb future)
         {
             return Ink.Colour(future);
         }
@@ -106,12 +124,12 @@ internal sealed class Palette
     internal SolidColorBrush Fill(Models.Hue hue, double opacity = 1) => Mark(Of(hue), opacity);
 
     /// <summary>A brush of a colour at an opacity.</summary>
-    internal static SolidColorBrush Mark(Windows.UI.Color colour, double opacity = 1) => new(colour) { Opacity = opacity };
+    internal static SolidColorBrush Mark(Windows.UI.Color colour, double opacity = 1) => new(colour) { Opacity = Guard.Fraction(opacity) };
 
     /// <summary>The brush for words in a part's colour: as dark as it needs to be to read on a light ground.</summary>
     internal Brush Words(Models.Colour? colour, Models.Hue fallback)
     {
-        if (contrast)
+        if (Contrast)
         {
             return Mark(Of(colour, fallback));
         }
@@ -127,14 +145,87 @@ internal sealed class Palette
     /// <summary>The hue of the series at a place.</summary>
     internal static Models.Hue SeriesHue(int index) => HueRules.SeriesHue(index);
 
-    /// <summary>The colour of a track a mark runs along: the mark's own hue, faint.</summary>
-    internal SolidColorBrush Track(Windows.UI.Color colour) => Mark(colour, Dark ? 0.26 : 0.18);
+    /// <summary>The colour of a track a mark runs along: the mark's own hue, faint; in a contrast theme the colour the system gives what is not in use.</summary>
+    internal SolidColorBrush Track(Windows.UI.Color colour) =>
+        Contrast ? new SolidColorBrush(ThemeState.System(UIElementType.GrayText)) : Mark(colour, Dark ? 0.26 : 0.18);
 
-    // The accent the person chose, and the secondary text colour, are the system's; asked of the theme's resources.
+    /// <summary>
+    /// How the series at a place is told apart from the others: none in the light and dark themes, where its hue does it, and in a contrast
+    /// theme a mark, a dash and a solid or an outline besides its colour.
+    /// </summary>
+    internal SeriesLook? Look(int index) => Contrast ? SeriesLooks.Of(index) : null;
+
+    /// <summary>The colour a series draws in, as its look gives it in a contrast theme.</summary>
+    internal Windows.UI.Color InkOf(SeriesLook look) =>
+        look.Highlight ? ThemeState.System(UIElementType.Highlight) : ThemeState.System(UIElementType.WindowText);
+
+    /// <summary>The ground of the page, as the system gives it in a contrast theme.</summary>
+    internal Windows.UI.Color Ground => Contrast ? ThemeState.System(UIElementType.Window) : CardColour;
+
+    /// <summary>
+    /// A bar's, slice's or segment's fill and edge for the series at a place: its hue and no edge in the light and dark themes; in a contrast
+    /// theme solid or an outline (the ground inside), as its look says, with an edge in its colour so the outline is seen.
+    /// </summary>
+    internal (Brush Fill, Brush? Edge, double EdgeWidth) Surface(Models.Colour? colour, Models.Hue fallback, int index, double opacity = 1)
+    {
+        if (Look(index) is not SeriesLook look)
+        {
+            return (Fill(colour, fallback, opacity), null, 0);
+        }
+
+        Windows.UI.Color ink = InkOf(look);
+        return (look.Filled ? Mark(ink) : Mark(Ground), Mark(ink), 2);
+    }
+
+    /// <summary>The colour of the series (or category) at a place: its page colour, and in a contrast theme the ink its look gives it.</summary>
+    /// <param name="colour">The page's colour, or none.</param>
+    /// <param name="index">The series' place.</param>
+    internal Windows.UI.Color Series(Models.Colour? colour, int index) => Category(colour, HueRules.SeriesHue(index), index);
+
+    /// <summary>The colour of a part of a whole that has a place among its parts: its page colour or a fallback hue, and in a contrast theme the ink its look gives it.</summary>
+    /// <param name="colour">The page's colour, or none.</param>
+    /// <param name="fallback">The hue to take when the page names none.</param>
+    /// <param name="index">The part's place.</param>
+    internal Windows.UI.Color Category(Models.Colour? colour, Models.Hue fallback, int index) =>
+        Look(index) is SeriesLook look ? InkOf(look) : Of(colour, fallback);
+
+    /// <summary>A mark's colour at an opacity: a contrast theme has no blends, so the opacity is left out there.</summary>
+    internal SolidColorBrush Fade(Windows.UI.Color colour, double opacity) => Mark(colour, Contrast ? 1 : opacity);
+
+    /// <summary>The ink for words or a sign laid on a mark of a colour that shows at an opacity over the ground: what reads on what the person sees there, never a colour fixed in advance.</summary>
+    /// <param name="mark">The mark's colour.</param>
+    /// <param name="opacity">How much of it shows over the ground.</param>
+    internal Windows.UI.Color InkOn(Windows.UI.Color mark, double opacity = 1)
+    {
+        if (Contrast)
+        {
+            // Text on the highlight is the highlight's own text colour; on the text colour, the ground.
+            return mark == ThemeState.System(UIElementType.Highlight) ? ThemeState.System(UIElementType.HighlightText) : ThemeState.System(UIElementType.Window);
+        }
+
+        Windows.UI.Color ground = CardColour;
+        Rgb seen = ContrastRules.Over(
+            new Rgb(mark.R / 255.0, mark.G / 255.0, mark.B / 255.0),
+            new Rgb(ground.R / 255.0, ground.G / 255.0, ground.B / 255.0),
+            opacity);
+        return Drawing.Ink.Colour(ContrastRules.Ink(seen));
+    }
+
+    /// <summary>The brush of <see cref="InkOn"/>.</summary>
+    internal Brush OnMark(Windows.UI.Color mark, double opacity = 1) => Mark(InkOn(mark, opacity));
+
+    /// <summary>The ink for words laid on the surface of the series at a place (see <see cref="Surface"/>): a contrast theme's outline has the text colour inside, a solid has its own ink.</summary>
+    internal Brush OnSurface(Windows.UI.Color mark, int index, double opacity = 1) =>
+        Look(index) is SeriesLook { Filled: false } ? Primary : OnMark(mark, opacity);
+
+    // Whether a hue is drawn in the highlight in a contrast theme (the accent and the cool hues); the rest in the text colour.
+    private static bool Highlighted(Models.Hue hue) => hue is Models.Hue.Accent or Models.Hue.Blue or Models.Hue.Info or Models.Hue.Cyan;
+
+    // The accent the person chose is the theme's own brush for it.
     private bool TryTheme(Models.Hue hue, out Windows.UI.Color colour)
     {
         string key = hue == Models.Hue.Accent ? "AccentFillColorDefaultBrush" : "TextFillColorSecondaryBrush";
-        if (Application.Current.Resources.TryGetValue(key, out object? value) && value is SolidColorBrush brush)
+        if (Resource(key) is SolidColorBrush brush)
         {
             colour = brush.Color;
             return true;
@@ -144,35 +235,13 @@ internal sealed class Palette
         return false;
     }
 
-    // In a contrast theme the marks are the system's: the text colour, the highlight, the link colour and the disabled text colour.
-    private string ContrastMark(Models.Hue hue)
-    {
-        string key = hue switch
+    // In a contrast theme the colours are the person's: the text colour on the window colour, the highlight for what is chosen, and the
+    // colour of what is not in use. Not the colour of links, which is for links.
+    private static Windows.UI.Color ContrastColour(string key) =>
+        key switch
         {
-            Models.Hue.Neutral or Models.Hue.Slate => "TextFillColorSecondaryBrush",
-            Models.Hue.Accent or Models.Hue.Blue or Models.Hue.Info => "AccentFillColorDefaultBrush",
-            Models.Hue.Green or Models.Hue.Success or Models.Hue.Violet or Models.Hue.Cyan => "AccentTextFillColorPrimaryBrush",
-            _ => "TextFillColorPrimaryBrush",
+            "CardBackgroundFillColorDefaultBrush" or "AcrylicInAppFillColorDefaultBrush" => ThemeState.System(UIElementType.Window),
+            "AccentFillColorDefaultBrush" => ThemeState.System(UIElementType.Highlight),
+            _ => ThemeState.System(UIElementType.WindowText),
         };
-        if (Application.Current.Resources.TryGetValue(key, out object? value) && value is SolidColorBrush brush)
-        {
-            return "#" + brush.Color.R.ToString("X2", System.Globalization.CultureInfo.InvariantCulture)
-                + brush.Color.G.ToString("X2", System.Globalization.CultureInfo.InvariantCulture)
-                + brush.Color.B.ToString("X2", System.Globalization.CultureInfo.InvariantCulture);
-        }
-
-        return Dark ? "#FFFFFF" : "#000000";
-    }
-
-    private static bool IsContrast()
-    {
-        try
-        {
-            return new AccessibilitySettings().HighContrast;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
 }
