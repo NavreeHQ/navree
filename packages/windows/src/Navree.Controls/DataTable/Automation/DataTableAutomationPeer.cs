@@ -1,3 +1,4 @@
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -11,21 +12,186 @@ public sealed partial class DataTable
     /// <inheritdoc />
     protected override AutomationPeer OnCreateAutomationPeer() => new DataTableAutomationPeer(this);
 
-    // Says something to assistive technology without moving focus.
-    private void RaiseNotification(string words)
+    private DispatcherQueueTimer? structureTimer;
+    private int reportedRowCount = -1;
+
+    // The notification event is number 30 of the events the platform defines; the projection this builds against has no name for it.
+    private const AutomationEvents NotificationEvent = (AutomationEvents)30;
+
+    // Says something to assistive technology without moving focus: only when a client listens, only when a peer was asked for,
+    // and a newer message of an activity replaces an older one that was not said yet.
+    private void RaiseNotification(string words, AnnouncementKind kind, string activity)
     {
         if (string.IsNullOrEmpty(words))
         {
             return;
         }
 
-        if (FrameworkElementAutomationPeer.FromElement(this) is { } peer)
+        try
         {
-            peer.RaiseNotificationEvent(
-                AutomationNotificationKind.ActionCompleted,
-                AutomationNotificationProcessing.ImportantMostRecent,
-                words,
-                "DataTable");
+            if (!NotificationsHeard() || FrameworkElementAutomationPeer.FromElement(this) is not { } peer)
+            {
+                return;
+            }
+
+            AutomationNotificationKind told = kind switch
+            {
+                AnnouncementKind.Added => AutomationNotificationKind.ItemAdded,
+                AnnouncementKind.Removed => AutomationNotificationKind.ItemRemoved,
+                AnnouncementKind.Completed => AutomationNotificationKind.ActionCompleted,
+                _ => AutomationNotificationKind.Other,
+            };
+            peer.RaiseNotificationEvent(told, AutomationNotificationProcessing.MostRecent, words, activity);
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            // A client went away between asking whether it listens and being told.
+        }
+    }
+
+    // Whether a client listens for notifications. The platform may not know the event by the number this build gives it, and then a client
+    // is taken to listen: the notification is raised, as it was before the question was asked.
+    private static bool NotificationsHeard()
+    {
+        try
+        {
+            return AutomationPeer.ListenerExists(NotificationEvent);
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+
+    // The peer of an element, when a client has asked for one: nothing is made to tell nobody.
+    private static AutomationPeer? PeerOf(UIElement element) =>
+        AutomationPeer.ListenerExists(AutomationEvents.PropertyChanged) || AutomationPeer.ListenerExists(AutomationEvents.StructureChanged)
+            || AutomationPeer.ListenerExists(AutomationEvents.SelectionPatternOnInvalidated)
+            || AutomationPeer.ListenerExists(AutomationEvents.SelectionItemPatternOnElementSelected)
+            || AutomationPeer.ListenerExists(AutomationEvents.SelectionItemPatternOnElementAddedToSelection)
+            || AutomationPeer.ListenerExists(AutomationEvents.SelectionItemPatternOnElementRemovedFromSelection)
+                ? FrameworkElementAutomationPeer.FromElement(element)
+                : null;
+
+    // What a change of the choice is told as: the row that changed, one by one, or one event that the choice is to be read again.
+    private void RaiseChoiceEvents(List<DataTableRow> changed, bool wholeSet)
+    {
+        SelectionNotice notice = SelectionNotices.For(changed.Count, wholeSet);
+        if (notice == SelectionNotice.None || PeerOf(this) is not { } tablePeer)
+        {
+            return;
+        }
+
+        try
+        {
+            if (notice == SelectionNotice.Invalidated)
+            {
+                if (AutomationPeer.ListenerExists(AutomationEvents.SelectionPatternOnInvalidated))
+                {
+                    tablePeer.RaiseAutomationEvent(AutomationEvents.SelectionPatternOnInvalidated);
+                }
+
+                return;
+            }
+
+            int chosenRows = ChosenCount;
+            foreach (DataTableRow row in changed)
+            {
+                if (FrameworkElementAutomationPeer.FromElement(row) is not { } rowPeer)
+                {
+                    continue;
+                }
+
+                AutomationEvents raised = SelectionNotices.EventFor(row.IsChosen, chosenRows) switch
+                {
+                    RowChoiceEvent.Selected => AutomationEvents.SelectionItemPatternOnElementSelected,
+                    RowChoiceEvent.Added => AutomationEvents.SelectionItemPatternOnElementAddedToSelection,
+                    _ => AutomationEvents.SelectionItemPatternOnElementRemovedFromSelection,
+                };
+                if (AutomationPeer.ListenerExists(raised))
+                {
+                    rowPeer.RaiseAutomationEvent(raised);
+                }
+
+                rowPeer.RaisePropertyChangedEvent(SelectionItemPatternIdentifiers.IsSelectedProperty, !row.IsChosen, row.IsChosen);
+            }
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            // A client went away between asking whether it listens and being told.
+        }
+    }
+
+    // A row's detail opened or shut: its expand and collapse state changed.
+    private void RaiseExpandState(DataTableRow row, bool open)
+    {
+        if (PeerOf(row) is not { } peer)
+        {
+            return;
+        }
+
+        try
+        {
+            peer.RaisePropertyChangedEvent(
+                ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty,
+                open ? ExpandCollapseState.Collapsed : ExpandCollapseState.Expanded,
+                open ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed);
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            // A client went away between asking whether it listens and being told.
+        }
+    }
+
+    // The number of rows held changed: the grid's row count is a property clients read again.
+    private void RaiseCountChanged(int rowCount)
+    {
+        int before = reportedRowCount;
+        reportedRowCount = rowCount;
+        if (before < 0 || before == rowCount || PeerOf(this) is not { } peer)
+        {
+            return;
+        }
+
+        try
+        {
+            peer.RaisePropertyChangedEvent(GridPatternIdentifiers.RowCountProperty, before, rowCount);
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            // A client went away between asking whether it listens and being told.
+        }
+    }
+
+    // Rows made and cleared change the tree a client sees; it is said once the rows have stopped changing.
+    private void QueueStructureEvent()
+    {
+        if (!loaded || !AutomationPeer.ListenerExists(AutomationEvents.StructureChanged))
+        {
+            return;
+        }
+
+        structureTimer ??= DispatcherQueue.CreateTimer();
+        structureTimer.Stop();
+        structureTimer.Interval = TimeSpan.FromMilliseconds(250);
+        structureTimer.IsRepeating = false;
+        structureTimer.Tick -= OnStructureTimer;
+        structureTimer.Tick += OnStructureTimer;
+        structureTimer.Start();
+    }
+
+    private void OnStructureTimer(DispatcherQueueTimer sender, object args)
+    {
+        try
+        {
+            if (loaded && FrameworkElementAutomationPeer.FromElement(this) is { } peer)
+            {
+                peer.RaiseAutomationEvent(AutomationEvents.StructureChanged);
+            }
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            // A client went away between asking whether it listens and being told.
         }
     }
 
@@ -57,6 +223,25 @@ public sealed partial class DataTable
     /// <summary>Scrolls a row into view, as assistive technology asks.</summary>
     /// <param name="index">The row's place.</param>
     internal void ScrollToRowIndex(int index) => RevealRow(index);
+
+    /// <summary>The message that says how the table is sorted, or null when it is not.</summary>
+    internal Announcement? SortedBy()
+    {
+        if (Model is not { } model)
+        {
+            return null;
+        }
+
+        foreach (DataTableColumn column in model.Columns)
+        {
+            if (column.Sort is { Direction: not DataTableSortDirection.None } sort)
+            {
+                return Announcements.Sorted(column.Header, sort.Direction == DataTableSortDirection.Ascending);
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>The words a sort puts beside the table's name.</summary>
     internal string? SortStatus()
@@ -92,7 +277,7 @@ public sealed partial class DataTableAutomationPeer : FrameworkElementAutomation
         table = owner;
     }
 
-    /// <inheritdoc />
+    /// <summary>The rows held: the grid pattern says rows not yet loaded are not counted. The place of a row in the whole set is said by its position and size in the set.</summary>
     public int RowCount => table.Model?.RowCount ?? 0;
 
     /// <inheritdoc />
@@ -110,12 +295,22 @@ public sealed partial class DataTableAutomationPeer : FrameworkElementAutomation
     /// <inheritdoc />
     public IRawElementProviderSimple GetItem(int row, int column)
     {
-        if (table.RealizedRows().FirstOrDefault(r => r.Index == row) is { } made && column >= 0 && column < made.Cells.Count)
+        // The grid has the rows held and the columns shown, counted from zero; anything else is a mistake of the client.
+        if (row < 0 || row >= RowCount || column < 0 || column >= ColumnCount)
         {
-            return ProviderFromPeer(FrameworkElementAutomationPeer.CreatePeerForElement(made.Cells[column]));
+            throw new ArgumentOutOfRangeException(row < 0 || row >= RowCount ? nameof(row) : nameof(column));
         }
 
-        return RowProvider(row);
+        DataTableRow? made = table.RealizedRows().FirstOrDefault(r => r.Index == row);
+        if (made is null)
+        {
+            // A row not made is made for the client that asked for one of its cells.
+            table.RealizeRow(row);
+            made = table.RealizedRows().FirstOrDefault(r => r.Index == row);
+        }
+
+        DataTableCell? cell = made?.Cells.FirstOrDefault(c => c.GridColumn == column && c.Role == CellRole.Data);
+        return cell is not null ? ProviderFromPeer(FrameworkElementAutomationPeer.CreatePeerForElement(cell)) : RowProvider(row);
     }
 
     // A row's provider: its own peer when it is made, else a stand-in that can ask for it to be made.
@@ -336,7 +531,7 @@ public sealed partial class DataTableHeaderItemAutomationPeer : FrameworkElement
     protected override string GetClassNameCore() => nameof(DataTableHeaderCell);
 
     /// <inheritdoc />
-    protected override string GetNameCore() => string.IsNullOrEmpty(cell.Heading) ? "Actions" : cell.Heading;
+    protected override string GetNameCore() => string.IsNullOrEmpty(cell.Heading) ? DataTableStrings.Get("DataTable_Header_Actions") : cell.Heading;
 
     /// <inheritdoc />
     protected override string GetAutomationIdCore() => "col:" + cell.ColumnKey;
@@ -477,10 +672,12 @@ public sealed partial class DataTableRowAutomationPeer : FrameworkElementAutomat
     protected override string GetAutomationIdCore() => row.Key ?? string.Empty;
 
     /// <inheritdoc />
-    protected override int GetPositionInSetCore() => row.Index + 1;
+    protected override int GetPositionInSetCore() =>
+        SetCounts.PositionInSet(row.Index, Table?.Model?.Earlier.Available == true);
 
     /// <inheritdoc />
-    protected override int GetSizeOfSetCore() => Table?.Model?.RowCount ?? 0;
+    protected override int GetSizeOfSetCore() =>
+        Table?.Model is { } model ? SetCounts.SizeOfSet(model.RowCount, model.TotalCount, model.Later.Available, model.Earlier.Available) : 0;
 
     /// <inheritdoc />
     protected override string GetLocalizedControlTypeCore() => DataTableStrings.Get("DataTable_ControlType_Row");
@@ -491,7 +688,7 @@ public sealed partial class DataTableRowAutomationPeer : FrameworkElementAutomat
 }
 
 /// <summary>A cell, told to assistive technology as a grid item with its row, column and heading.</summary>
-public sealed partial class DataTableCellAutomationPeer : FrameworkElementAutomationPeer, IGridItemProvider, ITableItemProvider
+public sealed partial class DataTableCellAutomationPeer : FrameworkElementAutomationPeer, IGridItemProvider, ITableItemProvider, IToggleProvider
 {
     private readonly DataTableCell cell;
 
@@ -530,23 +727,40 @@ public sealed partial class DataTableCellAutomationPeer : FrameworkElementAutoma
     /// <inheritdoc />
     public IRawElementProviderSimple[] GetRowHeaderItems() => [];
 
+    // The box in the heading chooses every row held that can be chosen: the one way assistive technology has to do it at once.
+    private bool IsChooseAllBox => cell.Role == CellRole.Check && cell.Row is { IsHeader: true };
+
+    /// <inheritdoc />
+    public ToggleState ToggleState => Table?.HeaderBox() switch
+    {
+        HeaderBoxState.On => ToggleState.On,
+        HeaderBoxState.Indeterminate => ToggleState.Indeterminate,
+        _ => ToggleState.Off,
+    };
+
+    /// <inheritdoc />
+    public void Toggle() => Table?.HeaderBoxPressed();
+
     /// <inheritdoc />
     protected override object? GetPatternCore(PatternInterface patternInterface) =>
-        patternInterface is PatternInterface.GridItem or PatternInterface.TableItem && cell.Role == CellRole.Data
+        (patternInterface is PatternInterface.GridItem or PatternInterface.TableItem && cell.Role == CellRole.Data)
+        || (patternInterface == PatternInterface.Toggle && IsChooseAllBox)
             ? this
             : base.GetPatternCore(patternInterface);
 
     /// <inheritdoc />
-    protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.DataItem;
+    protected override AutomationControlType GetAutomationControlTypeCore() => IsChooseAllBox ? AutomationControlType.CheckBox : AutomationControlType.DataItem;
 
     /// <inheritdoc />
     protected override string GetClassNameCore() => nameof(DataTableCell);
 
     /// <inheritdoc />
     protected override string GetNameCore() =>
-        Table?.Presenter is { } presenter && cell.Row is { } row && cell.Role == CellRole.Data
-            ? (cell.ColumnIndex >= 0 ? presenter.CellText(row.Record, cell.ColumnIndex) : Table.ListWords(row.Record))
-            : string.Empty;
+        IsChooseAllBox
+            ? DataTableStrings.Get("DataTable_ChooseAllShown")
+            : Table?.Presenter is { } presenter && cell.Row is { } row && cell.Role == CellRole.Data
+                ? (cell.ColumnIndex >= 0 ? presenter.CellText(row.Record, cell.ColumnIndex) : Table.ListWords(row.Record))
+                : string.Empty;
 
     /// <inheritdoc />
     protected override string GetAutomationIdCore() =>
@@ -556,10 +770,10 @@ public sealed partial class DataTableCellAutomationPeer : FrameworkElementAutoma
     protected override string GetLocalizedControlTypeCore() => DataTableStrings.Get("DataTable_ControlType_Cell");
 
     /// <inheritdoc />
-    protected override bool IsControlElementCore() => cell.Role == CellRole.Data;
+    protected override bool IsControlElementCore() => cell.Role == CellRole.Data || IsChooseAllBox;
 
     /// <inheritdoc />
-    protected override bool IsContentElementCore() => cell.Role == CellRole.Data;
+    protected override bool IsContentElementCore() => cell.Role == CellRole.Data || IsChooseAllBox;
 }
 
 /// <summary>
@@ -605,4 +819,59 @@ public sealed partial class DataTableRowStandInAutomationPeer : AutomationPeer, 
 
     /// <inheritdoc />
     protected override bool IsOffscreenCore() => true;
+}
+
+/// <summary>The dots of a row's menu, told to assistive technology as a button that opens the menu.</summary>
+public sealed class DataTableGlyphAutomationPeer : FrameworkElementAutomationPeer, IInvokeProvider
+{
+    private readonly DataTableGlyph glyph;
+
+    /// <summary>Makes the peer.</summary>
+    /// <param name="owner">The glyph.</param>
+    public DataTableGlyphAutomationPeer(DataTableGlyph owner)
+        : base(owner)
+    {
+        glyph = owner;
+    }
+
+    private DataTableRow? Row
+    {
+        get
+        {
+            for (DependencyObject? at = glyph; at is not null; at = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(at))
+            {
+                if (at is DataTableCell cell)
+                {
+                    return cell.Row;
+                }
+            }
+
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
+    public void Invoke()
+    {
+        if (Row is { } row)
+        {
+            row.Owner?.OpenRowMenu(row, glyph);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override object? GetPatternCore(PatternInterface patternInterface) =>
+        patternInterface == PatternInterface.Invoke ? this : base.GetPatternCore(patternInterface);
+
+    /// <inheritdoc />
+    protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Button;
+
+    /// <inheritdoc />
+    protected override string GetClassNameCore() => nameof(DataTableGlyph);
+
+    /// <inheritdoc />
+    protected override string GetNameCore() =>
+        Row is { } row && row.Owner?.Presenter is { } presenter
+            ? DataTableStrings.Get("DataTable_MoreActions", presenter.RowName(row.Record))
+            : DataTableStrings.Get("DataTable_MoreActions", string.Empty);
 }

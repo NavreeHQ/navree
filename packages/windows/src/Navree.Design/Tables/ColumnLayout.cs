@@ -18,7 +18,8 @@ public enum ColumnGroup
 /// <param name="Kind">What it holds.</param>
 /// <param name="Width">Its width before any room is shared out.</param>
 /// <param name="Flexible">Whether it takes the room the others leave.</param>
-public readonly record struct ColumnSpec(string Key, ColumnKind Kind, double Width, bool Flexible);
+/// <param name="Sized">Whether the person gave it its width: a width a person gave is not taken back to make room.</param>
+public readonly record struct ColumnSpec(string Key, ColumnKind Kind, double Width, bool Flexible, bool Sized = false);
 
 /// <summary>A column in its place.</summary>
 /// <param name="Key">The column's identity.</param>
@@ -94,6 +95,62 @@ public static class FrozenRegions
 /// <summary>Places the columns of a table.</summary>
 public static class ColumnLayoutBuilder
 {
+    // Takes up to a number of pixels from the columns of words, numbers and states the person gave no width to, never below their least,
+    // each giving in proportion to what it can give, in whole pixels; returns what was taken.
+    private static double TakeFromMiddle(IReadOnlyList<ColumnSpec> shown, double[] widths, double wanted)
+    {
+        List<int> givers = [];
+        List<double> room = [];
+        double total = 0;
+        for (int i = 0; i < shown.Count; i++)
+        {
+            ColumnSpec column = shown[i];
+            if (column.Flexible || column.Sized || column.Kind is not (ColumnKind.Words or ColumnKind.Number or ColumnKind.Status))
+            {
+                continue;
+            }
+
+            double spare = Math.Max(0, Math.Floor(widths[i]) - ColumnSizing.LeastWidth(column.Kind));
+            if (spare > 0)
+            {
+                givers.Add(i);
+                room.Add(spare);
+                total += spare;
+            }
+        }
+
+        if (total <= 0)
+        {
+            return 0;
+        }
+
+        double take = Math.Min(Math.Ceiling(wanted), total);
+        double[] given = new double[givers.Count];
+        double taken = 0;
+        for (int g = 0; g < givers.Count; g++)
+        {
+            given[g] = Math.Floor(take * room[g] / total);
+            taken += given[g];
+        }
+
+        // The pixels the shares left over are taken one at a time from the first that can still give.
+        for (int g = 0; taken < take && g < givers.Count; g = (g + 1) % givers.Count)
+        {
+            if (given[g] < room[g])
+            {
+                given[g]++;
+                taken++;
+            }
+        }
+
+        for (int g = 0; g < givers.Count; g++)
+        {
+            widths[givers[g]] -= given[g];
+        }
+
+        return taken;
+    }
+
     /// <summary>Works out the layout of a table's columns for a viewport.</summary>
     /// <param name="shown">The columns that scroll or are frozen at the start, in order.</param>
     /// <param name="frozenStartWished">How many of them the person wants frozen.</param>
@@ -135,25 +192,44 @@ public static class ColumnLayoutBuilder
         double scrollWidth = Sum(ColumnGroup.Scroll);
         double sum = fs + scrollWidth + fe;
 
-        // A table a little too wide takes the room from the flexible column, down to the least a person may make it,
-        // before it scrolls: a value is not cut by the frozen end group when a column can give a little.
+        // A table too wide for its viewport finds the room in this order, and scrolls only when none is left: the name gives what it
+        // has above what its words need; then the other columns of words, numbers and states give, down to their least, each in
+        // proportion to what it can give; and only then the name gives below what its words need, down to the least a person may make it.
+        // A column the person gave a width, a column of controls and a picture keep theirs.
         if (sum > viewport)
         {
+            int title = -1;
             for (int i = 0; i < shown.Count; i++)
             {
-                if (!shown[i].Flexible)
+                if (shown[i].Flexible)
                 {
-                    continue;
+                    title = i;
+                    break;
                 }
-
-                double least = ColumnSizing.ResizeRange(shown[i].Kind).Min;
-                double give = Math.Min(sum - viewport, Math.Max(0, widths[i] - least));
-                widths[i] -= give;
-                fs = gutter + Sum(ColumnGroup.FrozenStart);
-                scrollWidth = Sum(ColumnGroup.Scroll);
-                sum = fs + scrollWidth + fe;
-                break;
             }
+
+            double excess = sum - viewport;
+            if (title >= 0)
+            {
+                double give = Math.Min(excess, Math.Max(0, widths[title] - ColumnSet.TitleNeed));
+                widths[title] -= give;
+                excess -= give;
+            }
+
+            if (excess > 0)
+            {
+                excess -= TakeFromMiddle(shown, widths, excess);
+            }
+
+            if (excess > 0 && title >= 0)
+            {
+                double least = ColumnSizing.ResizeRange(shown[title].Kind).Min;
+                widths[title] -= Math.Min(excess, Math.Max(0, widths[title] - least));
+            }
+
+            fs = gutter + Sum(ColumnGroup.FrozenStart);
+            scrollWidth = Sum(ColumnGroup.Scroll);
+            sum = fs + scrollWidth + fe;
         }
 
         // Room left over goes to the flexible column, else to the last words column, within its range.

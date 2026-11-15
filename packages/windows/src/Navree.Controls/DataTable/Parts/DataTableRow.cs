@@ -18,6 +18,7 @@ public sealed class DataTableRow : Control
     private Canvas? frozenStart;
     private Canvas? frozenEnd;
     private Border? detailCard;
+    private Border? textOnHighlight;
     private readonly List<DataTableCell> cells = [];
     private readonly List<DataTableHeaderCell> headers = [];
     private DataTableCell? checkCell;
@@ -66,6 +67,18 @@ public sealed class DataTableRow : Control
     /// <summary>The card that holds the detail, which stays at the start edge.</summary>
     internal FrameworkElement? DetailLayer => detailCard;
 
+    /// <summary>The layers the table moves against the scroll for this row.</summary>
+    internal IEnumerable<UIElement> StickyLayers()
+    {
+        foreach (UIElement? layer in new UIElement?[] { chrome, frozenStart, frozenEnd, scrollCells, detailCard })
+        {
+            if (layer is not null)
+            {
+                yield return layer;
+            }
+        }
+    }
+
     /// <summary>The cells of the row's columns, in display order.</summary>
     internal IReadOnlyList<DataTableCell> Cells => cells;
 
@@ -95,7 +108,7 @@ public sealed class DataTableRow : Control
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
-        Diag.Guard("a row's template", MakeParts);
+        MakeParts();
     }
 
     private void MakeParts()
@@ -106,6 +119,7 @@ public sealed class DataTableRow : Control
         frozenStart = GetTemplateChild("PART_FrozenStart") as Canvas;
         frozenEnd = GetTemplateChild("PART_FrozenEnd") as Canvas;
         detailCard = GetTemplateChild("PART_DetailCard") as Border;
+        textOnHighlight = GetTemplateChild("PART_TextOnHighlight") as Border;
         builtVersion = -1;
         Owner?.RowPartsMade(this);
         UpdateState();
@@ -151,7 +165,8 @@ public sealed class DataTableRow : Control
     }
 
     /// <summary>Draws the row again from the model and the table's state.</summary>
-    internal void Refresh()
+    /// <param name="keepFocused">Whether a cell, or the detail, that holds keyboard focus is left as it is: the row was drawn again with new data and a person is in it.</param>
+    internal void Refresh(bool keepFocused = false)
     {
         DataTable? table = Owner;
         if (table is null || root is null)
@@ -188,7 +203,7 @@ public sealed class DataTableRow : Control
                 {
                     table.BindList(cell, Record);
                 }
-                else if (cell.Content is UIElement content)
+                else if (cell.Content is UIElement content && !(keepFocused && table.HoldsFocus(cell)))
                 {
                     presenter.BindCell(content, Record, cell.ColumnIndex);
                 }
@@ -211,19 +226,30 @@ public sealed class DataTableRow : Control
             chevron.Visibility = Record.HasDetail ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        if (keepFocused && detailContent is not null && !table.HoldsFocus(detailCard!))
+        {
+            // The detail is made again from the new data, unless a person is working in it.
+            ClearDetail();
+        }
+
         UpdateDetail(table);
         UpdateState();
     }
 
+    /// <summary>Whether the row is drawn chosen.</summary>
+    internal bool IsChosen => chosen;
+
     /// <summary>Draws the choice again without binding the cells.</summary>
-    internal void RefreshChoice()
+    /// <returns>True when the row was not chosen and is now, or was and is not.</returns>
+    internal bool RefreshChoice()
     {
         DataTable? table = Owner;
         if (table is null || IsHeader || Key is null)
         {
-            return;
+            return false;
         }
 
+        bool before = chosen;
         chosen = table.IsChosen(Key, Record.Choosable);
         if (check is not null)
         {
@@ -231,6 +257,7 @@ public sealed class DataTableRow : Control
         }
 
         UpdateState();
+        return before != chosen;
     }
 
     /// <summary>Sets the cells' positions and sizes from the table's layout.</summary>
@@ -359,16 +386,18 @@ public sealed class DataTableRow : Control
 
     private void UpdateState()
     {
-        string state = (chosen, pressed, over) switch
-        {
-            (true, true, _) => "ChosenPressed",
-            (true, false, true) => "ChosenPointerOver",
-            (true, false, false) => "Chosen",
-            (false, true, _) => "Pressed",
-            (false, false, true) => "PointerOver",
-            _ => "Normal",
-        };
+        string state = RowVisual.State(chosen, pressed, over, ContrastColours.IsOn && !IsHeader);
         VisualStateManager.GoToState(this, state, false);
+
+        // The words of a row that is the highlight take the highlight's text colour; any other row's words take what the style gives.
+        if (RowVisual.TextOnHighlight(state) && textOnHighlight?.Background is { } brush)
+        {
+            Foreground = brush;
+        }
+        else
+        {
+            ClearValue(ForegroundProperty);
+        }
     }
 
     private void Place(DataTableCell cell, int columnIndex, ColumnLayout layout, DataTable table, double height)

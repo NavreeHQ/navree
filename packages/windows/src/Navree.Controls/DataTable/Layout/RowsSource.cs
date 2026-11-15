@@ -113,6 +113,22 @@ internal sealed partial class RowsSource : IList, INotifyCollectionChanged, IKey
         CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, removed, at));
     }
 
+    /// <summary>Puts another row where one stood, as when the server gives a row another key.</summary>
+    /// <param name="at">The place.</param>
+    /// <param name="row">The new handle.</param>
+    internal void Replace(int at, RowHandle row)
+    {
+        RowHandle old = items[at];
+        items[at] = row;
+        if (places.TryGetValue(old.Key, out int held) && held == at)
+        {
+            places.Remove(old.Key);
+        }
+
+        places[row.Key] = at;
+        CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Replace, row, old, at));
+    }
+
     /// <summary>Draws one row again with other data: the key stays.</summary>
     /// <param name="at">The place.</param>
     internal void Redraw(int at)

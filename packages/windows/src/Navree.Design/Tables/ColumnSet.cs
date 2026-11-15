@@ -10,15 +10,16 @@ public readonly record struct ColInfo(string Key, ColumnKind Kind, ColumnRole Ro
 /// <summary>Which columns a table shows.</summary>
 public static class ColumnSet
 {
-    /// <summary>The width a name column is counted at when the room is shared out: it takes what is left, down to its least, so it is not counted whole.</summary>
-    public const double TitleComfort = 140;
+    /// <summary>The width the words of a name need: a name is counted at its own width, or at this when it asks for more, and is given this before any other column keeps more than its least.</summary>
+    public const double TitleNeed = 240;
 
     /// <summary>The most columns a table shows.</summary>
     public const int MostShown = 48;
 
     /// <summary>
-    /// The columns to show: all but the hidden ones and the subtitle, and when the room cannot hold them at the widths they ask for,
-    /// the secondary columns go first, the last one first, until the rest fit or no secondary column is left to go.
+    /// The columns to show: all but the hidden ones and the subtitle, and when the room cannot hold them at the widths they ask for
+    /// (the name at what its words need), the secondary columns go first, the last one first, until the rest fit or no secondary
+    /// column is left to go. A column that is not secondary is never left out here: the room it lacks is found by the layout.
     /// </summary>
     /// <param name="inPersonsOrder">All the columns, in the person's order.</param>
     /// <param name="hidden">The keys the person hid.</param>
@@ -54,7 +55,7 @@ public static class ColumnSet
             }
         }
 
-        double Asked() => shown.Sum(i => inPersonsOrder[i].Kind == ColumnKind.Title ? Math.Min(widths[i], TitleComfort) : widths[i]);
+        double Asked() => shown.Sum(i => inPersonsOrder[i].Kind == ColumnKind.Title ? Math.Min(widths[i], TitleNeed) : widths[i]);
         for (int at = shown.Count - 1; at >= 0 && Asked() > room; at--)
         {
             ColInfo column = inPersonsOrder[shown[at]];

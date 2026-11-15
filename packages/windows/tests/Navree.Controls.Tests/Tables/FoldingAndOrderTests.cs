@@ -196,22 +196,22 @@ public sealed class ColumnSetTests
             new("s2", ColumnKind.Words, ColumnRole.None, true),
         ];
         double[] asks = [240, 100, 100, 100];
-        Same.Items([0, 1, 2, 3], ColumnSet.Shown(columns, Set(), Set(), asks, 440));
-        Same.Items([0, 1, 2], ColumnSet.Shown(columns, Set(), Set(), asks, 439));
-        Same.Items([0, 2], ColumnSet.Shown(columns, Set(), Set(), asks, 339));
+        Same.Items([0, 1, 2, 3], ColumnSet.Shown(columns, Set(), Set(), asks, 540));
+        Same.Items([0, 1, 2], ColumnSet.Shown(columns, Set(), Set(), asks, 539));
+        Same.Items([0, 2], ColumnSet.Shown(columns, Set(), Set(), asks, 439));
         Same.Items([0, 2], ColumnSet.Shown(columns, Set(), Set(), asks, 50));
     }
 
     [TestMethod]
-    public void A_name_is_counted_at_its_comfort_and_not_at_what_it_asks_for()
+    public void A_name_is_counted_at_what_its_words_need_and_not_at_what_it_asks_for()
     {
         ColInfo[] columns =
         [
             new("t", ColumnKind.Title, ColumnRole.Title, false),
             new("s", ColumnKind.Words, ColumnRole.None, true),
         ];
-        Same.Items([0, 1], ColumnSet.Shown(columns, Set(), Set(), [800, 100], ColumnSet.TitleComfort + 100));
-        Same.Items([0], ColumnSet.Shown(columns, Set(), Set(), [800, 100], ColumnSet.TitleComfort + 99));
+        Same.Items([0, 1], ColumnSet.Shown(columns, Set(), Set(), [800, 100], ColumnSet.TitleNeed + 100));
+        Same.Items([0], ColumnSet.Shown(columns, Set(), Set(), [800, 100], ColumnSet.TitleNeed + 99));
     }
 
     [TestMethod]
@@ -234,7 +234,7 @@ public sealed class ColumnSetTests
     }
 
     [TestMethod]
-    public void The_orders_of_the_store_demo_show_all_seven_columns_at_the_wide_table_and_drop_the_last_secondary_at_the_middle_one()
+    public void The_orders_of_the_store_demo_drop_the_last_secondary_column_first_and_the_one_before_it_when_the_room_is_still_short()
     {
         // Order (name), Status, Fulfilment, Payment (secondary), Total, Ships to (secondary), Placed: as the table measures them.
         ColInfo[] orders =
@@ -248,7 +248,9 @@ public sealed class ColumnSetTests
             new("placed", ColumnKind.Words, ColumnRole.None, false),
         ];
         double[] asks = [240, 95, 120, 90, 85, 164, 139];
-        Same.Items([0, 1, 2, 3, 4, 5, 6], ColumnSet.Shown(orders, Set(), Set(), asks, 877));
+        // With the name at its 240, all seven ask for 933.
+        Same.Items([0, 1, 2, 3, 4, 5, 6], ColumnSet.Shown(orders, Set(), Set(), asks, 933));
+        Same.Items([0, 1, 2, 3, 4, 6], ColumnSet.Shown(orders, Set(), Set(), asks, 877));
         Same.Items([0, 1, 2, 3, 4, 6], ColumnSet.Shown(orders, Set(), Set(), asks, 790));
         Same.Items([0, 1, 2, 4, 6], ColumnSet.Shown(orders, Set(), Set(), asks, 650));
     }

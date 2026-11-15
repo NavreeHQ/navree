@@ -12,6 +12,8 @@ internal static class Mouse
     private const uint MoveTo = 0x0001;
     private const uint LeftDown = 0x0002;
     private const uint LeftUp = 0x0004;
+    private const uint RightDown = 0x0008;
+    private const uint RightUp = 0x0010;
     private const uint Absolute = 0x8000;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -67,6 +69,47 @@ internal static class Mouse
         await Task.Delay(60);
         mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
         await Task.Delay(300);
+    }
+
+    /// <summary>Presses and lets go of the right button where the pointer is.</summary>
+    internal static async Task RightClickAsync()
+    {
+        mouse_event(RightDown, 0, 0, 0, UIntPtr.Zero);
+        await Task.Delay(60);
+        mouse_event(RightUp, 0, 0, 0, UIntPtr.Zero);
+        await Task.Delay(500);
+    }
+
+    /// <summary>Presses the left button where the pointer is, and keeps it down.</summary>
+    internal static async Task DownAsync()
+    {
+        mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero);
+        await Task.Delay(150);
+    }
+
+    /// <summary>Lets go of the left button.</summary>
+    internal static async Task UpAsync()
+    {
+        mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+        await Task.Delay(300);
+    }
+
+    /// <summary>Presses the left button, moves the pointer in steps to a place, holds it there, and lets go.</summary>
+    internal static async Task DragAndHoldAsync((int X, int Y) from, (int X, int Y) to, int holdMilliseconds)
+    {
+        await MoveAsync(from);
+        mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero);
+        await Task.Delay(120);
+        const int steps = 8;
+        for (int i = 1; i <= steps; i++)
+        {
+            Put((from.X + ((to.X - from.X) * i / steps), from.Y + ((to.Y - from.Y) * i / steps)));
+            await Task.Delay(60);
+        }
+
+        await Task.Delay(holdMilliseconds);
+        mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
+        await Task.Delay(400);
     }
 
     /// <summary>Presses the left button, moves the pointer in steps, and lets go.</summary>

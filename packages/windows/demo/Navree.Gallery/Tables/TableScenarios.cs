@@ -12,7 +12,7 @@ namespace Navree.Gallery;
 internal static class TableScenarios
 {
     private static readonly string[] Standard =
-        ["standard", "chosen", "sorted", "loading", "empty", "failed", "scrolled", "detail", "cursor", "menu", "rowmenu", "layout", "narrow", "rtl", "rtlscrolled", "more", "keys"];
+        ["standard", "chosen", "sorted", "loading", "empty", "failed", "scrolled", "detail", "cursor", "menu", "rowmenu", "layout", "narrow", "rtl", "rtlscrolled", "more", "keys", "rowstates", "rowpressed"];
 
     /// <summary>The scenarios a run of "table" covers.</summary>
     internal static IReadOnlyList<string> All => Standard;
@@ -64,6 +64,11 @@ internal static class TableScenarios
         }
 
         Describe(tag, table);
+        if (name is "rowstates" or "rowpressed")
+        {
+            await RowStatesAsync(window, table, name);
+        }
+
         if (name == "keys")
         {
             await KeysAsync(window, table, tag);
@@ -75,10 +80,36 @@ internal static class TableScenarios
         }
 
         await Handshake.StepAsync("table-" + tag, "the " + name + " table in " + theme);
+        if (name == "rowpressed")
+        {
+            await Mouse.UpAsync();
+        }
+
         if (name is "standard" or "chosen" or "detail" && theme == ElementTheme.Light)
         {
             // The accessibility tree is read while the table is on the screen.
             await Handshake.StepAsync("uia-" + tag, "the accessibility tree of the " + name + " table");
+        }
+    }
+
+    // Rows in the states a pointer gives them: two chosen, one of them pointed at; or one with the button held down on it.
+    private static async Task RowStatesAsync(MainWindow window, DataTable table, string name)
+    {
+        Keys.Foreground(window);
+        table.ApplyChoice(name == "rowstates" ? ["c00002", "c00003"] : [], false);
+        await Task.Delay(500);
+        int index = name == "rowstates" ? 3 : 5;
+        if (table.RowsRepeater?.TryGetElement(index) is DataTableRow row && row.Cells.Count > 0)
+        {
+            DataTableCell cell = row.Cells[0];
+            (int X, int Y) at = Mouse.ScreenOf(window, cell, new Windows.Foundation.Point(Math.Min(60, cell.ActualWidth / 2), cell.ActualHeight / 2));
+            await Mouse.MoveAsync(at);
+            if (name == "rowpressed")
+            {
+                await Mouse.DownAsync();
+            }
+
+            await Task.Delay(500);
         }
     }
 
@@ -196,7 +227,7 @@ internal static class TableScenarios
             case "rowmenu":
                 if (table.RowsRepeater?.TryGetElement(2) is DataTableRow target && target.Cells.Count > 1)
                 {
-                    table.ShowRowMenuForRun(target, target.Cells[1]);
+                    table.OpenRowMenu(target, target.Cells[1]);
                     await Task.Delay(700);
                 }
 
@@ -418,5 +449,5 @@ internal static class Keys
 
     private static bool IsExtended(VirtualKey key) =>
         key is VirtualKey.Left or VirtualKey.Right or VirtualKey.Up or VirtualKey.Down or VirtualKey.Home or VirtualKey.End
-            or VirtualKey.PageUp or VirtualKey.PageDown or VirtualKey.Insert or VirtualKey.Delete;
+            or VirtualKey.PageUp or VirtualKey.PageDown or VirtualKey.Insert or VirtualKey.Delete or VirtualKey.Application;
 }

@@ -59,6 +59,7 @@ public sealed partial class DataTable : Control
     public DataTable()
     {
         DefaultStyleKey = typeof(DataTable);
+        factory = new RowFactory(RowDropped);
         Loaded += (_, _) => OnLoaded();
         Unloaded += (_, _) => OnUnloaded();
         SizeChanged += (_, _) => OnSizeChanged();
@@ -99,10 +100,6 @@ public sealed partial class DataTable : Control
 
     /// <summary>A person changed the columns: widths, order, what is hidden or frozen, the density.</summary>
     public event TypedEventHandler<DataTable, object?>? LayoutChanged;
-
-    /// <summary>Tells the table to report an exception that happens where the framework calls it, to a place a person can read, and to go on.</summary>
-    /// <param name="sink">Where it is written.</param>
-    public static void Watch(Action<string> sink) => Diag.Sink = sink;
 
     /// <summary>The rows and columns.</summary>
     public IDataTableModel? Model
@@ -167,14 +164,22 @@ public sealed partial class DataTable : Control
     public string? LayoutKey
     {
         get => layoutKey;
-        set => layoutKey = value;
+        set
+        {
+            layoutKey = value;
+            keeper.Forget();
+        }
     }
 
     /// <summary>Where a person's layout is kept.</summary>
     public IDataTableLayoutStore? LayoutStore
     {
         get => layoutStore;
-        set => layoutStore = value;
+        set
+        {
+            layoutStore = value;
+            keeper.Forget();
+        }
     }
 
     /// <summary>Whether the table is drawn as a table or as a list.</summary>
@@ -206,7 +211,7 @@ public sealed partial class DataTable : Control
     public void ApplyChoice(IEnumerable<string> keys, bool across)
     {
         choice = new ChoiceState(new HashSet<string>(keys, StringComparer.Ordinal), across);
-        ChoiceChanged(announce: false);
+        ChoiceChanged(announce: false, wholeSet: true);
     }
 
     /// <summary>Gives focus to a row, and to one of its cells.</summary>

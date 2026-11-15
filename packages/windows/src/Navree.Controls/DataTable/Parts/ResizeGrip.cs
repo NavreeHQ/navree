@@ -60,7 +60,6 @@ public sealed class ResizeGrip : Control
     {
         base.OnPointerPressed(e);
         Microsoft.UI.Input.PointerPoint point = e.GetCurrentPoint(null);
-        Diag.Say($"[drag] a press on a strip: left button {point.Properties.IsLeftButtonPressed}, kind {e.Pointer.PointerDeviceType}");
         if (e.Pointer.PointerDeviceType == PointerDeviceType.Mouse && !point.Properties.IsLeftButtonPressed)
         {
             return;

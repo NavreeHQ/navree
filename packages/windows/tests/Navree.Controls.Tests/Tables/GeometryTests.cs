@@ -62,8 +62,38 @@ public sealed class RowGeometryTests
         Assert.AreEqual(expected, RowGeometry.MaxHeldRows(rowHeight));
 
     [TestMethod]
-    public void A_row_of_no_height_holds_nothing_sensible() =>
+    [DataRow(40.0, 1.0, 200_000)]
+    [DataRow(40.0, 1.25, 200_000)]
+    [DataRow(40.0, 2.5, 160_000)]
+    [DataRow(64.0, 2.5, 100_000)]
+    [DataRow(64.0, 3.0, 83_333)]
+    [DataRow(80.0, 2.5, 80_000)]
+    [DataRow(96.0, 1.0, 166_666)]
+    [DataRow(62.0, 2.25, 114_695)]
+    public void The_rows_held_are_bounded_by_the_height_they_make_in_physical_pixels(double rowHeight, double scale, int expected)
+    {
+        Assert.AreEqual(expected, RowGeometry.MaxHeldRows(rowHeight, scale));
+        Assert.IsTrue(expected * rowHeight * scale <= RowGeometry.MaxExtent, "the whole table stays within the pixels a single-precision position holds");
+    }
+
+    [TestMethod]
+    public void One_lakh_rows_are_held_at_every_scale_a_window_has_with_the_rows_of_every_density_and_text_size_up_to_two_hundred_twenty_five_percent()
+    {
+        foreach (double scale in new[] { 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5 })
+        {
+            foreach (double height in new[] { 32.0, 40.0, 48.0, 54.0, 62.0, 64.0 })
+            {
+                Assert.IsTrue(RowGeometry.MaxHeldRows(height, scale) >= 100_000, $"a row of {height} at {scale}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void A_row_of_no_height_or_a_display_of_no_scale_holds_nothing_sensible()
+    {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RowGeometry.MaxHeldRows(0));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RowGeometry.MaxHeldRows(40, 0));
+    }
 }
 
 [TestClass]
@@ -113,6 +143,19 @@ public sealed class GeometryTests
         Assert.AreEqual((99_979, 99_999), plain.RealizedRange(3_999_200, 800, 100_000));
         Assert.AreEqual((0, -1), plain.RealizedRange(0, 800, 0));
         Same.Number(4_000_000, plain.Extent(100_000));
+    }
+
+    [TestMethod]
+    public void A_viewport_of_no_end_or_no_number_never_makes_every_row()
+    {
+        Geometry plain = new(40, []);
+        (int first, int last) = plain.RealizedRange(0, double.PositiveInfinity, 200_000);
+        Assert.AreEqual(0, first);
+        Assert.AreEqual(Geometry.MostRealized - 1, last);
+        (first, last) = plain.RealizedRange(120_000, double.PositiveInfinity, 200_000);
+        Assert.IsTrue(last - first + 1 <= Geometry.MostRealized, "a viewport that starts down the table is held to the same number");
+        Assert.AreEqual((0, -1), plain.RealizedRange(0, double.NaN, 200_000));
+        Assert.AreEqual((0, 20), plain.RealizedRange(0, 800, 100_000), "an ordinary viewport is not held back");
     }
 
     [TestMethod]

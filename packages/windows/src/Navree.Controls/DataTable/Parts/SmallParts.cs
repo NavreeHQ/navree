@@ -7,7 +7,6 @@ namespace Navree.Controls;
 /// <summary>The box that chooses a row, drawn from the table's own brushes.</summary>
 public sealed class DataTableCheck : Control
 {
-    private static Windows.UI.ViewManagement.AccessibilitySettings? access;
     private HeaderBoxState state;
     private bool available = true;
 
@@ -57,24 +56,7 @@ public sealed class DataTableCheck : Control
         };
         VisualStateManager.GoToState(this, check, false);
         VisualStateManager.GoToState(this, available ? "Enabled" : "Unavailable", false);
-        VisualStateManager.GoToState(this, HighContrast && state != HeaderBoxState.Off ? "ContrastOn" : "ContrastOff", false);
-    }
-
-    // Whether the system's high contrast colours are on: read each time, as a person may turn them on while the table is open.
-    private static bool HighContrast
-    {
-        get
-        {
-            try
-            {
-                access ??= new Windows.UI.ViewManagement.AccessibilitySettings();
-                return access.HighContrast;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
+        VisualStateManager.GoToState(this, ContrastColours.IsOn && state != HeaderBoxState.Off ? "ContrastOn" : "ContrastOff", false);
     }
 }
 
@@ -86,7 +68,7 @@ public sealed class DataTableGlyph : Control
         nameof(Glyph),
         typeof(string),
         typeof(DataTableGlyph),
-        new PropertyMetadata(string.Empty));
+        new PropertyMetadata(string.Empty, (d, _) => ((DataTableGlyph)d).GlyphChanged()));
 
     private bool over;
     private bool pressed;
@@ -104,6 +86,15 @@ public sealed class DataTableGlyph : Control
         get => (string)GetValue(GlyphProperty);
         set => SetValue(GlyphProperty, value);
     }
+
+    /// <inheritdoc />
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer() => new DataTableGlyphAutomationPeer(this);
+
+    // The dots of a row's menu are a button to assistive technology; the chevron is reached through the row's expand and collapse.
+    private void GlyphChanged() =>
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
+            this,
+            Glyph == Glyphs.More ? Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Control : Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
 
     /// <inheritdoc />
     protected override void OnApplyTemplate()
@@ -146,5 +137,28 @@ public sealed class DataTableGlyph : Control
     }
 
     private void UpdateState() =>
-        VisualStateManager.GoToState(this, pressed ? "Pressed" : over ? "PointerOver" : "Normal", false);
+        VisualStateManager.GoToState(this, pressed || over ? (ContrastColours.IsOn ? "Highlighted" : pressed ? "Pressed" : "PointerOver") : "Normal", false);
+}
+
+/// <summary>Whether the system's contrast colours are on.</summary>
+internal static class ContrastColours
+{
+    private static Windows.UI.ViewManagement.AccessibilitySettings? access;
+
+    /// <summary>Whether they are on: read each time, as a person may turn them on while the table is open.</summary>
+    internal static bool IsOn
+    {
+        get
+        {
+            try
+            {
+                access ??= new Windows.UI.ViewManagement.AccessibilitySettings();
+                return access.HighContrast;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+    }
 }

@@ -45,19 +45,17 @@ internal static class ScenarioRunner
                 await PartsScenario.RunAsync(window);
                 break;
             case "tabletext":
-                await TableScenarios.RunAsync(window, ["standard", "chosen", "narrow", "sorted", "rtl"], lightOnly: true);
+                await TableScenarios.RunAsync(window, ["standard", "chosen", "narrow", "sorted", "rtl", "rowstates", "rowpressed"], lightOnly: true);
                 break;
             case "contrast-states":
                 await ContrastScenario.RunAsync(window, "states");
-                break;
-            case "contrast-dictionary":
-                await ContrastScenario.RunAsync(window, "dictionary");
                 break;
             case "rows100k":
                 await HugeScenario.RunAsync(window);
                 break;
             case "table":
                 await TableScenarios.RunAsync(window, TableScenarios.All);
+                await CareScenarios.RunAsync(window);
                 break;
             case "translation":
                 await TranslationScenario.RunAsync(window);
@@ -66,9 +64,8 @@ internal static class ScenarioRunner
                 await ScrollNumbersScenario.RunAsync(window);
                 break;
             case "stick":
-                await StickScenario.RunAsync(window, StickyMode.Compositor, rtl: false);
-                await StickScenario.RunAsync(window, StickyMode.Compositor, rtl: true);
-                await StickScenario.RunAsync(window, StickyMode.UiThread, rtl: false);
+                await StickScenario.RunAsync(window, rtl: false);
+                await StickScenario.RunAsync(window, rtl: true);
                 break;
             case "anchor":
                 await AnchorScenario.RunAsync(window);

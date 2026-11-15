@@ -63,25 +63,6 @@ internal static class ContrastScenario
               </VisualStateGroup>
         """;
 
-    private const string DictionaryBorder = "BorderBrush=\"{ThemeResource DataTableCheckBoxBorder}\"";
-    private const string DictionaryBackground = "Background=\"{ThemeResource DataTableCheckBoxFill}\"";
-    private const string DictionaryGlyph = "Foreground=\"{ThemeResource DataTableCheckBoxGlyph}\"";
-    private const string DictionaryChecked = """
-        <Setter Target="PART_Box.Background" Value="{ThemeResource DataTableCheckBoxFillChecked}" />
-                            <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource DataTableCheckBoxBorderChecked}" />
-        """;
-
-    // The dictionary of brushes is merged inside the template, where the lookups of the template find it.
-    private const string DictionaryResources = """
-        <Grid.Resources>
-              <ResourceDictionary>
-                <ResourceDictionary.MergedDictionaries>
-                  <ResourceDictionary Source="ms-appx:///Navree.Controls/Themes/DataTable.Resources.xaml" />
-                </ResourceDictionary.MergedDictionaries>
-              </ResourceDictionary>
-            </Grid.Resources>
-        """;
-
     internal static async Task RunAsync(MainWindow window, string way)
     {
         Report.Line("== contrast " + way);
@@ -95,9 +76,7 @@ internal static class ContrastScenario
             Report.Line("[contrast] high contrast could not be read: " + problem.Message);
         }
 
-        string xaml = way == "dictionary"
-            ? Head.Replace("BORDER", DictionaryBorder).Replace("BACKGROUND", DictionaryBackground).Replace("GLYPH", DictionaryGlyph).Replace("CHECKED", DictionaryChecked).Replace("CONTRAST", string.Empty).Replace("@RESOURCES@", DictionaryResources)
-            : Head.Replace("BORDER", StatesBorder).Replace("BACKGROUND", StatesBackground).Replace("GLYPH", StatesGlyph).Replace("CHECKED", StatesChecked).Replace("CONTRAST", StatesContrast).Replace("@RESOURCES@", string.Empty);
+        string xaml = Head.Replace("BORDER", StatesBorder).Replace("BACKGROUND", StatesBackground).Replace("GLYPH", StatesGlyph).Replace("CHECKED", StatesChecked).Replace("CONTRAST", StatesContrast).Replace("@RESOURCES@", string.Empty);
 
         ElementTheme[] themes = contrast ? [ElementTheme.Default] : [ElementTheme.Light, ElementTheme.Dark];
         foreach (ElementTheme theme in themes)
@@ -107,12 +86,6 @@ internal static class ContrastScenario
             try
             {
                 StackPanel row = new() { Orientation = Orientation.Horizontal, Spacing = 40, Margin = new Thickness(40), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
-                if (way == "dictionary")
-                {
-                    ResourceDictionary brushes = new() { Source = new Uri("ms-appx:///Navree.Controls/Themes/DataTable.Resources.xaml") };
-                    Report.Line($"[contrast] {way}: the dictionary loaded, with {brushes.ThemeDictionaries.Count} theme dictionaries");
-                }
-
                 ControlTemplate template = (ControlTemplate)XamlReader.Load(xaml);
                 List<(ContentControl Box, string State, string Label)> boxes = [];
                 foreach ((string state, string label) in new[] { ("Unchecked", "not chosen"), ("Checked", "chosen"), ("Indeterminate", "some chosen") })
@@ -135,7 +108,7 @@ internal static class ContrastScenario
                     {
                         box.ApplyTemplate();
                         bool a = VisualStateManager.GoToState(box, state, false);
-                        bool b = way == "dictionary" || VisualStateManager.GoToState(box, contrast && state != "Unchecked" ? "ContrastOn" : "ContrastOff", false);
+                        bool b = VisualStateManager.GoToState(box, contrast && state != "Unchecked" ? "ContrastOn" : "ContrastOff", false);
                         Report.Line($"[contrast] {way} {name}: {label}: state {state} {a}, contrast state {b}");
                     }
                     catch (Exception problem)

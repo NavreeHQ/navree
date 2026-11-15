@@ -188,7 +188,6 @@ public sealed class DataTableHeaderCell : Control
         UpdateState();
         Row?.Owner?.HeaderPressed(this, e);
         Microsoft.UI.Input.PointerPoint point = e.GetCurrentPoint(null);
-        Diag.Say($"[drag] a press on the heading {heading}: left button {point.Properties.IsLeftButtonPressed}, kind {e.Pointer.PointerDeviceType}");
         if (e.Pointer.PointerDeviceType != Microsoft.UI.Input.PointerDeviceType.Touch && point.Properties.IsLeftButtonPressed)
         {
             pressedForDrag = true;
@@ -211,7 +210,8 @@ public sealed class DataTableHeaderCell : Control
             return;
         }
 
-        double moved = e.GetCurrentPoint(null).Position.X - dragStartX;
+        double pointerX = e.GetCurrentPoint(null).Position.X;
+        double moved = pointerX - dragStartX;
         if (!dragging && Math.Abs(moved) > 4 && CapturePointer(e.Pointer))
         {
             dragging = true;
@@ -220,7 +220,7 @@ public sealed class DataTableHeaderCell : Control
 
         if (dragging)
         {
-            Row?.Owner?.ReorderMoved(this, moved);
+            Row?.Owner?.ReorderMoved(this, moved, pointerX);
             e.Handled = true;
         }
     }
@@ -310,7 +310,7 @@ public sealed class DataTableHeaderCell : Control
     }
 
     private void UpdateState() =>
-        VisualStateManager.GoToState(this, pressed ? "Pressed" : over ? "PointerOver" : "Normal", false);
+        VisualStateManager.GoToState(this, pressed || over ? (ContrastColours.IsOn ? "Highlighted" : pressed ? "Pressed" : "PointerOver") : "Normal", false);
 
     private void Refresh()
     {

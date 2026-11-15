@@ -26,7 +26,10 @@ public enum RowShape
 /// <summary>The heights of rows, and what follows from them.</summary>
 public static class RowGeometry
 {
-    /// <summary>The most a table may stand tall, in effective pixels: past it a single-precision position no longer holds every whole pixel.</summary>
+    /// <summary>
+    /// The most a table may stand tall, in physical pixels: past it a single-precision position no longer holds every whole pixel, and
+    /// layout rounding works in physical pixels, so a row past it would stand on the wrong one.
+    /// </summary>
     public const double MaxExtent = 16_000_000;
 
     /// <summary>The most rows a table holds, whatever their height.</summary>
@@ -83,17 +86,23 @@ public static class RowGeometry
     public static double HeaderHeight(Density density, bool hasControls, double lineHeight, double rasterizationScale) =>
         RowHeight(density, RowShape.OneLine, hasControls, lineHeight, 0, rasterizationScale);
 
-    /// <summary>The most rows a table holds at a row height.</summary>
-    /// <param name="rowHeight">The height of a row.</param>
+    /// <summary>The most rows a table holds at a row height on a display of a scale.</summary>
+    /// <param name="rowHeight">The height of a row, in effective pixels.</param>
+    /// <param name="rasterizationScale">Physical pixels for each effective pixel: the extent is held to <see cref="MaxExtent"/> in physical pixels.</param>
     /// <returns>The smaller of the ceiling and what fits in the greatest extent.</returns>
-    public static int MaxHeldRows(double rowHeight)
+    public static int MaxHeldRows(double rowHeight, double rasterizationScale = 1.0)
     {
         if (!(rowHeight > 0))
         {
             throw new ArgumentOutOfRangeException(nameof(rowHeight), rowHeight, "A row has a height.");
         }
 
-        return (int)Math.Min(HeldRowsCeiling, Math.Floor(MaxExtent / rowHeight));
+        if (!(rasterizationScale > 0))
+        {
+            throw new ArgumentOutOfRangeException(nameof(rasterizationScale), rasterizationScale, "The scale must be more than zero.");
+        }
+
+        return (int)Math.Min(HeldRowsCeiling, Math.Floor(MaxExtent / (rowHeight * rasterizationScale)));
     }
 }
 
@@ -221,7 +230,10 @@ public sealed class Geometry
         return (candidate, y - before[endedAbove] - (candidate * RowHeight));
     }
 
-    /// <summary>The rows to have made for a viewport: those it touches and a margin of rows each side.</summary>
+    /// <summary>The most rows a pass makes, whatever the viewport says: a viewport of no end (a repeater with nothing to measure against) must not make every row.</summary>
+    public const int MostRealized = 400;
+
+    /// <summary>The rows to have made for a viewport: those it touches and a margin of rows each side, never more than <see cref="MostRealized"/>.</summary>
     /// <param name="top">The top of the viewport.</param>
     /// <param name="height">The height of the viewport.</param>
     /// <param name="count">How many rows the table holds.</param>
@@ -237,7 +249,7 @@ public sealed class Geometry
         double start = Math.Max(0, top);
         int first = Math.Max(0, IndexAt(start, count).Index - margin);
         int last = Math.Min(count - 1, IndexAt(start + height - 1e-6, count).Index + margin);
-        return (first, last);
+        return (first, Math.Min(last, first + MostRealized - 1));
     }
 
     // How many open rows have an index below the given one.
@@ -245,5 +257,39 @@ public sealed class Geometry
     {
         int at = Array.BinarySearch(openIndex, index);
         return at >= 0 ? at : ~at;
+    }
+}
+
+/// <summary>Which rows a pass of the rows layout makes: those the viewport touches and the rows kept made wherever they stand.</summary>
+public static class RealizationPlan
+{
+    /// <summary>The places of the rows to make, in order.</summary>
+    /// <param name="geometry">Where each row stands.</param>
+    /// <param name="top">The top of the realization rectangle.</param>
+    /// <param name="height">The height of the realization rectangle; of no end or no number it still makes no more than <see cref="Geometry.MostRealized"/> rows.</param>
+    /// <param name="count">How many rows the table holds.</param>
+    /// <param name="pinned">The places of the rows kept made wherever they stand.</param>
+    /// <param name="margin">How many rows to add each side of the viewport.</param>
+    /// <returns>The rows the viewport touches, then the pinned rows that exist and are not among them, each once.</returns>
+    public static IReadOnlyList<int> Indices(Geometry geometry, double top, double height, int count, IReadOnlyList<int> pinned, int margin = 1)
+    {
+        ArgumentNullException.ThrowIfNull(geometry);
+        ArgumentNullException.ThrowIfNull(pinned);
+        List<int> made = [];
+        (int first, int last) = geometry.RealizedRange(top, height, count, margin);
+        for (int index = first; index <= last; index++)
+        {
+            made.Add(index);
+        }
+
+        foreach (int place in pinned)
+        {
+            if (place >= 0 && place < count && (place < first || place > last) && !made.Contains(place))
+            {
+                made.Add(place);
+            }
+        }
+
+        return made;
     }
 }

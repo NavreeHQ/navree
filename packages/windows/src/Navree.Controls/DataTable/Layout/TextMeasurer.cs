@@ -61,6 +61,7 @@ public static class DataTableStrings
     {
         ["DataTable_Name_Default"] = "Table",
         ["DataTable_Header_Row"] = "Column headers",
+        ["DataTable_Header_Actions"] = "Actions",
         ["DataTable_Sortable_Help"] = "Sortable. Press Enter to sort.",
         ["DataTable_Status_Ascending"] = "Ascending",
         ["DataTable_Status_Descending"] = "Descending",

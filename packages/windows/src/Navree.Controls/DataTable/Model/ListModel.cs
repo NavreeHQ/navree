@@ -39,6 +39,7 @@ public sealed class ListDataTableModel<T> : IDataTableModel
     private DataTableCursor earlier;
     private string? summary;
     private DataTableChoiceOptions choice;
+    private long? total;
 
     /// <summary>Makes a model.</summary>
     /// <param name="columns">The columns.</param>
@@ -67,6 +68,9 @@ public sealed class ListDataTableModel<T> : IDataTableModel
 
     /// <summary>Whether an item has a detail.</summary>
     public Func<T, bool> HasDetailOf { get; set; } = _ => false;
+
+    /// <summary>Whether an item has its detail open when it first arrives; none has by default.</summary>
+    public Func<T, bool> DetailOpenOf { get; set; } = _ => false;
 
     /// <summary>Whether an item can be edited.</summary>
     public Func<T, bool> HasEditOf { get; set; } = _ => false;
@@ -128,6 +132,17 @@ public sealed class ListDataTableModel<T> : IDataTableModel
         set
         {
             summary = value;
+            Raise(DataTableChangeKind.Summary);
+        }
+    }
+
+    /// <inheritdoc />
+    public long? TotalCount
+    {
+        get => total;
+        set
+        {
+            total = value;
             Raise(DataTableChangeKind.Summary);
         }
     }
@@ -215,7 +230,7 @@ public sealed class ListDataTableModel<T> : IDataTableModel
             HasActionOf(item),
             HasMenuOf(item),
             HasDetailOf(item),
-            false,
+            DetailOpenOf(item),
             HasEditOf(item),
             item);
     }

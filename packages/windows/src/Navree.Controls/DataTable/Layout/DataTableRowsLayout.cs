@@ -9,7 +9,7 @@ namespace Navree.Controls;
 /// <summary>
 /// Places the rows of a table: every row has one height and a few that are open have more, so a
 /// row's place is arithmetic and nothing is estimated. Only the rows in view, a margin of rows, and
-/// the pinned row are made; the pinned row is the active one and is kept wherever it stands.
+/// the pinned row are made; the pinned rows (the active one, the one the view is on while rows join above it, and one assistive technology asked for) are kept wherever they stand.
 /// </summary>
 internal sealed class DataTableRowsLayout : VirtualizingLayout
 {
@@ -19,8 +19,8 @@ internal sealed class DataTableRowsLayout : VirtualizingLayout
     /// <summary>The width of every row; zero takes the width offered.</summary>
     internal double RowWidth { get; set; }
 
-    /// <summary>The index of the row to keep made wherever it stands, or minus one.</summary>
-    internal int PinnedIndex { get; set; } = -1;
+    /// <summary>The places of the rows to keep made wherever they stand.</summary>
+    internal IReadOnlyList<int> Pinned { get; set; } = [];
 
     /// <summary>Tells a row that it is the one to measure with room for its detail and how much room it has had.</summary>
     internal event Action<int, double>? DetailMeasured;
@@ -36,9 +36,7 @@ internal sealed class DataTableRowsLayout : VirtualizingLayout
     /// <inheritdoc />
     protected override Size MeasureOverride(VirtualizingLayoutContext context, Size availableSize)
     {
-        Size result = new(0, 0);
-        Diag.Guard("the rows were measured", () => result = MeasureRows(context, availableSize));
-        return result;
+        return MeasureRows(context, availableSize);
     }
 
     private Size MeasureRows(VirtualizingLayoutContext context, Size availableSize)
@@ -53,16 +51,9 @@ internal sealed class DataTableRowsLayout : VirtualizingLayout
 
         Geometry geometry = Geometry;
         Rect rect = context.RealizationRect;
-        (int first, int last) = geometry.RealizedRange(rect.Y, rect.Height, count);
-        for (int index = first; index <= last; index++)
+        foreach (int index in RealizationPlan.Indices(geometry, rect.Y, rect.Height, count, Pinned))
         {
             Realize(context, geometry, index, width);
-        }
-
-        int pinned = PinnedIndex;
-        if (pinned >= 0 && pinned < count && (pinned < first || pinned > last))
-        {
-            Realize(context, geometry, pinned, width);
         }
 
         return new Size(width, geometry.Extent(count));

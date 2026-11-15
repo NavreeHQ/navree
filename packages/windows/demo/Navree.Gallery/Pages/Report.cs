@@ -41,6 +41,9 @@ internal static class Report
 {
     private static string? file;
 
+    /// <summary>The folder the report is in, or null.</summary>
+    internal static string? Folder { get; private set; }
+
     /// <summary>Opens the report in a folder.</summary>
     /// <param name="folder">The folder, or null for none.</param>
     internal static void Open(string? folder)
@@ -51,6 +54,7 @@ internal static class Report
         }
 
         Directory.CreateDirectory(folder);
+        Folder = folder;
         file = Path.Combine(folder, "results.txt");
     }
 

@@ -30,7 +30,7 @@ internal sealed class StickPage : Grid
     private readonly Border edgeEnd = new();
     private readonly bool rtl;
 
-    internal StickPage(StickyMode mode, bool rightToLeft)
+    internal StickPage(bool rightToLeft)
     {
         rtl = rightToLeft;
         FlowDirection = rtl ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
@@ -72,7 +72,7 @@ internal sealed class StickPage : Grid
         SetRow(body, 1);
         Children.Add(body);
 
-        Sticky = new StickyCoordinator(Scroll) { Mode = mode };
+        Sticky = new StickyCoordinator(Scroll);
         Source.Reset(Enumerable.Range(0, 300).Select(i => new RowHandle("r" + i.ToString(CultureInfo.InvariantCulture))));
         Loaded += (_, _) => OnLoaded();
     }
@@ -130,11 +130,11 @@ internal sealed class StickPage : Grid
 /// <summary>Runs the pictures and measurements of the page that keeps parts in place.</summary>
 internal static class StickScenario
 {
-    internal static async Task RunAsync(MainWindow window, StickyMode mode, bool rtl)
+    internal static async Task RunAsync(MainWindow window, bool rtl)
     {
-        string tag = mode.ToString().ToLowerInvariant() + (rtl ? "-rtl" : "-ltr");
+        string tag = "compositor" + (rtl ? "-rtl" : "-ltr");
         Report.Line("== stick " + tag);
-        StickPage page = new(mode, rtl);
+        StickPage page = new(rtl);
         window.StageHost.Child = page;
         await Waiting.LoadedAsync(page);
         await Task.Delay(1500);

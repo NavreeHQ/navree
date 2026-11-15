@@ -133,7 +133,7 @@ public sealed partial class DataTable
         }
 
         string summary = model.Summary ?? string.Empty;
-        bool limit = model.RowCount >= RowGeometry.MaxHeldRows(rowHeight) && model.RowCount > 0;
+        bool limit = model.RowCount >= RowGeometry.MaxHeldRows(rowHeight, XamlRoot?.RasterizationScale ?? 1.0) && model.RowCount > 0;
         if (limit)
         {
             summary = DataTableStrings.Get("DataTable_HeldLimit", Choosing.FormatCount(model.RowCount, Culture));

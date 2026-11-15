@@ -18,11 +18,16 @@ public sealed partial class DataTable
     private double headerHeight = 40;
     private RowShape shape = RowShape.OneLine;
     private bool sortAsked;
-    private int askedAfterAt = -1;
-    private int askedBeforeAt = -1;
-    private bool heldLimitRaised;
+    private readonly ModelLink modelLink = new();
+    private readonly KeylessKeys keyless = new();
+    private ModelStamp modelStamp;
+    private readonly CursorWatch cursorWatch = new();
+    private readonly DetailSeeds detailSeeds = new();
+    private readonly RowShapeWatch shapeWatch = new();
     private bool detailGeometryQueued;
-    private DispatcherQueueTimer? pinTimer;
+    private DispatcherQueueTimer? anchorPinTimer;
+    private DispatcherQueueTimer? assistivePinTimer;
+    private bool holdingFirstRow;
 
     /// <summary>The height of a row.</summary>
     internal double RowHeight => rowHeight;
@@ -33,23 +38,41 @@ public sealed partial class DataTable
     /// <summary>One line in each cell or two.</summary>
     internal RowShape Shape => shape;
 
+    /// <summary>What a model said of itself when the table last had it in step.</summary>
+    private readonly record struct ModelStamp(int Rows, string? First, string? Last, DataTableLoadState State, string? Summary, DataTableCursor Later, DataTableCursor Earlier);
+
+    private static ModelStamp StampOf(IDataTableModel model) => new(
+        model.RowCount,
+        model.RowCount > 0 ? model.GetRow(0).Key : null,
+        model.RowCount > 0 ? model.GetRow(model.RowCount - 1).Key : null,
+        model.State,
+        model.Summary,
+        model.Later,
+        model.Earlier);
+
     private void ModelChanged(IDataTableModel? previous, IDataTableModel? current)
     {
-        if (previous is not null)
+        // The model is listened to only while the table is in the tree (see OnLoaded).
+        if (loaded)
         {
-            previous.Changed -= OnModelEvent;
+            modelLink.Attach(current, OnModelEvent);
         }
-
-        if (current is not null)
+        else
         {
-            current.Changed += OnModelEvent;
+            modelLink.Detach();
         }
 
         choice = new ChoiceState(new HashSet<string>(StringComparer.Ordinal), false);
-        activeRow = -1;
+        pins.Clear();
+        SetActiveRow(-1);
+        activeKey = null;
         activeColumn = 0;
         activeSet = false;
+        nameCache.Clear();
+        tally.Invalidate();
         openKeys.Clear();
+        detailSeeds.Forget();
+        shapeWatch.Forget();
         detailExtras.Clear();
         if (templateWired)
         {
@@ -68,14 +91,17 @@ public sealed partial class DataTable
     // Everything is drawn again for a model and a presenter: the columns are measured, the rows are listed.
     private void ModelAttached()
     {
-        askedAfterAt = askedBeforeAt = -1;
-        heldLimitRaised = false;
+        cursorWatch.Forget();
         RecomputeMetrics();
         RebuildColumns(remeasure: true);
         ReloadRows();
         UpdateState();
         UpdateFooter();
         UpdateBulkBar();
+        if (Model is { } attached)
+        {
+            modelStamp = StampOf(attached);
+        }
     }
 
     private void OnModelEvent(object? sender, DataTableModelChangedEventArgs e)
@@ -87,12 +113,15 @@ public sealed partial class DataTable
 
         if (e.Kind is DataTableChangeKind.Reset or DataTableChangeKind.Insert or DataTableChangeKind.Remove or DataTableChangeKind.Replace)
         {
-            rowNames = null;
+            nameCache.Clear();
+            tally.Invalidate();
         }
 
         switch (e.Kind)
         {
             case DataTableChangeKind.Reset:
+                cursorWatch.Forget();
+                shapeWatch.Forget();
                 RecomputeMetrics();
                 RebuildColumns(remeasure: false);
                 ReloadRows();
@@ -104,18 +133,14 @@ public sealed partial class DataTable
                 RowsRemoved(e.Index, e.Count);
                 break;
             case DataTableChangeKind.Replace:
-                for (int i = 0; i < e.Count; i++)
-                {
-                    rows.Redraw(e.Index + i);
-                }
-
+                RowsReplaced(e.Index, e.Count);
                 break;
             case DataTableChangeKind.Columns:
                 RebuildColumns(remeasure: false);
-                if (sortAsked && SortStatus() is { } sorted)
+                if (sortAsked && SortedBy() is { } sorted)
                 {
                     sortAsked = false;
-                    Announce(sorted);
+                    Say(sorted);
                 }
 
                 break;
@@ -128,17 +153,17 @@ public sealed partial class DataTable
                     lastLoadState = stated.State;
                     if (stated.State == DataTableLoadState.Loading)
                     {
-                        Announce(DataTableStrings.Get("DataTable_Loading"));
+                        Say(new Announcement("DataTable_Loading", []));
                     }
                     else if (stated.State == DataTableLoadState.Failed && stated.FailureMessage is { } why)
                     {
-                        Announce(why);
+                        Announce(why, AnnouncementKind.Other, "DataTable.State");
                     }
                 }
 
                 break;
             case DataTableChangeKind.Cursor:
-                askedAfterAt = askedBeforeAt = -1;
+                cursorWatch.Asked();
                 UpdateFooter();
                 CheckCursors();
                 break;
@@ -153,14 +178,40 @@ public sealed partial class DataTable
             UpdateFooter();
             UpdateBulkBar();
         }
+
+        if (Model is { } current)
+        {
+            modelStamp = StampOf(current);
+            RaiseCountChanged(current.RowCount);
+        }
+
+        if (e.Kind is DataTableChangeKind.Reset or DataTableChangeKind.Insert or DataTableChangeKind.Remove)
+        {
+            QueueStructureEvent();
+        }
     }
 
-    private List<RowHandle> Handles(IDataTableModel model, int first, int count)
+    // The handles of rows that arrive. A row that arrives with its detail open is opened once; and a row that needs what the rows
+    // so far did not (a second line, a detail) is said by the two flags, so the table can be shaped for it.
+    private List<RowHandle> Handles(IDataTableModel model, int first, int count, out bool newSecondLine, out bool newDetail)
     {
         List<RowHandle> handles = new(count);
+        IDataTablePresenter? presenter = Presenter;
+        newSecondLine = false;
+        newDetail = false;
         for (int i = first; i < first + count; i++)
         {
-            handles.Add(new RowHandle(model.GetRow(i).Key ?? ("\u0001" + i.ToString(Culture))));
+            DataTableRecord record = model.GetRow(i);
+            handles.Add(new RowHandle(record.Key ?? keyless.Next()));
+            if (detailSeeds.Arrive(record.Key, record.HasDetail, record.DetailOpen))
+            {
+                openKeys.Add(record.Key!);
+            }
+
+            bool second = !shapeWatch.SawSecondLine && presenter?.SecondLine(record) is not null;
+            (bool newSecond, bool newDetailHere) = shapeWatch.Observe(second, record.HasDetail);
+            newSecondLine |= newSecond;
+            newDetail |= newDetailHere;
         }
 
         return handles;
@@ -174,21 +225,45 @@ public sealed partial class DataTable
             return;
         }
 
+        // Focus is put back on the active cell afterwards only when it was in the table.
+        bool hadFocus = FocusIsInside();
         if (activeSet)
         {
-            activeRow = Math.Min(activeRow, model.RowCount - 1);
+            // The active row is the same row by key when the new rows have it, else the first row.
+            int same = activeKey is { } key ? model.IndexOfKey(key) : -1;
+            SetActiveRow(ActiveRowRules.AfterReset(activeRow < 0, same, model.RowCount));
         }
         else
         {
             NormalizeActive();
         }
 
-        rowsLayout.PinnedIndex = activeRow;
+        List<RowHandle> handles = Handles(model, 0, model.RowCount, out bool newSecondLine, out bool newDetail);
+        if (newSecondLine || newDetail)
+        {
+            // A later row needs a second line or a detail the first rows did not: the shape of the rows and the columns follow.
+            RecomputeMetrics();
+            RebuildColumns(remeasure: false);
+        }
+
         UpdateGeometry();
-        rows.Reset(Handles(model, 0, model.RowCount));
+        rows.Reset(handles);
         scroll?.ScrollTo(scroll.HorizontalOffset, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
         CheckCursors();
+        if (hadFocus)
+        {
+            FocusActiveSoon();
+        }
     }
+
+    // Puts focus back on the active cell once the rows have been placed.
+    private void FocusActiveSoon() => DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+    {
+        if (loaded && Model is not null)
+        {
+            TryActivate(focus: true, 0);
+        }
+    });
 
     // The place of the row at the top of the view, which is the one to keep when rows join above it.
     private int TopIndex()
@@ -209,28 +284,87 @@ public sealed partial class DataTable
         }
 
         int top = TopIndex();
-        bool above = index <= top && rows.Count > 0 && scroll is not null && scroll.VerticalOffset > 0;
-        if (above)
+        double offset = scroll?.VerticalOffset ?? 0;
+        double within = WithinTopRow(offset, top);
+        double heightBefore = rowHeight;
+        int heldBefore = rows.Count;
+        bool keepFirst = scroll is not null && ActiveRowRules.KeepsFirstRowInView(index, heldBefore, offset);
+        bool above = index <= top && heldBefore > 0 && scroll is not null && offset > 0;
+        pins.RowsJoined(index, count);
+        if (above || keepFirst)
         {
             // The row the view is on is kept made wherever it ends up, so the scroll view can keep it where it was.
-            rowsLayout.PinnedIndex = top + count;
+            pins.Set(PinOwner.Anchor, top + count);
         }
 
-        if (activeRow >= index)
+        if (activeSet)
         {
-            activeRow += count;
+            SetActiveRow(ActiveRowRules.AfterInsert(activeRow, index, count));
+        }
+        else
+        {
+            rowsLayout.Pinned = pins.Indices;
         }
 
+        List<RowHandle> handles = Handles(model, index, count, out bool newSecondLine, out bool newDetail);
         UpdateGeometry();
-        rows.InsertRows(index, Handles(model, index, count));
-        if (above)
+        rows.InsertRows(index, handles);
+        if (above || keepFirst)
         {
-            ReleasePinSoon();
+            ReleasePinSoon(PinOwner.Anchor);
         }
 
-        askedAfterAt = askedBeforeAt = -1;
+        if (newSecondLine || newDetail)
+        {
+            // A page that needs a second line or a detail the rows so far did not: the shape of the rows and the columns follow it.
+            RecomputeMetrics();
+            RebuildColumns(remeasure: false);
+        }
+
+        if (keepFirst || (rowHeight != heightBefore && heldBefore > 0))
+        {
+            // The view stays on the row it was on: the row that was first when it was at the top, else the row at the top of the view.
+            int anchor = keepFirst ? top + count : (index <= top ? top + count : top);
+            KeepAnchorInView(anchor, keepFirst ? 0 : within * rowHeight / heightBefore);
+        }
+
+        cursorWatch.Asked();
         NoteRowsAdded(count, earlier: index == 0 && rows.Count > count);
         CheckCursors();
+    }
+
+    // How far down inside the row at the top of the view the view is, by the rows as they stood.
+    private double WithinTopRow(double offset, int top) =>
+        rows.Count > 0 && scroll is not null ? Math.Max(0, offset - rowsLayout.Geometry.RowTop(top)) : 0;
+
+    // A view at the very top has nothing above it for the scroll view to anchor to: rows that joined the start are above the row that was
+    // first, and the view is moved down to that row. The same is done when the rows change height because of what joined. The place of
+    // the row is the arithmetic of the rows now held.
+    private void KeepAnchorInView(int anchorIndex, double within)
+    {
+        if (scroll is not { } view)
+        {
+            return;
+        }
+
+        holdingFirstRow = true;
+        void Move()
+        {
+            double wanted = Anchoring.OffsetAfterChange(anchorIndex, within, rowsLayout.Geometry, rows.Count, view.ViewportHeight);
+            if (Math.Abs(view.VerticalOffset - wanted) > 0.5)
+            {
+                view.ScrollTo(view.HorizontalOffset, wanted, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
+            }
+        }
+
+        view.UpdateLayout();
+        Move();
+        DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            Move();
+            holdingFirstRow = false;
+            CheckCursors();
+        });
     }
 
     private void RowsRemoved(int index, int count)
@@ -242,48 +376,86 @@ public sealed partial class DataTable
 
         int top = TopIndex();
         bool above = index + count <= top && scroll is not null && scroll.VerticalOffset > 0;
+        bool hadFocus = FocusIsInside();
+        pins.RowsLeft(index, count);
         if (above)
         {
-            rowsLayout.PinnedIndex = top - count;
+            pins.Set(PinOwner.Anchor, top - count);
         }
 
-        bool activeRemoved = activeSet && activeRow >= index && activeRow < index + count;
-        if (activeRow >= index + count)
+        if (activeSet)
         {
-            activeRow -= count;
+            (Cell? next, bool activeRemoved) = ActiveRowRules.AfterRemove(activeRow, index, count, Model?.RowCount ?? 0, activeColumn, !IsList);
+            SetActiveRow(next?.Row ?? -1);
+            if (activeRemoved)
+            {
+                Say(new Announcement("DataTable_RowRemoved", []));
+                if (hadFocus)
+                {
+                    // Focus goes where the rule for a removed row says: the row now at the place, the one before it, or the heading.
+                    FocusActiveSoon();
+                }
+            }
         }
-        else if (activeRemoved)
+        else
         {
-            Cell? next = GridNavigation.FocusAfterRemoval(index, Model?.RowCount ?? 0, activeColumn, !IsList);
-            activeRow = next?.Row ?? -1;
-            Announce(DataTableStrings.Get("DataTable_RowRemoved"));
+            rowsLayout.Pinned = pins.Indices;
         }
 
         UpdateGeometry();
         rows.RemoveRange(index, count);
         if (above)
         {
-            ReleasePinSoon();
+            ReleasePinSoon(PinOwner.Anchor);
         }
 
         RemovedFromChoice();
     }
 
-    // Lets the pin go back to the active row once the rows have been placed.
-    private void ReleasePinSoon()
+    // Rows drawn again with new data: a row that is made is bound again where it stands, so a field a person is typing in and the
+    // focus stay; a row whose key changed is a new row to the repeater.
+    private void RowsReplaced(int index, int count)
     {
-        pinTimer ??= DispatcherQueue.CreateTimer();
-        pinTimer.Stop();
-        pinTimer.Interval = TimeSpan.FromMilliseconds(400);
-        pinTimer.IsRepeating = false;
-        pinTimer.Tick -= OnPinTimer;
-        pinTimer.Tick += OnPinTimer;
-        pinTimer.Start();
+        if (Model is not { } model)
+        {
+            return;
+        }
+
+        for (int i = index; i < index + count && i < model.RowCount; i++)
+        {
+            // A row with no key keeps the handle it was given; a row with a key that is not the key held there is a new row.
+            string key = model.GetRow(i).Key ?? rows.At(i).Key;
+            if (rows.PlaceOf(key) != i)
+            {
+                rows.Replace(i, new RowHandle(key));
+            }
+            else if (repeater?.TryGetElement(i) is DataTableRow made)
+            {
+                made.Refresh(keepFocused: true);
+            }
+        }
+
+        UpdateFooter();
+    }
+
+    // Lets an owner's pin go back to nothing once the rows have been placed.
+    private void ReleasePinSoon(PinOwner owner)
+    {
+        ref DispatcherQueueTimer? timer = ref (owner == PinOwner.Anchor ? ref anchorPinTimer : ref assistivePinTimer);
+        timer ??= DispatcherQueue.CreateTimer();
+        timer.Stop();
+        timer.Interval = TimeSpan.FromMilliseconds(400);
+        timer.IsRepeating = false;
+        timer.Tick -= OnPinTimer;
+        timer.Tick += OnPinTimer;
+        timer.Start();
     }
 
     private void OnPinTimer(DispatcherQueueTimer sender, object args)
     {
-        rowsLayout.PinnedIndex = activeRow;
+        PinOwner owner = ReferenceEquals(sender, anchorPinTimer) ? PinOwner.Anchor : PinOwner.Assistive;
+        pins.Release(owner);
+        rowsLayout.Pinned = pins.Indices;
         rowsLayout.Reflow();
     }
 
@@ -291,8 +463,8 @@ public sealed partial class DataTable
     private void RecomputeMetrics()
     {
         measurer.Reset();
-        shape = RowShape.OneLine;
-        if (Model is { } model && Presenter is { } presenter)
+        shape = shapeWatch.SawSecondLine ? RowShape.TwoLine : RowShape.OneLine;
+        if (shape == RowShape.OneLine && Model is { } model && Presenter is { } presenter)
         {
             int sample = Math.Min(60, model.RowCount);
             for (int i = 0; i < sample; i++)
@@ -301,6 +473,7 @@ public sealed partial class DataTable
                 if (presenter.SecondLine(record) is not null)
                 {
                     shape = RowShape.TwoLine;
+                    shapeWatch.Observe(true, false);
                     break;
                 }
             }
@@ -367,7 +540,10 @@ public sealed partial class DataTable
             DispatcherQueue.TryEnqueue(() =>
             {
                 detailGeometryQueued = false;
-                UpdateGeometry();
+                if (loaded)
+                {
+                    UpdateGeometry();
+                }
             });
         }
     }
@@ -393,6 +569,8 @@ public sealed partial class DataTable
 
         UpdateGeometry();
         row.Refresh();
+        RaiseExpandState(row, open);
+        Say(Announcements.Detail(open));
         RaiseDetailToggled(key, open);
     }
 
@@ -422,38 +600,39 @@ public sealed partial class DataTable
         }
 
         double viewport = scroll.ViewportHeight;
-        if (viewport <= 0 || model.RowCount == 0)
+        if (viewport <= 0 || model.RowCount == 0 || holdingFirstRow)
         {
             return;
         }
 
-        int limit = RowGeometry.MaxHeldRows(rowHeight);
+        int limit = RowGeometry.MaxHeldRows(rowHeight, XamlRoot?.RasterizationScale ?? 1.0);
         if (model.RowCount >= limit)
         {
-            if (!heldLimitRaised)
+            if (cursorWatch.LimitReached())
             {
-                heldLimitRaised = true;
                 RaiseHeldLimitReached();
-                Announce(DataTableStrings.Get("DataTable_HeldLimit", Choosing.FormatCount(limit, Culture)));
+                Say(new Announcement("DataTable_HeldLimit", [limit]));
                 UpdateFooter();
             }
 
             return;
         }
 
-        if (model.Later is { Available: true, State: CursorState.Idle }
-            && askedAfterAt != model.RowCount
-            && Cursor.ShouldAskMore(scroll.VerticalOffset, viewport, scroll.ExtentHeight))
+        if (cursorWatch.ShouldAskAfter(
+            model.RowCount,
+            model.Later.Available,
+            model.Later.State == CursorState.Idle,
+            Cursor.ShouldAskMore(scroll.VerticalOffset, viewport, scroll.ExtentHeight)))
         {
-            askedAfterAt = model.RowCount;
             RaiseMoreRequested(MoreDirection.After);
         }
 
-        if (model.Earlier is { Available: true, State: CursorState.Idle }
-            && askedBeforeAt != model.RowCount
-            && Cursor.ShouldAskBefore(scroll.VerticalOffset, viewport))
+        if (cursorWatch.ShouldAskBefore(
+            model.RowCount,
+            model.Earlier.Available,
+            model.Earlier.State == CursorState.Idle,
+            Cursor.ShouldAskBefore(scroll.VerticalOffset, viewport)))
         {
-            askedBeforeAt = model.RowCount;
             RaiseMoreRequested(MoreDirection.Before);
         }
     }
@@ -467,6 +646,13 @@ public sealed partial class DataTable
         }
 
         DataTableCell? cell = FindCell(e.OriginalSource as DependencyObject);
+        if (cell is { Role: CellRole.Data } && InnerControlOf(e.OriginalSource as DependencyObject) != InnerControl.None && FindGlyph(e.OriginalSource as DependencyObject) is null)
+        {
+            // A tap in a field or on a button in a cell is the control's own: it makes the cell the active one and does not choose or open the row.
+            SetActive(new Cell(row.Index, Math.Max(cell.GridColumn, 0)), focus: false);
+            return;
+        }
+
         if (FindGlyph(e.OriginalSource as DependencyObject) is { } glyph)
         {
             if (cell is not null)
@@ -527,7 +713,7 @@ public sealed partial class DataTable
     /// <summary>Opens a row's menu beside a cell, as a key does.</summary>
     /// <param name="row">The row.</param>
     /// <param name="cell">The cell.</param>
-    internal void ShowRowMenuForRun(DataTableRow row, FrameworkElement cell) => ShowRowMenu(row, cell, null);
+    internal void OpenRowMenu(DataTableRow row, FrameworkElement cell) => ShowRowMenu(row, cell, null);
 
     // The row's menu, at a point when the pointer asked and beside the cell when a key did.
     private bool ShowRowMenu(DataTableRow row, FrameworkElement? target, Windows.Foundation.Point? position)

@@ -14,10 +14,9 @@ public sealed partial class DataTable
     private readonly HashSet<string> personWidths = new(StringComparer.Ordinal);
     private List<string> columnOrder = [];
     private DispatcherQueueTimer? saveTimer;
-    private string? loadedFor;
+    private readonly LayoutKeeper keeper = new();
     private string? resizingKey;
     private double resizeStartWidth;
-    private int saveCounter;
     private double gripWidth = 8;
 
     // A touch needs a wider strip to take hold of than a pen, and a pen than a mouse.
@@ -47,32 +46,59 @@ public sealed partial class DataTable
     /// <summary>The width a resize strip has for the pointer last seen.</summary>
     internal double GripWidth => gripWidth;
 
+    // A line for a measuring run to read; a build without the measuring symbol drops every call and what it would have written.
+    partial void Note(string line);
+
     private DataTableHeaderCell? reordering;
     private int dropAt;
+    private double reorderStartOffset;
+    private double reorderDx;
+    private double reorderPointerX;
+    private DispatcherQueueTimer? edgeTimer;
+    private System.Diagnostics.Stopwatch edgeClock = new();
 
     /// <summary>A pointer lifted a heading to move its column.</summary>
     internal void ReorderStarted(DataTableHeaderCell cell)
     {
         reordering = cell;
         dropAt = cell.GridColumn;
-        Diag.Say($"[drag] a heading was lifted: column {cell.GridColumn}");
+        reorderStartOffset = scroll?.HorizontalOffset ?? 0;
+        reorderDx = 0;
+        edgeClock = System.Diagnostics.Stopwatch.StartNew();
+        Note($"[drag] a heading was lifted: column {cell.GridColumn}");
         Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.SetIsTranslationEnabled(cell, true);
         cell.Opacity = 0.8;
         Canvas.SetZIndex(cell, 10);
+        edgeTimer ??= DispatcherQueue.CreateTimer();
+        edgeTimer.Interval = TimeSpan.FromMilliseconds(16);
+        edgeTimer.IsRepeating = true;
+        edgeTimer.Tick -= OnEdgeTick;
+        edgeTimer.Tick += OnEdgeTick;
+        edgeTimer.Start();
     }
 
     /// <summary>The pointer moved with a lifted heading, by this much since it began, in the window's coordinates.</summary>
-    internal void ReorderMoved(DataTableHeaderCell cell, double dx)
+    internal void ReorderMoved(DataTableHeaderCell cell, double dx, double pointerX)
     {
         if (reordering is null || cell.GridColumn < 0 || cell.GridColumn >= shown.Count)
         {
             return;
         }
 
-        double logical = FlowDirection == FlowDirection.RightToLeft ? -dx : dx;
-        cell.Translation = new System.Numerics.Vector3((float)logical, 0, 0);
+        reorderDx = dx;
+        reorderPointerX = pointerX;
+        FollowPointer(cell);
+    }
+
+    // The lifted heading stands under the pointer, and the place it would drop at is where its centre is among the others'. A heading
+    // of the scrolling columns moves with the content as the view is scrolled, so the distance scrolled since it was lifted is added.
+    private void FollowPointer(DataTableHeaderCell cell)
+    {
         ShownColumn dragged = shown[cell.GridColumn];
-        double centre = dragged.Placed.X + (dragged.Placed.Width / 2) + logical;
+        double logical = FlowDirection == FlowDirection.RightToLeft ? -reorderDx : reorderDx;
+        double scrolled = dragged.Placed.Group == ColumnGroup.Scroll ? (scroll?.HorizontalOffset ?? 0) - reorderStartOffset : 0;
+        cell.Translation = new System.Numerics.Vector3((float)(logical + scrolled), 0, 0);
+        double centre = dragged.Placed.X + (dragged.Placed.Width / 2) + logical + scrolled;
         List<double> centres = shown.Select(s => s.Placed.X + (s.Placed.Width / 2)).ToList();
         int applied = layout?.FrozenStartApplied ?? 0;
         int endCount = shown.Count(s => s.Placed.Group == ColumnGroup.FrozenEnd);
@@ -83,13 +109,37 @@ public sealed partial class DataTable
             _ => (applied, shown.Count - endCount - 1),
         };
         dropAt = ColumnOrder.DropIndex(cell.GridColumn, centre, centres, from, Math.Max(from, to));
-        Diag.Say($"[drag] the heading moved {dx:0.#}: it would drop at {dropAt}");
+        Note($"[drag] the heading moved {reorderDx:0.#}, view scrolled {scrolled:0.#}: it would drop at {dropAt}");
+    }
+
+    // While a heading of the scrolling columns is held near an edge of the view the view scrolls, faster the nearer the edge.
+    private void OnEdgeTick(DispatcherQueueTimer sender, object args)
+    {
+        double seconds = edgeClock.Elapsed.TotalSeconds;
+        edgeClock.Restart();
+        if (reordering is not { } cell || scroll is null || cell.GridColumn < 0 || cell.GridColumn >= shown.Count || shown[cell.GridColumn].Placed.Group != ColumnGroup.Scroll)
+        {
+            return;
+        }
+
+        double left = scroll.TransformToVisual(null).TransformPoint(new Point(0, 0)).X;
+        double velocity = AutoScroll.Velocity(reorderPointerX - left, scroll.ViewportWidth);
+        if (velocity == 0)
+        {
+            return;
+        }
+
+        // The velocity is in the window's directions: toward the physical left is negative. In a right to left flow the end of the rows is on the left.
+        double delta = (FlowDirection == FlowDirection.RightToLeft ? -velocity : velocity) * Math.Min(seconds, 0.1);
+        scroll.ScrollBy(delta, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
+        FollowPointer(cell);
     }
 
     /// <summary>The pointer let go of a lifted heading.</summary>
     internal void ReorderEnded(DataTableHeaderCell cell, bool keep)
     {
-        Diag.Say($"[drag] the heading was let go, kept: {keep}, from {cell.GridColumn} to {dropAt}");
+        Note($"[drag] the heading was let go, kept: {keep}, from {cell.GridColumn} to {dropAt}");
+        edgeTimer?.Stop();
         cell.Translation = System.Numerics.Vector3.Zero;
         cell.Opacity = 1;
         Canvas.SetZIndex(cell, 0);
@@ -155,7 +205,7 @@ public sealed partial class DataTable
     {
         resizingKey = KeyOf(cell);
         resizeStartWidth = widths.TryGetValue(resizingKey, out double known) ? known : 0;
-        Diag.Say($"[drag] a strip was taken hold of on {resizingKey}, now {resizeStartWidth:0} wide");
+        Note($"[drag] a strip was taken hold of on {resizingKey}, now {resizeStartWidth:0} wide");
     }
 
     /// <summary>A pointer is widening a column.</summary>
@@ -168,7 +218,7 @@ public sealed partial class DataTable
 
         double delta = FlowDirection == FlowDirection.RightToLeft ? -dx : dx;
         widths[resizingKey] = ColumnSizing.Clamp(ColumnAt(cell.ColumnIndex).Kind, resizeStartWidth + delta);
-        Diag.Say($"[drag] the strip moved {dx:0.#}: {resizingKey} is {widths[resizingKey]:0} wide");
+        Note($"[drag] the strip moved {dx:0.#}: {resizingKey} is {widths[resizingKey]:0} wide");
         RebuildColumns(remeasure: false);
     }
 
@@ -181,7 +231,7 @@ public sealed partial class DataTable
         }
 
         resizingKey = null;
-        Diag.Say($"[drag] the strip on {key} was let go, kept: {keep}");
+        Note($"[drag] the strip on {key} was let go, kept: {keep}");
         if (!keep)
         {
             widths[key] = resizeStartWidth;
@@ -237,7 +287,7 @@ public sealed partial class DataTable
         RaiseLayoutChanged();
         if (say is not null)
         {
-            Announce(DataTableStrings.Get(say, Culture));
+            Say(say);
         }
     }
 
@@ -398,63 +448,39 @@ public sealed partial class DataTable
         RaiseLayoutChanged();
     }
 
-    // What a person has kept of the columns is read when the columns first arrive for a key.
-    private void LoadStoredLayout(IReadOnlyList<DataTableColumn> columns)
+    // What a person has kept of the columns is read when the columns first arrive for a key; true when it changed the density.
+    private bool LoadStoredLayout(IReadOnlyList<DataTableColumn> columns)
     {
         if (layoutKey is not { } key || layoutStore is not { } store)
         {
-            return;
+            return false;
         }
 
-        string signature = key + "|" + string.Join(',', columns.Select(c => c.Key));
-        if (loadedFor == signature)
+        if (!keeper.ShouldRead(key, columns.Select(c => c.Key).ToList()))
         {
-            return;
+            return false;
         }
 
-        loadedFor = signature;
         if (!store.TryLoad(key, out string json) || LayoutText.Parse(json) is not { } stored)
         {
-            return;
+            return false;
         }
 
-        List<string> serverKeys = columns.Select(c => c.Key).ToList();
-        if (!stored.Order.Any(serverKeys.Contains) && stored.Columns.Keys.All(k => !serverKeys.Contains(k)))
+        if (StoredLayoutApplier.Apply(stored, columns, widths, personWidths, hiddenKeys, forcedShownKeys) is not { } applied)
         {
-            return;
+            return false;
         }
 
-        columnOrder = [.. ColumnOrder.Reconcile(serverKeys, stored.Order)];
-        frozenWish = Math.Clamp(stored.Frozen, 0, columns.Count);
-        if (Enum.TryParse(stored.Density, ignoreCase: true, out Density kept))
+        columnOrder = [.. applied.Order];
+        frozenWish = applied.Frozen;
+        keeper.Resume(applied.Seen);
+        if (applied.Density is { } kept && kept != density)
         {
             density = kept;
+            return true;
         }
 
-        foreach (DataTableColumn column in columns)
-        {
-            if (!stored.Columns.TryGetValue(column.Key, out StoredColumn? kept2))
-            {
-                continue;
-            }
-
-            if (kept2.Width is { } width && string.Equals(kept2.Kind, column.Kind.ToString(), StringComparison.OrdinalIgnoreCase))
-            {
-                widths[column.Key] = ColumnSizing.Clamp(column.Kind, width);
-                personWidths.Add(column.Key);
-            }
-
-            if (kept2.Hidden is true)
-            {
-                hiddenKeys.Add(column.Key);
-            }
-            else if (kept2.Hidden is false)
-            {
-                forcedShownKeys.Add(column.Key);
-            }
-        }
-
-        saveCounter = stored.Columns.Values.Select(c => c.Seen).DefaultIfEmpty(0).Max();
+        return false;
     }
 
     private void ScheduleSave()
@@ -464,6 +490,7 @@ public sealed partial class DataTable
             return;
         }
 
+        keeper.Changed();
         saveTimer ??= DispatcherQueue.CreateTimer();
         saveTimer.Stop();
         saveTimer.Interval = TimeSpan.FromMilliseconds(400);
@@ -475,28 +502,30 @@ public sealed partial class DataTable
 
     private void OnSaveTimer(DispatcherQueueTimer sender, object args) => SaveLayoutNow();
 
+    /// <summary>Writes what a person changed of the layout now, when there is a key and a store and the layout was read.</summary>
     internal void SaveLayoutNow()
     {
+        saveTimer?.Stop();
         if (layoutKey is not { } key || layoutStore is not { } store || Model is not { } model)
         {
             return;
         }
 
-        saveTimer?.Stop();
-        saveCounter++;
-        Dictionary<string, StoredColumn> columns = [];
-        foreach (DataTableColumn column in model.Columns)
+        keeper.TrySave(store, key, count =>
         {
-            double? width = personWidths.Contains(column.Key) && widths.TryGetValue(column.Key, out double w) ? w : null;
-            bool? hidden = hiddenKeys.Contains(column.Key) ? true : forcedShownKeys.Contains(column.Key) ? false : null;
-            if (width is not null || hidden is not null)
+            Dictionary<string, StoredColumn> columns = [];
+            foreach (DataTableColumn column in model.Columns)
             {
-                columns[column.Key] = new StoredColumn(column.Kind.ToString().ToLowerInvariant(), width, hidden, saveCounter);
+                double? width = personWidths.Contains(column.Key) && widths.TryGetValue(column.Key, out double w) ? w : null;
+                bool? hidden = hiddenKeys.Contains(column.Key) ? true : forcedShownKeys.Contains(column.Key) ? false : null;
+                if (width is not null || hidden is not null)
+                {
+                    columns[column.Key] = new StoredColumn(column.Kind.ToString().ToLowerInvariant(), width, hidden, count);
+                }
             }
-        }
 
-        int frozen = frozenWish ?? ColumnSet.DefaultFrozen(shown.Select(s => new ColInfo(s.Column.Key, s.Column.Kind, s.Column.Role, s.Column.Secondary)).ToList());
-        StoredLayout stored = new(LayoutText.CurrentVersion, density.ToString().ToLowerInvariant(), frozen, FullOrder(), columns);
-        store.Save(key, LayoutText.Serialize(stored));
+            int frozen = frozenWish ?? ColumnSet.DefaultFrozen(shown.Select(s => new ColInfo(s.Column.Key, s.Column.Kind, s.Column.Role, s.Column.Secondary)).ToList());
+            return new StoredLayout(LayoutText.CurrentVersion, density.ToString().ToLowerInvariant(), frozen, FullOrder(), columns);
+        });
     }
 }

@@ -53,11 +53,13 @@ public sealed partial class DataTable
         SyncBulkActions();
         (int held, int chosen) = CountChoice();
         long? total = model.Choice.AcrossTotal;
+
+        // The bar counts the keys chosen, which are what the host is told of, so it never says none while it shows.
         string countWords = choice.Across
             ? total is { } all
                 ? DataTableStrings.Get("DataTable_Chosen_All", Choosing.FormatCount(all, Culture))
                 : DataTableStrings.Get("DataTable_Chosen_AllUnknown")
-            : DataTableStrings.Get("DataTable_Chosen_Count", Choosing.FormatCount(chosen, Culture));
+            : DataTableStrings.Get("DataTable_Chosen_Count", Choosing.FormatCount(choice.Keys.Count, Culture));
         string? offer = null;
         if (Choosing.OfferAcross(model.Choice.AcrossAvailable, choice.Across, held, chosen))
         {
@@ -100,10 +102,8 @@ public sealed partial class DataTable
 
     private void OnChoiceTimer(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
-        (_, int chosen) = CountChoice();
         long? total = Model?.Choice.AcrossTotal;
-        Announcement announcement = Announcements.Chosen(chosen, total, choice.Across);
-        Announce(DataTableStrings.Get(announcement, Culture));
+        Say(Announcements.Chosen(choice.Keys.Count, total, choice.Across));
     }
 
     // Rows that join while focus is in the table are said once, a second after the last.
@@ -136,24 +136,36 @@ public sealed partial class DataTable
     {
         if (addedLater > 0)
         {
-            Announce(DataTableStrings.Get(Announcements.RowsAdded(addedLater, earlier: false), Culture));
+            Say(Announcements.RowsAdded(addedLater, earlier: false));
         }
 
         if (addedEarlier > 0)
         {
-            Announce(DataTableStrings.Get(Announcements.RowsAdded(addedEarlier, earlier: true), Culture));
+            Say(Announcements.RowsAdded(addedEarlier, earlier: true));
         }
 
         addedLater = 0;
         addedEarlier = 0;
     }
 
-    private bool FocusIsInside()
+    private bool FocusIsInside() => FocusIsInside(this);
+
+    /// <summary>Whether keyboard focus is on an element of the table or inside it.</summary>
+    /// <param name="element">The element.</param>
+    internal bool HoldsFocus(DependencyObject element) => FocusIsInside(element);
+
+    // Whether keyboard focus is on an element or on something inside it.
+    private bool FocusIsInside(DependencyObject inside)
     {
+        if (XamlRoot is null)
+        {
+            return false;
+        }
+
         DependencyObject? at = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
         while (at is not null)
         {
-            if (ReferenceEquals(at, this))
+            if (ReferenceEquals(at, inside))
             {
                 return true;
             }
@@ -173,19 +185,27 @@ public sealed partial class DataTable
             return;
         }
 
-        rowsLayout.PinnedIndex = index;
+        pins.Set(PinOwner.Assistive, index);
+        rowsLayout.Pinned = pins.Indices;
         rowsLayout.Reflow();
         _ = repeater.GetOrCreateElement(index);
         repeater.UpdateLayout();
-        ReleasePinSoon();
+        ReleasePinSoon(PinOwner.Assistive);
     }
 
-    private void Announce(string words)
+    // Says a message the rules gave, in the table's culture, as the kind and the activity the rules give it.
+    private void Say(Announcement announcement)
+    {
+        (AnnouncementKind kind, string activity) = Announcements.Describe(announcement.Id);
+        Announce(DataTableStrings.Get(announcement, Culture), kind, activity);
+    }
+
+    private void Announce(string words, AnnouncementKind kind = AnnouncementKind.Other, string activity = "DataTable")
     {
         lastAnnouncement = words;
-        RaiseNotification(words);
+        RaiseNotification(words, kind, activity);
     }
 
-    /// <summary>The last words the table said to assistive technology; a run reads them.</summary>
+    /// <summary>The last words the table said to assistive technology; a test reads them.</summary>
     internal string LastAnnouncement => lastAnnouncement;
 }
