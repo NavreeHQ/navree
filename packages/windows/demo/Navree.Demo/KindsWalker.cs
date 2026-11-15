@@ -70,6 +70,11 @@ internal sealed class KindsWalker(Window window, string folder)
                         Navree.Controls.Drawing.Readouts.Clear(page);
                     }
 
+                    if (width == 840 && name == "a-charts")
+                    {
+                        await RealInputAsync(page, prefix, name);
+                    }
+
                     if (width == 840 && prefix == "light-")
                     {
                         await SaveAsync(page, Path.Combine(folder, prefix + name + "-w840-x2.png"), 2, name);
@@ -87,6 +92,48 @@ internal sealed class KindsWalker(Window window, string folder)
             Say("done");
             File.WriteAllLines(Path.Combine(folder, prefix + "kinds.txt"), log);
             Application.Current.Exit();
+        }
+    }
+
+    // A real pointer over a chart and real arrow keys on one: which place each read out is written to the log, and each is pictured.
+    private async Task RealInputAsync(FrameworkElement page, string prefix, string name)
+    {
+        try
+        {
+            IntPtr handle = WinRT.Interop.WindowNative.GetWindowHandle(window);
+            RealInput.Forward(handle);
+            await Task.Delay(300);
+            double scale = page.XamlRoot?.RasterizationScale ?? 1;
+            Windows.Foundation.Point? spot = Navree.Controls.Drawing.FirstDrawing.Where(page, window.Content, 3);
+            if (spot is Windows.Foundation.Point found)
+            {
+                RealInput.PointerTo(handle, found.X * scale, found.Y * scale);
+                await Task.Delay(500);
+                Say(name + ": the pointer was put on place 3 of the first chart; it reads out place " + Navree.Controls.Drawing.FirstDrawing.Current(page));
+                await SaveAsync(page, Path.Combine(folder, prefix + name + "-w840-pointer.png"), 1, name);
+            }
+            else
+            {
+                Say(name + ": no chart to put a pointer on");
+            }
+
+            Navree.Controls.Drawing.Readouts.Clear(page);
+            RealInput.PointerTo(handle, 2, 2);
+            await Task.Delay(200);
+            bool focused = Navree.Controls.Drawing.FirstDrawing.Focus(page);
+            await Task.Delay(300);
+            int firstPlace = Navree.Controls.Drawing.FirstDrawing.Current(page);
+            RealInput.Press(0x27);
+            await Task.Delay(150);
+            RealInput.Press(0x27);
+            await Task.Delay(300);
+            Say(name + ": the first chart took the focus " + focused + ", read out place " + firstPlace + " at once and place " + Navree.Controls.Drawing.FirstDrawing.Current(page) + " after the right arrow twice");
+            await SaveAsync(page, Path.Combine(folder, prefix + name + "-w840-keys.png"), 1, name);
+            Navree.Controls.Drawing.Readouts.Clear(page);
+        }
+        catch (Exception problem)
+        {
+            Say("real input failed: " + problem.Message);
         }
     }
 

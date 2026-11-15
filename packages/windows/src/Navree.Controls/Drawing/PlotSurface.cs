@@ -521,3 +521,56 @@ public static class Readouts
         return shown;
     }
 }
+
+/// <summary>Finds the first drawing under an element that can be read out, and says where its places are: for a test that moves a real pointer and presses real keys.</summary>
+public static class FirstDrawing
+{
+    private static PlotSurface? Find(DependencyObject root)
+    {
+        int children = VisualTreeHelper.GetChildrenCount(root);
+        for (int at = 0; at < children; at++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, at);
+            if (child is PlotSurface surface && surface.Reads && surface.Probes.Count > 2)
+            {
+                return surface;
+            }
+
+            if (Find(child) is PlotSurface inner)
+            {
+                return inner;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Where a place of the first drawing is, as the element sees it; none when there is no such drawing.</summary>
+    /// <param name="root">Where to look.</param>
+    /// <param name="relativeTo">The element the place is told in.</param>
+    /// <param name="place">Which place.</param>
+    /// <returns>The point.</returns>
+    public static Windows.Foundation.Point? Where(DependencyObject root, UIElement relativeTo, int place)
+    {
+        PlotSurface? surface = Find(root);
+        if (surface is null || place >= surface.Probes.Count)
+        {
+            return null;
+        }
+
+        Probe probe = surface.Probes[place];
+        double x = probe.Hit.Width > 0 ? probe.Hit.X + (probe.Hit.Width / 2) : probe.X;
+        double y = probe.Hit.Height > 0 ? probe.Hit.Y + (probe.Hit.Height / 2) : probe.Y;
+        return surface.TransformToVisual(relativeTo).TransformPoint(new Windows.Foundation.Point(x, y));
+    }
+
+    /// <summary>The place the first drawing reads out now, or -1.</summary>
+    /// <param name="root">Where to look.</param>
+    /// <returns>The place.</returns>
+    public static int Current(DependencyObject root) => Find(root)?.Current ?? -1;
+
+    /// <summary>Gives the first drawing the keyboard focus, as a Tab would.</summary>
+    /// <param name="root">Where to look.</param>
+    /// <returns>Whether there was one to give it to.</returns>
+    public static bool Focus(DependencyObject root) => Find(root)?.Focus(FocusState.Keyboard) ?? false;
+}
