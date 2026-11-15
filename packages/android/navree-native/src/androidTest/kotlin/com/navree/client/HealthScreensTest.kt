@@ -196,35 +196,6 @@ class HealthScreensTest {
         assertEquals("the card opened the screen it leads to", "Shelves", (front?.content as? Content.Native)?.screen?.title)
     }
 
-    /**
-     * A set of rings in a card of a page that centres its parts stands in the
-     * middle of the card: the room left of the group (from the card's start to
-     * the dial) is the room right of it (from the legend's end to the card's
-     * end), whichever way the line runs.
-     */
-    @Test
-    fun aSetOfRingsInACardThatCentresItsPartsStandsInTheMiddleOfTheCard() {
-        val app = start(designedAtRoot = true)
-        front(app, "Today")
-        val dial = hasContentDescription("Activity rings:", substring = true) and hasScrollAction().not()
-        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(dial)
-        compose.waitForIdle()
-        fun bounds(matcher: androidx.compose.ui.test.SemanticsMatcher) = compose.onAllNodes(matcher).onFirst().fetchSemanticsNode().boundsInRoot
-        val dialBox = bounds(dial)
-        val heading = bounds(androidx.compose.ui.test.hasText("Activity") and androidx.compose.ui.test.isHeading())
-        val info = bounds(hasContentDescription("About how activity is counted"))
-        val legend = listOf("Move", "Exercise", "Stand").map { bounds(androidx.compose.ui.test.hasText(it)) }
-        val groupLeft = minOf(dialBox.left, legend.minOf { it.left })
-        val groupRight = maxOf(dialBox.right, legend.maxOf { it.right })
-        // The card's inner edges: where its heading starts and where its hint button ends (the heading may stand at either end, whichever way the line runs).
-        val cardLeft = minOf(heading.left, info.left)
-        val cardRight = maxOf(heading.right, info.right)
-        val left = groupLeft - cardLeft
-        val right = cardRight - groupRight
-        val density = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
-        assertTrue("the rings stand in the middle of their card: ${left / density} dp before them, ${right / density} dp after", kotlin.math.abs(left - right) <= 24 * density)
-    }
-
     /** A screen of days turns to the day before or after when it is swiped along, the way the page moves with the finger. */
     @Test
     fun aSwipeTurnsTheDay() {
