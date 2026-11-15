@@ -208,12 +208,14 @@ jobs:
             :navree-push-fcm:assembleDebug \
             :demo:assembleDebug
 
-      # The walk's own helpers: a screen is never read from an older dump, and what is absent is
-      # said only of a dump that was made.
-      - name: The walk's own tests
+      # The scripts' own tests: the walk's helpers (a screen is never read from an older dump, and what is
+      # absent is said only of a dump that was made), the reading of a run of the device tests, and the script
+      # put at the start of every document of the web view, run in node against a page's tricks.
+      - name: The scripts' own tests
         run: |
           python3 -I scripts/ui_test.py
           python3 -I scripts/read_run_test.py
+          python3 -I scripts/document_script_test.py
           bash scripts/walk_test.sh
 
       # The demo as a store ships it (not debuggable), signed with a key made here, to time a start on.
