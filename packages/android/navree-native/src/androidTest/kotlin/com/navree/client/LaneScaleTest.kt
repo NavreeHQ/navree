@@ -3,6 +3,7 @@ package com.navree.client
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
@@ -11,8 +12,6 @@ import com.navree.client.core.Content
 import com.navree.client.core.Stage
 import mockwebserver3.MockWebServer
 import okhttp3.HttpUrl.Companion.toHttpUrl
-import org.json.JSONArray
-import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -23,8 +22,11 @@ import org.junit.runner.RunWith
 /**
  * A board whose first lane holds 20, 200 and 2,000 cards (the board demo's
  * server sends 20 at first and 20 more at a time, up to 200 in a lane): the
- * time to the first screen drawn and the time of ten swipes up the page, written
- * beside the pictures as `lanes-<device>-<look>-<cards>.txt`.
+ * time to the first screen drawn, the time of ten swipes up the page and how
+ * many of the lane's cards are drawn at the end, written beside the pictures
+ * as `lanes-<device>-<look>-<cards>.txt`. A lane is laid lazily, so whatever it
+ * holds the first screen of 2,000 cards comes in the time of one screen, and
+ * only the cards near the window are drawn.
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
@@ -44,38 +46,8 @@ class LaneScaleTest {
         server.close()
     }
 
-    /** The recorded board with `cards` cards in its first lane. */
-    private fun boardWith(cards: Int): String {
-        val text = InstrumentationRegistryAssets.read("screen-board.json")
-        val root = JSONObject(text)
-        fun visit(node: Any?) {
-            when (node) {
-                is JSONObject -> {
-                    if (node.optString("id") == "board-todo" && node.has("reorder")) {
-                        val children = node.getJSONArray("children")
-                        val first = children.getJSONObject(0)
-                        val more = JSONArray()
-                        for (at in 0 until cards) {
-                            val copy = JSONObject(first.toString())
-                            copy.put("id", "c-$at")
-                            copy.put("key", "$at")
-                            copy.put("title", "Card $at of the first lane")
-                            copy.getJSONObject("action").put("href", "/cards/c-$at")
-                            more.put(copy)
-                        }
-                        node.put("children", more)
-                    }
-                    node.keys().forEach { visit(node.get(it)) }
-                }
-                is JSONArray -> for (at in 0 until node.length()) visit(node.get(at))
-            }
-        }
-        visit(root)
-        return root.toString()
-    }
-
     private fun measure(cards: Int) {
-        val body = boardWith(cards)
+        val body = LaneBoard.json(cards)
         server.dispatcher = Recorded("", routes = mapOf("/_navree/native/shell" to "shell", "/" to "screen-board"), read = { file -> if (file == "screen-board.json") body else null })
         server.start()
         val origin = server.url("/").toString().trimEnd('/')
@@ -93,16 +65,33 @@ class LaneScaleTest {
         }
         compose.waitForIdle()
         val firstMs = (System.nanoTime() - began) / 1_000_000
+        val drawnFirst = cardsDrawn()
+        Shots.take("lane-$cards-first")
         val scrolled = System.nanoTime()
         repeat(10) {
             compose.onRoot().performTouchInput { swipeUp(startY = bottom * 0.85f, endY = bottom * 0.2f, durationMillis = 200) }
             compose.waitForIdle()
         }
         val scrollMs = (System.nanoTime() - scrolled) / 1_000_000
+        val drawn = cardsDrawn()
         val heap = Runtime.getRuntime().let { (it.totalMemory() - it.freeMemory()) / (1024 * 1024) }
-        Shots.put("lanes-${Shots.device}-${Shots.look}-$cards.txt", "cards in the first lane: $cards\nfirst screen drawn: $firstMs ms\nten swipes up the page: $scrollMs ms\nheap in use afterwards: $heap MB\n")
-        assertTrue("the board with $cards cards in a lane came up and scrolled", firstMs > 0)
+        Shots.take("lane-$cards-scrolled")
+        Shots.put(
+            "lanes-${Shots.device}-${Shots.look}-$cards.txt",
+            "cards in the first lane: $cards\nfirst screen drawn: $firstMs ms\nten swipes up the page: $scrollMs ms\n" +
+                "cards of the lane drawn at the first screen: $drawnFirst, after the swipes: $drawn\nheap in use afterwards: $heap MB\n",
+        )
+        assertTrue("the board with $cards cards in a lane came up with cards in it", drawnFirst > 0)
+        assertTrue("$drawnFirst cards of the lane are drawn at the first screen of $cards: only the ones near the window are", drawnFirst < MOST_DRAWN)
+        assertTrue("$drawn cards of the lane are drawn after ten swipes: only the ones near the window are", drawn < MOST_DRAWN)
+        if (cards >= 2000) {
+            assertTrue("the first screen of a lane of $cards cards took $firstMs ms, over $MOST_FIRST_MS", firstMs < MOST_FIRST_MS)
+        }
     }
+
+    /** How many of the first lane's cards are drawn now: each is a node that says its title. */
+    private fun cardsDrawn(): Int =
+        compose.onAllNodes(hasText(LaneBoard.TITLE_END, substring = true)).fetchSemanticsNodes().size
 
     @Test
     fun aLaneOfTwentyCards() = measure(20)
@@ -114,8 +103,5 @@ class LaneScaleTest {
     fun aLaneOfTwoThousandCards() = measure(2000)
 }
 
-/** The test's own assets, by file name. */
-private object InstrumentationRegistryAssets {
-    fun read(file: String): String =
-        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().context.assets.open(file).use { it.readBytes().decodeToString() }
-}
+private const val MOST_DRAWN = 60
+private const val MOST_FIRST_MS = 1_500L

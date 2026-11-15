@@ -1,0 +1,241 @@
+package com.navree.client
+
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.isPopup
+import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pressKey
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.navree.client.core.Content
+import mockwebserver3.Dispatcher
+import mockwebserver3.MockResponse
+import mockwebserver3.MockWebServer
+import mockwebserver3.RecordedRequest
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.util.concurrent.CopyOnWriteArrayList
+
+/**
+ * A board whose first lane holds 200 cards (the most the board demo's server
+ * keeps in a lane), drawn lazily: a card is held and dragged past the edge of
+ * the lane so that the lane scrolls under it, a card is moved by the keyboard
+ * and by its handle's menu, and a card that is scrolled out of the lane and back
+ * shows what it showed. The server is a stand-in that records what it is told.
+ */
+@OptIn(ExperimentalTestApi::class)
+@RunWith(AndroidJUnit4::class)
+class LaneMoveTest {
+    @get:Rule
+    val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Before
+    fun readingListsFollowThePictures() {
+        Shots.rule = compose
+    }
+
+    private val server = MockWebServer()
+
+    /** The forms of the moves the server was told, in order. */
+    private val moves = CopyOnWriteArrayList<Map<String, String>>()
+
+    @After
+    fun stop() {
+        server.close()
+    }
+
+    private fun open(cards: Int, ticks: Boolean = false) {
+        val body = LaneBoard.json(cards, ticks)
+        val served = Recorded("", routes = mapOf("/_navree/native/shell" to "shell", "/" to "screen-board"), read = { file -> if (file == "screen-board.json") body else null })
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (request.method == "POST" && request.url.encodedPath == "/cards/move") {
+                    moves += LaneBoard.form(request.body?.utf8().orEmpty())
+                    return MockResponse.Builder().code(204).build()
+                }
+                return served.dispatch(request)
+            }
+        }
+        server.start()
+        val origin = server.url("/").toString().trimEnd('/')
+        val config = NavreeConfig(origin = origin, name = "Board", seed = null, loopbackHttp = true, openAnyLink = true)
+        lateinit var made: NavreeSession
+        compose.runOnUiThread {
+            made = NavreeSession(compose.activity.application, config, origin.toHttpUrl())
+            made.effects.activity = compose.activity
+        }
+        compose.setContent { Shots.Looked { Host(made) } }
+        compose.waitUntil(180_000) {
+            val front = made.driver.nav.front?.let { made.driver.screens[it] }
+            (front?.content as? Content.Native)?.screen?.title == "Board" && !front.loading
+        }
+        compose.waitForIdle()
+        waitFor("the first card") { shown().isNotEmpty() }
+    }
+
+    private fun waitFor(what: String, timeout: Long = 20_000, check: () -> Boolean) {
+        try {
+            compose.waitUntil(timeout) { check() }
+        } catch (e: Throwable) {
+            throw AssertionError("waited for $what; the cards drawn: ${shown()}; the server was told $moves", e)
+        }
+        compose.waitForIdle()
+    }
+
+    /** The numbers of the cards of the first lane that are drawn, from the top of the window down. */
+    private fun shown(): List<Int> =
+        compose.onAllNodes(hasText(LaneBoard.TITLE_END, substring = true)).fetchSemanticsNodes()
+            .sortedBy { it.boundsInRoot.top }
+            .mapNotNull { node ->
+                val words = node.config.getOrNull(SemanticsProperties.Text)?.joinToString(" ") { it.text }.orEmpty()
+                Regex("Card (\\d+) of").find(words)?.groupValues?.get(1)?.toInt()
+            }
+            .distinct()
+
+    private fun handle(at: Int) =
+        compose.onAllNodes(hasContentDescription("Move ${LaneBoard.title(at)}"), useUnmergedTree = true).onFirst()
+
+    private fun focused(at: Int) =
+        compose.onAllNodes(isFocused() and hasContentDescription("Move ${LaneBoard.title(at)}"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    /** One of the moves a screen reader or a keyboard is offered on a card's handle. */
+    private fun moveWith(at: Int, label: String) {
+        val action = handle(at).fetchSemanticsNode().config[SemanticsActions.CustomActions].first { it.label == label }
+        compose.runOnUiThread { action.action() }
+    }
+
+    /** Opens a card's menu and chooses a move in it. */
+    private fun chooseInMenu(label: String) {
+        waitFor("the menu with \"$label\"") { compose.onAllNodes(hasText(label) and hasAnyAncestor(isPopup())).fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodes(hasText(label) and hasAnyAncestor(isPopup())).onFirst().performClick()
+    }
+
+    /** What the server was told by its nth move, and that it was told it by a card of the first lane. */
+    private fun told(nth: Int, item: Int, before: Int?) {
+        waitFor("the server's ${nth + 1}th move") { moves.size > nth }
+        val form = moves[nth]
+        assertEquals("the card that moved, by its key", item.toString(), form["item"])
+        assertEquals("from the first lane", "todo", form["from"])
+        assertEquals("to the first lane", "todo", form["to"])
+        assertEquals("the card it stands before", before?.toString().orEmpty(), form["before"].orEmpty())
+    }
+
+    @Test
+    fun aCardHeldPastTheBottomOfALaneOfTwoHundredCardsScrollsTheLaneUnderItAndStandsWhereItIsLetGo() {
+        open(200)
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val grab = handle(0).fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performTouchInput {
+            down(grab)
+            // Into the lane, clear of its edges: the card lifts and follows the finger, and nothing scrolls.
+            for (step in 1..10) moveTo(Offset(grab.x, grab.y + 20f * step), delayMillis = 16)
+        }
+        compose.waitForIdle()
+        assertTrue("the held card is still drawn", shown().contains(0))
+        Shots.take("lane-held")
+        compose.onRoot().performTouchInput {
+            val from = grab.y + 200f
+            val to = root.bottom - 6f
+            // Down to the bottom edge, and held there a moment: the lane scrolls by itself while the finger is at the edge.
+            for (step in 1..20) moveTo(Offset(grab.x, from + (to - from) * step / 20f), delayMillis = 16)
+            repeat(70) { moveBy(Offset.Zero, delayMillis = 16) }
+            up()
+        }
+        compose.waitForIdle()
+        waitFor("the server told of the move") { moves.size == 1 }
+        val form = moves.single()
+        assertEquals("the card that was held", "0", form["item"])
+        assertEquals("in its own lane", "todo", form["from"])
+        assertEquals("in its own lane", "todo", form["to"])
+
+        waitFor("the card drawn where it was let go") { shown().contains(0) }
+        val order = shown()
+        val others = order.filter { it != 0 }
+        val at = order.indexOf(0)
+        assertTrue("the lane scrolled under the card: it shows cards from ${others.first()} on, in $order", others.first() >= 5)
+        assertEquals("the other cards keep their order", others.sorted(), others)
+        if (at + 1 < order.size) {
+            assertEquals("the server was told the card stands before the card that is drawn after it: $order", order[at + 1].toString(), form["before"])
+        } else {
+            assertTrue("the card is the last drawn: the card it stands before is further down (${form["before"]}), $order", (form["before"]?.toIntOrNull() ?: Int.MAX_VALUE) > others.last())
+        }
+        val card = compose.onAllNodes(hasText(LaneBoard.title(0))).onFirst().fetchSemanticsNode().boundsInRoot
+        assertTrue("the card stands in the lower part of the window, where the finger was: ${card.top} of ${root.height}", card.top > root.height * 0.4f)
+        Shots.take("lane-dropped")
+    }
+
+    @Test
+    fun aCardMovedByTheKeyboardAndByItsMenuKeepsTheFocusAndStandsWhereTheMoveSays() {
+        open(200)
+        handle(0).performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.waitForIdle()
+        assertTrue("the first card's handle has the focus", focused(0))
+
+        // The moves a keyboard and a screen reader are offered on the handle.
+        moveWith(0, "Move down")
+        waitFor("the first card second") { shown().take(3) == listOf(1, 0, 2) }
+        told(0, item = 0, before = 2)
+        assertTrue("the focus stays on the card that moved", focused(0))
+
+        // Enter on the handle opens its menu.
+        handle(0).performKeyInput { pressKey(Key.Enter) }
+        chooseInMenu("Move down")
+        waitFor("the card third") { shown().take(4) == listOf(1, 2, 0, 3) }
+        told(1, item = 0, before = 3)
+        assertTrue("the focus stays on the card after a move from its menu", focused(0))
+        Shots.take("lane-moved")
+
+        // A tap on the handle opens the same menu: up from the third place.
+        handle(0).performSemanticsAction(SemanticsActions.OnClick)
+        chooseInMenu("Move up")
+        waitFor("the card second again") { shown().take(3) == listOf(1, 0, 2) }
+        told(2, item = 0, before = 2)
+    }
+
+    @Test
+    fun aCardThatIsScrolledOutOfTheLaneAndBackShowsWhatItShowed() {
+        open(200, ticks = true)
+        val first = LaneBoard.title(0)
+        fun tick() = compose.onAllNodes(isToggleable() and hasAnyAncestor(hasText(first))).onFirst()
+        fun ticked() = tick().fetchSemanticsNode().config.getOrNull(SemanticsProperties.ToggleableState) == ToggleableState.On
+        assertTrue("the first card is not ticked at first", !ticked())
+        tick().performSemanticsAction(SemanticsActions.OnClick)
+        waitFor("the first card ticked") { ticked() }
+
+        // The list that holds the cards: the screen's own on a phone, the lane's on a wide window (the last that holds a card).
+        fun list(card: String) = compose.onAllNodes(hasScrollToIndexAction() and hasAnyDescendant(hasText(card, substring = true))).onLast()
+        list(first).performScrollToIndex(150)
+        waitFor("the first card gone from what is drawn") { compose.onAllNodes(hasText(first)).fetchSemanticsNodes().isEmpty() }
+        assertTrue("a lane of 200 cards has few of them drawn: ${shown().size}", shown().size < 60)
+        list(LaneBoard.TITLE_END).performScrollToIndex(0)
+        waitFor("the first card drawn again") { compose.onAllNodes(hasText(first)).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue("the first card is still ticked after it was scrolled out and back", ticked())
+        Shots.take("lane-ticked")
+    }
+}
