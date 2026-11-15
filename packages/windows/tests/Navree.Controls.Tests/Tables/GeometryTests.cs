@@ -116,6 +116,19 @@ public sealed class GeometryTests
     }
 
     [TestMethod]
+    public void A_viewport_of_no_end_or_no_number_never_makes_every_row()
+    {
+        Geometry plain = new(40, []);
+        (int first, int last) = plain.RealizedRange(0, double.PositiveInfinity, 200_000);
+        Assert.AreEqual(0, first);
+        Assert.AreEqual(Geometry.MostRealized - 1, last);
+        (first, last) = plain.RealizedRange(120_000, double.PositiveInfinity, 200_000);
+        Assert.IsTrue(last - first + 1 <= Geometry.MostRealized, "a viewport that starts down the table is held to the same number");
+        Assert.AreEqual((0, -1), plain.RealizedRange(0, double.NaN, 200_000));
+        Assert.AreEqual((0, 20), plain.RealizedRange(0, 800, 100_000), "an ordinary viewport is not held back");
+    }
+
+    [TestMethod]
     public void Open_rows_out_of_order_are_refused() =>
         Assert.ThrowsExactly<ArgumentException>(() => new Geometry(40, [(5, 10), (3, 10)]));
 }

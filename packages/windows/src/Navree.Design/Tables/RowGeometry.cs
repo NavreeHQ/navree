@@ -221,7 +221,10 @@ public sealed class Geometry
         return (candidate, y - before[endedAbove] - (candidate * RowHeight));
     }
 
-    /// <summary>The rows to have made for a viewport: those it touches and a margin of rows each side.</summary>
+    /// <summary>The most rows a pass makes, whatever the viewport says: a viewport of no end (a repeater with nothing to measure against) must not make every row.</summary>
+    public const int MostRealized = 400;
+
+    /// <summary>The rows to have made for a viewport: those it touches and a margin of rows each side, never more than <see cref="MostRealized"/>.</summary>
     /// <param name="top">The top of the viewport.</param>
     /// <param name="height">The height of the viewport.</param>
     /// <param name="count">How many rows the table holds.</param>
@@ -237,7 +240,7 @@ public sealed class Geometry
         double start = Math.Max(0, top);
         int first = Math.Max(0, IndexAt(start, count).Index - margin);
         int last = Math.Min(count - 1, IndexAt(start + height - 1e-6, count).Index + margin);
-        return (first, last);
+        return (first, Math.Min(last, first + MostRealized - 1));
     }
 
     // How many open rows have an index below the given one.
