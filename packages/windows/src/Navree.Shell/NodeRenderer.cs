@@ -47,7 +47,19 @@ internal sealed partial class NodeRenderer(RenderContext context)
     }
 
     // The kinds drawn by controls of our own (NodeRenderer.Kinds.cs) come first; the rest are drawn here.
-    private UIElement Draw(Models.Node node) => DrawKind(node) ?? DrawPlain(node);
+    private UIElement Draw(Models.Node node)
+    {
+        // The screen's title is drawn above the page already: the first heading of the page that says the same words is not said again.
+        if (!titleCovered && node is Models.Text { Heading: not null } heading && context.Screen.Screen?.Title == heading.Value)
+        {
+            titleCovered = true;
+            return Empty();
+        }
+
+        return DrawKind(node) ?? DrawPlain(node);
+    }
+
+    private bool titleCovered;
 
     private UIElement DrawPlain(Models.Node node) =>
         node switch
