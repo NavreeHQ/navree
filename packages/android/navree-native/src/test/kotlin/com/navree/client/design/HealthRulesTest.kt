@@ -218,6 +218,22 @@ class AxisRulesTest {
     }
 }
 
+class ChartLabelFitTest {
+    @Test
+    fun a_last_label_pushed_against_the_one_before_it_takes_its_place() {
+        // Six marks, a label 60 wide each; the last was kept inside the chart and now touches the one before it.
+        val spans = listOf(0f to 60f, 80f to 140f, 160f to 220f, 240f to 300f, 320f to 380f, 350f to 410f)
+        assertEquals(listOf(0, 1, 2, 3, 5), AxisRules.fit(spans, 6f))
+    }
+
+    @Test
+    fun labels_that_stand_clear_are_all_kept_and_one_that_meets_another_is_left_out() {
+        assertEquals(listOf(0, 1, 2), AxisRules.fit(listOf(0f to 40f, 50f to 90f, 100f to 140f), 6f))
+        assertEquals(listOf(0, 2), AxisRules.fit(listOf(0f to 40f, 42f to 80f, 100f to 140f), 6f))
+        assertEquals(emptyList<Int>(), AxisRules.fit(emptyList(), 6f))
+    }
+}
+
 class ChartLabelStepTest {
     @Test
     fun labels_that_would_touch_stand_every_second_or_third_mark() {

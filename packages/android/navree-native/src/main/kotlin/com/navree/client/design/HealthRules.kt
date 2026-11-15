@@ -362,6 +362,27 @@ object AxisRules {
     }
 
     /**
+     * Which of a row of labels are drawn, from where each would stand (its
+     * left and right edge, in the order of the marks): a label is kept when it
+     * stands `gap` clear of the one kept before it. The last label stays, and
+     * the one before it gives way, where the clamp that keeps it inside the
+     * chart brought it up against that one.
+     */
+    fun fit(spans: List<Pair<Float, Float>>, gap: Float): List<Int> {
+        fun meets(a: Pair<Float, Float>, b: Pair<Float, Float>) = a.first < b.second + gap && b.first < a.second + gap
+        val kept = ArrayList<Int>()
+        for (at in spans.indices) {
+            if (kept.isEmpty() || !meets(spans[at], spans[kept.last()])) {
+                kept += at
+            } else if (at == spans.lastIndex) {
+                while (kept.isNotEmpty() && meets(spans[at], spans[kept.last()])) kept.removeAt(kept.lastIndex)
+                kept += at
+            }
+        }
+        return kept
+    }
+
+    /**
      * The mark of a chart a touch at `x` is over, or null outside the plot:
      * the bar whose width it falls in, or the nearest point of a line. Where
      * the line runs right to left the first mark is at the right.

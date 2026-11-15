@@ -233,12 +233,16 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
                 val slot = if (bar) plot.width / count else if (count > 1) plot.width / (count - 1) else plot.width
                 val step = AxisRules.labelStep(widest.toFloat(), slot, 6.dp.toPx())
                 val shown = if (count <= 8) node.labels.indices.filter { it % step == 0 } else listOf(0, node.labels.size / 2, node.labels.lastIndex).distinct()
-                for (at in shown) {
-                    val word = node.labels.getOrNull(at) ?: continue
+                // Where each would stand, kept inside the chart; one that comes up against the one before it gives way (the last stays).
+                val standing = shown.mapNotNull { at ->
+                    val word = node.labels.getOrNull(at) ?: return@mapNotNull null
                     val text = measurer.measure(word, small)
                     val centre = if (bar) x((at + 0.5f) / count) else x(if (count > 1) at.toFloat() / (count - 1) else 0.5f)
                     val left = (centre - text.size.width / 2f).coerceIn(plot.left - (if (rtl) 0f else gutter), size.width - text.size.width)
-                    drawText(text, topLeft = Offset(left, plot.bottom + 6.dp.toPx()))
+                    Triple(text, left, left + text.size.width)
+                }
+                for (at in AxisRules.fit(standing.map { it.second to it.third }, 6.dp.toPx())) {
+                    drawText(standing[at].first, topLeft = Offset(standing[at].second, plot.bottom + 6.dp.toPx()))
                 }
                 // What a finger is on: a rule down the mark, and its label and values in a small card.
                 touched?.takeIf { it < count }?.let { at ->
