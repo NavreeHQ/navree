@@ -6,6 +6,13 @@
     <!-- A window of its own (a dialog, a menu, a picker) lays itself out right to left only for an app that says it supports it. -->
     <application
         android:networkSecurityConfig="@xml/navree_test_network"
-        android:supportsRtl="true" />
+        android:supportsRtl="true">
+
+        <!-- Documents a device test hands the file field as a picker would: a name, a size and a media type each. -->
+        <provider
+            android:name="com.navree.client.TestDocuments"
+            android:authorities="com.navree.client.test.documents"
+            android:exported="false" />
+    </application>
 
 </manifest>
