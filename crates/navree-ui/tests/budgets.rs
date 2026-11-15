@@ -542,6 +542,59 @@ fn a_page_with_an_island_loads_the_islands_module_alone() {
     );
 }
 
+/// What mounts a plugin's components, seals what they draw and lets them call only the routes
+/// the server named. Each component's own script has the ceiling its plugin gives it, checked
+/// when the plugin compiles.
+#[test]
+fn the_extensions_module_is_at_most_4_kb_gzip() {
+    assert!(size("extensions") <= 4 * 1024, "{}", size("extensions"));
+}
+
+/// A component with a script loads the core runtime, whose write path its calls take, and the
+/// extensions module, and no other script of the toolkit's: its own comes from the address on
+/// it, and its stylesheet is its plugin's.
+#[test]
+fn a_page_with_a_script_extension_loads_the_core_and_extensions_modules_alone() {
+    use navree_ui::{ExtensionFile, UiExtension, el};
+
+    const SCRIPT: ExtensionFile =
+        ExtensionFile::__new(b"export const contract = 1;", "1a2b3c4d5e6f", None);
+    const SHEET: ExtensionFile = ExtensionFile::__new(
+        br#":where([data-slot^="geo:"]){.pin{color:red}}"#,
+        "0f9e8d7c6b5a",
+        Some("geo"),
+    );
+    static MAP: UiExtension = UiExtension::new("geo", "map")
+        .script(SCRIPT)
+        .sheet(SHEET)
+        .contract(1);
+    let page = View::new("x").body(el("div").slot("geo:map").extension(&MAP));
+    let html = page.to_html();
+    assert_eq!(linked(&html).0, ["core", "extensions"], "{html}");
+    assert_eq!(linked(&html).1, ["navree-ui"], "{html}");
+}
+
+/// A component with a stylesheet and no script loads no script at all: the head links its sheet.
+#[test]
+fn a_page_with_a_sheet_only_extension_loads_no_script() {
+    use navree_ui::{ExtensionFile, UiExtension, el};
+
+    const SHEET: ExtensionFile = ExtensionFile::__new(
+        br#":where([data-slot^="geo:"]){}"#,
+        "aaaaaaaaaaaa",
+        Some("geo"),
+    );
+    static BADGE: UiExtension = UiExtension::new("geo", "badge").sheet(SHEET);
+    let page = View::new("x").body(el("span").slot("geo:badge").extension(&BADGE));
+    let html = page.to_html();
+    assert!(!html.contains("<script"), "{html}");
+    let sheet = BADGE.sheet_url().expect("a sheet");
+    assert!(
+        html.contains(&format!(r#"<link rel="stylesheet" href="{sheet}""#)),
+        "{html}"
+    );
+}
+
 #[test]
 fn the_parts_module_is_at_most_2_kb_gzip() {
     assert!(size("parts") <= 2 * 1024, "{}", size("parts"));
@@ -799,6 +852,8 @@ fn no_two_modules_share_a_bit() {
         Uses::MARKETING,
         Uses::SORTABLE_GRID,
         Uses::SORTABLE_GRID_STYLES,
+        Uses::EXTENSIONS,
+        Uses::EXTENSION_SHEETS,
     ];
     for (at, one) in all.iter().enumerate() {
         for other in &all[at + 1..] {
