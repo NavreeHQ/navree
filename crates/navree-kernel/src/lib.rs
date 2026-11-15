@@ -80,6 +80,7 @@ pub mod __private {
     };
     pub use crate::publish::is_safe_relative_path;
     pub use crate::publish::{PublishRefused, Published, publish_files};
+    pub use crate::resolver::app_in_chain;
 }
 
 /// A boxed error that can cross module and task boundaries.

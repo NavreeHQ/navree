@@ -14,6 +14,7 @@ use crate::container::{AppInner, RequestScope};
 use crate::graph::{Graph, GraphReport, ROOT};
 use crate::introspect::introspect_json;
 use crate::publish;
+use crate::resolver::Stack;
 use crate::{
     BootErrors, BoxError, CommandSpec, KernelError, Lifecycle, Module, ModuleId, PluginInfo,
     PluginsReport, ProviderKey, Resolver, Scope,
@@ -511,11 +512,23 @@ pub struct ModuleInfo {
 #[derive(Clone)]
 pub struct AppContext {
     pub(crate) inner: Arc<AppInner>,
+    /// The singletons that were being built when this handle was handed out
+    /// (see `app_in_chain`), which its resolutions continue; empty for every
+    /// other handle.
+    chain: Stack,
 }
 
 impl AppContext {
     pub(crate) fn from_inner(inner: Arc<AppInner>) -> Self {
-        Self { inner }
+        Self {
+            inner,
+            chain: Stack::default(),
+        }
+    }
+
+    /// A handle to the app whose resolutions continue `chain`.
+    pub(crate) fn in_chain(inner: Arc<AppInner>, chain: Stack) -> Self {
+        Self { inner, chain }
     }
 
     /// A handle that does not keep the app alive. Providers that need the
@@ -711,9 +724,11 @@ impl AppContext {
         self.root_resolver().resolve_as::<T>(index, &key).await
     }
 
-    /// A resolver with the visibility of the implicit app root.
+    /// A resolver with the visibility of the implicit app root, continuing
+    /// this handle's chain.
     fn root_resolver(&self) -> Resolver {
         Resolver::new(self.inner.clone(), self.inner.graph.modules[ROOT].id, None)
+            .continuing(self.chain.clone())
     }
 
     /// Constructs every singleton (modules in dependency order), then runs

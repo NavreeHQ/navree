@@ -258,7 +258,7 @@ fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
                 check_registrations(&ctx, &SMS_SLOT, NotifyOptions::schema())?;
                 check_registrations(&ctx, &WHATSAPP_SLOT, NotifyOptions::schema())?;
                 check_registrations(&ctx, &CHANNEL_SLOT, NotifyOptions::schema())?;
-                let registered = registered_drivers(&ctx, &options).await?;
+                let registered = registered_drivers(&r, &options).await?;
                 let drivers = ChannelDrivers::from_options(&options, &push, &app)
                     .map_err(|message| format!("notify: {message}"))?
                     .with_registered(registered.sms, registered.whatsapp);

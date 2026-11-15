@@ -11,7 +11,7 @@ use navree_config::__private::{build_driver, check_registrations};
 use navree_config::ConfigSection;
 use navree_contracts::{Dispatcher, JobEnvelope, JobOptions};
 use navree_db::{Backend, Db, Uow};
-use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle, WeakAppContext};
+use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle, Resolver, WeakAppContext};
 use navree_queue::Queue;
 use navree_workspace::Workspaces;
 use serde::Serialize;
@@ -112,14 +112,13 @@ pub struct IndexStatus {
 }
 
 impl Search {
-    /// Builds the service for `app`: the engine from `options` (a module's
-    /// registered engine, built from its registration), and every model
-    /// registered with `SearchModule::for_feature`. Every registration of
-    /// an engine is checked first, whichever engine is selected.
-    pub(crate) async fn build(
-        app: &AppContext,
-        options: SearchOptions,
-    ) -> Result<Search, BoxError> {
+    /// Builds the service from the factory of `Search` (`r`): the engine
+    /// from `options` (a module's registered engine, built from its
+    /// registration), and every model registered with
+    /// `SearchModule::for_feature`. Every registration of an engine is
+    /// checked first, whichever engine is selected.
+    pub(crate) async fn build(r: &Resolver, options: SearchOptions) -> Result<Search, BoxError> {
+        let app = r.app();
         let options = SearchOptions {
             engine: options.engine.resolved(),
             ..options
@@ -127,12 +126,12 @@ impl Search {
         options
             .check()
             .map_err(|message| format!("invalid search options: {message}"))?;
-        check_registrations(app, &SLOT, SearchOptions::schema())?;
+        check_registrations(&app, &SLOT, SearchOptions::schema())?;
         let db = app.try_get::<Db>().await.map(|db| (*db).clone());
         let engine = match &options.engine {
             Engine::Registered(name) => {
                 build_driver::<dyn SearchEngine>(
-                    app,
+                    r,
                     &SLOT,
                     "search.engine",
                     *name,
@@ -182,7 +181,7 @@ impl Search {
         }
         let vectors = match &options.vectors {
             Some(vector_options) => {
-                Some(Vectors::build(app, vector_options, &options, db.as_ref()).await?)
+                Some(Vectors::build(&app, vector_options, &options, db.as_ref()).await?)
             }
             None => None,
         };

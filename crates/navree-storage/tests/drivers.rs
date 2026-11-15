@@ -13,6 +13,7 @@ mod conformance;
 use std::collections::BTreeMap;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use bytes::{Bytes, BytesMut};
 use chrono::{DateTime, Utc};
@@ -323,6 +324,37 @@ async fn a_disk_given_in_code_hands_its_driver_its_table() {
         *seen.lock().unwrap(),
         Some(("Amritsar invoices".to_owned(), Some("invoices".to_owned())))
     );
+}
+
+/// Registers the disk driver `darpan`, which would mirror another disk: its
+/// factory asks the app for `Storage`, which is being built.
+struct DarpanModule;
+
+impl Module for DarpanModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.disk_driver("darpan", |ctx| async move {
+            ctx.app().get::<Storage>().await?;
+            Ok(Sanduk::default())
+        });
+    }
+}
+
+#[tokio::test]
+async fn a_disk_driver_that_asks_for_storage_fails_the_boot_naming_the_cycle() {
+    let booting = boot_error(
+        Navree::app()
+            .module(ConfigModule::for_root(uploads(json!({"driver": "darpan"}))))
+            .module(StorageModule::from_config())
+            .module(DarpanModule),
+    );
+    let error = tokio::time::timeout(Duration::from_secs(10), booting)
+        .await
+        .expect("the boot fails instead of waiting");
+    assert!(
+        error.contains("disk driver `darpan` (registered with m.disk_driver in `DarpanModule`) failed to start: provider dependency cycle: "),
+        "{error}"
+    );
+    assert!(error.contains("Storage -> "), "{error}");
 }
 
 #[tokio::test]

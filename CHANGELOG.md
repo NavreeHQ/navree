@@ -102,7 +102,9 @@ every `@navree/*` package carries the same version.
   built-in and registered names of `cache.store`, `queue.driver`, `session.store`,
   `realtime.backplane`, `notify.sms.driver`, `notify.whatsapp.driver` and `search.engine`. A
   factory's error is shown as it wrote it in the boot error, so it must not contain a secret from
-  the driver's settings. The new public traits `DiskDriver`, `AiDriver` and `ChannelDriver`
+  the driver's settings. A factory that asks the app for the service its driver is being built
+  for (`Storage` for a disk driver, `Cache` for a cache store), or for one built on it, fails the
+  boot, naming the driver and the cycle. The new public traits `DiskDriver`, `AiDriver` and `ChannelDriver`
   describe a disk, an AI provider and a notification channel, with `DiskUpload`, `OpenedFile`,
   `DiskDriverError`, `RegisteredDisk`, `AiCapabilities`, `AiDriverRequest`, `AiTool`,
   `AiDriverAnswer`, `AiDriverChunk`, `AiDriverStream`, `AiEmbedRequest`, `AiEmbedAnswer`,

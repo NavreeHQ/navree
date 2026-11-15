@@ -162,7 +162,7 @@ async fn registered_drivers(
             continue;
         };
         let driver = build_driver::<dyn DiskDriver>(
-            &app,
+            r,
             &SLOT,
             &format!("storage.disks.{disk}.driver"),
             table.driver(),

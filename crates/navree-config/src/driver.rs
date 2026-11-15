@@ -27,7 +27,8 @@ use std::fmt;
 use std::future::Future;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
-use navree_kernel::{AppContext, BoxError, BoxFuture, Contributed, ModuleBuilder};
+use navree_kernel::__private::app_in_chain;
+use navree_kernel::{AppContext, BoxError, BoxFuture, Contributed, ModuleBuilder, Resolver};
 use serde::de::{self, DeserializeOwned};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Value as Json, json};
@@ -344,7 +345,11 @@ impl DriverContext {
         self.name
     }
 
-    /// The app, to resolve what the driver needs.
+    /// The app, to resolve what the driver needs. The factory runs while
+    /// its kind's service is being built (`Storage` for a disk driver,
+    /// `Cache` for a cache store): asking for that service, or for anything
+    /// built on it, fails the boot with the cycle, naming the driver. A
+    /// driver that needs it keeps this handle and asks once the app runs.
     pub fn app(&self) -> &AppContext {
         &self.app
     }
@@ -807,18 +812,21 @@ pub fn check_registrations(
 }
 
 /// Builds the driver registered as `name` for `slot`, with its settings at
-/// `settings_key` and for `instance`. `settings` is the table the kind's
-/// module holds for the driver (a disk's table, a provider table given in
-/// code), which the factory reads in place of the configuration's. No such
-/// registration is the error that names `key` (the selector's key,
+/// `settings_key` and for `instance`, from the factory of the provider `r`
+/// builds. `settings` is the table the kind's module holds for the driver
+/// (a disk's table, a provider table given in code), which the factory
+/// reads in place of the configuration's. No such registration is the
+/// error that names `key` (the selector's key,
 /// `storage.disks.uploads.driver` for a `*` slot) and the names that are
 /// known; a failing factory is an error naming the driver, the method and
-/// the module.
+/// the module. The factory's app continues `r`'s chain, so a factory that
+/// asks it for a service being built on the way to the driver (the kind's
+/// own) fails with that cycle instead of waiting for ever.
 ///
 /// Not public API: what the driver kinds of Navree call.
 #[doc(hidden)]
 pub async fn build_driver<X: ?Sized + Send + Sync + 'static>(
-    app: &AppContext,
+    r: &Resolver,
     slot: &DriverSlot,
     key: &str,
     name: DriverName,
@@ -826,15 +834,16 @@ pub async fn build_driver<X: ?Sized + Send + Sync + 'static>(
     instance: Option<String>,
     settings: Option<Json>,
 ) -> Result<Arc<X>, BoxError> {
+    let app = app_in_chain(r);
     let found = app
         .contributions::<DriverFactory<X>>()
         .into_iter()
         .find(|factory| factory.value.slot == slot.key() && factory.value.name == name);
     let Some(found) = found else {
-        let drivers = registered(app);
+        let drivers = registered(&app);
         return Err(unregistered(slot, key, name.as_str(), &drivers).into());
     };
-    let mut ctx = DriverContext::new(app, name, settings_key, instance).await;
+    let mut ctx = DriverContext::new(&app, name, settings_key, instance).await;
     ctx.held = settings;
     (found.value.build)(ctx)
         .await

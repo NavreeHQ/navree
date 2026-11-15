@@ -4,6 +4,7 @@
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use navree_config::__private::{
     build_driver, check_registrations, contribute_slot, register_driver, selector_error,
@@ -14,8 +15,8 @@ use navree_config::{
     ModuleBuilderConfigExt, RegisteredDriver, SectionRegistration,
 };
 use navree_kernel::{
-    AppBuilder, CommandSpec, ConfiguredModule, Factory, Module, ModuleBuilder, Navree, ProviderKey,
-    Resolver,
+    AppBuilder, AppContext, CommandSpec, ConfiguredModule, Factory, Module, ModuleBuilder, Navree,
+    ProviderKey, Resolver,
 };
 use serde::{Deserialize, Deserializer};
 use serde_json::json;
@@ -79,7 +80,7 @@ impl Module for ReportModule {
         m.factory(Factory::<ChestReport>::new(move |r: Resolver| async move {
             let name = DriverName::new("chest")?;
             let built = build_driver::<String>(
-                &r.app(),
+                &r,
                 &SLOT,
                 "vault.kind",
                 name,
@@ -245,7 +246,7 @@ fn register_vault(m: &mut ModuleBuilder, options: Option<VaultOptions>) {
                 VaultKind::Memory => None,
                 VaultKind::Registered(name) => Some(
                     build_driver::<String>(
-                        &r.app(),
+                        &r,
                         &SLOT,
                         "vault.kind",
                         name,
@@ -471,6 +472,71 @@ async fn the_boot_does_not_report_the_tables_of_registered_drivers() {
         .boot()
         .await
         .unwrap();
+}
+
+/// Registers the vault kind `darpan`, whose factory asks the app for the
+/// vault it is being built for.
+struct DarpanModule;
+
+impl Module for DarpanModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        register_driver::<String, _, _>(m, &SLOT, Some("vault"), "darpan", |ctx| async move {
+            ctx.app().get::<Vault>().await?;
+            Ok(Arc::new("darpan".to_owned()))
+        });
+    }
+}
+
+/// The app the vault kind `pehredar` kept from its factory.
+type Kept = Arc<Mutex<Option<AppContext>>>;
+
+/// Registers the vault kind `pehredar`, whose factory keeps the app to ask
+/// it for things once it runs.
+struct PehredarModule(Kept);
+
+impl Module for PehredarModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let kept = self.0.clone();
+        register_driver::<String, _, _>(m, &SLOT, Some("vault"), "pehredar", move |ctx| {
+            *kept.lock().unwrap() = Some(ctx.app().clone());
+            async move { Ok(Arc::new("pehredar".to_owned())) }
+        });
+    }
+}
+
+#[tokio::test]
+async fn a_factory_that_asks_for_the_service_it_is_built_for_fails_the_boot_naming_the_cycle() {
+    let booting = boot(vault(json!({"kind": "darpan"})), |app| {
+        app.module(VaultModule).module(DarpanModule)
+    });
+    let text = tokio::time::timeout(Duration::from_secs(10), booting)
+        .await
+        .expect("the boot fails instead of waiting");
+    assert!(
+        text.contains("vault kind `darpan` (registered with m.vault_kind in `DarpanModule`) failed to start: provider dependency cycle: "),
+        "{text}"
+    );
+    assert!(text.contains("Vault -> "), "{text}");
+
+    // A factory that keeps the app asks it once the app runs, and gets it.
+    let kept = Kept::default();
+    let app = Navree::app()
+        .module(ConfigModule::for_root(vault(json!({"kind": "pehredar"}))))
+        .module(VaultModule)
+        .module(PehredarModule(kept.clone()))
+        .boot()
+        .await
+        .unwrap();
+    let handle = kept.lock().unwrap().clone().expect("the factory ran");
+    let booted = tokio::time::timeout(Duration::from_secs(10), handle.get::<Vault>())
+        .await
+        .expect("a kept handle does not wait")
+        .unwrap();
+    assert_eq!(
+        booted.0.as_deref().map(String::as_str),
+        Some("pehredar")
+    );
+    drop(app);
 }
 
 /// A made-up section that sits below `vault` and is read by a module of its own

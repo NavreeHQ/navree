@@ -120,7 +120,7 @@ fn register(m: &mut ModuleBuilder, options: Option<SessionOptions>) {
                     }
                     SessionStoreKind::Registered(name) => {
                         build_driver::<dyn SessionStore>(
-                            &r.app(),
+                            &r,
                             &SLOT,
                             "session.store",
                             name,

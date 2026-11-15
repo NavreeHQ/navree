@@ -8,7 +8,7 @@ use std::sync::Arc;
 use navree_config::__private::{DriverRecord, build_driver, register_driver, register_in};
 use navree_config::{DriverContext, DriverName, DriverSlot, ModuleBuilderConfigExt};
 use navree_contracts::BoxFuture;
-use navree_kernel::{AppContext, BoxError, Injectable, ModuleBuilder};
+use navree_kernel::{AppContext, BoxError, Injectable, ModuleBuilder, Resolver};
 use serde_json::Value;
 
 use crate::{
@@ -280,13 +280,13 @@ pub(crate) struct RegisteredDrivers {
 /// The [`RegisteredDrivers`] `options` select, built with their settings
 /// (`notify.{name}`). A name no module registers fails, naming the method.
 pub(crate) async fn registered_drivers(
-    app: &AppContext,
+    r: &Resolver,
     options: &NotifyOptions,
 ) -> Result<RegisteredDrivers, BoxError> {
     let sms = match options.sms.driver.map(SmsDriverKind::resolved) {
         Some(SmsDriverKind::Registered(name)) => Some(
             build_driver::<dyn SmsDriver>(
-                app,
+                r,
                 &SMS_SLOT,
                 "notify.sms.driver",
                 name,
@@ -301,7 +301,7 @@ pub(crate) async fn registered_drivers(
     let whatsapp = match options.whatsapp.driver.map(WhatsAppDriverKind::resolved) {
         Some(WhatsAppDriverKind::Registered(name)) => Some(
             build_driver::<dyn WhatsAppDriver>(
-                app,
+                r,
                 &WHATSAPP_SLOT,
                 "notify.whatsapp.driver",
                 name,

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use navree_config::__private::{build_driver, check_registrations, register_driver};
 use navree_config::{DriverContext, DriverName, DriverSlot};
-use navree_kernel::{AppContext, BoxError, ModuleBuilder};
+use navree_kernel::{BoxError, ModuleBuilder, Resolver};
 use serde_json::{Map, Value as Json};
 
 use crate::options::DRIVERS;
@@ -144,11 +144,11 @@ impl ModuleBuilderAiProviderExt for ModuleBuilder {
 /// reads the table it was given; otherwise the table as the configuration
 /// writes it.
 pub(crate) async fn registered_drivers(
-    app: &AppContext,
+    r: &Resolver,
     options: &AiOptions,
     in_code: bool,
 ) -> Result<BTreeMap<String, Arc<dyn Driver>>, BoxError> {
-    check_registrations(app, &SLOT, None)?;
+    check_registrations(&r.app(), &SLOT, None)?;
     let mut drivers: BTreeMap<String, Arc<dyn Driver>> = BTreeMap::new();
     for (table, config) in &options.providers {
         let driver = config.driver_for(table);
@@ -159,7 +159,7 @@ pub(crate) async fn registered_drivers(
         // request: the open check let only driver names through.
         let name = DriverName::new(driver)?;
         let built = build_driver::<dyn AiDriver>(
-            app,
+            r,
             &SLOT,
             &format!("ai.providers.{table}.driver"),
             name,
