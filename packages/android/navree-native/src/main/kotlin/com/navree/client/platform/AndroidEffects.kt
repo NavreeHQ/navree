@@ -85,7 +85,9 @@ class AndroidEffects(
             // The session was closed: nothing more is kept.
         }
     }
-    val http = CoreHttp(cookies, origins, loopbackHttp, state) { post(it) }
+    /** The files chosen for a form's file fields, which a request that sends them reads from. */
+    val picked = PickedFiles.of(app).also { files -> state.always { files.purgeStale() } }
+    val http = CoreHttp(cookies, origins, loopbackHttp, state, picked::body) { post(it) }
     private val streams = CoreStreams(http.client, origins, cookies, state) { post(it) }
     private val cache = SealedCache(app)
     private val timers = HashMap<Long, Runnable>()
@@ -199,6 +201,12 @@ class AndroidEffects(
             snapshots.clear()
         } catch (_: Throwable) {
             // A file that could not be deleted is sealed under a key only this app holds.
+        }
+        try {
+            // The copies of the files chosen for forms are the person's own documents, kept unsealed in the cache folder.
+            picked.clear()
+        } catch (_: Throwable) {
+            // A copy that could not be deleted is in the cache folder, which no backup takes and the system may empty.
         }
         main.post {
             try {

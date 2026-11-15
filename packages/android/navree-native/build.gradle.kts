@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.compose.material3)
     api(libs.activity.compose)
     implementation(libs.browser)
+    implementation(libs.exifinterface)
     implementation(libs.webkit)
     implementation(libs.credentials)
     implementation(libs.credentials.play)
