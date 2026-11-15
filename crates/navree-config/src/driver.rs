@@ -14,7 +14,9 @@
 //! from the app's configuration, with [`DriverName::new`]. A name read from
 //! anywhere else (a request, a stored row, a job payload) goes through
 //! [`DriverName::lookup`], which never adds one, so made-up names cannot
-//! grow the set.
+//! grow the set. A driver kind that reads a name from outside looks it up
+//! among the names registered for that kind only, so the name of another
+//! kind's driver is as unknown to it as a made-up one.
 //!
 //! The boot and `config:check` build their messages with the same
 //! functions, so they say the same thing about a name that does not
@@ -63,6 +65,10 @@ fn names() -> MutexGuard<'static, Names> {
 /// A set of driver names, each stored once, holding at most `limit`.
 struct Names {
     set: BTreeSet<&'static str>,
+    /// The keys of the slots each name was registered for: a name is known
+    /// for a kind only when a module registered a driver of that kind under
+    /// it.
+    registered: BTreeMap<&'static str, BTreeSet<&'static str>>,
     limit: usize,
 }
 
@@ -70,8 +76,28 @@ impl Names {
     fn with_limit(limit: usize) -> Names {
         Names {
             set: BTreeSet::new(),
+            registered: BTreeMap::new(),
             limit,
         }
+    }
+
+    /// Stores `name` itself, as [`register`](Names::register) does, as a
+    /// name registered for the slot whose key is `slot`.
+    fn register_in(
+        &mut self,
+        slot: &'static str,
+        name: &'static str,
+    ) -> Result<&'static str, DriverNameError> {
+        let stored = self.register(name)?;
+        self.registered.entry(stored).or_default().insert(slot);
+        Ok(stored)
+    }
+
+    /// The stored name equal to `name` when it was registered for the slot
+    /// whose key is `slot`; never stores one.
+    fn lookup_in(&self, slot: &str, name: &str) -> Option<&'static str> {
+        let (stored, slots) = self.registered.get_key_value(name)?;
+        slots.contains(slot).then_some(*stored)
     }
 
     /// Stores `name` itself (no copy); the stored name when it is there.
@@ -609,6 +635,29 @@ impl<X: ?Sized> Clone for DriverFactory<X> {
     }
 }
 
+/// Puts `name`, written in code, in the process's set as a name a module
+/// registered for the slot whose key is `slot`: what every registration
+/// method calls. [`lookup_in`] then finds it for that slot, and for no
+/// other.
+///
+/// Not public API: what the driver kinds of Navree call.
+#[doc(hidden)]
+pub fn register_in(slot: &'static str, name: &'static str) -> Result<DriverName, DriverNameError> {
+    names().register_in(slot, name).map(DriverName)
+}
+
+/// The name equal to `name` that a module registered for the slot whose
+/// key is `slot`, if one did. A name read from a request, a stored row or a
+/// job payload is known for a kind only so: the name of another kind's
+/// driver, another kind's built-in name and a name only the configuration
+/// gave are not. It never adds a name.
+///
+/// Not public API: what the driver kinds of Navree call.
+#[doc(hidden)]
+pub fn lookup_in(slot: &str, name: &str) -> Option<DriverName> {
+    names().lookup_in(slot, name).map(DriverName)
+}
+
 /// Registers `name` for `slot`, built by `factory`. An accepted name
 /// contributes its [`DriverRecord`], its [`DriverFactory`], a
 /// [`RegisteredDriver`] and, with `settings = Some(section)`, a claim on
@@ -629,7 +678,7 @@ where
     F: Fn(DriverContext) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Result<Arc<X>, BoxError>> + Send + 'static,
 {
-    match DriverName::register(name) {
+    match register_in(slot.key(), name) {
         Ok(driver) => {
             m.contribute(DriverRecord::new(slot.key(), name, None))
                 .contribute(DriverFactory::<X> {
@@ -1342,6 +1391,41 @@ mod tests {
         assert_eq!(
             DriverNameError::TooMany.to_string(),
             "too many driver names in one process (at most 1024)"
+        );
+    }
+
+    #[test]
+    fn a_name_is_known_for_the_kind_it_was_registered_for_only() {
+        // A set of its own, then the process's.
+        let mut names = Names::with_limit(LIMIT);
+        names.register_in("vault.kind", "jalandhar_chest").unwrap();
+        names.intern("jalandhar_box").unwrap();
+        assert_eq!(
+            names.lookup_in("vault.kind", "jalandhar_chest"),
+            Some("jalandhar_chest")
+        );
+        assert_eq!(
+            names.lookup_in("vault.lock", "jalandhar_chest"),
+            None,
+            "another kind's name"
+        );
+        assert_eq!(
+            names.lookup_in("vault.kind", "jalandhar_box"),
+            None,
+            "a configured name is not a registration"
+        );
+        assert_eq!(names.lookup_in("vault.kind", "jalandhar_made_up"), None);
+        assert_eq!(names.lookup("jalandhar_made_up"), None, "a miss adds nothing");
+
+        let chest = register_in("vault.kind", "amritsar_chest").unwrap();
+        assert_eq!(lookup_in("vault.kind", "amritsar_chest"), Some(chest));
+        assert_eq!(lookup_in("vault.lock", "amritsar_chest"), None);
+        assert_eq!(DriverName::lookup("amritsar_chest"), Some(chest));
+        assert_eq!(lookup_in("vault.kind", "amritsar_made_up"), None);
+        assert_eq!(DriverName::lookup("amritsar_made_up"), None);
+        assert_eq!(
+            register_in("vault.kind", "Amritsar Chest"),
+            Err(DriverNameError::Invalid)
         );
     }
 

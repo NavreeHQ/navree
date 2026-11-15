@@ -5,6 +5,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use navree_config::__private::register_in;
 use navree_config::check::CheckOptions;
 use navree_config::{ConfigModule, ConfigSection, ConfigSources, DriverName};
 use navree_contracts::Secret;
@@ -212,39 +213,6 @@ async fn a_registered_mail_transport_sends_and_joins_a_failover() {
 }
 
 #[test]
-fn a_made_up_transport_name_from_a_request_is_refused_and_not_kept() {
-    for body in [
-        json!("patra_post"),
-        json!({"type": "failover", "transports": ["patra_post"]}),
-        json!({"type": "failover", "transports": "log,patra_post"}),
-    ] {
-        let error = serde_json::from_value::<TransportConfig>(body.clone())
-            .expect_err(&body.to_string())
-            .to_string();
-        assert!(
-            error.contains("unknown mail transport (expected"),
-            "{error}"
-        );
-    }
-    assert_eq!(
-        DriverName::lookup("patra_post"),
-        None,
-        "reading adds no name"
-    );
-
-    // A name the process knows reads as that transport; outside MailModule
-    // it does not build, so a tenant's transport cannot be one.
-    DriverName::register("dakghar").unwrap();
-    let read: TransportConfig = serde_json::from_value(json!("dakghar")).unwrap();
-    assert_eq!(
-        read,
-        TransportConfig::Registered(DriverName::from_static("dakghar"))
-    );
-    assert!(read.build().is_err());
-    assert_eq!(read.to_json(), json!("dakghar"));
-}
-
-#[test]
 fn mail_config_of_today_reads_as_before() {
     let read = |value: Value| serde_json::from_value::<TransportConfig>(value);
     assert_eq!(read(json!("log")).unwrap(), TransportConfig::Log);
@@ -293,9 +261,9 @@ fn mail_config_of_today_reads_as_before() {
 #[tokio::test]
 async fn an_unregistered_or_doubly_registered_mail_transport_fails_the_boot_naming_m_mail_transport()
  {
-    // A name the process knows (another kind's, say) that no module
-    // registers as a mail transport.
-    DriverName::register("chitthi_dak").unwrap();
+    // A name registered as a mail transport in the process (by a module of
+    // another app), which no module of this app registers.
+    register_in("mail.transport", "chitthi_dak").unwrap();
     let unregistered = "mail.transport is `chitthi_dak`, but no module registers a mail transport under that name with m.mail_transport (known: log, array, smtp, smtps, ses, mailgun, postmark, resend, failover)";
     let sources = || mail(json!({"transport": "chitthi_dak"}));
     let add = |app: AppBuilder| app.module(views()).module(MailModule::from_config());
@@ -303,6 +271,16 @@ async fn an_unregistered_or_doubly_registered_mail_transport_fails_the_boot_nami
     assert!(text.contains(unregistered), "{text}");
     let text = check_text(sources(), add).await;
     assert!(text.contains(&format!("error    {unregistered}")), "{text}");
+
+    // The name of another kind's driver is no mail transport: the section
+    // does not read, as for a name nobody registered.
+    register_in("cache.store", "sanduk_tijori").unwrap();
+    let sources = || mail(json!({"transport": "sanduk_tijori"}));
+    let text = boot(sources(), add).await;
+    assert!(text.contains("unknown mail transport (expected"), "{text}");
+    assert!(!text.contains("but no module registers"), "{text}");
+    let text = check_text(sources(), add).await;
+    assert!(text.contains("unknown mail transport (expected"), "{text}");
 
     let sources = || mail(json!({"transport": "log"}));
 

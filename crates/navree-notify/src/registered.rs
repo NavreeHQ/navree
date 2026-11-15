@@ -5,7 +5,7 @@
 use std::future::Future;
 use std::sync::Arc;
 
-use navree_config::__private::{DriverRecord, build_driver, register_driver};
+use navree_config::__private::{DriverRecord, build_driver, register_driver, register_in};
 use navree_config::{DriverContext, DriverName, DriverSlot, ModuleBuilderConfigExt};
 use navree_contracts::BoxFuture;
 use navree_kernel::{AppContext, BoxError, Injectable, ModuleBuilder};
@@ -217,7 +217,7 @@ pub trait ModuleBuilderNotifyChannelsExt {
 impl ModuleBuilderNotifyChannelsExt for ModuleBuilder {
     fn notification_channel<C: ChannelDriver + Injectable>(&mut self) -> &mut Self {
         self.provider::<C>();
-        match DriverName::register(C::NAME) {
+        match register_in(CHANNEL_SLOT.key(), C::NAME) {
             Ok(name) => self
                 .contribute(DriverRecord::new(CHANNEL_SLOT.key(), C::NAME, None))
                 .contribute(ChannelRegistration {

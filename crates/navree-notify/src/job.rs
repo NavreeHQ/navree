@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use navree_config::DriverName;
 use navree_contracts::{BoxError, Job, JobContext};
 use navree_mail::TemplateMail;
+use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -123,10 +124,12 @@ pub enum Delivery {
         message: PushMessage,
     },
     /// A message over a channel a module adds (`"via": "registered"`). The
-    /// channel's name reads back only when the process knows it: a payload
-    /// naming a channel no module of the process registers does not read.
+    /// channel's name reads back only when the process knows it as a
+    /// channel: a payload naming a channel no module of the process adds
+    /// (the name of another kind's driver included) does not read.
     Registered {
         /// The channel's name.
+        #[serde(deserialize_with = "registered_channel")]
         channel: DriverName,
         /// The address, as [`Notifiable::route_channel`](crate::Notifiable::route_channel)
         /// gave it.
@@ -135,6 +138,20 @@ pub enum Delivery {
         /// gave it.
         message: Value,
     },
+}
+
+/// The channel of a queued payload: the name of a channel a module adds
+/// that the process knows ([`Channel::from_name`]). Any other name is
+/// ``unknown notification channel `{name}` ``, and reading one never adds
+/// a name.
+fn registered_channel<'de, D: Deserializer<'de>>(deserializer: D) -> Result<DriverName, D::Error> {
+    let name = String::deserialize(deserializer)?;
+    match Channel::from_name(&name) {
+        Some(Channel::Registered(channel)) => Ok(channel),
+        _ => Err(de::Error::custom(format!(
+            "unknown notification channel `{name}`"
+        ))),
+    }
 }
 
 impl Delivery {

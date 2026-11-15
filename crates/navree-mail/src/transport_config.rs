@@ -4,6 +4,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use navree_config::DriverName;
+use navree_config::__private::lookup_in;
 use navree_contracts::Secret;
 use serde::Deserialize;
 use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
@@ -412,14 +413,15 @@ impl<'de> Visitor<'de> for TransportVisitor {
         write!(f, "a mail transport: {EXPECTED}")
     }
 
-    /// A shorthand, else a name the process already knows that is not a
-    /// built-in type (a transport a module registers). The name is only
-    /// looked up, never added: this also reads request bodies and stored
-    /// rows.
+    /// A shorthand, else the name of a transport a module registers that
+    /// is not a built-in type. The name is only looked up among the mail
+    /// transports, never added: this also reads request bodies and stored
+    /// rows, and the name of another kind's driver reads as any unknown
+    /// name does.
     fn visit_str<E: de::Error>(self, value: &str) -> Result<TransportConfig, E> {
         match TransportConfig::shorthand(value) {
             Ok(Some(config)) => Ok(config),
-            Ok(None) => match DriverName::lookup(value.trim()) {
+            Ok(None) => match lookup_in(SLOT.key(), value.trim()) {
                 Some(name) if !SLOT.built_in().contains(&name.as_str()) => {
                     Ok(TransportConfig::Registered(name))
                 }
