@@ -120,7 +120,7 @@ class PickedFiles internal constructor(private val folder: File) {
 
     /** Removes the copies no token of this process names: what a process that ended left behind. */
     fun purgeStale() {
-        folder.listFiles()?.forEach { if (it.name !in types) it.delete() }
+        folder.listFiles()?.forEach { if (!types.containsKey(it.name)) it.delete() }
     }
 
     /** Removes the copies a form has had a day to send. */
