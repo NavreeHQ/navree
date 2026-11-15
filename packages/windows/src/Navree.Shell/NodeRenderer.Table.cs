@@ -764,6 +764,13 @@ internal sealed class ProtocolTablePresenter(
                 {
                     single.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
                 }
+                else if (panel is Grid { ColumnDefinitions.Count: > 1 } several
+                    && several.ColumnDefinitions[^1].Width.IsAuto
+                    && several.Children.OfType<TextBlock>().Any(words => Grid.GetColumn(words) == several.ColumnDefinitions.Count - 1))
+                {
+                    // A flag and a place, a mark and a word: the words take what is left of the cell and end in an ellipsis.
+                    several.ColumnDefinitions[^1].Width = new GridLength(1, GridUnitType.Star);
+                }
 
                 foreach (UIElement child in panel.Children)
                 {
