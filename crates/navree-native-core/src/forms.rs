@@ -246,6 +246,12 @@ impl Core {
         if !same_kind(&held.value, &value) {
             return;
         }
+        // What the field already holds is no change: nothing is redrawn,
+        // nothing is marked as typed, and nothing it says happens as it
+        // changes starts (a value put in by the client and told back).
+        if held.value == value {
+            return;
+        }
         held.value = value;
         // What was wrong with it was wrong with what it held before.
         held.errors.clear();

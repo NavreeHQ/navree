@@ -132,6 +132,14 @@
           {"t":"message","id":2,"tone":"neutral","text":"Saved"}
         ]
       }
+    },
+    {
+      "note": "The client says again what the switch already holds (a value put in programmatically and given back as an event): nothing changed, so nothing is sent.",
+      "send": {"t":"field","screen":1,"form":"gift","field":"wrap","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
     }
   ]
 }
