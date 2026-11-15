@@ -16,6 +16,11 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.isSystemInDarkTheme
 import com.navree.client.R
 import com.navree.client.design.Presentation
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -129,6 +134,20 @@ private fun Sheet(
     }
 }
 
+/** The system bars' icons over a dialog window that is drawn behind them: dark over the light theme's surface, light over the dark theme's. */
+@Composable
+private fun DialogSystemBars() {
+    val view = LocalView.current
+    val dark = isSystemInDarkTheme()
+    SideEffect {
+        val window = (view.parent as? DialogWindowProvider)?.window ?: return@SideEffect
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
+    }
+}
+
 /**
  * A sheet of the page that is a task: something to finish or cancel. On a
  * short window it is a full-screen dialog (an X, the title, the affirming
@@ -141,7 +160,10 @@ private fun TaskSheet(sheet: Navree.Sheet, place: Place, full: Boolean, close: (
     // One action finishes the task from the bar; the others stand at the end of the content.
     val placed = OverlayRules.taskActions(sheet.actions.filterIsInstance<Navree.Button>(), hasSubmit = form != null && submit != null)
     val inner = place.copy(omit = submit)
-    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = !full)) {
+    // A full-screen task is drawn edge to edge, as the screen under it is: the surface runs behind the system bars (which
+    // the content keeps clear of), and the bars' icons are the colour the surface calls for.
+    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = !full, decorFitsSystemWindows = !full)) {
+        if (full) DialogSystemBars()
         Surface(
             shape = if (full) RectangleShape else MaterialTheme.shapes.extraLarge,
             color = if (full) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerHigh,
